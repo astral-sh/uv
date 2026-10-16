@@ -11,7 +11,7 @@ use url::Host;
 use uv_distribution::{DistributionDatabase, Reporter};
 use uv_distribution_filename::{DistExtension, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
-    BuildableSource, DirectSourceUrl, DirectorySourceUrl, Error as DistributionTypesError,
+    BuildableSource, DirectSourceUrl, DirectorySourceUrl, Dist, Error as DistributionTypesError,
     GitDirectorySourceUrl, GitPathSourceUrl, Identifier, PathSourceUrl, RemoteSource, Requirement,
     SourceUrl,
 };
@@ -81,19 +81,39 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
 
     /// Infer the package name for a given "unnamed" requirement.
     async fn resolve_requirement(
-        requirement: UnnamedRequirement<VerbatimParsedUrl>,
+        mut requirement: UnnamedRequirement<VerbatimParsedUrl>,
         hasher: &HashStrategy,
         index: &InMemoryIndex,
         database: &DistributionDatabase<'a, Context>,
     ) -> Result<uv_pep508::Requirement<VerbatimParsedUrl>, Error> {
+        if let ParsedUrl::Archive(archive) = &mut requirement.url.parsed_url {
+            database
+                .resolve_archive_url(archive, None)
+                .await
+                .map_err(|error| Error::Distribution(Box::new(error)))?;
+        }
+
+        // A header can name a wheel even when the URL has no archive extension.
+        let header_wheel = if let ParsedUrl::Archive(archive) = &requirement.url.parsed_url
+            && archive.archive.extension() == Some(DistExtension::Wheel)
+        {
+            archive.archive.header_filename()
+        } else {
+            None
+        };
+
         // If the requirement is a wheel, extract the package name from the wheel filename.
         //
         // Ex) `anyio-4.3.0-py3-none-any.whl`
-        if Path::new(requirement.url.verbatim.path())
-            .extension()
-            .is_some_and(|ext| ext.eq_ignore_ascii_case("whl"))
+        if header_wheel.is_some()
+            || Path::new(requirement.url.verbatim.path())
+                .extension()
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("whl"))
         {
-            let filename = WheelFilename::from_str(&requirement.url.verbatim.filename()?)?;
+            let filename = WheelFilename::from_str(&match header_wheel {
+                Some(filename) => Cow::Borrowed(filename),
+                None => requirement.url.verbatim.filename()?,
+            })?;
             return Ok(uv_pep508::Requirement {
                 name: filename.name,
                 extras: requirement.extras,
@@ -103,8 +123,9 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
             });
         }
 
-        // If the requirement is a source archive, try to extract the package name from the archive
-        // filename. This isn't guaranteed to work.
+        // If the URL names a source archive, try to extract the package name from that filename.
+        // Server-provided source filenames can be generated from repository names, so use metadata
+        // to name those archives instead.
         //
         // Ex) `anyio-4.3.0.tar.gz`
         if let Some(filename) = requirement
@@ -286,6 +307,11 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
         // Fetch the metadata for the distribution.
         let name = {
             let id = source.distribution_id();
+            let header_source = if let ParsedUrl::Archive(archive) = &requirement.url.parsed_url {
+                archive.archive.header_filename().is_some()
+            } else {
+                false
+            };
             if let Some(archive) = index
                 .distributions()
                 .get(&id)
@@ -297,6 +323,7 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
                         None
                     }
                 })
+                && !header_source
             {
                 // If the metadata is already in the index, return it.
                 archive.metadata.name.clone()
@@ -312,9 +339,8 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
                 let name = archive.metadata.name.clone();
 
                 // Insert the metadata into the index.
-                index
-                    .distributions()
-                    .done(id, Arc::new(MetadataResponse::Found(archive)));
+                let dist = Dist::from_url(name.clone(), requirement.url.clone())?;
+                index.insert_url(&dist, Arc::new(MetadataResponse::Found(archive)));
 
                 name
             }

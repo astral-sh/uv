@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use tracing::{Level, trace};
 
-use uv_distribution_types::{Dist, DistributionId, Identifier, IndexUrl, ResolvedDist};
+use uv_distribution_types::{DistributionId, Identifier, IndexUrl, ResolvedDist};
 use uv_git::GitResolver;
 use uv_normalize::PackageName;
 use uv_pep440::{MIN_VERSION, Version};
@@ -68,19 +68,26 @@ impl SelectedDistribution {
         git: &GitResolver,
     ) -> Result<Self, ResolveError> {
         let source = if let Some(url) = &package.url {
-            let metadata_id = Dist::from_url(package.name.clone(), url.clone())?.distribution_id();
+            let metadata_id = url.verbatim.distribution_id();
             let response = index.distributions().get(&metadata_id).ok_or_else(|| {
                 ResolveError::UnregisteredTask(format!("{} @ {}", package.name, url.verbatim))
             })?;
-            let MetadataResponse::Found(_) = response.as_ref() else {
+            let MetadataResponse::Found(archive) = response.as_ref() else {
                 return Err(ResolveError::PackageUnavailable(package.name.clone()));
             };
+            if archive.metadata.name != package.name {
+                return Err(ResolveError::MismatchedPackageName {
+                    request: "distribution metadata",
+                    expected: package.name.clone(),
+                    actual: archive.metadata.name.clone(),
+                });
+            }
             SelectedSource::Url {
                 dist: ResolvedDist::Installable {
-                    dist: Arc::new(Dist::from_url(
-                        package.name.clone(),
-                        url_to_precise(url.clone(), git),
-                    )?),
+                    dist: Arc::new(
+                        index
+                            .resolved_url(package.name.clone(), url_to_precise(url.clone(), git))?,
+                    ),
                     version: Some(version.clone()),
                 },
                 metadata_id,

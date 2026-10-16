@@ -12,6 +12,7 @@ use uv_distribution_types::{
 };
 use uv_normalize::PackageName;
 use uv_platform_tags::Tags;
+use uv_pypi_types::VerbatimParsedUrl;
 use uv_static::EnvVars;
 use uv_types::{BuildContext, HashStrategy};
 
@@ -37,6 +38,13 @@ pub enum VersionsResponse {
 }
 
 pub trait ResolverProvider {
+    /// Resolve a URL to a concrete archive before requesting its metadata.
+    fn resolve_url<'io>(
+        &'io self,
+        name: &'io PackageName,
+        url: &'io VerbatimParsedUrl,
+    ) -> impl Future<Output = Result<Dist, uv_distribution::Error>> + 'io;
+
     /// Get the version map for a package.
     fn get_package_versions<'io>(
         &'io self,
@@ -132,6 +140,14 @@ impl<'a, Context: BuildContext> DefaultResolverProvider<'a, Context> {
 }
 
 impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Context> {
+    async fn resolve_url<'io>(
+        &'io self,
+        name: &'io PackageName,
+        url: &'io VerbatimParsedUrl,
+    ) -> Result<Dist, uv_distribution::Error> {
+        self.fetcher.resolve_url(name, url).await
+    }
+
     /// Make a "Simple API" request for the package and convert the result to a [`VersionMap`].
     async fn get_package_versions<'io>(
         &'io self,

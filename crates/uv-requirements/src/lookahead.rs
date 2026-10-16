@@ -11,7 +11,7 @@ use uv_distribution_types::{Dist, Identifier, Requirement, RequirementSource};
 use uv_resolver::{InMemoryIndex, MetadataResponse, ResolverEnvironment};
 use uv_types::{BuildContext, HashStrategy, HashVerification, RequestedRequirements};
 
-use crate::{Error, required_dist};
+use crate::{Error, required_dist, validate_metadata_name};
 
 /// A resolver for resolving lookahead requirements from direct URLs.
 ///
@@ -169,7 +169,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
 
         // Determine whether the requirement represents a local distribution and convert to a
         // buildable distribution.
-        let Some(dist) = required_dist(&requirement)? else {
+        let Some(dist) = required_dist(&requirement, &self.database).await? else {
             return Ok(None);
         };
 
@@ -185,7 +185,9 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
         // Fetch the metadata for the distribution.
         let metadata = {
             let id = dist.distribution_id();
-            if let Some(response) = self.index.distributions().register_or_wait(&id).await {
+            if let Some(response) = self.index.distributions().register_or_wait(&id).await
+                && self.index.is_url_metadata_valid(&dist)
+            {
                 let MetadataResponse::Found(archive) = &*response else {
                     panic!("Failed to find metadata for: {requirement}");
                 };
@@ -196,18 +198,19 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                     .database
                     .get_or_build_wheel_metadata(&dist, hasher.metadata_policy(&dist))
                     .await
-                    .map_err(|err| Error::from_dist(dist, err))?;
+                    .map_err(|err| Error::from_dist(dist.clone(), err))?;
 
                 let metadata = archive.metadata.clone();
 
                 // Insert the metadata into the index.
                 self.index
-                    .distributions()
-                    .done(id, Arc::new(MetadataResponse::Found(archive)));
+                    .insert_url(&dist, Arc::new(MetadataResponse::Found(archive)));
 
                 metadata
             }
         };
+
+        validate_metadata_name(&requirement.name, &metadata.name)?;
 
         // Respect recursive extras by propagating the source extras to the dependencies.
         let package = metadata.name.clone();

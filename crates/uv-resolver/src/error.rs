@@ -48,6 +48,9 @@ pub enum ResolveError {
     #[error(transparent)]
     Distribution(#[from] uv_distribution::Error),
 
+    #[error(transparent)]
+    UrlResolution(Arc<Self>),
+
     #[error("The channel closed unexpectedly")]
     ChannelClosed,
 
@@ -144,6 +147,7 @@ impl ResolveError {
         match self {
             Self::Dependencies(error, ..) => error.is_user_failure(),
             Self::Distribution(error) => error.is_user_failure(),
+            Self::UrlResolution(error) => error.is_user_failure(),
             Self::ConflictingUrls { .. }
             | Self::ConflictingIndexesForEnvironment { .. }
             | Self::ConflictingIndexes(..)
@@ -170,6 +174,7 @@ impl uv_errors::Hinted for ResolveError {
             Self::NoSolution(no_solution) => uv_errors::Hinted::hints(no_solution.as_ref()),
             Self::Client(error) => uv_errors::Hinted::hints(error),
             Self::Distribution(error) => uv_errors::Hinted::hints(error),
+            Self::UrlResolution(error) => uv_errors::Hinted::hints(error.as_ref()),
             Self::Dependencies(error, ..) => uv_errors::Hinted::hints(error.as_ref()),
             _ => uv_errors::Hints::none(),
         }

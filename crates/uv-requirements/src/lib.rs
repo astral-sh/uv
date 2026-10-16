@@ -9,7 +9,10 @@ pub use crate::specification::*;
 pub use crate::unnamed::*;
 pub use uv_configuration::RequirementsInput;
 
-use uv_distribution_types::{Dist, DistErrorKind, Requirement, RequirementSource};
+use uv_distribution::DistributionDatabase;
+use uv_distribution_types::{Dist, DistErrorKind, Requirement};
+use uv_normalize::PackageName;
+use uv_types::BuildContext;
 
 mod extras;
 mod lookahead;
@@ -71,62 +74,33 @@ impl Error {
     }
 }
 
-/// Convert a [`Requirement`] into a [`Dist`], if it is a direct URL.
-pub(crate) fn required_dist(
+/// Convert a [`Requirement`] into a [`Dist`], discovering remote archive filenames as needed.
+pub(crate) async fn required_dist<Context: BuildContext>(
     requirement: &Requirement,
-) -> Result<Option<Dist>, uv_distribution_types::Error> {
-    Ok(Some(match &requirement.source {
-        RequirementSource::Registry { .. } => return Ok(None),
-        RequirementSource::Url {
-            subdirectory,
-            location,
-            archive,
-            url,
-        } => Dist::from_http_url(
-            requirement.name.clone(),
-            url.clone(),
-            location.as_url().clone(),
-            subdirectory.clone(),
-            archive.clone(),
-        )?,
-        RequirementSource::GitDirectory {
-            git,
-            subdirectory,
-            url,
-        } => Dist::from_git_directory_url(
-            requirement.name.clone(),
-            url.clone(),
-            git.clone(),
-            subdirectory.clone(),
-        )?,
-        RequirementSource::GitPath {
-            git,
-            install_path,
-            ext,
-            url,
-        } => Dist::from_git_path_url(
-            requirement.name.clone(),
-            url.clone(),
-            git.clone(),
-            install_path.clone(),
-            *ext,
-        )?,
-        RequirementSource::Path {
-            install_path,
-            ext,
-            url,
-        } => Dist::from_file_url(requirement.name.clone(), url.clone(), install_path, *ext)?,
-        RequirementSource::Directory {
-            install_path,
-            r#virtual,
-            url,
-            editable,
-        } => Dist::from_directory_url(
-            requirement.name.clone(),
-            url.clone(),
-            install_path,
-            *editable,
-            *r#virtual,
-        )?,
-    }))
+    database: &DistributionDatabase<'_, Context>,
+) -> Result<Option<Dist>, Error> {
+    let Some(url) = requirement.source.to_verbatim_parsed_url() else {
+        return Ok(None);
+    };
+    database
+        .resolve_url(&requirement.name, &url)
+        .await
+        .map(Some)
+        .map_err(|error| Error::Distribution(Box::new(error)))
+}
+
+/// Validate names when metadata is reused across requirements for the same URL.
+pub(crate) fn validate_metadata_name(
+    expected: &PackageName,
+    actual: &PackageName,
+) -> Result<(), Error> {
+    if expected != actual {
+        return Err(Error::Distribution(Box::new(
+            uv_distribution::Error::WheelMetadataNameMismatch {
+                given: expected.clone(),
+                metadata: actual.clone(),
+            },
+        )));
+    }
+    Ok(())
 }

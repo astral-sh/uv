@@ -7,7 +7,7 @@ use uv_distribution_types::{Identifier, Requirement};
 use uv_resolver::{InMemoryIndex, MetadataResponse};
 use uv_types::{BuildContext, HashStrategy};
 
-use crate::{Error, required_dist};
+use crate::{Error, required_dist, validate_metadata_name};
 
 /// A resolver to expand the requested extras for a set of requirements to include all defined
 /// extras.
@@ -77,7 +77,7 @@ impl<'a, Context: BuildContext> ExtrasResolver<'a, Context> {
     ) -> Result<Requirement, Error> {
         // Determine whether the requirement represents a local distribution and convert to a
         // buildable distribution.
-        let Some(dist) = required_dist(&requirement)? else {
+        let Some(dist) = required_dist(&requirement, database).await? else {
             return Ok(requirement);
         };
 
@@ -97,21 +97,22 @@ impl<'a, Context: BuildContext> ExtrasResolver<'a, Context> {
                         None
                     }
                 })
+                && index.is_url_metadata_valid(&dist)
             {
+                validate_metadata_name(&requirement.name, &archive.metadata.name)?;
                 archive.metadata.provides_extra.to_vec()
             } else {
                 // Run the PEP 517 build process to extract metadata from the source distribution.
                 let archive = database
                     .get_or_build_wheel_metadata(&dist, hasher.metadata_policy(&dist))
                     .await
-                    .map_err(|err| Error::from_dist(dist, err))?;
+                    .map_err(|err| Error::from_dist(dist.clone(), err))?;
 
+                validate_metadata_name(&requirement.name, &archive.metadata.name)?;
                 let extras = archive.metadata.provides_extra.to_vec();
 
                 // Insert the metadata into the index.
-                index
-                    .distributions()
-                    .done(id, Arc::new(MetadataResponse::Found(archive)));
+                index.insert_url(&dist, Arc::new(MetadataResponse::Found(archive)));
 
                 extras
             }
