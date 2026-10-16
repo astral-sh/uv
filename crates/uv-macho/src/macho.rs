@@ -258,17 +258,13 @@ impl FileRegions {
             return Ok(());
         }
 
-        let overlaps_previous = self
+        // Stored regions are disjoint, so only the last one starting before this end can overlap.
+        if self
             .by_start
-            .range(..=region.start)
+            .range(..region.end)
             .next_back()
-            .is_some_and(|(_, end)| *end > region.start);
-        let overlaps_next = self
-            .by_start
-            .range(region.start..)
-            .next()
-            .is_some_and(|(start, _)| *start < region.end);
-        if overlaps_previous || overlaps_next {
+            .is_some_and(|(_, end)| *end > region.start)
+        {
             return Err(Error::Malformed("overlapping file regions"));
         }
 

@@ -5,11 +5,10 @@
 //! Command boundaries and command-relative strings also follow ruby-macho's readers:
 //! <https://github.com/Homebrew/ruby-macho/blob/e106f7782df467357d0273c17aacd40df953de66/lib/macho/load_commands.rb>.
 
-use std::ffi::CStr;
 use std::ops::Range;
 
 use crate::Error;
-use crate::bytes::{array, slice};
+use crate::bytes::{array, c_string, slice};
 
 pub(crate) const HEADER_SIZE: usize = 32;
 const SEGMENT_SIZE: usize = 72;
@@ -196,10 +195,7 @@ fn command_string(data: &[u8], header_size: usize) -> Result<(), Error> {
     if offset < header_size {
         return Err(Error::Malformed("invalid load-command string offset"));
     }
-    let name = data
-        .get(offset..)
-        .ok_or(Error::Malformed("invalid string offset"))?;
-    CStr::from_bytes_until_nul(name).map_err(|_| Error::Malformed("unterminated string"))?;
+    c_string(data, offset)?;
     Ok(())
 }
 
