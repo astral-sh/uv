@@ -92,10 +92,6 @@ impl CanonicalUrl {
 
         Self(url)
     }
-
-    pub fn parse(url: &str) -> Result<Self, SafeUrlError> {
-        Ok(Self::new(SafeUrl::parse(url)?))
-    }
 }
 
 impl CacheKey for CanonicalUrl {
@@ -226,14 +222,16 @@ mod tests {
     #[test]
     fn user_credential_does_not_affect_cache_key() -> Result<(), SafeUrlError> {
         let mut hasher = CacheKeyHasher::new();
-        CanonicalUrl::parse("https://example.com/pypa/sample-namespace-packages.git@2.0.0")?
-            .cache_key(&mut hasher);
+        CanonicalUrl::new(SafeUrl::parse(
+            "https://example.com/pypa/sample-namespace-packages.git@2.0.0",
+        )?)
+        .cache_key(&mut hasher);
         let hash_without_creds = hasher.finish();
 
         let mut hasher = CacheKeyHasher::new();
-        CanonicalUrl::parse(
+        CanonicalUrl::new(SafeUrl::parse(
             "https://user:foo@example.com/pypa/sample-namespace-packages.git@2.0.0",
-        )?
+        )?)
         .cache_key(&mut hasher);
         let hash_with_creds = hasher.finish();
         assert_eq!(
@@ -242,9 +240,9 @@ mod tests {
         );
 
         let mut hasher = CacheKeyHasher::new();
-        CanonicalUrl::parse(
+        CanonicalUrl::new(SafeUrl::parse(
             "https://user:bar@example.com/pypa/sample-namespace-packages.git@2.0.0",
-        )?
+        )?)
         .cache_key(&mut hasher);
         let hash_with_creds = hasher.finish();
         assert_eq!(
@@ -253,8 +251,10 @@ mod tests {
         );
 
         let mut hasher = CacheKeyHasher::new();
-        CanonicalUrl::parse("https://:bar@example.com/pypa/sample-namespace-packages.git@2.0.0")?
-            .cache_key(&mut hasher);
+        CanonicalUrl::new(SafeUrl::parse(
+            "https://:bar@example.com/pypa/sample-namespace-packages.git@2.0.0",
+        )?)
+        .cache_key(&mut hasher);
         let hash_with_creds = hasher.finish();
         assert_eq!(
             hash_without_creds, hash_with_creds,
@@ -262,8 +262,10 @@ mod tests {
         );
 
         let mut hasher = CacheKeyHasher::new();
-        CanonicalUrl::parse("https://user:@example.com/pypa/sample-namespace-packages.git@2.0.0")?
-            .cache_key(&mut hasher);
+        CanonicalUrl::new(SafeUrl::parse(
+            "https://user:@example.com/pypa/sample-namespace-packages.git@2.0.0",
+        )?)
+        .cache_key(&mut hasher);
         let hash_with_creds = hasher.finish();
         assert_eq!(
             hash_without_creds, hash_with_creds,
@@ -277,95 +279,121 @@ mod tests {
     fn canonical_url() -> Result<(), SafeUrlError> {
         // Two URLs should be considered equal regardless of the `.git` suffix.
         assert_eq!(
-            CanonicalUrl::parse("git+https://github.com/pypa/sample-namespace-packages.git")?,
-            CanonicalUrl::parse("git+https://github.com/pypa/sample-namespace-packages")?,
+            CanonicalUrl::new(SafeUrl::parse(
+                "git+https://github.com/pypa/sample-namespace-packages.git"
+            )?),
+            CanonicalUrl::new(SafeUrl::parse(
+                "git+https://github.com/pypa/sample-namespace-packages"
+            )?),
         );
 
         // Two URLs should be considered equal regardless of the `.git` suffix.
         assert_eq!(
-            CanonicalUrl::parse("git+https://github.com/pypa/sample-namespace-packages.git@2.0.0")?,
-            CanonicalUrl::parse("git+https://github.com/pypa/sample-namespace-packages@2.0.0")?,
+            CanonicalUrl::new(SafeUrl::parse(
+                "git+https://github.com/pypa/sample-namespace-packages.git@2.0.0"
+            )?),
+            CanonicalUrl::new(SafeUrl::parse(
+                "git+https://github.com/pypa/sample-namespace-packages@2.0.0"
+            )?),
         );
 
         // Two URLs should be _not_ considered equal if they point to different repositories.
         assert_ne!(
-            CanonicalUrl::parse("git+https://github.com/pypa/sample-namespace-packages.git")?,
-            CanonicalUrl::parse("git+https://github.com/pypa/sample-packages.git")?,
+            CanonicalUrl::new(SafeUrl::parse(
+                "git+https://github.com/pypa/sample-namespace-packages.git"
+            )?),
+            CanonicalUrl::new(SafeUrl::parse(
+                "git+https://github.com/pypa/sample-packages.git"
+            )?),
         );
 
         // Two URLs should _not_ be considered equal if they request different subdirectories.
         assert_ne!(
-            CanonicalUrl::parse(
+            CanonicalUrl::new(SafeUrl::parse(
                 "git+https://github.com/pypa/sample-namespace-packages.git#subdirectory=pkg_resources/pkg_a"
-            )?,
-            CanonicalUrl::parse(
+            )?),
+            CanonicalUrl::new(SafeUrl::parse(
                 "git+https://github.com/pypa/sample-namespace-packages.git#subdirectory=pkg_resources/pkg_b"
-            )?,
+            )?),
         );
 
         // Two URLs should _not_ be considered equal if they differ in Git LFS enablement.
         assert_ne!(
-            CanonicalUrl::parse(
+            CanonicalUrl::new(SafeUrl::parse(
                 "git+https://github.com/pypa/sample-namespace-packages.git#lfs=true"
-            )?,
-            CanonicalUrl::parse("git+https://github.com/pypa/sample-namespace-packages.git")?,
+            )?),
+            CanonicalUrl::new(SafeUrl::parse(
+                "git+https://github.com/pypa/sample-namespace-packages.git"
+            )?),
         );
 
         // Two URLs should _not_ be considered equal if they request different commit tags.
         assert_ne!(
-            CanonicalUrl::parse(
+            CanonicalUrl::new(SafeUrl::parse(
                 "git+https://github.com/pypa/sample-namespace-packages.git@v1.0.0"
-            )?,
-            CanonicalUrl::parse(
+            )?),
+            CanonicalUrl::new(SafeUrl::parse(
                 "git+https://github.com/pypa/sample-namespace-packages.git@v2.0.0"
-            )?,
+            )?),
         );
 
         // Two URLs that cannot be a base should be considered equal.
         assert_eq!(
-            CanonicalUrl::parse("git+https:://github.com/pypa/sample-namespace-packages.git")?,
-            CanonicalUrl::parse("git+https:://github.com/pypa/sample-namespace-packages.git")?,
+            CanonicalUrl::new(SafeUrl::parse(
+                "git+https:://github.com/pypa/sample-namespace-packages.git"
+            )?),
+            CanonicalUrl::new(SafeUrl::parse(
+                "git+https:://github.com/pypa/sample-namespace-packages.git"
+            )?),
         );
 
         // Two URLs should _not_ be considered equal based on percent-decoding slashes.
         assert_ne!(
-            CanonicalUrl::parse("https://github.com/pypa/sample%2Fnamespace%2Fpackages")?,
-            CanonicalUrl::parse("https://github.com/pypa/sample/namespace/packages")?,
+            CanonicalUrl::new(SafeUrl::parse(
+                "https://github.com/pypa/sample%2Fnamespace%2Fpackages"
+            )?),
+            CanonicalUrl::new(SafeUrl::parse(
+                "https://github.com/pypa/sample/namespace/packages"
+            )?),
         );
 
         // Two URLs should be considered equal regardless of percent-encoding.
         assert_eq!(
-            CanonicalUrl::parse("https://github.com/pypa/sample%2Bnamespace%2Bpackages")?,
-            CanonicalUrl::parse("https://github.com/pypa/sample+namespace+packages")?,
+            CanonicalUrl::new(SafeUrl::parse(
+                "https://github.com/pypa/sample%2Bnamespace%2Bpackages"
+            )?),
+            CanonicalUrl::new(SafeUrl::parse(
+                "https://github.com/pypa/sample+namespace+packages"
+            )?),
         );
 
         assert_eq!(
-            CanonicalUrl::parse("HTTPS://github.com/PYPA/Éxample")?,
-            CanonicalUrl::parse("https://github.com/pypa/%C3%89xample")?,
+            CanonicalUrl::new(SafeUrl::parse("HTTPS://github.com/PYPA/Éxample")?),
+            CanonicalUrl::new(SafeUrl::parse("https://github.com/pypa/%C3%89xample")?),
         );
         assert_ne!(
-            CanonicalUrl::parse("https://github.com/pypa/Éxample")?,
-            CanonicalUrl::parse("https://github.com/pypa/éxample")?,
+            CanonicalUrl::new(SafeUrl::parse("https://github.com/pypa/Éxample")?),
+            CanonicalUrl::new(SafeUrl::parse("https://github.com/pypa/éxample")?),
         );
 
         // Two URLs should _not_ be considered equal based on percent-decoding slashes.
         assert_ne!(
-            CanonicalUrl::parse(
+            CanonicalUrl::new(SafeUrl::parse(
                 "file:///home/ferris/my_project%2Fmy_project-0.1.0-py3-none-any.whl"
-            )?,
-            CanonicalUrl::parse(
+            )?),
+            CanonicalUrl::new(SafeUrl::parse(
                 "file:///home/ferris/my_project/my_project-0.1.0-py3-none-any.whl"
-            )?,
+            )?),
         );
 
         // Two URLs should be considered equal regardless of percent-encoding.
         assert_eq!(
-            CanonicalUrl::parse(
+            CanonicalUrl::new(SafeUrl::parse(
                 "file:///home/ferris/my_project/my_project-0.1.0+foo-py3-none-any.whl"
-            )?,
-            CanonicalUrl::parse(
+            )?),
+            CanonicalUrl::new(SafeUrl::parse(
                 "file:///home/ferris/my_project/my_project-0.1.0%2Bfoo-py3-none-any.whl"
-            )?,
+            )?),
         );
 
         Ok(())
