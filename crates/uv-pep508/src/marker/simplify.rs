@@ -9,23 +9,52 @@ use version_ranges::Ranges;
 
 use uv_pep440::{Version, VersionSpecifier};
 
-use crate::marker::tree::ContainerOperator;
-use crate::{ExtraOperator, MarkerExpression, MarkerOperator, MarkerTree, MarkerTreeKind};
+use crate::marker::algebra::INTERNER;
+use crate::marker::algebra::isop::Cover;
+use crate::marker::tree::{ContainerOperator, MarkerTree};
+use crate::{ExtraOperator, MarkerExpression, MarkerOperator, MarkerTreeKind};
 
 /// Returns a simplified DNF expression for a given marker tree.
 ///
-/// Marker trees are represented as decision diagrams that cannot be directly serialized to.
-/// a boolean expression. Instead, you must traverse and collect all possible solutions to the
-/// diagram, which can be used to create a DNF expression, or all non-solutions to the diagram,
-/// which can be used to create a CNF expression.
-///
-/// We choose DNF as it is easier to simplify for user-facing output.
+/// Extract a shared cover before expanding it to clauses for user-facing output.
 pub(crate) fn to_dnf(tree: MarkerTree) -> Vec<Vec<MarkerExpression>> {
+    let cover = INTERNER.lock().isop(tree.0);
     let mut dnf = Vec::new();
-    collect_dnf(tree, &mut dnf, &mut Vec::new());
-    simplify(&mut dnf);
+    collect_cover(&cover, &mut dnf, &mut Vec::new());
     sort(&mut dnf);
     dnf
+}
+
+/// Expand a shared cover, rendering each single-variable guard with the marker range rules.
+fn collect_cover(
+    cover: &Cover,
+    dnf: &mut Vec<Vec<MarkerExpression>>,
+    path: &mut Vec<MarkerExpression>,
+) {
+    match cover {
+        Cover::False => {}
+        Cover::True => {
+            if !path.is_empty() {
+                dnf.push(path.clone());
+            }
+        }
+        Cover::Branches(branches) => {
+            for (guard, suffix) in branches.iter() {
+                if guard.is_true() {
+                    collect_cover(suffix, dnf, path);
+                    continue;
+                }
+                let mut alternatives = Vec::new();
+                collect_dnf(MarkerTree(*guard), &mut alternatives, &mut Vec::new());
+                for alternative in alternatives {
+                    let length = path.len();
+                    path.extend(alternative);
+                    collect_cover(suffix, dnf, path);
+                    path.truncate(length);
+                }
+            }
+        }
+    }
 }
 
 /// Walk a [`MarkerTree`] recursively and construct a DNF expression.
@@ -219,105 +248,6 @@ fn collect_dnf(
     }
 }
 
-/// Simplifies a DNF expression.
-///
-/// A decision diagram is canonical, but only for a given variable order. Depending on the
-/// pre-defined order, the DNF expression produced by a decision tree can still be further
-/// simplified.
-///
-/// For example, the decision diagram for the expression `A or B` will be represented as
-/// `A or (not A and B)` or `B or (not B and A)`, depending on the variable order. In both
-/// cases, the negation in the second clause is redundant.
-///
-/// Completely simplifying a DNF expression is NP-hard and amounts to the set cover problem.
-/// Additionally, marker expressions can contain complex expressions involving version ranges
-/// that are not trivial to simplify. Instead, we choose to simplify at the boolean variable
-/// level without any truth table expansion. Combined with the normalization applied by decision
-/// trees, this seems to be sufficient in practice.
-///
-/// Note: This function has quadratic time complexity. However, it is not applied on every marker
-/// operation, only to user facing output, which are typically very simple.
-fn simplify(dnf: &mut Vec<Vec<MarkerExpression>>) {
-    for i in 0..dnf.len() {
-        let clause = &dnf[i];
-
-        // Find redundant terms in this clause.
-        let mut redundant_terms = Vec::new();
-        'term: for (skipped, skipped_term) in clause.iter().enumerate() {
-            for (j, other_clause) in dnf.iter().enumerate() {
-                if i == j {
-                    continue;
-                }
-
-                // Let X be this clause with a given term A set to it's negation.
-                // If there exists another clause that is a subset of X, the term A is
-                // redundant in this clause.
-                //
-                // For example, `A or (not A and B)` can be simplified to `A or B`,
-                // eliminating the `not A` term.
-                if other_clause.iter().all(|term| {
-                    // For the term to be redundant in this clause, the other clause can
-                    // contain the negation of the term but not the term itself.
-                    if term == skipped_term {
-                        return false;
-                    }
-                    if is_negation(term, skipped_term) {
-                        return true;
-                    }
-
-                    // TODO(ibraheem): if we intern variables we could reduce this
-                    // from a linear search to an integer `HashSet` lookup
-                    clause
-                        .iter()
-                        .position(|x| x == term)
-                        // If the term was already removed from this one, we cannot
-                        // depend on it for further simplification.
-                        .is_some_and(|i| !redundant_terms.contains(&i))
-                }) {
-                    redundant_terms.push(skipped);
-                    continue 'term;
-                }
-            }
-        }
-
-        // Eliminate any redundant terms.
-        redundant_terms.sort_by(|a, b| b.cmp(a));
-        for term in redundant_terms {
-            dnf[i].remove(term);
-        }
-    }
-
-    // Once we have eliminated redundant terms, there may also be redundant clauses.
-    // For example, `(A and B) or (not A and B)` would have been simplified above to
-    // `(A and B) or B` and can now be further simplified to just `B`.
-    let mut redundant_clauses = Vec::new();
-    'clause: for i in 0..dnf.len() {
-        let clause = &dnf[i];
-
-        for (j, other_clause) in dnf.iter().enumerate() {
-            // Ignore clauses that are going to be eliminated.
-            if i == j || redundant_clauses.contains(&j) {
-                continue;
-            }
-
-            // There is another clause that is a subset of this one, thus this clause is redundant.
-            if other_clause.iter().all(|term| {
-                // TODO(ibraheem): if we intern variables we could reduce this
-                // from a linear search to an integer `HashSet` lookup
-                clause.contains(term)
-            }) {
-                redundant_clauses.push(i);
-                continue 'clause;
-            }
-        }
-    }
-
-    // Eliminate any redundant clauses.
-    for i in redundant_clauses.into_iter().rev() {
-        dnf.remove(i);
-    }
-}
-
 /// Sort the clauses in a DNF expression, for backwards compatibility. The goal is to avoid
 /// unnecessary churn in the display output of the marker expressions, e.g., when modifying the
 /// internal representations used in the marker algebra.
@@ -408,85 +338,5 @@ fn star_range_specifier(range: &Ranges<Version>) -> Option<VersionSpecifier> {
         }
     } else {
         None
-    }
-}
-
-/// Returns `true` if the LHS is the negation of the RHS, or vice versa.
-fn is_negation(left: &MarkerExpression, right: &MarkerExpression) -> bool {
-    match left {
-        MarkerExpression::Version { key, specifier } => {
-            let MarkerExpression::Version {
-                key: key2,
-                specifier: specifier2,
-            } = right
-            else {
-                return false;
-            };
-
-            key == key2
-                && specifier.version() == specifier2.version()
-                && specifier
-                    .operator()
-                    .negate()
-                    .is_some_and(|negated| negated == *specifier2.operator())
-        }
-        MarkerExpression::VersionIn {
-            key,
-            versions,
-            operator,
-        } => {
-            let MarkerExpression::VersionIn {
-                key: key2,
-                versions: versions2,
-                operator: operator2,
-            } = right
-            else {
-                return false;
-            };
-
-            key == key2 && versions == versions2 && operator != operator2
-        }
-        MarkerExpression::String {
-            key,
-            operator,
-            value,
-        } => {
-            let MarkerExpression::String {
-                key: key2,
-                operator: operator2,
-                value: value2,
-            } = right
-            else {
-                return false;
-            };
-
-            key == key2
-                && value == value2
-                && operator
-                    .negate()
-                    .is_some_and(|negated| negated == *operator2)
-        }
-        MarkerExpression::Extra { operator, name } => {
-            let MarkerExpression::Extra {
-                name: name2,
-                operator: operator2,
-            } = right
-            else {
-                return false;
-            };
-
-            name == name2 && operator.negate() == *operator2
-        }
-        MarkerExpression::List { pair, operator } => {
-            let MarkerExpression::List {
-                pair: pair2,
-                operator: operator2,
-            } = right
-            else {
-                return false;
-            };
-
-            pair == pair2 && operator != operator2
-        }
     }
 }
