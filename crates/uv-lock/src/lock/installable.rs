@@ -21,7 +21,6 @@ use uv_pypi_types::{ConflictKind, ConflictSet, ResolverMarkerEnvironment};
 use uv_resolver_types::UniversalMarker;
 use uv_resolver_types::universal_marker::ActivatedConflictItems;
 
-use crate::lock::selection::{Selection, SelectionMode};
 use crate::lock::{
     Dependency, DependencySelectionContext, HashedDist, LockErrorKind, Package, PackageIndex,
     SelectedDependency, TagPolicy,
@@ -266,80 +265,6 @@ trait InstallableExt<'lock>: Installable<'lock> {
         build_options: &BuildOptions,
         install_options: &InstallOptions,
     ) -> Result<Resolution, LockError> {
-        if self.lock().version() == 2 {
-            let roots = roots
-                .iter()
-                .copied()
-                .map(|package| (package, InstallableRootKind::Production))
-                .chain(group_root.map(|package| (package, InstallableRootKind::DependencyGroups)))
-                .collect::<Vec<_>>();
-            let selection = Selection::from_lock(
-                self,
-                &roots,
-                include_manifest,
-                selection_context,
-                extras,
-                groups,
-                Some(marker_env.markers()),
-                &[],
-                SelectionMode::Resolution,
-            )?;
-            let mut graph = Graph::new();
-            let root = graph.add_node(Node::Root);
-            let mut inverse = vec![None; self.lock().packages.len()];
-            for (package, _) in roots {
-                let package_index = self.lock().by_id[&package.id];
-                let node = if selection.packages[package_index.0].is_false() {
-                    self.non_installable_node(package, tags, marker_env)?
-                } else {
-                    self.package_to_node(package, tags, build_options, install_options, marker_env)?
-                };
-                let index = *inverse[package_index.0].get_or_insert_with(|| graph.add_node(node));
-                graph.add_edge(root, index, Edge::Prod);
-            }
-            for (index, marker) in selection.packages.iter().enumerate() {
-                if !marker.is_false() && inverse[index].is_none() {
-                    inverse[index] = Some(graph.add_node(self.package_to_node(
-                        &self.lock().packages[index],
-                        tags,
-                        build_options,
-                        install_options,
-                        marker_env,
-                    )?));
-                }
-            }
-            for edge in selection.edges {
-                let parent = if let Some(parent) = edge.parent {
-                    if let Some(index) = inverse[parent.0] {
-                        index
-                    } else {
-                        let index = graph.add_node(self.non_installable_node(
-                            self.lock().package(parent),
-                            tags,
-                            marker_env,
-                        )?);
-                        inverse[parent.0] = Some(index);
-                        index
-                    }
-                } else {
-                    root
-                };
-                let target = if let Some(index) = inverse[edge.target.0] {
-                    index
-                } else {
-                    let index = graph.add_node(self.non_installable_node(
-                        self.lock().package(edge.target),
-                        tags,
-                        marker_env,
-                    )?);
-                    inverse[edge.target.0] = Some(index);
-                    index
-                };
-                graph.add_edge(parent, target, edge.kind);
-            }
-            return Ok(Resolution::new(graph));
-        }
-
         let size_guess = self.lock().packages.len();
         let mut petgraph = Graph::with_capacity(size_guess, size_guess);
         let mut inverse = vec![None; size_guess];
@@ -1827,66 +1752,6 @@ source = { registry = "https://example.com/simple" }
         )
         "#);
         });
-    }
-
-    #[test]
-    fn request_selection_rejects_external_version_context() {
-        let lock = Lock::from_toml(r#"
-version = 2
-revision = 5
-requires-python = ">=3.11"
-conflicts = [[
-    { package = "project", extra = "foo" },
-    { package = "project", extra = "bar" },
-]]
-
-[[package]]
-name = "tool"
-version = "1.0.0"
-source = { registry = "https://example.com/simple" }
-requests = [{ name = "backend" }]
-sdist = { url = "https://example.com/tool-1.0.0.tar.gz", hash = "sha256:1111111111111111111111111111111111111111111111111111111111111111" }
-dependencies = [
-    { name = "backend", version = "1.0.0", source = { registry = "https://example.com/simple" }, marker = "sys_platform == 'linux' or extra == 'extra-7-project-foo'" },
-    { name = "backend", version = "2.0.0", source = { registry = "https://example.com/simple" }, marker = "sys_platform != 'linux' and extra != 'extra-7-project-foo'" },
-]
-
-[[package]]
-name = "backend"
-version = "1.0.0"
-source = { registry = "https://example.com/simple" }
-requests = []
-sdist = { url = "https://example.com/backend-1.0.0.tar.gz", hash = "sha256:2222222222222222222222222222222222222222222222222222222222222222" }
-
-[[package]]
-name = "backend"
-version = "2.0.0"
-source = { registry = "https://example.com/simple" }
-requests = []
-sdist = { url = "https://example.com/backend-2.0.0.tar.gz", hash = "sha256:3333333333333333333333333333333333333333333333333333333333333333" }
-"#).expect("valid request lock");
-        let root = package(&lock, "tool", "1.0.0");
-        let extras = ExtrasSpecification::default();
-        let error = materialize_with_extras(&lock, &[root], &DARWIN_MARKERS, &extras)
-            .expect_err("the version choice requires the absent project context");
-        let error = error.to_string();
-        insta::assert_snapshot!(anstream::adapter::strip_str(&error), @"Cannot materialize dependency `backend==1.0.0 @ registry+https://example.com/simple` of `tool==1.0.0 @ registry+https://example.com/simple` because its conflict marker depends on a package outside the selected subgraph");
-
-        let linux = materialize_with_extras(&lock, &[root], &LINUX_MARKERS, &extras)
-            .expect("the version choice is unconditional on Linux");
-        insta::assert_debug_snapshot!(graph_snapshot(&linux), @r#"
-        (
-            [
-                "backend==1.0.0 (install: true, hashes: sha256:2222222222222222222222222222222222222222222222222222222222222222)",
-                "root",
-                "tool==1.0.0 (install: true, hashes: sha256:1111111111111111111111111111111111111111111111111111111111111111)",
-            ],
-            [
-                "root --Prod--> tool==1.0.0 (install: true, hashes: sha256:1111111111111111111111111111111111111111111111111111111111111111)",
-                "tool==1.0.0 (install: true, hashes: sha256:1111111111111111111111111111111111111111111111111111111111111111) --Prod--> backend==1.0.0 (install: true, hashes: sha256:2222222222222222222222222222222222222222222222222222222222222222)",
-            ],
-        )
-        "#);
     }
 
     #[test]

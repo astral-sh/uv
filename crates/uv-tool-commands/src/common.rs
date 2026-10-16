@@ -346,7 +346,6 @@ impl ToolLock {
         let lock = Lock::from_resolution(
             resolution,
             manifest,
-            Conflicts::empty(),
             root,
             Vec::new(),
             index_locations,

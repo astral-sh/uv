@@ -45,7 +45,6 @@ use uv_warnings::warn_user_once;
 use uv_resolver_types::ResolverOutput;
 
 use crate::lock::export::ExportableRequirements;
-use crate::lock::selection::SelectionMode;
 use crate::lock::{Source, WheelTagHint, is_wheel_unreachable};
 use crate::{Installable, LockError};
 
@@ -793,7 +792,6 @@ impl<'lock> PylockToml {
             dev,
             annotate,
             install_options,
-            SelectionMode::Resolution,
         )?;
 
         // Sort the nodes.

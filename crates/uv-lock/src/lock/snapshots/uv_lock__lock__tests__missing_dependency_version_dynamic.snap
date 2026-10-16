@@ -73,7 +73,6 @@ Ok(
                     provides_extra: [],
                     dependency_groups: {},
                 },
-                requests: None,
             },
             Package {
                 id: PackageId {
@@ -121,7 +120,6 @@ Ok(
                     provides_extra: [],
                     dependency_groups: {},
                 },
-                requests: None,
             },
             Package {
                 id: PackageId {
@@ -189,7 +187,6 @@ Ok(
                     provides_extra: [],
                     dependency_groups: {},
                 },
-                requests: None,
             },
         ],
         by_id: {

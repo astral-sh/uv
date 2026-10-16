@@ -286,9 +286,6 @@ fn write_package(
 ) -> Result<(), WriteError> {
     writer.array_of_tables(&["package"])?;
     write_package_id(writer, &package.id, None, PackageIdLocation::Table)?;
-    if let Some(requests) = &package.requests {
-        write_serialized_array(writer, "requests", requests)?;
-    }
     if let Some(groups) = &package.default_groups {
         writer.key_value("default-groups", serialize_value(groups)?)?;
     }

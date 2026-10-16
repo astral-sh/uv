@@ -15774,7 +15774,7 @@ fn conflicting_editable() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 2
+        version = 1
         revision = 5
         requires-python = ">=3.12"
         conflicts = [[
@@ -15789,22 +15789,16 @@ fn conflicting_editable() -> Result<()> {
         name = "child"
         version = "0.1.0"
         source = { directory = "child" }
-        requests = []
 
         [[package]]
         name = "child"
         version = "0.1.0"
         source = { editable = "child" }
-        requests = []
 
         [[package]]
         name = "project"
         version = "0.1.0"
         source = { virtual = "." }
-        requests = [
-            { name = "child", group = "bar" },
-            { name = "child", group = "foo" },
-        ]
 
         [package.dev-dependencies]
         bar = [
@@ -15931,7 +15925,7 @@ fn undeclared_editable() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 2
+        version = 1
         revision = 5
         requires-python = ">=3.12"
         conflicts = [[
@@ -15946,22 +15940,16 @@ fn undeclared_editable() -> Result<()> {
         name = "child"
         version = "0.1.0"
         source = { directory = "child" }
-        requests = []
 
         [[package]]
         name = "child"
         version = "0.1.0"
         source = { editable = "child" }
-        requests = []
 
         [[package]]
         name = "project"
         version = "0.1.0"
         source = { virtual = "." }
-        requests = [
-            { name = "child", group = "bar" },
-            { name = "child", group = "foo" },
-        ]
 
         [package.dev-dependencies]
         bar = [

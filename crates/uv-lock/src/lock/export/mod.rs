@@ -18,7 +18,6 @@ use uv_pypi_types::ConflictItem;
 use uv_resolver_types::graph_ops::Reachable;
 use uv_resolver_types::universal_marker::resolve_activated_extras;
 
-use crate::lock::DependencySelectionContext;
 pub use crate::lock::export::metadata::{Metadata, PythonReport};
 pub(crate) use crate::lock::export::metadata::{
     MetadataNode, MetadataNodeId, MetadataNodeKind, MetadataScript, MetadataWorkspace,
@@ -26,7 +25,6 @@ pub(crate) use crate::lock::export::metadata::{
 };
 pub use crate::lock::export::pylock_toml::{PylockToml, PylockTomlError, PylockTomlErrorKind};
 pub use crate::lock::export::requirements_txt::RequirementsTxtExport;
-use crate::lock::selection::{Selection, SelectionMode};
 use crate::lock::{LockErrorKind, PackageIndex};
 use crate::{Installable, InstallableRootKind, LockError, Package};
 
@@ -59,76 +57,7 @@ impl<'lock> ExportableRequirements<'lock> {
         groups: &DependencyGroupsWithDefaults,
         annotate: bool,
         install_options: &'lock InstallOptions,
-        mode: SelectionMode,
     ) -> Result<Self, LockError> {
-        if target.lock().version() == 2 {
-            let roots = target
-                .roots()
-                .map(|root| (root, InstallableRootKind::Production))
-                .chain(
-                    target
-                        .group_root(groups)
-                        .map(|root| (root, InstallableRootKind::DependencyGroups)),
-                )
-                .filter(|(root, _)| !prune.contains(root))
-                .map(|(name, kind)| {
-                    let package = target
-                        .lock()
-                        .find_by_name(name)
-                        .map_err(|_| LockErrorKind::MultipleRootPackages { name: name.clone() })?
-                        .ok_or_else(|| LockErrorKind::MissingRootPackage { name: name.clone() })?;
-                    Ok::<_, LockError>((package, kind))
-                })
-                .collect::<Result<Vec<_>, _>>()?;
-            let selection = Selection::from_lock(
-                target,
-                &roots,
-                true,
-                DependencySelectionContext::None,
-                extras,
-                groups,
-                None,
-                prune,
-                mode,
-            )?;
-            let mut dependents = vec![Vec::new(); target.lock().packages.len()];
-            if annotate {
-                for edge in &selection.edges {
-                    if let Some(parent) = edge.parent
-                        && parent != edge.target
-                    {
-                        dependents[edge.target.0].push(target.lock().package(parent));
-                    }
-                }
-            }
-            return Ok(Self(
-                target
-                    .lock()
-                    .packages
-                    .iter()
-                    .zip(selection.packages)
-                    .zip(dependents)
-                    .filter(|((package, marker), _)| {
-                        !marker.is_false()
-                            && install_options.include_package(
-                                package.as_install_target(),
-                                target.project_name(),
-                                target.lock().members(),
-                            )
-                    })
-                    .map(|((package, marker), mut dependents)| {
-                        dependents.sort_unstable_by_key(|package| package.name());
-                        dependents.dedup_by_key(|package| package.name());
-                        ExportableRequirement {
-                            package,
-                            marker: target.lock().simplify_environment(marker),
-                            dependents,
-                        }
-                    })
-                    .collect(),
-            ));
-        }
-
         let size_guess = target.lock().packages.len();
         let mut graph = Graph::<Node<'lock>, Edge<'lock>>::with_capacity(size_guess, size_guess);
         let mut inverse = vec![None; size_guess];

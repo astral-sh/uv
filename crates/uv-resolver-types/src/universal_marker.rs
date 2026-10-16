@@ -7,7 +7,7 @@ use rustc_hash::FxHashMap;
 
 use uv_normalize::{ExtraName, GroupName, InvalidNameError, PackageName};
 use uv_pep508::{MarkerEnvironment, MarkerExpression, MarkerOperator, MarkerTree};
-use uv_pypi_types::{ConflictItem, ConflictKind, Conflicts};
+use uv_pypi_types::{ConflictItem, ConflictKind, Conflicts, Inference};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ConflictMarkerError {
@@ -167,17 +167,66 @@ impl UniversalMarker {
         self.pep508 = self.pep508.and(other.pep508);
     }
 
-    /// Restrict an installation marker to assignments permitted by the declared conflicts.
+    /// Imbibes the world knowledge expressed by `conflicts` into this marker.
     ///
-    /// Invalid assignments are outside this marker's domain. Callers must retain dependency
-    /// requests separately and validate them before using the simplified installation graph.
+    /// This will effectively simplify the conflict marker in this universal
+    /// marker. In particular, it enables simplifying based on the fact that no
+    /// two items from the same set in the given conflicts can be active at a
+    /// given time. If every valid selection has the same nonempty environment marker,
+    /// the result contains only that environment marker. Otherwise, invalid selections
+    /// remain reachable so lockfile readers can discover transitive conflicts.
     pub fn imbibe(&mut self, conflicts: ConflictMarker) {
         if conflicts.marker.is_true() {
             return;
         }
 
-        self.marker = self.marker.restrict(conflicts.marker);
-        if self.marker != self.pep508 {
+        if !self.has_conflict_marker() && !self.marker.is_false() {
+            return;
+        }
+
+        // If every valid conflict selection has the same environment marker, that marker does
+        // not need to repeat the conflicts.
+        let reachable = self.marker.and(conflicts.marker);
+        let environment = reachable.without_extras();
+        if !environment.is_false() && reachable == environment.and(conflicts.marker) {
+            self.marker = environment;
+            self.pep508 = environment;
+            return;
+        }
+
+        // Lockfile readers discover transitively activated conflicts by following dependency
+        // edges. Conflict-dependent and impossible edges must remain reachable when an invalid
+        // combination is selected, so those readers can report the conflict.
+        self.marker = conflicts.marker.implies(self.marker);
+        self.pep508 = self.marker.without_extras();
+    }
+
+    /// If all inference sets reduce to the same marker, simplify the marker using that knowledge.
+    pub(crate) fn unify_inference_sets(&mut self, conflict_sets: &[BTreeSet<Inference>]) {
+        let mut previous_marker = None;
+
+        for conflict_set in conflict_sets {
+            let mut marker = self.marker;
+            for inference in conflict_set {
+                let extra = encode_conflict_item(&inference.item);
+
+                marker = if inference.included {
+                    marker.simplify_extras_with(|candidate| *candidate == extra)
+                } else {
+                    marker.simplify_not_extras_with(|candidate| *candidate == extra)
+                };
+            }
+            if let Some(previous_marker) = &previous_marker {
+                if previous_marker != &marker {
+                    return;
+                }
+            } else {
+                previous_marker = Some(marker);
+            }
+        }
+
+        if let Some(all_branches_marker) = previous_marker {
+            self.marker = all_branches_marker;
             self.pep508 = self.marker.without_extras();
         }
     }
@@ -349,8 +398,7 @@ impl UniversalMarker {
     }
 
     /// Returns true if the marker always evaluates to true if the given set of extras is activated.
-    #[cfg(test)]
-    fn evaluate_only_extras<P, E, G>(self, extras: &[(P, E)], groups: &[(P, G)]) -> bool
+    pub(crate) fn evaluate_only_extras<P, E, G>(self, extras: &[(P, E)], groups: &[(P, G)]) -> bool
     where
         P: Borrow<PackageName>,
         E: Borrow<ExtraName>,
@@ -1085,7 +1133,7 @@ mod tests {
     }
 
     #[test]
-    fn imbibe_removes_impossible_installation_edges() {
+    fn imbibe_retains_impossible_selections_for_conflict_discovery() {
         let conflicts = create_conflicts([create_set(["foo", "bar"])]);
         let conflicts_marker = ConflictMarker::from_conflicts(&conflicts);
         let impossible = create_extra_marker("foo")
@@ -1094,7 +1142,7 @@ mod tests {
         for combined in [MarkerTree::FALSE, impossible] {
             let mut marker = UniversalMarker::from_combined(combined);
             marker.imbibe(conflicts_marker);
-            assert!(marker.is_false());
+            assert_eq!(marker.combined(), conflicts_marker.marker.negate());
         }
     }
 
@@ -1130,19 +1178,37 @@ mod tests {
         }
     }
 
-    /// Restriction must not import unrelated conflict variables into a request's version guard.
     #[test]
-    fn imbibe_does_not_add_conflict_variables() {
+    fn imbibe_canonicalizes_allowed_selections() {
         let conflicts = create_conflicts([
             create_set(["foo", "bar", "baz"]),
             create_set(["fox", "ant"]),
         ]);
+        let conflicts_marker = ConflictMarker::from_conflicts(&conflicts);
         let environment =
             MarkerTree::from_str("sys_platform == 'darwin'").expect("valid marker expression");
-        let original = environment.and(create_extra_marker("foo").marker);
-        let mut marker = UniversalMarker::from_combined(original);
-        marker.imbibe(ConflictMarker::from_conflicts(&conflicts));
-        assert_eq!(marker.combined(), original);
+        let foo = create_extra_marker("foo").marker;
+        let bar = create_extra_marker("bar").marker;
+        let fox = create_extra_marker("fox").marker;
+        let ant = create_extra_marker("ant").marker;
+        for combined in [
+            environment,
+            environment.and(foo).or(environment.negate().and(bar)),
+            environment.and(foo.or(fox)),
+            foo.and(bar),
+            foo.and(fox).or(bar.and(ant)),
+        ] {
+            let mut marker = UniversalMarker::from_combined(combined);
+            marker.imbibe(conflicts_marker);
+            for equivalent in [
+                combined.and(conflicts_marker.marker),
+                conflicts_marker.marker.implies(combined),
+            ] {
+                let mut equivalent = UniversalMarker::from_combined(equivalent);
+                equivalent.imbibe(conflicts_marker);
+                assert_eq!(marker, equivalent);
+            }
+        }
     }
 
     #[test]

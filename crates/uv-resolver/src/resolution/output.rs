@@ -18,7 +18,7 @@ use uv_pypi_types::{Conflicts, HashDigests, ParsedUrl, VerbatimParsedUrl, Yanked
 use uv_resolver_types::PackageRole;
 use uv_types::HashStrategy;
 
-use crate::graph_ops::marker_reachability;
+use crate::graph_ops::{marker_reachability, simplify_conflict_markers};
 use crate::preferences::Preferences;
 use crate::resolution::{AnnotatedDist, ResolutionGraphNode, ResolverOutput};
 use crate::resolution_mode::ResolutionStrategy;
@@ -123,8 +123,8 @@ pub(crate) fn from_state(
     // Compute and apply the marker reachability.
     let mut reachability = marker_reachability(&graph, &fork_markers);
 
-    // Restrict installation markers to valid assignments. Lockfiles retain the original
-    // dependency requests separately so impossible edges can be discarded safely.
+    // Apply the reachability to the graph and imbibe world
+    // knowledge about conflicts.
     let conflict_marker = ConflictMarker::from_conflicts(conflicts);
     for index in graph.node_indices() {
         if let ResolutionGraphNode::Dist(dist) = &mut graph[index] {
@@ -135,6 +135,8 @@ pub(crate) fn from_state(
     for weight in graph.edge_weights_mut() {
         weight.imbibe(conflict_marker);
     }
+
+    simplify_conflict_markers(conflicts, &mut graph);
 
     // Discard any unreachable nodes.
     graph.retain_nodes(|graph, node| !graph[node].marker().is_false());

@@ -90,27 +90,24 @@ mod inputs;
 mod installable;
 mod map;
 mod requirements;
-mod selection;
 mod serialize;
 mod tree;
 #[cfg(test)]
 mod windows_emulation_tests;
 
 /// The current version of the lockfile format.
-const VERSION: u32 = 2;
+const VERSION: u32 = 1;
 
 /// An error returned when parsing a lockfile.
 #[derive(Debug, thiserror::Error)]
 pub enum LockParseError {
     /// The lockfile uses an unsupported schema version.
-    #[error(
-        "unsupported lockfile schema version (v{version}, but only versions up to v{supported} are supported)"
-    )]
+    #[error("unsupported lockfile schema version (v{version}, but only v{supported} is supported)")]
     UnsupportedVersion { supported: u32, version: u32 },
 
     /// The lockfile cannot be parsed and uses an unsupported schema version.
     #[error(
-        "failed to parse lockfile using an unsupported schema version (v{version}, but only versions up to v{supported} are supported)"
+        "failed to parse lockfile using an unsupported schema version (v{version}, but only v{supported} is supported)"
     )]
     UnparsableVersion {
         supported: u32,
@@ -316,9 +313,12 @@ pub(crate) struct HashedDist {
 pub struct Lock {
     /// The (major) version of the lockfile format.
     ///
-    /// Version 2 retains dependency requests separately from installation markers. Readers must
-    /// validate these requests before traversing the compact installation graph. Version 1 locks
-    /// remain readable through the legacy traversal.
+    /// Changes to the major version indicate backwards- and forwards-incompatible changes to the
+    /// lockfile format. A given uv version only supports a single major version of the lockfile
+    /// format.
+    ///
+    /// In other words, a version of uv that supports version 2 of the lockfile format will not be
+    /// able to read lockfiles generated under version 1 or 3.
     version: u32,
     /// The revision of the lockfile format.
     ///
@@ -2476,7 +2476,6 @@ impl Lock {
     pub fn from_resolution(
         resolution: &ResolverOutput,
         manifest: ResolverManifest,
-        conflicts: Conflicts,
         root: &Path,
         supported_environments: Vec<MarkerTree>,
         index_locations: &IndexLocations,
@@ -2501,7 +2500,6 @@ impl Lock {
             &requires_python,
             fork_markers_union(&resolution.fork_markers, &requires_python),
         );
-        let conflict_marker = ConflictMarker::from_conflicts(&conflicts);
 
         // Determine the set of packages included at multiple versions.
         let mut seen = FxHashSet::default();
@@ -2533,9 +2531,6 @@ impl Lock {
 
             let mut package =
                 Package::from_annotated_dist(dist, fork_markers, root, index_locations)?;
-            if !conflicts.is_empty() {
-                package.record_requests(dist, &resolution.modifiers)?;
-            }
             // Git declarations can introduce direct sources needed by offline freshness checks.
             if metadata_free
                 && matches!(package.id.source, Source::Git(..))
@@ -2563,7 +2558,6 @@ impl Lock {
                 resolution,
                 node_index,
                 environment,
-                conflict_marker,
                 root,
             )?;
 
@@ -2605,7 +2599,6 @@ impl Lock {
                     resolution,
                     node_index,
                     environment,
-                    conflict_marker,
                     root,
                 )?;
             }
@@ -2624,33 +2617,12 @@ impl Lock {
                     resolution,
                     node_index,
                     environment,
-                    conflict_marker,
                     root,
                 )?;
             }
         }
 
-        let mut packages = packages.into_values().collect::<Vec<_>>();
-        if !conflicts.is_empty() {
-            for package in &mut packages {
-                if let Some(requests) = &mut package.requests {
-                    requests.retain(|request| {
-                        request.is_reachable(
-                            &package.optional_dependencies,
-                            requires_python.to_marker_tree(),
-                        )
-                    });
-                }
-                for dependencies in iter::once(&mut package.dependencies)
-                    .chain(package.optional_dependencies.values_mut())
-                    .chain(package.dependency_groups.values_mut())
-                {
-                    dependencies.retain(|dependency| !dependency.complexified_marker.is_false());
-                    dependencies.sort();
-                    dependencies.dedup();
-                }
-            }
-        }
+        let packages = packages.into_values().collect();
 
         let options = ResolverOptions {
             resolution_mode: resolution.options.resolution_mode,
@@ -2666,13 +2638,13 @@ impl Lock {
         let fork_markers =
             canonicalize_universal_markers(&resolution.fork_markers, &requires_python);
         let lock = Self::new(
-            if conflicts.is_empty() { 1 } else { VERSION },
+            VERSION,
             REVISION,
             packages,
             requires_python,
             options,
             manifest,
-            conflicts,
+            Conflicts::empty(),
             supported_environments,
             vec![],
             fork_markers,
@@ -2705,17 +2677,6 @@ impl Lock {
         // Put all dependencies for each package in a canonical order and
         // check for duplicates.
         for package in &mut packages {
-            if version == VERSION && package.requests.is_none() {
-                return Err(LockErrorKind::MissingRequests {
-                    package: package.id.clone(),
-                }
-                .into());
-            }
-            if let Some(requests) = &package.requests {
-                for request in requests {
-                    request.validate(package)?;
-                }
-            }
             package.dependencies.sort();
             for [dep1, dep2] in package.dependencies.array_windows() {
                 if dep1 == dep2 {
@@ -2857,6 +2818,13 @@ impl Lock {
             manifest,
         };
         Ok(lock)
+    }
+
+    /// Record the conflicting groups that were used to generate this lock.
+    #[must_use]
+    pub fn with_conflicts(mut self, conflicts: Conflicts) -> Self {
+        self.conflicts = conflicts;
+        self
     }
 
     /// Record the required platforms that were used to generate this lock.
@@ -3199,7 +3167,7 @@ impl Lock {
     pub fn configured_member_default_groups(
         &self,
     ) -> Option<impl Iterator<Item = (&PackageName, &DefaultGroups)>> {
-        ((self.version(), self.revision()) >= (1, DEFAULT_GROUPS_REVISION)).then(|| {
+        ((self.version(), self.revision()) >= (VERSION, DEFAULT_GROUPS_REVISION)).then(|| {
             self.workspace_packages().filter_map(|package| {
                 package
                     .default_groups
@@ -3213,7 +3181,7 @@ impl Lock {
     ///
     /// Returns `None` if the lockfile predates this metadata.
     pub fn workspace_default_groups(&self) -> Option<DefaultGroups> {
-        ((self.version(), self.revision()) >= (1, DEFAULT_GROUPS_REVISION)).then(|| {
+        ((self.version(), self.revision()) >= (VERSION, DEFAULT_GROUPS_REVISION)).then(|| {
             self.manifest
                 .default_groups
                 .clone()
@@ -3228,11 +3196,13 @@ impl Lock {
     pub fn member_group_metadata(
         &self,
     ) -> Option<impl Iterator<Item = (&PackageName, &BTreeMap<GroupName, GroupMetadata>)>> {
-        ((self.version(), self.revision()) >= (1, MEMBER_GROUP_METADATA_REVISION)).then(|| {
-            self.workspace_packages()
-                .filter(|package| !package.group_requires_python.is_empty())
-                .map(|package| (&package.id.name, &package.group_requires_python))
-        })
+        ((self.version(), self.revision()) >= (VERSION, MEMBER_GROUP_METADATA_REVISION)).then(
+            || {
+                self.workspace_packages()
+                    .filter(|package| !package.group_requires_python.is_empty())
+                    .map(|package| (&package.id.name, &package.group_requires_python))
+            },
+        )
     }
 
     /// Return dependency group metadata for a workspace root without a `[project]` table.
@@ -3246,7 +3216,7 @@ impl Lock {
     /// A single-project lockfile's root counts as a member even when the workspace member list is
     /// omitted.
     pub fn member_default_groups(&self, name: &PackageName) -> Option<DefaultGroups> {
-        if (self.version(), self.revision()) < (1, DEFAULT_GROUPS_REVISION) {
+        if (self.version(), self.revision()) < (VERSION, DEFAULT_GROUPS_REVISION) {
             return None;
         }
         let index = *self.workspace_members.get(name)?;
@@ -3814,7 +3784,7 @@ impl Lock {
                 Ok(lock) => lock,
                 Err(source) => {
                     if let Ok(lock) = toml::from_str::<LockVersion>(input)
-                        && !(1..=VERSION).contains(&lock.version())
+                        && lock.version() != VERSION
                     {
                         return Err(LockParseError::UnparsableVersion {
                             supported: VERSION,
@@ -3827,7 +3797,7 @@ impl Lock {
             },
         };
 
-        if !(1..=VERSION).contains(&lock.version()) {
+        if lock.version() != VERSION {
             return Err(LockParseError::UnsupportedVersion {
                 supported: VERSION,
                 version: lock.version(),
@@ -6664,9 +6634,6 @@ pub struct Package {
     group_requires_python: BTreeMap<GroupName, GroupMetadata>,
     /// The exact requirements from the package metadata.
     metadata: PackageMetadata,
-    /// Requirements after overrides and exclusions, before conflict-based edge simplification.
-    /// Present for every package in a version 2 lock, including packages without dependencies.
-    requests: Option<BTreeSet<selection::DependencyRequest>>,
 }
 
 impl Package {
@@ -6700,7 +6667,6 @@ impl Package {
             default_groups: None,
             group_requires_python: BTreeMap::new(),
             metadata,
-            requests: None,
         })
     }
 
@@ -6712,7 +6678,6 @@ impl Package {
         resolution: &ResolverOutput,
         node_index: NodeIndex,
         environment: SimplifiedMarkerTree,
-        conflicts: ConflictMarker,
         root: &Path,
     ) -> Result<(), LockError> {
         let parent_marker = *resolution.graph[node_index].marker();
@@ -6723,28 +6688,6 @@ impl Package {
             parent_marker,
             parent_marker,
         );
-        // Reaching an optional or group section already activates its owner. Validated requests
-        // retain that activation, so installation edges need not repeat the implied conflicts.
-        let assumption = if self.requests.is_some() {
-            let item = match context {
-                DependencyContext::Production => None,
-                DependencyContext::Extra(extra) => {
-                    Some(ConflictItem::from((self.id.name.clone(), extra.clone())))
-                }
-                DependencyContext::Group(group) => {
-                    Some(ConflictItem::from((self.id.name.clone(), group.clone())))
-                }
-            };
-            item.map(|item| {
-                UniversalMarker::new(
-                    MarkerTree::TRUE,
-                    conflicts.and(ConflictMarker::from_conflict_item(&item)),
-                )
-                .combined()
-            })
-        } else {
-            None
-        };
         for edge in resolution.graph.edges(node_index) {
             let ResolutionGraphNode::Dist(distribution) = &resolution.graph[edge.target()] else {
                 continue;
@@ -6752,12 +6695,14 @@ impl Package {
 
             let package_id = PackageId::from_annotated_dist(distribution, root)?;
             let extras = distribution.kind.extra().into_iter().cloned().collect();
-            let marker = assumption.map_or(*edge.weight(), |assumption| {
-                UniversalMarker::from_combined(edge.weight().combined().restrict(assumption))
-            });
 
             // Preserve the distinction between an empty extra and an extra with dependencies.
-            builder.add(context.dependencies_mut(self), package_id, extras, marker);
+            builder.add(
+                context.dependencies_mut(self),
+                package_id,
+                extras,
+                *edge.weight(),
+            );
         }
 
         Ok(())
@@ -7469,8 +7414,6 @@ struct PackageWire {
     #[serde(default)]
     metadata: PackageMetadata,
     #[serde(default)]
-    requests: Option<BTreeSet<selection::DependencyRequest>>,
-    #[serde(default)]
     sdist: Option<SourceDist>,
     #[serde(default)]
     wheels: Vec<Wheel>,
@@ -7616,7 +7559,6 @@ impl PackageWire {
         Ok(Package {
             id: self.id,
             metadata: self.metadata,
-            requests: self.requests,
             default_groups: self.default_groups,
             group_requires_python: self.group_requires_python,
             sdist: self.sdist,
@@ -8017,8 +7959,7 @@ impl Source {
                     && source.subdirectory == *subdirectory
             }
             (Self::Path(path), RequirementSource::Path { install_path, .. }) => {
-                normalize_path(root.join(path)).as_ref()
-                    == normalize_path(root.join(install_path)).as_ref()
+                normalize_path(root.join(path)).as_ref() == install_path.as_ref()
             }
             (
                 Self::Directory(path) | Self::Editable(path) | Self::Virtual(path),
@@ -8030,11 +7971,11 @@ impl Source {
                 },
             ) => {
                 let actual = normalize_path(root.join(path));
-                actual.as_ref() == normalize_path(root.join(install_path)).as_ref()
+                actual.as_ref() == install_path.as_ref()
                     && matches!(self, Self::Editable(_)) == editable.unwrap_or(false)
                     && (matches!(self, Self::Virtual(_)) == r#virtual.unwrap_or(false)
                         || matches!(self, Self::Virtual(_))
-                            && actual.as_ref() == normalize_path(root).as_ref())
+                            && install_path.as_ref() == normalize_path(root).as_ref())
             }
             (
                 Self::Git(url, source),
@@ -9272,8 +9213,8 @@ pub struct Dependency {
     extra: BTreeSet<ExtraName>,
     /// A marker simplified from the PEP 508 marker in `complexified_marker`
     /// by assuming `requires-python` and the PEP 508 portion of the parent package's reachability
-    /// marker are satisfied. The parent's conflict predicates let concrete subgraphs detect choices
-    /// that depend on omitted workspace context. So if
+    /// marker are satisfied. The parent's conflict predicates are retained for compatibility with
+    /// older lockfile readers. So if
     /// `requires-python = '>=3.8'`, then
     /// `python_version >= '3.8' and python_version < '3.12'`
     /// gets simplified to `python_version < '3.12'`.
@@ -10249,10 +10190,6 @@ enum LockErrorKind {
         package2: PackageName,
         extra2: ExtraName,
     },
-    #[error("The lockfile is missing dependency requests for `{package}`")]
-    MissingRequests { package: PackageId },
-    #[error("{reason}")]
-    InvalidSelection { reason: String },
     #[error(transparent)]
     GitUrlParse(#[from] GitUrlParseError),
     #[error("Failed to read `{path}`")]
@@ -10337,8 +10274,8 @@ fn marker_is_unreachable(requires_python: &RequiresPython, marker: MarkerTree) -
 }
 
 /// Simplify an edge marker using the PEP 508 conditions that must already hold to reach its parent
-/// node. Parent conflict predicates remain on the edge so concrete subgraphs can detect choices
-/// that depend on omitted workspace context.
+/// node. Parent conflict predicates remain on the edge for compatibility with older lockfile
+/// readers that evaluate dependency markers independently during conflict discovery.
 fn simplify_dependency_marker(
     requires_python: &RequiresPython,
     environment: SimplifiedMarkerTree,
