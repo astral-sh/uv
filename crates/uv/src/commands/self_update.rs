@@ -14,7 +14,6 @@ use tempfile::TempDir;
 use thiserror::Error;
 use tokio::process::Command;
 use tracing::{debug, warn};
-use url::Url;
 use uv_bin_install::{Binary, find_matching_version};
 use uv_client::{BaseClientBuilder, RetriableError, WrappedReqwestError, fetch_with_url_fallback};
 use uv_command_support::{ExitStatus, Printer};
@@ -440,7 +439,7 @@ async fn download_installer_from_urls(
         .context("Failed to build HTTP client for self-update")?;
 
     fetch_with_url_fallback(urls, retry_policy, "official uv installer", |url| async {
-        let mut request = client.for_host(&url).get(Url::from(url.clone()));
+        let mut request = client.for_host(&url).get(url.clone());
         if let Some(github_token) = installer_download_github_token(&url, github_token) {
             request = request.header("Authorization", format!("Bearer {github_token}"));
         }

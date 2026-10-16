@@ -3,7 +3,6 @@ use std::path::{Path, PathBuf};
 use futures::{FutureExt, StreamExt};
 use reqwest::Response;
 use tracing::{Instrument, debug, info_span, warn};
-use url::Url;
 
 use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::cache_digest;
@@ -219,7 +218,7 @@ impl<'a> FlatIndexClient<'a> {
             .client
             .uncached()
             .for_host(url)
-            .get(Url::from(url.clone()))
+            .get(url.clone())
             .header("Accept-Encoding", "gzip")
             .header("Accept", "text/html")
             .build()

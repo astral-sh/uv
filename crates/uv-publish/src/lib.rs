@@ -27,7 +27,6 @@ use tokio::io::{AsyncReadExt, BufReader};
 use tokio::sync::Semaphore;
 use tokio_util::io::ReaderStream;
 use tracing::{Level, debug, enabled, trace, warn};
-use url::Url;
 
 use uv_auth::{Credentials, CredentialsPrompt, CredentialsPromptError, Realm};
 use uv_cache::{Cache, Refresh};
@@ -1365,7 +1364,7 @@ impl PublishSession<'_> {
         let mut request = self
             .upload_client
             .for_host(&url)
-            .post(Url::from(url))
+            .post(url)
             .multipart(form)
             // Ask PyPI for a structured error messages instead of HTML-markup error messages.
             // For other registries, we ask them to return plain text over HTML. See

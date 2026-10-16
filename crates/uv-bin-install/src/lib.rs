@@ -19,7 +19,6 @@ use serde::Deserialize;
 use thiserror::Error;
 use tokio::io::{AsyncRead, ReadBuf};
 use tokio_util::compat::FuturesAsyncReadCompatExt;
-use url::Url;
 use uv_client::retryable_on_request_failure;
 use uv_distribution_filename::LegacySourceDistExtension;
 use uv_distribution_filename::SourceDistExtension;
@@ -556,7 +555,7 @@ async fn fetch_and_find_matching_version(
 ) -> Result<ResolvedVersion, Error> {
     let response = client
         .for_host(&manifest_url)
-        .get(Url::from(manifest_url.clone()))
+        .get(manifest_url.clone())
         .send()
         .await
         .map_err(|source| Error::ManifestFetch {
@@ -798,7 +797,7 @@ async fn download_and_unpack(
 
     let response = client
         .for_host(&download_url)
-        .get(Url::from(download_url.clone()))
+        .get(download_url.clone())
         .send()
         .await
         .map_err(|err| Error::Download {
@@ -1356,12 +1355,7 @@ mod tests {
         let client = BaseClientBuilder::default()
             .build()
             .expect("failed to build base client");
-        let response = client
-            .for_host(&url)
-            .get(Url::from(url.clone()))
-            .send()
-            .await
-            .unwrap();
+        let response = client.for_host(&url).get(url.clone()).send().await.unwrap();
 
         let reqwest_err = response.bytes_stream().try_next().await.unwrap_err();
         assert!(reqwest_err.is_body() || reqwest_err.is_decode());

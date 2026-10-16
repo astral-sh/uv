@@ -35,7 +35,6 @@ rustc-hash = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 unscanny = { workspace = true }
-url = { workspace = true }
 
 [features]
 http = ["reqwest", "reqwest-middleware"]

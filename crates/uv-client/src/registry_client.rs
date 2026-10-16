@@ -631,7 +631,7 @@ impl RegistryClient {
     ) -> Result<OwnedArchive<SimpleDetailMetadata>, Error> {
         let simple_request = self
             .uncached_client(url)
-            .get(Url::from(url.clone()))
+            .get(url.clone())
             .header("Accept-Encoding", "gzip, deflate, zstd")
             .header("Accept", MediaType::pypi())
             .build()
@@ -882,7 +882,7 @@ impl RegistryClient {
 
         let simple_request = self
             .uncached_client(url)
-            .get(Url::from(url.clone()))
+            .get(url.clone())
             .header("Accept-Encoding", "gzip, deflate, zstd")
             .header("Accept", MediaType::pypi())
             .build()
@@ -1141,7 +1141,7 @@ impl RegistryClient {
             };
             let req = self
                 .uncached_client(&url)
-                .get(Url::from(url.clone()))
+                .get(url.clone())
                 .build()
                 .map_err(|err| {
                     ErrorKind::from_reqwest(url.clone(), err, self.client.certificate_source())
@@ -1205,7 +1205,7 @@ impl RegistryClient {
         if index.is_none_or(|index| capabilities.supports_range_requests(index)) {
             let req = self
                 .uncached_client(url)
-                .head(Url::from(url.clone()))
+                .head(url.clone())
                 .header(
                     "accept-encoding",
                     http::HeaderValue::from_static("identity"),
@@ -1299,7 +1299,7 @@ impl RegistryClient {
         // Create a request to stream the file.
         let req = self
             .uncached_client(url)
-            .get(Url::from(url.clone()))
+            .get(url.clone())
             .header(
                 // `reqwest` defaults to accepting compressed responses.
                 // Specify identity encoding to get consistent .whl downloading
@@ -1842,7 +1842,6 @@ mod tests {
 
     use insta::{assert_debug_snapshot, assert_snapshot};
     use tokio::sync::Semaphore;
-    use url::Url;
     use uv_normalize::PackageName;
     use uv_pypi_types::{HashDigest, HashDigests, PypiSimpleDetail};
     use uv_redacted::SafeUrl;
@@ -2021,7 +2020,7 @@ mod tests {
         assert_eq!(
             client
                 .for_host(&redirect_server_url)
-                .get(redirect_server.uri())
+                .get(redirect_server_url.clone())
                 .send()
                 .await?
                 .status(),
@@ -2036,7 +2035,7 @@ mod tests {
         assert_eq!(
             client
                 .for_host(&redirect_server_url)
-                .get(Url::from(url))
+                .get(url)
                 .send()
                 .await?
                 .status(),
@@ -2084,12 +2083,7 @@ mod tests {
         let _ = url.set_password(Some(password));
 
         assert_eq!(
-            client
-                .for_host(&url)
-                .get(Url::from(url))
-                .send()
-                .await?
-                .status(),
+            client.for_host(&url).get(url).send().await?.status(),
             200,
             "Requests should succeed for relative URL"
         );
@@ -2134,12 +2128,7 @@ mod tests {
         let _ = url.set_password(Some(password));
 
         assert_eq!(
-            client
-                .for_host(&url)
-                .get(Url::from(url))
-                .send()
-                .await?
-                .status(),
+            client.for_host(&url).get(url).send().await?.status(),
             200,
             "Requests should succeed for relative URL"
         );

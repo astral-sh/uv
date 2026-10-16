@@ -43,7 +43,6 @@ use std::str::FromStr;
 use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::instrument;
 use unscanny::{Pattern, Scanner};
-use url::Url;
 
 #[cfg(feature = "http")]
 use uv_client::{BaseClient, ClientBuildError};
@@ -1118,7 +1117,7 @@ async fn read_url_to_string(
 ) -> Result<String, RequirementsTxtParserError> {
     let response = client
         .for_host(url)
-        .get(Url::from(url.clone()))
+        .get(url.clone())
         .send()
         .await
         .map_err(|err| RequirementsTxtParserError::from_reqwest_middleware(url.clone(), err))?;

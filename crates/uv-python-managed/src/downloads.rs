@@ -25,7 +25,6 @@ use tokio::io::{AsyncRead, AsyncWriteExt, BufWriter, ReadBuf};
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tokio_util::either::Either;
 use tracing::{debug, instrument};
-use url::Url;
 use zstd::stream::read::Decoder;
 
 use uv_cache::{Cache, CacheBucket};
@@ -399,7 +398,7 @@ async fn fetch_downloads_from_url(
     let request = client
         .uncached()
         .for_host(url)
-        .get(Url::from(url.clone()))
+        .get(url.clone())
         .build()
         .map_err(|err| Error::NetworkError(url.clone(), WrappedReqwestError::from(err)))?;
 
@@ -787,7 +786,7 @@ impl ManagedPythonDownload {
         self.key.version()
     }
 
-    /// Return the ordered list of [`Url`]s to try when downloading the distribution.
+    /// Return the ordered list of [`SafeUrl`]s to try when downloading the distribution.
     ///
     /// For CPython without a user-configured mirror, the default Astral mirror is listed first,
     /// followed by the canonical GitHub URL as a fallback.
@@ -1135,7 +1134,7 @@ where
     }
 }
 
-/// Convert a [`Url`] into an [`AsyncRead`] stream.
+/// Convert a [`SafeUrl`] into an [`AsyncRead`] stream.
 async fn read_url(
     url: &SafeUrl,
     client: &BaseClient,
@@ -1154,7 +1153,7 @@ async fn read_url(
         let start = Instant::now();
         let response = client
             .for_host(url)
-            .get(Url::from(url.clone()))
+            .get(url.clone())
             .send()
             .await
             .map_err(|err| Error::from_reqwest_middleware(url.clone(), err))?;

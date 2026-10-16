@@ -19,7 +19,6 @@ use futures::{FutureExt, TryStreamExt};
 use reqwest::{Response, StatusCode};
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::{Instrument, debug, info_span, instrument, warn};
-use url::Url;
 
 use uv_auth::CredentialsCache;
 use uv_cache::{Cache, CacheBucket, CacheEntry, CacheShard, Removal, WheelCache};
@@ -2649,14 +2648,20 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         };
 
         // Fetch the `pyproject.toml` from the resolved commit.
-        let url =
-            format!("https://raw.githubusercontent.com/{owner}/{repo}/{commit}/pyproject.toml");
+        let url = SafeUrl::parse_relaxed(&format!(
+            "https://raw.githubusercontent.com/{owner}/{repo}/{commit}/pyproject.toml"
+        ))
+        .map_err(anyhow::Error::from)?;
 
         debug!("Attempting to fetch `pyproject.toml` from: {url}");
 
         let content = client
             .managed(async |client| {
-                let response = client.uncached_client(git.url()).get(&url).send().await?;
+                let response = client
+                    .uncached_client(git.url())
+                    .get(url.clone())
+                    .send()
+                    .await?;
 
                 // If the `pyproject.toml` does not exist, the GitHub API will return a 404.
                 if response.status() == StatusCode::NOT_FOUND {
@@ -3215,7 +3220,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     fn request(url: SafeUrl, client: &RegistryClient) -> Result<reqwest::Request, reqwest::Error> {
         client
             .uncached_client(&url)
-            .get(Url::from(url))
+            .get(url)
             .header(
                 // `reqwest` defaults to accepting compressed responses.
                 // Specify identity encoding to get consistent .whl downloading
