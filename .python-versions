@@ -17,7 +17,12 @@
 3.8.20
 # The following is needed for `==3.13` request tests
 3.13.0
-# Free-threaded version required for testing
+# Free-threaded versions required for testing
+3.13.16t
 3.14.8t
 # Pre-release version required for testing
 3.16.0a1
+
+# Pre-releases used to compare interpreter selection with 3.13.0
+3.13.0rc2
+3.13.0rc3
