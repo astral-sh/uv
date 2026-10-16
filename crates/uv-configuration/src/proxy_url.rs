@@ -8,10 +8,11 @@ use serde::{Deserialize, Deserializer, Serialize};
 use url::Url;
 
 use uv_redacted::SafeUrl;
+use uv_redacted::policy::Raw;
 
 /// A proxy URL with a supported scheme and a host.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct ProxyUrl(SafeUrl);
+pub struct ProxyUrl(SafeUrl<Raw>);
 
 /// The destination scheme to which a [`ProxyUrl`] applies.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -22,7 +23,7 @@ pub enum ProxyUrlKind {
 
 impl ProxyUrl {
     /// Returns a reference to the underlying URL.
-    fn as_url(&self) -> &SafeUrl {
+    fn as_url(&self) -> &SafeUrl<Raw> {
         &self.0
     }
 
@@ -88,7 +89,7 @@ impl TryFrom<Url> for ProxyUrl {
                 if !url.has_host() {
                     return Err(ProxyUrlError::InvalidUrl(url::ParseError::EmptyHost));
                 }
-                Ok(Self(url))
+                Ok(Self(url.with_policy(Raw)))
             }
             scheme => Err(ProxyUrlError::InvalidScheme {
                 scheme: scheme.to_string(),
@@ -119,7 +120,7 @@ impl Serialize for ProxyUrl {
     where
         S: serde::ser::Serializer,
     {
-        serializer.serialize_str(self.as_url().as_str())
+        self.as_url().serialize(serializer)
     }
 }
 

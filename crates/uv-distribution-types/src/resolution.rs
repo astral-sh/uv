@@ -1,6 +1,7 @@
 use uv_distribution_filename::DistExtension;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pypi_types::{HashDigest, HashDigests};
+use uv_redacted::policy::Raw;
 
 use crate::{
     BuiltDist, Diagnostic, Dist, IndexMetadata, Name, RequirementSource, ResolvedDist, SourceDist,
@@ -219,7 +220,7 @@ impl From<&ResolvedDist> for RequirementSource {
                     location.set_fragment(None);
                     Self::Url {
                         url: wheel.url.clone(),
-                        location,
+                        location: location.with_policy(Raw),
                         subdirectory: None,
                         ext: DistExtension::Wheel,
                     }
@@ -247,7 +248,7 @@ impl From<&ResolvedDist> for RequirementSource {
                     location.set_fragment(None);
                     Self::Url {
                         url: sdist.url.clone(),
-                        location,
+                        location: location.with_policy(Raw),
                         subdirectory: sdist.subdirectory.clone(),
                         ext: DistExtension::Source(sdist.ext),
                     }

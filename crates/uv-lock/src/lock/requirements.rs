@@ -257,7 +257,7 @@ pub(super) fn normalize_requirement(
 
             // Reconstruct the PEP 508 URL from the underlying data.
             let url = SafeUrl::from(ParsedArchiveUrl {
-                url: location.clone(),
+                url: location.as_url().clone(),
                 subdirectory: subdirectory.clone(),
                 ext,
             });

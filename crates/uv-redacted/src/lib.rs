@@ -1,11 +1,16 @@
 use ref_cast::RefCast;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::borrow::Cow;
 use std::fmt::{Debug, Display};
+use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 use std::str::FromStr;
 use thiserror::Error;
 use url::Url;
+
+pub mod policy;
+
+use policy::{InternalSerializationPolicy, Raw, SerializationPolicy, Unserializable};
 
 const SENSITIVE_QUERY_PARAMETERS: &[&str] = &[
     "sig",
@@ -27,44 +32,75 @@ pub enum SafeUrlError {
     AmbiguousAuthority(String),
 }
 
-/// A [`Url`] wrapper that redacts credentials and sensitive query parameters when displaying the URL.
+/// A URL with redacted display output and a type-level serialization policy.
 ///
-/// `SafeUrl` wraps the standard [`url::Url`] type, providing functionality to mask
-/// secrets by default when the URL is displayed or logged. This helps prevent accidental
-/// exposure of sensitive information in logs and debug output.
+/// The complete parsed URL, including credentials, remains available in memory.
+/// [`Display`] and [`Debug`] redact credentials and recognized sensitive query
+/// parameters for every policy. Policies affect serialization, not parsing or
+/// the URL's contents.
 ///
-/// # Examples
+/// A [`SafeUrl`] with the default [`Unserializable`] policy does not implement
+/// [`serde::Serialize`].
+/// Choose [`policy::Stripped`] or [`policy::Raw`] explicitly
+/// when a field needs to be serialized:
 ///
 /// ```
+/// use uv_redacted::{SafeUrl, policy::Stripped};
+///
+/// #[derive(serde::Serialize)]
+/// struct Origin {
+///     url: SafeUrl<Stripped>,
+/// }
+///
+/// let url = SafeUrl::parse("https://user:password@example.com/file.whl?sig=signature")?;
+/// let origin = Origin { url: url.with_policy(Stripped) };
+/// assert_eq!(origin.url.password(), Some("password"));
+/// assert_eq!(serde_json::to_string(&origin)?,
+///     r#"{"url":"https://example.com/file.whl?sig=signature"}"#);
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+///
+/// Fields with the default policy cannot derive [`serde::Serialize`] without a custom serializer:
+///
+/// ```compile_fail
 /// use uv_redacted::SafeUrl;
-/// use std::str::FromStr;
 ///
-/// // Create a `SafeUrl` from a `&str`
-/// let mut url = SafeUrl::parse("https://user:password@example.com").unwrap();
-///
-/// // Display will mask secrets
-/// assert_eq!(url.to_string(), "https://user:****@example.com/");
-///
-/// // You can still access the username and password
-/// assert_eq!(url.username(), "user");
-/// assert_eq!(url.password(), Some("password"));
-///
-/// // And you can still update the username and password
-/// let _ = url.set_username("new_user");
-/// let _ = url.set_password(Some("new_password"));
-/// assert_eq!(url.username(), "new_user");
-/// assert_eq!(url.password(), Some("new_password"));
-///
-/// // It is also possible to remove the credentials entirely
-/// url.remove_credentials();
-/// assert_eq!(url.username(), "");
-/// assert_eq!(url.password(), None);
+/// #[derive(serde::Serialize)]
+/// struct Origin {
+///     url: SafeUrl,
+/// }
 /// ```
-#[derive(Clone, Eq, PartialEq, PartialOrd, Ord, Hash, Serialize, Deserialize, RefCast)]
+///
+/// `serialize` method calls also require a serializing policy:
+///
+/// ```compile_fail
+/// use serde::Serialize;
+/// use uv_redacted::SafeUrl;
+///
+/// let url = SafeUrl::parse("https://user:password@example.com")?;
+/// url.serialize(serde_json::value::Serializer)?;
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+///
+/// Returning to the default policy removes the ordinary [`serde::Serialize`] implementation:
+///
+/// ```compile_fail
+/// use uv_redacted::{SafeUrl, policy::{Unserializable, Raw}};
+///
+/// let url = SafeUrl::parse("https://example.com")?
+///     .with_policy(Raw)
+///     .with_policy(Unserializable);
+/// serde_json::to_string(&url)?;
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+#[derive(Clone, Eq, PartialEq, PartialOrd, Ord, Hash, RefCast)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-#[cfg_attr(feature = "schemars", schemars(transparent))]
+#[cfg_attr(
+    feature = "schemars",
+    schemars(transparent, bound = "", description = "A URL.")
+)]
 #[repr(transparent)]
-pub struct SafeUrl(Url);
+pub struct SafeUrl<P: SerializationPolicy = Unserializable>(Url, PhantomData<P>);
 
 /// Check if a path or fragment contains a credential-like pattern (`:` followed by `@`).
 ///
@@ -96,7 +132,7 @@ impl SafeUrl {
 
         Self::reject_ambiguous_credentials(input, &url)?;
 
-        Ok(Self(url))
+        Ok(Self(url, PhantomData))
     }
 
     /// Reject some ambiguous cases, e.g., `https://user/name:password@domain/a/b/c`
@@ -156,42 +192,60 @@ impl SafeUrl {
     /// That means that it's primarily useful for contexts where a human can't easily accidentally
     /// introduce an ambiguous URL, such as URLs being read from a request.
     pub fn from_url(url: Url) -> Self {
-        Self(url)
+        Self(url, PhantomData)
     }
 
-    /// Cast a `&Url` to a `&SafeUrl` using ref-cast.
+    /// Borrow a [`Url`] with the default [`Unserializable`] policy using ref-cast.
     #[inline]
     pub fn ref_cast(url: &Url) -> &Self {
         RefCast::ref_cast(url)
     }
 
+    #[expect(clippy::result_unit_err)]
+    pub fn from_file_path<P: AsRef<std::path::Path>>(path: P) -> Result<Self, ()> {
+        Ok(Self(Url::from_file_path(path)?, PhantomData))
+    }
+}
+
+impl<P: SerializationPolicy> SafeUrl<P> {
+    /// Change the serialization policy without modifying the parsed URL.
+    #[must_use]
+    pub fn with_policy<Q: SerializationPolicy>(self, _policy: Q) -> SafeUrl<Q> {
+        SafeUrl(self.0, PhantomData)
+    }
+
+    /// Borrow the parsed URL with a different serialization policy.
+    #[must_use]
+    fn with_policy_ref<Q: SerializationPolicy>(&self, _policy: Q) -> &SafeUrl<Q> {
+        RefCast::ref_cast(&self.0)
+    }
+
+    /// Borrow the URL with the default [`Unserializable`] policy.
+    pub fn as_url(&self) -> &SafeUrl {
+        self.with_policy_ref(Unserializable)
+    }
+
+    /// Return the URL with the default [`Unserializable`] policy.
+    pub fn into_url(self) -> SafeUrl {
+        self.with_policy(Unserializable)
+    }
+
+    /// Serialize the normalized URL according to its policy.
+    ///
+    /// This inherent method prevents method lookup from bypassing the policy
+    /// through [`Deref`] to [`Url`].
+    pub fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        Self: serde::Serialize,
+        S: serde::Serializer,
+    {
+        serde::Serialize::serialize(self, serializer)
+    }
+
     /// Parse a string as an URL, with this URL as the base URL.
     #[inline]
     pub fn join(&self, input: &str) -> Result<Self, SafeUrlError> {
-        Ok(Self(self.0.join(input)?))
-    }
-
-    /// Serialize with Serde using the internal representation of the `Url` struct.
-    #[inline]
-    pub fn serialize_internal<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        self.0.serialize_internal(serializer)
-    }
-
-    /// Serialize with Serde using the internal representation of the `Url` struct.
-    #[inline]
-    pub fn deserialize_internal<'de, D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        Ok(Self(Url::deserialize_internal(deserializer)?))
-    }
-
-    #[expect(clippy::result_unit_err)]
-    pub fn from_file_path<P: AsRef<std::path::Path>>(path: P) -> Result<Self, ()> {
-        Ok(Self(Url::from_file_path(path)?))
+        Ok(Self(self.0.join(input)?, PhantomData))
     }
 
     /// Remove the credentials from a URL, allowing the generic `git` username (without a password)
@@ -238,9 +292,61 @@ impl SafeUrl {
     pub fn redact_in(&self, message: &str) -> String {
         message.replace(self.0.as_str(), &self.to_string())
     }
+
+    /// Serialize the complete URL using the internal representation of the `Url` struct.
+    ///
+    /// A field using this serializer must declare the [`Raw`] policy:
+    ///
+    /// ```compile_fail
+    /// use uv_redacted::{SafeUrl, policy::Raw};
+    ///
+    /// #[derive(serde::Serialize)]
+    /// struct CachedUrl {
+    ///     #[serde(serialize_with = "SafeUrl::<Raw>::serialize_internal")]
+    ///     url: SafeUrl,
+    /// }
+    /// ```
+    ///
+    /// `serialize_internal` method calls require [`Raw`] as well:
+    ///
+    /// ```compile_fail
+    /// use uv_redacted::SafeUrl;
+    ///
+    /// let url = SafeUrl::parse("https://user:password@example.com")?;
+    /// url.serialize_internal(serde_json::value::Serializer)?;
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// ```compile_fail
+    /// use uv_redacted::{SafeUrl, policy::Stripped};
+    ///
+    /// let url = SafeUrl::parse("https://user:password@example.com")?
+    ///     .with_policy(Stripped);
+    /// url.serialize_internal(serde_json::value::Serializer)?;
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn serialize_internal<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        P: InternalSerializationPolicy,
+        S: serde::Serializer,
+    {
+        self.0.serialize_internal(serializer)
+    }
 }
 
-impl Deref for SafeUrl {
+impl SafeUrl<Raw> {
+    /// Deserialize the internal representation of the `Url` struct.
+    #[inline]
+    pub fn deserialize_internal<'de, D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        Ok(Self(Url::deserialize_internal(deserializer)?, PhantomData))
+    }
+}
+
+impl<P: SerializationPolicy> Deref for SafeUrl<P> {
     type Target = Url;
 
     fn deref(&self) -> &Self::Target {
@@ -248,19 +354,19 @@ impl Deref for SafeUrl {
     }
 }
 
-impl DerefMut for SafeUrl {
+impl<P: SerializationPolicy> DerefMut for SafeUrl<P> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
 }
 
-impl Display for SafeUrl {
+impl<P: SerializationPolicy> Display for SafeUrl<P> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         display_with_redacted_credentials(&self.0, f)
     }
 }
 
-impl Debug for SafeUrl {
+impl<P: SerializationPolicy> Debug for SafeUrl<P> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let url = &self.0;
         let (username, password) = redacted_credentials(url);
@@ -283,15 +389,15 @@ impl Debug for SafeUrl {
     }
 }
 
-impl From<SafeUrl> for Url {
-    fn from(url: SafeUrl) -> Self {
+impl<P: SerializationPolicy> From<SafeUrl<P>> for Url {
+    fn from(url: SafeUrl<P>) -> Self {
         url.0
     }
 }
 
 impl From<Url> for SafeUrl {
     fn from(url: Url) -> Self {
-        Self(url)
+        Self(url, PhantomData)
     }
 }
 
@@ -300,6 +406,16 @@ impl FromStr for SafeUrl {
 
     fn from_str(input: &str) -> Result<Self, Self::Err> {
         Self::parse(input)
+    }
+}
+
+impl<'de, P: SerializationPolicy> Deserialize<'de> for SafeUrl<P> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        // Policies do not select parsing rules. Use `SafeUrl::parse` to check human input.
+        Url::deserialize(deserializer).map(|url| Self(url, PhantomData))
     }
 }
 

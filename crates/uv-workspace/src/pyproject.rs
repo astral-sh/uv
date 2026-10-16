@@ -35,6 +35,7 @@ use uv_pypi_types::{
     VerbatimParsedUrl,
 };
 use uv_redacted::SafeUrl;
+use uv_redacted::policy::Raw;
 use uv_toml::deserialize_unique_map;
 
 use crate::DefaultGroupsError;
@@ -1248,7 +1249,7 @@ pub enum Source {
     /// ```
     Git {
         /// The repository URL (without the `git+` prefix).
-        git: SafeUrl,
+        git: SafeUrl<Raw>,
         /// The path to the directory with the `pyproject.toml`, if it's not in the repository root.
         subdirectory: Option<PortablePathBuf>,
         /// The path to the archive within the repository.
@@ -1276,7 +1277,7 @@ pub enum Source {
     /// flask = { url = "https://files.pythonhosted.org/packages/61/80/ffe1da13ad9300f87c93af113edd0638c75138c42a0994becfacac078c06/flask-3.0.3-py3-none-any.whl" }
     /// ```
     Url {
-        url: SafeUrl,
+        url: SafeUrl<Raw>,
         /// For source distributions, the path to the directory with the `pyproject.toml`, if it's
         /// not in the archive root.
         subdirectory: Option<PortablePathBuf>,
@@ -1466,7 +1467,7 @@ impl<'de> Deserialize<'de> for Source {
             };
 
             return Ok(Self::Git {
-                git,
+                git: git.with_policy(Raw),
                 subdirectory,
                 path,
                 rev,
@@ -1528,7 +1529,7 @@ impl<'de> Deserialize<'de> for Source {
             }
 
             return Ok(Self::Url {
-                url,
+                url: url.with_policy(Raw),
                 subdirectory,
                 marker,
                 extra,
@@ -1928,7 +1929,7 @@ impl Source {
                         tag,
                         branch,
                         lfs: lfs.into(),
-                        git: git.url().clone(),
+                        git: git.url().clone().with_policy(Raw),
                         subdirectory: subdirectory.map(PortablePathBuf::from),
                         path: None,
                         marker: MarkerTree::TRUE,
@@ -1941,7 +1942,7 @@ impl Source {
                         tag,
                         branch,
                         lfs: lfs.into(),
-                        git: git.url().clone(),
+                        git: git.url().clone().with_policy(Raw),
                         subdirectory: subdirectory.map(PortablePathBuf::from),
                         path: None,
                         marker: MarkerTree::TRUE,
@@ -1960,7 +1961,7 @@ impl Source {
                         tag,
                         branch,
                         lfs: lfs.into(),
-                        git: git.url().clone(),
+                        git: git.url().clone().with_policy(Raw),
                         subdirectory: None,
                         path: Some(PortablePathBuf::from(install_path.as_path())),
                         marker: MarkerTree::TRUE,
@@ -1973,7 +1974,7 @@ impl Source {
                         tag,
                         branch,
                         lfs: lfs.into(),
-                        git: git.url().clone(),
+                        git: git.url().clone().with_policy(Raw),
                         subdirectory: None,
                         path: Some(PortablePathBuf::from(install_path.as_path())),
                         marker: MarkerTree::TRUE,

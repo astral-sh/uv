@@ -5425,6 +5425,72 @@ async fn tool_install_default_credentials() -> Result<()> {
     Ok(())
 }
 
+/// A tool receipt must accept a publish URL with `:` and `@` in its path after stripping userinfo.
+#[test]
+fn tool_install_publish_url_receipt() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
+    let bin_dir = context.temp_dir.child("bin");
+    let wheel = context
+        .workspace_root
+        .join("test/links/simple_launcher-0.1.0-py3-none-any.whl");
+    let uv_toml = context.temp_dir.child("uv.toml");
+    uv_toml.write_str(indoc! {r#"
+        [[index]]
+        name = "private"
+        url = "https://example.com/simple"
+        publish-url = "https://user:password@example.com/api:upload@v1?sig=abc%2Bdef%3D"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg(&wheel)
+        .arg("--offline")
+        .arg("--config-file")
+        .arg(uv_toml.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + simple-launcher==0.1.0 (from file://[WORKSPACE]/test/links/simple_launcher-0.1.0-py3-none-any.whl)
+    Installed 1 executable: simple_launcher
+    ");
+
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(context.read("tools/simple-launcher/uv-receipt.toml"), @r#"
+        [tool]
+        requirements = [{ name = "simple-launcher", path = "[WORKSPACE]/test/links/simple_launcher-0.1.0-py3-none-any.whl" }]
+        entrypoints = [
+            { name = "simple_launcher", install-path = "[TEMP_DIR]/bin/simple_launcher", from = "simple-launcher" },
+        ]
+
+        [tool.options]
+        index = [{ name = "private", url = "https://example.com/simple", explicit = false, default = false, format = "simple", publish-url = "https://example.com/api:upload@v1?sig=abc%2Bdef%3D", authenticate = "auto" }]
+        exclude-newer = "2024-03-25T00:00:00Z"
+        "#);
+    });
+
+    uv_snapshot!(context.filters(), context.tool_list().arg("--no-config"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    simple-launcher v0.1.0
+    - simple_launcher
+    ");
+
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("simple-launcher")
+        .arg("--no-config")
+        .arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Nothing to upgrade
+    ");
+
+    Ok(())
+}
+
 /// Test installing a tool with `--with-executables-from`.
 #[test]
 fn tool_install_with_executables_from() -> Result<()> {

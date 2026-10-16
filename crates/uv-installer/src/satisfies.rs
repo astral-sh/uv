@@ -144,7 +144,7 @@ impl RequirementSatisfaction {
                 }
 
                 if !CanonicalUrl::parse(installed_url).is_ok_and(|installed_url| {
-                    installed_url == CanonicalUrl::new(requested_url.clone())
+                    installed_url == CanonicalUrl::new(requested_url.as_url().clone())
                 }) {
                     return Self::Mismatch;
                 }

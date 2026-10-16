@@ -9,6 +9,7 @@ use url::Url;
 use uv_auth::{AuthPolicy, Credentials, CredentialsFromUrlError};
 use uv_pypi_types::HashAlgorithm;
 use uv_redacted::SafeUrl;
+use uv_redacted::policy::Stripped;
 use uv_small_str::SmallString;
 
 use crate::exclude_newer::ExcludeNewerOverride;
@@ -196,7 +197,7 @@ pub struct Index {
     /// url = "https://pypi.org/simple"
     /// publish-url = "https://upload.pypi.org/legacy/"
     /// ```
-    pub publish_url: Option<SafeUrl>,
+    pub publish_url: Option<SafeUrl<Stripped>>,
     /// When uv should use authentication for requests to the index.
     ///
     /// ```toml
@@ -780,7 +781,7 @@ impl<'de> Deserialize<'de> for Index {
             default: wire.default,
             origin: None,
             format: wire.format,
-            publish_url: wire.publish_url,
+            publish_url: wire.publish_url.map(|url| url.with_policy(Stripped)),
             authenticate: wire.authenticate,
             ignore_error_codes: wire.ignore_error_codes,
             cache_control: wire.cache_control,

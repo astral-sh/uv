@@ -7840,9 +7840,9 @@ impl Source {
                 Ok(Self::Registry(source))
             }
             IndexUrl::Path(url) => {
-                let path = url
-                    .to_file_path()
-                    .map_err(|()| LockErrorKind::UrlToPath { url: url.to_url() })?;
+                let path = url.to_file_path().map_err(|()| LockErrorKind::UrlToPath {
+                    url: url.to_url().into_url(),
+                })?;
                 let path = try_relative_to_if(&path, root, url.prefers_relative())
                     .map_err(LockErrorKind::IndexRelativePath)?;
                 let source = RegistrySource::Path(path.into_boxed_path());
@@ -7932,7 +7932,7 @@ impl Source {
                 let expected = expected
                     .to_file_path()
                     .map_err(|()| LockErrorKind::UrlToPath {
-                        url: expected.to_url(),
+                        url: expected.to_url().into_url(),
                     })?;
                 normalize_path(root.join(actual)).as_ref() == normalize_path(expected).as_ref()
             }
@@ -7954,7 +7954,7 @@ impl Source {
                 actual.remove_credentials();
                 let mut expected = location.clone();
                 expected.remove_credentials();
-                normalize_url(actual) == normalize_url(expected)
+                normalize_url(actual) == normalize_url(expected.into_url())
                     && source.subdirectory == *subdirectory
             }
             (Self::Path(path), RequirementSource::Path { install_path, .. }) => {
@@ -8608,9 +8608,9 @@ impl SourceDist {
                 }))
             }
             IndexUrl::Path(path) => {
-                let index_path = path
-                    .to_file_path()
-                    .map_err(|()| LockErrorKind::UrlToPath { url: path.to_url() })?;
+                let index_path = path.to_file_path().map_err(|()| LockErrorKind::UrlToPath {
+                    url: path.to_url().into_url(),
+                })?;
                 let url = reg_dist
                     .file
                     .url
@@ -8928,9 +8928,9 @@ impl Wheel {
                 WheelWireSource::Url { url }
             }
             IndexUrl::Path(path) => {
-                let index_path = path
-                    .to_file_path()
-                    .map_err(|()| LockErrorKind::UrlToPath { url: path.to_url() })?;
+                let index_path = path.to_file_path().map_err(|()| LockErrorKind::UrlToPath {
+                    url: path.to_url().into_url(),
+                })?;
                 let wheel_url = wheel.file.url.to_url().map_err(LockErrorKind::InvalidUrl)?;
 
                 if wheel_url.scheme() == "file" {
