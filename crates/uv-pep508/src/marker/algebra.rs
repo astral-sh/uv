@@ -68,6 +68,8 @@ use crate::{
     ExtraOperator, MarkerExpression, MarkerOperator, MarkerValueString, MarkerValueVersion,
 };
 
+pub(super) mod isop;
+
 /// The global node interner.
 pub(crate) static INTERNER: LazyLock<Interner> = LazyLock::new(Interner::default);
 
