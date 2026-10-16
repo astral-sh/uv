@@ -74,10 +74,18 @@ jobs:
           retention-days: 1
 
   benchmarks-walltime-run:
-    name: "walltime on x86_64 linux"
+    name: "walltime on x86_64 linux (${{ matrix.shard }})"
     runs-on: codspeed-macro-x64-ryzen-9950x-ubuntu-24-04
     needs: benchmarks-walltime-build
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard: git
+            benches: --bench git_fetch
+          - shard: core
+            benches: --bench uv --bench workspace_discovery
     permissions:
       contents: read
       id-token: write # for codspeed authentication
@@ -113,27 +121,27 @@ jobs:
         id: profiles
         # Only public main pushes produce reusable baseline profiles.
         if: ${{ github.repository == 'astral-sh/uv' && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-        run: ./target/debug/uv run --script scripts/codspeed-profiles.py start "$RUNNER_TEMP/codspeed-walltime" walltime >> "$GITHUB_OUTPUT"
+        run: ./target/debug/uv run --script scripts/codspeed-profiles.py start "$RUNNER_TEMP/codspeed-walltime-${{ matrix.shard }}" walltime >> "$GITHUB_OUTPUT"
 
       - name: "Run benchmarks"
         uses: CodSpeedHQ/action@373d6868929f444bc08d901fd0eb0ad52a8875ea # v5.2.1
         with:
-          run: uv run --only-dev cargo codspeed run
+          run: uv run --only-dev cargo codspeed run -m walltime -p uv-bench ${{ matrix.benches }}
           mode: walltime
           upload-url: ${{ steps.profiles.outputs.upload-url }}
 
       - name: "Finish profile capture"
         if: ${{ always() && steps.profiles.outcome == 'success' }}
-        run: ./target/debug/uv run --script scripts/codspeed-profiles.py finish "$RUNNER_TEMP/codspeed-walltime"
+        run: ./target/debug/uv run --script scripts/codspeed-profiles.py finish "$RUNNER_TEMP/codspeed-walltime-${{ matrix.shard }}"
 
       - name: "Upload benchmark profiles"
         if: ${{ steps.profiles.outcome == 'success' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: codspeed-profiles-walltime
+          name: codspeed-profiles-walltime-${{ matrix.shard }}
           path: |
-            ${{ runner.temp }}/codspeed-walltime/metadata.json
-            ${{ runner.temp }}/codspeed-walltime/profile.tar
+            ${{ runner.temp }}/codspeed-walltime-${{ matrix.shard }}/metadata.json
+            ${{ runner.temp }}/codspeed-walltime-${{ matrix.shard }}/profile.tar
           compression-level: 0
           if-no-files-found: error
           retention-days: 30

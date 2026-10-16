@@ -37,8 +37,26 @@ UPLOAD_URL = "https://api.codspeed.io/upload"
 SOURCE_REPOSITORY = "astral-sh/uv"
 DESTINATION_REPOSITORY = "astral-sh/uv-dev"
 EXECUTORS = {"simulation": "valgrind", "walltime": "walltime"}
-ARTIFACTS = {mode: f"codspeed-profiles-{mode}" for mode in EXECUTORS}
-SOURCE_JOBS = {"bench / simulated", "bench / walltime on x86_64 linux"}
+PROFILE_JOBS = {
+    "simulation": "bench / simulated",
+    "walltime": "bench / walltime on x86_64 linux",
+    "walltime-git": "bench / walltime on x86_64 linux (git)",
+    "walltime-core": "bench / walltime on x86_64 linux (core)",
+}
+
+
+def profile_names(artifacts: set[str]) -> tuple[str, ...] | None:
+    """Require a complete run, including support for retained unsharded profiles."""
+    available = {
+        name for name in PROFILE_JOBS if f"codspeed-profiles-{name}" in artifacts
+    }
+    for names in (
+        ("simulation", "walltime-git", "walltime-core"),
+        ("simulation", "walltime"),
+    ):
+        if available == set(names):
+            return names
+    return None
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -332,14 +350,13 @@ def find_source_run(sha: str, run_id: str | None = None) -> str | None:
             "jobs",
         )
         successful = {job["name"] for job in jobs if job["conclusion"] == "success"}
-        if not SOURCE_JOBS <= successful:
-            continue
         artifacts = github_items(
             f"repos/{SOURCE_REPOSITORY}/actions/runs/{source_run}/artifacts?per_page=100",
             "artifacts",
         )
         available = {item["name"] for item in artifacts if not item["expired"]}
-        if set(ARTIFACTS.values()) <= available:
+        names = profile_names(available)
+        if names and {PROFILE_JOBS[name] for name in names} <= successful:
             return source_run
     return None
 
@@ -360,7 +377,9 @@ def commit_is_mirrored(sha: str) -> bool:
     return comparison is not None and comparison["status"] in {"ahead", "identical"}
 
 
-def destination_metadata(source: dict, environment: Mapping[str, str]) -> dict:
+def destination_metadata(
+    source: dict, environment: Mapping[str, str], shard: str = ""
+) -> dict:
     repository = environment["GITHUB_REPOSITORY"]
     if repository != DESTINATION_REPOSITORY:
         raise ValueError("Only uv-dev may import benchmark profiles")
@@ -375,6 +394,9 @@ def destination_metadata(source: dict, environment: Mapping[str, str]) -> dict:
     job = environment["GITHUB_JOB"]
     run_id = environment["GITHUB_RUN_ID"]
     executor = metadata["runner"]["executor"]
+    run_part_id = f"{job}-{executor}"
+    if shard:
+        run_part_id += f"-{shard}"
     metadata.update(
         tokenless=False,
         owner=owner,
@@ -386,7 +408,7 @@ def destination_metadata(source: dict, environment: Mapping[str, str]) -> dict:
         },
         runPart={
             "runId": run_id,
-            "runPartId": f"{job}-{executor}",
+            "runPartId": run_part_id,
             "jobName": job,
             "metadata": {"executor": executor},
         },
@@ -412,19 +434,25 @@ def oidc_token() -> str:
 
 
 def import_profiles(directory: Path, source_run: str, source_sha: str) -> None:
+    names = profile_names({path.name for path in directory.iterdir() if path.is_dir()})
+    if not names:
+        raise ValueError("Expected a complete set of CodSpeed profiles")
     prepared = []
-    for mode, artifact in ARTIFACTS.items():
-        bundle = directory / artifact
+    for name in names:
+        mode, _, shard = name.partition("-")
+        bundle = directory / f"codspeed-profiles-{name}"
         source = json.loads((bundle / "metadata.json").read_text())
         profile = bundle / "profile.tar"
         verify_source(source, source_sha, source_run, mode)
+        if shard and source["runPart"]["metadata"].get("shard") != shard:
+            raise ValueError("Unexpected CodSpeed benchmark shard")
         verify_profile(profile, source)
-        metadata = destination_metadata(source, os.environ)
-        prepared.append((mode, profile, metadata))
-    for mode, profile, metadata in prepared:
+        metadata = destination_metadata(source, os.environ, shard)
+        prepared.append((name, profile, metadata))
+    for name, profile, metadata in prepared:
         response = upload_request(metadata, oidc_token())
         upload_profile(response["uploadUrl"], profile, metadata)
-        print(f"Imported {mode} profiles from uv run {source_run}")
+        print(f"Imported {name} profiles from uv run {source_run}")
 
 
 def main() -> None:
