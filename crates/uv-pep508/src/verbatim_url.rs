@@ -702,7 +702,7 @@ pub(crate) fn strip_host(path: &str) -> &str {
 }
 
 /// Returns `true` if a URL looks like a reference to a Git repository (e.g., `https://github.com/user/repo.git`).
-pub fn looks_like_git_repository(url: &Url) -> bool {
+pub fn looks_like_git_repository<P: SerializationPolicy>(url: &SafeUrl<P>) -> bool {
     matches!(
         url.host_str(),
         Some("github.com" | "gitlab.com" | "bitbucket.org")
@@ -985,28 +985,28 @@ mod tests {
 
     #[test]
     fn git_repository() {
-        let url = Url::parse("https://github.com/user/repo.git").unwrap();
+        let url = SafeUrl::parse("https://github.com/user/repo.git").unwrap();
         assert!(looks_like_git_repository(&url));
 
-        let url = Url::parse("https://gitlab.com/user/repo.git").unwrap();
+        let url = SafeUrl::parse("https://gitlab.com/user/repo.git").unwrap();
         assert!(looks_like_git_repository(&url));
 
-        let url = Url::parse("https://bitbucket.org/user/repo.git").unwrap();
+        let url = SafeUrl::parse("https://bitbucket.org/user/repo.git").unwrap();
         assert!(looks_like_git_repository(&url));
 
-        let url = Url::parse("https://github.com/user/repo").unwrap();
+        let url = SafeUrl::parse("https://github.com/user/repo").unwrap();
         assert!(looks_like_git_repository(&url));
 
-        let url = Url::parse("https://example.com/user/repo.git").unwrap();
+        let url = SafeUrl::parse("https://example.com/user/repo.git").unwrap();
         assert!(!looks_like_git_repository(&url));
 
-        let url = Url::parse("https://github.com/user").unwrap();
+        let url = SafeUrl::parse("https://github.com/user").unwrap();
         assert!(!looks_like_git_repository(&url));
 
-        let url = Url::parse("https://github.com/user/repo.zip").unwrap();
+        let url = SafeUrl::parse("https://github.com/user/repo.zip").unwrap();
         assert!(!looks_like_git_repository(&url));
 
-        let url = Url::parse("https://github.com/").unwrap();
+        let url = SafeUrl::parse("https://github.com/").unwrap();
         assert!(!looks_like_git_repository(&url));
 
         let url = Url::parse("").unwrap_err();
@@ -1015,19 +1015,19 @@ mod tests {
         let url = Url::parse("github.com/user/repo.git").unwrap_err();
         assert_eq!(url.to_string(), "relative URL without a base");
 
-        let url = Url::parse("https://github.com/user/repo/extra.git").unwrap();
+        let url = SafeUrl::parse("https://github.com/user/repo/extra.git").unwrap();
         assert!(!looks_like_git_repository(&url));
 
-        let url = Url::parse("https://github.com/user/repo.GIT").unwrap();
+        let url = SafeUrl::parse("https://github.com/user/repo.GIT").unwrap();
         assert!(looks_like_git_repository(&url));
 
-        let url = Url::parse("https://github.com/user/repo.git?foo=bar").unwrap();
+        let url = SafeUrl::parse("https://github.com/user/repo.git?foo=bar").unwrap();
         assert!(looks_like_git_repository(&url));
 
-        let url = Url::parse("https://github.com/user/repo.git#readme").unwrap();
+        let url = SafeUrl::parse("https://github.com/user/repo.git#readme").unwrap();
         assert!(looks_like_git_repository(&url));
 
-        let url = Url::parse("https://github.com/pypa/pip/archive/1.3.1.zip#sha1=da9234ee9982d4bbb3c72346a6de940a148ea686").unwrap();
+        let url = SafeUrl::parse("https://github.com/pypa/pip/archive/1.3.1.zip#sha1=da9234ee9982d4bbb3c72346a6de940a148ea686").unwrap();
         assert!(!looks_like_git_repository(&url));
     }
 

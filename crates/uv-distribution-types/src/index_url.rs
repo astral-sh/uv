@@ -9,7 +9,7 @@ use http::StatusCode;
 use itertools::Either;
 use rustc_hash::{FxHashMap, FxHashSet};
 use thiserror::Error;
-use url::{ParseError, Url};
+use url::ParseError;
 use uv_auth::RealmRef;
 use uv_cache_key::CanonicalUrl;
 use uv_pep508::{Scheme, VerbatimUrl, VerbatimUrlError, split_scheme};
@@ -47,7 +47,7 @@ impl IndexUrl {
         Ok(Self::from(url))
     }
 
-    /// Return the root [`Url`] of the index, if applicable.
+    /// Return the root [`SafeUrl`] of the index, if applicable.
     ///
     /// For indexes with a `/simple` endpoint, this is simply the URL with the final segment
     /// removed. This is useful, e.g., for credential propagation to other endpoints on the index.
@@ -249,10 +249,10 @@ impl From<IndexUrl> for SafeUrl {
 }
 
 impl Deref for IndexUrl {
-    type Target = Url;
+    type Target = SafeUrl;
 
     fn deref(&self) -> &Self::Target {
-        self.inner()
+        self.url()
     }
 }
 

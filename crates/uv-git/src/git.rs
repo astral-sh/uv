@@ -9,7 +9,6 @@ use anyhow::{Context, Result, anyhow};
 use cargo_util::{ProcessBuilder, ProcessError, paths};
 use owo_colors::OwoColorize;
 use tracing::{debug, instrument, warn};
-use url::Url;
 
 use uv_fs::Simplified;
 use uv_git_types::{GitOid, GitReference};
@@ -576,8 +575,8 @@ fn submodule_auth_config(original_remote_url: &SafeUrl) -> Vec<String> {
     let mut config = Vec::new();
 
     if remote_url.as_str() != original_remote_url.as_str() {
-        let safe_root = remote_url_root(remote_url.into_owned());
-        let credentialed_root = remote_url_root((**original_remote_url).clone());
+        let safe_root = remote_url_root(SafeUrl::from_url(remote_url.into_owned()));
+        let credentialed_root = remote_url_root(original_remote_url.clone());
 
         if safe_root.as_str() != credentialed_root.as_str() {
             config.push(format!(
@@ -596,7 +595,7 @@ fn submodule_auth_config(original_remote_url: &SafeUrl) -> Vec<String> {
 /// This is used as the rewrite prefix for `url.*.insteadOf`, so a credentialed parent URL can
 /// authenticate sibling submodule URLs without making the credentials part of any persisted
 /// submodule URL.
-fn remote_url_root(mut url: Url) -> Url {
+fn remote_url_root(mut url: SafeUrl) -> SafeUrl {
     url.set_path("/");
     url.set_query(None);
     url.set_fragment(None);
@@ -858,7 +857,7 @@ fn fetch_lfs(
 
 /// Redact a credentialed remote URL from a Git process error.
 fn redact_git_error(mut error: anyhow::Error, url: &SafeUrl) -> anyhow::Error {
-    let credentialed_root = SafeUrl::from_url(remote_url_root((**url).clone()));
+    let credentialed_root = remote_url_root(url.clone());
     let redact = |message: &str| credentialed_root.redact_in(&url.redact_in(message));
 
     if let Some(process_error) = error.downcast_mut::<ProcessError>() {

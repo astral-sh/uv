@@ -2,9 +2,9 @@ use crate::{Error, ErrorKind};
 use async_http_range_reader::AsyncHttpRangeReader;
 use futures::io::BufReader;
 use tokio_util::compat::TokioAsyncReadCompatExt;
-use url::Url;
 use uv_distribution_filename::WheelFilename;
 use uv_metadata::find_archive_dist_info;
+use uv_redacted::SafeUrl;
 
 /// Read the `.dist-info/METADATA` file from a async remote zip reader, so we avoid downloading the
 /// entire wheel just for the one file.
@@ -49,7 +49,7 @@ use uv_metadata::find_archive_dist_info;
 /// rest of the crate.
 pub(crate) async fn wheel_metadata_from_remote_zip(
     filename: &WheelFilename,
-    debug_name: &Url,
+    debug_name: &SafeUrl,
     reader: &mut AsyncHttpRangeReader,
 ) -> Result<String, Error> {
     // Make sure we have the back part of the stream.

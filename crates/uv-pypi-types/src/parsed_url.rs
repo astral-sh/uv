@@ -2,7 +2,6 @@ use std::fmt::{Display, Formatter};
 use std::path::{Path, PathBuf};
 
 use thiserror::Error;
-use url::Url;
 use uv_cache_key::{CacheKey, CacheKeyHasher};
 
 use uv_distribution_filename::{DistExtension, ExtensionError};
@@ -462,7 +461,7 @@ impl TryFrom<SafeUrl> for ParsedArchiveUrl {
 /// or (direct URL):
 ///   `https://github.com/foo-labs/foo/archive/master.zip#subdirectory=packages/bar`
 ///   `https://github.com/foo-labs/foo/archive/master.zip#egg=pkg&subdirectory=packages/bar`
-fn get_subdirectory(url: &Url) -> Option<PathBuf> {
+fn get_subdirectory(url: &SafeUrl) -> Option<PathBuf> {
     let fragment = url.fragment()?;
     let subdirectory = fragment
         .split('&')
@@ -473,7 +472,7 @@ fn get_subdirectory(url: &Url) -> Option<PathBuf> {
 /// If the URL points to an archive, extract it, as in (Git):
 ///   `git+https://git.example.com/MyProject.git@v1.0#path=path/to/wheel.whl`
 ///   `git+https://git.example.com/MyProject.git@v1.0#egg=pkg&path=path/to/wheel.whl`
-fn get_install_path(url: &Url) -> Option<PathBuf> {
+fn get_install_path(url: &SafeUrl) -> Option<PathBuf> {
     let fragment = url.fragment()?;
     let install_path = fragment
         .split('&')

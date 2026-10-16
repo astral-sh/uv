@@ -9,7 +9,6 @@ use memchr::memmem::Finder;
 use serde::Deserialize;
 use thiserror::Error;
 use tracing::instrument;
-use url::Url;
 
 use uv_configuration::NoSources;
 use uv_normalize::PackageName;
@@ -67,7 +66,7 @@ pub enum Pep723ItemRef<'item> {
     /// A PEP 723 script provided via `stdin`.
     Stdin(&'item Pep723Metadata),
     /// A PEP 723 script provided via a remote URL.
-    Remote(&'item Pep723Metadata, &'item Url),
+    Remote(&'item Pep723Metadata, &'item SafeUrl),
 }
 
 impl Pep723ItemRef<'_> {

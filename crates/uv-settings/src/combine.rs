@@ -1,8 +1,6 @@
 use std::path::PathBuf;
 use std::{collections::BTreeMap, num::NonZeroUsize};
 
-use url::Url;
-
 use uv_configuration::{
     AddBoundsKind, AnnotationStyle, BuildIsolation, ExcludeNewer, ExcludeNewerPackage,
     ExportFormat, ForkStrategy, IndexStrategy, KeyringProviderType, NoSources, PrereleaseMode,
@@ -121,7 +119,6 @@ impl_combine_or!(SupportedEnvironments);
 impl_combine_or!(TargetTriple);
 impl_combine_or!(TorchMode);
 impl_combine_or!(TrustedPublishing);
-impl_combine_or!(Url);
 impl_combine_or!(bool);
 
 impl<T> Combine for Option<Vec<T>> {

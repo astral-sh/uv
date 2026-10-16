@@ -9,6 +9,7 @@ use tracing::debug;
 use url::{ParseError, Url};
 
 use uv_preview::{Preview, PreviewFeature};
+use uv_redacted::SafeUrl;
 use uv_static::EnvVars;
 use uv_warnings::warn_user_once;
 
@@ -58,8 +59,8 @@ impl HuggingFaceProvider {
     }
 }
 
-/// The [`Url`] for the S3 endpoint, if set.
-static S3_ENDPOINT_URL: LazyLock<Result<Option<Url>, ParseError>> =
+/// The [`SafeUrl`] for the S3 endpoint, if set.
+static S3_ENDPOINT_URL: LazyLock<Result<Option<SafeUrl>, ParseError>> =
     LazyLock::new(|| endpoint_url(EnvVars::UV_S3_ENDPOINT_URL));
 
 /// A provider for authentication credentials for S3 endpoints.
@@ -108,8 +109,8 @@ impl S3EndpointProvider {
     }
 }
 
-/// The [`Url`] for the GCS endpoint, if set.
-static GCS_ENDPOINT_URL: LazyLock<Result<Option<Url>, ParseError>> =
+/// The [`SafeUrl`] for the GCS endpoint, if set.
+static GCS_ENDPOINT_URL: LazyLock<Result<Option<SafeUrl>, ParseError>> =
     LazyLock::new(|| endpoint_url(EnvVars::UV_GCS_ENDPOINT_URL));
 
 /// A provider for authentication credentials for GCS endpoints.
@@ -149,8 +150,8 @@ impl GcsEndpointProvider {
     }
 }
 
-/// The [`Url`] for the Azure endpoint, if set.
-static AZURE_ENDPOINT_URL: LazyLock<Result<Option<Url>, ParseError>> =
+/// The [`SafeUrl`] for the Azure endpoint, if set.
+static AZURE_ENDPOINT_URL: LazyLock<Result<Option<SafeUrl>, ParseError>> =
     LazyLock::new(|| endpoint_url(EnvVars::UV_AZURE_ENDPOINT_URL));
 
 /// A provider for authentication credentials for Azure endpoints.
@@ -190,19 +191,19 @@ impl AzureEndpointProvider {
     }
 }
 
-/// Returns the configured endpoint [`Url`], if set and valid.
-fn endpoint_url(env_var: &str) -> Result<Option<Url>, ParseError> {
+/// Returns the configured endpoint [`SafeUrl`], if set and valid.
+fn endpoint_url(env_var: &str) -> Result<Option<SafeUrl>, ParseError> {
     let Some(endpoint_url) = std::env::var(env_var).ok() else {
         return Ok(None);
     };
-    Url::parse(&endpoint_url).map(Some)
+    Url::parse(&endpoint_url).map(SafeUrl::from_url).map(Some)
 }
 
 /// Returns `true` if `url` is within the configured S3, GCS, or Azure-compatible endpoint URL.
 ///
 /// The URL must be in the same realm, or a subdomain of the endpoint realm, and must be under the
 /// endpoint path using complete path-segment prefix matching.
-fn is_endpoint_url(url: &Url, endpoint_url: &Url) -> bool {
+fn is_endpoint_url(url: &Url, endpoint_url: &SafeUrl) -> bool {
     let endpoint_realm = RealmRef::from(endpoint_url);
     let realm = RealmRef::from(url);
     if realm != endpoint_realm && !realm.is_subdomain_of(endpoint_realm) {
@@ -218,7 +219,7 @@ mod tests {
 
     #[test]
     fn test_endpoint_url_matches_path_prefix() {
-        let endpoint_url = Url::parse("https://example.com/private").unwrap();
+        let endpoint_url = SafeUrl::parse("https://example.com/private").unwrap();
 
         for url in [
             "https://example.com/private",
@@ -234,7 +235,7 @@ mod tests {
 
     #[test]
     fn test_endpoint_url_rejects_partial_path_segments() {
-        let endpoint_url = Url::parse("https://example.com/private").unwrap();
+        let endpoint_url = SafeUrl::parse("https://example.com/private").unwrap();
 
         for url in [
             "https://example.com/public",
@@ -250,7 +251,7 @@ mod tests {
 
     #[test]
     fn test_endpoint_url_matches_subdomain_with_path_prefix() {
-        let endpoint_url = Url::parse("https://example.com/private").unwrap();
+        let endpoint_url = SafeUrl::parse("https://example.com/private").unwrap();
 
         assert!(is_endpoint_url(
             &Url::parse("https://bucket.example.com/private/package.whl").unwrap(),
@@ -264,7 +265,7 @@ mod tests {
 
     #[test]
     fn test_endpoint_url_root_path_matches_all_paths() {
-        let endpoint_url = Url::parse("https://example.com").unwrap();
+        let endpoint_url = SafeUrl::parse("https://example.com").unwrap();
 
         for url in [
             "https://example.com/package.whl",

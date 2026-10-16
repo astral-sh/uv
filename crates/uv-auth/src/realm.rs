@@ -103,6 +103,12 @@ impl RealmRef<'_> {
     }
 }
 
+impl<'a> From<&'a SafeUrl> for RealmRef<'a> {
+    fn from(url: &'a SafeUrl) -> Self {
+        Self::from(&**url)
+    }
+}
+
 impl<'a> From<&'a Url> for RealmRef<'a> {
     fn from(url: &'a Url) -> Self {
         Self {
