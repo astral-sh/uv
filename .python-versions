@@ -23,7 +23,6 @@
 # Pre-release version required for testing
 3.16.0a1
 
-# Versions used to compare pre-release and stable interpreter selection
-3.14.0rc2
-3.14.0rc3
-3.14.0
+# Pre-releases used to compare interpreter selection with 3.13.0
+3.13.0rc2
+3.13.0rc3
