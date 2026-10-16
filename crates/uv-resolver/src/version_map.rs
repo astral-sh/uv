@@ -873,14 +873,7 @@ impl VersionMapLazy {
             }
         };
 
-        // Break ties with the build tag.
-        let build_tag = filename.build_tag().cloned();
-
-        if filename.variant().is_some() {
-            WheelCompatibility::Variant(hash, priority, build_tag)
-        } else {
-            WheelCompatibility::Compatible(hash, priority, build_tag)
-        }
+        WheelCompatibility::from_tag_priority(filename, hash, priority)
     }
 }
 

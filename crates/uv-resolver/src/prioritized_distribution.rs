@@ -420,10 +420,15 @@ impl PrioritizedDist {
         &self.0.variants_json
     }
 
-    /// Whether this index has a wheel whose variant properties need to be checked.
-    pub(crate) fn has_variants(&self, index: &IndexUrl) -> bool {
-        self.0.wheels.iter().any(|(wheel, compatibility)| {
-            &wheel.index == index && matches!(compatibility, WheelCompatibility::Variant(..))
+    /// Variant metadata from indexes with wheels whose properties still need to be checked.
+    pub(crate) fn variants_json_for_selection(
+        &self,
+    ) -> impl Iterator<Item = &RegistryVariantsJson> {
+        self.0.variants_json.iter().filter(|metadata| {
+            self.0.wheels.iter().any(|(wheel, compatibility)| {
+                wheel.index == metadata.index
+                    && matches!(compatibility, WheelCompatibility::Variant(..))
+            })
         })
     }
 
@@ -432,6 +437,9 @@ impl PrioritizedDist {
         &self,
         metadata: &[(&IndexUrl, &VariantsJsonContent)],
     ) -> Option<Self> {
+        if metadata.is_empty() {
+            return None;
+        }
         let supported = HashSet::new();
         let (best_index, (hash, _, priority, build_tag)) = self
             .0
@@ -450,7 +458,7 @@ impl PrioritizedDist {
                     })
                     .then_some((index, (*hash, Reverse(label), *priority, build_tag)))
             })
-            .max_by(|(_, left), (_, right)| left.cmp(right))?;
+            .max_by_key(|(_, priority)| *priority)?;
 
         if let Some((_, WheelCompatibility::Compatible(existing_hash, ..))) = self.best_wheel()
             && *existing_hash > hash
@@ -791,6 +799,20 @@ impl<'a> CompatibleDist<'a> {
 }
 
 impl WheelCompatibility {
+    /// Record platform compatibility, deferring the property check for a variant wheel.
+    pub(crate) fn from_tag_priority(
+        filename: &WheelFilename,
+        hash: HashComparison,
+        priority: Option<TagPriority>,
+    ) -> Self {
+        let build_tag = filename.build_tag().cloned();
+        if filename.variant().is_some() {
+            Self::Variant(hash, priority, build_tag)
+        } else {
+            Self::Compatible(hash, priority, build_tag)
+        }
+    }
+
     /// Return `true` if the distribution is compatible.
     fn is_compatible(&self) -> bool {
         matches!(self, Self::Compatible(_, _, _))

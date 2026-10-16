@@ -1,4 +1,3 @@
-use std::collections::HashSet;
 use std::fmt;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -11,13 +10,13 @@ use uv_cache_info::Timestamp;
 use uv_configuration::{BuildOptions, Reinstall};
 use uv_distribution::{
     BuiltWheelIndex, HttpArchivePointer, PathArchivePointer, RegistryWheelIndex,
-    check_supported_wheel_variant,
+    check_supported_wheel_variant, wheel_variant_matches,
 };
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
     BuiltDist, CachedDirectUrlDist, CachedDist, ConfigSettings, Dist, Error, ExtraBuildRequires,
     ExtraBuildVariables, Hashed, IndexLocations, InstalledDist, Name, PackageConfigSettings,
-    RequirementSource, Resolution, ResolvedDist, SourceDist, VariantsJsonContent,
+    RequirementSource, Resolution, ResolvedDist, SourceDist,
 };
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
@@ -821,17 +820,7 @@ fn installed_variant_matches(installed: &InstalledDist, dist: &ResolvedDist) -> 
         return variant.is_none();
     };
 
-    match fs_err::read(path) {
-        Ok(contents) => variant.is_some_and(|label| {
-            VariantsJsonContent::from_slice(&contents)
-                .is_ok_and(|metadata| metadata.is_compatible_wheel(label, &HashSet::new()))
-        }),
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => variant.is_none(),
-        Err(err) => {
-            debug!("Failed to read installed wheel variant metadata: {err}");
-            false
-        }
-    }
+    wheel_variant_matches(&path, variant)
 }
 
 /// Returns `true` if the given distribution is a seed package.

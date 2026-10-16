@@ -1,8 +1,9 @@
 use std::collections::HashSet;
 use std::path::Path;
 
+use tracing::debug;
 use uv_cache_info::CacheInfo;
-use uv_distribution_filename::WheelFilename;
+use uv_distribution_filename::{VariantLabel, WheelFilename};
 use uv_distribution_types::{BuildInfo, BuiltDist, CachedDist, Dist, Hashed, VariantsJsonContent};
 use uv_metadata::{find_flat_dist_info, read_flat_wheel_metadata};
 use uv_preview::PreviewFeature;
@@ -39,13 +40,24 @@ pub(crate) fn variant_compatible(filename: &WheelFilename, archive: &Path) -> bo
         return false;
     };
     let path = archive.join(format!("{dist_info}.dist-info/variant.json"));
-    let Ok(contents) = fs_err::read(path) else {
-        return false;
-    };
-    let Ok(metadata) = VariantsJsonContent::from_slice(&contents) else {
-        return false;
-    };
-    metadata.is_compatible_wheel(label, &HashSet::new())
+    wheel_variant_matches(&path, Some(label))
+}
+
+/// Whether `variant.json` describes the expected, compatible variant.
+///
+/// An ordinary wheel (no variant label) must not have a `variant.json` file.
+pub fn wheel_variant_matches(path: &Path, label: Option<&VariantLabel>) -> bool {
+    match fs_err::read(path) {
+        Ok(contents) => label.is_some_and(|label| {
+            VariantsJsonContent::from_slice(&contents)
+                .is_ok_and(|metadata| metadata.is_compatible_wheel(label, &HashSet::new()))
+        }),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => label.is_none(),
+        Err(err) => {
+            debug!("Failed to read wheel variant metadata: {err}");
+            false
+        }
+    }
 }
 
 /// A locally available wheel.

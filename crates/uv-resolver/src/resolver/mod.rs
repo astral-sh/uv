@@ -51,8 +51,8 @@ use crate::manifest::Manifest;
 use crate::pins::FilePins;
 use crate::preferences::{PreferenceSource, Preferences};
 use crate::prioritized_distribution::{
-    CompatibleDist, IncompatibleDist, IncompatibleSource, IncompatibleWheel, PythonRequirementKind,
-    RegistryVariantsJson, implied_markers,
+    CompatibleDist, IncompatibleDist, IncompatibleSource, IncompatibleWheel, PrioritizedDist,
+    PythonRequirementKind, RegistryVariantsJson, implied_markers,
 };
 use crate::pubgrub::{
     DependencySource, PubGrubDependency, PubGrubPackage, PubGrubPackageInner, PubGrubPriorities,
@@ -157,6 +157,17 @@ struct ResolverState<InstalledPackages: InstalledPackagesProvider> {
     options: Options,
     /// The reporter to use for this resolver.
     reporter: Option<Arc<dyn Reporter>>,
+}
+
+/// The result of checking a candidate version's wheel variants.
+#[derive(Default)]
+struct WheelVariantSelection<'a> {
+    /// The first distribution we can use, with variant compatibility applied.
+    distribution: Option<Cow<'a, PrioritizedDist>>,
+    /// Why the original candidate was unavailable, if no distribution can be used.
+    unavailable: Option<MetadataUnavailable>,
+    /// Keep an installed variant if we could not reach the index to check its replacement.
+    offline: bool,
 }
 
 impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
@@ -1352,18 +1363,19 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             return Ok(None);
         };
 
-        let preview_variants = uv_preview::is_enabled(PreviewFeature::WheelVariants);
-        let mut installed_fallback = None;
-        let mut installed_has_variant = false;
-        let candidate = if self.options.reselect_installed_variants
-            && env.marker_environment().is_some()
+        // Universal lockfiles cannot yet record the metadata needed to select a variant.
+        let specific_environment = env.marker_environment().is_some();
+        let preview_variants =
+            specific_environment && uv_preview::is_enabled(PreviewFeature::WheelVariants);
+        let (candidate, installed_fallback) = if self.options.reselect_installed_variants
+            && specific_environment
             && let CandidateDist::Compatible(CompatibleDist::InstalledDist(installed)) =
                 candidate.dist()
         {
-            installed_has_variant = installed
+            let has_variant = installed
                 .variant_metadata_path()
                 .is_some_and(|path| path.try_exists().unwrap_or(true));
-            if (preview_variants || installed_has_variant)
+            if (preview_variants || has_variant)
                 && let Some(alternative) = self.selector.select_no_preference(
                     name,
                     &Range::singleton(candidate.version().clone()),
@@ -1371,107 +1383,40 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     env,
                 )
             {
-                installed_fallback = Some(candidate);
-                alternative
+                (alternative, Some((candidate, has_variant)))
             } else {
-                candidate
+                (candidate, None)
             }
         } else {
-            candidate
+            (candidate, None)
         };
 
-        // Variant properties are scoped to the source that provided the wheel. Only specific
-        // resolutions can select variants until lockfiles can record their metadata.
-        let mut variant_metadata_offline = false;
-        let variant_prioritized = if env.marker_environment().is_some()
-            && preview_variants
-            && let Some(prioritized) = candidate.prioritized()
-        {
-            // With unsafe-best-match, variants on any index may become compatible after their
-            // properties are checked. Consider the candidates in index order.
-            let candidates = if self.selector.index_strategy() == &IndexStrategy::UnsafeBestMatch {
-                Either::Left(
-                    version_maps
-                        .iter()
-                        .filter_map(|version_map| version_map.get(candidate.version())),
-                )
-            } else {
-                Either::Right(std::iter::once(prioritized))
-            };
-
-            let mut variant_prioritized = None;
-            let mut unavailable_metadata = None;
-            for candidate_dist in candidates {
-                let mut responses = Vec::new();
-                for variants_json in candidate_dist.variants_json() {
-                    if candidate_dist.has_variants(&variants_json.index) {
-                        responses.push((
-                            &variants_json.index,
-                            requests.request_variants_json(variants_json)?.wait(),
-                        ));
-                    }
-                }
-                let mut metadata = Vec::with_capacity(responses.len());
-                for (index, response) in &responses {
-                    match response.as_ref() {
-                        Ok(content) => metadata.push((*index, content)),
-                        Err(reason) => {
-                            if let MetadataUnavailable::Offline | MetadataUnavailable::Network(_) =
-                                reason
-                            {
-                                variant_metadata_offline = true;
-                            }
-                            if unavailable_metadata.is_none()
-                                && std::ptr::eq(candidate_dist, prioritized)
-                            {
-                                unavailable_metadata = Some(reason.clone());
-                            }
-                        }
-                    }
-                }
-                if let Some(selected) = candidate_dist.prioritize_variants(&metadata) {
-                    variant_prioritized = Some(Cow::Owned(selected));
-                    break;
-                }
-                if candidate_dist.get().is_some() {
-                    variant_prioritized = Some(Cow::Borrowed(candidate_dist));
-                    break;
-                }
-            }
-            if variant_prioritized.is_none()
-                && installed_fallback.is_none()
-                && let Some(reason) = unavailable_metadata.as_ref()
-            {
-                return Ok(Some(ResolverVersion::Unavailable(
-                    candidate.version().clone(),
-                    self.record_unavailable_metadata(name, candidate.version(), reason),
-                )));
-            }
-            variant_prioritized
+        let variant = if preview_variants && let Some(prioritized) = candidate.prioritized() {
+            self.select_wheel_variant(candidate.version(), prioritized, version_maps, requests)?
         } else {
-            None
+            WheelVariantSelection::default()
         };
-        let candidate = if let Some(prioritized) = &variant_prioritized {
+        let candidate = if let Some(prioritized) = &variant.distribution {
             candidate.with_prioritized_dist(prioritized)
+        } else if installed_fallback.is_none()
+            && let Some(reason) = &variant.unavailable
+        {
+            return Ok(Some(ResolverVersion::Unavailable(
+                candidate.version().clone(),
+                self.record_unavailable_metadata(name, candidate.version(), reason),
+            )));
         } else {
             candidate
         };
-        let candidate = if let Some(installed) = installed_fallback {
-            let compatible = candidate.compatible().is_some_and(|dist| {
-                Self::check_requires_python(dist, python_requirement).is_none()
+
+        let candidate = if let Some((installed, installed_has_variant)) = installed_fallback {
+            let replace_installed = candidate.compatible().is_some_and(|dist| {
+                let selected_variant = matches!(dist, CompatibleDist::CompatibleWheel { wheel, .. }
+                    if wheel.filename.variant().is_some());
+                (selected_variant || (installed_has_variant && !variant.offline))
+                    && Self::check_requires_python(dist, python_requirement).is_none()
             });
-            let selected_variant =
-                if let CandidateDist::Compatible(CompatibleDist::CompatibleWheel {
-                    wheel, ..
-                }) = candidate.dist()
-                {
-                    wheel.filename.variant().is_some()
-                } else {
-                    false
-                };
-            if compatible
-                && (selected_variant || (installed_has_variant && !variant_metadata_offline))
-            {
+            if replace_installed {
                 candidate
             } else {
                 installed
@@ -1595,6 +1540,56 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
         let version = candidate.version().clone();
         Ok(Some(ResolverVersion::Unforked(version)))
+    }
+
+    /// Select a wheel using only the variant metadata from the index that supplied it.
+    fn select_wheel_variant<'a>(
+        &self,
+        version: &Version,
+        prioritized: &'a PrioritizedDist,
+        version_maps: &'a [VersionMap],
+        requests: &MetadataRequests,
+    ) -> Result<WheelVariantSelection<'a>, ResolveError> {
+        // With unsafe-best-match, a wheel on a later index may become compatible once we
+        // check its variant properties. Try the indexes in order, as in candidate selection.
+        let candidates = if self.selector.index_strategy() == &IndexStrategy::UnsafeBestMatch {
+            Either::Left(version_maps.iter().filter_map(|map| map.get(version)))
+        } else {
+            Either::Right(std::iter::once(prioritized))
+        };
+
+        let mut selection = WheelVariantSelection::default();
+        for dist in candidates {
+            let mut responses = Vec::new();
+            for variants_json in dist.variants_json_for_selection() {
+                let response = requests.request_variants_json(variants_json)?.wait();
+                responses.push((&variants_json.index, response));
+            }
+            let mut metadata = Vec::with_capacity(responses.len());
+            for (index, response) in &responses {
+                match response.as_ref() {
+                    Ok(content) => metadata.push((*index, content)),
+                    Err(reason) => {
+                        selection.offline |= matches!(
+                            reason,
+                            MetadataUnavailable::Offline | MetadataUnavailable::Network(_)
+                        );
+                        if std::ptr::eq(dist, prioritized) {
+                            selection.unavailable.get_or_insert_with(|| reason.clone());
+                        }
+                    }
+                }
+            }
+            if let Some(variant) = dist.prioritize_variants(&metadata) {
+                selection.distribution = Some(Cow::Owned(variant));
+                break;
+            }
+            if dist.get().is_some() {
+                selection.distribution = Some(Cow::Borrowed(dist));
+                break;
+            }
+        }
+        Ok(selection)
     }
 
     /// Determine whether a candidate covers all supported platforms; and, if not, generate a fork.
