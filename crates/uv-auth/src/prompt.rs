@@ -38,12 +38,17 @@ impl CredentialsPrompt {
     }
 
     /// Return credentials already entered through this prompt, without prompting.
-    pub fn get(&self) -> Option<&Credentials> {
+    pub fn credentials(&self) -> Option<&Credentials> {
         self.credentials.get().and_then(Option::as_ref)
     }
 
+    /// Return whether a prompt was attempted but interactive input was unavailable.
+    pub fn was_unavailable(&self) -> bool {
+        self.credentials.get().is_some_and(Option::is_none)
+    }
+
     /// Prompt on a blocking thread, retaining the response for subsequent requests.
-    pub async fn credentials(&self) -> Result<Option<Credentials>, CredentialsPromptError> {
+    pub async fn prompt(&self) -> Result<Option<Credentials>, CredentialsPromptError> {
         self.credentials
             .get_or_try_init(|| async { tokio::task::spawn_blocking(self.callback).await? })
             .await

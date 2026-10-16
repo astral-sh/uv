@@ -492,15 +492,14 @@ impl Middleware for AuthMiddleware {
             )
             .await?;
 
-        // A discovered username alone cannot satisfy a request that requires authentication.
-        // Give the prompt a chance before sending either missing or incomplete credentials.
+        // If no complete credentials were found, prompt before sending the request.
         if must_authenticate
             && !matches!(auth_policy, AuthPolicy::Never)
             && !fetched_credentials
                 .as_ref()
                 .is_some_and(|credentials| credentials.is_authenticated())
             && let Some(prompt) = &self.credentials_prompt
-            && let Some(credentials) = prompt.credentials().await.map_err(Error::middleware)?
+            && let Some(credentials) = prompt.prompt().await.map_err(Error::middleware)?
         {
             fetched_credentials = Some(Arc::new(Authentication::from(credentials)));
         }

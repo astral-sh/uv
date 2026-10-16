@@ -46,9 +46,9 @@ use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_static::TarBackend;
 use uv_warnings::warn_user;
 
-pub use crate::trusted_publishing::TrustedPublishingToken;
+use crate::trusted_publishing::TrustedPublishingService;
 use crate::trusted_publishing::pypi::PyPIPublishingService;
-use crate::trusted_publishing::{TrustedPublishingError, TrustedPublishingService};
+pub use crate::trusted_publishing::{TrustedPublishingError, TrustedPublishingToken};
 
 #[derive(Error, Debug)]
 pub enum PublishError {
@@ -729,7 +729,7 @@ impl<'a> PublishSession<'a> {
                 && let Some(prompted) = self
                     .credentials_prompt
                     .as_ref()
-                    .and_then(CredentialsPrompt::get)
+                    .and_then(CredentialsPrompt::credentials)
             {
                 *credentials = prompted.clone();
             }
@@ -822,8 +822,8 @@ impl<'a> PublishSession<'a> {
             ) && let PublishingCredentials::Supplied(credentials) = &mut self.credentials
                 && credentials.is_empty()
                 && let Some(prompt) = &self.credentials_prompt
-                && prompt.get().is_none()
-                && let Some(prompted) = prompt.credentials().await?
+                && prompt.credentials().is_none()
+                && let Some(prompted) = prompt.prompt().await?
             {
                 // Reopen the streaming body, reusing the metadata and hashes already computed.
                 *credentials = prompted;
