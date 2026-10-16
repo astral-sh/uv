@@ -2,6 +2,7 @@ use std::error::Error;
 use std::time::{Duration, SystemTime, SystemTimeError};
 use std::{io, iter};
 
+use http::Method;
 use http::status::StatusCode;
 use itertools::Itertools;
 use reqwest::Response;
@@ -142,9 +143,31 @@ impl RetryState {
         err: &(dyn Error + 'static),
         error_retries: u32,
     ) -> Option<Duration> {
+        self.should_retry_inner(err, error_retries, None)
+    }
+
+    /// Determines whether a failed request should be retried.
+    ///
+    /// Unlike [`Self::should_retry`], this treats unclassified request errors as transient for
+    /// read-only HTTP methods.
+    pub(crate) fn should_retry_request(
+        &mut self,
+        method: &Method,
+        err: &(dyn Error + 'static),
+        error_retries: u32,
+    ) -> Option<Duration> {
+        self.should_retry_inner(err, error_retries, Some(method))
+    }
+
+    fn should_retry_inner(
+        &mut self,
+        err: &(dyn Error + 'static),
+        error_retries: u32,
+        method: Option<&Method>,
+    ) -> Option<Duration> {
         // If the middleware performed any retries, consider them in our budget.
         self.total_retries += error_retries;
-        match retryable_on_request_failure(err) {
+        match retryable_on_request_failure_inner(err, method) {
             Some(Retryable::Transient) => {
                 // Capture `now` before calling the policy so that `execute_after`
                 // (computed from a `SystemTime::now()` inside the library) is always
@@ -190,6 +213,13 @@ impl RetryState {
 ///   of different crates processing the stream, including `io::Error` layers
 /// * Any `h2` error
 pub fn retryable_on_request_failure(err: &(dyn Error + 'static)) -> Option<Retryable> {
+    retryable_on_request_failure_inner(err, None)
+}
+
+fn retryable_on_request_failure_inner(
+    err: &(dyn Error + 'static),
+    method: Option<&Method>,
+) -> Option<Retryable> {
     // First, try to show a nice trace log
     if let Some((Some(status), Some(url))) = find_source::<WrappedReqwestError>(&err)
         .map(|request_err| (request_err.status(), request_err.url()))
@@ -208,6 +238,7 @@ pub fn retryable_on_request_failure(err: &(dyn Error + 'static)) -> Option<Retry
     }
 
     let mut has_known_error = false;
+    let mut has_unclassified_request_error = false;
     // IO Errors or reqwest errors may be nested through custom IO errors or stream processing
     // crates
     let mut current_source = Some(err);
@@ -244,7 +275,8 @@ pub fn retryable_on_request_failure(err: &(dyn Error + 'static)) -> Option<Retry
                 return Some(Retryable::Transient);
             }
 
-            trace!("Fatal nested reqwest error");
+            has_unclassified_request_error |= reqwest_err.is_request();
+            trace!("Unclassified nested reqwest error");
         } else if source.downcast_ref::<h2::Error>().is_some() {
             // All h2 errors look like errors that should be retried
             // https://github.com/astral-sh/uv/issues/15916
@@ -280,11 +312,20 @@ pub fn retryable_on_request_failure(err: &(dyn Error + 'static)) -> Option<Retry
         current_source = source.source();
     }
 
+    if has_unclassified_request_error && method.is_some_and(is_read_only_method) {
+        trace!("Transient unclassified reqwest request error for read-only method");
+        return Some(Retryable::Transient);
+    }
+
     if !has_known_error {
         trace!("Cannot retry error: neither an IO error nor a reqwest error");
     }
 
     None
+}
+
+fn is_read_only_method(method: &Method) -> bool {
+    *method == Method::GET || *method == Method::HEAD
 }
 
 /// An error type that supports URL-fallback and exponential-backoff retry logic.
@@ -406,6 +447,13 @@ mod tests {
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use crate::{UvRetryableStrategy, retryable_on_request_failure};
+
+    #[test]
+    fn only_read_only_methods_retry_unclassified_request_errors() {
+        assert!(is_read_only_method(&Method::GET));
+        assert!(is_read_only_method(&Method::HEAD));
+        assert!(!is_read_only_method(&Method::POST));
+    }
 
     #[tokio::test]
     #[traced_test]
