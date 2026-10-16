@@ -67,7 +67,10 @@ jobs:
       - name: "Install required Python versions"
         env:
           UV_PYTHON_DOWNLOADS_JSON_URL: crates/uv-python-managed/download-metadata.json
-        run: uv python install
+        run: |
+          uv python install
+          # Cache archives for the Unix-only debug installation tests.
+          uv python install 3.12d 3.13d 3.13t 3.13td
 
       - name: "Install secret service"
         run: |
@@ -208,7 +211,10 @@ jobs:
       - name: "Install required Python versions"
         env:
           UV_PYTHON_DOWNLOADS_JSON_URL: crates/uv-python-managed/download-metadata.json
-        run: uv python install
+        run: |
+          uv python install
+          # Cache archives for the Unix-only debug installation tests.
+          uv python install 3.12d 3.13d 3.13t 3.13td
 
       - name: "Cargo test"
         env:
