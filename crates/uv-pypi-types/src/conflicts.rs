@@ -331,11 +331,6 @@ impl ConflictItem {
         self.kind.extra()
     }
 
-    /// Returns the group name of this conflicting item.
-    pub fn group(&self) -> Option<&GroupName> {
-        self.kind.group()
-    }
-
     /// Returns this item as a new type with its fields borrowed.
     pub fn as_ref(&self) -> ConflictItemRef<'_> {
         ConflictItemRef {
@@ -443,15 +438,6 @@ impl ConflictKind {
         match self {
             Self::Extra(extra) => Some(extra),
             Self::Group(_) | Self::Project => None,
-        }
-    }
-
-    /// If this conflict corresponds to a group, then return the
-    /// group name.
-    fn group(&self) -> Option<&GroupName> {
-        match self {
-            Self::Group(group) => Some(group),
-            Self::Extra(_) | Self::Project => None,
         }
     }
 
