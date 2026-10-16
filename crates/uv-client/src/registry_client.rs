@@ -14,7 +14,6 @@ use reqwest::{Proxy, Response};
 use rustc_hash::FxHashMap;
 use tokio::sync::{Mutex, Semaphore};
 use tracing::{Instrument, Span, debug, info_span, instrument, trace, warn};
-use url::Url;
 
 use uv_auth::{CredentialsCache, Indexes};
 use uv_cache::{Cache, CacheBucket, CacheEntry, WheelCache};
@@ -1239,7 +1238,7 @@ impl RegistryClient {
                     let mut reader = AsyncHttpRangeReader::from_head_response(
                         self.uncached_client(url).clone(),
                         response,
-                        Url::from(url.clone()),
+                        url.clone().into_unsafe_url(),
                         headers.clone(),
                     )
                     .await

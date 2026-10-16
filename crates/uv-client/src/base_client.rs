@@ -17,7 +17,6 @@ use reqwest_retry::{Jitter, RetryTransientMiddleware};
 use thiserror::Error;
 use tracing::{debug, warn};
 use url::ParseError;
-use url::Url;
 
 use uv_auth::{
     AuthMiddleware, Credentials, CredentialsCache, CredentialsFromUrlError, CredentialsPrompt,
@@ -1084,7 +1083,7 @@ fn request_into_redirect(
     }
 
     std::mem::swap(req.headers_mut(), &mut headers);
-    *req.url_mut() = Url::from(redirect_url);
+    *req.url_mut() = redirect_url.into_unsafe_url();
     debug!(
         "Received HTTP {status}. Redirecting to `{}`",
         SafeUrl::ref_cast(req.url())
