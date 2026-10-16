@@ -177,7 +177,9 @@ impl UniversalMarker {
         }
 
         self.marker = self.marker.restrict(conflicts.marker);
-        self.pep508 = self.marker.without_extras();
+        if self.marker != self.pep508 {
+            self.pep508 = self.marker.without_extras();
+        }
     }
 
     /// Assumes that a given extra/group for the given package is activated.
