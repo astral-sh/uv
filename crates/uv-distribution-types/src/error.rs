@@ -19,6 +19,9 @@ pub enum Error {
     #[error("Could not extract wheel filename from path: {}", _0.display())]
     MissingWheelFilename(PathBuf),
 
+    #[error("The archive filename for `{0}` has not been resolved")]
+    UnresolvedUrl(SafeUrl),
+
     #[error("Distribution not found at: {0}")]
     NotFound(SafeUrl),
 

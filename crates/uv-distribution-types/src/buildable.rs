@@ -178,6 +178,7 @@ pub struct DirectSourceUrl<'a> {
     pub url: &'a SafeUrl,
     pub subdirectory: Option<&'a Path>,
     pub ext: SourceDistExtension,
+    pub header_filename: Option<&'a str>,
 }
 
 impl std::fmt::Display for DirectSourceUrl<'_> {

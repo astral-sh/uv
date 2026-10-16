@@ -80,14 +80,14 @@ pub(crate) fn required_dist(
         RequirementSource::Url {
             subdirectory,
             location,
-            ext,
+            archive,
             url,
         } => Dist::from_http_url(
             requirement.name.clone(),
             url.clone(),
             location.as_url().clone(),
             subdirectory.clone(),
-            *ext,
+            archive.clone(),
         )?,
         RequirementSource::GitDirectory {
             git,

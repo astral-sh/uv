@@ -113,7 +113,7 @@ impl RequirementSatisfaction {
                 // records `"url": "https://github.com/tqdm/tqdm"` in `direct_url.json`.
                 location: requested_url,
                 subdirectory: requested_subdirectory,
-                ext: _,
+                archive: _,
                 url: _,
             } => {
                 let InstalledDistKind::Url(InstalledDirectUrlDist {

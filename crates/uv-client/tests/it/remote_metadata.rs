@@ -41,6 +41,7 @@ async fn remote_metadata_with_and_without_cache() -> Result<()> {
         let url = format!("{}/ok-1.0.0-py3-none-any.whl", server.uri());
         let filename = WheelFilename::from_str("ok-1.0.0-py3-none-any.whl")?;
         let dist = BuiltDist::DirectUrl(DirectUrlBuiltDist {
+            header_filename: None,
             filename,
             location: Box::new(SafeUrl::parse(&url)?),
             url: VerbatimUrl::from_str(&url)?,
@@ -79,6 +80,7 @@ async fn remote_metadata_requires_range_requests() -> Result<()> {
     let url = format!("{}/ok-1.0.0-py3-none-any.whl", server.uri());
     let filename = WheelFilename::from_str("ok-1.0.0-py3-none-any.whl")?;
     let dist = BuiltDist::DirectUrl(DirectUrlBuiltDist {
+        header_filename: None,
         filename,
         location: Box::new(SafeUrl::parse(&url)?),
         url: VerbatimUrl::from_str(&url)?,
@@ -606,6 +608,7 @@ async fn assert_wheel_metadata_readable(source_server: &MockServer) -> Result<()
         "source-password",
     )?;
     let dist = BuiltDist::DirectUrl(DirectUrlBuiltDist {
+        header_filename: None,
         filename: WheelFilename::from_str("ok-1.0.0-py3-none-any.whl")?,
         location: Box::new(SafeUrl::parse(&url)?),
         url: VerbatimUrl::from_str(&url)?,

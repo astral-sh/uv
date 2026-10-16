@@ -246,7 +246,7 @@ pub(super) fn normalize_requirement(
         RequirementSource::Url {
             mut location,
             subdirectory,
-            ext,
+            archive,
             url: _,
         } => {
             // Remove the credentials.
@@ -259,13 +259,13 @@ pub(super) fn normalize_requirement(
             let url = SafeUrl::from(ParsedArchiveUrl {
                 url: location.as_url().clone(),
                 subdirectory: subdirectory.clone(),
-                ext,
+                archive: archive.clone(),
             });
 
             RequirementSource::Url {
                 location,
                 subdirectory,
-                ext,
+                archive,
                 url: VerbatimUrl::from_url(url),
             }
         }
