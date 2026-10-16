@@ -172,6 +172,10 @@ impl UniversalMarker {
     /// Invalid assignments are outside this marker's domain. Callers must retain dependency
     /// requests separately and validate them before using the simplified installation graph.
     pub fn imbibe(&mut self, conflicts: ConflictMarker) {
+        if conflicts.marker.is_true() {
+            return;
+        }
+
         self.marker = self.marker.restrict(conflicts.marker);
         self.pep508 = self.marker.without_extras();
     }
