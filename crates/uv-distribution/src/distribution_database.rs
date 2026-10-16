@@ -49,7 +49,9 @@ use crate::extracted_wheel::{ExtractedWheel, HashedWheel, WheelExtractor};
 use crate::hash::http_hash_algorithms;
 use crate::metadata::{ArchiveMetadata, Metadata};
 use crate::source::SourceDistributionBuilder;
-use crate::{Error, FirstPartyPackages, LocalWheel, Reporter, RequiresDist};
+use crate::{
+    Error, FirstPartyPackages, LocalWheel, Reporter, RequiresDist, check_supported_wheel_variant,
+};
 
 /// A cached high-level interface to convert distributions (a requirement resolved to a location)
 /// to a wheel or wheel metadata.
@@ -221,14 +223,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         tags: &Tags,
         hashes: ArchiveHashPolicy<'_>,
     ) -> Result<LocalWheel, Error> {
-        // TODO(konsti): Support fetching wheel variants.
-        if let Dist::Built(built) = dist
-            && built.wheel_filename().variant().is_some()
-        {
-            return Err(Error::UnsupportedWheelVariant(Box::new(
-                built.wheel_filename().clone(),
-            )));
-        }
+        check_supported_wheel_variant(dist)?;
         match dist {
             Dist::Built(built) => self.get_wheel(built, hashes).await,
             Dist::Source(source) => self.build_wheel(source, tags, hashes).await,
@@ -267,14 +262,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         dist: &Dist,
         hashes: MetadataHashPolicy<'_>,
     ) -> Result<ArchiveMetadata, Error> {
-        // TODO(konsti): Support reading metadata from wheel variants.
-        if let Dist::Built(built) = dist
-            && built.wheel_filename().variant().is_some()
-        {
-            return Err(Error::UnsupportedWheelVariant(Box::new(
-                built.wheel_filename().clone(),
-            )));
-        }
+        check_supported_wheel_variant(dist)?;
         match dist {
             Dist::Built(built) => self.get_wheel_metadata(built, hashes).await,
             Dist::Source(source) => {

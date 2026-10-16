@@ -439,6 +439,7 @@ pub async fn pip_sync(
             .resolution_mode(resolution_mode)
             .prerelease(prerelease)
             .dependency_mode(dependency_mode)
+            .reselect_installed_variants(true)
             .exclude_newer(exclude_newer.clone())
             .index_strategy(index_strategy)
             .torch_backend(torch_backend)

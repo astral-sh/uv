@@ -10,6 +10,7 @@ use uv_cache_info::Timestamp;
 use uv_configuration::{BuildOptions, Reinstall};
 use uv_distribution::{
     BuiltWheelIndex, HttpArchivePointer, PathArchivePointer, RegistryWheelIndex,
+    check_supported_wheel_variant, wheel_variant_matches,
 };
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
@@ -341,14 +342,8 @@ impl<'a> Planner<'a> {
         //    So, e.g., if a package is marked as `--reinstall`, we _expect_ that it's not passed in
         //    as [`ResolvedDist::Installed`] here.
         for dist in self.resolution.distributions() {
-            // TODO(konsti): Support installing wheel variants.
-            if let Some(filename) = dist.wheel_filename()
-                && filename.variant().is_some()
-            {
-                return Err(uv_distribution::Error::UnsupportedWheelVariant(Box::new(
-                    filename.clone(),
-                ))
-                .into());
+            if let ResolvedDist::Installable { dist, .. } = dist {
+                check_supported_wheel_variant(dist)?;
             }
             // Check if the package should be reinstalled.
             let reinstall = reinstall.contains_package(dist.name())
@@ -389,8 +384,13 @@ impl<'a> Planner<'a> {
                                 );
                             }
                             RequirementSatisfaction::Satisfied => {
-                                debug!("Requirement already installed: {installed}");
-                                continue;
+                                if installed_variant_matches(installed, dist) {
+                                    debug!("Requirement already installed: {installed}");
+                                    continue;
+                                }
+                                debug!(
+                                    "Installed wheel variant differs from the resolved distribution: {installed}"
+                                );
                             }
                             RequirementSatisfaction::OutOfDate => {
                                 debug!("Requirement installed, but not fresh: {installed}");
@@ -807,6 +807,20 @@ impl<'a> Planner<'a> {
             extraneous,
         })
     }
+}
+
+/// Check whether an installed wheel is the variant selected by the resolver.
+fn installed_variant_matches(installed: &InstalledDist, dist: &ResolvedDist) -> bool {
+    if let ResolvedDist::Installed { .. } = dist {
+        return true;
+    }
+
+    let variant = dist.wheel_filename().and_then(WheelFilename::variant);
+    let Some(path) = installed.variant_metadata_path() else {
+        return variant.is_none();
+    };
+
+    wheel_variant_matches(&path, variant)
 }
 
 /// Returns `true` if the given distribution is a seed package.
