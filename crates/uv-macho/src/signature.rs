@@ -21,6 +21,14 @@ const CS_ADHOC: u32 = 2;
 const CS_LINKER_SIGNED: u32 = 0x20000;
 const PAGE_SIZE: usize = 4096;
 const SHA256_SIZE: usize = 32;
+// An empty requirements set and CMS wrapper match Apple's bare ad-hoc signatures.
+const EMPTY_REQUIREMENTS: &[u8] = [
+    REQUIREMENTS.to_be_bytes(),
+    12u32.to_be_bytes(),
+    0u32.to_be_bytes(),
+]
+.as_flattened();
+const EMPTY_CMS_WRAPPER: &[u8] = [BLOB_WRAPPER.to_be_bytes(), 8u32.to_be_bytes()].as_flattened();
 
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) struct Metadata<'image> {
@@ -28,7 +36,7 @@ pub(crate) struct Metadata<'image> {
     flags: u32,
     runtime: u32,
     exec_flags: u64,
-    components: BTreeMap<ComponentSlot, Vec<u8>>,
+    components: BTreeMap<ComponentSlot, &'image [u8]>,
 }
 
 impl<'image> Metadata<'image> {
@@ -99,15 +107,15 @@ impl<'image> Metadata<'image> {
                     }
                     2 => {
                         let blob = Blob::<REQUIREMENTS>::parse(data)?;
-                        components.insert(ComponentSlot::Requirements, blob.data.to_vec());
+                        components.insert(ComponentSlot::Requirements, blob.data);
                     }
                     5 => {
                         let blob = Blob::<ENTITLEMENTS>::parse(data)?;
-                        components.insert(ComponentSlot::Entitlements, blob.data.to_vec());
+                        components.insert(ComponentSlot::Entitlements, blob.data);
                     }
                     7 => {
                         let blob = Blob::<DER_ENTITLEMENTS>::parse(data)?;
-                        components.insert(ComponentSlot::DerEntitlements, blob.data.to_vec());
+                        components.insert(ComponentSlot::DerEntitlements, blob.data);
                     }
                     0x10000 => {
                         Blob::<BLOB_WRAPPER>::parse(data)?;
@@ -125,17 +133,10 @@ impl<'image> Metadata<'image> {
             metadata.components = components;
         }
 
-        // An empty requirements set and CMS wrapper match Apple's bare ad-hoc signatures.
         metadata
             .components
             .entry(ComponentSlot::Requirements)
-            .or_insert_with(|| {
-                let mut bytes = vec![0; 12];
-                bytes[0..4].copy_from_slice(&u32::to_be_bytes(REQUIREMENTS));
-                bytes[4..8].copy_from_slice(&u32::to_be_bytes(12));
-
-                bytes
-            });
+            .or_insert(EMPTY_REQUIREMENTS);
 
         Ok(metadata)
     }
@@ -312,7 +313,7 @@ impl<'image> Metadata<'image> {
         })
     }
 
-    /// Allocate the complete signature before the image's final headers are written.
+    /// Plan the signature and allocate its code-directory hashes before finalizing the image.
     pub(crate) fn prepare<'a>(
         &'a self,
         code_limit: usize,
@@ -327,8 +328,8 @@ impl<'image> Metadata<'image> {
         for length in self
             .components
             .values()
-            .map(Vec::len)
-            .chain([directory.bytes.len(), 8])
+            .map(|data| data.len())
+            .chain([directory.bytes.len(), EMPTY_CMS_WRAPPER.len()])
         {
             size = size.checked_add(length).ok_or(Error::TooLarge)?;
         }
@@ -343,7 +344,7 @@ impl<'image> Metadata<'image> {
     }
 }
 
-/// Allocated signature records that cannot be serialized until hashing completes.
+/// A signature plan that cannot be serialized until the image headers are finalized.
 pub(crate) struct PreparedSignature<'a> {
     metadata: &'a Metadata<'a>,
     directory: PreparedCodeDirectory<'a>,
@@ -357,43 +358,42 @@ impl PreparedSignature<'_> {
         self.size as usize
     }
 
-    /// Consume the prepared records, hashing the image after its headers are finalized.
-    pub(crate) fn sign(self, source: &[u8]) -> Result<Vec<u8>, Error> {
-        if source.len() != self.code_limit {
+    /// Hash the finalized image and append its signature to the same buffer.
+    pub(crate) fn sign(self, image: &mut Vec<u8>) -> Result<(), Error> {
+        if image.len() != self.code_limit {
             return Err(Error::Malformed(
                 "signature layout does not match the image size",
             ));
         }
 
-        let mut entries = self
-            .metadata
-            .components
-            .iter()
-            .map(|(slot, data)| (*slot as u32, data.clone()))
-            .collect::<BTreeMap<_, _>>();
-        entries.insert(0, self.directory.sign(source, self.info_plist));
+        let directory = self.directory.sign(image, self.info_plist);
+        let entries = [(0, directory.as_slice())]
+            .into_iter()
+            .chain(
+                self.metadata
+                    .components
+                    .iter()
+                    .map(|(&slot, &data)| (slot as u32, data)),
+            )
+            .chain([(0x10000, EMPTY_CMS_WRAPPER)]);
+        let count = self.metadata.components.len() + 2;
 
-        // An empty CMS wrapper matches Apple's bare ad-hoc signatures.
-        let wrapper = [BLOB_WRAPPER.to_be_bytes(), 8u32.to_be_bytes()].concat();
-        entries.insert(0x10000, wrapper);
+        image.extend_from_slice(&SUPERBLOB.to_be_bytes());
+        image.extend_from_slice(&self.size.to_be_bytes());
+        image.extend_from_slice(&u32::try_from(count)?.to_be_bytes());
 
-        let mut output = Vec::with_capacity(self.size as usize);
-        output.extend_from_slice(&SUPERBLOB.to_be_bytes());
-        output.extend_from_slice(&self.size.to_be_bytes());
-        output.extend_from_slice(&u32::try_from(entries.len())?.to_be_bytes());
-
-        let mut offset = 12 + entries.len() * 8;
-        for (slot, data) in &entries {
-            output.extend_from_slice(&slot.to_be_bytes());
-            output.extend_from_slice(&u32::try_from(offset)?.to_be_bytes());
+        let mut offset = 12 + count * 8;
+        for (slot, data) in entries.clone() {
+            image.extend_from_slice(&slot.to_be_bytes());
+            image.extend_from_slice(&u32::try_from(offset)?.to_be_bytes());
             offset += data.len();
         }
 
-        for data in entries.into_values() {
-            output.extend(data);
+        for (_, data) in entries {
+            image.extend_from_slice(data);
         }
 
-        Ok(output)
+        Ok(())
     }
 }
 
