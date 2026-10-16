@@ -1,6 +1,4 @@
-#[cfg(target_os = "macos")]
-use std::os::unix::fs::PermissionsExt;
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "macos"))]
 use std::path::PathBuf;
 #[cfg(unix)]
 use std::{
@@ -17,8 +15,6 @@ use assert_fs::{
     prelude::{FileTouch, FileWriteStr, PathChild, PathCreateDir},
 };
 use indoc::indoc;
-#[cfg(target_os = "macos")]
-use insta::allow_duplicates;
 use predicates::prelude::predicate;
 use tracing::debug;
 #[cfg(unix)]
@@ -1095,7 +1091,7 @@ fn python_install_preview_upgrade() {
 }
 
 #[test]
-fn python_install_freethreaded() -> anyhow::Result<()> {
+fn python_install_freethreaded() {
     let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_filtered_latest_python_versions()
@@ -1124,7 +1120,16 @@ fn python_install_freethreaded() -> anyhow::Result<()> {
     bin_python.assert(predicate::path::is_symlink());
 
     #[cfg(target_os = "macos")]
-    assert_macos_dylib(&context, bin_python.path(), "libpython3.13t.dylib")?;
+    {
+        let dylib = installed_python_dylib(bin_python.path(), "libpython3.13t.dylib");
+        uv_snapshot!(context.filters(), Command::new("/usr/bin/otool").arg("-D").arg(&dylib), @"
+        exit_code: 0 (success)
+        ----- stdout -----
+        [TEMP_DIR]/managed/cpython-3.13.[LATEST]+freethreaded-[PLATFORM]/lib/libpython3.13t.dylib:
+        [TEMP_DIR]/managed/cpython-3.13.[LATEST]+freethreaded-[PLATFORM]/lib/libpython3.13t.dylib
+        ");
+        uv_snapshot!(context.filters(), Command::new("/usr/bin/codesign").args(["--verify", "--strict"]).arg(&dylib), @"exit_code: 0 (success)");
+    }
 
     // The executable should "work"
     uv_snapshot!(context.filters(), Command::new(bin_python.as_os_str())
@@ -1241,8 +1246,6 @@ fn python_install_freethreaded() -> anyhow::Result<()> {
      - cpython-3.13.[LATEST]+freethreaded-[PLATFORM] (python3.13t)
      - cpython-3.13.[LATEST]-[PLATFORM] (python3.13)
     ");
-
-    Ok(())
 }
 
 /// Test that installing both GIL and free-threaded variants of the same Python version
@@ -1401,7 +1404,7 @@ fn python_upgrade_not_allowed() {
 // We only support debug builds on Unix
 #[cfg(unix)]
 #[test]
-fn python_install_debug() -> anyhow::Result<()> {
+fn python_install_debug() {
     let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
@@ -1428,7 +1431,16 @@ fn python_install_debug() -> anyhow::Result<()> {
     bin_python.assert(predicate::path::is_symlink());
 
     #[cfg(target_os = "macos")]
-    assert_macos_dylib(&context, bin_python.path(), "libpython3.13d.dylib")?;
+    {
+        let dylib = installed_python_dylib(bin_python.path(), "libpython3.13d.dylib");
+        uv_snapshot!(context.filters(), Command::new("/usr/bin/otool").arg("-D").arg(&dylib), @"
+        exit_code: 0 (success)
+        ----- stdout -----
+        [TEMP_DIR]/managed/cpython-3.13.[LATEST]+debug-[PLATFORM]/lib/libpython3.13d.dylib:
+        [TEMP_DIR]/managed/cpython-3.13.[LATEST]+debug-[PLATFORM]/lib/libpython3.13d.dylib
+        ");
+        uv_snapshot!(context.filters(), Command::new("/usr/bin/codesign").args(["--verify", "--strict"]).arg(&dylib), @"exit_code: 0 (success)");
+    }
 
     // The executable should "work"
     uv_snapshot!(context.filters(), Command::new(bin_python.as_os_str())
@@ -1498,14 +1510,12 @@ fn python_install_debug() -> anyhow::Result<()> {
      - cpython-3.13.[LATEST]+debug-[PLATFORM] (python3.13d)
      - cpython-3.13.[LATEST]-[PLATFORM] (python3.13)
     ");
-
-    Ok(())
 }
 
 // We only support debug builds on Unix
 #[cfg(unix)]
 #[test]
-fn python_install_debug_freethreaded() -> anyhow::Result<()> {
+fn python_install_debug_freethreaded() {
     let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
@@ -1532,7 +1542,16 @@ fn python_install_debug_freethreaded() -> anyhow::Result<()> {
     bin_python.assert(predicate::path::is_symlink());
 
     #[cfg(target_os = "macos")]
-    assert_macos_dylib(&context, bin_python.path(), "libpython3.13td.dylib")?;
+    {
+        let dylib = installed_python_dylib(bin_python.path(), "libpython3.13td.dylib");
+        uv_snapshot!(context.filters(), Command::new("/usr/bin/otool").arg("-D").arg(&dylib), @"
+        exit_code: 0 (success)
+        ----- stdout -----
+        [TEMP_DIR]/managed/cpython-3.13.[LATEST]+freethreaded+debug-[PLATFORM]/lib/libpython3.13td.dylib:
+        [TEMP_DIR]/managed/cpython-3.13.[LATEST]+freethreaded+debug-[PLATFORM]/lib/libpython3.13td.dylib
+        ");
+        uv_snapshot!(context.filters(), Command::new("/usr/bin/codesign").args(["--verify", "--strict"]).arg(&dylib), @"exit_code: 0 (success)");
+    }
 
     // The executable should "work"
     uv_snapshot!(context.filters(), Command::new(bin_python.as_os_str())
@@ -1617,8 +1636,6 @@ fn python_install_debug_freethreaded() -> anyhow::Result<()> {
      - cpython-3.13.[LATEST]+debug-[PLATFORM] (python3.13d)
      - cpython-3.13.[LATEST]-[PLATFORM] (python3.13)
     ");
-
-    Ok(())
 }
 
 #[test]
@@ -2504,115 +2521,95 @@ fn python_install_default_from_env() {
 }
 
 #[cfg(target_os = "macos")]
-fn assert_macos_dylib(
-    context: &uv_test::TestContext,
-    executable: &Path,
-    name: &str,
-) -> anyhow::Result<()> {
-    let executable = fs_err::canonicalize(executable)?;
-    let python_dir = executable
+fn installed_python_dylib(executable: &Path, name: &str) -> PathBuf {
+    fs_err::canonicalize(executable)
+        .expect("installed Python executable should resolve")
         .parent()
         .and_then(Path::parent)
-        .context("Python executable must be inside its installation's bin directory")?;
-    let dylib = python_dir.join("lib").join(name);
-    // Match the complete expected filename before the general path and version filters.
-    let pattern = regex::escape(&dylib.user_display().to_string());
-    let mut filters = vec![(pattern.as_str(), "[DYLIB]")];
-    filters.extend(context.filters());
-
-    let mut command = Command::new("/usr/bin/otool");
-    command.arg("-D").arg(&dylib);
-    allow_duplicates! {
-        uv_snapshot!(filters, command, @"
-        exit_code: 0 (success)
-        ----- stdout -----
-        [DYLIB]:
-        [DYLIB]
-        ");
-    }
-
-    let mut command = Command::new("/usr/bin/codesign");
-    command.args(["--verify", "--strict"]).arg(&dylib);
-    allow_duplicates! {
-        uv_snapshot!(context.filters(), command, @"exit_code: 0 (success)");
-    }
-    Ok(())
+        .expect("Python executable should be inside its installation's bin directory")
+        .join("lib")
+        .join(name)
 }
 
 #[cfg(target_os = "macos")]
 #[test]
 fn python_install_patch_dylib() -> anyhow::Result<()> {
-    for native in [false, true] {
-        let context = uv_test::test_context_with_versions!(&[])
-            .with_filtered_python_keys()
-            .with_managed_python_dirs();
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_filtered_python_keys()
+        .with_managed_python_dirs();
 
-        // The native path must work with an empty PATH; the default must invoke the tool.
-        let tools = context.temp_dir.child("tools");
-        tools.create_dir_all()?;
-        let calls = context.temp_dir.child("install-name-tool-called");
-        if !native {
-            let tool = tools.child("install_name_tool");
-            tool.write_str(indoc! {r#"
-                #!/bin/sh
-                printf called > "$UV_TEST_INSTALL_NAME_TOOL_LOG"
-                exec /usr/bin/install_name_tool "$@"
-            "#})?;
-            fs_err::set_permissions(tool.path(), std::fs::Permissions::from_mode(0o755))?;
-        }
+    let tools = context.temp_dir.child("tools");
+    tools.create_dir_all()?;
+    let calls = context.temp_dir.child("install-name-tool-called");
+    let tool = tools.child("install_name_tool");
+    tool.write_str(indoc! {r#"
+        #!/bin/sh
+        printf called > "$UV_TEST_INSTALL_NAME_TOOL_LOG"
+        exec /usr/bin/install_name_tool "$@"
+    "#})?;
+    fs_err::set_permissions(tool.path(), std::fs::Permissions::from_mode(0o755))?;
 
-        let mut command = context.python_install();
-        if native {
-            command.args([
-                "--preview-features",
-                "native-macho-edit,python-install-default",
-            ]);
-        }
-        command
-            .env(EnvVars::PATH, tools.path())
-            .env("UV_TEST_INSTALL_NAME_TOOL_LOG", calls.path())
-            .arg("3.13.1")
-            .assert()
-            .success();
-        assert_eq!(calls.path().exists(), !native);
+    context
+        .python_install()
+        .env(EnvVars::PATH, tools.path())
+        .env("UV_TEST_INSTALL_NAME_TOOL_LOG", calls.path())
+        .arg("3.13.1")
+        .assert()
+        .success();
+    calls.assert(predicate::path::exists());
 
-        let installation = context.temp_dir.child(format!(
-            "managed/cpython-3.13.1-{}",
-            platform_key_from_env()?
-        ));
-        let dylib = installation.child("lib/libpython3.13.dylib");
-        let mut command = Command::new("/usr/bin/otool");
-        command.arg("-D").arg(dylib.path());
-        allow_duplicates! {
-            uv_snapshot!(context.filters(), command, @"
-            exit_code: 0 (success)
-            ----- stdout -----
-            [TEMP_DIR]/managed/cpython-3.13.1-[PLATFORM]/lib/libpython3.13.dylib:
-            [TEMP_DIR]/managed/cpython-3.13.1-[PLATFORM]/lib/libpython3.13.dylib
-            ");
-        }
+    let dylib = context.temp_dir.child(format!(
+        "managed/cpython-3.13.1-{}/lib/libpython3.13.dylib",
+        platform_key_from_env()?
+    ));
+    uv_snapshot!(context.filters(), Command::new("/usr/bin/otool").arg("-D").arg(dylib.path()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [TEMP_DIR]/managed/cpython-3.13.1-[PLATFORM]/lib/libpython3.13.dylib:
+    [TEMP_DIR]/managed/cpython-3.13.1-[PLATFORM]/lib/libpython3.13.dylib
+    ");
+    Ok(())
+}
 
-        if native {
-            let mut command = Command::new("/usr/bin/codesign");
-            command.args(["--verify", "--strict"]).arg(dylib.path());
-            uv_snapshot!(context.filters(), command, @"exit_code: 0 (success)");
+#[cfg(target_os = "macos")]
+#[test]
+fn python_install_patch_dylib_native() -> anyhow::Result<()> {
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_filtered_python_keys()
+        .with_managed_python_dirs();
+    let tools = context.temp_dir.child("tools");
+    tools.create_dir_all()?;
 
-            let mut command = Command::new(installation.child("bin/python3").path());
-            command
-                .args([
-                    "-I",
-                    "-c",
-                    "import ctypes, sys; ctypes.CDLL(sys.argv[1]); print('loaded')",
-                ])
-                .arg(dylib.path());
-            uv_snapshot!(context.filters(), command, @"
-            exit_code: 0 (success)
-            ----- stdout -----
-            loaded
-            ");
-        }
-    }
+    context
+        .python_install()
+        .env(EnvVars::PATH, tools.path())
+        .args([
+            "--preview-features",
+            "native-macho-edit,python-install-default",
+            "3.13.1",
+        ])
+        .assert()
+        .success();
 
+    let installation = context.temp_dir.child(format!(
+        "managed/cpython-3.13.1-{}",
+        platform_key_from_env()?
+    ));
+    let dylib = installation.child("lib/libpython3.13.dylib");
+    uv_snapshot!(context.filters(), Command::new("/usr/bin/otool").arg("-D").arg(dylib.path()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [TEMP_DIR]/managed/cpython-3.13.1-[PLATFORM]/lib/libpython3.13.dylib:
+    [TEMP_DIR]/managed/cpython-3.13.1-[PLATFORM]/lib/libpython3.13.dylib
+    ");
+    uv_snapshot!(context.filters(), Command::new("/usr/bin/codesign").args(["--verify", "--strict"]).arg(dylib.path()), @"exit_code: 0 (success)");
+    uv_snapshot!(context.filters(), Command::new(installation.child("bin/python3").path())
+        .args(["-I", "-c", "import ctypes, sys; ctypes.CDLL(sys.argv[1]); print('loaded')"])
+        .arg(dylib.path()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    loaded
+    ");
     Ok(())
 }
 
