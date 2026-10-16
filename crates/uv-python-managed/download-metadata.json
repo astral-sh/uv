@@ -103750,6 +103750,108 @@
     "variant": "debug",
     "build": "20200418"
   },
+  "pypy-3.12.15-darwin-aarch64-none": {
+    "name": "pypy",
+    "arch": {
+      "family": "aarch64",
+      "variant": null
+    },
+    "os": "darwin",
+    "libc": "none",
+    "major": 3,
+    "minor": 12,
+    "patch": 15,
+    "prerelease": "",
+    "url": "https://downloads.python.org/pypy/pypy3.12-v8.0.1-macos_arm64.tar.gz",
+    "sha256": "c10baeae4a61063a1183c4ee4e8324765ba736a3980323654efb31e79f1514db",
+    "variant": null,
+    "build": "8.0.1"
+  },
+  "pypy-3.12.15-darwin-x86_64-none": {
+    "name": "pypy",
+    "arch": {
+      "family": "x86_64",
+      "variant": null
+    },
+    "os": "darwin",
+    "libc": "none",
+    "major": 3,
+    "minor": 12,
+    "patch": 15,
+    "prerelease": "",
+    "url": "https://downloads.python.org/pypy/pypy3.12-v8.0.1-macos_x86_64.tar.gz",
+    "sha256": "b0b9c68d6a8318957186cd69dd2f4020fc4184c9a844619aa7747e1cc5a700a5",
+    "variant": null,
+    "build": "8.0.1"
+  },
+  "pypy-3.12.15-linux-aarch64-gnu": {
+    "name": "pypy",
+    "arch": {
+      "family": "aarch64",
+      "variant": null
+    },
+    "os": "linux",
+    "libc": "gnu",
+    "major": 3,
+    "minor": 12,
+    "patch": 15,
+    "prerelease": "",
+    "url": "https://downloads.python.org/pypy/pypy3.12-v8.0.1-aarch64.tar.gz",
+    "sha256": "4dd9611f782f0974ffd25b521120b4297049daec05a3cec5698dbc6022c74fb9",
+    "variant": null,
+    "build": "8.0.1"
+  },
+  "pypy-3.12.15-linux-i686-gnu": {
+    "name": "pypy",
+    "arch": {
+      "family": "i686",
+      "variant": null
+    },
+    "os": "linux",
+    "libc": "gnu",
+    "major": 3,
+    "minor": 12,
+    "patch": 15,
+    "prerelease": "",
+    "url": "https://downloads.python.org/pypy/pypy3.12-v8.0.1-linux32.tar.gz",
+    "sha256": "aac46889fd2e85e522f5446256cd57167f91648c48d906d79eb593c812dbe55f",
+    "variant": null,
+    "build": "8.0.1"
+  },
+  "pypy-3.12.15-linux-x86_64-gnu": {
+    "name": "pypy",
+    "arch": {
+      "family": "x86_64",
+      "variant": null
+    },
+    "os": "linux",
+    "libc": "gnu",
+    "major": 3,
+    "minor": 12,
+    "patch": 15,
+    "prerelease": "",
+    "url": "https://downloads.python.org/pypy/pypy3.12-v8.0.1-linux64.tar.gz",
+    "sha256": "aeed27797777296d9c94e53bdfa608804696dbd4ff9f2213003cce064ee46ef8",
+    "variant": null,
+    "build": "8.0.1"
+  },
+  "pypy-3.12.15-windows-x86_64-none": {
+    "name": "pypy",
+    "arch": {
+      "family": "x86_64",
+      "variant": null
+    },
+    "os": "windows",
+    "libc": "none",
+    "major": 3,
+    "minor": 12,
+    "patch": 15,
+    "prerelease": "",
+    "url": "https://downloads.python.org/pypy/pypy3.12-v8.0.1-win64.zip",
+    "sha256": "225aa62deed1a624c86d5ffd03cc34615ff927b095d8508ad82593ee23ddce91",
+    "variant": null,
+    "build": "8.0.1"
+  },
   "pypy-3.12.14-darwin-aarch64-none": {
     "name": "pypy",
     "arch": {
@@ -103851,6 +103953,108 @@
     "sha256": "0ccfe530cf22330bd225c561bb41b6200a759d96a15847c541d4b98859adaf3f",
     "variant": null,
     "build": "8.0.0"
+  },
+  "pypy-3.11.17-darwin-aarch64-none": {
+    "name": "pypy",
+    "arch": {
+      "family": "aarch64",
+      "variant": null
+    },
+    "os": "darwin",
+    "libc": "none",
+    "major": 3,
+    "minor": 11,
+    "patch": 17,
+    "prerelease": "",
+    "url": "https://downloads.python.org/pypy/pypy3.11-v8.0.1-macos_arm64.tar.gz",
+    "sha256": "b839268a9eaf41d28e4dc0be20f2201e18121b31dc9ebc8bc19d140d9d34bc6c",
+    "variant": null,
+    "build": "8.0.1"
+  },
+  "pypy-3.11.17-darwin-x86_64-none": {
+    "name": "pypy",
+    "arch": {
+      "family": "x86_64",
+      "variant": null
+    },
+    "os": "darwin",
+    "libc": "none",
+    "major": 3,
+    "minor": 11,
+    "patch": 17,
+    "prerelease": "",
+    "url": "https://downloads.python.org/pypy/pypy3.11-v8.0.1-macos_x86_64.tar.gz",
+    "sha256": "6d64709b5488d5114c137ab542c857e6ab4ca165d3aea2e5a7c3c6fe6dc34b18",
+    "variant": null,
+    "build": "8.0.1"
+  },
+  "pypy-3.11.17-linux-aarch64-gnu": {
+    "name": "pypy",
+    "arch": {
+      "family": "aarch64",
+      "variant": null
+    },
+    "os": "linux",
+    "libc": "gnu",
+    "major": 3,
+    "minor": 11,
+    "patch": 17,
+    "prerelease": "",
+    "url": "https://downloads.python.org/pypy/pypy3.11-v8.0.1-aarch64.tar.gz",
+    "sha256": "5b568e1515dee46df58c9844dba95921c69dfd9f38ebf9e0f091caad5e10cd0c",
+    "variant": null,
+    "build": "8.0.1"
+  },
+  "pypy-3.11.17-linux-i686-gnu": {
+    "name": "pypy",
+    "arch": {
+      "family": "i686",
+      "variant": null
+    },
+    "os": "linux",
+    "libc": "gnu",
+    "major": 3,
+    "minor": 11,
+    "patch": 17,
+    "prerelease": "",
+    "url": "https://downloads.python.org/pypy/pypy3.11-v8.0.1-linux32.tar.gz",
+    "sha256": "fdafc3aa7a17e25f7ba63a6a2baa91c4a765c1c9a99149759e583f68e68115e5",
+    "variant": null,
+    "build": "8.0.1"
+  },
+  "pypy-3.11.17-linux-x86_64-gnu": {
+    "name": "pypy",
+    "arch": {
+      "family": "x86_64",
+      "variant": null
+    },
+    "os": "linux",
+    "libc": "gnu",
+    "major": 3,
+    "minor": 11,
+    "patch": 17,
+    "prerelease": "",
+    "url": "https://downloads.python.org/pypy/pypy3.11-v8.0.1-linux64.tar.gz",
+    "sha256": "706965bcf372752ba69dafd59d860e51bc2fadbb0f8a47cec3426125d7058ceb",
+    "variant": null,
+    "build": "8.0.1"
+  },
+  "pypy-3.11.17-windows-x86_64-none": {
+    "name": "pypy",
+    "arch": {
+      "family": "x86_64",
+      "variant": null
+    },
+    "os": "windows",
+    "libc": "none",
+    "major": 3,
+    "minor": 11,
+    "patch": 17,
+    "prerelease": "",
+    "url": "https://downloads.python.org/pypy/pypy3.11-v8.0.1-win64.zip",
+    "sha256": "cba5f9e9543c679ea5d31b6c81b7a6667d836e3c18bf3eb6cb8c72147f829896",
+    "variant": null,
+    "build": "8.0.1"
   },
   "pypy-3.11.16-darwin-aarch64-none": {
     "name": "pypy",
