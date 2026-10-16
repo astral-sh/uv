@@ -171,7 +171,7 @@ pub async fn pip_uninstall(
                         "{}{} Skipping `{}` as it is not installed",
                         "warning".yellow().bold(),
                         ":".bold(),
-                        url.as_ref().bold()
+                        url.bold()
                     )?;
                 }
             } else {

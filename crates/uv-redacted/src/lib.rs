@@ -3,7 +3,7 @@ use serde::Deserialize;
 use std::borrow::Cow;
 use std::fmt::{Debug, Display};
 use std::marker::PhantomData;
-use std::ops::{Deref, DerefMut};
+use std::path::PathBuf;
 use std::str::FromStr;
 use thiserror::Error;
 use url::Url;
@@ -38,6 +38,26 @@ pub enum SafeUrlError {
 /// [`Display`] and [`Debug`] redact credentials and recognized sensitive query
 /// parameters for every policy. Policies affect serialization, not parsing or
 /// the URL's contents.
+///
+/// A reference cannot implicitly coerce to `&Url`:
+///
+/// ```compile_fail
+/// use uv_redacted::SafeUrl;
+///
+/// let url = SafeUrl::parse("https://example.com")?;
+/// let _: &url::Url = &url;
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+///
+/// A mutable reference cannot implicitly coerce to `&mut Url`:
+///
+/// ```compile_fail
+/// use uv_redacted::SafeUrl;
+///
+/// let mut url = SafeUrl::parse("https://example.com")?;
+/// let _: &mut url::Url = &mut url;
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 ///
 /// A [`SafeUrl`] with the default [`Unserializable`] policy does not implement
 /// [`serde::Serialize`].
@@ -102,6 +122,58 @@ pub enum SafeUrlError {
 #[repr(transparent)]
 pub struct SafeUrl<P: SerializationPolicy = Unserializable>(Url, PhantomData<P>);
 
+/// A guard for editing a [`SafeUrl`]'s path segments.
+///
+/// The underlying guard contains the complete URL, so this wrapper does not expose its debug output.
+pub struct PathSegmentsMut<'a>(url::PathSegmentsMut<'a>);
+
+impl PathSegmentsMut<'_> {
+    /// Remove all path segments, leaving the leading slash.
+    pub fn clear(&mut self) -> &mut Self {
+        self.0.clear();
+        self
+    }
+
+    /// Remove the last path segment if it is empty.
+    pub fn pop_if_empty(&mut self) -> &mut Self {
+        self.0.pop_if_empty();
+        self
+    }
+
+    /// Remove the last path segment.
+    pub fn pop(&mut self) -> &mut Self {
+        self.0.pop();
+        self
+    }
+
+    /// Append a path segment, percent-encoding it as needed.
+    pub fn push(&mut self, segment: &str) -> &mut Self {
+        self.0.push(segment);
+        self
+    }
+
+    /// Append path segments, percent-encoding them as needed.
+    pub fn extend<I>(&mut self, segments: I) -> &mut Self
+    where
+        I: IntoIterator,
+        I::Item: AsRef<str>,
+    {
+        self.0.extend(segments);
+        self
+    }
+}
+
+/// A guard for appending query pairs to a [`SafeUrl`].
+pub struct QueryPairsMut<'a>(url::form_urlencoded::Serializer<'a, url::UrlQuery<'a>>);
+
+impl QueryPairsMut<'_> {
+    /// Append a name/value pair using form URL encoding.
+    pub fn append_pair(&mut self, name: &str, value: &str) -> &mut Self {
+        self.0.append_pair(name, value);
+        self
+    }
+}
+
 /// Check if a path or fragment contains a credential-like pattern (`:` followed by `@`).
 ///
 /// This skips colons that are followed by `//`, as those indicate URL schemes (e.g., `https://`)
@@ -130,7 +202,7 @@ impl SafeUrl {
     pub fn parse(input: &str) -> Result<Self, SafeUrlError> {
         let url = Self::parse_relaxed(input)?;
 
-        Self::reject_ambiguous_credentials(input, &url)?;
+        Self::reject_ambiguous_credentials(input, &url.0)?;
 
         Ok(url)
     }
@@ -256,16 +328,133 @@ impl<P: SerializationPolicy> SafeUrl<P> {
         self.0
     }
 
-    /// Serialize the normalized URL according to its policy.
+    /// Return the complete URL string, including credentials.
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+
+    /// Return the scheme, without the trailing colon.
+    pub fn scheme(&self) -> &str {
+        self.0.scheme()
+    }
+
+    /// Return the authority, including any credentials and port.
+    pub fn authority(&self) -> &str {
+        self.0.authority()
+    }
+
+    /// Return whether the URL has an opaque path instead of path segments.
+    pub fn cannot_be_a_base(&self) -> bool {
+        self.0.cannot_be_a_base()
+    }
+
+    /// Return the percent-encoded username.
+    pub fn username(&self) -> &str {
+        self.0.username()
+    }
+
+    /// Return the percent-encoded password, if present.
+    pub fn password(&self) -> Option<&str> {
+        self.0.password()
+    }
+
+    /// Return whether the URL has a host.
+    pub fn has_host(&self) -> bool {
+        self.0.has_host()
+    }
+
+    /// Return the host as a string, if present.
+    pub fn host_str(&self) -> Option<&str> {
+        self.0.host_str()
+    }
+
+    /// Return the parsed host, if present.
+    pub fn host(&self) -> Option<url::Host<&str>> {
+        self.0.host()
+    }
+
+    /// Return the explicit non-default port, if present.
+    pub fn port(&self) -> Option<u16> {
+        self.0.port()
+    }
+
+    /// Return the explicit port or the scheme's known default.
+    pub fn port_or_known_default(&self) -> Option<u16> {
+        self.0.port_or_known_default()
+    }
+
+    /// Return the percent-encoded path.
+    pub fn path(&self) -> &str {
+        self.0.path()
+    }
+
+    /// Return the percent-encoded path segments, unless the path is opaque.
+    pub fn path_segments(&self) -> Option<std::str::Split<'_, char>> {
+        self.0.path_segments()
+    }
+
+    /// Return the decoded query name/value pairs.
+    pub fn query_pairs(&self) -> url::form_urlencoded::Parse<'_> {
+        self.0.query_pairs()
+    }
+
+    /// Return the fragment, without the leading hash, if present.
+    pub fn fragment(&self) -> Option<&str> {
+        self.0.fragment()
+    }
+
+    /// Set or remove the fragment, using [`Url::set_fragment`] encoding rules.
+    pub fn set_fragment(&mut self, fragment: Option<&str>) {
+        self.0.set_fragment(fragment);
+    }
+
+    /// Set or remove the query, using [`Url::set_query`] encoding rules.
+    pub fn set_query(&mut self, query: Option<&str>) {
+        self.0.set_query(query);
+    }
+
+    /// Set the path, using [`Url::set_path`] encoding rules.
+    pub fn set_path(&mut self, path: &str) {
+        self.0.set_path(path);
+    }
+
+    /// Set or remove the password, if the URL supports credentials.
+    #[expect(clippy::result_unit_err)]
+    pub fn set_password(&mut self, password: Option<&str>) -> Result<(), ()> {
+        self.0.set_password(password)
+    }
+
+    /// Set the username, if the URL supports credentials.
+    #[expect(clippy::result_unit_err)]
+    pub fn set_username(&mut self, username: &str) -> Result<(), ()> {
+        self.0.set_username(username)
+    }
+
+    /// Convert a file URL to a filesystem path.
+    #[expect(clippy::result_unit_err)]
+    pub fn to_file_path(&self) -> Result<PathBuf, ()> {
+        self.0.to_file_path()
+    }
+
+    /// Edit the path segments without exposing the underlying URL.
+    #[expect(clippy::result_unit_err)]
+    pub fn path_segments_mut(&mut self) -> Result<PathSegmentsMut<'_>, ()> {
+        self.0.path_segments_mut().map(PathSegmentsMut)
+    }
+
+    /// Append query pairs with form URL encoding.
     ///
-    /// This inherent method prevents method lookup from bypassing the policy
-    /// through [`Deref`] to [`Url`].
-    pub fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        Self: serde::Serialize,
-        S: serde::Serializer,
-    {
-        serde::Serialize::serialize(self, serializer)
+    /// The guard restores the fragment when dropped. It cannot return a raw URL:
+    ///
+    /// ```compile_fail
+    /// use uv_redacted::SafeUrl;
+    ///
+    /// let mut url = SafeUrl::parse("https://example.com")?;
+    /// let _: &mut url::Url = url.query_pairs_mut().finish();
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn query_pairs_mut(&mut self) -> QueryPairsMut<'_> {
+        QueryPairsMut(self.0.query_pairs_mut())
     }
 
     /// Parse a string as an URL, with this URL as the base URL.
@@ -379,20 +568,6 @@ impl SafeUrl<Raw> {
         D: serde::Deserializer<'de>,
     {
         Ok(Self(Url::deserialize_internal(deserializer)?, PhantomData))
-    }
-}
-
-impl<P: SerializationPolicy> Deref for SafeUrl<P> {
-    type Target = Url;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl<P: SerializationPolicy> DerefMut for SafeUrl<P> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
     }
 }
 
@@ -831,7 +1006,7 @@ mod tests {
     fn log_safe_url_ref() {
         let url_str = "https://user:pass@pypi-proxy.fly.dev/basic-auth/simple";
         let url = SafeUrl::parse(url_str).unwrap();
-        let log_safe_url = SafeUrl::ref_cast(&url);
+        let log_safe_url = SafeUrl::ref_cast(&url.0);
         assert_eq!(log_safe_url.username(), "user");
         assert!(log_safe_url.password().is_some_and(|p| p == "pass"));
         assert_eq!(
