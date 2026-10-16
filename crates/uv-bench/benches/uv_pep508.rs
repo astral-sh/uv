@@ -3,6 +3,7 @@
 extern crate uv_performance_memory_allocator;
 
 use std::hint::black_box;
+use std::time::Duration;
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main, measurement::WallTime};
 use rustc_hash::FxHashMap;
@@ -191,5 +192,11 @@ fn imbibe(criterion: &mut Criterion<WallTime>) {
     group.finish();
 }
 
-criterion_group!(uv_pep508, to_dnf, resolve_extras, imbibe);
+criterion_group! {
+    name = uv_pep508;
+    config = Criterion::default()
+        .warm_up_time(Duration::from_secs(1))
+        .measurement_time(Duration::from_secs(2));
+    targets = to_dnf, resolve_extras, imbibe
+}
 criterion_main!(uv_pep508);
