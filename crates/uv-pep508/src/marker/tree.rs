@@ -1442,7 +1442,7 @@ impl MarkerTree {
             f: &mut impl FnMut(MarkerOperator, &ExtraName),
             visited: &mut FxHashSet<MarkerTree>,
         ) {
-            if !visited.insert(tree) {
+            if tree.is_true() || tree.is_false() || !visited.insert(tree) {
                 return;
             }
             match tree.kind() {
