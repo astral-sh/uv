@@ -15,6 +15,7 @@ Learn how to integrate uv with other software:
 - [Using with Google Artifact Registry](./google.md)
 - [Using with AWS CodeArtifact](./aws.md)
 - [Using with JFrog Artifactory](./jfrog.md)
+- [Using with RepoForge.io](./repoforge.md)
 - [Using with Renovate](./renovate.md)
 - [Using with Dependabot](./dependabot.md)
 - [Using with AWS Lambda](./aws-lambda.md)

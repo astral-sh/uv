@@ -126,6 +126,7 @@ plugins:
           - guides/integration/google.md
           - guides/integration/aws.md
           - guides/integration/jfrog.md
+          - guides/integration/repoforge.md
           - guides/integration/renovate.md
           - guides/integration/dependabot.md
           - guides/integration/aws-lambda.md
@@ -213,6 +214,7 @@ nav:
           - Google Artifact Registry: guides/integration/google.md
           - AWS CodeArtifact: guides/integration/aws.md
           - JFrog Artifactory: guides/integration/jfrog.md
+          - RepoForge.io: guides/integration/repoforge.md
           - Renovate: guides/integration/renovate.md
           - Dependabot: guides/integration/dependabot.md
           - AWS Lambda: guides/integration/aws-lambda.md
