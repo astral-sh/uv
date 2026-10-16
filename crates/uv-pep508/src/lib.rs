@@ -234,7 +234,7 @@ impl<T: Pep508Url> Serialize for Requirement<T> {
     }
 }
 
-impl<T: Pep508Url> CacheKey for Requirement<T> {
+impl<T: Pep508Url + CacheKey> CacheKey for Requirement<T> {
     fn cache_key(&self, state: &mut CacheKeyHasher) {
         self.name.as_str().cache_key(state);
 
@@ -313,6 +313,8 @@ impl<T: Pep508Url> Requirement<T> {
 ///
 /// [`Requirement`] uses [`VerbatimUrl`] by default. The implementation for [`url::Url`]
 /// requires the `unsafe-url` feature.
+///
+/// Requirements implement [`CacheKey`] only when their URL type does.
 #[cfg_attr(
     not(feature = "unsafe-url"),
     doc = r#"
@@ -325,7 +327,7 @@ let _: Requirement<url::Url> = "demo @ https://example.com/demo.whl".parse().unw
 ```
 "#
 )]
-pub trait Pep508Url: Display + Debug + Sized + CacheKey {
+pub trait Pep508Url: Display + Debug + Sized {
     /// String to URL parsing error
     type Err: Error + Debug;
 
