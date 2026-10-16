@@ -33,6 +33,7 @@ fn activation_graph(lock: &Lock) -> (ActivationGraph, BTreeMap<(usize, Section),
                 requests: vec![ConflictItem::from((package.id.name.clone(), extra.clone()))],
                 requires_choice: false,
             });
+            graph.graph.add_edge(node, production, MarkerTree::TRUE);
             nodes.insert((index, Section::Extra(extra.clone())), node);
         }
         for group in package.metadata.dependency_groups.keys() {
@@ -64,6 +65,13 @@ fn activation_graph(lock: &Lock) -> (ActivationGraph, BTreeMap<(usize, Section),
         };
         for requirement in requirements {
             let condition = requirement.marker.resolve_extras(extras.clone());
+            let condition = match section {
+                Section::Extra(_) => {
+                    // The production node already supplies unconditional requirements.
+                    condition.and(requirement.marker.resolve_extras([]).negate())
+                }
+                Section::Production | Section::Group(_) => condition,
+            };
             if condition.is_false() {
                 continue;
             }
@@ -265,6 +273,47 @@ requires-dist = []
                 Section::Production
             )]
         ),
+        environment
+    );
+}
+
+#[test]
+fn selecting_extra_includes_base_dependencies() {
+    let lock: Lock = toml::from_str(
+        r#"
+version = 1
+revision = 5
+requires-python = ">=3.12"
+
+[[package]]
+name = "project"
+source = { virtual = "." }
+dependencies = [{ name = "support" }]
+[package.optional-dependencies]
+dev = []
+[package.metadata]
+requires-dist = [{ name = "support", virtual = "support" }]
+provides-extras = ["dev"]
+
+[[package]]
+name = "support"
+source = { virtual = "support" }
+"#,
+    )
+    .expect("valid lock");
+    let environment = lock.requires_python.to_marker_tree();
+    let (graph, nodes) = activation_graph(&lock);
+    let project = package_index(&lock, "project", None);
+    let dev = nodes[&(project, Section::Extra("dev".parse().expect("extra")))];
+    let selected = graph
+        .select([(dev, MarkerTree::TRUE)], environment, &lock.conflicts)
+        .expect("an extra includes the base dependencies");
+    assert_eq!(
+        selected.marker(nodes[&(project, Section::Production)]),
+        environment
+    );
+    assert_eq!(
+        selected.marker(nodes[&(package_index(&lock, "support", None), Section::Production)]),
         environment
     );
 }
