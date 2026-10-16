@@ -4,12 +4,13 @@ use std::ops::Range;
 use crate::Error;
 use crate::bytes::{array, slice};
 use crate::format::{
-    CPU_TYPE_ARM64, CPU_TYPE_X86_64, Command, CommandKind, HEADER_SIZE, Header, MH_DYLIB,
-    MH_MAGIC_64, S_GB_ZEROFILL, S_THREAD_LOCAL_ZEROFILL, S_ZEROFILL, SECT_INFO_PLIST, SECTION_TYPE,
-    SEG_LINKEDIT, SEG_TEXT, Section, Segment,
+    CPU_TYPE_ARM64, CPU_TYPE_X86_64, Command, HEADER_SIZE, Header, MH_DYLIB, MH_MAGIC_64,
+    S_GB_ZEROFILL, S_THREAD_LOCAL_ZEROFILL, S_ZEROFILL, SECT_INFO_PLIST, SECTION_TYPE,
+    SEG_LINKEDIT, SEG_TEXT, Section,
 };
 
-pub(crate) fn parse(image: &[u8]) -> Result<(), Error> {
+/// Validate a thin 64-bit macOS dylib for install-name editing and ad-hoc signing.
+pub fn validate(image: &[u8]) -> Result<(), Error> {
     let header = Header::parse(image)?;
     if header.magic != MH_MAGIC_64 || header.filetype != MH_DYLIB {
         return Err(Error::Unsupported(
@@ -40,9 +41,9 @@ pub(crate) fn parse(image: &[u8]) -> Result<(), Error> {
             return Err(Error::Malformed("invalid load-command size"));
         }
 
-        let data = slice(command_data, 0, size)?;
-        commands.push(Command::parse(data)?);
-        command_data = &command_data[data.len()..];
+        let command = Command::parse(slice(command_data, 0, size)?)?;
+        command_data = &command_data[command.as_bytes().len()..];
+        commands.push(command);
     }
 
     if !command_data.is_empty() {
@@ -55,22 +56,22 @@ pub(crate) fn parse(image: &[u8]) -> Result<(), Error> {
     let mut text = None;
     let mut linkedit = None;
     let mut info_plist = None;
-    let mut minimum_version = None;
+    let mut has_deployment_target = false;
     let mut segments = FileRegions::default();
     let mut virtual_segments = Vec::new();
     let mut sections = FileRegions::default();
     let mut file_bounds = None;
 
     for (index, command) in commands.iter().enumerate() {
-        match command.kind {
-            CommandKind::InstallId => {
+        match command {
+            Command::InstallId(_) => {
                 if install_id.replace(index).is_some() {
                     return Err(Error::Malformed("invalid or duplicate LC_ID_DYLIB"));
                 }
             }
 
-            CommandKind::CodeSignature => {
-                let data = command.linkedit_data()?;
+            Command::CodeSignature(signature_data) => {
+                let data = signature_data.file_range()?;
                 if signature_command.replace(index).is_some() {
                     return Err(Error::Malformed("invalid or duplicate LC_CODE_SIGNATURE"));
                 }
@@ -82,34 +83,15 @@ pub(crate) fn parse(image: &[u8]) -> Result<(), Error> {
                 }
             }
 
-            CommandKind::MinimumVersion => {
-                if minimum_version
-                    .replace(u32::from_le_bytes(array(command.data, 8)?))
-                    .is_some()
-                {
+            Command::DeploymentTarget(_) => {
+                if has_deployment_target {
                     return Err(Error::Malformed("multiple deployment targets"));
                 }
+                has_deployment_target = true;
             }
 
-            CommandKind::BuildVersion => {
-                let platform = u32::from_le_bytes(array(command.data, 8)?);
-                if platform != 1 {
-                    return Err(Error::UnsupportedValue {
-                        field: "build platform",
-                        value: u64::from(platform),
-                    });
-                }
-
-                if minimum_version
-                    .replace(u32::from_le_bytes(array(command.data, 12)?))
-                    .is_some()
-                {
-                    return Err(Error::Malformed("multiple deployment targets"));
-                }
-            }
-
-            CommandKind::Segment => {
-                let segment = Segment::parse(command.data)?;
+            Command::Segment(segment) => {
+                let segment = segment.parse()?;
                 let segment_offset = usize::try_from(segment.fileoff)?;
                 let segment_data =
                     slice(image, segment_offset, usize::try_from(segment.filesize)?)?;
@@ -191,17 +173,17 @@ pub(crate) fn parse(image: &[u8]) -> Result<(), Error> {
                     }
                 }
             }
-            CommandKind::SymbolTable => {
-                extend_file_bounds(&mut file_bounds, command.symbol_tables()?);
+            Command::SymbolTable(table) => {
+                extend_file_bounds(&mut file_bounds, table.file_ranges()?);
             }
-            CommandKind::DynamicSymbolTable => {
-                extend_file_bounds(&mut file_bounds, command.dynamic_symbol_tables()?);
+            Command::DynamicSymbolTable(table) => {
+                extend_file_bounds(&mut file_bounds, table.file_ranges()?);
             }
-            CommandKind::DyldInfo => extend_file_bounds(&mut file_bounds, command.dyld_info()?),
-            CommandKind::LinkeditData => {
-                extend_file_bounds(&mut file_bounds, [command.linkedit_data()?]);
+            Command::DyldInfo(info) => extend_file_bounds(&mut file_bounds, info.file_ranges()?),
+            Command::LinkeditData(data) => {
+                extend_file_bounds(&mut file_bounds, [data.file_range()?]);
             }
-            CommandKind::String | CommandKind::NoFileData => {}
+            Command::Other(_) => {}
         }
     }
 

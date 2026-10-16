@@ -56,7 +56,6 @@ uv-keyring = { version = "0.0.93", path = "crates/uv-keyring" }
 uv-lock = { version = "0.0.93", path = "crates/uv-lock" }
 uv-lock-operations = { version = "0.0.93", path = "crates/uv-lock-operations" }
 uv-logging = { version = "0.0.93", path = "crates/uv-logging" }
-uv-macho = { version = "0.0.93", path = "crates/uv-macho" }
 uv-macros = { version = "0.0.93", path = "crates/uv-macros" }
 uv-metadata = { version = "0.0.93", path = "crates/uv-metadata" }
 uv-netrc = { version = "0.0.93", path = "crates/uv-netrc" }
