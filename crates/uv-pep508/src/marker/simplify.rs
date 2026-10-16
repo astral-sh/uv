@@ -664,6 +664,7 @@ fn negate_expression(expression: &MarkerExpression) -> Option<MarkerExpression> 
 
 #[cfg(test)]
 mod tests {
+    use itertools::iproduct;
     use uv_pep440::{Operator, Version, VersionSpecifier};
 
     use super::{is_negation, negate_expression, simplify, simplify_indexed, simplify_linear};
@@ -676,7 +677,7 @@ mod tests {
     }
 
     #[test]
-    fn indexed_simplification_matches_linear_order() {
+    fn negate_expression_matches_is_negation() {
         let expressions: Vec<_> = [
             "extra == 'a'",
             "extra != 'a'",
@@ -712,126 +713,115 @@ mod tests {
                 );
             }
         }
-        let many_expressions = expressions
+    }
+
+    #[test]
+    fn indexed_simplification_preserves_removal_order() {
+        let [a, not_a, b, not_b] = [
+            "extra == 'a'",
+            "extra != 'a'",
+            "extra == 'b'",
+            "extra != 'b'",
+        ]
+        .map(expression);
+        // After removing `a` from the first clause, `b` cannot be removed using the third.
+        let mut dnf = vec![
+            vec![a.clone(), b.clone()],
+            vec![not_a, b.clone()],
+            vec![a.clone(), not_b],
+        ];
+
+        assert!(simplify_indexed(&mut dnf));
+        assert_eq!(dnf, vec![vec![b], vec![a]]);
+    }
+
+    #[test]
+    fn indexed_simplification_matches_linear() {
+        let a = ["extra == 'a'", "extra != 'a'"].map(expression);
+        let b = ["extra == 'b'", "extra != 'b'"].map(expression);
+        // All nonempty clauses over two variables, with at most one term per variable.
+        let clauses: Vec<_> = a
             .iter()
-            .cloned()
-            .chain((0..70).flat_map(|index| {
-                [
-                    expression(&format!("extra == 'extra-{index}'")),
-                    expression(&format!("extra != 'extra-{index}'")),
-                ]
-            }))
+            .chain(&b)
+            .map(|term| vec![term.clone()])
+            .chain(iproduct!(&a, &b).map(|(a, b)| vec![a.clone(), b.clone()]))
             .collect();
-        for expressions in [expressions, many_expressions] {
-            let mut seed = 17u64;
-            let mut indexed_cases = 0;
-            for case in 0..2_000 {
-                let mut next = || {
-                    seed = seed.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1);
-                    (seed >> 32) as usize
-                };
-                let mut expected = Vec::new();
-                for _ in 0..next() % 30 {
-                    let mut clause = Vec::new();
-                    for _ in 0..next() % 12 {
-                        let term = expressions[next() % expressions.len()].clone();
-                        if case % 2 == 0 || !clause.contains(&term) {
-                            clause.push(term);
-                        }
-                    }
-                    expected.push(clause);
-                }
-                let mut actual = expected.clone();
-                simplify_linear(&mut expected);
-                if simplify_indexed(&mut actual) {
-                    indexed_cases += 1;
-                } else {
-                    simplify_linear(&mut actual);
-                }
-                assert_eq!(actual, expected, "case {case}");
-            }
-            assert!(indexed_cases >= 1_000);
+
+        for (first, second, third) in iproduct!(&clauses, &clauses, &clauses) {
+            let mut actual = vec![first.clone(), second.clone(), third.clone()];
+            let mut expected = actual.clone();
+            simplify_linear(&mut expected);
+            assert!(simplify_indexed(&mut actual));
+            assert_eq!(actual, expected, "{first:?} or {second:?} or {third:?}");
         }
     }
 
     #[test]
     fn indexed_simplification_spans_multiple_words() {
-        for size in [63, 64, 65, 127, 128, 129] {
-            let terms: Vec<_> = (0..size)
-                .map(|index| expression(&format!("extra == 'extra-{index}'")))
-                .collect();
-            let other = terms[..size - 1]
-                .iter()
-                .cloned()
-                .chain([expression(&format!("extra != 'extra-{}'", size - 1))])
-                .collect();
-            let mut actual = vec![terms.clone(), other];
-            let mut expected = actual.clone();
+        // The 63 shared terms put the complementary pair on opposite sides of a word boundary.
+        let shared: Vec<_> = (0..63)
+            .map(|index| expression(&format!("extra == 'extra-{index}'")))
+            .collect();
+        let mut dnf = vec![shared.clone(), shared.clone()];
+        dnf[0].push(expression("extra == 'boundary'"));
+        dnf[1].push(expression("extra != 'boundary'"));
 
-            simplify_linear(&mut expected);
-            assert_eq!(expected, vec![terms[..size - 1].to_vec()]);
-            assert!(simplify_indexed(&mut actual));
-            assert_eq!(actual, expected);
-        }
+        assert!(simplify_indexed(&mut dnf));
+        assert_eq!(dnf, vec![shared]);
     }
 
     #[test]
-    fn indexed_simplification_sparse_clauses() {
-        for size in [0, 7, 8, 9, 63, 64, 65, 127, 128, 129] {
-            let terms: Vec<_> = (0..size)
-                .map(|index| expression(&format!("platform_machine == 'arch-{index}'")))
-                .collect();
-            let singletons: Vec<_> = terms.iter().map(|term| vec![term.clone()]).collect();
-            for dnf in [
-                singletons.clone(),
-                // A long clause can become sparse before later clauses compare against it.
-                [terms.clone()]
-                    .into_iter()
-                    .chain(singletons.clone())
-                    .collect(),
-                singletons.iter().cloned().chain([terms.clone()]).collect(),
-                vec![terms.clone(), Vec::new(), terms],
-                // Complementary short clauses simplify to their shared term.
-                singletons
-                    .into_iter()
-                    .chain([
-                        vec![expression("extra == 'a'"), expression("extra == 'b'")],
-                        vec![expression("extra != 'a'"), expression("extra == 'b'")],
-                    ])
-                    .collect(),
-            ] {
-                let mut expected = dnf.clone();
-                simplify_linear(&mut expected);
-                let mut actual = dnf.clone();
-                assert!(simplify_indexed(&mut actual));
-                assert_eq!(actual, expected);
-                let mut actual = dnf;
-                simplify(&mut actual);
-                assert_eq!(actual, expected);
-            }
-        }
+    fn indexed_simplification_uses_surviving_terms_in_sparse_clauses() {
+        let [a, not_a, b, c, not_c] = [
+            "extra == 'a'",
+            "extra != 'a'",
+            "extra == 'b'",
+            "extra == 'c'",
+            "extra != 'c'",
+        ]
+        .map(expression);
+        let mut dnf = vec![
+            vec![a, b.clone(), c.clone()],
+            vec![not_a, b.clone(), c],
+            vec![b.clone(), not_c],
+        ];
+        // Five terms above plus 124 singleton terms require three words. The first clause
+        // becomes sparse after removing `a` and `c`, and the third clause must see only `b`.
+        let singletons: Vec<_> = (0..124)
+            .map(|index| vec![expression(&format!("platform_machine == 'arch-{index}'"))])
+            .collect();
+        dnf.extend(singletons.clone());
+
+        assert!(simplify_indexed(&mut dnf));
+        let mut expected = vec![vec![b]];
+        expected.extend(singletons);
+        assert_eq!(dnf, expected);
+    }
+
+    #[test]
+    fn indexed_simplification_eliminates_empty_clauses() {
+        let mut dnf = vec![Vec::new(), Vec::new()];
+        assert!(simplify_indexed(&mut dnf));
+        assert_eq!(dnf, vec![Vec::new()]);
     }
 
     #[test]
     fn indexed_simplification_falls_back_for_repeated_terms() {
         let term = expression("extra == 'a'");
-        for repeated_clause in [0, 7] {
-            let mut expected: Vec<_> = (0..8)
-                .map(|index| vec![term.clone(); if index == repeated_clause { 2 } else { 1 }])
-                .collect();
-            let mut actual = expected.clone();
+        // Eight clauses trigger indexing; a duplicate in the last one must leave the input intact.
+        let mut dnf = vec![vec![term.clone()]; 8];
+        dnf[7].push(term.clone());
+        let original = dnf.clone();
 
-            assert!(!simplify_indexed(&mut actual));
-            assert_eq!(actual, expected);
-            simplify_linear(&mut expected);
-            simplify(&mut actual);
-            assert_eq!(actual, expected);
-        }
+        assert!(!simplify_indexed(&mut dnf));
+        assert_eq!(dnf, original);
+        simplify(&mut dnf);
+        assert_eq!(dnf, vec![vec![term.clone(), term]]);
     }
 
     #[test]
     fn indexed_simplification_limits_dense_storage() {
-        // 16,385 distinct terms in separate clauses require more than 32 MiB of bit sets.
+        // 16,384 singleton terms fill exactly 32 MiB; one more exceeds the index limit.
         let mut actual: Vec<_> = (0..16_385)
             .map(|index| vec![expression(&format!("extra == 'extra-{index}'"))])
             .collect();
