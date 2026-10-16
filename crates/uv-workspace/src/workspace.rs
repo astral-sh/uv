@@ -134,7 +134,15 @@ impl ProjectEnvironmentSelection {
 
 type WorkspaceMembers = Arc<BTreeMap<PackageName, WorkspaceMember>>;
 type FxOnceMap<K, V> = OnceMap<K, V, BuildHasherDefault<FxHasher>>;
-type CachedWorkspaceResult = Result<Arc<Workspace>, WorkspaceError>;
+type CachedWorkspaceResult = Result<CachedWorkspace, WorkspaceError>;
+
+/// A workspace and the project at the cache key's path, if it is a project root.
+#[derive(Debug, Clone)]
+struct CachedWorkspace {
+    workspace: Arc<Workspace>,
+    /// `None` for a virtual workspace root without a project.
+    project_name: Option<PackageName>,
+}
 
 /// Cache for workspace discovery.
 ///
@@ -159,12 +167,14 @@ impl WorkspaceCache {
     ///
     /// Once an error is inserted, it will be returned to all future callers that query the failed
     /// query path.
-    fn insert(&self, result: CachedWorkspaceResult, install_path: &Path) {
+    fn insert(&self, result: Result<Arc<Workspace>, WorkspaceError>, install_path: &Path) {
         match result {
             Ok(workspace) => {
-                for package in workspace.packages.values() {
+                let mut root_project_name = None;
+                for (name, package) in workspace.packages.iter() {
                     // Publish the root once below, even when it is also a project member.
                     if package.root == workspace.install_path {
+                        root_project_name = Some(name.clone());
                         continue;
                     }
                     // Historically, upward workspace discovery stopped at an intermediate
@@ -174,11 +184,21 @@ impl WorkspaceCache {
                     if has_intermediate_pyproject(&workspace.install_path, &package.root) {
                         continue;
                     }
-                    self.workspaces
-                        .done(package.root.clone(), Ok(workspace.clone()));
+                    self.workspaces.done(
+                        package.root.clone(),
+                        Ok(CachedWorkspace {
+                            workspace: workspace.clone(),
+                            project_name: Some(name.clone()),
+                        }),
+                    );
                 }
-                self.workspaces
-                    .done(workspace.install_path.clone(), Ok(workspace));
+                self.workspaces.done(
+                    workspace.install_path.clone(),
+                    Ok(CachedWorkspace {
+                        workspace,
+                        project_name: root_project_name,
+                    }),
+                );
             }
             Err(err) => {
                 self.workspaces.done(install_path.to_path_buf(), Err(err));
@@ -190,8 +210,14 @@ impl WorkspaceCache {
     ///
     /// Calling this function ensures that - given a workspace root - the discovery is only done by
     /// one thread.
-    async fn register_or_wait(&self, workspace_root: &PathBuf) -> Option<CachedWorkspaceResult> {
-        self.workspaces.register_or_wait(workspace_root).await
+    async fn register_or_wait(
+        &self,
+        workspace_root: &PathBuf,
+    ) -> Option<Result<Arc<Workspace>, WorkspaceError>> {
+        self.workspaces
+            .register_or_wait(workspace_root)
+            .await
+            .map(|result| result.map(|cached| cached.workspace))
     }
 
     /// Get the cached workspace, if any, from the path to the workspace root or to a member root.
@@ -219,8 +245,8 @@ impl WorkspaceCache {
     /// Contract: There are no parallel workspace operations, this is the only thread operating on
     /// workspaces.
     fn invalidate_workspace(&self, workspace: &Workspace) {
-        if let Some(Ok(workspace)) = self.workspaces.remove(workspace.install_path()) {
-            for member in workspace.packages.values() {
+        if let Some(Ok(cached)) = self.workspaces.remove(workspace.install_path()) {
+            for member in cached.workspace.packages.values() {
                 self.workspaces.remove(&member.root);
             }
         }
@@ -452,7 +478,7 @@ impl Workspace {
         // synchronize them after finding the workspace root and allow only one of them to perform
         // the full discovery.
         if let Some(workspace) = workspace_cache.get(&project_path, &options.members) {
-            return workspace;
+            return workspace.map(|cached| cached.workspace);
         }
 
         let pyproject_path = project_path.join("pyproject.toml");
@@ -1577,23 +1603,19 @@ impl ProjectWorkspace {
         options: &DiscoveryOptions,
         cache: &WorkspaceCache,
     ) -> Result<Option<Self>, WorkspaceError> {
-        let workspace = match cache.get(project_root, &options.members) {
-            Some(Ok(workspace)) => workspace,
+        let cached = match cache.get(project_root, &options.members) {
+            Some(Ok(cached)) => cached,
             Some(Err(error)) => return Err(error),
             None => return Ok(None),
         };
-        let Some((project_name, _member)) = workspace
-            .packages
-            .iter()
-            .find(|(_project_name, member)| member.root() == project_root)
-        else {
+        let Some(project_name) = cached.project_name else {
             return Ok(None);
         };
 
         Ok(Some(Self {
             project_root: project_root.to_path_buf(),
-            project_name: project_name.clone(),
-            workspace,
+            project_name,
+            workspace: cached.workspace,
         }))
     }
 
@@ -2182,20 +2204,16 @@ impl VirtualProject {
         debug!("Found project root: {}", project_root.simplified_display());
 
         // Fast path: The workspace is already cached.
-        if let Some(workspace) = workspace_cache.get(project_root, &options.members) {
-            let workspace = workspace?;
-            let virtual_project = if let Some((project_name, _member)) = workspace
-                .packages
-                .iter()
-                .find(|(_package_name, member)| member.root == project_root)
-            {
+        if let Some(cached) = workspace_cache.get(project_root, &options.members) {
+            let cached = cached?;
+            let virtual_project = if let Some(project_name) = cached.project_name {
                 Self::Project(ProjectWorkspace {
                     project_root: project_root.to_path_buf(),
-                    project_name: project_name.clone(),
-                    workspace,
+                    project_name,
+                    workspace: cached.workspace,
                 })
             } else {
-                Self::NonProject(workspace.clone())
+                Self::NonProject(cached.workspace)
             };
             return Ok(virtual_project);
         }
@@ -2406,7 +2424,7 @@ mod tests {
     use std::str::FromStr;
     use std::sync::Arc;
 
-    use anyhow::Result;
+    use anyhow::{Result, bail};
     use assert_fs::fixture::ChildPath;
     use assert_fs::prelude::*;
     use insta::{assert_json_snapshot, assert_snapshot};
@@ -2416,7 +2434,9 @@ mod tests {
     use uv_pypi_types::DependencyGroupSpecifier;
 
     use crate::pyproject::PyProjectToml;
-    use crate::workspace::{DiscoveryOptions, MemberDiscovery, ProjectWorkspace, Workspace};
+    use crate::workspace::{
+        DiscoveryOptions, MemberDiscovery, ProjectWorkspace, VirtualProject, Workspace,
+    };
     use crate::{WorkspaceCache, WorkspaceError};
 
     async fn workspace_test(folder: &str) -> (ProjectWorkspace, String) {
@@ -2856,6 +2876,103 @@ mod tests {
         .expect("cached workspace member ignores invalid change in the meantime");
 
         assert!(Arc::ptr_eq(&root_workspace, &member_project.workspace));
+        assert_eq!(
+            member_project.project_name(),
+            &PackageName::from_str("seeds")?
+        );
+
+        let root_project = ProjectWorkspace::discover(
+            root.as_ref(),
+            &DiscoveryOptions::default(),
+            &cache,
+            &workspace_cache,
+        )
+        .await?;
+
+        assert!(Arc::ptr_eq(&root_workspace, &root_project.workspace));
+        assert_eq!(
+            root_project.project_name(),
+            &PackageName::from_str("albatross")?
+        );
+
+        Ok(())
+    }
+
+    /// A cached virtual root must not acquire the name of one of its members.
+    #[tokio::test]
+    async fn workspace_cache_preserves_virtual_root() -> Result<()> {
+        let root = tempfile::TempDir::new()?;
+        let root = ChildPath::new(root.path());
+
+        root.child("pyproject.toml").write_str(
+            r#"
+            [tool.uv.workspace]
+            members = ["packages/*"]
+            "#,
+        )?;
+
+        root.child("packages")
+            .child("seeds")
+            .child("pyproject.toml")
+            .write_str(
+                r#"
+            [project]
+            name = "seeds"
+            version = "1.0.0"
+            requires-python = ">=3.12"
+            "#,
+            )?;
+
+        let cache = Cache::from_path(env::temp_dir().join("uv-workspace-cache"));
+        let workspace_cache = WorkspaceCache::default();
+        let root_workspace = Workspace::discover(
+            root.as_ref(),
+            &DiscoveryOptions::default(),
+            &cache,
+            &workspace_cache,
+        )
+        .await?;
+
+        root.child("pyproject.toml")
+            .write_str("not valid toml >.<")?;
+        let virtual_root = VirtualProject::discover(
+            root.as_ref(),
+            &DiscoveryOptions::default(),
+            &cache,
+            &workspace_cache,
+        )
+        .await?;
+
+        match virtual_root {
+            VirtualProject::NonProject(workspace) => {
+                assert!(Arc::ptr_eq(&root_workspace, &workspace));
+            }
+            VirtualProject::Project(_) => bail!("expected a cached virtual workspace root"),
+        }
+        assert!(
+            ProjectWorkspace::from_cache(
+                root.as_ref(),
+                &DiscoveryOptions::default(),
+                &workspace_cache,
+            )?
+            .is_none()
+        );
+
+        let member = VirtualProject::discover(
+            root.child("packages").child("seeds").as_ref(),
+            &DiscoveryOptions::default(),
+            &cache,
+            &workspace_cache,
+        )
+        .await?;
+
+        match member {
+            VirtualProject::Project(project) => {
+                assert!(Arc::ptr_eq(&root_workspace, &project.workspace));
+                assert_eq!(project.project_name(), &PackageName::from_str("seeds")?);
+            }
+            VirtualProject::NonProject(_) => bail!("expected a cached workspace member project"),
+        }
 
         Ok(())
     }
