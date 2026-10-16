@@ -20,7 +20,6 @@ use insta::{allow_duplicates, assert_snapshot};
 use predicates::prelude::predicate;
 use serde_json::json;
 use sha2::{Digest, Sha256};
-use url::Url;
 use walkdir::WalkDir;
 use wiremock::{
     Mock, MockServer, ResponseTemplate,
@@ -30,6 +29,7 @@ use wiremock::{
 use uv_extract::dirhash::{DirectoryDigest, dirhash_path};
 use uv_fs::{PortablePath, Simplified};
 use uv_install_wheel::validate_and_heal_record;
+use uv_redacted::SafeUrl;
 use uv_static::EnvVars;
 use uv_test::archive::write_tar_gz;
 #[cfg(feature = "test-git")]
@@ -1393,7 +1393,7 @@ async fn install_remote_requirements_txt() -> Result<()> {
 
     let server_url = start_requirements_server(username, password, requirements_txt).await;
 
-    let mut requirements_url = Url::parse(&format!("{server_url}/requirements.txt"))?;
+    let mut requirements_url = SafeUrl::parse(&format!("{server_url}/requirements.txt"))?;
 
     // Should fail without credentials
     uv_snapshot!(context.filters(), context.pip_install()
@@ -1434,7 +1434,7 @@ async fn install_remote_requirements_txt() -> Result<()> {
     let requirements_txt = "iniconfig";
     // Update the mock server to serve a new requirements.txt
     let server_url = start_requirements_server(username, password, requirements_txt).await;
-    let mut requirements_url = Url::parse(&format!("{server_url}/requirements.txt"))?;
+    let mut requirements_url = SafeUrl::parse(&format!("{server_url}/requirements.txt"))?;
     let _ = requirements_url.set_username(username);
     let _ = requirements_url.set_password(Some(password));
 
@@ -3126,7 +3126,7 @@ fn install_git_workspace_build_requirement() -> Result<()> {
         .assert()
         .success();
 
-    let repository_url = Url::from_directory_path(repository.path())
+    let repository_url = SafeUrl::from_directory_path(repository.path())
         .map_err(|()| anyhow!("failed to convert repository path to file URL"))?;
     let repository_url = repository_url.as_str().trim_end_matches('/');
 
@@ -3204,7 +3204,7 @@ fn install_git_checkout_marker_symlink() -> Result<()> {
         .assert()
         .success();
 
-    let repository_url = Url::from_directory_path(repository.path())
+    let repository_url = SafeUrl::from_directory_path(repository.path())
         .map_err(|()| anyhow!("failed to convert repository path to file URL"))?;
     let repository_url = repository_url.as_str().trim_end_matches('/');
 
@@ -3334,7 +3334,7 @@ fn install_git_full_commit_ignores_same_named_branch() -> Result<()> {
         .assert()
         .success();
 
-    let repository_url = Url::from_directory_path(repository.path())
+    let repository_url = SafeUrl::from_directory_path(repository.path())
         .map_err(|()| anyhow!("failed to convert repository path to file URL"))?;
     let repository_url = repository_url.as_str().trim_end_matches('/');
 
@@ -3441,7 +3441,7 @@ fn install_git_full_commit_rejects_tag_object() -> Result<()> {
     let tag = String::from_utf8(tag.stdout)?;
     let tag = tag.trim();
 
-    let repository_url = Url::from_directory_path(repository.path())
+    let repository_url = SafeUrl::from_directory_path(repository.path())
         .map_err(|()| anyhow!("failed to convert repository path to file URL"))?;
     let repository_url = repository_url.as_str().trim_end_matches('/');
     let mut filters = context.filters();
@@ -3552,7 +3552,7 @@ fn install_git_percent_encoded_ref() -> Result<()> {
         .assert()
         .success();
 
-    let repository_url = Url::from_directory_path(repository.path())
+    let repository_url = SafeUrl::from_directory_path(repository.path())
         .map_err(|()| anyhow!("failed to convert repository path to file URL"))?;
     let repository_url = repository_url.as_str().trim_end_matches('/');
 
@@ -8873,7 +8873,7 @@ fn find_links_local_html() -> Result<()> {
 #[test]
 fn find_links_uppercase_file_url_from_requirements_file() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let links_url = Url::from_directory_path(context.workspace_root.join("test/links"))
+    let links_url = SafeUrl::from_directory_path(context.workspace_root.join("test/links"))
         .map_err(|()| anyhow!("Failed to convert links directory to URL"))?;
     let links_url = links_url.as_str().replacen("file://", "FILE://", 1);
     context
@@ -8906,7 +8906,7 @@ async fn find_links_uppercase_http_url_from_requirements_file() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let server = MockServer::start().await;
     let wheel_filename = "ok-1.0.0-py3-none-any.whl";
-    let wheel_url = Url::from_file_path(
+    let wheel_url = SafeUrl::from_file_path(
         context
             .workspace_root
             .join("test/links")
@@ -9103,7 +9103,7 @@ async fn find_links_uppercase_html() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let server = MockServer::start().await;
     let wheel_filename = "tqdm-1000.0.0-py3-none-any.whl";
-    let wheel_url = Url::from_file_path(
+    let wheel_url = SafeUrl::from_file_path(
         context
             .workspace_root
             .join("test/links")
@@ -10046,7 +10046,7 @@ fn require_hashes_repeated_file_requirements_constraint() -> Result<()> {
     let wheel = context
         .workspace_root
         .join("test/links/ok-2.0.0-py3-none-any.whl");
-    let url = Url::from_file_path(&wheel).map_err(|()| anyhow!("invalid wheel path"))?;
+    let url = SafeUrl::from_file_path(&wheel).map_err(|()| anyhow!("invalid wheel path"))?;
     let requirements_txt = context.temp_dir.child("requirements.txt");
     let constraints_txt = context.temp_dir.child("constraints.txt");
     requirements_txt.write_str(&formatdoc! {r"
@@ -11227,7 +11227,7 @@ fn create_local_index_with_tqdm(context: &TestContext, root: &Path) -> Result<()
             </a>
           </body>
         </html>
-    "#, Url::from_directory_path(context.workspace_root.join("test/links/")).unwrap().as_str()},
+    "#, SafeUrl::from_directory_path(context.workspace_root.join("test/links/")).unwrap().as_str()},
     )?;
     Ok(())
 }
@@ -11244,7 +11244,7 @@ fn local_index_absolute() -> Result<()> {
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("tqdm")
         .arg("--index-url")
-        .arg(Url::from_directory_path(root).unwrap().as_str()), @"
+        .arg(SafeUrl::from_directory_path(root).unwrap().as_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
@@ -11296,7 +11296,7 @@ fn local_index_requirements_txt_absolute() -> Result<()> {
     requirements_txt.write_str(&indoc::formatdoc! {r"
         --index-url {}
         tqdm
-    ", Url::from_directory_path(root).unwrap().as_str()})?;
+    ", SafeUrl::from_directory_path(root).unwrap().as_str()})?;
 
     uv_snapshot!(context.filters(), context.pip_install()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
@@ -11377,7 +11377,7 @@ fn local_index_fallback() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("iniconfig")
         .arg("--extra-index-url")
-        .arg(Url::from_directory_path(root).unwrap().as_str()), @"
+        .arg(SafeUrl::from_directory_path(root).unwrap().as_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]

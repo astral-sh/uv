@@ -4,8 +4,8 @@ use anyhow::{Result, anyhow};
 use assert_fs::prelude::*;
 use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
-use url::Url;
 
+use uv_redacted::SafeUrl;
 use uv_test::packse::PackseServer;
 use uv_test::packse::scenario::Scenario;
 use uv_test::uv_snapshot;
@@ -10838,7 +10838,7 @@ fn lock_conflicting_workspace_member_transitive_source() -> Result<()> {
         requires = []
         build-backend = "example"
     "#})?;
-    let other_url = Url::from_file_path(context.temp_dir.child("other").path())
+    let other_url = SafeUrl::from_file_path(context.temp_dir.child("other").path())
         .map_err(|()| anyhow!("failed to convert dependency path to file URL"))?;
     context
         .temp_dir

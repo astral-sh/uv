@@ -3,7 +3,6 @@ use std::fmt::Formatter;
 use std::path::{Component, Path, PathBuf};
 
 use owo_colors::OwoColorize;
-use url::Url;
 
 use uv_configuration::{
     DependencyGroupsWithDefaults, EditableMode, ExtrasSpecificationWithDefaults, InstallOptions,
@@ -133,7 +132,7 @@ impl std::fmt::Display for RequirementsTxtExport<'_> {
                         write!(
                             f,
                             "{}",
-                            Url::from_file_path(path).map_err(|()| std::fmt::Error)?
+                            SafeUrl::from_file_path(path).map_err(|()| std::fmt::Error)?
                         )?;
                     } else {
                         write!(f, "{}", anchor(path).portable_display())?;
@@ -152,7 +151,7 @@ impl std::fmt::Display for RequirementsTxtExport<'_> {
                             write!(
                                 f,
                                 "{}",
-                                Url::from_file_path(path).map_err(|()| std::fmt::Error)?
+                                SafeUrl::from_file_path(path).map_err(|()| std::fmt::Error)?
                             )?;
                         } else {
                             write!(f, "{}", anchor(path).portable_display())?;

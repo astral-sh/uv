@@ -23,6 +23,8 @@ use tokio_stream::wrappers::ReceiverStream;
 use wiremock::matchers::{any, method};
 use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
+#[cfg(feature = "test-pypi")]
+use uv_redacted::SafeUrl;
 use uv_static::EnvVars;
 use uv_test::{TestContext, uv_snapshot};
 
@@ -943,7 +945,7 @@ async fn proxy_no_proxy_in_uv_toml() {
     let proxy_uri = proxy_server.uri();
 
     // Note: reqwest's NoProxy matches on host only, not host:port
-    let target_url = url::Url::parse(&target_uri).unwrap();
+    let target_url = SafeUrl::parse(&target_uri).unwrap();
     let target_host = target_url.host_str().unwrap();
 
     let context = context

@@ -7,8 +7,8 @@ use async_zip::base::write::ZipFileWriter;
 use async_zip::{Compression, ZipEntryBuilder};
 use futures::executor::block_on;
 use indoc::{formatdoc, indoc};
-use url::Url;
 
+use uv_redacted::SafeUrl;
 use uv_static::EnvVars;
 use uv_test::{copy_dir_ignore, uv_snapshot};
 
@@ -816,7 +816,7 @@ fn workspace_metadata_script_dependency_edges() -> Result<()> {
         "metadata_edge_child-0.1.0",
         &[],
     )?;
-    let child_url = Url::from_file_path(child.path())
+    let child_url = SafeUrl::from_file_path(child.path())
         .map_err(|()| anyhow::anyhow!("failed to convert wheel path to file URL"))?;
 
     let first = context
@@ -832,7 +832,7 @@ fn workspace_metadata_script_dependency_edges() -> Result<()> {
         ),
         &[],
     )?;
-    let first_url = Url::from_file_path(first.path())
+    let first_url = SafeUrl::from_file_path(first.path())
         .map_err(|()| anyhow::anyhow!("failed to convert wheel path to file URL"))?;
 
     let second = context
@@ -848,7 +848,7 @@ fn workspace_metadata_script_dependency_edges() -> Result<()> {
         ),
         &[],
     )?;
-    let second_url = Url::from_file_path(second.path())
+    let second_url = SafeUrl::from_file_path(second.path())
         .map_err(|()| anyhow::anyhow!("failed to convert wheel path to file URL"))?;
 
     let script = context.temp_dir.child("script.py");
@@ -933,7 +933,7 @@ fn workspace_metadata_dependency_edges_include_parent_reachability() -> Result<(
         .temp_dir
         .child("metadata_child-0.1.0-py3-none-any.whl");
     write_wheel(child.path(), "metadata-child", "metadata_child-0.1.0", &[])?;
-    let child_url = Url::from_file_path(child.path())
+    let child_url = SafeUrl::from_file_path(child.path())
         .map_err(|()| anyhow::anyhow!("failed to convert wheel path to file URL"))?;
 
     let parent = context
@@ -947,7 +947,7 @@ fn workspace_metadata_dependency_edges_include_parent_reachability() -> Result<(
         &format!("Requires-Dist: metadata-child @ {child_url}\n"),
         &[],
     )?;
-    let parent_url = Url::from_file_path(parent.path())
+    let parent_url = SafeUrl::from_file_path(parent.path())
         .map_err(|()| anyhow::anyhow!("failed to convert wheel path to file URL"))?;
 
     context.init().arg("project").assert().success();
@@ -1207,7 +1207,7 @@ fn workspace_metadata_exact_sync_removes_extraneous_packages() -> Result<()> {
         "metadata_required-0.1.0",
         &[("required_module.py", "")],
     )?;
-    let required_url = Url::from_file_path(required.path())
+    let required_url = SafeUrl::from_file_path(required.path())
         .map_err(|()| anyhow::anyhow!("failed to convert wheel path to file URL"))?;
 
     let extraneous = context
@@ -1411,9 +1411,9 @@ fn workspace_metadata_includes_existing_environment() -> Result<()> {
         &[("missing_module.py", "")],
     )?;
 
-    let installed_owner_url = Url::from_file_path(installed_owner.path())
+    let installed_owner_url = SafeUrl::from_file_path(installed_owner.path())
         .map_err(|()| anyhow::anyhow!("failed to convert wheel path to file URL"))?;
-    let missing_owner_url = Url::from_file_path(missing_owner.path())
+    let missing_owner_url = SafeUrl::from_file_path(missing_owner.path())
         .map_err(|()| anyhow::anyhow!("failed to convert wheel path to file URL"))?;
 
     context
@@ -1564,7 +1564,7 @@ fn workspace_metadata_lockfile_workspace_group_module_owners() -> Result<()> {
         "installed_owner-0.1.0",
         &[("installed_module.py", "")],
     )?;
-    let wheel_url = Url::from_file_path(wheel.path())
+    let wheel_url = SafeUrl::from_file_path(wheel.path())
         .map_err(|()| anyhow::anyhow!("failed to convert wheel path to file URL"))?;
     context
         .temp_dir
@@ -1672,11 +1672,11 @@ fn workspace_metadata_module_owners_from_locked_wheels() -> Result<()> {
         ],
     )?;
 
-    let gpu_a_url = Url::from_file_path(gpu_a.path())
+    let gpu_a_url = SafeUrl::from_file_path(gpu_a.path())
         .map_err(|()| anyhow::anyhow!("failed to convert wheel path to file URL"))?;
-    let gpu_b_url = Url::from_file_path(gpu_b.path())
+    let gpu_b_url = SafeUrl::from_file_path(gpu_b.path())
         .map_err(|()| anyhow::anyhow!("failed to convert wheel path to file URL"))?;
-    let typing_extensions_url = Url::from_file_path(typing_extensions.path())
+    let typing_extensions_url = SafeUrl::from_file_path(typing_extensions.path())
         .map_err(|()| anyhow::anyhow!("failed to convert wheel path to file URL"))?;
 
     context
@@ -1890,9 +1890,9 @@ fn workspace_metadata_module_owners_use_installed_package_id() -> Result<()> {
         &[("shared.py", "")],
     )?;
 
-    let module_owner_311_url = Url::from_file_path(module_owner_311.path())
+    let module_owner_311_url = SafeUrl::from_file_path(module_owner_311.path())
         .map_err(|()| anyhow::anyhow!("failed to convert wheel path to file URL"))?;
-    let module_owner_312_url = Url::from_file_path(module_owner_312.path())
+    let module_owner_312_url = SafeUrl::from_file_path(module_owner_312.path())
         .map_err(|()| anyhow::anyhow!("failed to convert wheel path to file URL"))?;
 
     context
@@ -2029,7 +2029,7 @@ fn workspace_metadata_module_owners_after_dependency_changes() -> Result<()> {
         "",
         &[("replacement_module.py", "")],
     )?;
-    let locked_owner_url = Url::from_file_path(locked_owner.path())
+    let locked_owner_url = SafeUrl::from_file_path(locked_owner.path())
         .map_err(|()| anyhow::anyhow!("failed to convert wheel path to file URL"))?;
 
     context
@@ -2150,7 +2150,7 @@ fn workspace_metadata_installed_packages_with_duplicate_names() -> Result<()> {
 
     let editable_source = context.temp_dir.child("editable-source");
     editable_source.create_dir_all()?;
-    let editable_url = Url::from_directory_path(editable_source.path())
+    let editable_url = SafeUrl::from_directory_path(editable_source.path())
         .map_err(|()| anyhow::anyhow!("failed to convert source path to file URL"))?;
     let site_packages = ChildPath::new(context.site_packages());
     site_packages.child("shared.py").write_str("")?;
@@ -2289,7 +2289,7 @@ fn workspace_metadata_installed_packages_without_modules() -> Result<()> {
         "missing_record-0.1.0",
         &[],
     )?;
-    let declared_url = Url::from_file_path(declared.path())
+    let declared_url = SafeUrl::from_file_path(declared.path())
         .map_err(|()| anyhow::anyhow!("failed to convert wheel path to file URL"))?;
     pyproject.write_str(&formatdoc! {r#"
         [project]
@@ -2319,7 +2319,7 @@ fn workspace_metadata_module_owners_failure_is_error() -> Result<()> {
     let gpu_a = context.temp_dir.child("gpu_a-0.1.0-py3-none-any.whl");
     write_wheel(gpu_a.path(), "gpu-a", "gpu_a-0.1.0", &[("gpu/a.py", "")])?;
 
-    let gpu_a_url = Url::from_file_path(gpu_a.path())
+    let gpu_a_url = SafeUrl::from_file_path(gpu_a.path())
         .map_err(|()| anyhow::anyhow!("failed to convert wheel path to file URL"))?;
 
     context

@@ -29,7 +29,6 @@ use indoc::indoc;
 #[cfg(feature = "test-universal")]
 use regex::Regex;
 use sha2::{Digest, Sha256, Sha512};
-use url::Url;
 use wiremock::matchers::{header, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -39,6 +38,7 @@ use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pep508::Requirement;
+use uv_redacted::SafeUrl;
 use uv_static::EnvVars;
 
 #[cfg(unix)]
@@ -3640,7 +3640,7 @@ fn compile_wheel_path_dependency() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str(&format!(
         "flask @ {}",
-        Url::from_file_path(flask_wheel.path()).unwrap()
+        SafeUrl::from_file_path(flask_wheel.path()).unwrap()
     ))?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
@@ -3884,7 +3884,7 @@ fn compile_source_distribution_path_dependency() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str(&format!(
         "flask @ {}",
-        Url::from_file_path(flask_wheel.path()).unwrap()
+        SafeUrl::from_file_path(flask_wheel.path()).unwrap()
     ))?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
@@ -5311,7 +5311,7 @@ fn generate_hashes_registry_sha512_source() -> Result<()> {
         .arg("requirements.in")
         .arg("--generate-hashes")
         .arg("--index-url")
-        .arg(Url::from_directory_path(&index).expect("absolute temporary directory path").as_str())
+        .arg(SafeUrl::from_directory_path(&index).expect("absolute temporary directory path").as_str())
         .env_remove(EnvVars::UV_EXCLUDE_NEWER), @r"
     exit_code: 0 (success)
     ----- stdout -----
@@ -11939,7 +11939,7 @@ fn editable_scoped_exclusion_missing_path() -> Result<()> {
         name = "parent"
         version = "1.0.0"
         dependencies = ["child @ {}"]
-        "#, Url::from_file_path(missing).unwrap()})?;
+        "#, SafeUrl::from_file_path(missing).unwrap()})?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("pyproject.toml"), @r#"
@@ -13673,7 +13673,7 @@ dependencies = [
 ]
 requires-python = ">3.8"
 "#,
-        Url::from_directory_path(anyio.path()).unwrap().as_str(),
+        SafeUrl::from_directory_path(anyio.path()).unwrap().as_str(),
     ))?;
 
     // Create an application that depends on the library.
@@ -13689,7 +13689,7 @@ dependencies = [
 ]
 requires-python = ">3.8"
 "#,
-        Url::from_directory_path(lib.path()).unwrap().as_str(),
+        SafeUrl::from_directory_path(lib.path()).unwrap().as_str(),
     ))?;
 
     // Write to a requirements file.
@@ -13752,7 +13752,7 @@ dependencies = [
 ]
 requires-python = ">3.8"
 "#,
-        Url::from_directory_path(anyio.path()).unwrap().as_str(),
+        SafeUrl::from_directory_path(anyio.path()).unwrap().as_str(),
     ))?;
 
     // Create an application that depends on the library.
@@ -13768,7 +13768,7 @@ dependencies = [
 ]
 requires-python = ">3.8"
 "#,
-        Url::from_directory_path(lib.path()).unwrap().as_str(),
+        SafeUrl::from_directory_path(lib.path()).unwrap().as_str(),
     ))?;
 
     // Write to a requirements file.
@@ -13844,7 +13844,7 @@ dependencies = [
 ]
 requires-python = ">3.8"
 "#,
-        Url::from_directory_path(anyio.path()).unwrap().as_str(),
+        SafeUrl::from_directory_path(anyio.path()).unwrap().as_str(),
     ))?;
 
     // Create an application that depends on the library.
@@ -13860,7 +13860,7 @@ dependencies = [
 ]
 requires-python = ">3.8"
 "#,
-        Url::from_directory_path(lib.path()).unwrap().as_str(),
+        SafeUrl::from_directory_path(lib.path()).unwrap().as_str(),
     ))?;
 
     // Write to a requirements file.
@@ -14848,7 +14848,7 @@ fn git_source_checkout_marker() -> Result<()> {
         .assert()
         .success();
 
-    let repository_url = Url::from_directory_path(repository.path())
+    let repository_url = SafeUrl::from_directory_path(repository.path())
         .map_err(|()| anyhow!("failed to convert repository path to file URL"))?;
     let repository_url = repository_url.as_str().trim_end_matches('/');
     context
@@ -15141,7 +15141,8 @@ fn file_url() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements file.txt");
     requirements_txt.write_str("iniconfig")?;
 
-    let url = Url::from_file_path(requirements_txt.simple_canonicalize()?).expect("valid file URL");
+    let url =
+        SafeUrl::from_file_path(requirements_txt.simple_canonicalize()?).expect("valid file URL");
 
     uv_snapshot!(context.filters(), context.pip_compile().arg(url.to_string()), @"
     exit_code: 0 (success)
@@ -16579,7 +16580,7 @@ fn compile_derivation_chain() -> Result<()> {
         dependencies = [
             "child @ {}",
         ]
-    "#, Url::from_file_path(child).unwrap()})?;
+    "#, SafeUrl::from_file_path(child).unwrap()})?;
 
     uv_snapshot!(context.filters(), context.pip_compile().arg("pyproject.toml"), @r#"
     exit_code: 1 (failure)
@@ -18821,7 +18822,7 @@ fn pep_751_compile_backend_only_relative_path() -> Result<()> {
         requires = ["uv_build>=0.7,<10000"]
         build-backend = "uv_build"
     "#})?;
-    let child_url = Url::from_file_path(child.path())
+    let child_url = SafeUrl::from_file_path(child.path())
         .map_err(|()| anyhow::anyhow!("child path is not a valid file URL"))?;
 
     let parent = context.temp_dir.child("parent");
