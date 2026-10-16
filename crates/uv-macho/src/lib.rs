@@ -50,9 +50,4 @@ impl EditedDylib {
     pub fn as_bytes(&self) -> &[u8] {
         &self.bytes
     }
-
-    /// Extract the image, discarding its editing state.
-    pub fn into_bytes(self) -> Vec<u8> {
-        self.bytes
-    }
 }

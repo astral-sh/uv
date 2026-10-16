@@ -198,7 +198,7 @@ impl<'a> Layout<'a> {
                     extend_file_bounds(&mut file_bounds, table.file_ranges()?);
                 }
                 Command::DyldInfo(info) => {
-                    extend_file_bounds(&mut file_bounds, info.file_ranges()?)
+                    extend_file_bounds(&mut file_bounds, info.file_ranges()?);
                 }
                 Command::LinkeditData(data) => {
                     extend_file_bounds(&mut file_bounds, [data.file_range()?]);
