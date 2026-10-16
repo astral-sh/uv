@@ -1,7 +1,9 @@
 use std::collections::BTreeMap;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 use uv_redacted::{SafeUrl, SafeUrlError};
 
 use crate::{HashAlgorithm, Hashes};
@@ -48,6 +50,37 @@ pub enum DirectUrl {
         #[serde(skip_serializing_if = "Option::is_none")]
         path: Option<PathBuf>,
     },
+}
+
+/// A failure to read the metadata schema or parse its URL.
+#[derive(Debug, Error)]
+pub enum DirectUrlError {
+    /// The JSON cannot be read or does not match the direct URL metadata schema.
+    #[error(transparent)]
+    Json(#[from] serde_json::Error),
+    /// The metadata matches the schema, but URL parsing failed.
+    #[error(transparent)]
+    Url(#[from] SafeUrlError),
+}
+
+/// Read `direct_url.json` and return its decoded [`DirectUrl`] and reconstructed [`SafeUrl`].
+///
+/// The URL can include a VCS prefix and revision, an archive hash, or a subdirectory fragment
+/// derived from the metadata.
+///
+/// # Errors
+///
+/// Returns [`DirectUrlError::Json`] if reading fails, the JSON is malformed, or the metadata does
+/// not match the expected schema. Returns [`DirectUrlError::Url`] if the metadata matches the
+/// schema but its URL cannot be parsed.
+///
+/// Installed metadata from other tools may contain URLs that cannot be parsed, such as SCP-style
+/// Git addresses. Distinguishing URL errors lets callers ignore an unusable origin without
+/// ignoring malformed metadata or read errors.
+pub fn read_direct_url_json(reader: impl Read) -> Result<(DirectUrl, SafeUrl), DirectUrlError> {
+    let metadata: DirectUrl = serde_json::from_reader(reader)?;
+    let url = SafeUrl::try_from(&metadata)?;
+    Ok((metadata, url))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]

@@ -76,6 +76,105 @@ fn list_editable_non_file_url() -> Result<()> {
     Ok(())
 }
 
+/// An invalid direct URL emits a warning and leaves the installed distribution usable by version.
+#[test]
+#[cfg(feature = "test-python")]
+fn list_invalid_direct_url() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let dist_info = ChildPath::new(context.site_packages()).child("project-1.0.0.dist-info");
+    dist_info.create_dir_all()?;
+    dist_info
+        .child("METADATA")
+        .write_str("Metadata-Version: 2.1\nName: project\nVersion: 1.0.0\n")?;
+    dist_info
+        .child("direct_url.json")
+        .write_str(r#"{"url":"not-a-url","archive_info":{}}"#)?;
+
+    uv_snapshot!(context.pip_list()
+        .arg("--format=freeze")
+        .env(EnvVars::RUST_LOG, "uv_distribution_types::installed=warn"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    project==1.0.0
+
+    ----- stderr -----
+    WARN Failed to parse direct URL: relative URL without a base
+    ");
+    Ok(())
+}
+
+/// An ambiguous VCS URL emits a warning with credentials redacted and treats the installed
+/// distribution as a registry distribution.
+#[test]
+#[cfg(feature = "test-python")]
+fn list_ambiguous_direct_url() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let dist_info = ChildPath::new(context.site_packages()).child("project-1.0.0.dist-info");
+    dist_info.create_dir_all()?;
+    dist_info
+        .child("METADATA")
+        .write_str("Metadata-Version: 2.1\nName: project\nVersion: 1.0.0\n")?;
+    dist_info.child("direct_url.json").write_str(
+        r#"{"url":"https://user/name:password@example.com/project.git","vcs_info":{"vcs":"git"}}"#,
+    )?;
+
+    uv_snapshot!(context.pip_list()
+        .arg("--format=freeze")
+        .env(EnvVars::RUST_LOG, "uv_distribution_types::installed=warn"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    project==1.0.0
+
+    ----- stderr -----
+    WARN Failed to parse direct URL: ambiguous user/pass authority in URL (not percent-encoded?): git+https:***@example.com/project.git
+    ");
+    Ok(())
+}
+
+/// Malformed JSON is an error, unlike an invalid URL in otherwise valid metadata.
+#[test]
+#[cfg(feature = "test-python")]
+fn list_invalid_direct_url_json() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let dist_info = ChildPath::new(context.site_packages()).child("project-1.0.0.dist-info");
+    dist_info.create_dir_all()?;
+    dist_info
+        .child("METADATA")
+        .write_str("Metadata-Version: 2.1\nName: project\nVersion: 1.0.0\n")?;
+    dist_info.child("direct_url.json").write_str("{")?;
+
+    uv_snapshot!(context.filters(), context.pip_list().arg("--format=freeze"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to read metadata from: [SITE_PACKAGES]/project-1.0.0.dist-info
+      cause: EOF while parsing an object at line 1 column 1
+    ");
+    Ok(())
+}
+
+/// A missing metadata discriminator produces a schema error.
+#[test]
+#[cfg(feature = "test-python")]
+fn list_invalid_direct_url_metadata() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let dist_info = ChildPath::new(context.site_packages()).child("project-1.0.0.dist-info");
+    dist_info.create_dir_all()?;
+    dist_info
+        .child("METADATA")
+        .write_str("Metadata-Version: 2.1\nName: project\nVersion: 1.0.0\n")?;
+    dist_info
+        .child("direct_url.json")
+        .write_str(r#"{"url":"https://example.com/project"}"#)?;
+
+    uv_snapshot!(context.filters(), context.pip_list().arg("--format=freeze"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to read metadata from: [SITE_PACKAGES]/project-1.0.0.dist-info
+      cause: data did not match any variant of untagged enum DirectUrl
+    ");
+    Ok(())
+}
+
 #[test]
 #[cfg(feature = "test-pypi")]
 fn list_single_no_editable() -> Result<()> {
