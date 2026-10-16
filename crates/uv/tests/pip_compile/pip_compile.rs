@@ -23,9 +23,7 @@ use fs_err::{File, read};
 use fs_err::{read_to_string, remove_file, write};
 #[cfg(feature = "test-python-managed")]
 use http::StatusCode;
-#[cfg(feature = "test-universal")]
-use indoc::formatdoc;
-use indoc::indoc;
+use indoc::{formatdoc, indoc};
 #[cfg(feature = "test-universal")]
 use regex::Regex;
 use sha2::{Digest, Sha256, Sha512};
@@ -15050,54 +15048,51 @@ fn tool_uv_sources() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn invalid_tool_uv_sources() -> Result<()> {
+#[tokio::test]
+async fn invalid_tool_uv_sources() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    let server = MockServer::start().await;
+    Mock::given(path("/urllib3.tar.baz"))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&server)
+        .await;
+    let url = format!("{}/urllib3.tar.baz", server.uri());
 
-    // Write an invalid extension on a PEP 508 URL.
+    // A PEP 508 URL with an unknown extension needs a filename from the server.
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(indoc! {r#"
+    pyproject_toml.write_str(&formatdoc! {r#"
         [project]
         name = "project"
         version = "0.0.0"
-        dependencies = [
-          "urllib3 @ https://files.pythonhosted.org/packages/a2/73/a68704750a7679d0b6d3ad7aa8d4da8e14e151ae82e6fee774e6e0d05ec8/urllib3-2.2.1-py3-none-any.tar.baz",
-        ]
+        dependencies = ["urllib3 @ {url}"]
     "#})?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-        .arg(context.temp_dir.join("pyproject.toml")), @"
-    exit_code: 2 (failure)
+        .arg("pyproject.toml")
+        .arg("--no-index"), @"
+    exit_code: 1 (failure)
     ----- stderr -----
-    error: Failed to parse metadata from built wheel
-      cause: Expected direct URL (`https://files.pythonhosted.org/packages/a2/73/a68704750a7679d0b6d3ad7aa8d4da8e14e151ae82e6fee774e6e0d05ec8/urllib3-2.2.1-py3-none-any.tar.baz`) to end in a supported file extension: `.whl`, `.tar.gz`, `.zip`, `.tar.bz2`, `.tar.lz`, `.tar.lzma`, `.tar.xz`, `.tar.zst`, `.tar`, `.tbz`, `.tgz`, `.tlz`, or `.txz`
-             urllib3 @ https://files.pythonhosted.org/packages/a2/73/a68704750a7679d0b6d3ad7aa8d4da8e14e151ae82e6fee774e6e0d05ec8/urllib3-2.2.1-py3-none-any.tar.baz
-                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    "
-    );
+    error: Missing filename in `Content-Disposition` header for `http://[LOCALHOST]/urllib3.tar.baz`
+    ");
 
-    // Write an invalid extension on a source.
-    let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(indoc! {r#"
+    // The same requirement applies to a URL in tool.uv.sources.
+    pyproject_toml.write_str(&formatdoc! {r#"
         [project]
         name = "project"
         version = "0.0.0"
-        dependencies = [
-          "urllib3",
-        ]
+        dependencies = ["urllib3"]
 
         [tool.uv.sources]
-        urllib3 = { url = "https://files.pythonhosted.org/packages/a2/73/a68704750a7679d0b6d3ad7aa8d4da8e14e151ae82e6fee774e6e0d05ec8/urllib3-2.2.1-py3-none-any.tar.baz" }
+        urllib3 = {{ url = "{url}" }}
     "#})?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-        .arg(context.temp_dir.join("pyproject.toml")), @"
-    exit_code: 2 (failure)
+        .arg("pyproject.toml")
+        .arg("--no-index"), @"
+    exit_code: 1 (failure)
     ----- stderr -----
-    error: Failed to parse entry: `urllib3`
-      cause: Expected direct URL (`https://files.pythonhosted.org/packages/a2/73/a68704750a7679d0b6d3ad7aa8d4da8e14e151ae82e6fee774e6e0d05ec8/urllib3-2.2.1-py3-none-any.tar.baz`) to end in a supported file extension: `.whl`, `.tar.gz`, `.zip`, `.tar.bz2`, `.tar.lz`, `.tar.lzma`, `.tar.xz`, `.tar.zst`, `.tar`, `.tbz`, `.tgz`, `.tlz`, or `.txz`
-    "
-    );
+    error: Missing filename in `Content-Disposition` header for `http://[LOCALHOST]/urllib3.tar.baz`
+    ");
 
     Ok(())
 }

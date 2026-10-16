@@ -32,7 +32,9 @@ use uv_test::archive::{generate_source_archive, write_tar_gz};
 #[cfg(feature = "test-universal")]
 use uv_test::package_server::PackageServer;
 #[cfg(feature = "test-universal")]
-use uv_test::packse::{PackseServer, generate_wheel_with_files, scenario::Scenario};
+use uv_test::packse::{
+    PackseServer, generate_wheel, generate_wheel_with_files, scenario::Scenario,
+};
 #[cfg(all(feature = "test-universal", feature = "test-git"))]
 use uv_test::{READ_ONLY_GITHUB_TOKEN, decode_token};
 use uv_test::{diff_snapshot, uv_snapshot};
@@ -2088,6 +2090,410 @@ fn lock_sdist_url() -> Result<()> {
     Checked 1 package in [TIME]
     ");
 
+    Ok(())
+}
+
+/// Persisted opaque declarations need version 2 even when their markers exclude them.
+#[cfg(feature = "test-universal")]
+#[tokio::test]
+async fn lock_content_disposition_inactive_requirement() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = MockServer::start().await;
+    Mock::given(path("/unreachable"))
+        .respond_with(ResponseTemplate::new(500))
+        .expect(0)
+        .mount(&server)
+        .await;
+    let url = format!("{}/unreachable", server.uri());
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["unused @ {url} ; python_version < '2'"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--no-index"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(lock, @r#"
+        version = 2
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+
+        [package.metadata]
+        requires-dist = [{ name = "unused", marker = "python_full_version < '2'", url = "http://[LOCALHOST]/unreachable" }]
+        "#);
+    });
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--no-index"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    assert_eq!(context.read("uv.lock"), lock);
+    Ok(())
+}
+
+/// A locked wheel retains its discovered filename without rewriting the download URL.
+#[cfg(feature = "test-universal")]
+#[tokio::test]
+async fn lock_content_disposition_wheel() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = MockServer::start().await;
+    let (filename, wheel) = generate_wheel(
+        &"ok".parse()?,
+        &"1.0.0".parse()?,
+        &[],
+        &BTreeMap::new(),
+        None,
+        "py3-none-any",
+        &[],
+    );
+    Mock::given(path("/download"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header(
+                    "Content-Disposition",
+                    format!("attachment; filename=\"{filename}\""),
+                )
+                .set_body_bytes(wheel),
+        )
+        .mount(&server)
+        .await;
+    let url = format!("{}/download?artifact=wheel&value=a%2Bb", server.uri());
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["ok @ {url}"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--no-index"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(lock, @r#"
+        version = 2
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "ok"
+        version = "1.0.0"
+        source = { url = "http://[LOCALHOST]/download?artifact=wheel&value=a%2Bb" }
+        wheels = [
+            { url = "http://[LOCALHOST]/download?artifact=wheel&value=a%2Bb", filename = "ok-1.0.0-py3-none-any.whl", hash = "sha256:12eca69e4c9bc5a11b1e4510695c626547528d89e9e4d2ef5e41979bc95c0fa0" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "ok" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "ok", url = "http://[LOCALHOST]/download?artifact=wheel&value=a%2Bb" }]
+        "#);
+    });
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--no-index"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    assert_eq!(context.read("uv.lock"), lock);
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--frozen")
+        .arg("--offline")
+        .arg("--no-header")
+        .arg("--no-hashes"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    ok @ http://[LOCALHOST]/download?artifact=wheel&value=a%2Bb
+        # via project
+    ");
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--frozen")
+        .arg("--offline")
+        .arg("--format")
+        .arg("pylock.toml"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Package `ok` requires a Content-Disposition filename, which pylock.toml export does not support
+    ");
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--frozen")
+        .arg("--no-cache")
+        .arg("--no-index"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0 (from http://[LOCALHOST]/download?artifact=wheel&value=a%2Bb)
+    ");
+
+    context.assert_installed("ok", "1.0.0");
+    let direct_url = context.read(
+        context
+            .site_packages()
+            .join("ok-1.0.0.dist-info/direct_url.json"),
+    );
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(direct_url, @r#"{"url":"http://[LOCALHOST]/download?artifact=wheel&value=a%2Bb","archive_info":{}}"#);
+    });
+    Ok(())
+}
+
+/// Upgrading an opaque URL must keep its discovered filename, metadata, and hash together.
+#[cfg(feature = "test-universal")]
+#[tokio::test]
+async fn lock_content_disposition_changed_filename() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = MockServer::start().await;
+    let (filename, wheel) = generate_wheel(
+        &"ok".parse()?,
+        &"1.0.0".parse()?,
+        &[],
+        &BTreeMap::new(),
+        None,
+        "py3-none-any",
+        &[],
+    );
+    Mock::given(path("/download"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header(
+                    "Content-Disposition",
+                    format!("attachment; filename=\"{filename}\""),
+                )
+                .insert_header("Cache-Control", "max-age=3600")
+                .set_body_bytes(wheel),
+        )
+        .mount(&server)
+        .await;
+    let url = format!("{}/download?artifact=wheel", server.uri());
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["ok @ {url}"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--no-index"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    server.verify().await;
+    server.reset().await;
+    let (filename, wheel) = generate_wheel(
+        &"ok".parse()?,
+        &"2.0.0".parse()?,
+        &[],
+        &BTreeMap::new(),
+        None,
+        "py3-none-any",
+        &[],
+    );
+    Mock::given(path("/download"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header(
+                    "Content-Disposition",
+                    format!("attachment; filename=\"{filename}\""),
+                )
+                .insert_header("Cache-Control", "max-age=3600")
+                .set_body_bytes(wheel),
+        )
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--refresh")
+        .arg("--upgrade-package")
+        .arg("ok")
+        .arg("--no-index"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Updated ok v1.0.0 -> v2.0.0
+    ");
+
+    let lock = context.read("uv.lock");
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(lock, @r#"
+        version = 2
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "ok"
+        version = "2.0.0"
+        source = { url = "http://[LOCALHOST]/download?artifact=wheel" }
+        wheels = [
+            { url = "http://[LOCALHOST]/download?artifact=wheel", filename = "ok-2.0.0-py3-none-any.whl", hash = "sha256:68fa0103c28fbe5979a2eb93c29d1a7a8e0323bc2423a3e81f9083e11e2b92c2" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "ok" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "ok", url = "http://[LOCALHOST]/download?artifact=wheel" }]
+        "#);
+    });
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--frozen")
+        .arg("--no-cache")
+        .arg("--no-index"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==2.0.0 (from http://[LOCALHOST]/download?artifact=wheel)
+    ");
+    context.assert_installed("ok", "2.0.0");
+    Ok(())
+}
+
+/// Frozen synchronization needs the source format even when the discovery cache is absent.
+#[cfg(feature = "test-universal")]
+#[tokio::test]
+async fn lock_content_disposition_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = MockServer::start().await;
+    let archive = generate_source_archive(&"ok".parse()?, &"1.0.0".parse()?, "", None)?;
+    Mock::given(path("/download"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header(
+                    "Content-Disposition",
+                    "attachment; filename=\"ok-1.0.0.tar.gz\"",
+                )
+                .set_body_bytes(archive),
+        )
+        .mount(&server)
+        .await;
+    let url = format!("{}/download?artifact=source", server.uri());
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["ok @ {url}"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--no-index"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(lock, @r#"
+        version = 2
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "ok"
+        version = "1.0.0"
+        source = { url = "http://[LOCALHOST]/download?artifact=source" }
+        sdist = { filename = "ok-1.0.0.tar.gz", hash = "sha256:658c5587f8c0dff2211dfa38d4b8a9ff89f68bd81e81306362e1ddb5b5b3f169" }
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "ok" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "ok", url = "http://[LOCALHOST]/download?artifact=source" }]
+        "#);
+    });
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--no-index"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    assert_eq!(context.read("uv.lock"), lock);
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--frozen")
+        .arg("--no-cache")
+        .arg("--no-index"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0 (from http://[LOCALHOST]/download?artifact=source)
+    ");
+
+    context.assert_installed("ok", "1.0.0");
     Ok(())
 }
 

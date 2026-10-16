@@ -5754,23 +5754,33 @@ fn semicolon_trailing_space() -> Result<()> {
 }
 
 /// Treat a semicolon that's not whitespace-separated as a part of the URL.
-#[test]
-fn semicolon_no_space() -> Result<()> {
+#[tokio::test]
+async fn semicolon_no_space() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path(
+            "/iniconfig-2.0.0-py3-none-any.whl;python_version%20%3E%20'3.10'",
+        ))
+        .respond_with(ResponseTemplate::new(404))
+        .expect(1)
+        .mount(&server)
+        .await;
 
     let requirements = context.temp_dir.child("requirements.txt");
-    requirements.write_str("iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl;python_version > '3.10'")?;
+    requirements.write_str(&format!(
+        "iniconfig @ {}/iniconfig-2.0.0-py3-none-any.whl;python_version > '3.10'",
+        server.uri()
+    ))?;
 
-    uv_snapshot!(context.pip_sync()
-        .arg("requirements.txt"), @"
-    exit_code: 2 (failure)
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("requirements.txt")
+        .arg("--no-index"), @"
+    exit_code: 1 (failure)
     ----- stderr -----
-    error: Couldn't parse requirement in `requirements.txt` at position 0
-      cause: Expected direct URL (`https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl;python_version%20%3E%20'3.10'`) to end in a supported file extension: `.whl`, `.tar.gz`, `.zip`, `.tar.bz2`, `.tar.lz`, `.tar.lzma`, `.tar.xz`, `.tar.zst`, `.tar`, `.tbz`, `.tgz`, `.tlz`, or `.txz`
-             iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl;python_version > '3.10'
-                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    "
-    );
+    error: Failed to fetch: http://[LOCALHOST]/iniconfig-2.0.0-py3-none-any.whl;python_version%20%3E%20'3.10'
+      cause: HTTP status client error (404 Not Found) for url (http://[LOCALHOST]/iniconfig-2.0.0-py3-none-any.whl;python_version%20%3E%20'3.10')
+    ");
 
     Ok(())
 }

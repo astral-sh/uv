@@ -767,24 +767,20 @@ fn url_source(
         verbatim_url.set_fragment(Some(&format!("subdirectory={subdirectory}")));
     }
 
-    let ext = match DistExtension::from_path(url.path()) {
-        Ok(ext) => ext,
-        Err(..) if looks_like_git_repository(&url) => {
-            return Err(LoweringError::MissingGitSource(
-                requirement.name.clone(),
-                url.as_url().clone(),
-            ));
-        }
-        Err(err) => {
-            return Err(ParsedUrlError::MissingExtensionUrl(url.to_string(), err).into());
-        }
-    };
+    let archive = ArchiveUrlFilename::from_url(&url)
+        .map_err(|err| ParsedUrlError::MissingExtensionUrl(url.to_string(), err))?;
+    if archive == ArchiveUrlFilename::Unknown && looks_like_git_repository(&url) {
+        return Err(LoweringError::MissingGitSource(
+            requirement.name.clone(),
+            url.as_url().clone(),
+        ));
+    }
 
     let verbatim_url = VerbatimUrl::from_url(verbatim_url);
     Ok(RequirementSource::Url {
         location: url,
         subdirectory,
-        archive: ArchiveUrlFilename::Url(ext),
+        archive,
         url: verbatim_url,
     })
 }

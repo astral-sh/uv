@@ -38,6 +38,10 @@ To install a package from the disk:
 $ uv pip install "ruff @ ./projects/ruff"
 ```
 
+HTTP and HTTPS URLs can identify a wheel or source distribution by a filename in the URL or, when
+the URL has no recognized archive extension, in the server's `Content-Disposition` header. See
+[URL dependencies](../concepts/projects/dependencies.md#url) for details.
+
 To install a package from GitHub:
 
 ```console

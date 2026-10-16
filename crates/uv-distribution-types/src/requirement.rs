@@ -1200,6 +1200,8 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
                 }
             }
             RequirementSourceWire::Direct { url, subdirectory } => {
+                let archive = ArchiveUrlFilename::from_url(&url)
+                    .map_err(|err| ParsedUrlError::MissingExtensionUrl(url.to_string(), err))?;
                 let location = url.clone();
 
                 // Create a PEP 508-compatible URL.
@@ -1211,11 +1213,7 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
                 Ok(Self::Url {
                     location,
                     subdirectory: subdirectory.map(Box::<Path>::from),
-                    archive: ArchiveUrlFilename::Url(
-                        DistExtension::from_path(url.path()).map_err(|err| {
-                            ParsedUrlError::MissingExtensionUrl(url.to_string(), err)
-                        })?,
-                    ),
+                    archive,
                     url: VerbatimUrl::from_url(url),
                 })
             }

@@ -31,7 +31,7 @@ use uv_fs::{PortablePath, Simplified};
 use uv_install_wheel::validate_and_heal_record;
 use uv_redacted::SafeUrl;
 use uv_static::EnvVars;
-use uv_test::archive::write_tar_gz;
+use uv_test::archive::{generate_source_archive, write_tar_gz};
 #[cfg(feature = "test-git")]
 use uv_test::decode_token;
 use uv_test::find_links::FindLinksServer;
@@ -11970,37 +11970,492 @@ fn install_build_isolation_package() -> Result<()> {
 }
 
 /// Install a package with an unsupported extension.
-#[test]
-fn invalid_extension() {
+#[tokio::test]
+async fn invalid_extension() {
     let context = uv_test::test_context!(DEFAULT_PYTHON_VERSION);
+    let server = MockServer::start().await;
+    Mock::given(path("/ruff-0.5.6.tar.baz"))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&server)
+        .await;
 
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg("ruff @ https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6.tar.baz")
-        , @"
-    exit_code: 2 (failure)
+        .arg(format!("ruff @ {}/ruff-0.5.6.tar.baz", server.uri()))
+        .arg("--no-index"), @"
+    exit_code: 1 (failure)
     ----- stderr -----
-    error: Failed to parse: `ruff @ https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6.tar.baz`
-      cause: Expected direct URL (`https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6.tar.baz`) to end in a supported file extension: `.whl`, `.tar.gz`, `.zip`, `.tar.bz2`, `.tar.lz`, `.tar.lzma`, `.tar.xz`, `.tar.zst`, `.tar`, `.tbz`, `.tgz`, `.tlz`, or `.txz`
-             ruff @ https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6.tar.baz
-                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    error: Missing filename in `Content-Disposition` header for `http://[LOCALHOST]/ruff-0.5.6.tar.baz`
     ");
 }
 
-/// Install a package without unsupported extension.
-#[test]
-fn no_extension() {
+/// Install a package without a filename extension or a Content-Disposition filename.
+#[tokio::test]
+async fn no_extension() {
     let context = uv_test::test_context!(DEFAULT_PYTHON_VERSION);
+    let server = MockServer::start().await;
+    Mock::given(path("/download"))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&server)
+        .await;
 
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg("ruff @ https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6")
-        , @"
-    exit_code: 2 (failure)
+        .arg(format!("ruff @ {}/download", server.uri()))
+        .arg("--no-index"), @"
+    exit_code: 1 (failure)
     ----- stderr -----
-    error: Failed to parse: `ruff @ https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6`
-      cause: Expected direct URL (`https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6`) to end in a supported file extension: `.whl`, `.tar.gz`, `.zip`, `.tar.bz2`, `.tar.lz`, `.tar.lzma`, `.tar.xz`, `.tar.zst`, `.tar`, `.tbz`, `.tgz`, `.tlz`, or `.txz`
-             ruff @ https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6
-                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    error: Missing filename in `Content-Disposition` header for `http://[LOCALHOST]/download`
     ");
+}
+
+/// Discovery retains the original URL, caches its filename, and honors `--no-deps`.
+#[tokio::test]
+async fn content_disposition_named_wheel() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = MockServer::start().await;
+    let dependency = format!("missing @ {}/unreachable", server.uri()).parse()?;
+    let (filename, wheel) = generate_wheel(
+        &"ok".parse()?,
+        &"1.0.0".parse()?,
+        &[dependency],
+        &BTreeMap::new(),
+        None,
+        "py3-none-any",
+        &[],
+    );
+    Mock::given(path("/download"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header(
+                    "Content-Disposition",
+                    format!("attachment; filename=\"{filename}\""),
+                )
+                .insert_header("Cache-Control", "max-age=3600")
+                .set_body_bytes(wheel),
+        )
+        .mount(&server)
+        .await;
+    Mock::given(path("/unreachable"))
+        .respond_with(ResponseTemplate::new(500))
+        .expect(0)
+        .mount(&server)
+        .await;
+    let url = format!("{}/download?artifact=wheel&value=a%2Bb", server.uri());
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(format!("ok @ {url}"))
+        .arg("--no-deps")
+        .arg("--no-index"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0 (from http://[LOCALHOST]/download?artifact=wheel&value=a%2Bb)
+    ");
+
+    let direct_url = context.read(
+        context
+            .site_packages()
+            .join("ok-1.0.0.dist-info/direct_url.json"),
+    );
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(direct_url, @r#"{"url":"http://[LOCALHOST]/download?artifact=wheel&value=a%2Bb","archive_info":{}}"#);
+    });
+    server.verify().await;
+    server.reset().await;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(format!("ok @ {url}"))
+        .arg("--no-deps")
+        .arg("--no-index")
+        .arg("--offline")
+        .arg("--reinstall"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ ok==1.0.0 (from http://[LOCALHOST]/download?artifact=wheel&value=a%2Bb)
+    ");
+
+    // Reusing the filename cache must still validate the requested package name.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(format!("different @ {url}"))
+        .arg("--no-deps")
+        .arg("--no-index")
+        .arg("--offline"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Requested package name `different` does not match `ok` in the distribution filename: http://[LOCALHOST]/download?artifact=wheel&value=a%2Bb
+    ");
+
+    context.assert_installed("ok", "1.0.0");
+    Ok(())
+}
+
+#[tokio::test]
+async fn content_disposition_unnamed_wheel() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = MockServer::start().await;
+    let (filename, wheel) = generate_wheel(
+        &"ok".parse()?,
+        &"1.0.0".parse()?,
+        &[],
+        &BTreeMap::new(),
+        None,
+        "py3-none-any",
+        &[],
+    );
+    Mock::given(path("/download"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header(
+                    "Content-Disposition",
+                    format!("attachment; filename=\"{filename}\""),
+                )
+                .set_body_bytes(wheel),
+        )
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(format!("{}/download", server.uri()))
+        .arg("--no-index"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0 (from http://[LOCALHOST]/download)
+    ");
+
+    context.assert_installed("ok", "1.0.0");
+    Ok(())
+}
+
+#[tokio::test]
+async fn content_disposition_named_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = MockServer::start().await;
+    let archive = generate_source_archive(&"ok".parse()?, &"1.0.0".parse()?, "", None)?;
+    Mock::given(path("/download"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header(
+                    "Content-Disposition",
+                    "attachment; filename=\"ok-1.0.0.tar.gz\"",
+                )
+                .set_body_bytes(archive),
+        )
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(format!("ok @ {}/download", server.uri()))
+        .arg("--no-index"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0 (from http://[LOCALHOST]/download)
+    ");
+
+    context.assert_installed("ok", "1.0.0");
+    Ok(())
+}
+
+/// Source archive filenames can describe a repository rather than its Python package.
+#[tokio::test]
+async fn content_disposition_unnamed_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = MockServer::start().await;
+    let archive = generate_source_archive(&"ok".parse()?, &"1.0.0".parse()?, "", None)?;
+    Mock::given(path("/download"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header(
+                    "Content-Disposition",
+                    "attachment; filename=\"upstream-repository-99.0.tar.gz\"",
+                )
+                .set_body_bytes(archive),
+        )
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(format!("{}/download", server.uri()))
+        .arg("--no-index"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0 (from http://[LOCALHOST]/download)
+    ");
+
+    context.assert_installed("ok", "1.0.0");
+    Ok(())
+}
+
+/// A refreshed filename must not reuse source metadata or built wheels cached under another filename.
+#[tokio::test]
+async fn content_disposition_source_cache_filename() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = MockServer::start().await;
+    let archive = generate_source_archive(&"ok".parse()?, &"1.0.0".parse()?, "", None)?;
+    Mock::given(method("GET"))
+        .and(path("/download"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("Cache-Control", "max-age=0")
+                .insert_header(
+                    "Content-Disposition",
+                    "attachment; filename=\"ok-1.0.0.tar.gz\"",
+                ),
+        )
+        .with_priority(1)
+        .up_to_n_times(1)
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/download"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("Cache-Control", "max-age=3600")
+                .insert_header(
+                    "Content-Disposition",
+                    "attachment; filename=\"ok-1.0.0.tar.gz\"",
+                )
+                .set_body_bytes(archive),
+        )
+        .with_priority(2)
+        .mount(&server)
+        .await;
+    let url = format!("{}/download", server.uri());
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(format!("ok @ {url}"))
+        .arg("--no-index"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0 (from http://[LOCALHOST]/download)
+    ");
+
+    context.assert_installed("ok", "1.0.0");
+    server.verify().await;
+    server.reset().await;
+    let archive = generate_source_archive(&"ok".parse()?, &"2.0.0".parse()?, "", None)?;
+    Mock::given(method("GET"))
+        .and(path("/download"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("Cache-Control", "max-age=3600")
+                .insert_header(
+                    "Content-Disposition",
+                    "attachment; filename=\"ok-2.0.0.tar.gz\"",
+                )
+                .set_body_bytes(archive),
+        )
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(format!("ok @ {url}"))
+        .arg("--no-index")
+        .arg("--reinstall"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - ok==1.0.0 (from http://[LOCALHOST]/download)
+     + ok==2.0.0 (from http://[LOCALHOST]/download)
+    ");
+
+    context.assert_installed("ok", "2.0.0");
+    Ok(())
+}
+
+/// A known URL filename takes precedence over an unrelated response header.
+#[tokio::test]
+async fn content_disposition_ignored_for_recognized_url() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = MockServer::start().await;
+    let (filename, wheel) = generate_wheel(
+        &"ok".parse()?,
+        &"1.0.0".parse()?,
+        &[],
+        &BTreeMap::new(),
+        None,
+        "py3-none-any",
+        &[],
+    );
+    Mock::given(path(format!("/{filename}")))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header(
+                    "Content-Disposition",
+                    "attachment; filename=\"different-2.0.0.tar.gz\"",
+                )
+                .set_body_bytes(wheel),
+        )
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(format!("ok @ {}/{filename}", server.uri()))
+        .arg("--no-index"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0 (from http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl)
+    ");
+
+    context.assert_installed("ok", "1.0.0");
+    Ok(())
+}
+
+/// Inactive extras must not trigger filename discovery for their direct URL dependencies.
+#[tokio::test]
+async fn content_disposition_inactive_extra() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = MockServer::start().await;
+    let dependency = format!("missing @ {}/unreachable", server.uri()).parse()?;
+    let (filename, wheel) = generate_wheel(
+        &"ok".parse()?,
+        &"1.0.0".parse()?,
+        &[],
+        &BTreeMap::from([("unused".parse()?, vec![dependency])]),
+        None,
+        "py3-none-any",
+        &[],
+    );
+    Mock::given(path(format!("/{filename}")))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(wheel))
+        .mount(&server)
+        .await;
+    Mock::given(path("/unreachable"))
+        .respond_with(ResponseTemplate::new(500))
+        .expect(0)
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(format!("ok @ {}/{filename}", server.uri()))
+        .arg("--no-index"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0 (from http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl)
+    ");
+
+    context.assert_installed("ok", "1.0.0");
+    Ok(())
+}
+
+/// Reject a changed format before extracting an archive or running its build backend.
+#[tokio::test]
+async fn content_disposition_changed_archive_type() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = MockServer::start().await;
+    let marker = context.temp_dir.child("backend-executed");
+    let archive =
+        generate_source_archive(&"ok".parse()?, &"1.0.0".parse()?, "", Some(marker.path()))?;
+    Mock::given(method("GET"))
+        .and(path("/download"))
+        .respond_with(ResponseTemplate::new(200).insert_header(
+            "Content-Disposition",
+            "attachment; filename=\"ok-1.0.0.tar.gz\"",
+        ))
+        .with_priority(1)
+        .up_to_n_times(1)
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/download"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header(
+                    "Content-Disposition",
+                    "attachment; filename=\"ok-1.0.0.zip\"",
+                )
+                .set_body_bytes(archive),
+        )
+        .with_priority(2)
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(format!("ok @ {}/download", server.uri()))
+        .arg("--no-index"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to download and build `ok @ http://[LOCALHOST]/download`
+      cause: Filename in `Content-Disposition` header for `http://[LOCALHOST]/download` changed from `ok-1.0.0.tar.gz` to `ok-1.0.0.zip`
+    ");
+
+    marker.assert(predicate::path::missing());
+    context.assert_not_installed("ok");
+    Ok(())
+}
+
+/// A matching extension does not authorize a different filename after discovery.
+#[tokio::test]
+async fn content_disposition_changed_filename() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = MockServer::start().await;
+    let marker = context.temp_dir.child("backend-executed");
+    let archive =
+        generate_source_archive(&"ok".parse()?, &"1.0.0".parse()?, "", Some(marker.path()))?;
+    Mock::given(method("GET"))
+        .and(path("/download"))
+        .respond_with(ResponseTemplate::new(200).insert_header(
+            "Content-Disposition",
+            "attachment; filename=\"ok-1.0.0.tar.gz\"",
+        ))
+        .with_priority(1)
+        .up_to_n_times(1)
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/download"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header(
+                    "Content-Disposition",
+                    "attachment; filename=\"different-1.0.0.tar.gz\"",
+                )
+                .set_body_bytes(archive),
+        )
+        .with_priority(2)
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(format!("ok @ {}/download", server.uri()))
+        .arg("--no-index"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to download and build `ok @ http://[LOCALHOST]/download`
+      cause: Filename in `Content-Disposition` header for `http://[LOCALHOST]/download` changed from `ok-1.0.0.tar.gz` to `different-1.0.0.tar.gz`
+    ");
+
+    marker.assert(predicate::path::missing());
+    context.assert_not_installed("ok");
+    Ok(())
 }
 
 /// Regression test for: <https://github.com/astral-sh/uv/pull/6646>

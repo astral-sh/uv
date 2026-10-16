@@ -490,18 +490,16 @@ impl TryFrom<SafeUrl> for ParsedArchiveUrl {
         url.set_fragment(None);
 
         // Infer the extension from the path.
-        let ext = match DistExtension::from_path(url.path()) {
-            Ok(ext) => ext,
-            Err(..) if looks_like_git_repository(&url) => {
-                return Err(ParsedUrlError::MissingGitPrefix(url.to_string()));
-            }
-            Err(err) => return Err(ParsedUrlError::MissingExtensionUrl(url.to_string(), err)),
-        };
+        let archive = ArchiveUrlFilename::from_url(&url)
+            .map_err(|err| ParsedUrlError::MissingExtensionUrl(url.to_string(), err))?;
+        if archive == ArchiveUrlFilename::Unknown && looks_like_git_repository(&url) {
+            return Err(ParsedUrlError::MissingGitPrefix(url.to_string()));
+        }
 
         Ok(Self {
             url,
             subdirectory,
-            archive: ArchiveUrlFilename::Url(ext),
+            archive,
         })
     }
 }

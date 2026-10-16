@@ -387,6 +387,18 @@ To add a URL source, provide a `https://` URL to either a wheel (ending in `.whl
 distribution (typically ending in `.tar.gz` or `.zip`; see
 [here](../../concepts/resolution.md#source-distribution) for all supported formats).
 
+If an HTTP or HTTPS URL does not end in a recognized archive extension, uv uses the filename in the
+server's `Content-Disposition` response header. For example, a `/download` URL can serve a wheel
+with `Content-Disposition: attachment; filename="example-1.0-py3-none-any.whl"`. The filename must
+identify a supported wheel or source distribution. A recognized extension in the original URL takes
+precedence over the response header.
+
+uv retains the original URL, including its query parameters, in dependency declarations and
+installed package metadata. The discovered filename is stored separately in `uv.lock`; these
+lockfiles use version 2 and cannot be read by uv versions that only support version 1. Lockfiles
+without these URLs continue to use version 1. Exporting these dependencies to `pylock.toml` is not
+supported.
+
 For example:
 
 ```console
