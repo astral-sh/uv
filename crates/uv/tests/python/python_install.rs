@@ -22,7 +22,7 @@ use uv_test::assert_link_target;
 use uv_test::{LATEST_PYTHON_3_12, assert_path_missing, uv_snapshot};
 
 use uv_fs::Simplified;
-use uv_python_managed::platform_key_from_env;
+use uv_python_managed::{ManagedPythonInstallations, platform_key_from_env};
 use uv_static::EnvVars;
 use walkdir::WalkDir;
 
@@ -329,6 +329,91 @@ fn python_reinstall_patch() {
      ~ cpython-3.12.6-[PLATFORM]
      ~ cpython-3.12.7-[PLATFORM] (python3.12)
     ");
+}
+
+/// A managed installation whose interpreter executable is missing cannot be used, so a plain
+/// `uv python install` reinstalls it instead of reporting it as already installed.
+#[test]
+fn python_install_missing_executable() -> anyhow::Result<()> {
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_filtered_latest_python_versions()
+        .with_managed_python_dirs();
+
+    uv_snapshot!(context.filters(), context.python_install().arg("3.12"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Installed Python 3.12.[LATEST] in [TIME]
+     + cpython-3.12.[LATEST]-[PLATFORM] (python3.12)
+    ");
+
+    // Remove the interpreter executable, leaving the rest of the installation in place
+    let executable =
+        ManagedPythonInstallations::from_settings(Some(context.temp_dir.join("managed")))?
+            .find_all()?
+            .find(|installation| {
+                installation.key().major() == 3 && installation.key().minor() == 12
+            })
+            .context("Expected a managed installation of Python 3.12")?
+            .executable(false);
+    fs_err::remove_file(&executable)?;
+
+    // The installation should be replaced, as with `--reinstall`; the executable link already
+    // points at it, so it is not reported
+    uv_snapshot!(context.filters(), context.python_install().arg("3.12"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Installed Python 3.12.[LATEST] in [TIME]
+     ~ cpython-3.12.[LATEST]-[PLATFORM]
+    ");
+
+    assert!(executable.exists());
+
+    Ok(())
+}
+
+/// A managed installation whose interpreter executable is missing is skipped during discovery
+/// and downloaded again when a command needs it, instead of failing to run the missing file.
+#[test]
+fn python_install_automatic_missing_executable() -> anyhow::Result<()> {
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_filtered_latest_python_versions()
+        .with_managed_python_dirs();
+
+    uv_snapshot!(context.filters(), context.python_install().arg("3.12"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Installed Python 3.12.[LATEST] in [TIME]
+     + cpython-3.12.[LATEST]-[PLATFORM] (python3.12)
+    ");
+
+    // Remove the interpreter executable, leaving the rest of the installation in place
+    let executable =
+        ManagedPythonInstallations::from_settings(Some(context.temp_dir.join("managed")))?
+            .find_all()?
+            .find(|installation| {
+                installation.key().major() == 3 && installation.key().minor() == 12
+            })
+            .context("Expected a managed installation of Python 3.12")?
+            .executable(false);
+    fs_err::remove_file(&executable)?;
+
+    // The installation should be fetched again
+    uv_snapshot!(context.filters(), context.run()
+        .env_remove(EnvVars::VIRTUAL_ENV)
+        .arg("-p").arg("3.12")
+        .arg("python").arg("-c").arg("import sys; print(sys.version_info[:2])"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    (3, 12)
+    ");
+
+    assert!(executable.exists());
+
+    Ok(())
 }
 
 #[test]

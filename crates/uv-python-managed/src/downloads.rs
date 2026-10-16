@@ -51,12 +51,16 @@ use uv_python_types::{
     PythonVariant, PythonVersion,
 };
 
+use crate::managed::{Error as ManagedError, ManagedPythonInstallation};
+
 #[derive(Error, DebugNoInline)]
 pub enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),
     #[error(transparent)]
     Request(#[from] PythonDownloadRequestError),
+    #[error(transparent)]
+    Installation(Box<ManagedError>),
     #[error("Expected download URL (`{0}`) to end in a supported file extension: {1}")]
     MissingExtension(String, ExtensionError),
     #[error("Failed to download `{0}`")]
@@ -498,9 +502,19 @@ impl ManagedPythonDownload {
     ) -> Result<DownloadResult, Error> {
         let path = installation_dir.join(self.key().to_string());
 
-        // If it is not a reinstall and the dir already exists, return it.
+        // If it is not a reinstall and the installation already exists, return it. An
+        // installation directory without its executable is replaced like a reinstall.
         if !reinstall && path.is_dir() {
-            return Ok(DownloadResult::AlreadyAvailable(path));
+            let installation = ManagedPythonInstallation::new(path.clone(), self)
+                .map_err(|err| Error::Installation(Box::new(err)))?;
+            if installation.has_executable() {
+                return Ok(DownloadResult::AlreadyAvailable(path));
+            }
+            debug!(
+                "Reinstalling `{}`: the Python executable `{}` is missing",
+                self.key(),
+                installation.executable(false).user_display()
+            );
         }
 
         // We improve filesystem compatibility by using neither the URL-encoded `%2B` nor the `+` it
