@@ -2,8 +2,11 @@ use std::path::{Path, PathBuf};
 use std::{env, io};
 
 use fs_err as fs;
+use uv_fs::read_venv_redirect;
+use uv_preview::PreviewFeature;
 use uv_python_interpreter::VirtualEnvError as Error;
 use uv_static::EnvVars;
+use uv_warnings::warn_user_once;
 
 /// Locate an active virtual environment by inspecting environment variables.
 ///
@@ -95,9 +98,9 @@ pub(crate) fn conda_environment_from_env(kind: CondaEnvironmentKind) -> Option<P
 
 /// Locate a virtual environment by searching the file system.
 ///
-/// Searches for a `.venv` directory or symlink in the current or any parent directory. If the
-/// current directory is itself a virtual environment (or a subdirectory of a virtual environment),
-/// the containing virtual environment is returned.
+/// Searches for a `.venv` directory, directory link, or redirect file in the current or any parent
+/// directory. If the current directory is itself a virtual environment (or a subdirectory of a
+/// virtual environment), the containing virtual environment is returned.
 pub(crate) fn virtualenv_from_working_dir() -> Result<Option<PathBuf>, Error> {
     let current_dir = crate::current_dir()?;
 
@@ -114,12 +117,25 @@ pub(crate) fn virtualenv_from_working_dir() -> Result<Option<PathBuf>, Error> {
             Err(err) if err.kind() == io::ErrorKind::NotFound => continue,
             Err(err) => return Err(err.into()),
         };
-        if metadata.is_dir() || metadata.file_type().is_symlink() {
-            if !uv_fs::is_virtualenv_base(&dot_venv) {
-                return Err(Error::MissingPyVenvCfg(dot_venv));
-            }
-            return Ok(Some(dot_venv));
+        let redirect = metadata.is_file()
+            || metadata.file_type().is_symlink()
+                && fs::metadata(&dot_venv).is_ok_and(|metadata| metadata.is_file());
+        let root = if redirect {
+            read_venv_redirect(&dot_venv)?
+        } else if metadata.is_dir() || metadata.file_type().is_symlink() {
+            dot_venv
+        } else {
+            continue;
+        };
+        if !uv_fs::is_virtualenv_base(&root) {
+            return Err(Error::MissingPyVenvCfg(root));
         }
+        if redirect && !uv_preview::is_enabled(PreviewFeature::VenvRedirectFiles) {
+            warn_user_once!(
+                "Using `.venv` redirect files is experimental and may change without warning. Pass `--preview-features venv-redirect-files` to disable this warning."
+            );
+        }
+        return Ok(Some(root));
     }
 
     Ok(None)

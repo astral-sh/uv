@@ -19,7 +19,7 @@ use tracing::{debug, trace, warn};
 use uv_cache::Cache;
 use uv_configuration::{ActiveEnvironment, DependencyGroupsWithDefaults, ExcludeDependency};
 use uv_distribution_types::{Index, MinimumLibcVersion, Requirement, RequirementSource};
-use uv_fs::{CWD, Simplified, normalize_path};
+use uv_fs::{CWD, Simplified, normalize_path, read_venv_redirect};
 use uv_normalize::{DEV_DEPENDENCIES, DefaultGroups, GroupName, PackageName};
 use uv_once_map::OnceMap;
 use uv_pep440::VersionSpecifiers;
@@ -85,9 +85,18 @@ impl ProjectEnvironmentSelection {
             .map_or_else(|| install_path.join(".venv"), Path::to_path_buf);
 
         if let Some(from_virtual_env) = from_virtual_env_variable() {
+            let redirect = if selection.is_default() && project_environment_path.is_file() {
+                read_venv_redirect(&project_environment_path).ok()
+            } else {
+                None
+            };
             let matches_project =
                 uv_fs::is_same_file_allow_missing(&from_virtual_env, &project_environment_path)
-                    .unwrap_or(false);
+                    .unwrap_or(false)
+                    || redirect.as_deref().is_some_and(|target| {
+                        uv_fs::is_same_file_allow_missing(&from_virtual_env, target)
+                            .unwrap_or(false)
+                    });
             match active {
                 ActiveEnvironment::Prefer => {
                     if !matches_project {

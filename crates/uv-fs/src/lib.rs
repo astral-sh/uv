@@ -958,6 +958,17 @@ pub fn is_virtualenv_base(path: impl AsRef<Path>) -> bool {
     path.as_ref().join("pyvenv.cfg").is_file()
 }
 
+/// Read the path in a `.venv` redirect file (PEP 832), relative to the file's directory.
+pub fn read_venv_redirect(path: &Path) -> io::Result<PathBuf> {
+    let contents = fs_err::read_to_string(path)?;
+    let line = contents
+        .strip_suffix("\r\n")
+        .or_else(|| contents.strip_suffix('\n'))
+        .unwrap_or(&contents);
+
+    Ok(path.parent().unwrap_or(Path::new("")).join(line))
+}
+
 /// Whether the error is due to a lock being held.
 #[cfg(feature = "tokio")]
 fn is_known_already_locked_error(err: &std::fs::TryLockError) -> bool {
@@ -1118,6 +1129,28 @@ mod tests {
             .expect_err("A socket cannot be atomically replaced");
         assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
         assert!(fs_err::metadata(&path)?.file_type().is_socket());
+        Ok(())
+    }
+
+    #[test]
+    fn read_venv_redirect_file() -> io::Result<()> {
+        let tempdir = tempfile::tempdir()?;
+        let path = tempdir.path().join(".venv");
+        for contents in [
+            "other environment",
+            "other environment\n",
+            "other environment\r\n",
+        ] {
+            fs_err::write(&path, contents)?;
+            assert_eq!(
+                read_venv_redirect(&path)?,
+                tempdir.path().join("other environment")
+            );
+        }
+
+        let target = tempdir.path().join("environments/default");
+        fs_err::write(&path, format!("{}\n", target.display()))?;
+        assert_eq!(read_venv_redirect(&path)?, target);
         Ok(())
     }
 

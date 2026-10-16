@@ -27,6 +27,7 @@ uv-errors = { workspace = true }
 uv-fs = { workspace = true }
 uv-pep440 = { workspace = true }
 uv-platform = { workspace = true }
+uv-preview = { workspace = true }
 uv-python-interpreter = { workspace = true }
 uv-python-managed = { workspace = true }
 uv-python-types = { workspace = true }
