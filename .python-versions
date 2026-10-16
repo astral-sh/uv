@@ -3,10 +3,8 @@
 # installed through any means you like, e.g. `uv python install` if you already have a build of uv,
 # `cargo run python install`, or through some other installer.
 #
-# In uv's CI in GitHub Actions, they are bootstrapped by an existing released version of uv,
-# installed by the astral-sh/setup-uv action If you need a newer or different version, you will
-# first need to complete a uv release capable of installing that version, get it picked up by
-# astral-sh/setup-uv, and update its hash in .github/workflows.
+# We recommend setting `UV_PYTHON_DOWNLOADS_JSON_URL=crates/uv-python-managed/download-metadata.json`
+# to use the versions of Python embedded in the local checkout of `uv`.
 
 3.14.0
 3.13.2
