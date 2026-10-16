@@ -123,6 +123,7 @@ fn resolve_extras(criterion: &mut Criterion<WallTime>) {
 
 /// Measure conflict simplification on its own and together with formatting. Environment-only
 /// markers can discard the conflict guards, while conflict-dependent markers must retain them.
+/// Select extras at both ends of the diagram's variable order.
 /// Build the inputs before timing and copy the original marker on every iteration.
 fn imbibe(criterion: &mut Criterion<WallTime>) {
     let package: PackageName = "project".parse().expect("valid package name");
@@ -143,6 +144,7 @@ fn imbibe(criterion: &mut Criterion<WallTime>) {
             })
             .collect();
         let selected = ConflictMarker::from_conflict_item(&items[0]);
+        let last_selected = ConflictMarker::from_conflict_item(&items[count - 1]);
         let mut conflicts = Conflicts::empty();
         conflicts.push(ConflictSet::try_from(items).expect("valid conflicts"));
         let conflicts = ConflictMarker::from_conflicts(&conflicts);
@@ -156,6 +158,12 @@ fn imbibe(criterion: &mut Criterion<WallTime>) {
             "conflict_dependent",
             count,
             UniversalMarker::new(environment, conflicts.and(selected)),
+            conflicts,
+        ));
+        inputs.push((
+            "conflict_dependent_last",
+            count,
+            UniversalMarker::new(environment, conflicts.and(last_selected)),
             conflicts,
         ));
     }

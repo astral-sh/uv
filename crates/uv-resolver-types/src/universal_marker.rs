@@ -186,11 +186,9 @@ impl UniversalMarker {
 
         // If every valid conflict selection has the same environment marker, that marker does
         // not need to repeat the conflicts.
-        let reachable = self.marker.and(conflicts.marker);
-        let environment = reachable.without_extras();
-        if !environment.is_false() && reachable == environment.and(conflicts.marker) {
-            self.marker = environment;
-            self.pep508 = environment;
+        let simplified = Self::from_combined(self.marker.restrict(conflicts.marker));
+        if !simplified.is_false() && !simplified.has_conflict_marker() {
+            *self = simplified;
             return;
         }
 
