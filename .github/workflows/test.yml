@@ -65,6 +65,8 @@ jobs:
           checksum: "1468ebd5a5541121837c5a2817b9972ba6090fa6caa3d142620850a47fb75154"
 
       - name: "Install required Python versions"
+        env:
+          UV_PYTHON_DOWNLOADS_JSON_URL: crates/uv-python-managed/download-metadata.json
         run: uv python install
 
       - name: "Install secret service"
@@ -204,6 +206,8 @@ jobs:
           checksum: "a9c1b29002cf3c83f07fa9cd8a887a3be0107d90e23189721221e7257db8e3d6"
 
       - name: "Install required Python versions"
+        env:
+          UV_PYTHON_DOWNLOADS_JSON_URL: crates/uv-python-managed/download-metadata.json
         run: uv python install
 
       - name: "Cargo test"
@@ -281,6 +285,8 @@ jobs:
           checksum: "088962f9e7b7bd9ea740c04c650b2a21c8928c345bd99ac24350dc924dba656c"
 
       - name: "Install required Python versions"
+        env:
+          UV_PYTHON_DOWNLOADS_JSON_URL: crates/uv-python-managed/download-metadata.json
         run: uv python install
 
       - name: "Install Rust toolchain"

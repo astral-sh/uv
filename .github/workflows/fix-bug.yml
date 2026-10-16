@@ -123,6 +123,8 @@ jobs:
           save-if: false
 
       - name: "Install required Python versions"
+        env:
+          UV_PYTHON_DOWNLOADS_JSON_URL: crates/uv-python-managed/download-metadata.json
         run: uv python install
 
       - name: "Prepare trusted bug-fix context"
