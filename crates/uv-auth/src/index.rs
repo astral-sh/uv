@@ -1,7 +1,6 @@
 use std::fmt::{self, Display, Formatter};
 
 use rustc_hash::FxHashSet;
-use url::Url;
 use uv_redacted::SafeUrl;
 
 /// When to use authentication.
@@ -62,7 +61,7 @@ pub struct Index {
 }
 
 impl Index {
-    fn is_prefix_for(&self, url: &Url) -> bool {
+    fn is_prefix_for(&self, url: &SafeUrl) -> bool {
         if self.root_url.scheme() != url.scheme()
             || self.root_url.host_str() != url.host_str()
             || self.root_url.port_or_known_default() != url.port_or_known_default()
@@ -112,18 +111,18 @@ impl Indexes {
     }
 
     /// Get the index for a URL if one exists.
-    pub(crate) fn index_for(&self, url: &Url) -> Option<&Index> {
+    pub(crate) fn index_for(&self, url: &SafeUrl) -> Option<&Index> {
         self.find_prefix_index(url)
     }
 
     /// Get the [`AuthPolicy`] for a URL.
-    pub(crate) fn auth_policy_for(&self, url: &Url) -> AuthPolicy {
+    pub(crate) fn auth_policy_for(&self, url: &SafeUrl) -> AuthPolicy {
         self.find_prefix_index(url)
             .map(|index| index.auth_policy)
             .unwrap_or(AuthPolicy::Auto)
     }
 
-    fn find_prefix_index(&self, url: &Url) -> Option<&Index> {
+    fn find_prefix_index(&self, url: &SafeUrl) -> Option<&Index> {
         self.0.iter().find(|&index| index.is_prefix_for(url))
     }
 }
@@ -151,7 +150,7 @@ mod tests {
             "https://example.com/simple/anyio",
         ] {
             assert!(
-                index.is_prefix_for(&Url::parse(url).unwrap()),
+                index.is_prefix_for(&SafeUrl::parse(url).unwrap()),
                 "Failed to match URL with prefix: {url}"
             );
         }
@@ -162,7 +161,7 @@ mod tests {
             "https://example.com/simpl",
         ] {
             assert!(
-                !index.is_prefix_for(&Url::parse(url).unwrap()),
+                !index.is_prefix_for(&SafeUrl::parse(url).unwrap()),
                 "Should not match URL with partial path segment: {url}"
             );
         }

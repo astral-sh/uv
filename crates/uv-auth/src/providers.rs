@@ -20,7 +20,7 @@ use crate::realm::{Realm, RealmRef};
 
 /// The [`Realm`] for the Hugging Face platform.
 static HUGGING_FACE_REALM: LazyLock<Realm> = LazyLock::new(|| {
-    let url = Url::parse("https://huggingface.co").expect("Failed to parse Hugging Face URL");
+    let url = SafeUrl::parse("https://huggingface.co").expect("Failed to parse Hugging Face URL");
     Realm::from(&url)
 });
 
@@ -47,7 +47,7 @@ pub(crate) struct HuggingFaceProvider;
 
 impl HuggingFaceProvider {
     /// Returns the credentials for the Hugging Face platform, if available.
-    pub(crate) fn credentials_for(url: &Url) -> Option<Credentials> {
+    pub(crate) fn credentials_for(url: &SafeUrl) -> Option<Credentials> {
         if RealmRef::from(url) == *HUGGING_FACE_REALM {
             if let Some(token) = HUGGING_FACE_TOKEN.as_ref() {
                 return Some(Credentials::Bearer {
@@ -69,7 +69,7 @@ pub(crate) struct S3EndpointProvider;
 
 impl S3EndpointProvider {
     /// Returns `true` if the URL matches the configured S3 endpoint.
-    pub(crate) fn is_s3_endpoint(url: &Url, preview: Preview) -> Result<bool> {
+    pub(crate) fn is_s3_endpoint(url: &SafeUrl, preview: Preview) -> Result<bool> {
         if let Some(s3_endpoint_url) = S3_ENDPOINT_URL
             .as_ref()
             .map_err(|error| *error)
@@ -119,7 +119,7 @@ pub(crate) struct GcsEndpointProvider;
 
 impl GcsEndpointProvider {
     /// Returns `true` if the URL matches the configured GCS endpoint.
-    pub(crate) fn is_gcs_endpoint(url: &Url, preview: Preview) -> Result<bool> {
+    pub(crate) fn is_gcs_endpoint(url: &SafeUrl, preview: Preview) -> Result<bool> {
         if let Some(gcs_endpoint_url) = GCS_ENDPOINT_URL
             .as_ref()
             .map_err(|error| *error)
@@ -160,7 +160,7 @@ pub struct AzureEndpointProvider;
 
 impl AzureEndpointProvider {
     /// Returns `true` if the URL matches the configured Azure endpoint.
-    pub fn is_azure_endpoint(url: &Url, preview: Preview) -> Result<bool> {
+    pub fn is_azure_endpoint(url: &SafeUrl, preview: Preview) -> Result<bool> {
         if let Some(azure_endpoint_url) = AZURE_ENDPOINT_URL
             .as_ref()
             .map_err(|error| *error)
@@ -203,7 +203,7 @@ fn endpoint_url(env_var: &str) -> Result<Option<SafeUrl>, ParseError> {
 ///
 /// The URL must be in the same realm, or a subdomain of the endpoint realm, and must be under the
 /// endpoint path using complete path-segment prefix matching.
-fn is_endpoint_url(url: &Url, endpoint_url: &SafeUrl) -> bool {
+fn is_endpoint_url(url: &SafeUrl, endpoint_url: &SafeUrl) -> bool {
     let endpoint_realm = RealmRef::from(endpoint_url);
     let realm = RealmRef::from(url);
     if realm != endpoint_realm && !realm.is_subdomain_of(endpoint_realm) {
@@ -227,7 +227,7 @@ mod tests {
             "https://example.com/private/packages/anyio.whl",
         ] {
             assert!(
-                is_endpoint_url(&Url::parse(url).unwrap(), &endpoint_url),
+                is_endpoint_url(&SafeUrl::parse(url).unwrap(), &endpoint_url),
                 "Failed to match endpoint URL prefix: {url}"
             );
         }
@@ -243,7 +243,7 @@ mod tests {
             "https://example.com/privatebucket",
         ] {
             assert!(
-                !is_endpoint_url(&Url::parse(url).unwrap(), &endpoint_url),
+                !is_endpoint_url(&SafeUrl::parse(url).unwrap(), &endpoint_url),
                 "Should not match URL outside endpoint path: {url}"
             );
         }
@@ -254,11 +254,11 @@ mod tests {
         let endpoint_url = SafeUrl::parse("https://example.com/private").unwrap();
 
         assert!(is_endpoint_url(
-            &Url::parse("https://bucket.example.com/private/package.whl").unwrap(),
+            &SafeUrl::parse("https://bucket.example.com/private/package.whl").unwrap(),
             &endpoint_url
         ));
         assert!(!is_endpoint_url(
-            &Url::parse("https://bucket.example.com/public/package.whl").unwrap(),
+            &SafeUrl::parse("https://bucket.example.com/public/package.whl").unwrap(),
             &endpoint_url
         ));
     }
@@ -272,7 +272,7 @@ mod tests {
             "https://bucket.example.com/package.whl",
         ] {
             assert!(
-                is_endpoint_url(&Url::parse(url).unwrap(), &endpoint_url),
+                is_endpoint_url(&SafeUrl::parse(url).unwrap(), &endpoint_url),
                 "Failed to match URL under endpoint root: {url}"
             );
         }

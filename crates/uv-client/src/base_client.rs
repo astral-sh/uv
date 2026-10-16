@@ -1050,7 +1050,7 @@ fn request_into_redirect(
     let mut headers = HeaderMap::new();
     std::mem::swap(req.headers_mut(), &mut headers);
 
-    let cross_realm = RealmRef::from(&*redirect_url) != RealmRef::from(&*original_req_url);
+    let cross_realm = RealmRef::from(&redirect_url) != RealmRef::from(&original_req_url);
     if cross_realm {
         if cross_origin_credentials_policy == CrossOriginCredentialsPolicy::Secure {
             debug!("Received a cross-origin redirect. Removing sensitive headers.");

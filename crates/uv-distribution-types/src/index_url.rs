@@ -301,7 +301,7 @@ impl IndexLocations {
 
 /// Returns `true` if two [`IndexUrl`]s refer to the same index.
 fn is_same_index(a: &IndexUrl, b: &IndexUrl) -> bool {
-    RealmRef::from(&**b.url()) == RealmRef::from(&**a.url())
+    RealmRef::from(b.url()) == RealmRef::from(a.url())
         && CanonicalUrl::new(a.url().clone()) == CanonicalUrl::new(b.url().clone())
 }
 
