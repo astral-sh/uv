@@ -14,15 +14,12 @@ use crate::{Error, InstallName, SigningIdentifier};
 pub(crate) struct Layout<'a> {
     image: &'a [u8],
     commands: Vec<Command<'a>>,
-    install_id: usize,
     command_end: usize,
     data_start: usize,
     code_limit: usize,
     signature: Option<&'a [u8]>,
-    signature_command: Option<usize>,
     text: Segment<'a>,
-    linkedit: Segment<'a>,
-    linkedit_index: usize,
+    linkedit: Linkedit<'a>,
     info_plist: Option<&'a [u8]>,
     architecture: Architecture,
 }
@@ -69,9 +66,8 @@ impl<'a> Layout<'a> {
             return Err(Error::Malformed("load commands do not fill sizeofcmds"));
         }
 
-        let mut install_id = None;
+        let mut has_install_id = false;
         let mut signature = None;
-        let mut signature_command = None;
         let mut text = None;
         let mut linkedit = None;
         let mut info_plist = None;
@@ -85,22 +81,24 @@ impl<'a> Layout<'a> {
         for (index, command) in commands.iter().enumerate() {
             match command {
                 Command::InstallId(_) => {
-                    if install_id.replace(index).is_some() {
+                    if has_install_id {
                         return Err(Error::Malformed("invalid or duplicate LC_ID_DYLIB"));
                     }
+                    has_install_id = true;
                 }
 
                 Command::CodeSignature(signature_data) => {
                     let data = signature_data.file_range()?;
-                    if signature_command.replace(index).is_some() {
+                    if signature.is_some() {
                         return Err(Error::Malformed("invalid or duplicate LC_CODE_SIGNATURE"));
                     }
-
-                    if !data.is_empty() {
-                        let offset = usize::try_from(data.start)?;
-                        let size = usize::try_from(data.end - data.start)?;
-                        signature = Some((offset, slice(image, offset, size)?));
-                    }
+                    let offset = usize::try_from(data.start)?;
+                    let bytes = if data.is_empty() {
+                        &[]
+                    } else {
+                        slice(image, offset, usize::try_from(data.end - data.start)?)?
+                    };
+                    signature = Some((offset, bytes));
                 }
 
                 Command::DeploymentTarget(_) => {
@@ -145,7 +143,12 @@ impl<'a> Layout<'a> {
                     }
 
                     if segment.segname == SEG_LINKEDIT {
-                        if linkedit.replace((index, segment)).is_some()
+                        if linkedit
+                            .replace(Linkedit {
+                                command_index: index,
+                                segment,
+                            })
+                            .is_some()
                             || !segment.sections.is_empty()
                         {
                             return Err(Error::Malformed(
@@ -216,10 +219,11 @@ impl<'a> Layout<'a> {
             }
         }
 
-        let install_id = install_id.ok_or(Error::Malformed("missing LC_ID_DYLIB"))?;
+        if !has_install_id {
+            return Err(Error::Malformed("missing LC_ID_DYLIB"));
+        }
         let text = text.ok_or(Error::Malformed("missing __TEXT segment"))?;
-        let (linkedit_index, linkedit) =
-            linkedit.ok_or(Error::Malformed("missing __LINKEDIT segment"))?;
+        let linkedit = linkedit.ok_or(Error::Malformed("missing __LINKEDIT segment"))?;
 
         virtual_segments.sort_unstable();
         if virtual_segments
@@ -227,22 +231,23 @@ impl<'a> Layout<'a> {
             .any(|pair| pair[0].1 > pair[1].0)
             || virtual_segments
                 .last()
-                .is_none_or(|segment| segment.0 != linkedit.vmaddr)
+                .is_none_or(|segment| segment.0 != linkedit.segment.vmaddr)
         {
             return Err(Error::Unsupported(
                 "overlapping virtual segments or nonterminal __LINKEDIT",
             ));
         }
 
-        if usize::try_from(linkedit.fileoff + linkedit.filesize)? != image.len() {
+        if usize::try_from(linkedit.segment.fileoff + linkedit.segment.filesize)? != image.len() {
             return Err(Error::Unsupported(
                 "__LINKEDIT is not the final file segment",
             ));
         }
 
+        let signature = signature.filter(|(_, data)| !data.is_empty());
         let code_limit = if let Some((offset, data)) = signature {
             let padding = &image[offset + data.len()..];
-            if offset < usize::try_from(linkedit.fileoff)?
+            if offset < usize::try_from(linkedit.segment.fileoff)?
                 || !offset.is_multiple_of(16)
                 || padding.len() > 15
                 || padding.iter().any(|byte| *byte != 0)
@@ -276,42 +281,32 @@ impl<'a> Layout<'a> {
         Ok(Self {
             image,
             commands,
-            install_id,
             command_end,
             data_start,
             code_limit,
             signature: signature.map(|(_, data)| data),
-            signature_command,
             text,
             linkedit,
-            linkedit_index,
             info_plist,
             architecture,
         })
     }
 
-    pub(crate) fn replace_install_name(&self, name: InstallName<'_>) -> Result<Vec<u8>, Error> {
-        let commands = self.load_commands(Some(name))?;
-        self.replace_commands(commands.bytes, self.image.len(), self.image.len())
-    }
-
     /// Serialize load commands and record their new offsets before copying any file data.
-    fn load_commands(&self, name: Option<InstallName<'_>>) -> Result<LoadCommands, Error> {
+    fn load_commands(&self, name: InstallName<'_>) -> Result<LoadCommands, Error> {
         let mut bytes = self.image[..HEADER_SIZE].to_vec();
-        let mut linkedit = HEADER_SIZE;
+        let mut linkedit = None;
         let mut signature = None;
 
         for (index, command) in self.commands.iter().enumerate() {
-            if index == self.linkedit_index {
-                linkedit = bytes.len();
+            if index == self.linkedit.command_index {
+                linkedit = Some(bytes.len());
             }
-            if Some(index) == self.signature_command {
+            if let Command::CodeSignature(_) = command {
                 signature = Some(bytes.len());
             }
 
-            if index == self.install_id
-                && let Some(name) = name
-            {
+            if let Command::InstallId(data) = command {
                 let name = name.as_c_str().to_bytes_with_nul();
                 let size = name
                     .len()
@@ -321,7 +316,7 @@ impl<'a> Layout<'a> {
                 let size_u32 = u32::try_from(size)?;
 
                 let offset = bytes.len();
-                bytes.extend_from_slice(&command.as_bytes()[..24]);
+                bytes.extend_from_slice(&data[..24]);
                 bytes[offset + 4..offset + 8].copy_from_slice(&size_u32.to_le_bytes());
                 bytes[offset + 8..offset + 12].copy_from_slice(&24u32.to_le_bytes());
                 bytes.extend_from_slice(name);
@@ -331,19 +326,26 @@ impl<'a> Layout<'a> {
             }
         }
 
+        let signature = if let Some(offset) = signature {
+            offset
+        } else {
+            let offset = bytes.len();
+            bytes.resize(offset + 16, 0);
+            bytes[offset..offset + 4].copy_from_slice(&u32::to_le_bytes(LC_CODE_SIGNATURE));
+            bytes[offset + 4..offset + 8].copy_from_slice(&u32::to_le_bytes(16));
+            bytes[16..20]
+                .copy_from_slice(&u32::to_le_bytes(u32::try_from(self.commands.len() + 1)?));
+            offset
+        };
+
         Ok(LoadCommands {
             bytes,
-            linkedit,
+            linkedit: linkedit.ok_or(Error::Malformed("missing __LINKEDIT segment"))?,
             signature,
         })
     }
 
-    fn replace_commands(
-        &self,
-        mut output: Vec<u8>,
-        image_end: usize,
-        capacity: usize,
-    ) -> Result<Vec<u8>, Error> {
+    fn replace_commands(&self, mut output: Vec<u8>, capacity: usize) -> Result<Vec<u8>, Error> {
         if output.len() > self.data_start || output.len() > self.code_limit {
             return Err(Error::InsufficientHeaderPadding);
         }
@@ -361,32 +363,20 @@ impl<'a> Layout<'a> {
         // Both the copied data and the new signature fit without reallocating the image.
         output.reserve(capacity - output.len());
         output.resize(output.len().max(self.command_end), 0);
-        output.extend_from_slice(&self.image[output.len()..image_end]);
+        output.extend_from_slice(&self.image[output.len()..self.code_limit]);
 
         Ok(output)
     }
 
-    pub(crate) fn adhoc_sign(
+    pub(crate) fn set_install_name(
         &self,
-        name: Option<InstallName<'_>>,
+        name: InstallName<'_>,
         identifier: SigningIdentifier<'_>,
     ) -> Result<Vec<u8>, Error> {
         let metadata =
             Metadata::read(self.signature, identifier, self.code_limit, self.info_plist)?;
 
-        let mut commands = self.load_commands(name)?;
-        let signature_offset = if let Some(offset) = commands.signature {
-            offset
-        } else {
-            let offset = commands.bytes.len();
-            commands.bytes.resize(offset + 16, 0);
-            commands.bytes[offset..offset + 4]
-                .copy_from_slice(&u32::to_le_bytes(LC_CODE_SIGNATURE));
-            commands.bytes[offset + 4..offset + 8].copy_from_slice(&u32::to_le_bytes(16));
-            commands.bytes[16..20]
-                .copy_from_slice(&u32::to_le_bytes(u32::try_from(self.commands.len() + 1)?));
-            offset
-        };
+        let commands = self.load_commands(name)?;
 
         let signature_start = self
             .code_limit
@@ -409,7 +399,8 @@ impl<'a> Layout<'a> {
 
         // Finalize the load commands before hashing the image they describe.
         let linkedit_offset = commands.linkedit;
-        let mut output = self.replace_commands(commands.bytes, self.code_limit, final_size)?;
+        let signature_offset = commands.signature;
+        let mut output = self.replace_commands(commands.bytes, final_size)?;
         output.resize(signature_start, 0);
         output[signature_offset + 8..signature_offset + 12]
             .copy_from_slice(&u32::to_le_bytes(u32::try_from(signature_start)?));
@@ -417,7 +408,7 @@ impl<'a> Layout<'a> {
             .copy_from_slice(&u32::to_le_bytes(u32::try_from(signature_size)?));
 
         let linkedit_size = final_size
-            .checked_sub(usize::try_from(self.linkedit.fileoff)?)
+            .checked_sub(usize::try_from(self.linkedit.segment.fileoff)?)
             .ok_or(Error::Malformed("invalid __LINKEDIT offset"))?;
         output[linkedit_offset + 48..linkedit_offset + 56]
             .copy_from_slice(&u64::to_le_bytes(linkedit_size as u64));
@@ -427,19 +418,20 @@ impl<'a> Layout<'a> {
             Architecture::Arm64 => 16384,
             Architecture::X86_64 => 4096,
         };
-        let virtual_size = self.linkedit.vmsize.max(
+        let virtual_size = self.linkedit.segment.vmsize.max(
             linkedit_size
                 .checked_next_multiple_of(segment_alignment)
                 .ok_or(Error::TooLarge)? as u64,
         );
         self.linkedit
+            .segment
             .vmaddr
             .checked_add(virtual_size)
             .ok_or(Error::TooLarge)?;
         output[linkedit_offset + 32..linkedit_offset + 40]
             .copy_from_slice(&u64::to_le_bytes(virtual_size));
 
-        output.extend(signature.sign(&output)?);
+        signature.sign(&mut output)?;
         output.resize(final_size, 0);
 
         Ok(output)
@@ -450,7 +442,12 @@ impl<'a> Layout<'a> {
 struct LoadCommands {
     bytes: Vec<u8>,
     linkedit: usize,
-    signature: Option<usize>,
+    signature: usize,
+}
+
+struct Linkedit<'a> {
+    command_index: usize,
+    segment: Segment<'a>,
 }
 
 enum Architecture {

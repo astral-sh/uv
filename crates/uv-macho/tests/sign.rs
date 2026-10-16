@@ -12,9 +12,7 @@ use sha2::{Digest, Sha256};
 
 use common::{commands, install_name, name_capacity, sections};
 
-use uv_macho::{
-    Error, InstallName, SigningIdentifier, adhoc_sign, replace_install_name, set_install_name,
-};
+use uv_macho::{Error, InstallName, SigningIdentifier, set_install_name};
 
 const ARM64: &[u8] = include_bytes!("fixtures/arm64.dylib");
 const X86_64: &[u8] = include_bytes!("fixtures/x86_64.dylib");
@@ -91,70 +89,152 @@ fn verify_hashes(image: &[u8]) -> Result<()> {
 }
 
 #[test]
-fn edit_and_sign() -> Result<()> {
+fn edit_and_sign_arm64() -> Result<()> {
     let temporary = tempfile::tempdir()?;
     // A large identifier forces __LINKEDIT to grow by multiple virtual pages.
     let identifier = CString::new(vec![b'x'; 25000])?;
-    let mut summary = Vec::new();
-
-    for (architecture, fixture) in [("arm64", ARM64), ("x86_64", X86_64), ("signed", SIGNED)] {
-        let path = temporary.path().join(format!("{architecture}.dylib"));
-        let name = CString::new(path.as_os_str().as_encoded_bytes())?;
-        let output = set_install_name(
-            fixture,
+    let path = temporary.path().join("arm64.dylib");
+    let name = CString::new(path.as_os_str().as_encoded_bytes())?;
+    let output = set_install_name(
+        ARM64,
+        InstallName::new(&name)?,
+        SigningIdentifier::new(&identifier)?,
+    )?;
+    assert_eq!(install_name(output.as_bytes())?, name.as_bytes());
+    assert_eq!(sections(output.as_bytes())?, sections(ARM64)?);
+    verify_hashes(output.as_bytes())?;
+    assert_eq!(
+        set_install_name(
+            output.as_bytes(),
             InstallName::new(&name)?,
-            SigningIdentifier::new(&identifier)?,
-        )?;
-        assert_eq!(install_name(output.as_bytes())?, name.as_bytes());
-        assert_eq!(sections(output.as_bytes())?, sections(fixture)?);
-        verify_hashes(output.as_bytes())?;
-        assert_eq!(
-            replace_install_name(fixture, InstallName::new(&name)?)?
-                .adhoc_sign(SigningIdentifier::new(&identifier)?)?,
-            output
-        );
-        assert_eq!(
-            adhoc_sign(output.as_bytes(), SigningIdentifier::new(c"ignored")?)?,
-            output
-        );
+            SigningIdentifier::new(c"ignored")?,
+        )?,
+        output
+    );
 
-        #[cfg(target_os = "macos")]
-        {
-            fs_err::write(&path, output.as_bytes())?;
-            Command::new("/usr/bin/otool")
-                .arg("-D")
-                .arg(&path)
-                .assert()
-                .success()
-                .stdout(format!("{}:\n{}\n", path.display(), path.display()));
-            Command::new("/usr/bin/codesign")
-                .args(["--verify", "--strict"])
-                .arg(&path)
-                .assert()
-                .success();
-        }
-
-        let (_, blobs) = signature(output.as_bytes())?;
-        summary.push(format!(
-            "{architecture}: {:?}",
-            blobs.keys().collect::<Vec<_>>()
-        ));
+    #[cfg(target_os = "macos")]
+    {
+        fs_err::write(&path, output.as_bytes())?;
+        Command::new("/usr/bin/otool")
+            .arg("-D")
+            .arg(&path)
+            .assert()
+            .success()
+            .stdout(format!("{}:\n{}\n", path.display(), path.display()));
+        Command::new("/usr/bin/codesign")
+            .args(["--verify", "--strict"])
+            .arg(&path)
+            .assert()
+            .success();
     }
 
-    insta::assert_snapshot!(summary.join("\n"), @r"
-    arm64: [0, 2, 65536]
-    x86_64: [0, 2, 65536]
-    signed: [0, 2, 5, 7, 65536]
+    let (_, blobs) = signature(output.as_bytes())?;
+    insta::assert_debug_snapshot!(blobs.keys().collect::<Vec<_>>(), @r"
+    [
+        0,
+        2,
+        65536,
+    ]
     ");
 
     Ok(())
 }
 
 #[test]
+fn edit_and_sign_x86_64() -> Result<()> {
+    let identifier = CString::new(vec![b'x'; 25000])?;
+    let name = c"/a/longer/install/directory/libfixture.dylib";
+    let output = set_install_name(
+        X86_64,
+        InstallName::new(name)?,
+        SigningIdentifier::new(&identifier)?,
+    )?;
+    assert_eq!(install_name(output.as_bytes())?, name.to_bytes());
+    assert_eq!(sections(output.as_bytes())?, sections(X86_64)?);
+    verify_hashes(output.as_bytes())?;
+
+    let (_, blobs) = signature(output.as_bytes())?;
+    insta::assert_debug_snapshot!(blobs.keys().collect::<Vec<_>>(), @r"
+    [
+        0,
+        2,
+        65536,
+    ]
+    ");
+    Ok(())
+}
+
+#[test]
+fn short_install_name() -> Result<()> {
+    let output = set_install_name(
+        ARM64,
+        InstallName::new(c"x")?,
+        SigningIdentifier::new(c"fixture")?,
+    )?;
+    assert_eq!(install_name(output.as_bytes())?, b"x");
+    assert_eq!(sections(output.as_bytes())?, sections(ARM64)?);
+    Ok(())
+}
+
+#[test]
+fn non_utf8_install_name() -> Result<()> {
+    let name = c"/non-utf8-\xff/libfixture.dylib";
+    let output = set_install_name(
+        ARM64,
+        InstallName::new(name)?,
+        SigningIdentifier::new(c"fixture")?,
+    )?;
+    assert_eq!(install_name(output.as_bytes())?, name.to_bytes());
+    Ok(())
+}
+
+#[test]
+fn empty_signature_command() -> Result<()> {
+    let mut image = SIGNED.to_vec();
+    let offset = commands(&image)?
+        .into_iter()
+        .find(|command| command.kind == 0x1d)
+        .context("LC_CODE_SIGNATURE")?
+        .offset;
+    image[offset + 8..offset + 12].copy_from_slice(&u32::MAX.to_le_bytes());
+    image[offset + 12..offset + 16].copy_from_slice(&0u32.to_le_bytes());
+
+    let output = set_install_name(
+        &image,
+        InstallName::new(c"fixture.dylib")?,
+        SigningIdentifier::new(c"fixture")?,
+    )?;
+    verify_hashes(output.as_bytes())?;
+    assert_eq!(
+        commands(output.as_bytes())?
+            .iter()
+            .filter(|command| command.kind == 0x1d)
+            .count(),
+        1
+    );
+    Ok(())
+}
+
+#[test]
 fn preserve_metadata() -> Result<()> {
-    let output = adhoc_sign(SIGNED, SigningIdentifier::new(c"ignored")?)?;
+    let output = set_install_name(
+        SIGNED,
+        InstallName::new(c"fixture.dylib")?,
+        SigningIdentifier::new(c"ignored")?,
+    )?;
     let (_, before) = signature(SIGNED)?;
     let (_, after) = signature(output.as_bytes())?;
+    assert_eq!(sections(output.as_bytes())?, sections(SIGNED)?);
+    verify_hashes(output.as_bytes())?;
+    insta::assert_debug_snapshot!(after.keys().collect::<Vec<_>>(), @r"
+    [
+        0,
+        2,
+        5,
+        7,
+        65536,
+    ]
+    ");
 
     for slot in [2, 5, 7] {
         assert_eq!(
@@ -359,7 +439,11 @@ fn resign_legacy_hashes() -> Result<()> {
         2
     );
 
-    let output = adhoc_sign(&image, SigningIdentifier::new(c"ignored")?)?;
+    let output = set_install_name(
+        &image,
+        InstallName::new(c"legacy.dylib")?,
+        SigningIdentifier::new(c"ignored")?,
+    )?;
     verify_hashes(output.as_bytes())?;
 
     let (_, after) = signature(output.as_bytes())?;
@@ -384,7 +468,11 @@ fn resign_legacy_hashes() -> Result<()> {
 #[test]
 fn non_utf8_identifier() -> Result<()> {
     let identifier = c"fixture-\xff";
-    let output = adhoc_sign(ARM64, SigningIdentifier::new(identifier)?)?;
+    let output = set_install_name(
+        ARM64,
+        InstallName::new(c"fixture.dylib")?,
+        SigningIdentifier::new(identifier)?,
+    )?;
 
     let (_, blobs) = signature(output.as_bytes())?;
     let directory = blobs.get(&0).context("primary CodeDirectory")?;
