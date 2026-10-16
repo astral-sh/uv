@@ -82,9 +82,9 @@ pub struct Metadata {
     requires_python: RequiresPython,
     /// Info about conflicting packages
     conflicts: MetadataConflicts,
-    /// A mapping from importable module names to the package nodes that provide them
+    /// Information about importable modules, keyed by module name.
     #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
-    module_owners: BTreeMap<ModuleName, Vec<MetadataModuleOwner>>,
+    modules: BTreeMap<ModuleName, MetadataModule>,
     /// An index of which nodes are workspace members
     ///
     /// These entries are often what you should use as the entry-points into the `resolve` graph.
@@ -246,6 +246,13 @@ impl MetadataWorkspaceMember {
             .to_flat(),
         })
     }
+}
+
+/// Information about an importable module.
+#[derive(Debug, serde::Serialize)]
+struct MetadataModule {
+    /// Installed distributions that provide this module.
+    owners: Vec<MetadataModuleOwner>,
 }
 
 /// An installed distribution that provides an importable module.
@@ -1468,7 +1475,7 @@ impl Metadata {
             environment: None,
             script,
             workspace: workspace_metadata,
-            module_owners: BTreeMap::new(),
+            modules: BTreeMap::new(),
             workspace_root,
             requires_python: lock.requires_python.clone(),
             members,
@@ -1516,8 +1523,8 @@ impl Metadata {
     }
 
     #[must_use]
-    pub fn with_module_owners(mut self, module_owners: BTreeMap<ModuleName, Vec<String>>) -> Self {
-        self.module_owners = module_owners
+    pub fn with_modules(mut self, module_owners: BTreeMap<ModuleName, Vec<String>>) -> Self {
+        self.modules = module_owners
             .into_iter()
             .filter_map(|(module, owners)| {
                 let owners = owners
@@ -1529,7 +1536,7 @@ impl Metadata {
                     })
                     .map(|package_id| MetadataModuleOwner { package_id })
                     .collect::<Vec<_>>();
-                (!owners.is_empty()).then_some((module, owners))
+                (!owners.is_empty()).then_some((module, MetadataModule { owners }))
             })
             .collect();
         self
