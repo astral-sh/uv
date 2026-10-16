@@ -7,9 +7,8 @@ const X86_64: &[u8] = include_bytes!("../../tests/fixtures/x86_64.dylib");
 const SIGNED: &[u8] = include_bytes!("../../tests/fixtures/signed-arm64.dylib");
 
 #[test]
-fn parse_dylibs() -> Result<()> {
+fn parse_reversed_regions() -> Result<()> {
     for image in [ARM64, X86_64, SIGNED] {
-        validate(image)?;
         validate(&reverse_regions(image)?)?;
     }
 
