@@ -1,13 +1,12 @@
-//! Editing support for thin 64-bit macOS Mach-O dylibs.
+//! Validation for thin 64-bit macOS Mach-O dylibs.
 
 use std::num::TryFromIntError;
 
-#[cfg(test)]
 mod bytes;
-#[cfg(test)]
 mod format;
-#[cfg(test)]
 mod macho;
+
+pub use macho::validate;
 
 /// An error validating a Mach-O image.
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]

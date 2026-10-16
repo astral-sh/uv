@@ -1,8 +1,6 @@
 use anyhow::Result;
 
-use crate::Error;
-
-use super::parse;
+use crate::{Error, validate};
 
 const ARM64: &[u8] = include_bytes!("../../tests/fixtures/arm64.dylib");
 const X86_64: &[u8] = include_bytes!("../../tests/fixtures/x86_64.dylib");
@@ -11,8 +9,8 @@ const SIGNED: &[u8] = include_bytes!("../../tests/fixtures/signed-arm64.dylib");
 #[test]
 fn parse_dylibs() -> Result<()> {
     for image in [ARM64, X86_64, SIGNED] {
-        parse(image)?;
-        parse(&reverse_regions(image)?)?;
+        validate(image)?;
+        validate(&reverse_regions(image)?)?;
     }
 
     Ok(())
@@ -105,12 +103,12 @@ fn malformed_inputs() {
     ] {
         let mut bytes = ARM64.to_vec();
         bytes[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
-        assert_eq!(parse(&bytes).err(), Some(expected), "{description}");
+        assert_eq!(validate(&bytes).err(), Some(expected), "{description}");
     }
 
     // Every truncated prefix must fail without panicking.
     for end in 0..SIGNED.len() {
-        assert!(parse(&SIGNED[..end]).is_err(), "truncated at {end}");
+        assert!(validate(&SIGNED[..end]).is_err(), "truncated at {end}");
     }
 }
 
@@ -203,20 +201,20 @@ fn command_boundaries() -> Result<()> {
     ] {
         let mut image = ARM64.to_vec();
         image[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
-        assert_eq!(parse(&image).err(), Some(expected), "{description}");
+        assert_eq!(validate(&image).err(), Some(expected), "{description}");
     }
 
     let mut image = ARM64.to_vec();
     image[install_id + 24..install_id + install_id_size as usize].fill(b'x');
     assert_eq!(
-        parse(&image).err(),
+        validate(&image).err(),
         Some(Error::Malformed("unterminated string"))
     );
 
     let mut image = ARM64.to_vec();
     // The first section's address plus its nonempty size must not wrap.
     image[136..144].copy_from_slice(&u64::MAX.to_le_bytes());
-    assert_eq!(parse(&image).err(), Some(Error::TooLarge));
+    assert_eq!(validate(&image).err(), Some(Error::TooLarge));
 
     // An empty table does not reference any bytes, even with an out-of-bounds offset.
     let mut image = ARM64.to_vec();
@@ -226,7 +224,7 @@ fn command_boundaries() -> Result<()> {
         0
     );
     image[dynamic_symbols + 32..dynamic_symbols + 36].copy_from_slice(&u32::MAX.to_le_bytes());
-    parse(&image)?;
+    validate(&image)?;
 
     Ok(())
 }
@@ -269,7 +267,7 @@ fn overlapping_file_regions() -> Result<()> {
 
             for image in [&image, &reversed] {
                 assert_eq!(
-                    parse(image).err(),
+                    validate(image).err(),
                     Some(Error::Malformed("overlapping file regions")),
                     "{description}"
                 );
