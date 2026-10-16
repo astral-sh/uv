@@ -22,6 +22,7 @@ use super::{Edges, InternerGuard, NodeId};
 pub(crate) enum Cover {
     False,
     True,
+    Guard(NodeId),
     Branches(Rc<[(NodeId, Self)]>),
 }
 
@@ -46,6 +47,10 @@ impl InternerGuard<'_> {
         if upper.is_true() {
             return (NodeId::TRUE, Cover::True);
         }
+        debug_assert!(
+            !upper.is_false() && !lower.is_true(),
+            "invalid ISOP interval: {lower:?}..{upper:?}"
+        );
         if let Some(result) = cache.get(&(lower, upper)) {
             return result.clone();
         }
@@ -58,7 +63,7 @@ impl InternerGuard<'_> {
                 .nodes()
                 .all(|child| child.is_true() || child.is_false())
         {
-            return (lower, Cover::Branches(vec![(lower, Cover::True)].into()));
+            return (lower, Cover::Guard(lower));
         }
 
         let cofactors = self.cover_cofactors(lower, upper);
