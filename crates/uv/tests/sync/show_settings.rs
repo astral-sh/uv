@@ -4030,6 +4030,7 @@ fn preview_features() {
     +            CheckCommand,
     +            PackagedInit,
     +            CentralizedProjectEnvs,
+    +            VenvRedirectFiles,
     +            ToolInstallLocks,
     +            WorkspaceListScripts,
     +            IndexHashAlgorithm,
