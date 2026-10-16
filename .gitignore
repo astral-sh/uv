@@ -57,7 +57,6 @@ profile.json.gz
 /agents/codex/*
 !/agents/codex/config.toml
 .codex/*
-!.codex/hooks.json
 !.codex/skills/
 .codex/skills/*
 !.codex/skills/load-github-action-thread/
