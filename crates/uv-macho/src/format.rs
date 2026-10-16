@@ -6,6 +6,7 @@
 //! <https://github.com/Homebrew/ruby-macho/blob/e106f7782df467357d0273c17aacd40df953de66/lib/macho/load_commands.rb>.
 
 use std::ffi::CStr;
+use std::ops::Range;
 
 use crate::Error;
 use crate::bytes::{array, slice};
@@ -13,6 +14,12 @@ use crate::bytes::{array, slice};
 pub(crate) const HEADER_SIZE: usize = 32;
 pub(crate) const SEGMENT_SIZE: usize = 72;
 pub(crate) const SECTION_SIZE: usize = 80;
+const NLIST_64_SIZE: u32 = 16;
+const DYLIB_TABLE_OF_CONTENTS_SIZE: u32 = 8;
+const DYLIB_MODULE_64_SIZE: u32 = 56;
+const DYLIB_REFERENCE_SIZE: u32 = 4;
+const INDIRECT_SYMBOL_SIZE: u32 = 4;
+const RELOCATION_INFO_SIZE: u32 = 8;
 pub(crate) const MH_MAGIC_64: u32 = 0xfeed_facf;
 pub(crate) const MH_DYLIB: u32 = 6;
 pub(crate) const CPU_TYPE_ARM64: u32 = 0x0100_000c;
@@ -81,46 +88,66 @@ impl Header {
 
 /// A bounded load command, retaining its original bytes for serialization.
 pub(crate) struct Command<'a> {
-    pub(crate) kind: u32,
+    pub(crate) kind: CommandKind,
     pub(crate) data: &'a [u8],
+}
+
+/// Categories of supported load commands used by the layout reader.
+pub(crate) enum CommandKind {
+    Segment,
+    InstallId,
+    CodeSignature,
+    MinimumVersion,
+    BuildVersion,
+    SymbolTable,
+    DynamicSymbolTable,
+    DyldInfo,
+    LinkeditData,
+    String,
+    NoFileData,
 }
 
 impl<'a> Command<'a> {
     pub(crate) fn parse(data: &'a [u8]) -> Result<Self, Error> {
-        let kind = u32::from_le_bytes(array(data, 0)?);
-        let size = match kind {
-            LC_SEGMENT_64 => SEGMENT_SIZE,
-            LC_SYMTAB | LC_UUID | LC_BUILD_VERSION => 24,
-            LC_DYSYMTAB => 80,
-            LC_DYLD_INFO | LC_DYLD_INFO_ONLY => 48,
-            LC_ROUTINES_64 => 72,
-            LC_CODE_SIGNATURE
-            | LC_SEGMENT_SPLIT_INFO
+        let raw_kind = u32::from_le_bytes(array(data, 0)?);
+        let (size, kind) = match raw_kind {
+            LC_SEGMENT_64 => (SEGMENT_SIZE, CommandKind::Segment),
+            LC_SYMTAB => (24, CommandKind::SymbolTable),
+            LC_DYSYMTAB => (80, CommandKind::DynamicSymbolTable),
+            LC_DYLD_INFO | LC_DYLD_INFO_ONLY => (48, CommandKind::DyldInfo),
+            LC_CODE_SIGNATURE => (16, CommandKind::CodeSignature),
+            LC_VERSION_MIN_MACOSX => (16, CommandKind::MinimumVersion),
+            LC_BUILD_VERSION => (24, CommandKind::BuildVersion),
+            LC_ID_DYLIB => (24, CommandKind::InstallId),
+            LC_SEGMENT_SPLIT_INFO
             | LC_FUNCTION_STARTS
             | LC_DATA_IN_CODE
             | LC_DYLIB_CODE_SIGN_DRS
             | LC_LINKER_OPTIMIZATION_HINT
             | LC_DYLD_EXPORTS_TRIE
-            | LC_DYLD_CHAINED_FIXUPS
-            | LC_VERSION_MIN_MACOSX
-            | LC_SOURCE_VERSION => 16,
-            LC_ID_DYLIB | LC_LOAD_DYLIB | LC_LOAD_WEAK_DYLIB | LC_REEXPORT_DYLIB
-            | LC_LOAD_UPWARD_DYLIB | LC_LAZY_LOAD_DYLIB => 24,
-            LC_RPATH | LC_SUB_FRAMEWORK | LC_SUB_UMBRELLA | LC_SUB_CLIENT | LC_SUB_LIBRARY => 12,
+            | LC_DYLD_CHAINED_FIXUPS => (16, CommandKind::LinkeditData),
+            LC_SOURCE_VERSION => (16, CommandKind::NoFileData),
+            LC_UUID => (24, CommandKind::NoFileData),
+            LC_LOAD_DYLIB | LC_LOAD_WEAK_DYLIB | LC_REEXPORT_DYLIB | LC_LOAD_UPWARD_DYLIB
+            | LC_LAZY_LOAD_DYLIB => (24, CommandKind::String),
+            LC_RPATH | LC_SUB_FRAMEWORK | LC_SUB_UMBRELLA | LC_SUB_CLIENT | LC_SUB_LIBRARY => {
+                (12, CommandKind::String)
+            }
+            LC_ROUTINES_64 => (72, CommandKind::NoFileData),
             _ => {
                 return Err(Error::UnsupportedValue {
                     field: "load command",
-                    value: u64::from(kind),
+                    value: u64::from(raw_kind),
                 });
             }
         };
         let header = slice(data, 0, size)?;
 
         match kind {
-            LC_SEGMENT_64 => {
+            CommandKind::Segment => {
                 // The section table is checked while reading the segment's sections.
             }
-            LC_BUILD_VERSION => {
+            CommandKind::BuildVersion => {
                 let tools_size = (u32::from_le_bytes(array(header, 20)?) as usize)
                     .checked_mul(8)
                     .ok_or(Error::TooLarge)?;
@@ -129,9 +156,7 @@ impl<'a> Command<'a> {
                     return Err(Error::Malformed("invalid build-tool table"));
                 }
             }
-            LC_ID_DYLIB | LC_LOAD_DYLIB | LC_LOAD_WEAK_DYLIB | LC_REEXPORT_DYLIB
-            | LC_LOAD_UPWARD_DYLIB | LC_LAZY_LOAD_DYLIB | LC_RPATH | LC_SUB_FRAMEWORK
-            | LC_SUB_UMBRELLA | LC_SUB_CLIENT | LC_SUB_LIBRARY => {
+            CommandKind::InstallId | CommandKind::String => {
                 let offset = u32::from_le_bytes(array(header, 8)?) as usize;
                 if offset < size {
                     return Err(Error::Malformed("invalid load-command string offset"));
@@ -142,7 +167,13 @@ impl<'a> Command<'a> {
                 CStr::from_bytes_until_nul(name)
                     .map_err(|_| Error::Malformed("unterminated string"))?;
             }
-            _ => {
+            CommandKind::CodeSignature
+            | CommandKind::MinimumVersion
+            | CommandKind::SymbolTable
+            | CommandKind::DynamicSymbolTable
+            | CommandKind::DyldInfo
+            | CommandKind::LinkeditData
+            | CommandKind::NoFileData => {
                 if data.len() != size {
                     return Err(Error::Malformed("invalid fixed-size load command"));
                 }
@@ -151,6 +182,50 @@ impl<'a> Command<'a> {
 
         Ok(Self { kind, data })
     }
+
+    pub(crate) fn symbol_tables(&self) -> Result<[Range<u64>; 2], Error> {
+        let symbols = file_table(self.data, 8, NLIST_64_SIZE)?;
+        let strings = file_table(self.data, 16, 1)?;
+        Ok([symbols, strings])
+    }
+
+    pub(crate) fn dynamic_symbol_tables(&self) -> Result<[Range<u64>; 6], Error> {
+        let table_of_contents = file_table(self.data, 32, DYLIB_TABLE_OF_CONTENTS_SIZE)?;
+        let modules = file_table(self.data, 40, DYLIB_MODULE_64_SIZE)?;
+        let references = file_table(self.data, 48, DYLIB_REFERENCE_SIZE)?;
+        let indirect_symbols = file_table(self.data, 56, INDIRECT_SYMBOL_SIZE)?;
+        let external_relocations = file_table(self.data, 64, RELOCATION_INFO_SIZE)?;
+        let local_relocations = file_table(self.data, 72, RELOCATION_INFO_SIZE)?;
+        Ok([
+            table_of_contents,
+            modules,
+            references,
+            indirect_symbols,
+            external_relocations,
+            local_relocations,
+        ])
+    }
+
+    pub(crate) fn dyld_info(&self) -> Result<[Range<u64>; 5], Error> {
+        let rebase = file_table(self.data, 8, 1)?;
+        let bind = file_table(self.data, 16, 1)?;
+        let weak_bind = file_table(self.data, 24, 1)?;
+        let lazy_bind = file_table(self.data, 32, 1)?;
+        let export = file_table(self.data, 40, 1)?;
+        Ok([rebase, bind, weak_bind, lazy_bind, export])
+    }
+
+    pub(crate) fn linkedit_data(&self) -> Result<Range<u64>, Error> {
+        file_table(self.data, 8, 1)
+    }
+}
+
+/// Read the file range of a table whose offset and entry count are adjacent fields.
+fn file_table(data: &[u8], field: usize, entry_size: u32) -> Result<Range<u64>, Error> {
+    let offset = u64::from(u32::from_le_bytes(array(data, field)?));
+    let count = u64::from(u32::from_le_bytes(array(data, field + 4)?));
+    // The offset, count, and entry size are all u32, so the end offset fits in u64.
+    Ok(offset..offset + count * u64::from(entry_size))
 }
 
 /// A segment header and its complete table of fixed-size section records.
@@ -193,8 +268,7 @@ pub(crate) struct Section {
     pub(crate) addr: u64,
     pub(crate) size: u64,
     pub(crate) offset: u32,
-    pub(crate) reloff: u32,
-    pub(crate) nreloc: u32,
+    pub(crate) relocations: Range<u64>,
     pub(crate) flags: u32,
 }
 
@@ -206,8 +280,7 @@ impl Section {
             addr: u64::from_le_bytes(array(data, 32)?),
             size: u64::from_le_bytes(array(data, 40)?),
             offset: u32::from_le_bytes(array(data, 48)?),
-            reloff: u32::from_le_bytes(array(data, 56)?),
-            nreloc: u32::from_le_bytes(array(data, 60)?),
+            relocations: file_table(data, 56, RELOCATION_INFO_SIZE)?,
             flags: u32::from_le_bytes(array(data, 64)?),
         })
     }
