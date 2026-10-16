@@ -98,22 +98,29 @@ impl ActivationGraph {
                 requested.insert(item, MarkerTree::FALSE);
             }
         }
+        let has_symbolic_guards = self.graph.edge_weights().any(|marker| {
+            let mut symbolic = false;
+            marker.visit_extras(|_, _| symbolic = true);
+            symbolic
+        });
         let mut variables = Vec::new();
-        for item in requested.keys() {
-            conflict_variable(item).visit_extras(|_, extra| {
-                variables.push((extra.clone(), *item));
-            });
-        }
-        let names: FxHashSet<_> = variables.iter().map(|(name, _)| name).collect();
-        for edge in self.graph.edge_weights() {
-            let mut unknown = None;
-            edge.visit_extras(|_, extra| {
-                if !names.contains(extra) {
-                    unknown = Some(extra.clone());
+        if has_symbolic_guards {
+            for item in requested.keys() {
+                conflict_variable(item).visit_extras(|_, extra| {
+                    variables.push((extra.clone(), *item));
+                });
+            }
+            let names: FxHashSet<_> = variables.iter().map(|(name, _)| name).collect();
+            for edge in self.graph.edge_weights() {
+                let mut unknown = None;
+                edge.visit_extras(|_, extra| {
+                    if !names.contains(extra) {
+                        unknown = Some(extra.clone());
+                    }
+                });
+                if let Some(extra) = unknown {
+                    return Err(SelectionError::UnknownConflictItem(extra));
                 }
-            });
-            if let Some(extra) = unknown {
-                return Err(SelectionError::UnknownConflictItem(extra));
             }
         }
 
@@ -146,26 +153,34 @@ impl ActivationGraph {
 
         // Merge all paths before deriving activations: a requirement shared by every version
         // is justified without first choosing a version, even when the choice needs that extra.
+        // Without activation-dependent guards, reachability already gives the grounded requests.
         let mut justified: BTreeMap<_, _> = requested
-            .keys()
-            .map(|item| (*item, MarkerTree::FALSE))
+            .iter()
+            .map(|(item, condition)| {
+                (
+                    *item,
+                    if variables.is_empty() {
+                        *condition
+                    } else {
+                        MarkerTree::FALSE
+                    },
+                )
+            })
             .collect();
-        loop {
+        let mut changed = !variables.is_empty();
+        while changed {
             let bounds: Vec<_> = variables
                 .iter()
                 .map(|(_, item)| (justified[item], conflict_variable(item)))
                 .collect();
             let mut cache = FxHashMap::default();
-            let mut changed = false;
+            changed = false;
             for (item, condition) in &requested {
                 let marker = supported_guard(*condition, &bounds, 0, &mut cache);
                 let existing = justified.entry(item).or_insert(MarkerTree::FALSE);
                 let combined = existing.or(marker);
                 changed |= combined != *existing;
                 *existing = combined;
-            }
-            if !changed {
-                break;
             }
         }
 
@@ -190,6 +205,9 @@ impl ActivationGraph {
             .collect();
         let mut projected = FxHashMap::default();
         let mut project = |marker: MarkerTree| {
+            if variables.is_empty() {
+                return marker;
+            }
             *projected
                 .entry(marker)
                 .or_insert_with(|| marker.resolve_extras(substitutions.iter().cloned()))
@@ -199,7 +217,7 @@ impl ActivationGraph {
         }
         let mut valid = environment;
         for node in self.graph.node_indices() {
-            if self.graph[node].requires_choice {
+            if self.graph[node].requires_choice && !reachability[node.index()].is_false() {
                 let mut covered = MarkerTree::FALSE;
                 let mut overlap = MarkerTree::FALSE;
                 for edge in self.graph.edges(node) {

@@ -1,8 +1,8 @@
 //! Compare complete lock-to-selection and export operations in an isolated process.
 //!
 //! The experimental representation consists of a compact lock and a serialized request graph.
-//! Both files count toward its size and are parsed inside the timed operation. Production
-//! materialization and requirements formatting are shared by both paths.
+//! Both files count toward its size and are parsed inside the timed operation. Package construction
+//! and requirements formatting use the same production helpers in both paths.
 
 // Match the allocator used by the CLI and the operation benchmarks.
 extern crate uv_performance_memory_allocator;
@@ -13,19 +13,18 @@ use std::hint::black_box;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
+use petgraph::Graph;
 use petgraph::graph::NodeIndex;
 use petgraph::visit::EdgeRef;
 use serde::{Deserialize, Serialize};
 use uv_configuration::{
     BuildOptions, DependencyGroups, EditableMode, ExtrasSpecification, InstallOptions,
 };
-use uv_distribution_types::{Node, Resolution, SimplifiedMarkerTree};
+use uv_distribution_types::{Edge, Node, Resolution, SimplifiedMarkerTree};
 use uv_normalize::{DefaultExtras, DefaultGroups, ExtraName, GroupName, PackageName};
 use uv_pep508::{MarkerEnvironment, MarkerEnvironmentBuilder, MarkerTree};
 use uv_platform_tags::{Arch, Os, Platform, Tags, TagsOptions};
-use uv_pypi_types::{
-    ConflictItem, ConflictKind, ConflictSet, Conflicts, ResolverMarkerEnvironment,
-};
+use uv_pypi_types::{ConflictItem, ConflictKind, ConflictSet, ResolverMarkerEnvironment};
 use uv_resolver_types::selection::{ActivationGraph, ActivationNode, SelectionError};
 use uv_resolver_types::{ConflictMarker, UniversalMarker};
 
@@ -168,13 +167,13 @@ impl RequestGraph {
         }
     }
 
-    /// Validate the requested roots, then eliminate conflict variables from installation edges.
-    fn project(
+    /// Validate requested roots and retain their package-section reachability for materialization.
+    fn select(
         self,
-        mut lock: Lock,
+        lock: &Lock,
         case: &Case,
-        concrete: Option<MarkerTree>,
-    ) -> Result<Lock, String> {
+        concrete: Option<&ResolverMarkerEnvironment>,
+    ) -> Result<SelectedRequests, String> {
         let mut graph = ActivationGraph::default();
         for (requests, requires_choice) in self.nodes {
             graph.graph.add_node(ActivationNode {
@@ -189,7 +188,9 @@ impl RequestGraph {
             graph.graph.add_edge(
                 NodeIndex::new(source),
                 NodeIndex::new(target),
-                concrete.map_or(marker, |environment| marker.restrict(environment)),
+                concrete.map_or(marker, |environment| {
+                    marker.simplify_environment(environment)
+                }),
             );
         }
         let roots = self.sections.iter().filter_map(|(package, section, node)| {
@@ -211,40 +212,148 @@ impl RequestGraph {
             .select(roots, environment, &lock.conflicts)
             .map_err(selection_error)?;
         let mut activated = BTreeMap::new();
-        for node in graph.graph.node_indices() {
-            for item in &graph.graph[node].requests {
+        if concrete.is_some() {
+            for node in graph.graph.node_indices() {
                 let marker = selected.marker(node);
-                UniversalMarker::new(MarkerTree::TRUE, ConflictMarker::from_conflict_item(item))
+                if marker.is_false() {
+                    continue;
+                }
+                for item in &graph.graph[node].requests {
+                    UniversalMarker::new(
+                        MarkerTree::TRUE,
+                        ConflictMarker::from_conflict_item(item),
+                    )
                     .combined()
                     .visit_extras(|_, name| {
                         let condition = activated.entry(name.clone()).or_insert(MarkerTree::FALSE);
                         *condition = condition.or(marker);
                     });
-            }
-        }
-        for package in &mut lock.packages {
-            for dependencies in std::iter::once(&mut package.dependencies)
-                .chain(package.optional_dependencies.values_mut())
-                .chain(package.dependency_groups.values_mut())
-            {
-                for dependency in dependencies.iter_mut() {
-                    let marker = dependency.complexified_marker.combined();
-                    let marker =
-                        concrete.map_or(marker, |environment| marker.restrict(environment));
-                    let marker = marker.resolve_extras(
-                        activated
-                            .iter()
-                            .map(|(name, marker)| (name.clone(), *marker)),
-                    );
-                    dependency.complexified_marker = UniversalMarker::from_combined(marker);
-                    dependency.simplified_marker =
-                        SimplifiedMarkerTree::new(&lock.requires_python, marker);
                 }
-                dependencies.retain(|dependency| !dependency.complexified_marker.is_false());
             }
         }
-        lock.conflicts = Conflicts::empty();
-        Ok(lock)
+        Ok(SelectedRequests {
+            sections: self
+                .sections
+                .into_iter()
+                .filter_map(|(package, section, node)| {
+                    let marker = selected.marker(NodeIndex::new(node));
+                    (!marker.is_false()).then_some((package, section, marker))
+                })
+                .collect(),
+            activated: activated.into_iter().collect(),
+        })
+    }
+}
+
+/// Validated package sections, with environment-only reachability and final extra activations.
+struct SelectedRequests {
+    sections: Vec<(usize, Section, MarkerTree)>,
+    activated: Vec<(ExtraName, MarkerTree)>,
+}
+
+impl SelectedRequests {
+    /// Materialize concrete packages and edges without rediscovering their reachability.
+    fn to_resolution(
+        &self,
+        target: &Target<'_>,
+        environment: &ResolverMarkerEnvironment,
+        tags: &Tags,
+        build_options: &BuildOptions,
+        install_options: &InstallOptions,
+    ) -> Result<Resolution, LockError> {
+        let lock = target.lock;
+        let mut graph = Graph::new();
+        let root = graph.add_node(Node::Root);
+        let mut inverse = vec![None; lock.packages.len()];
+        for (package, section, _) in &self.sections {
+            if let Section::Production = section {
+                inverse[*package] = Some(graph.add_node(target.package_to_node(
+                    &lock.packages[*package],
+                    tags,
+                    build_options,
+                    install_options,
+                    environment,
+                )?));
+            }
+        }
+        for name in &target.case.roots {
+            let package = lock
+                .find_by_name(name)
+                .expect("one locked root version")
+                .expect("locked root package");
+            let index = lock.by_id[&package.id];
+            let node = if let Some(node) = inverse[index.0] {
+                node
+            } else {
+                let node =
+                    graph.add_node(target.non_installable_node(package, tags, environment)?);
+                inverse[index.0] = Some(node);
+                node
+            };
+            graph.add_edge(root, node, Edge::Prod);
+        }
+        for (package, section, _) in &self.sections {
+            let dependencies = match section {
+                Section::Production => &lock.packages[*package].dependencies,
+                Section::Extra(extra) => {
+                    let Some(dependencies) =
+                        lock.packages[*package].optional_dependencies.get(extra)
+                    else {
+                        continue;
+                    };
+                    dependencies
+                }
+                Section::Group(group) => &lock.packages[*package].dependency_groups[group],
+            };
+            for dependency in dependencies {
+                let marker = dependency
+                    .complexified_marker
+                    .combined()
+                    .simplify_environment(environment)
+                    .resolve_extras(self.activated.iter().cloned());
+                if marker.is_false() {
+                    continue;
+                }
+                let source = inverse[*package].expect("selected parent package");
+                let target = inverse[dependency.index.0].expect("selected dependency package");
+                let edge = match section {
+                    Section::Production => Edge::Prod,
+                    Section::Extra(extra) => Edge::Optional(extra.clone()),
+                    Section::Group(group) => Edge::Dev(group.clone()),
+                };
+                graph.add_edge(source, target, edge);
+            }
+        }
+        Ok(Resolution::new(graph))
+    }
+
+    /// Format validated package markers using the production requirements formatter.
+    fn export(&self, target: &Target<'_>, install_options: &InstallOptions) -> String {
+        let packages = self
+            .sections
+            .iter()
+            .filter_map(|(package, section, marker)| {
+                match section {
+                    Section::Production => {}
+                    Section::Extra(_) | Section::Group(_) => return None,
+                }
+                let package = &target.lock.packages[*package];
+                install_options
+                    .include_package(
+                        package.as_install_target(),
+                        target.project_name(),
+                        target.lock.members(),
+                    )
+                    .then(|| {
+                        (
+                            package,
+                            SimplifiedMarkerTree::new(&target.lock.requires_python, *marker)
+                                .as_simplified_marker_tree(),
+                        )
+                    })
+            });
+        RequirementsTxtExport::from_selection(packages, Some(EditableMode::Editable), true)
+            .to_string()
     }
 }
 
@@ -299,11 +408,8 @@ impl<'a> Installable<'a> for Target<'a> {
     }
 }
 
-/// Construct selection inputs, creating a Boolean restriction only for the experimental reader.
-fn environment(
-    case: &Case,
-    project: bool,
-) -> (ResolverMarkerEnvironment, Option<MarkerTree>, Tags) {
+/// Construct the concrete marker environment and wheel tags shared by both readers.
+fn environment(case: &Case) -> (ResolverMarkerEnvironment, Tags) {
     let (system, operating_system, sys_platform, platform) = match case.platform {
         ComparisonPlatform::Linux => (
             "Linux",
@@ -341,10 +447,6 @@ fn environment(
         sys_platform,
     })
     .expect("comparison marker environment");
-    let constraint = project.then(|| format!(
-        "implementation_name == 'cpython' and implementation_version == '{}' and os_name == '{}' and platform_machine == 'x86_64' and platform_python_implementation == 'CPython' and platform_release == '6.8.0' and platform_system == '{}' and platform_version == 'comparison' and python_full_version == '{}' and sys_platform == '{}'",
-        case.python, operating_system, system, case.python, sys_platform,
-    ).parse().expect("concrete comparison environment"));
     let python = (3, minor.parse().expect("Python minor version"));
     let tags = Tags::from_env(
         Platform::new(platform, Arch::X86_64),
@@ -354,7 +456,7 @@ fn environment(
         TagsOptions::default(),
     )
     .expect("comparison tags");
-    (marker.into(), constraint, tags)
+    (marker.into(), tags)
 }
 
 enum Output {
@@ -400,7 +502,7 @@ impl Output {
     }
 }
 
-/// Measure parsing, validation, projection, and the existing materialization or export path.
+/// Measure parsing, validation, and complete installation-graph construction or formatted export.
 fn operation(case: &Case) -> Result<Output, String> {
     let experimental = case.action.starts_with("new-");
     let export = case.action.ends_with("export");
@@ -410,17 +512,33 @@ fn operation(case: &Case) -> Result<Output, String> {
         "baseline.lock"
     });
     let contents = fs_err::read_to_string(input).expect("comparison lockfile");
-    let mut lock = Lock::from_toml(&contents).expect("valid comparison lockfile");
-    let environment =
-        (!export).then(|| environment(case, experimental && !lock.conflicts.is_empty()));
+    let lock = Lock::from_toml(&contents).expect("valid comparison lockfile");
+    let environment = (!export).then(|| environment(case));
+    let target = Target { lock: &lock, case };
+    let install_options = InstallOptions::default();
     if experimental && !lock.conflicts.is_empty() {
         let requests = fs_err::read(case.directory.join("requests.json")).expect("request data");
         let graph: RequestGraph =
             serde_json::from_slice(&requests).expect("serialized request graph");
-        let constraint = environment
-            .as_ref()
-            .and_then(|(_, constraint, _)| *constraint);
-        lock = graph.project(lock, case, constraint)?;
+        let selected = graph.select(
+            &lock,
+            case,
+            environment.as_ref().map(|(environment, _)| environment),
+        )?;
+        return if let Some((environment, tags)) = &environment {
+            selected
+                .to_resolution(
+                    &target,
+                    environment,
+                    tags,
+                    &BuildOptions::default(),
+                    &install_options,
+                )
+                .map(Output::Selection)
+                .map_err(|error| error.to_string())
+        } else {
+            Ok(Output::Export(selected.export(&target, &install_options)))
+        };
     }
     let extras = ExtrasSpecification::from_extra(case.extras.clone())
         .with_defaults(DefaultExtras::default());
@@ -441,9 +559,7 @@ fn operation(case: &Case) -> Result<Output, String> {
         false,
     )
     .with_defaults(DefaultGroups::default());
-    let install_options = InstallOptions::default();
     if export {
-        let target = Target { lock: &lock, case };
         RequirementsTxtExport::from_lock(
             &target,
             &[],
@@ -457,8 +573,7 @@ fn operation(case: &Case) -> Result<Output, String> {
         .map(|export| Output::Export(export.to_string()))
         .map_err(|error| error.to_string())
     } else {
-        let (environment, _, tags) = environment.expect("selection environment");
-        let target = Target { lock: &lock, case };
+        let (environment, tags) = environment.expect("selection environment");
         target
             .to_resolution(
                 &environment,
