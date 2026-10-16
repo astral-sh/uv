@@ -329,6 +329,23 @@ fn projects_and_groups_use_the_same_validation() {
     );
 }
 
+/// Sharing an inactive member does not make two conflict sets one larger exclusive set.
+#[test]
+fn overlapping_conflict_sets_allow_compatible_requests() {
+    let first = item("project", "first");
+    let middle = item("project", "middle");
+    let last = item("project", "last");
+    let mut graph = ActivationGraph::default();
+    let root = request(&mut graph, &[first.clone(), last.clone()]);
+    let mut declared = conflicts(&[first, middle.clone()]);
+    declared.push(ConflictSet::try_from(vec![middle, last]).expect("conflict set"));
+
+    let selection = graph
+        .select([(root, MarkerTree::TRUE)], MarkerTree::TRUE, &declared)
+        .expect("the two requested extras do not conflict");
+    assert_eq!(selection.marker(root), MarkerTree::TRUE);
+}
+
 /// There are 2^128 possible activation assignments; selection operates on their shared diagram.
 #[test]
 fn large_conflict_set_selects_last_version() {

@@ -168,36 +168,74 @@ impl ActivationGraph {
                 break;
             }
         }
+
+        // An activation determined by the environment needs no symbolic assignment. Substitute
+        // it before constructing constraints, leaving only mutually dependent activations to solve.
+        let mut unresolved = Vec::new();
+        let mut activations = BTreeMap::new();
+        for (item, condition) in &justified {
+            let mut symbolic = false;
+            condition.visit_extras(|_, _| symbolic = true);
+            let activation = if symbolic {
+                unresolved.push(*item);
+                conflict_variable(item)
+            } else {
+                *condition
+            };
+            activations.insert(*item, activation);
+        }
+        let substitutions: Vec<_> = variables
+            .iter()
+            .map(|(name, item)| (name.clone(), activations[item]))
+            .collect();
+        let mut projected = FxHashMap::default();
+        let mut project = |marker: MarkerTree| {
+            *projected
+                .entry(marker)
+                .or_insert_with(|| marker.resolve_extras(substitutions.iter().cloned()))
+        };
+        for marker in &mut reachability {
+            *marker = project(*marker);
+        }
         let mut valid = environment;
         for node in self.graph.node_indices() {
             if self.graph[node].requires_choice {
                 let mut covered = MarkerTree::FALSE;
                 let mut overlap = MarkerTree::FALSE;
                 for edge in self.graph.edges(node) {
-                    overlap = overlap.or(covered.and(*edge.weight()));
-                    covered = covered.or(*edge.weight());
+                    let marker = project(*edge.weight());
+                    overlap = overlap.or(covered.and(marker));
+                    covered = covered.or(marker);
                 }
                 valid =
                     valid.and(reachability[node.index()].implies(covered.and(overlap.negate())));
             }
         }
-        for (item, condition) in &justified {
+        for item in &unresolved {
+            let condition = project(justified[item]);
             let variable = conflict_variable(item);
-            valid = valid.and(variable.implies(*condition));
+            valid = valid.and(variable.implies(condition));
             valid = valid.and(condition.implies(variable));
         }
-        let constraints =
-            UniversalMarker::new(MarkerTree::TRUE, ConflictMarker::from_conflicts(conflicts))
-                .combined();
-        let constrained = valid.and(constraints);
+        // Enforce at most one active item per set within the supported assignments. Accumulating
+        // prior activations avoids constructing a separate constraint for every pair.
+        let mut constrained = valid;
+        for set in conflicts.iter() {
+            let mut active = MarkerTree::FALSE;
+            for item in set.iter() {
+                let activation = activations[item];
+                constrained = constrained.and(active.and(activation).negate());
+                active = active.or(constrained.and(activation));
+            }
+        }
         let invalid = environment.and(constrained.without_extras().negate());
         if !invalid.is_false() {
             for set in conflicts.iter() {
                 for (first, second) in set.iter().tuple_combinations() {
                     let condition = valid
                         .and(invalid)
-                        .and(conflict_variable(first))
-                        .and(conflict_variable(second))
+                        .and(activations[first])
+                        .and(activations[second])
                         .without_extras();
                     if !condition.is_false() {
                         return Err(SelectionError::Conflict {
@@ -212,7 +250,7 @@ impl ActivationGraph {
         }
         let valid = constrained;
         let mut ambiguous = MarkerTree::FALSE;
-        for item in requested.keys() {
+        for item in &unresolved {
             let variable = conflict_variable(item);
             let enabled = valid.and(variable).without_extras();
             let disabled = valid.and(variable.negate()).without_extras();
