@@ -19,7 +19,7 @@ env:
 jobs:
   benchmarks-walltime-build:
     name: "walltime build"
-    runs-on: depot-ubuntu-24.04-4
+    runs-on: depot-ubuntu-24.04-16
     # uv-dev benchmarks pull requests but imports its main-branch measurements from uv.
     if: ${{ github.repository == 'astral-sh/uv' || (github.repository == 'astral-sh/uv-dev' && github.ref != 'refs/heads/main') }}
     timeout-minutes: 30
