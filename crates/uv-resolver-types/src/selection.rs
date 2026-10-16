@@ -215,7 +215,14 @@ impl ActivationGraph {
         for marker in &mut reachability {
             *marker = project(*marker);
         }
-        let mut valid = environment;
+        let mut supported = environment;
+        for item in &unresolved {
+            let condition = project(justified[item]);
+            let variable = conflict_variable(item);
+            supported = supported.and(variable.implies(condition));
+            supported = supported.and(condition.implies(variable));
+        }
+        let mut valid = supported;
         for node in self.graph.node_indices() {
             if self.graph[node].requires_choice && !reachability[node.index()].is_false() {
                 let mut covered = MarkerTree::FALSE;
@@ -228,12 +235,6 @@ impl ActivationGraph {
                 valid =
                     valid.and(reachability[node.index()].implies(covered.and(overlap.negate())));
             }
-        }
-        for item in &unresolved {
-            let condition = project(justified[item]);
-            let variable = conflict_variable(item);
-            valid = valid.and(variable.implies(condition));
-            valid = valid.and(condition.implies(variable));
         }
         // Enforce at most one active item per set within the supported assignments. Accumulating
         // prior activations avoids constructing a separate constraint for every pair.
@@ -250,7 +251,9 @@ impl ActivationGraph {
         if !invalid.is_false() {
             for set in conflicts.iter() {
                 for (first, second) in set.iter().tuple_combinations() {
-                    let condition = valid
+                    // A conflict can make every installation choice impossible. Diagnose the
+                    // supported requests even when their target edges have already been pruned.
+                    let condition = supported
                         .and(invalid)
                         .and(activations[first])
                         .and(activations[second])

@@ -1406,6 +1406,51 @@ impl MarkerTree {
         Self(INTERNER.lock().without_extras(self.0))
     }
 
+    /// Evaluate environment decisions while retaining extra and dependency-group decisions.
+    ///
+    /// Environment variables precede extras and lists in the diagram's variable order. Following
+    /// their selected edges therefore returns an existing subtree without rebuilding the diagram.
+    #[must_use]
+    pub fn simplify_environment(mut self, env: &MarkerEnvironment) -> Self {
+        loop {
+            self = match self.kind() {
+                MarkerTreeKind::True
+                | MarkerTreeKind::False
+                | MarkerTreeKind::Extra(_)
+                | MarkerTreeKind::List(_) => return self,
+                MarkerTreeKind::Version(marker) => marker
+                    .edges()
+                    .find_map(|(range, tree)| {
+                        range
+                            .contains(env.get_version(marker.key()))
+                            .then_some(tree)
+                    })
+                    .unwrap_or(Self::FALSE),
+                MarkerTreeKind::String(marker) => marker
+                    .children()
+                    .find_map(|(range, tree)| {
+                        range.contains(env.get_string(marker.key())).then_some(tree)
+                    })
+                    .unwrap_or(Self::FALSE),
+                MarkerTreeKind::VersionString(marker) => {
+                    let Ok(version) = env.get_string(marker.key()).parse::<Version>() else {
+                        return Self::FALSE;
+                    };
+                    marker
+                        .edges()
+                        .find_map(|(range, tree)| range.contains(&version).then_some(tree))
+                        .unwrap_or(Self::FALSE)
+                }
+                MarkerTreeKind::In(marker) => {
+                    marker.edge(marker.value().contains(env.get_string(marker.key())))
+                }
+                MarkerTreeKind::Contains(marker) => {
+                    marker.edge(env.get_string(marker.key()).contains(marker.value()))
+                }
+            };
+        }
+    }
+
     /// Replace extras with the conditions under which they are enabled.
     ///
     /// Extras absent from `known_extras` are false. Substitution is simultaneous: extras in a
@@ -2052,6 +2097,54 @@ mod test {
                 .try_to_string()
                 .unwrap(),
             "python_full_version <= '3.12.1'"
+        );
+    }
+
+    #[test]
+    fn simplify_environment_preserves_extra_decisions() {
+        let environment = env37();
+        let marker = m(
+            "(sys_platform == 'linux' and extra == 'dev') or (sys_platform == 'darwin' and extra == 'docs')",
+        );
+        assert_eq!(
+            marker.simplify_environment(&environment),
+            m("extra == 'dev'")
+        );
+        assert_eq!(
+            marker.negate().simplify_environment(&environment),
+            m("extra != 'dev'")
+        );
+        assert_eq!(
+            m("python_full_version < '3.8' and extra != 'dev'").simplify_environment(&environment),
+            m("extra != 'dev'")
+        );
+        assert_eq!(
+            m("'lin' in sys_platform and extra == 'dev'").simplify_environment(&environment),
+            m("extra == 'dev'")
+        );
+        assert_eq!(
+            m("sys_platform in 'linux,darwin' and extra == 'dev'")
+                .simplify_environment(&environment),
+            m("extra == 'dev'")
+        );
+        assert_eq!(
+            m("sys_platform == 'darwin' and platform_release >= '24.9' and extra == 'dev'")
+                .simplify_environment(
+                    &environment
+                        .with_sys_platform("darwin")
+                        .with_platform_release("24.10"),
+                ),
+            m("extra == 'dev'")
+        );
+    }
+
+    #[test]
+    fn simplify_environment_preserves_list_decisions() {
+        let marker =
+            m("python_version < '3.8' and ('test' in extras or 'dev' in dependency_groups)");
+        assert_eq!(
+            marker.simplify_environment(&env37()),
+            m("'test' in extras or 'dev' in dependency_groups")
         );
     }
 

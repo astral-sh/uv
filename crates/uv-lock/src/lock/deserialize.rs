@@ -1100,6 +1100,40 @@ version = "1.0.0"
     }
 
     #[test]
+    fn request_lock_requires_requests_and_round_trips() {
+        let input = r#"version = 2
+revision = 5
+requires-python = ">=3.12"
+
+[[package]]
+name = "project"
+source = { virtual = "." }
+requests = [{ name = "dependency", extras = ["feature"], marker = "extra == 'test'" }]
+
+[package.optional-dependencies]
+test = [{ name = "dependency", extra = ["feature"] }]
+
+[[package]]
+name = "dependency"
+source = { virtual = "dependency" }
+requests = []
+
+[package.optional-dependencies]
+feature = []
+"#;
+        let lock = Lock::from_toml(input).expect("version 2 lock with requests");
+        let canonical = lock.to_toml().expect("serializable lock");
+        assert_eq!(
+            Lock::from_canonical_toml(&canonical).expect("canonical request lock"),
+            lock
+        );
+
+        let missing = input.replace("requests = []\n", "");
+        let error = Lock::from_toml(&missing).expect_err("version 2 requires complete requests");
+        insta::assert_snapshot!(error.to_string(), @"The lockfile is missing dependency requests for `dependency @ virtual+dependency`");
+    }
+
+    #[test]
     fn unparsable_unsupported_lock_version_is_identified() {
         let version = VERSION + 1;
         let input = CANONICAL_LOCK

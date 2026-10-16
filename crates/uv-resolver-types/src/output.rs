@@ -12,7 +12,7 @@ use uv_distribution_types::{
     BuiltDist, Dist, Edge, Identifier, Name, Node, Requirement, RequiresPython,
     ResolutionDiagnostic, ResolvedDist, SourceDist,
 };
-use uv_normalize::{ExtraName, GroupName, PackageName};
+use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifier};
 use uv_pep508::{MarkerEnvironment, MarkerTree, MarkerTreeKind};
 use uv_pypi_types::{HashDigests, ParsedUrlError};
@@ -52,33 +52,6 @@ impl ResolutionGraphNode {
         match self {
             Self::Root => &UniversalMarker::TRUE,
             Self::Dist(dist) => &dist.marker,
-        }
-    }
-
-    pub(crate) fn package_extra_names(&self) -> Option<(&PackageName, &ExtraName)> {
-        match self {
-            Self::Root => None,
-            Self::Dist(dist) => {
-                let extra = dist.kind.extra()?;
-                Some((&dist.name, extra))
-            }
-        }
-    }
-
-    pub(crate) fn package_group_names(&self) -> Option<(&PackageName, &GroupName)> {
-        match self {
-            Self::Root => None,
-            Self::Dist(dist) => {
-                let group = dist.kind.group()?;
-                Some((&dist.name, group))
-            }
-        }
-    }
-
-    pub(crate) fn package_name(&self) -> Option<&PackageName> {
-        match self {
-            Self::Root => None,
-            Self::Dist(dist) => Some(&dist.name),
         }
     }
 }

@@ -21,6 +21,7 @@ use uv_pypi_types::HashAlgorithm;
 use uv_warnings::warn_user;
 
 use crate::lock::export::{ExportableRequirement, ExportableRequirements};
+use crate::lock::selection::SelectionMode;
 use crate::lock::{LockErrorKind, Package, PackageId, RegistrySource, Source, WheelWireSource};
 use crate::{Installable, LockError};
 
@@ -360,6 +361,7 @@ pub fn from_lock<'lock>(
         groups,
         annotate,
         install_options,
+        SelectionMode::Inventory,
     )?;
 
     nodes.sort_unstable_by_key(|node| &node.package.id);

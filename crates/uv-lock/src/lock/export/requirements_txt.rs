@@ -16,6 +16,7 @@ use uv_pypi_types::{ParsedArchiveUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl};
 use uv_redacted::DisplaySafeUrl;
 
 use crate::lock::export::{ExportableRequirement, ExportableRequirements};
+use crate::lock::selection::SelectionMode;
 use crate::lock::{Package, PackageId, Source};
 use crate::{Installable, LockError};
 
@@ -46,6 +47,7 @@ impl<'lock> RequirementsTxtExport<'lock> {
             dev,
             annotate,
             install_options,
+            SelectionMode::Resolution,
         )?;
 
         // Sort the nodes, such that unnamed URLs (editables) appear at the top.

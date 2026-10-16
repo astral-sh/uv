@@ -28,7 +28,7 @@ fn request(graph: &mut ActivationGraph, items: &[ConflictItem]) -> NodeIndex {
 }
 
 /// The request for `example[bar]` remains observable even if no valid installation edge can
-/// coexist with `example[foo]`. This is the transitive conflict currently diagnosed by `imbibe`.
+/// coexist with `example[foo]`. The conflict must be reported even after every target is pruned.
 #[test]
 fn transitive_conflict_survives_impossible_installation() {
     let foo = item("example", "foo");
@@ -37,6 +37,7 @@ fn transitive_conflict_survives_impossible_installation() {
     let root = request(&mut graph, std::slice::from_ref(&foo));
     let indirection = request(&mut graph, &[]);
     let bar_request = request(&mut graph, std::slice::from_ref(&bar));
+    graph.graph[bar_request].requires_choice = true;
     graph.graph.add_edge(root, indirection, MarkerTree::TRUE);
     graph
         .graph
