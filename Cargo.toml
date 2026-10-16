@@ -528,7 +528,7 @@ panic = "abort"
 # release builds.
 [profile.profiling]
 inherits = "release"
-codegen-units = 16
+codegen-units = 1
 strip = false
 debug = "full"
 lto = false
