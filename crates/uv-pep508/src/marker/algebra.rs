@@ -965,7 +965,7 @@ impl InternerGuard<'_> {
             let children = node.children.map(i, |node_id| {
                 self.complexify_python_versions(node_id, py_lower, py_upper)
             });
-            return self.create_node(node.var.clone(), children);
+            return self.rebuild_node(&node.var, children);
         };
         // The approach we take here is to filter out any range that
         // has no intersection with our Python lower/upper bounds.

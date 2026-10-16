@@ -3550,6 +3550,23 @@ mod test {
         m(antecedent).implies(m(consequent)).is_true()
     }
 
+    /// Restoring Python bounds must place version decisions before extra decisions.
+    #[test]
+    fn complexified_markers_extra_order() {
+        let version = Version::new([3, 12]);
+        let marker = m("extra == 'dev'")
+            .complexify_python_versions(Bound::Included(&version), Bound::Unbounded);
+        assert_eq!(
+            marker,
+            m("python_full_version >= '3.12' and extra == 'dev'")
+        );
+        assert!(marker.and(m("python_full_version < '3.12'")).is_false());
+        assert_eq!(
+            marker.simplify_python_versions(Bound::Included(&version), Bound::Unbounded),
+            m("extra == 'dev'")
+        );
+    }
+
     #[test]
     fn complexified_markers() {
         // Takes optional lower (inclusive) and upper (exclusive)
