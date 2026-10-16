@@ -2,7 +2,7 @@ use http::Extensions;
 use std::fmt::Debug;
 use uv_auth::AzureEndpointProvider;
 use uv_preview::Preview;
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 
 use reqwest::header::HeaderValue;
 use reqwest::{Request, Response};
@@ -41,12 +41,12 @@ impl Middleware for AzureStorageMiddleware {
 /// A custom error type for the offline middleware.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct OfflineError {
-    url: DisplaySafeUrl,
+    url: SafeUrl,
 }
 
 impl OfflineError {
     /// Returns the URL that caused the error.
-    pub(crate) fn url(&self) -> &DisplaySafeUrl {
+    pub(crate) fn url(&self) -> &SafeUrl {
         &self.url
     }
 }
@@ -76,7 +76,7 @@ impl Middleware for OfflineMiddleware {
     ) -> reqwest_middleware::Result<Response> {
         Err(reqwest_middleware::Error::Middleware(
             OfflineError {
-                url: DisplaySafeUrl::from_url(req.url().clone()),
+                url: SafeUrl::from_url(req.url().clone()),
             }
             .into(),
         ))

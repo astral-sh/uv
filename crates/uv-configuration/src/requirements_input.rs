@@ -6,7 +6,7 @@ use thiserror::Error;
 
 use uv_fs::{Simplified, is_windows_absolute_path};
 use uv_pep508::split_scheme;
-use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
+use uv_redacted::{SafeUrl, SafeUrlError};
 
 /// A requirements input.
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
@@ -16,7 +16,7 @@ pub enum RequirementsInput {
     /// A local requirements input.
     Local(PathBuf),
     /// A remote requirements input.
-    Remote(DisplaySafeUrl),
+    Remote(SafeUrl),
 }
 
 impl RequirementsInput {
@@ -101,7 +101,7 @@ impl FromStr for RequirementsInput {
             return Ok(PathBuf::from(input).into());
         }
 
-        let url = DisplaySafeUrl::parse(input)?;
+        let url = SafeUrl::parse(input)?;
         if url.scheme() == "file" {
             let path = url
                 .to_file_path()
@@ -118,8 +118,8 @@ impl FromStr for RequirementsInput {
 pub enum RequirementsInputError {
     /// The input is not a valid URL.
     #[error(transparent)]
-    Url(#[from] DisplaySafeUrlError),
+    Url(#[from] SafeUrlError),
     /// A `file://` URL could not be converted to a local path.
     #[error("invalid file URL: {0}")]
-    InvalidFileUrl(DisplaySafeUrl),
+    InvalidFileUrl(SafeUrl),
 }

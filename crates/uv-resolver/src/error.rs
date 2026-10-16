@@ -18,7 +18,7 @@ use uv_pep440::{LowerBound, Version};
 use uv_pep508::MarkerEnvironment;
 use uv_platform_tags::Tags;
 use uv_pypi_types::ParsedUrl;
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 use uv_static::EnvVars;
 
 use crate::candidate_selector::CandidateSelector;
@@ -62,7 +62,7 @@ pub enum ResolveError {
             format!(" in {env}")
         },
         urls.iter()
-            .map(|url| format!("{}{}", DisplaySafeUrl::from(url.clone()), if url.is_editable() { " (editable)" } else { "" }))
+            .map(|url| format!("{}{}", SafeUrl::from(url.clone()), if url.is_editable() { " (editable)" } else { "" }))
             .collect::<Vec<_>>()
             .join("\n- ")
     )]

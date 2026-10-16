@@ -1,7 +1,7 @@
 use std::hash::{Hash, Hasher};
 use std::{fmt::Display, fmt::Formatter};
 use url::Url;
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 use uv_small_str::SmallString;
 
 /// Used to determine if authentication information should be retained on a new URL.
@@ -30,8 +30,8 @@ pub struct Realm {
     port: Option<u16>,
 }
 
-impl From<&DisplaySafeUrl> for Realm {
-    fn from(url: &DisplaySafeUrl) -> Self {
+impl From<&SafeUrl> for Realm {
+    fn from(url: &SafeUrl) -> Self {
         Self::from(&**url)
     }
 }

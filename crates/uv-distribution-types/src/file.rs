@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use uv_pep440::{VersionSpecifiers, VersionSpecifiersParseError};
 use uv_pep508::split_scheme;
 use uv_pypi_types::{CoreMetadata, HashDigests, Yanked};
-use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
+use uv_redacted::{SafeUrl, SafeUrlError};
 use uv_small_str::SmallString;
 
 /// Error converting [`uv_pypi_types::PypiFile`] to [`File`].
@@ -110,14 +110,13 @@ impl FileLocation {
     ///
     /// This returns an error if parsing the base or absolute URL fails, or if the relative path
     /// cannot be joined to the base URL.
-    pub fn to_url(&self) -> Result<DisplaySafeUrl, ToUrlError> {
+    pub fn to_url(&self) -> Result<SafeUrl, ToUrlError> {
         match self {
             Self::RelativeUrl(base, path) => {
-                let base_url =
-                    DisplaySafeUrl::parse(base).map_err(|err| ToUrlError::InvalidBase {
-                        base: base.to_string(),
-                        err,
-                    })?;
+                let base_url = SafeUrl::parse(base).map_err(|err| ToUrlError::InvalidBase {
+                    base: base.to_string(),
+                    err,
+                })?;
                 let joined = base_url.join(path).map_err(|err| ToUrlError::InvalidJoin {
                     base: base.to_string(),
                     path: path.to_string(),
@@ -166,9 +165,9 @@ impl UrlString {
         Self(url)
     }
 
-    /// Converts a [`UrlString`] to a [`DisplaySafeUrl`].
-    pub fn to_url(&self) -> Result<DisplaySafeUrl, ToUrlError> {
-        DisplaySafeUrl::from_str(&self.0).map_err(|err| ToUrlError::InvalidAbsolute {
+    /// Converts a [`UrlString`] to a [`SafeUrl`].
+    pub fn to_url(&self) -> Result<SafeUrl, ToUrlError> {
+        SafeUrl::from_str(&self.0).map_err(|err| ToUrlError::InvalidAbsolute {
             absolute: self.0.to_string(),
             err,
         })
@@ -198,14 +197,14 @@ impl AsRef<str> for UrlString {
     }
 }
 
-impl From<DisplaySafeUrl> for UrlString {
-    fn from(value: DisplaySafeUrl) -> Self {
+impl From<SafeUrl> for UrlString {
+    fn from(value: SafeUrl) -> Self {
         Self(value.as_str().into())
     }
 }
 
-impl From<&DisplaySafeUrl> for UrlString {
-    fn from(value: &DisplaySafeUrl) -> Self {
+impl From<&SafeUrl> for UrlString {
+    fn from(value: &SafeUrl) -> Self {
         Self(value.as_str().into())
     }
 }
@@ -227,7 +226,7 @@ pub enum ToUrlError {
         base: String,
         /// The underlying URL parse error.
         #[source]
-        err: DisplaySafeUrlError,
+        err: SafeUrlError,
     },
     /// An error that occurs when the base URL could not be joined with
     /// the relative path in a [`FileLocation::RelativeUrl`].
@@ -239,7 +238,7 @@ pub enum ToUrlError {
         path: String,
         /// The underlying URL parse error.
         #[source]
-        err: DisplaySafeUrlError,
+        err: SafeUrlError,
     },
     /// An error that occurs when the absolute URL in [`FileLocation::AbsoluteUrl`]
     /// could not be parsed as a valid URL.
@@ -249,7 +248,7 @@ pub enum ToUrlError {
         absolute: String,
         /// The underlying URL parse error.
         #[source]
-        err: DisplaySafeUrlError,
+        err: SafeUrlError,
     },
 }
 

@@ -14,13 +14,13 @@ use uv_auth::RealmRef;
 use uv_cache_key::CanonicalUrl;
 use uv_pep508::{Scheme, VerbatimUrl, VerbatimUrlError, split_scheme};
 use uv_pypi_types::HashAlgorithm;
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 use uv_warnings::warn_user;
 
 use crate::{ExcludeNewerOverride, Index, IndexStatusCodeStrategy, Verbatim};
 
-pub static PYPI_URL: LazyLock<DisplaySafeUrl> =
-    LazyLock::new(|| DisplaySafeUrl::parse("https://pypi.org/simple").unwrap());
+pub static PYPI_URL: LazyLock<SafeUrl> =
+    LazyLock::new(|| SafeUrl::parse("https://pypi.org/simple").unwrap());
 
 static DEFAULT_INDEX: LazyLock<Index> = LazyLock::new(|| {
     Index::from_index_url(IndexUrl::Pypi(Arc::new(VerbatimUrl::from_url(
@@ -50,7 +50,7 @@ impl IndexUrl {
     ///
     /// For indexes with a `/simple` endpoint, this is simply the URL with the final segment
     /// removed. This is useful, e.g., for credential propagation to other endpoints on the index.
-    pub fn root(&self) -> Option<DisplaySafeUrl> {
+    pub fn root(&self) -> Option<SafeUrl> {
         let mut segments = self.url().path_segments()?;
         let last = match segments.next_back()? {
             // If the last segment is empty due to a trailing `/`, skip it (as in `pop_if_empty`)
@@ -92,12 +92,12 @@ impl IndexUrl {
     }
 
     /// Return the raw URL for the index.
-    pub fn url(&self) -> &DisplaySafeUrl {
+    pub fn url(&self) -> &SafeUrl {
         self.inner().raw()
     }
 
-    /// Convert the index URL into a [`DisplaySafeUrl`].
-    pub fn into_url(self) -> DisplaySafeUrl {
+    /// Convert the index URL into a [`SafeUrl`].
+    pub fn into_url(self) -> SafeUrl {
         match self {
             Self::Pypi(url) | Self::Url(url) | Self::Path(url) => {
                 Arc::unwrap_or_clone(url).into_url()
@@ -106,7 +106,7 @@ impl IndexUrl {
     }
 
     /// Return the redacted URL for the index, omitting any sensitive credentials.
-    pub fn without_credentials(&self) -> Cow<'_, DisplaySafeUrl> {
+    pub fn without_credentials(&self) -> Cow<'_, SafeUrl> {
         let url = self.url();
         if url.username().is_empty() && url.password().is_none() {
             Cow::Borrowed(url)
@@ -240,7 +240,7 @@ impl From<VerbatimUrl> for IndexUrl {
     }
 }
 
-impl From<IndexUrl> for DisplaySafeUrl {
+impl From<IndexUrl> for SafeUrl {
     fn from(index: IndexUrl) -> Self {
         index.into_url()
     }

@@ -443,7 +443,7 @@ fn publish_resolved_settings() -> anyhow::Result<()> {
         index: None,
         dry_run: false,
         no_attestations: false,
-        publish_url: DisplaySafeUrl {
+        publish_url: SafeUrl {
             scheme: "https",
             cannot_be_a_base: false,
             username: "",
@@ -463,7 +463,7 @@ fn publish_resolved_settings() -> anyhow::Result<()> {
         check_url: Some(
             Url(
                 VerbatimUrl {
-                    url: DisplaySafeUrl {
+                    url: SafeUrl {
                         scheme: "https",
                         cannot_be_a_base: false,
                         username: "check-user",
@@ -498,7 +498,7 @@ fn publish_resolved_settings() -> anyhow::Result<()> {
                     ),
                     url: Url(
                         VerbatimUrl {
-                            url: DisplaySafeUrl {
+                            url: SafeUrl {
                                 scheme: "https",
                                 cannot_be_a_base: false,
                                 username: "index-user",
@@ -1260,7 +1260,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
     +                    name: None,
     +                    url: Pypi(
     +                        VerbatimUrl {
-    +                            url: DisplaySafeUrl {
+    +                            url: SafeUrl {
     +                                scheme: "https",
     +                                cannot_be_a_base: false,
     +                                username: "",
@@ -1415,7 +1415,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
     +                    name: None,
     +                    url: Pypi(
     +                        VerbatimUrl {
-    +                            url: DisplaySafeUrl {
+    +                            url: SafeUrl {
     +                                scheme: "https",
     +                                cannot_be_a_base: false,
     +                                username: "",
@@ -1575,7 +1575,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
     +                    name: None,
     +                    url: Pypi(
     +                        VerbatimUrl {
-    +                            url: DisplaySafeUrl {
+    +                            url: SafeUrl {
     +                                scheme: "https",
     +                                cannot_be_a_base: false,
     +                                username: "",
@@ -1612,7 +1612,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
     +                    name: None,
     +                    url: Url(
     +                        VerbatimUrl {
-    +                            url: DisplaySafeUrl {
+    +                            url: SafeUrl {
     +                                scheme: "https",
     +                                cannot_be_a_base: false,
     +                                username: "",
@@ -1667,7 +1667,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
                          name: None,
     +                    url: Url(
     +                        VerbatimUrl {
-    +                            url: DisplaySafeUrl {
+    +                            url: SafeUrl {
     +                                scheme: "https",
     +                                cannot_be_a_base: false,
     +                                username: "",
@@ -1706,7 +1706,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
     +                    name: None,
                          url: Pypi(
                              VerbatimUrl {
-                                 url: DisplaySafeUrl {
+                                 url: SafeUrl {
     ...
     "#
     );
@@ -1759,7 +1759,7 @@ fn resolve_find_links() -> anyhow::Result<()> {
     +                    name: None,
     +                    url: Url(
     +                        VerbatimUrl {
-    +                            url: DisplaySafeUrl {
+    +                            url: SafeUrl {
     +                                scheme: "https",
     +                                cannot_be_a_base: false,
     +                                username: "",
@@ -1882,7 +1882,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
     +                    name: None,
     +                    url: Url(
     +                        VerbatimUrl {
-    +                            url: DisplaySafeUrl {
+    +                            url: SafeUrl {
     +                                scheme: "https",
     +                                cannot_be_a_base: false,
     +                                username: "",
@@ -1919,7 +1919,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
     +                    name: None,
     +                    url: Url(
     +                        VerbatimUrl {
-    +                            url: DisplaySafeUrl {
+    +                            url: SafeUrl {
     +                                scheme: "https",
     +                                cannot_be_a_base: false,
     +                                username: "",
@@ -2331,7 +2331,7 @@ fn resolve_both() -> anyhow::Result<()> {
     +                    name: None,
     +                    url: Pypi(
     +                        VerbatimUrl {
-    +                            url: DisplaySafeUrl {
+    +                            url: SafeUrl {
     +                                scheme: "https",
     +                                cannot_be_a_base: false,
     +                                username: "",
@@ -2466,7 +2466,7 @@ fn resolve_both_special_fields() -> anyhow::Result<()> {
     +                    name: None,
     +                    url: Pypi(
     +                        VerbatimUrl {
-    +                            url: DisplaySafeUrl {
+    +                            url: SafeUrl {
     +                                scheme: "https",
     +                                cannot_be_a_base: false,
     +                                username: "",
@@ -2813,7 +2813,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
     +                    name: None,
     +                    url: Pypi(
     +                        VerbatimUrl {
-    +                            url: DisplaySafeUrl {
+    +                            url: SafeUrl {
     +                                scheme: "https",
     +                                cannot_be_a_base: false,
     +                                username: "",
@@ -3297,7 +3297,7 @@ fn index_priority() -> anyhow::Result<()> {
     +                    name: None,
     +                    url: Url(
     +                        VerbatimUrl {
-    +                            url: DisplaySafeUrl {
+    +                            url: SafeUrl {
     +                                scheme: "https",
     +                                cannot_be_a_base: false,
     +                                username: "",
@@ -3336,7 +3336,7 @@ fn index_priority() -> anyhow::Result<()> {
     +                    name: None,
     +                    url: Url(
     +                        VerbatimUrl {
-    +                            url: DisplaySafeUrl {
+    +                            url: SafeUrl {
     +                                scheme: "https",
     +                                cannot_be_a_base: false,
     +                                username: "",

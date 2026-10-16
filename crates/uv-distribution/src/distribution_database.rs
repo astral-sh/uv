@@ -39,7 +39,7 @@ use uv_platform_tags::Tags;
 use uv_preview::PreviewFeature;
 use uv_pypi_types::{HashDigest, HashDigests, PyProjectToml, ResolutionMetadata};
 use uv_python_types::PythonVariant;
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 use uv_threads::initialize_rayon_once;
 use uv_types::{BuildContext, BuildStack};
 
@@ -782,7 +782,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     /// origin.
     async fn stream_wheel(
         &self,
-        url: DisplaySafeUrl,
+        url: SafeUrl,
         index: Option<&IndexUrl>,
         filename: &WheelFilename,
         progress_size_hint: Option<u64>,
@@ -977,7 +977,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     /// of the wheel if/when fetched from the origin.
     async fn download_wheel(
         &self,
-        url: DisplaySafeUrl,
+        url: SafeUrl,
         index: Option<&IndexUrl>,
         filename: &WheelFilename,
         progress_size_hint: Option<u64>,
@@ -1108,7 +1108,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     async fn download_wheel_response(
         &self,
         mut response: reqwest::Response,
-        url: &DisplaySafeUrl,
+        url: &SafeUrl,
         retry_state: &mut RetryState,
         filename: &WheelFilename,
         progress_size_hint: Option<u64>,
@@ -1603,7 +1603,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     }
 
     /// Returns a GET [`reqwest::Request`] for the given URL.
-    fn request(&self, url: DisplaySafeUrl) -> Result<reqwest::Request, reqwest::Error> {
+    fn request(&self, url: SafeUrl) -> Result<reqwest::Request, reqwest::Error> {
         self.client
             .unmanaged
             .uncached_client(&url)
@@ -1621,7 +1621,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     /// Build a GET request with a `Range: bytes=<offset>-` header.
     ///
     /// Used to resume an interrupted download from `offset` bytes into the file.
-    fn request_with_offset(&self, url: DisplaySafeUrl, offset: u64) -> RequestBuilder<'_> {
+    fn request_with_offset(&self, url: SafeUrl, offset: u64) -> RequestBuilder<'_> {
         self.client
             .unmanaged
             .uncached_client(&url)

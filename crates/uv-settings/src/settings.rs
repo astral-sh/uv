@@ -29,7 +29,7 @@ use uv_pep508::Requirement;
 use uv_preview::{MaybePreviewFeature, Preview};
 use uv_pypi_types::{SupportedEnvironments, VerbatimParsedUrl};
 use uv_python_types::{PythonDownloadMirrors, PythonDownloads, PythonPreference, PythonVersion};
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 use uv_torch::TorchMode;
 use uv_workspace::pyproject::{
     BuildConstraintDependency, ExtraBuildDependencies, OverrideDependency,
@@ -2715,7 +2715,7 @@ struct OptionsWire {
 
     // #[serde(flatten)]
     // publish: PublishOptions
-    publish_url: Option<DisplaySafeUrl>,
+    publish_url: Option<SafeUrl>,
     trusted_publishing: Option<TrustedPublishing>,
     check_url: Option<IndexUrl>,
 
@@ -2947,7 +2947,7 @@ pub struct PublishOptions {
             publish-url = "https://test.pypi.org/legacy/"
         "#
     )]
-    pub publish_url: Option<DisplaySafeUrl>,
+    pub publish_url: Option<SafeUrl>,
 
     /// Configure trusted publishing.
     ///
@@ -3034,7 +3034,7 @@ pub struct AuditOptions {
             malware-check-url = "https://example.com"
         "#
     )]
-    pub malware_check_url: Option<DisplaySafeUrl>,
+    pub malware_check_url: Option<SafeUrl>,
 
     /// A list of vulnerability IDs to ignore during auditing.
     ///
@@ -3069,7 +3069,7 @@ pub struct MalwareCheckSettings {
     /// Whether the malware check is enabled.
     pub enabled: bool,
     /// The OSV-shaped service URL to use for malware checks.
-    pub malware_check_url: Option<DisplaySafeUrl>,
+    pub malware_check_url: Option<SafeUrl>,
 }
 
 impl MalwareCheckSettings {

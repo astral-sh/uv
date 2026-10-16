@@ -10,7 +10,7 @@ use uv_git_types::{GitUrl, GitUrlParseError};
 use uv_pep508::{
     Pep508Url, UnnamedRequirementUrl, VerbatimUrl, VerbatimUrlError, looks_like_git_repository,
 };
-use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
+use uv_redacted::{SafeUrl, SafeUrlError};
 
 use crate::{ArchiveInfo, DirInfo, DirectUrl, VcsInfo, VcsKind};
 
@@ -27,7 +27,7 @@ pub enum ParsedUrlError {
     #[error(transparent)]
     GitUrlParse(#[from] GitUrlParseError),
     #[error("Not a valid URL: {0}")]
-    UrlParse(String, #[source] DisplaySafeUrlError),
+    UrlParse(String, #[source] SafeUrlError),
     #[error(transparent)]
     VerbatimUrl(#[from] VerbatimUrlError),
     #[error(
@@ -260,7 +260,7 @@ impl ParsedUrl {
 /// * `file:///home/ferris/my_project/my_project-0.1.0-py3-none-any.whl`
 #[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Hash, Ord)]
 pub struct ParsedPathUrl {
-    pub url: DisplaySafeUrl,
+    pub url: SafeUrl,
     /// The absolute path to the distribution which we use for installing.
     pub install_path: Box<Path>,
     /// The file extension, e.g. `tar.gz`, `zip`, etc.
@@ -269,7 +269,7 @@ pub struct ParsedPathUrl {
 
 impl ParsedPathUrl {
     /// Construct a [`ParsedPathUrl`] from a path requirement source.
-    pub fn from_source(install_path: Box<Path>, ext: DistExtension, url: DisplaySafeUrl) -> Self {
+    pub fn from_source(install_path: Box<Path>, ext: DistExtension, url: SafeUrl) -> Self {
         Self {
             url,
             install_path,
@@ -284,7 +284,7 @@ impl ParsedPathUrl {
 /// * `file:///home/ferris/my_project`
 #[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Hash, Ord)]
 pub struct ParsedDirectoryUrl {
-    pub url: DisplaySafeUrl,
+    pub url: SafeUrl,
     /// The absolute path to the distribution which we use for installing.
     pub install_path: Box<Path>,
     /// Whether the project at the given URL should be installed in editable mode.
@@ -299,7 +299,7 @@ impl ParsedDirectoryUrl {
         install_path: Box<Path>,
         editable: Option<bool>,
         r#virtual: Option<bool>,
-        url: DisplaySafeUrl,
+        url: SafeUrl,
     ) -> Self {
         Self {
             url,
@@ -331,22 +331,22 @@ impl ParsedGitDirectoryUrl {
     }
 }
 
-impl TryFrom<DisplaySafeUrl> for ParsedGitDirectoryUrl {
+impl TryFrom<SafeUrl> for ParsedGitDirectoryUrl {
     type Error = ParsedUrlError;
 
     /// Supports URLs with and without the `git+` prefix.
     ///
     /// When the URL includes a prefix, it's presumed to come from a PEP 508 requirement; when it's
     /// excluded, it's presumed to come from `tool.uv.sources`.
-    fn try_from(url_in: DisplaySafeUrl) -> Result<Self, Self::Error> {
+    fn try_from(url_in: SafeUrl) -> Result<Self, Self::Error> {
         let subdirectory = get_subdirectory(&url_in).map(PathBuf::into_boxed_path);
 
         let url = url_in
             .as_str()
             .strip_prefix("git+")
             .unwrap_or(url_in.as_str());
-        let url = DisplaySafeUrl::parse(url)
-            .map_err(|err| ParsedUrlError::UrlParse(url.to_string(), err))?;
+        let url =
+            SafeUrl::parse(url).map_err(|err| ParsedUrlError::UrlParse(url.to_string(), err))?;
         let url = GitUrl::try_from(url)?;
         Ok(Self { url, subdirectory })
     }
@@ -376,14 +376,14 @@ impl ParsedGitPathUrl {
     }
 }
 
-impl TryFrom<DisplaySafeUrl> for ParsedGitPathUrl {
+impl TryFrom<SafeUrl> for ParsedGitPathUrl {
     type Error = ParsedUrlError;
 
     /// Supports URLs with and without the `git+` prefix.
     ///
     /// When the URL includes a prefix, it's presumed to come from a PEP 508 requirement; when it's
     /// excluded, it's presumed to come from `tool.uv.sources`.
-    fn try_from(url_in: DisplaySafeUrl) -> Result<Self, Self::Error> {
+    fn try_from(url_in: SafeUrl) -> Result<Self, Self::Error> {
         let install_path = get_install_path(&url_in).unwrap();
         let ext = DistExtension::from_path(&install_path)
             .map_err(|err| ParsedUrlError::MissingExtensionPath(install_path.clone(), err))?;
@@ -392,8 +392,8 @@ impl TryFrom<DisplaySafeUrl> for ParsedGitPathUrl {
             .as_str()
             .strip_prefix("git+")
             .unwrap_or(url_in.as_str());
-        let url = DisplaySafeUrl::parse(url)
-            .map_err(|err| ParsedUrlError::UrlParse(url.to_string(), err))?;
+        let url =
+            SafeUrl::parse(url).map_err(|err| ParsedUrlError::UrlParse(url.to_string(), err))?;
         let url = GitUrl::try_from(url)?;
         Ok(Self {
             url,
@@ -411,7 +411,7 @@ impl TryFrom<DisplaySafeUrl> for ParsedGitPathUrl {
 /// * A source dist with a recognizable extension but invalid name: `https://github.com/foo-labs/foo/archive/master.zip#egg=pkg&subdirectory=packages/bar`
 #[derive(Debug, Clone, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub struct ParsedArchiveUrl {
-    pub url: DisplaySafeUrl,
+    pub url: SafeUrl,
     pub subdirectory: Option<Box<Path>>,
     pub ext: DistExtension,
 }
@@ -419,7 +419,7 @@ pub struct ParsedArchiveUrl {
 impl ParsedArchiveUrl {
     /// Construct a [`ParsedArchiveUrl`] from a URL requirement source.
     pub fn from_source(
-        location: DisplaySafeUrl,
+        location: SafeUrl,
         subdirectory: Option<Box<Path>>,
         ext: DistExtension,
     ) -> Self {
@@ -431,10 +431,10 @@ impl ParsedArchiveUrl {
     }
 }
 
-impl TryFrom<DisplaySafeUrl> for ParsedArchiveUrl {
+impl TryFrom<SafeUrl> for ParsedArchiveUrl {
     type Error = ParsedUrlError;
 
-    fn try_from(mut url: DisplaySafeUrl) -> Result<Self, Self::Error> {
+    fn try_from(mut url: SafeUrl) -> Result<Self, Self::Error> {
         // Extract the `#subdirectory` fragment, if present.
         let subdirectory = get_subdirectory(&url).map(PathBuf::into_boxed_path);
         url.set_fragment(None);
@@ -481,10 +481,10 @@ fn get_install_path(url: &Url) -> Option<PathBuf> {
     Some(PathBuf::from(install_path))
 }
 
-impl TryFrom<DisplaySafeUrl> for ParsedUrl {
+impl TryFrom<SafeUrl> for ParsedUrl {
     type Error = ParsedUrlError;
 
-    fn try_from(url: DisplaySafeUrl) -> Result<Self, Self::Error> {
+    fn try_from(url: SafeUrl) -> Result<Self, Self::Error> {
         if let Some((prefix, ..)) = url.scheme().split_once('+') {
             match prefix {
                 "git" => {
@@ -633,7 +633,7 @@ impl From<&ParsedGitPathUrl> for DirectUrl {
     }
 }
 
-impl From<ParsedUrl> for DisplaySafeUrl {
+impl From<ParsedUrl> for SafeUrl {
     fn from(value: ParsedUrl) -> Self {
         match value {
             ParsedUrl::Path(value) => value.into(),
@@ -645,19 +645,19 @@ impl From<ParsedUrl> for DisplaySafeUrl {
     }
 }
 
-impl From<ParsedPathUrl> for DisplaySafeUrl {
+impl From<ParsedPathUrl> for SafeUrl {
     fn from(value: ParsedPathUrl) -> Self {
         value.url
     }
 }
 
-impl From<ParsedDirectoryUrl> for DisplaySafeUrl {
+impl From<ParsedDirectoryUrl> for SafeUrl {
     fn from(value: ParsedDirectoryUrl) -> Self {
         value.url
     }
 }
 
-impl From<ParsedArchiveUrl> for DisplaySafeUrl {
+impl From<ParsedArchiveUrl> for SafeUrl {
     fn from(value: ParsedArchiveUrl) -> Self {
         let mut url = value.url;
         if let Some(subdirectory) = value.subdirectory {
@@ -667,7 +667,7 @@ impl From<ParsedArchiveUrl> for DisplaySafeUrl {
     }
 }
 
-impl From<ParsedGitPathUrl> for DisplaySafeUrl {
+impl From<ParsedGitPathUrl> for SafeUrl {
     fn from(value: ParsedGitPathUrl) -> Self {
         let lfs = value.url.lfs().enabled();
         let mut url = Self::parse(&format!("{}{}", "git+", Self::from(value.url).as_str()))
@@ -681,7 +681,7 @@ impl From<ParsedGitPathUrl> for DisplaySafeUrl {
     }
 }
 
-impl From<ParsedGitDirectoryUrl> for DisplaySafeUrl {
+impl From<ParsedGitDirectoryUrl> for SafeUrl {
     fn from(value: ParsedGitDirectoryUrl) -> Self {
         let lfs = value.url.lfs().enabled();
         let mut url = Self::parse(&format!("{}{}", "git+", Self::from(value.url).as_str()))
@@ -706,41 +706,40 @@ mod tests {
     use anyhow::Result;
 
     use crate::{DirectUrl, parsed_url::ParsedUrl};
-    use uv_redacted::DisplaySafeUrl;
+    use uv_redacted::SafeUrl;
 
     #[test]
     fn direct_url_from_url() -> Result<()> {
-        let expected = DisplaySafeUrl::parse("git+https://github.com/pallets/flask.git")?;
-        let actual = DisplaySafeUrl::from(ParsedUrl::try_from(expected.clone())?);
+        let expected = SafeUrl::parse("git+https://github.com/pallets/flask.git")?;
+        let actual = SafeUrl::from(ParsedUrl::try_from(expected.clone())?);
         assert_eq!(expected, actual);
 
         let expected =
-            DisplaySafeUrl::parse("git+https://github.com/pallets/flask.git#subdirectory=pkg_dir")?;
-        let actual = DisplaySafeUrl::from(ParsedUrl::try_from(expected.clone())?);
+            SafeUrl::parse("git+https://github.com/pallets/flask.git#subdirectory=pkg_dir")?;
+        let actual = SafeUrl::from(ParsedUrl::try_from(expected.clone())?);
         assert_eq!(expected, actual);
 
-        let expected = DisplaySafeUrl::parse("git+https://github.com/pallets/flask.git@2.0.0")?;
-        let actual = DisplaySafeUrl::from(ParsedUrl::try_from(expected.clone())?);
+        let expected = SafeUrl::parse("git+https://github.com/pallets/flask.git@2.0.0")?;
+        let actual = SafeUrl::from(ParsedUrl::try_from(expected.clone())?);
         assert_eq!(expected, actual);
 
-        let expected = DisplaySafeUrl::parse(
-            "git+https://github.com/pallets/flask.git@2.0.0#subdirectory=pkg_dir",
-        )?;
-        let actual = DisplaySafeUrl::from(ParsedUrl::try_from(expected.clone())?);
+        let expected =
+            SafeUrl::parse("git+https://github.com/pallets/flask.git@2.0.0#subdirectory=pkg_dir")?;
+        let actual = SafeUrl::from(ParsedUrl::try_from(expected.clone())?);
         assert_eq!(expected, actual);
 
         // We do not support implicit parsing of the `lfs=true` url fragments for now
-        let expected = DisplaySafeUrl::parse(
+        let expected = SafeUrl::parse(
             "git+https://github.com/pallets/flask.git#subdirectory=pkg_dir&lfs=true",
         )?;
-        let actual = DisplaySafeUrl::from(ParsedUrl::try_from(expected.clone())?);
+        let actual = SafeUrl::from(ParsedUrl::try_from(expected.clone())?);
         assert_ne!(expected, actual);
 
         // TODO(charlie): Preserve other fragments.
-        let expected = DisplaySafeUrl::parse(
+        let expected = SafeUrl::parse(
             "git+https://github.com/pallets/flask.git#egg=flask&subdirectory=pkg_dir",
         )?;
-        let actual = DisplaySafeUrl::from(ParsedUrl::try_from(expected.clone())?);
+        let actual = SafeUrl::from(ParsedUrl::try_from(expected.clone())?);
         assert_ne!(expected, actual);
 
         Ok(())
@@ -752,9 +751,9 @@ mod tests {
             "git+ssh://git@github.com/pallets/flask.git",
             "git+ssh://git@github.com/pallets/flask.git#path=dist/flask-1.0-py3-none-any.whl",
         ] {
-            let expected = DisplaySafeUrl::parse(expected)?;
+            let expected = SafeUrl::parse(expected)?;
             let parsed_url = ParsedUrl::try_from(expected.clone())?;
-            let actual = DisplaySafeUrl::try_from(&DirectUrl::from(&parsed_url))?;
+            let actual = SafeUrl::try_from(&DirectUrl::from(&parsed_url))?;
             assert_eq!(expected, actual);
         }
 
@@ -764,8 +763,8 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn direct_url_from_url_absolute() -> Result<()> {
-        let expected = DisplaySafeUrl::parse("file:///path/to/directory")?;
-        let actual = DisplaySafeUrl::from(ParsedUrl::try_from(expected.clone())?);
+        let expected = SafeUrl::parse("file:///path/to/directory")?;
+        let actual = SafeUrl::from(ParsedUrl::try_from(expected.clone())?);
         assert_eq!(expected, actual);
         Ok(())
     }

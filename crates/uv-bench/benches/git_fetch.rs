@@ -18,7 +18,7 @@ use criterion::{
 };
 use uv_git::{Fetch, GitHttpSettings, GitResolver};
 use uv_git_types::{GitLfs, GitOid, GitReference, GitUrl};
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 
 use git_fixture::GIT_FIXTURES;
 
@@ -45,7 +45,7 @@ fn fetch(
     fetched
 }
 
-fn git_url(repository: &DisplaySafeUrl, reference: &str, precise: Option<GitOid>) -> GitUrl {
+fn git_url(repository: &SafeUrl, reference: &str, precise: Option<GitOid>) -> GitUrl {
     GitUrl::from_fields(
         repository.clone(),
         GitReference::from_rev(reference.to_owned()),

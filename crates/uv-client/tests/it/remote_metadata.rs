@@ -18,7 +18,7 @@ use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{BuiltDist, DirectUrlBuiltDist, IndexCapabilities};
 use uv_git::GitResolver;
 use uv_pep508::VerbatimUrl;
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 
 #[tokio::test]
 async fn remote_metadata_with_and_without_cache() -> Result<()> {
@@ -42,7 +42,7 @@ async fn remote_metadata_with_and_without_cache() -> Result<()> {
         let filename = WheelFilename::from_str("ok-1.0.0-py3-none-any.whl")?;
         let dist = BuiltDist::DirectUrl(DirectUrlBuiltDist {
             filename,
-            location: Box::new(DisplaySafeUrl::parse(&url)?),
+            location: Box::new(SafeUrl::parse(&url)?),
             url: VerbatimUrl::from_str(&url)?,
             size: None,
         });
@@ -80,7 +80,7 @@ async fn remote_metadata_requires_range_requests() -> Result<()> {
     let filename = WheelFilename::from_str("ok-1.0.0-py3-none-any.whl")?;
     let dist = BuiltDist::DirectUrl(DirectUrlBuiltDist {
         filename,
-        location: Box::new(DisplaySafeUrl::parse(&url)?),
+        location: Box::new(SafeUrl::parse(&url)?),
         url: VerbatimUrl::from_str(&url)?,
         size: None,
     });
@@ -607,7 +607,7 @@ async fn assert_wheel_metadata_readable(source_server: &MockServer) -> Result<()
     )?;
     let dist = BuiltDist::DirectUrl(DirectUrlBuiltDist {
         filename: WheelFilename::from_str("ok-1.0.0-py3-none-any.whl")?,
-        location: Box::new(DisplaySafeUrl::parse(&url)?),
+        location: Box::new(SafeUrl::parse(&url)?),
         url: VerbatimUrl::from_str(&url)?,
         size: None,
     });

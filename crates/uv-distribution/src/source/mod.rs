@@ -44,7 +44,7 @@ use uv_normalize::PackageName;
 use uv_pep440::{Version, release_specifiers_to_ranges};
 use uv_platform_tags::Tags;
 use uv_pypi_types::{HashAlgorithm, HashDigest, HashDigests, PyProjectToml, ResolutionMetadata};
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 use uv_types::{BuildContext, BuildKey, BuildStack, SourceBuildTrait};
 use uv_workspace::pyproject::ToolUvSources;
 
@@ -175,7 +175,7 @@ impl<'a, 'client> StaticMetadataDatabase<'a, 'client> {
 async fn fetch_git_source_tree(
     git_resolver: &GitResolver,
     git: &GitUrl,
-    url: DisplaySafeUrl,
+    url: SafeUrl,
     subdirectory: Option<&Path>,
     http_settings: GitHttpSettings,
     cache: &Cache,
@@ -649,7 +649,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     async fn url<'data>(
         &self,
         source: &BuildableSource<'data>,
-        url: &'data DisplaySafeUrl,
+        url: &'data SafeUrl,
         index: Option<&'data IndexUrl>,
         cache_shard: &CacheShard,
         subdirectory: Option<&'data Path>,
@@ -783,7 +783,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     async fn url_metadata<'data>(
         &self,
         source: &BuildableSource<'data>,
-        url: &'data DisplaySafeUrl,
+        url: &'data SafeUrl,
         index: Option<&'data IndexUrl>,
         cache_shard: &CacheShard,
         subdirectory: Option<&'data Path>,
@@ -969,7 +969,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         &self,
         source: &BuildableSource<'_>,
         ext: SourceDistExtension,
-        url: &DisplaySafeUrl,
+        url: &SafeUrl,
         index: Option<&IndexUrl>,
         cache_shard: &CacheShard,
         hashes: ArchiveHashPolicy<'_>,
@@ -2755,7 +2755,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         &self,
         source: &BuildableSource<'_>,
         ext: SourceDistExtension,
-        url: &DisplaySafeUrl,
+        url: &SafeUrl,
         index: Option<&IndexUrl>,
         entry: &CacheEntry,
         revision: Revision,
@@ -3212,10 +3212,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     }
 
     /// Returns a GET [`reqwest::Request`] for the given URL.
-    fn request(
-        url: DisplaySafeUrl,
-        client: &RegistryClient,
-    ) -> Result<reqwest::Request, reqwest::Error> {
+    fn request(url: SafeUrl, client: &RegistryClient) -> Result<reqwest::Request, reqwest::Error> {
         client
             .uncached_client(&url)
             .get(Url::from(url))

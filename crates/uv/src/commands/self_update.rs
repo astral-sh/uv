@@ -20,7 +20,7 @@ use uv_client::{BaseClientBuilder, RetriableError, WrappedReqwestError, fetch_wi
 use uv_command_support::{ExitStatus, Printer};
 use uv_fs::Simplified;
 use uv_pep440::{Version as Pep440Version, VersionSpecifier, VersionSpecifiers};
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 use uv_static::{
     EnvVars, astral_mirror_base_url, astral_mirror_url_from_env, custom_astral_mirror_url,
 };
@@ -405,22 +405,20 @@ fn installer_filename() -> &'static str {
 fn official_installer_urls_with_mirror(
     version: &Pep440Version,
     astral_mirror_url: Option<&str>,
-) -> Result<Vec<DisplaySafeUrl>> {
+) -> Result<Vec<SafeUrl>> {
     let astral_mirror_url = custom_astral_mirror_url(astral_mirror_url);
     let filename = installer_filename();
     let mirror_prefix = effective_uv_mirror_prefix(astral_mirror_url);
     let mirror = format!("{mirror_prefix}{version}/{filename}");
 
-    let mut urls = vec![
-        DisplaySafeUrl::parse(&mirror).with_context(|| format!("Failed to parse `{mirror}`"))?,
-    ];
+    let mut urls =
+        vec![SafeUrl::parse(&mirror).with_context(|| format!("Failed to parse `{mirror}`"))?];
 
     // When using the default mirror, also fall back to the canonical GitHub URL.
     if astral_mirror_url.is_none() {
         let canonical = format!("{UV_GITHUB_RELEASES_DOWNLOAD_PREFIX}{version}/{filename}");
         urls.push(
-            DisplaySafeUrl::parse(&canonical)
-                .with_context(|| format!("Failed to parse `{canonical}`"))?,
+            SafeUrl::parse(&canonical).with_context(|| format!("Failed to parse `{canonical}`"))?,
         );
     }
     Ok(urls)
@@ -428,7 +426,7 @@ fn official_installer_urls_with_mirror(
 
 /// Download the official installer from the provided mirror/canonical URL list.
 async fn download_installer_from_urls(
-    urls: &[DisplaySafeUrl],
+    urls: &[SafeUrl],
     installer_path: &Path,
     client_builder: BaseClientBuilder<'_>,
     github_token: Option<&str>,
@@ -494,7 +492,7 @@ async fn download_installer_from_urls(
 }
 
 fn installer_download_github_token<'a>(
-    url: &DisplaySafeUrl,
+    url: &SafeUrl,
     github_token: Option<&'a str>,
 ) -> Option<&'a str> {
     match url.host_str() {
@@ -747,7 +745,7 @@ const fn default_modify_path() -> bool {
 enum InstallerDownloadError {
     #[error("Failed to download installer from: {url}")]
     Download {
-        url: DisplaySafeUrl,
+        url: SafeUrl,
         #[source]
         source: WrappedReqwestError,
     },
@@ -851,7 +849,7 @@ mod tests {
 
     fn spawn_http_server(
         response: String,
-    ) -> (DisplaySafeUrl, Arc<AtomicUsize>, Sender<()>, JoinHandle<()>) {
+    ) -> (SafeUrl, Arc<AtomicUsize>, Sender<()>, JoinHandle<()>) {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         listener.set_nonblocking(true).unwrap();
         let addr = listener.local_addr().unwrap();
@@ -880,7 +878,7 @@ mod tests {
             }
         });
         (
-            DisplaySafeUrl::parse(&format!("http://{addr}/uv-installer.sh")).unwrap(),
+            SafeUrl::parse(&format!("http://{addr}/uv-installer.sh")).unwrap(),
             requests,
             shutdown_tx,
             handle,
@@ -1055,11 +1053,11 @@ mod tests {
 
     #[test]
     fn test_installer_download_github_token() {
-        let mirror = DisplaySafeUrl::parse(
+        let mirror = SafeUrl::parse(
             "https://releases.astral.sh/github/uv/releases/download/1.2.3/uv-installer.sh",
         )
         .unwrap();
-        let github = DisplaySafeUrl::parse(
+        let github = SafeUrl::parse(
             "https://github.com/astral-sh/uv/releases/download/1.2.3/uv-installer.sh",
         )
         .unwrap();

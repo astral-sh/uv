@@ -22,10 +22,10 @@ use uv_client::{CacheControl, CachedClient, CachedClientError};
 use uv_configuration::Concurrency;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
-use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
+use uv_redacted::{SafeUrl, SafeUrlError};
 
-pub static API_BASE: LazyLock<DisplaySafeUrl> = LazyLock::new(|| {
-    DisplaySafeUrl::parse("https://api.osv.dev/").expect("embedded OSV URL is a valid URL")
+pub static API_BASE: LazyLock<SafeUrl> = LazyLock::new(|| {
+    SafeUrl::parse("https://api.osv.dev/").expect("embedded OSV URL is a valid URL")
 });
 
 /// Errors during OSV service interactions.
@@ -39,7 +39,7 @@ pub enum Error {
     ReqwestMiddleware(#[from] reqwest_middleware::Error),
     /// An error when constructing the URL for an API request.
     #[error("Invalid API URL: {0}")]
-    Url(DisplaySafeUrl, #[source] DisplaySafeUrlError),
+    Url(SafeUrl, #[source] SafeUrlError),
     /// An error when OSV returns an invalid vulnerability record.
     #[error("OSV returned a malformed vulnerability record for `{id}`")]
     MalformedRecord {
@@ -148,7 +148,7 @@ enum ReferenceType {
 struct Reference {
     #[serde(rename = "type")]
     reference_type: ReferenceType,
-    url: DisplaySafeUrl,
+    url: SafeUrl,
 }
 
 /// A full vulnerability record from OSV.
@@ -230,7 +230,7 @@ const OSV_QUERY_BATCH_SIZE: usize = 1_000;
 
 /// Represents [OSV](https://osv.dev/), an open-source vulnerability database.
 pub struct Osv {
-    base_url: DisplaySafeUrl,
+    base_url: SafeUrl,
     client: CachedClient,
     concurrency: Concurrency,
     cache: Cache,
@@ -244,7 +244,7 @@ impl Osv {
     /// are cached transparently by the [`CachedClient`].
     pub fn new(
         client: CachedClient,
-        base_url: Option<DisplaySafeUrl>,
+        base_url: Option<SafeUrl>,
         concurrency: Concurrency,
         cache: Cache,
     ) -> Self {
@@ -451,7 +451,7 @@ impl Osv {
                     .map(|reference| reference.url.clone())
             })
             .unwrap_or_else(|| {
-                DisplaySafeUrl::parse(&format!("https://osv.dev/vulnerability/{}", vuln.id))
+                SafeUrl::parse(&format!("https://osv.dev/vulnerability/{}", vuln.id))
                     .expect("impossible: synthesized URL is invalid")
             });
 
@@ -521,7 +521,7 @@ mod tests {
     use uv_configuration::Concurrency;
     use uv_normalize::PackageName;
     use uv_pep440::Version;
-    use uv_redacted::DisplaySafeUrl;
+    use uv_redacted::SafeUrl;
     use wiremock::matchers::{body_json, method, path};
     use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
@@ -615,7 +615,7 @@ mod tests {
 
         let osv = Osv::new(
             test_client(),
-            Some(DisplaySafeUrl::parse(&server.uri()).unwrap()),
+            Some(SafeUrl::parse(&server.uri()).unwrap()),
             Concurrency::default(),
             Cache::temp().unwrap(),
         );
@@ -692,7 +692,7 @@ mod tests {
 
         let osv = Osv::new(
             test_client(),
-            Some(DisplaySafeUrl::parse(&server.uri()).unwrap()),
+            Some(SafeUrl::parse(&server.uri()).unwrap()),
             Concurrency::default(),
             Cache::temp().unwrap(),
         );
@@ -784,7 +784,7 @@ mod tests {
 
         let osv = Osv::new(
             test_client(),
-            Some(DisplaySafeUrl::parse(&server.uri()).unwrap()),
+            Some(SafeUrl::parse(&server.uri()).unwrap()),
             Concurrency::default(),
             Cache::temp().unwrap(),
         );
@@ -821,7 +821,7 @@ mod tests {
                     summary: None,
                     description: None,
                     link: Some(
-                        DisplaySafeUrl {
+                        SafeUrl {
                             scheme: "https",
                             cannot_be_a_base: false,
                             username: "",
@@ -859,7 +859,7 @@ mod tests {
                     summary: None,
                     description: None,
                     link: Some(
-                        DisplaySafeUrl {
+                        SafeUrl {
                             scheme: "https",
                             cannot_be_a_base: false,
                             username: "",
@@ -979,7 +979,7 @@ mod tests {
 
         let osv = Osv::new(
             test_client(),
-            Some(DisplaySafeUrl::parse(&server.uri()).unwrap()),
+            Some(SafeUrl::parse(&server.uri()).unwrap()),
             Concurrency::default(),
             Cache::temp().unwrap(),
         );
@@ -1063,7 +1063,7 @@ mod tests {
 
         let osv = Osv::new(
             test_client(),
-            Some(DisplaySafeUrl::parse(&server.uri()).unwrap()),
+            Some(SafeUrl::parse(&server.uri()).unwrap()),
             Concurrency::default(),
             Cache::temp().unwrap(),
         );

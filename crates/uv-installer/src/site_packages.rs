@@ -24,7 +24,7 @@ use uv_pep508::VersionOrUrl;
 use uv_platform_tags::Tags;
 use uv_pypi_types::{ResolverMarkerEnvironment, VerbatimParsedUrl};
 use uv_python_interpreter::{Interpreter, PythonEnvironment};
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 use uv_types::InstalledPackagesProvider;
 use uv_warnings::warn_user;
 
@@ -45,7 +45,7 @@ pub struct SitePackages {
     /// virtual environment, which we handle gracefully.
     by_name: FxHashMap<PackageName, Vec<usize>>,
     /// The installed editable distributions, keyed by URL.
-    by_url: FxHashMap<DisplaySafeUrl, Vec<usize>>,
+    by_url: FxHashMap<SafeUrl, Vec<usize>>,
 }
 
 impl SitePackages {
@@ -75,7 +75,7 @@ impl SitePackages {
     ) -> Result<Self> {
         let mut distributions: Vec<Option<InstalledDist>> = Vec::new();
         let mut by_name: FxHashMap<PackageName, Vec<usize>> = FxHashMap::default();
-        let mut by_url: FxHashMap<DisplaySafeUrl, Vec<usize>> = FxHashMap::default();
+        let mut by_url: FxHashMap<SafeUrl, Vec<usize>> = FxHashMap::default();
 
         for site_packages in interpreter.site_packages() {
             // Read the site-packages directory.
@@ -188,7 +188,7 @@ impl SitePackages {
     }
 
     /// Returns the distributions installed from the given URL, if any.
-    pub fn get_urls(&self, url: &DisplaySafeUrl) -> Vec<&InstalledDist> {
+    pub fn get_urls(&self, url: &SafeUrl) -> Vec<&InstalledDist> {
         let Some(indexes) = self.by_url.get(url) else {
             return Vec::new();
         };

@@ -16,7 +16,7 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Certificates, RegistryClientBuilder};
 use uv_distribution_types::IndexUrl;
 use uv_errors::{ErrorOptions, Hinted, write_error_chain_with_options};
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 use uv_static::EnvVars;
 
 use crate::http_util::{
@@ -351,7 +351,7 @@ impl TestClient {
     /// Assert that an HTTPS connection to a public host succeeds.
     #[cfg(feature = "test-pypi")]
     async fn expect_https_connect_succeeds_for_host(&self, host: &str) {
-        let url = DisplaySafeUrl::from_str(&format!("https://{host}/")).unwrap();
+        let url = SafeUrl::from_str(&format!("https://{host}/")).unwrap();
         let vars = self.ssl_vars();
         let system_certs = self.system_certs;
         async_with_vars(vars, async {
@@ -369,7 +369,7 @@ impl TestClient {
     /// error on the client side.
     #[cfg(feature = "test-pypi")]
     async fn expect_https_connect_fails_for_host(&self, host: &str) {
-        let url = DisplaySafeUrl::from_str(&format!("https://{host}/")).unwrap();
+        let url = SafeUrl::from_str(&format!("https://{host}/")).unwrap();
         let vars = self.ssl_vars();
         let system_certs = self.system_certs;
         async_with_vars(vars, async {
@@ -428,21 +428,21 @@ async fn send_request(
     system_certs: bool,
     cert: Option<&Path>,
 ) -> Result<reqwest::Response, reqwest_middleware::Error> {
-    let url = DisplaySafeUrl::from_str(&format!("https://{addr}")).unwrap();
+    let url = SafeUrl::from_str(&format!("https://{addr}")).unwrap();
     send_request_to_with_cert(&url, system_certs, cert).await
 }
 
 /// Send a GET request to an arbitrary URL using a fresh registry client.
 #[cfg(feature = "test-pypi")]
 async fn send_request_to(
-    url: &DisplaySafeUrl,
+    url: &SafeUrl,
     system_certs: bool,
 ) -> Result<reqwest::Response, reqwest_middleware::Error> {
     send_request_to_with_cert(url, system_certs, None).await
 }
 
 async fn send_request_to_with_cert(
-    url: &DisplaySafeUrl,
+    url: &SafeUrl,
     system_certs: bool,
     cert: Option<&Path>,
 ) -> Result<reqwest::Response, reqwest_middleware::Error> {

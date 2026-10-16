@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
-use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
+use uv_redacted::{SafeUrl, SafeUrlError};
 
 use crate::{HashAlgorithm, Hashes};
 
@@ -98,8 +98,8 @@ impl std::fmt::Display for VcsKind {
     }
 }
 
-impl TryFrom<&DirectUrl> for DisplaySafeUrl {
-    type Error = DisplaySafeUrlError;
+impl TryFrom<&DirectUrl> for SafeUrl {
+    type Error = SafeUrlError;
 
     fn try_from(value: &DirectUrl) -> Result<Self, Self::Error> {
         match value {

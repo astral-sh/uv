@@ -17,7 +17,7 @@ use uv_fs::Simplified;
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep508::RequirementOrigin;
 use uv_pypi_types::PyProjectToml;
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 use uv_resolver::{InMemoryIndex, MetadataResponse};
 use uv_types::{BuildContext, HashStrategy, HashVerification};
 
@@ -195,7 +195,7 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
             }
         }
 
-        let Ok(url) = Url::from_directory_path(path).map(DisplaySafeUrl::from_url) else {
+        let Ok(url) = Url::from_directory_path(path).map(SafeUrl::from_url) else {
             return Err(anyhow::anyhow!("Failed to convert path to URL"));
         };
         let source = SourceUrl::Directory(DirectorySourceUrl {

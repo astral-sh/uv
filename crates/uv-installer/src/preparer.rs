@@ -13,7 +13,7 @@ use uv_distribution_types::{
 };
 use uv_normalize::PackageName;
 use uv_platform_tags::Tags;
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 use uv_types::{BuildContext, HashStrategy, InFlight};
 
 /// Prepare distributions for installation.
@@ -273,10 +273,10 @@ pub trait Reporter: Send + Sync {
     fn on_build_complete(&self, source: &BuildableSource, id: usize);
 
     /// Callback to invoke when a repository checkout begins.
-    fn on_checkout_start(&self, url: &DisplaySafeUrl, rev: &str) -> usize;
+    fn on_checkout_start(&self, url: &SafeUrl, rev: &str) -> usize;
 
     /// Callback to invoke when a repository checkout completes.
-    fn on_checkout_complete(&self, url: &DisplaySafeUrl, rev: &str, index: usize);
+    fn on_checkout_complete(&self, url: &SafeUrl, rev: &str, index: usize);
 }
 
 impl dyn Reporter {
@@ -302,11 +302,11 @@ impl uv_distribution::Reporter for Facade {
         self.reporter.on_build_complete(source, id);
     }
 
-    fn on_checkout_start(&self, url: &DisplaySafeUrl, rev: &str) -> usize {
+    fn on_checkout_start(&self, url: &SafeUrl, rev: &str) -> usize {
         self.reporter.on_checkout_start(url, rev)
     }
 
-    fn on_checkout_complete(&self, url: &DisplaySafeUrl, rev: &str, index: usize) {
+    fn on_checkout_complete(&self, url: &SafeUrl, rev: &str, index: usize) {
         self.reporter.on_checkout_complete(url, rev, index);
     }
 

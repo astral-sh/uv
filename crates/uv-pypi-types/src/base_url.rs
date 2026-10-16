@@ -1,29 +1,29 @@
 use serde::{Deserialize, Serialize};
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
 pub struct BaseUrl(
     #[serde(
-        serialize_with = "DisplaySafeUrl::serialize_internal",
-        deserialize_with = "DisplaySafeUrl::deserialize_internal"
+        serialize_with = "SafeUrl::serialize_internal",
+        deserialize_with = "SafeUrl::deserialize_internal"
     )]
-    DisplaySafeUrl,
+    SafeUrl,
 );
 
 impl BaseUrl {
-    /// Return the underlying [`DisplaySafeUrl`].
-    pub fn as_url(&self) -> &DisplaySafeUrl {
+    /// Return the underlying [`SafeUrl`].
+    pub fn as_url(&self) -> &SafeUrl {
         &self.0
     }
 
-    /// Return the underlying [`DisplaySafeUrl`] as a serialized string.
+    /// Return the underlying [`SafeUrl`] as a serialized string.
     pub fn as_str(&self) -> &str {
         self.0.as_str()
     }
 }
 
-impl From<DisplaySafeUrl> for BaseUrl {
-    fn from(url: DisplaySafeUrl) -> Self {
+impl From<SafeUrl> for BaseUrl {
+    fn from(url: SafeUrl) -> Self {
         Self(url)
     }
 }

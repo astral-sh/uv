@@ -9,7 +9,7 @@ use uv_client::BaseClientBuilder;
 use uv_client::RegistryClientBuilder;
 use uv_pep508::{MarkerEnvironment, MarkerEnvironmentBuilder};
 use uv_platform_tags::{Arch, Os, Platform};
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 use uv_version::version;
 
 /// Return the current uv version as a regex-escaped string for use in snapshot filters.
@@ -29,7 +29,7 @@ async fn test_user_agent_has_version() -> Result<()> {
     let client = RegistryClientBuilder::new(BaseClientBuilder::default(), cache).build()?;
 
     // Send request to our dummy server
-    let url = DisplaySafeUrl::from_str(&format!("http://{addr}"))?;
+    let url = SafeUrl::from_str(&format!("http://{addr}"))?;
     let res = client
         .cached_client()
         .uncached()
@@ -88,7 +88,7 @@ async fn test_user_agent_has_subcommand() -> Result<()> {
     .build()?;
 
     // Send request to our dummy server
-    let url = DisplaySafeUrl::from_str(&format!("http://{addr}"))?;
+    let url = SafeUrl::from_str(&format!("http://{addr}"))?;
     let res = client
         .cached_client()
         .uncached()
@@ -183,7 +183,7 @@ async fn test_user_agent_has_linehaul() -> Result<()> {
     let client = builder.build()?;
 
     // Send request to our dummy server
-    let url = DisplaySafeUrl::from_str(&format!("http://{addr}"))?;
+    let url = SafeUrl::from_str(&format!("http://{addr}"))?;
     let res = client
         .cached_client()
         .uncached()

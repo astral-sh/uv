@@ -8,7 +8,7 @@ use tracing::trace;
 use url::Url;
 
 use uv_once_map::OnceMap;
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 
 use crate::credentials::{Authentication, CredentialsFromUrlError, Username};
 use crate::{Credentials, Realm};
@@ -18,7 +18,7 @@ type FxOnceMap<K, V> = OnceMap<K, V, BuildHasherDefault<FxHasher>>;
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) enum FetchUrl {
     /// A full index URL
-    Index(DisplaySafeUrl),
+    Index(SafeUrl),
     /// A realm URL
     Realm(Realm),
 }
@@ -63,7 +63,7 @@ impl CredentialsCache {
     /// Returns `true` if the store was updated.
     pub fn store_credentials_from_url(
         &self,
-        url: &DisplaySafeUrl,
+        url: &SafeUrl,
     ) -> Result<bool, CredentialsFromUrlError> {
         if let Some(credentials) = Credentials::from_url(url)? {
             trace!("Caching credentials for `{url}`");
@@ -77,7 +77,7 @@ impl CredentialsCache {
     /// Populate the global authentication store with credentials on a URL, if there are any.
     ///
     /// Returns `true` if the store was updated.
-    pub fn store_credentials(&self, url: &DisplaySafeUrl, credentials: Credentials) {
+    pub fn store_credentials(&self, url: &SafeUrl, credentials: Credentials) {
         trace!("Caching credentials for `{url}`");
         self.insert(url, Arc::new(Authentication::from(credentials)));
     }
@@ -122,7 +122,7 @@ impl CredentialsCache {
     /// If multiple usernames are used per URL, the realm cache should be queried instead.
     pub(crate) fn get_url(
         &self,
-        url: &DisplaySafeUrl,
+        url: &SafeUrl,
         username: &Username,
     ) -> Option<Arc<Authentication>> {
         let urls = self.urls.read().unwrap();
@@ -143,7 +143,7 @@ impl CredentialsCache {
     }
 
     /// Update the cache with the given credentials.
-    pub(crate) fn insert(&self, url: &DisplaySafeUrl, credentials: Arc<Authentication>) {
+    pub(crate) fn insert(&self, url: &SafeUrl, credentials: Arc<Authentication>) {
         // Do not cache empty credentials
         if credentials.is_empty() {
             return;
@@ -384,12 +384,11 @@ mod tests {
         }));
         let cache = CredentialsCache::default();
         // Insert with URL with credentials and get with redacted URL.
-        let url = DisplaySafeUrl::parse("https://username:password@example.com/foobar").unwrap();
+        let url = SafeUrl::parse("https://username:password@example.com/foobar").unwrap();
         cache.insert(&url, credentials.clone());
         assert_eq!(cache.get_url(&url, &username), Some(credentials.clone()));
         // Insert with redacted URL and get with URL with credentials.
-        let url =
-            DisplaySafeUrl::parse("https://username:password@second-example.com/foobar").unwrap();
+        let url = SafeUrl::parse("https://username:password@second-example.com/foobar").unwrap();
         cache.insert(&url, credentials.clone());
         assert_eq!(cache.get_url(&url, &username), Some(credentials.clone()));
     }

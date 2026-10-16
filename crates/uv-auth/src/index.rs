@@ -2,7 +2,7 @@ use std::fmt::{self, Display, Formatter};
 
 use rustc_hash::FxHashSet;
 use url::Url;
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 
 /// When to use authentication.
 #[derive(
@@ -54,10 +54,10 @@ impl Display for AuthPolicy {
 // could potentially make sense for a future refactor.
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub struct Index {
-    pub url: DisplaySafeUrl,
+    pub url: SafeUrl,
     /// The root endpoint where authentication is applied.
     /// For PEP 503 endpoints, this excludes `/simple`.
-    pub root_url: DisplaySafeUrl,
+    pub root_url: SafeUrl,
     pub auth_policy: AuthPolicy,
 }
 
@@ -133,7 +133,7 @@ mod tests {
     use super::*;
 
     fn index(root_url: &str, auth_policy: AuthPolicy) -> Index {
-        let root_url = DisplaySafeUrl::parse(root_url).unwrap();
+        let root_url = SafeUrl::parse(root_url).unwrap();
         Index {
             url: root_url.clone(),
             root_url,

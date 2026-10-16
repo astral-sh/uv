@@ -7,11 +7,11 @@ use reqwest::Proxy;
 use serde::{Deserialize, Deserializer, Serialize};
 use url::Url;
 
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 
 /// A proxy URL with a supported scheme and a host.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct ProxyUrl(DisplaySafeUrl);
+pub struct ProxyUrl(SafeUrl);
 
 /// The destination scheme to which a [`ProxyUrl`] applies.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -22,7 +22,7 @@ pub enum ProxyUrlKind {
 
 impl ProxyUrl {
     /// Returns a reference to the underlying URL.
-    fn as_url(&self) -> &DisplaySafeUrl {
+    fn as_url(&self) -> &SafeUrl {
         &self.0
     }
 
@@ -42,7 +42,7 @@ pub enum ProxyUrlError {
     #[error(
         "invalid proxy URL scheme `{scheme}` in `{url}`: expected http, https, socks5, or socks5h"
     )]
-    InvalidScheme { scheme: String, url: DisplaySafeUrl },
+    InvalidScheme { scheme: String, url: SafeUrl },
 }
 
 /// Returns true if the input likely has no scheme (no "://" present).
@@ -81,7 +81,7 @@ impl TryFrom<Url> for ProxyUrl {
     type Error = ProxyUrlError;
 
     fn try_from(url: Url) -> Result<Self, Self::Error> {
-        let url = DisplaySafeUrl::from_url(url);
+        let url = SafeUrl::from_url(url);
         match url.scheme() {
             "http" | "https" | "socks5" | "socks5h" => {
                 // Reqwest can reinterpret a hostless SOCKS URL as an HTTP proxy.

@@ -32,8 +32,8 @@ use uv_git::GitHttpSettings;
 use uv_pep508::MarkerEnvironment;
 use uv_platform_tags::Platform;
 use uv_preview::Preview;
-use uv_redacted::DisplaySafeUrl;
-use uv_redacted::DisplaySafeUrlError;
+use uv_redacted::SafeUrl;
+use uv_redacted::SafeUrlError;
 use uv_static::EnvVars;
 use uv_threads::min_stack_size;
 use uv_version::version;
@@ -451,13 +451,13 @@ impl<'a> BaseClientBuilder<'a> {
     /// See [`CredentialsCache::store_credentials_from_url`].
     pub fn store_credentials_from_url(
         &self,
-        url: &DisplaySafeUrl,
+        url: &SafeUrl,
     ) -> Result<bool, CredentialsFromUrlError> {
         self.credentials_cache.store_credentials_from_url(url)
     }
 
     /// See [`CredentialsCache::store_credentials`].
-    pub fn store_credentials(&self, url: &DisplaySafeUrl, credentials: Credentials) {
+    pub fn store_credentials(&self, url: &SafeUrl, credentials: Credentials) {
         self.credentials_cache.store_credentials(url, credentials);
     }
 
@@ -805,7 +805,7 @@ impl BaseClient {
     }
 
     /// Selects the appropriate client based on the host's trustworthiness.
-    pub fn for_host(&self, url: &DisplaySafeUrl) -> &RedirectClientWithMiddleware {
+    pub fn for_host(&self, url: &SafeUrl) -> &RedirectClientWithMiddleware {
         if self.disable_ssl(url) {
             &self.dangerous_client
         } else {
@@ -815,19 +815,19 @@ impl BaseClient {
 
     /// Executes a request, applying redirect policy.
     pub(crate) async fn execute(&self, req: Request) -> reqwest_middleware::Result<Response> {
-        let client = self.for_host(&DisplaySafeUrl::from_url(req.url().clone()));
+        let client = self.for_host(&SafeUrl::from_url(req.url().clone()));
         client.execute(req).await
     }
 
     /// Returns `true` if the host is trusted to use the insecure client.
-    fn disable_ssl(&self, url: &DisplaySafeUrl) -> bool {
+    fn disable_ssl(&self, url: &SafeUrl) -> bool {
         self.allow_insecure_host
             .iter()
             .any(|allow_insecure_host| allow_insecure_host.matches(url))
     }
 
     /// Return the [`GitHttpSettings`] for fetching from the given URL.
-    pub fn git_http_settings(&self, url: &DisplaySafeUrl) -> GitHttpSettings {
+    pub fn git_http_settings(&self, url: &SafeUrl) -> GitHttpSettings {
         GitHttpSettings::default()
             .with_disabled_ssl(self.disable_ssl(url))
             .with_offline(self.connectivity().is_offline())
@@ -965,7 +965,7 @@ fn request_into_redirect(
     res: &Response,
     cross_origin_credentials_policy: CrossOriginCredentialsPolicy,
 ) -> reqwest_middleware::Result<Option<Request>> {
-    let original_req_url = DisplaySafeUrl::from_url(req.url().clone());
+    let original_req_url = SafeUrl::from_url(req.url().clone());
     let status = res.status();
     let should_redirect = match status {
         StatusCode::MOVED_PERMANENTLY
@@ -1015,10 +1015,10 @@ fn request_into_redirect(
             ))
         })?;
 
-    let mut redirect_url = match DisplaySafeUrl::parse(location) {
+    let mut redirect_url = match SafeUrl::parse(location) {
         Ok(url) => url,
         // Per RFC 7231, URLs should be resolved against the request URL.
-        Err(DisplaySafeUrlError::Url(ParseError::RelativeUrlWithoutBase)) => original_req_url.join(location).map_err(|err| {
+        Err(SafeUrlError::Url(ParseError::RelativeUrlWithoutBase)) => original_req_url.join(location).map_err(|err| {
             reqwest_middleware::Error::Middleware(anyhow!(
                 "Invalid HTTP {status} 'Location' value `{location}` relative to `{original_req_url}`: {err}"
             ))
@@ -1088,7 +1088,7 @@ fn request_into_redirect(
     *req.url_mut() = Url::from(redirect_url);
     debug!(
         "Received HTTP {status}. Redirecting to `{}`",
-        DisplaySafeUrl::ref_cast(req.url())
+        SafeUrl::ref_cast(req.url())
     );
     Ok(Some(req))
 }
@@ -1096,10 +1096,7 @@ fn request_into_redirect(
 /// Return a Referer [`HeaderValue`] according to RFC 7231.
 ///
 /// Return [`None`] if https has been downgraded in the redirect location.
-fn make_referer(
-    redirect_url: &DisplaySafeUrl,
-    original_url: &DisplaySafeUrl,
-) -> Option<HeaderValue> {
+fn make_referer(redirect_url: &SafeUrl, original_url: &SafeUrl) -> Option<HeaderValue> {
     if redirect_url.scheme() == "http" && original_url.scheme() == "https" {
         return None;
     }
@@ -1198,13 +1195,13 @@ fn retry_policy(retries: u32, no_retry_delay: bool) -> ExponentialBackoff {
 /// URLs have been exhausted. On the next retry attempt the full URL list is tried again from the
 /// beginning.
 pub async fn fetch_with_url_fallback<T, E, F>(
-    urls: &[DisplaySafeUrl],
+    urls: &[SafeUrl],
     retry_policy: ExponentialBackoff,
     subject: &str,
     mut attempt: F,
 ) -> Result<T, E>
 where
-    F: AsyncFnMut(DisplaySafeUrl) -> Result<T, E>,
+    F: AsyncFnMut(SafeUrl) -> Result<T, E>,
     E: RetriableError + From<SystemTimeError>,
 {
     let mut retry_state = RetryState::start(
