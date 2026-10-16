@@ -40,7 +40,7 @@
 //! tree negation. It also allows us to only implement a single operation for both `AND` and `OR`, implementing
 //! the other in terms of its De Morgan Complement.
 //!
-//! ADDs are created and managed through the global [`Interner`]. A given ADD is referenced through
+//! Persistent ADDs are created and managed through the global [`Interner`]. A given ADD is referenced through
 //! a [`NodeId`], which represents a potentially complemented reference to a [`Node`] in the interner,
 //! or a terminal `true`/`false` node. Interning allows the reduction rule that isomorphic nodes are
 //! merged to be applied globally.
@@ -71,23 +71,27 @@ use crate::{
 pub(super) mod isop;
 
 /// The global node interner.
-pub(crate) static INTERNER: LazyLock<Interner> = LazyLock::new(Interner::default);
+pub(crate) static INTERNER: LazyLock<Interner<'static>> = LazyLock::new(Interner::default);
 
 /// An interner for decision nodes.
 ///
 /// Interning decision nodes allows isomorphic nodes to be automatically merged.
 /// It also allows nodes to cheaply compared.
 #[derive(Default)]
-pub(crate) struct Interner {
-    pub(crate) shared: InternerShared,
+pub(crate) struct Interner<'a> {
+    pub(crate) shared: InternerShared<'a>,
     state: Mutex<InternerState>,
 }
 
 /// The shared part of an [`Interner`], which can be accessed without a lock.
 #[derive(Default)]
-pub(crate) struct InternerShared {
+pub(crate) struct InternerShared<'a> {
     /// A list of unique [`Node`]s.
     nodes: boxcar::Vec<Node>,
+    /// A read-only parent whose nodes and cached operations can be reused.
+    parent: Option<&'a InternerGuard<'a>>,
+    /// The first node index owned by this interner.
+    offset: usize,
 }
 
 /// The mutable [`Interner`] state, stored behind a lock.
@@ -105,14 +109,20 @@ struct InternerState {
     exclusions: Option<NodeId>,
 }
 
-impl InternerShared {
+impl InternerShared<'_> {
     /// Returns the node for the given [`NodeId`].
     pub(crate) fn node(&self, id: NodeId) -> &Node {
-        &self.nodes[id.index()]
+        let index = id.index();
+        if let Some(parent) = self.parent
+            && index < self.offset
+        {
+            return parent.shared.node(id);
+        }
+        &self.nodes[index - self.offset]
     }
 }
 
-impl Interner {
+impl Interner<'_> {
     /// Locks the interner state, returning a guard that can be used to perform marker
     /// operations.
     pub(crate) fn lock(&self) -> InternerGuard<'_> {
@@ -126,10 +136,47 @@ impl Interner {
 /// A lock of [`InternerState`].
 pub(crate) struct InternerGuard<'a> {
     state: MutexGuard<'a, InternerState>,
-    shared: &'a InternerShared,
+    shared: &'a InternerShared<'a>,
 }
 
 impl InternerGuard<'_> {
+    /// Create a temporary interner that borrows existing nodes without changing its parent.
+    ///
+    /// Holding the parent guard prevents new parent nodes from overlapping temporary node IDs.
+    /// New nodes and operation-cache entries belong to the returned interner and must not escape
+    /// its lifetime.
+    pub(crate) fn scoped(&self) -> Interner<'_> {
+        Interner {
+            shared: InternerShared {
+                nodes: boxcar::Vec::new(),
+                parent: Some(self),
+                offset: self.shared.offset + self.shared.nodes.count(),
+            },
+            state: Mutex::new(InternerState {
+                exclusions: self.state.exclusions,
+                ..InternerState::default()
+            }),
+        }
+    }
+
+    /// Find a canonical node in this interner or its read-only parent.
+    fn find_node(&self, node: &Node) -> Option<NodeId> {
+        self.state
+            .unique
+            .get(node)
+            .copied()
+            .or_else(|| self.shared.parent.and_then(|parent| parent.find_node(node)))
+    }
+
+    /// Reuse a conjunction result without retaining new entries in the parent cache.
+    fn cached_and(&self, left: NodeId, right: NodeId) -> Option<NodeId> {
+        self.state.cache.get(&(left, right)).copied().or_else(|| {
+            self.shared
+                .parent
+                .and_then(|parent| parent.cached_and(left, right))
+        })
+    }
+
     /// Creates a decision node with the given variable and children.
     fn create_node(&mut self, var: Variable, children: Edges) -> NodeId {
         let mut node = Node { var, children };
@@ -154,10 +201,13 @@ impl InternerGuard<'_> {
         // Insert the node.
         // Probing before inserting keeps the clone off the common path where an isomorphic node
         // has already been interned. Cloning a [`Node`] copies every outgoing edge range.
-        let id = if let Some(&id) = self.state.unique.get(&node) {
+        let id = if let Some(id) = self.find_node(&node) {
             id
         } else {
-            let id = NodeId::new(self.shared.nodes.push(node.clone()), false);
+            let id = NodeId::new(
+                self.shared.offset + self.shared.nodes.push(node.clone()),
+                false,
+            );
             self.state.unique.insert(node, id);
             id
         };
@@ -406,8 +456,8 @@ impl InternerGuard<'_> {
         );
 
         // The operation was memoized.
-        if let Some(result) = self.state.cache.get(&(xi, yi)) {
-            return *result;
+        if let Some(result) = self.cached_and(xi, yi) {
+            return result;
         }
 
         let (x, y) = (self.shared.node(xi), self.shared.node(yi));
@@ -1969,10 +2019,14 @@ impl fmt::Debug for NodeId {
             return write!(f, "true");
         }
 
+        // Temporary cover nodes are not present in the global interner.
+        let Some(node) = INTERNER.shared.nodes.get(self.index()) else {
+            return f.debug_tuple("NodeId").field(&self.0).finish();
+        };
         if self.is_complement() {
-            write!(f, "{:?}", INTERNER.shared.node(*self).clone().not())
+            write!(f, "{:?}", node.clone().not())
         } else {
-            write!(f, "{:?}", INTERNER.shared.node(*self))
+            write!(f, "{node:?}")
         }
     }
 }
@@ -1980,12 +2034,44 @@ impl fmt::Debug for NodeId {
 #[cfg(test)]
 mod tests {
     use super::{INTERNER, NodeId};
-    use crate::MarkerExpression;
+    use crate::{MarkerExpression, MarkerTree};
 
     fn expr(s: &str) -> NodeId {
         INTERNER
             .lock()
             .expression(MarkerExpression::from_str(s).unwrap().unwrap())
+    }
+
+    /// ISOP creates intermediate functions even when every final guard already exists.
+    #[test]
+    fn scoped_cover_does_not_grow_parent() {
+        let marker: MarkerTree = "python_full_version < '3.11' \
+            or (extra == 'scoped-a' and extra == 'scoped-b') \
+            or (extra == 'scoped-a' and extra == 'scoped-c') \
+            or (extra == 'scoped-a' and extra == 'scoped-d') \
+            or (extra == 'scoped-b' and extra == 'scoped-c') \
+            or (extra == 'scoped-b' and extra == 'scoped-d') \
+            or (extra == 'scoped-c' and extra == 'scoped-d')"
+            .parse()
+            .expect("valid marker");
+        let parent = INTERNER.lock();
+        let nodes = parent.shared.nodes.count();
+        let unique = (parent.state.unique.len(), parent.state.unique.capacity());
+        let cache = (parent.state.cache.len(), parent.state.cache.capacity());
+
+        let workspace = parent.scoped();
+        let _cover = workspace.lock().isop(marker.0);
+        assert!(workspace.shared.nodes.count() > 0);
+        assert!(!workspace.lock().state.cache.is_empty());
+        assert_eq!(parent.shared.nodes.count(), nodes);
+        assert_eq!(
+            (parent.state.unique.len(), parent.state.unique.capacity()),
+            unique
+        );
+        assert_eq!(
+            (parent.state.cache.len(), parent.state.cache.capacity()),
+            cache
+        );
     }
 
     #[test]

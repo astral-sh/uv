@@ -9,8 +9,8 @@ use version_ranges::Ranges;
 
 use uv_pep440::{Version, VersionSpecifier};
 
-use crate::marker::algebra::INTERNER;
 use crate::marker::algebra::isop::{Cover, Guard};
+use crate::marker::algebra::{INTERNER, InternerShared};
 use crate::marker::tree::{ContainerOperator, MarkerTree};
 use crate::{ExtraOperator, MarkerExpression, MarkerOperator, MarkerTreeKind};
 
@@ -18,15 +18,20 @@ use crate::{ExtraOperator, MarkerExpression, MarkerOperator, MarkerTreeKind};
 ///
 /// Extract a shared cover before expanding it to clauses for user-facing output.
 pub(crate) fn to_dnf(tree: MarkerTree) -> Vec<Vec<MarkerExpression>> {
-    let cover = INTERNER.lock().isop(tree.0);
     let mut dnf = Vec::new();
-    collect_cover(&cover, &mut dnf, &mut Vec::new());
+    {
+        let parent = INTERNER.lock();
+        let workspace = parent.scoped();
+        let cover = workspace.lock().isop(tree.0);
+        collect_cover(&workspace.shared, &cover, &mut dnf, &mut Vec::new());
+    }
     sort(&mut dnf);
     dnf
 }
 
 /// Expand a shared cover, rendering each single-variable guard with the marker range rules.
 fn collect_cover(
+    interner: &InternerShared<'_>,
     cover: &Cover,
     dnf: &mut Vec<Vec<MarkerExpression>>,
     path: &mut Vec<MarkerExpression>,
@@ -38,10 +43,12 @@ fn collect_cover(
                 dnf.push(path.clone());
             }
         }
-        Cover::Guard(guard) => collect_guard(Guard::Node(*guard), &Cover::True, dnf, path),
+        Cover::Guard(guard) => {
+            collect_guard(interner, Guard::Node(*guard), &Cover::True, dnf, path);
+        }
         Cover::Branches(branches) => {
             for (guard, suffix) in branches.iter() {
-                collect_guard(*guard, suffix, dnf, path);
+                collect_guard(interner, *guard, suffix, dnf, path);
             }
         }
     }
@@ -49,6 +56,7 @@ fn collect_cover(
 
 /// Render a single-variable guard directly into the path before expanding its suffix.
 fn collect_guard(
+    interner: &InternerShared<'_>,
     guard: Guard,
     suffix: &Cover,
     dnf: &mut Vec<Vec<MarkerExpression>>,
@@ -58,10 +66,10 @@ fn collect_guard(
         Guard::Node(node) => (MarkerTree(node), MarkerTree::TRUE),
         Guard::Edge { node, child } => (MarkerTree(node), MarkerTree(child)),
     };
-    match tree.kind() {
+    match tree.kind_with(interner) {
         // Reached a `false` node, meaning the conjunction is irrelevant for DNF.
         MarkerTreeKind::False => {}
-        MarkerTreeKind::True => collect_cover(suffix, dnf, path),
+        MarkerTreeKind::True => collect_cover(interner, suffix, dnf, path),
         MarkerTreeKind::Version(marker) => {
             let range = guard_range(marker.edges(), child);
             // Detect whether the range can be simplified as an inequality.
@@ -74,7 +82,7 @@ fn collect_guard(
                     });
                 }
 
-                collect_cover(suffix, dnf, path);
+                collect_cover(interner, suffix, dnf, path);
                 path.truncate(current);
                 return;
             }
@@ -86,7 +94,7 @@ fn collect_guard(
                     specifier,
                 });
 
-                collect_cover(suffix, dnf, path);
+                collect_cover(interner, suffix, dnf, path);
                 path.pop();
                 return;
             }
@@ -100,7 +108,7 @@ fn collect_guard(
                     });
                 }
 
-                collect_cover(suffix, dnf, path);
+                collect_cover(interner, suffix, dnf, path);
                 path.truncate(current);
             }
         }
@@ -119,7 +127,7 @@ fn collect_guard(
                         value,
                     });
                 }
-                collect_cover(suffix, dnf, path);
+                collect_cover(interner, suffix, dnf, path);
                 path.truncate(current);
             }
         }
@@ -136,7 +144,7 @@ fn collect_guard(
                     });
                 }
 
-                collect_cover(suffix, dnf, path);
+                collect_cover(interner, suffix, dnf, path);
                 path.truncate(current);
                 return;
             }
@@ -151,7 +159,7 @@ fn collect_guard(
                     });
                 }
 
-                collect_cover(suffix, dnf, path);
+                collect_cover(interner, suffix, dnf, path);
                 path.truncate(current);
             }
         }
@@ -170,7 +178,7 @@ fn collect_guard(
                 };
 
                 path.push(expr);
-                collect_cover(suffix, dnf, path);
+                collect_cover(interner, suffix, dnf, path);
                 path.pop();
             }
         }
@@ -189,7 +197,7 @@ fn collect_guard(
                 };
 
                 path.push(expr);
-                collect_cover(suffix, dnf, path);
+                collect_cover(interner, suffix, dnf, path);
                 path.pop();
             }
         }
@@ -205,7 +213,7 @@ fn collect_guard(
                 };
 
                 path.push(expr);
-                collect_cover(suffix, dnf, path);
+                collect_cover(interner, suffix, dnf, path);
                 path.pop();
             }
         }
@@ -223,7 +231,7 @@ fn collect_guard(
                 };
 
                 path.push(expr);
-                collect_cover(suffix, dnf, path);
+                collect_cover(interner, suffix, dnf, path);
                 path.pop();
             }
         }
