@@ -6,13 +6,14 @@
 //! prime, irredundant cover over arbitrary unions of ranges.
 //!
 //! See <https://people.eecs.berkeley.edu/~alanmi/publications/2003/iwls03_sop.pdf>, section 4.
+//! Cover subtraction follows the fused area/cover operation described in section 7.2 of
+//! <https://people.eecs.berkeley.edu/~alanmi/publications/2001/tech01_zdd_.pdf>.
 
 use std::cmp::Ordering;
 use std::ops::Bound;
 use std::rc::Rc;
 
 use indexmap::IndexMap;
-use indexmap::map::Entry;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use version_ranges::Ranges;
 
@@ -34,32 +35,34 @@ pub(crate) enum Guard {
     Edge { node: NodeId, child: NodeId },
 }
 
+/// Extraction-local memo tables. Every branch cover remains owned by `covers`, so its
+/// allocation address is a stable identity for subtraction until extraction finishes.
+#[derive(Default)]
+struct CoverCache {
+    covers: FxHashMap<(NodeId, NodeId), Cover>,
+    differences: FxHashMap<(NodeId, *const (Guard, Cover)), NodeId>,
+}
+
 impl InternerGuard<'_> {
     /// Extract a cover without materializing the decision diagram's paths.
     pub(crate) fn isop(&mut self, marker: NodeId) -> Cover {
-        self.isop_cached(marker, marker, &mut FxHashMap::default())
-            .1
+        self.isop_cached(marker, marker, &mut CoverCache::default())
     }
 
-    /// Return a cover and its function `I`, where `lower => I => upper`.
+    /// Return a cover of a function `I`, where `lower => I => upper`.
     /// The interval allows recursive calls to use already covered cases as don't-cares.
-    fn isop_cached(
-        &mut self,
-        lower: NodeId,
-        upper: NodeId,
-        cache: &mut FxHashMap<(NodeId, NodeId), (NodeId, Cover)>,
-    ) -> (NodeId, Cover) {
+    fn isop_cached(&mut self, lower: NodeId, upper: NodeId, cache: &mut CoverCache) -> Cover {
         if lower.is_false() {
-            return (NodeId::FALSE, Cover::False);
+            return Cover::False;
         }
         if upper.is_true() {
-            return (NodeId::TRUE, Cover::True);
+            return Cover::True;
         }
         debug_assert!(
             !upper.is_false() && !lower.is_true(),
             "invalid ISOP interval: {lower:?}..{upper:?}"
         );
-        if let Some(result) = cache.get(&(lower, upper)) {
+        if let Some(result) = cache.covers.get(&(lower, upper)) {
             return result.clone();
         }
         // A single decision is already a cover; its range renderer merges equal branches.
@@ -71,11 +74,14 @@ impl InternerGuard<'_> {
                 .nodes()
                 .all(|child| child.is_true() || child.is_false())
         {
-            return (lower, Cover::Guard(lower));
+            return Cover::Guard(lower);
         }
 
         let exact = lower == upper;
         let cofactors = self.cover_cofactors(lower, upper);
+        // With two cofactors, nonempty specific covers cannot represent the same function:
+        // each must cover a point forbidden by the other cofactor's upper bound.
+        let merge_ranges = cofactors.len() > 2;
         // A clause can omit this variable only where every branch permits it.
         let common_upper = cofactors
             .iter()
@@ -83,46 +89,155 @@ impl InternerGuard<'_> {
                 self.and(common, upper)
             });
         let mut common_lower = NodeId::FALSE;
-        let mut function = NodeId::FALSE;
-        let mut branches = IndexMap::<_, _, FxBuildHasher>::default();
+        let mut branches = Vec::new();
+        let mut equivalent = FxHashMap::default();
         for (guard, lower, upper) in cofactors {
             let required = self.and(lower, common_upper.not());
-            let (specific, cover) = self.isop_cached(required, upper, cache);
-            let remaining = self.and(lower, specific.not());
+            let cover = self.isop_cached(required, upper, cache);
+            let remaining = self.subtract_cover(lower, &cover, cache);
             common_lower = self.or(common_lower, remaining);
-            if specific.is_false() {
+            if let Cover::False = cover {
                 continue;
             }
-            if !exact {
-                let condition = self.guard_node(guard);
-                let term = self.and(condition, specific);
-                function = self.or(function, term);
-            }
             // Equivalent suffixes can share a union of ranges, including inequalities.
-            match branches.entry(specific) {
-                Entry::Vacant(entry) => {
-                    entry.insert((guard, cover));
-                }
-                Entry::Occupied(mut entry) => {
-                    let left = self.guard_node(entry.get().0);
+            if merge_ranges {
+                let function = self.subtract_cover(NodeId::TRUE, &cover, cache).not();
+                if let Some(&index) = equivalent.get(&function) {
+                    let (previous, _): &mut (Guard, Cover) = &mut branches[index];
+                    let left = self.guard_node(*previous);
                     let right = self.guard_node(guard);
-                    entry.get_mut().0 = Guard::Node(self.or(left, right));
+                    *previous = Guard::Node(self.or(left, right));
+                    continue;
                 }
+                equivalent.insert(function, branches.len());
+            }
+            branches.push((guard, cover));
+        }
+        let common = self.isop_cached(common_lower, common_upper, cache);
+        match common {
+            Cover::False => {}
+            Cover::True | Cover::Guard(_) | Cover::Branches(_) => {
+                branches.push((Guard::Node(NodeId::TRUE), common));
             }
         }
-        let (common, cover) = self.isop_cached(common_lower, common_upper, cache);
-        // Equal bounds already determine the function; only its cover needs rebuilding.
-        function = if exact {
-            lower
-        } else {
-            self.or(function, common)
-        };
-        if !common.is_false() {
-            branches.insert(common, (Guard::Node(NodeId::TRUE), cover));
+        let branches: Rc<[_]> = branches.into();
+        if exact {
+            let identity = Rc::as_ptr(&branches).cast();
+            cache.differences.insert((lower, identity), NodeId::FALSE);
+            cache
+                .differences
+                .insert((NodeId::TRUE, identity), lower.not());
         }
-        let result = (function, Cover::Branches(branches.into_values().collect()));
-        cache.insert((lower, upper), result.clone());
+        let result = Cover::Branches(branches);
+        cache.covers.insert((lower, upper), result.clone());
         result
+    }
+
+    /// Subtract a cover directly, without constructing the diagram of its covered area.
+    /// This fuses cover conversion and Boolean difference, as in EXTRA's ISOP procedure.
+    fn subtract_cover(&mut self, marker: NodeId, cover: &Cover, cache: &mut CoverCache) -> NodeId {
+        if marker.is_false() {
+            return marker;
+        }
+        match cover {
+            Cover::False => marker,
+            Cover::True => NodeId::FALSE,
+            Cover::Guard(guard) => self.and(marker, guard.not()),
+            Cover::Branches(branches) => {
+                let key = (marker, Rc::as_ptr(branches).cast());
+                if let Some(&result) = cache.differences.get(&key) {
+                    return result;
+                }
+                let mut result = self.subtract_branches(marker, cover, branches, cache);
+                if !result.is_true()
+                    && !result.is_false()
+                    && self.shared.node(result).var.is_conflicting_variable()
+                {
+                    let exclusions = self.exclusions();
+                    if self.disjointness(result, exclusions.not()) {
+                        result = NodeId::FALSE;
+                    }
+                }
+                cache.differences.insert(key, result);
+                result
+            }
+        }
+    }
+
+    /// Match input and cover cofactors, then rebuild only the uncovered decision.
+    /// The specific guards partition one variable; the final guard may omit it.
+    fn subtract_branches(
+        &mut self,
+        marker: NodeId,
+        cover: &Cover,
+        branches: &[(Guard, Cover)],
+        cache: &mut CoverCache,
+    ) -> NodeId {
+        let Some((first, suffix)) = branches.first() else {
+            return marker;
+        };
+        let condition = match first {
+            Guard::Node(node) | Guard::Edge { node, .. } => *node,
+        };
+        if condition.is_true() {
+            return self.subtract_cover(marker, suffix, cache);
+        }
+        let decision = self.shared.node(condition);
+        let (variable, children) = if marker.is_true() {
+            (decision.var.clone(), None)
+        } else {
+            let node = self.shared.node(marker);
+            match node.var.cmp(&decision.var) {
+                Ordering::Less => {
+                    // Earlier input decisions recurse through the memoized operation,
+                    // so shared cofactors are visited once, not once per guard.
+                    let children = node
+                        .children
+                        .map(marker, |child| self.subtract_cover(child, cover, cache));
+                    return self.create_node(node.var.clone(), children);
+                }
+                Ordering::Equal => (node.var.clone(), Some(&node.children)),
+                Ordering::Greater => (decision.var.clone(), None),
+            }
+        };
+        // Remove the common suffix before the specific suffixes, and keep the
+        // uncovered cofactors uninterned until all guards have been processed.
+        let (specific, common) = match branches.split_last() {
+            Some(((Guard::Node(node), common), specific)) if node.is_true() => {
+                (specific, Some(common))
+            }
+            _ => (branches, None),
+        };
+        let mut remaining = |child| match common {
+            Some(common) => self.subtract_cover(child, common, cache),
+            None => child,
+        };
+        let mut children = if let Some(children) = children {
+            children.map(marker, remaining)
+        } else {
+            let remaining = remaining(marker);
+            decision.children.map(condition, |_| remaining)
+        };
+        for (guard, suffix) in specific {
+            let (condition, accepted) = match guard {
+                Guard::Node(node) => (*node, NodeId::TRUE),
+                Guard::Edge { node, child } => (*node, *child),
+            };
+            let decision = self.shared.node(condition);
+            children = children.apply(
+                NodeId::TRUE,
+                &decision.children,
+                condition,
+                |child, guard_child| {
+                    if guard_child == accepted {
+                        self.subtract_cover(child, suffix, cache)
+                    } else {
+                        child
+                    }
+                },
+            );
+        }
+        self.create_node(variable, children)
     }
 
     /// Materialize a borrowed guard only when algebra needs its function.
@@ -350,5 +465,53 @@ fn compare_ends<T: Ord>(left: Bound<&T>, right: Bound<&T>) -> Ordering {
         | (Bound::Excluded(left), Bound::Excluded(right)) => left.cmp(right),
         (Bound::Included(left), Bound::Excluded(right)) => left.cmp(right).then(Ordering::Greater),
         (Bound::Excluded(left), Bound::Included(right)) => left.cmp(right).then(Ordering::Less),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::CoverCache;
+    use crate::MarkerTree;
+    use crate::marker::algebra::INTERNER;
+
+    /// Subtraction must handle unrelated input and cover roots, complemented edges,
+    /// overlapping suffixes, native range partitions, and known platform exclusions.
+    #[test]
+    fn cover_difference() {
+        let mut markers = vec![MarkerTree::FALSE, MarkerTree::TRUE];
+        markers.extend(
+            [
+                "extra == 'a'",
+                "extra != 'a'",
+                "extra == 'b'",
+                "extra == 'a' or extra == 'b'",
+                "extra == 'a' and extra == 'b'",
+                "(extra == 'a' and extra == 'b') or (extra != 'a' and extra == 'c')",
+                "(extra == 'a' and extra == 'b') or (extra == 'b' and extra == 'c') or (extra == 'a' and extra == 'c')",
+                "python_full_version < '3.10'",
+                "python_full_version == '3.10' or extra == 'a'",
+                "(python_full_version < '3.10' and extra == 'a') or (python_full_version > '3.10' and extra == 'b')",
+                "sys_platform == 'linux'",
+                "sys_platform == 'win32' or extra == 'a'",
+                "sys_platform != 'linux' and sys_platform != 'win32'",
+                "os_name == 'nt' or extra == 'b'",
+                "platform_release == '24' or extra == 'a'",
+                "platform_release != '24' and extra != 'b'",
+            ]
+            .map(|marker| marker.parse::<MarkerTree>().expect("valid marker")),
+        );
+        let mut interner = INTERNER.lock();
+        let mut cache = CoverCache::default();
+        for covered in &markers {
+            let cover = interner.isop_cached(covered.0, covered.0, &mut cache);
+            for marker in &markers {
+                let expected = interner.and(marker.0, covered.0.not());
+                let actual = interner.subtract_cover(marker.0, &cover, &mut cache);
+                // Equivalent range decisions can retain different adjacent partitions.
+                assert!(interner.disjointness(actual, expected.not()));
+                assert!(interner.disjointness(expected, actual.not()));
+                assert_eq!(actual.is_false(), expected.is_false());
+            }
+        }
     }
 }
