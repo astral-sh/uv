@@ -182,20 +182,24 @@ impl RequirementSatisfaction {
                     return Self::Mismatch;
                 };
                 let DirectUrl::VcsUrl {
-                    url: installed_url,
-                    vcs_info:
-                        VcsInfo {
-                            vcs: VcsKind::Git,
-                            requested_revision: _,
-                            commit_id: installed_precise,
-                            git_lfs: installed_git_lfs,
-                        },
+                    url: installed_vcs,
                     subdirectory: installed_subdirectory,
                     path: None,
                 } = direct_url.as_ref()
                 else {
                     return Self::Mismatch;
                 };
+
+                let VcsInfo {
+                    vcs: VcsKind::Git,
+                    requested_revision: _,
+                    commit_id: installed_precise,
+                    git_lfs: installed_git_lfs,
+                } = installed_vcs.vcs_info()
+                else {
+                    return Self::Mismatch;
+                };
+                let installed_url = installed_vcs.url();
 
                 if requested_subdirectory != installed_subdirectory {
                     debug!(
@@ -253,20 +257,24 @@ impl RequirementSatisfaction {
                     return Self::Mismatch;
                 };
                 let DirectUrl::VcsUrl {
-                    url: installed_url,
-                    vcs_info:
-                        VcsInfo {
-                            vcs: VcsKind::Git,
-                            requested_revision: _,
-                            commit_id: installed_precise,
-                            git_lfs: installed_git_lfs,
-                        },
+                    url: installed_vcs,
                     subdirectory: None,
                     path: Some(installed_path),
                 } = direct_url.as_ref()
                 else {
                     return Self::Mismatch;
                 };
+
+                let VcsInfo {
+                    vcs: VcsKind::Git,
+                    requested_revision: _,
+                    commit_id: installed_precise,
+                    git_lfs: installed_git_lfs,
+                } = installed_vcs.vcs_info()
+                else {
+                    return Self::Mismatch;
+                };
+                let installed_url = installed_vcs.url();
 
                 if requested_path != installed_path {
                     debug!(

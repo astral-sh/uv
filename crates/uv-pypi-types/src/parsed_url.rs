@@ -11,7 +11,7 @@ use uv_pep508::{
 };
 use uv_redacted::{SafeUrl, SafeUrlError};
 
-use crate::{ArchiveInfo, DirInfo, DirectUrl, VcsInfo, VcsKind};
+use crate::{ArchiveInfo, DirInfo, DirectUrl, VcsUrl};
 
 #[derive(Debug, Error)]
 pub enum ParsedUrlError {
@@ -603,13 +603,7 @@ impl From<&ParsedArchiveUrl> for DirectUrl {
 impl From<&ParsedGitDirectoryUrl> for DirectUrl {
     fn from(value: &ParsedGitDirectoryUrl) -> Self {
         Self::VcsUrl {
-            url: value.url.url().to_string(),
-            vcs_info: VcsInfo {
-                vcs: VcsKind::Git,
-                commit_id: value.url.precise().as_ref().map(ToString::to_string),
-                requested_revision: value.url.reference().as_str().map(ToString::to_string),
-                git_lfs: value.url.lfs().enabled().then_some(true),
-            },
+            url: VcsUrl::from(&value.url),
             subdirectory: value.subdirectory.clone(),
             path: None,
         }
@@ -619,13 +613,7 @@ impl From<&ParsedGitDirectoryUrl> for DirectUrl {
 impl From<&ParsedGitPathUrl> for DirectUrl {
     fn from(value: &ParsedGitPathUrl) -> Self {
         Self::VcsUrl {
-            url: value.url.url().to_string(),
-            vcs_info: VcsInfo {
-                vcs: VcsKind::Git,
-                commit_id: value.url.precise().as_ref().map(ToString::to_string),
-                requested_revision: value.url.reference().as_str().map(ToString::to_string),
-                git_lfs: value.url.lfs().enabled().then_some(true),
-            },
+            url: VcsUrl::from(&value.url),
             subdirectory: None,
             path: Some(value.install_path.clone()),
         }

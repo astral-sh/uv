@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use uv_git_types::GitUrl;
 use uv_redacted::{SafeUrl, SafeUrlError};
 
 use crate::{HashAlgorithm, Hashes};
@@ -43,13 +44,46 @@ pub enum DirectUrl {
     /// {"url": "https://github.com/pallets/flask.git", "vcs_info": {"commit_id": "8d9519df093864ff90ca446d4af2dc8facd3c542", "vcs": "git", "git_lfs": true }}
     /// ```
     VcsUrl {
-        url: String,
-        vcs_info: VcsInfo,
+        #[serde(flatten)]
+        url: VcsUrl,
         #[serde(skip_serializing_if = "Option::is_none")]
         subdirectory: Option<Box<Path>>,
         #[serde(skip_serializing_if = "Option::is_none")]
         path: Option<PathBuf>,
     },
+}
+
+/// The repository URL and VCS information for a `direct_url.json` source.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct VcsUrl {
+    url: String,
+    vcs_info: VcsInfo,
+}
+
+impl VcsUrl {
+    /// Return the repository URL in its `direct_url.json` form.
+    pub fn url(&self) -> &str {
+        &self.url
+    }
+
+    /// Return the VCS metadata, including its kind and any revision.
+    pub fn vcs_info(&self) -> &VcsInfo {
+        &self.vcs_info
+    }
+}
+
+impl From<&GitUrl> for VcsUrl {
+    fn from(value: &GitUrl) -> Self {
+        Self {
+            url: value.url().to_string(),
+            vcs_info: VcsInfo {
+                vcs: VcsKind::Git,
+                commit_id: value.precise().as_ref().map(ToString::to_string),
+                requested_revision: value.reference().as_str().map(ToString::to_string),
+                git_lfs: value.lfs().enabled().then_some(true),
+            },
+        }
+    }
 }
 
 /// A failure to read the metadata schema or parse its URL.
@@ -181,11 +215,11 @@ impl TryFrom<&DirectUrl> for SafeUrl {
             }
             DirectUrl::VcsUrl {
                 url,
-                vcs_info,
                 subdirectory,
                 path,
             } => {
-                let mut url = Self::parse(&format!("{}+{}", vcs_info.vcs, url))?;
+                let vcs_info = url.vcs_info();
+                let mut url = Self::parse(&format!("{}+{}", vcs_info.vcs, url.url()))?;
                 if let Some(commit_id) = &vcs_info.commit_id {
                     let path = format!("{}@{commit_id}", url.path());
                     url.set_path(&path);
