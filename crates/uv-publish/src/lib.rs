@@ -29,7 +29,7 @@ use tokio_util::io::ReaderStream;
 use tracing::{Level, debug, enabled, trace, warn};
 use url::Url;
 
-use uv_auth::{Credentials, Realm};
+use uv_auth::{Credentials, CredentialsPrompt, CredentialsPromptError, Realm};
 use uv_cache::{Cache, Refresh};
 use uv_client::{
     BaseClient, ClientBuildError, DEFAULT_MAX_REDIRECTS, MetadataFormat, OwnedArchive,
@@ -46,9 +46,9 @@ use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_static::TarBackend;
 use uv_warnings::warn_user;
 
-pub use crate::trusted_publishing::TrustedPublishingToken;
+use crate::trusted_publishing::TrustedPublishingService;
 use crate::trusted_publishing::pypi::PyPIPublishingService;
-use crate::trusted_publishing::{TrustedPublishingError, TrustedPublishingService};
+pub use crate::trusted_publishing::{TrustedPublishingError, TrustedPublishingToken};
 
 #[derive(Error, Debug)]
 pub enum PublishError {
@@ -93,6 +93,8 @@ pub enum PublishError {
     MissingHash(Box<DistFilename>),
     #[error(transparent)]
     RetryParsing(#[from] RetryParsingError),
+    #[error(transparent)]
+    CredentialsPrompt(#[from] CredentialsPromptError),
 }
 
 /// Failure to get the metadata for a specific file.
@@ -319,6 +321,7 @@ struct CheckUrlClient<'a> {
 pub struct PublishSession<'a> {
     publish_url: DisplaySafeUrl,
     credentials: PublishingCredentials,
+    credentials_prompt: Option<CredentialsPrompt>,
     upload_client: &'a BaseClient,
     oidc_client: &'a BaseClient,
     retry_policy: ExponentialBackoff,
@@ -618,6 +621,7 @@ impl<'a> PublishSession<'a> {
         Self {
             publish_url,
             credentials,
+            credentials_prompt: None,
             upload_client,
             oidc_client,
             retry_policy,
@@ -626,6 +630,15 @@ impl<'a> PublishSession<'a> {
             // Check URL requests are made one at a time against a single index.
             download_concurrency: Semaphore::new(1),
         }
+    }
+
+    /// Configure an interactive fallback for rejected credentials discovered by the middleware.
+    ///
+    /// Share the upload client's [`CredentialsPrompt`] to reuse entered credentials and avoid
+    /// prompting again if they are rejected. Explicit publishing credentials are never replaced.
+    pub fn with_credentials_prompt(mut self, prompt: CredentialsPrompt) -> Self {
+        self.credentials_prompt = Some(prompt);
+        self
     }
 
     /// Configure the index used to skip existing distributions and detect raced uploads.
@@ -709,6 +722,18 @@ impl<'a> PublishSession<'a> {
                 })?;
 
             let result = request.send().await;
+
+            // Keep credentials entered by the middleware for retries and subsequent files.
+            if let PublishingCredentials::Supplied(credentials) = &mut self.credentials
+                && credentials.is_empty()
+                && let Some(prompted) = self
+                    .credentials_prompt
+                    .as_ref()
+                    .and_then(CredentialsPrompt::credentials)
+            {
+                *credentials = prompted.clone();
+            }
+
             let response = match result {
                 Ok(response) => {
                     // When the user accidentally uses https://test.pypi.org/legacy (no slash) as publish URL, we
@@ -790,6 +815,20 @@ impl<'a> PublishSession<'a> {
                     ));
                 }
             };
+
+            if matches!(
+                response.status(),
+                StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN
+            ) && let PublishingCredentials::Supplied(credentials) = &mut self.credentials
+                && credentials.is_empty()
+                && let Some(prompt) = &self.credentials_prompt
+                && prompt.credentials().is_none()
+                && let Some(prompted) = prompt.prompt().await?
+            {
+                // Reopen the streaming body, reusing the metadata and hashes already computed.
+                *credentials = prompted;
+                continue;
+            }
 
             return match Self::handle_response(&current_registry, response).await {
                 Ok(()) => {
@@ -1432,16 +1471,18 @@ impl PublishSession<'_> {
 #[cfg(test)]
 mod tests {
     use std::assert_matches;
+    use std::io;
     use std::path::PathBuf;
     use std::sync::Arc;
 
     use async_compression::tokio::write::GzipEncoder;
     use insta::{allow_duplicates, assert_debug_snapshot, assert_snapshot};
     use itertools::Itertools;
+    use reqwest::StatusCode;
     use tar_codec::{ArchiveBuilder as _, EntryMetadata, TarEncoder};
     use tempfile::NamedTempFile;
     use tokio::io::AsyncWriteExt as _;
-    use uv_auth::Credentials;
+    use uv_auth::{Credentials, CredentialsPrompt, CredentialsPromptError};
     use uv_client::{AuthIntegration, BaseClient, BaseClientBuilder, RedirectPolicy};
     use uv_distribution_filename::DistFilename;
     use uv_pypi_types::{HashDigest, Metadata23};
@@ -1449,11 +1490,12 @@ mod tests {
     use uv_static::TarBackend;
 
     use crate::{
-        FormMetadata, PublishError, PublishOutcome, PublishPrepareError, PublishSession,
-        PublishingCredentials, Reporter, UploadOutcome, group_files, source_dist_pkg_info,
+        FormMetadata, PublishError, PublishOutcome, PublishPrepareError, PublishSendError,
+        PublishSession, PublishingCredentials, Reporter, UploadOutcome, group_files,
+        source_dist_pkg_info,
     };
     use uv_errors::{ErrorOptions, Hints, write_error_chain_with_options};
-    use wiremock::matchers::{method, path};
+    use wiremock::matchers::{basic_auth, method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     struct DummyReporter;
@@ -2206,6 +2248,172 @@ mod tests {
             .finalize(PublishOutcome::DryRun)
             .await
             .expect("Finalization failed");
+    }
+
+    /// Entered credentials must survive cache updates for subsequent files. If they are rejected,
+    /// the upload must terminate without another authentication retry.
+    #[tokio::test]
+    async fn upload_rejected_prompt_credentials() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(basic_auth("reader", "read-password"))
+            .respond_with(ResponseTemplate::new(401))
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(basic_auth("writer", "secret"))
+            .respond_with(ResponseTemplate::new(200))
+            .up_to_n_times(1)
+            .with_priority(1)
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(basic_auth("writer", "secret"))
+            .respond_with(ResponseTemplate::new(401))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let registry = DisplaySafeUrl::parse(&server.uri()).expect("Valid registry URL");
+        let prompt = CredentialsPrompt::new(|| {
+            Ok(Some(Credentials::basic(
+                Some("writer".to_string()),
+                Some("secret".to_string()),
+            )))
+        });
+        let client_builder = BaseClientBuilder::default()
+            .auth_integration(AuthIntegration::OnlyAuthenticated)
+            .credentials_prompt(prompt.clone())
+            .retries(0);
+        client_builder.store_credentials(
+            &registry,
+            Credentials::basic(
+                Some("reader".to_string()),
+                Some("read-password".to_string()),
+            ),
+        );
+        let client = client_builder.build().expect("Client should build");
+        let mut session = PublishSession::new(
+            registry,
+            PublishingCredentials::Supplied(Credentials::basic(None, None)),
+            &client,
+            &client,
+            client.retry_policy(),
+            TarBackend::default(),
+        )
+        .with_credentials_prompt(prompt);
+        let prepared = PublishSession::prepare(
+            vec!["../../test/links/ok-1.0.0-py3-none-any.whl".to_string()],
+            false,
+        )
+        .expect("Distribution should be found")
+        .pop()
+        .expect("One distribution");
+
+        assert_matches!(
+            session
+                .upload(prepared, Arc::new(DummyReporter))
+                .await
+                .expect("Prompted credentials should authenticate the upload"),
+            UploadOutcome::Uploaded
+        );
+
+        // The next file's index check can reload read credentials into the shared cache.
+        client_builder.store_credentials(
+            &DisplaySafeUrl::parse(&server.uri()).expect("Valid registry URL"),
+            Credentials::basic(
+                Some("reader".to_string()),
+                Some("read-password".to_string()),
+            ),
+        );
+        let prepared = PublishSession::prepare(
+            vec!["../../test/links/ok-2.0.0-py3-none-any.whl".to_string()],
+            false,
+        )
+        .expect("Distribution should be found")
+        .pop()
+        .expect("One distribution");
+
+        let err = session
+            .upload(prepared, Arc::new(DummyReporter))
+            .await
+            .expect_err("Prompted credentials should be rejected");
+        assert_matches!(err, PublishError::PublishSend(_, _, err)
+            if matches!(*err, PublishSendError::Status(StatusCode::UNAUTHORIZED, _)));
+        assert_eq!(
+            server
+                .received_requests()
+                .await
+                .expect("Recorded requests")
+                .len(),
+            3
+        );
+        session
+            .finalize(PublishOutcome::Failed)
+            .await
+            .expect("Finalization should succeed");
+    }
+
+    /// Supplying a username explicitly must not allow an interactive replacement on rejection.
+    #[tokio::test]
+    async fn upload_rejected_explicit_username() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(basic_auth("writer", ""))
+            .respond_with(ResponseTemplate::new(401))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let registry = DisplaySafeUrl::parse(&server.uri()).expect("Valid registry URL");
+        let prompt = CredentialsPrompt::new(|| {
+            Err(CredentialsPromptError::ReadUsername(io::Error::other(
+                "Unexpected prompt",
+            )))
+        });
+        let client = BaseClientBuilder::default()
+            .auth_integration(AuthIntegration::OnlyAuthenticated)
+            .credentials_prompt(prompt.clone())
+            .retries(0)
+            .build()
+            .expect("Client should build");
+        let mut session = PublishSession::new(
+            registry,
+            PublishingCredentials::Supplied(Credentials::basic(Some("writer".to_string()), None)),
+            &client,
+            &client,
+            client.retry_policy(),
+            TarBackend::default(),
+        )
+        .with_credentials_prompt(prompt);
+        let prepared = PublishSession::prepare(
+            vec!["../../test/links/ok-1.0.0-py3-none-any.whl".to_string()],
+            false,
+        )
+        .expect("Distribution should be found")
+        .pop()
+        .expect("One distribution");
+
+        let err = session
+            .upload(prepared, Arc::new(DummyReporter))
+            .await
+            .expect_err("Explicit username should be rejected");
+        assert_matches!(err, PublishError::PublishSend(_, _, err)
+            if matches!(*err, PublishSendError::Status(StatusCode::UNAUTHORIZED, _)));
+        assert_eq!(
+            server
+                .received_requests()
+                .await
+                .expect("Recorded requests")
+                .len(),
+            1
+        );
+        session
+            .finalize(PublishOutcome::Failed)
+            .await
+            .expect("Finalization should succeed");
     }
 
     #[tokio::test]

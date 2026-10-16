@@ -22,7 +22,8 @@ use url::ParseError;
 use url::Url;
 
 use uv_auth::{
-    AuthMiddleware, Credentials, CredentialsCache, CredentialsFromUrlError, Indexes, RealmRef,
+    AuthMiddleware, Credentials, CredentialsCache, CredentialsFromUrlError, CredentialsPrompt,
+    Indexes, RealmRef,
 };
 use uv_configuration::ProxyUrlKind;
 use uv_configuration::{Concurrency, KeyringProviderType, ProxyUrl, TrustedHost};
@@ -110,6 +111,7 @@ pub struct BaseClientBuilder<'a> {
     markers: Option<&'a MarkerEnvironment>,
     platform: Option<&'a Platform>,
     auth_integration: AuthIntegration,
+    credentials_prompt: Option<CredentialsPrompt>,
     /// Global authentication cache for a uv invocation to share credentials across uv clients.
     credentials_cache: Arc<CredentialsCache>,
     indexes: Indexes,
@@ -222,6 +224,7 @@ impl Default for BaseClientBuilder<'_> {
             markers: None,
             platform: None,
             auth_integration: AuthIntegration::default(),
+            credentials_prompt: None,
             credentials_cache: Arc::new(CredentialsCache::default()),
             indexes: Indexes::new(),
             read_timeout: DEFAULT_READ_TIMEOUT,
@@ -353,6 +356,13 @@ impl<'a> BaseClientBuilder<'a> {
     #[must_use]
     pub fn auth_integration(mut self, auth_integration: AuthIntegration) -> Self {
         self.auth_integration = auth_integration;
+        self
+    }
+
+    /// Configure a fallback prompt for requests that require authentication.
+    #[must_use]
+    pub fn credentials_prompt(mut self, prompt: CredentialsPrompt) -> Self {
+        self.credentials_prompt = Some(prompt);
         self
     }
 
@@ -709,6 +719,7 @@ impl<'a> BaseClientBuilder<'a> {
                             .with_cache_arc(self.credentials_cache.clone())
                             .with_indexes(self.indexes.clone())
                             .with_keyring(self.keyring.to_provider())
+                            .with_credentials_prompt(self.credentials_prompt.clone())
                             .with_preview(self.preview);
                         client = client.with(auth_middleware);
                     }
@@ -717,6 +728,7 @@ impl<'a> BaseClientBuilder<'a> {
                             .with_cache_arc(self.credentials_cache.clone())
                             .with_indexes(self.indexes.clone())
                             .with_keyring(self.keyring.to_provider())
+                            .with_credentials_prompt(self.credentials_prompt.clone())
                             .with_preview(self.preview)
                             .with_only_authenticated(true);
                         client = client.with(auth_middleware);

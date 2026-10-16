@@ -194,7 +194,8 @@ impl Credentials {
         }
     }
 
-    fn is_empty(&self) -> bool {
+    /// Whether these credentials contain neither basic authentication fields nor a bearer token.
+    pub fn is_empty(&self) -> bool {
         match self {
             Self::Basic { username, password } => username.is_none() && password.is_none(),
             Self::Bearer { token } => token.is_empty(),
