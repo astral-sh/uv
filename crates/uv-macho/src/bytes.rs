@@ -1,3 +1,5 @@
+use std::ffi::CStr;
+
 use crate::Error;
 
 /// Borrow a complete region, rejecting overflow and reads outside the input.
@@ -13,4 +15,12 @@ pub(crate) fn array<const N: usize>(bytes: &[u8], offset: usize) -> Result<[u8; 
     let mut value = [0; N];
     value.copy_from_slice(slice(bytes, offset, N)?);
     Ok(value)
+}
+
+/// Read a NUL-terminated string within its containing data.
+pub(crate) fn c_string(bytes: &[u8], offset: usize) -> Result<&CStr, Error> {
+    let bytes = bytes
+        .get(offset..)
+        .ok_or(Error::Malformed("invalid string offset"))?;
+    CStr::from_bytes_until_nul(bytes).map_err(|_| Error::Malformed("unterminated string"))
 }
