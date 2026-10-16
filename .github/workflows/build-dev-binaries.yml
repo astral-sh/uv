@@ -35,10 +35,10 @@ jobs:
       - name: "Install Rust toolchain"
         run: rustup toolchain install --profile minimal
 
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: astral-sh/github-actions/rust-workspace-cache@84a2c337d854dbc1ce9bc416e7cd58f56413fbf6
         with:
           prefix-key: v1-rust-workspace
-          cache-workspace-crates: "true"
+          profile: no-debug-nightly
           save-if: ${{ inputs.save-rust-cache == 'true' }}
 
       - name: "Build"
@@ -70,10 +70,10 @@ jobs:
       - name: "Install Rust toolchain"
         run: rustup toolchain install --profile minimal
 
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: astral-sh/github-actions/rust-workspace-cache@84a2c337d854dbc1ce9bc416e7cd58f56413fbf6
         with:
           prefix-key: v1-rust-workspace
-          cache-workspace-crates: "true"
+          profile: no-debug-nightly
           save-if: ${{ inputs.save-rust-cache == 'true' }}
 
       - name: "Build"
@@ -119,10 +119,10 @@ jobs:
           rustup toolchain install --profile minimal
           rustup target add armv7-unknown-linux-gnueabihf
 
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: astral-sh/github-actions/rust-workspace-cache@84a2c337d854dbc1ce9bc416e7cd58f56413fbf6
         with:
           prefix-key: v1-rust-workspace
-          cache-workspace-crates: "true"
+          profile: armv7-unknown-linux-gnueabihf/no-debug-nightly
           save-if: ${{ inputs.save-rust-cache == 'true' }}
 
       - name: "Build"
@@ -161,10 +161,10 @@ jobs:
           rustup toolchain install --profile minimal
           rustup target add x86_64-unknown-linux-musl
 
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: astral-sh/github-actions/rust-workspace-cache@84a2c337d854dbc1ce9bc416e7cd58f56413fbf6
         with:
           prefix-key: v1-rust-workspace
-          cache-workspace-crates: "true"
+          profile: x86_64-unknown-linux-musl/no-debug-nightly
           save-if: ${{ inputs.save-rust-cache == 'true' }}
 
       - name: "Build"
@@ -193,12 +193,12 @@ jobs:
       - name: "Install Rust toolchain"
         run: rustup toolchain install --profile minimal
 
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: astral-sh/github-actions/rust-workspace-cache@84a2c337d854dbc1ce9bc416e7cd58f56413fbf6
         with:
           prefix-key: v1-rust-workspace
-          cache-workspace-crates: "true"
+          profile: no-debug-nightly
           save-if: ${{ inputs.save-rust-cache == 'true' }}
-          cache-bin: false
+          cache-bin: "false"
       - name: "Build"
         run: cargo build --locked --profile no-debug-nightly -Z checksum-freshness --bin uv --bin uvx
 
@@ -227,12 +227,12 @@ jobs:
           rustup toolchain install --profile minimal
           rustup target add x86_64-apple-darwin
 
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: astral-sh/github-actions/rust-workspace-cache@84a2c337d854dbc1ce9bc416e7cd58f56413fbf6
         with:
           prefix-key: v1-rust-workspace
-          cache-workspace-crates: "true"
+          profile: x86_64-apple-darwin/no-debug-nightly
           save-if: ${{ inputs.save-rust-cache == 'true' }}
-          cache-bin: false
+          cache-bin: "false"
       - name: "Build"
         run: cargo build --locked --profile no-debug-nightly -Z checksum-freshness --target x86_64-apple-darwin --bin uv --bin uvx
 
@@ -273,11 +273,11 @@ jobs:
         working-directory: ${{ env.UV_WORKSPACE }}
         run: rustup toolchain install --profile minimal
 
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: astral-sh/github-actions/rust-workspace-cache@84a2c337d854dbc1ce9bc416e7cd58f56413fbf6
         with:
           prefix-key: v1-rust-workspace
-          workspaces: ${{ env.UV_WORKSPACE }}
-          cache-workspace-crates: "true"
+          workspace: ${{ env.UV_WORKSPACE }}
+          profile: no-debug-nightly
           save-if: ${{ inputs.save-rust-cache == 'true' }}
 
       - name: "Build"
@@ -316,11 +316,11 @@ jobs:
         working-directory: ${{ env.UV_WORKSPACE }}
         run: rustup toolchain install --profile minimal
 
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: astral-sh/github-actions/rust-workspace-cache@84a2c337d854dbc1ce9bc416e7cd58f56413fbf6
         with:
           prefix-key: v1-rust-workspace
-          workspaces: ${{ env.UV_WORKSPACE }}
-          cache-workspace-crates: "true"
+          workspace: ${{ env.UV_WORKSPACE }}
+          profile: no-debug-nightly
           save-if: ${{ inputs.save-rust-cache == 'true' }}
 
       - name: "Build"
@@ -402,10 +402,10 @@ jobs:
           rustup toolchain install --profile minimal
           rustup target add aarch64-linux-android
 
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: astral-sh/github-actions/rust-workspace-cache@84a2c337d854dbc1ce9bc416e7cd58f56413fbf6
         with:
           prefix-key: v1-rust-workspace
-          cache-workspace-crates: "true"
+          profile: aarch64-linux-android/no-debug-nightly
           save-if: ${{ inputs.save-rust-cache == 'true' }}
 
       - name: "Build"
