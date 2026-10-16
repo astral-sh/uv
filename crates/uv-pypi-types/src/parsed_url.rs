@@ -590,7 +590,7 @@ impl From<&ParsedArchiveUrl> for DirectUrl {
     fn from(value: &ParsedArchiveUrl) -> Self {
         Self::ArchiveUrl {
             // Query parameters identify the source, so only strip username and password credentials.
-            url: value.url.without_credentials().to_string(),
+            url: value.url.without_credentials().as_str().to_owned(),
             archive_info: ArchiveInfo {
                 hash: None,
                 hashes: None,
@@ -741,6 +741,17 @@ mod tests {
         let actual = SafeUrl::from(ParsedUrl::try_from(expected.clone())?);
         assert_ne!(expected, actual);
 
+        Ok(())
+    }
+
+    #[test]
+    fn direct_url_preserves_archive_query() -> Result<()> {
+        let url = SafeUrl::parse(
+            "https://user:password@example.com/project.tar.gz?sig=abc%2Bdef%3D&other=a+b#subdirectory=pkg",
+        )?;
+        let parsed = ParsedUrl::try_from(url)?;
+        let direct_url = DirectUrl::from(&parsed);
+        insta::assert_snapshot!(serde_json::to_string(&direct_url)?, @r#"{"url":"https://example.com/project.tar.gz?sig=abc%2Bdef%3D&other=a+b","archive_info":{},"subdirectory":"pkg"}"#);
         Ok(())
     }
 

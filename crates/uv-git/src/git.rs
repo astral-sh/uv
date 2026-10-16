@@ -575,7 +575,7 @@ fn submodule_auth_config(original_remote_url: &SafeUrl) -> Vec<String> {
     let mut config = Vec::new();
 
     if remote_url.as_str() != original_remote_url.as_str() {
-        let safe_root = remote_url_root(SafeUrl::from_url(remote_url.into_owned()));
+        let safe_root = remote_url_root(remote_url.into_owned());
         let credentialed_root = remote_url_root(original_remote_url.clone());
 
         if safe_root.as_str() != credentialed_root.as_str() {

@@ -277,21 +277,31 @@ impl<P: SerializationPolicy> SafeUrl<P> {
         let _ = self.0.set_password(None);
     }
 
-    /// Returns the URL with any credentials removed.
-    pub fn without_credentials(&self) -> Cow<'_, Url> {
+    /// Return the URL with sensitive userinfo removed, retaining its serialization policy.
+    ///
+    /// The complete query is retained; display and debug formatting redact recognized credentials.
+    /// Removing userinfo does not make an [`Unserializable`] URL serializable:
+    ///
+    /// ```compile_fail
+    /// use uv_redacted::SafeUrl;
+    ///
+    /// let url = SafeUrl::parse("https://user:password@example.com/file.whl")?;
+    /// serde_json::to_string(&url.without_credentials())?;
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn without_credentials(&self) -> Cow<'_, Self> {
         if self.0.password().is_none() && self.0.username() == "" {
-            return Cow::Borrowed(&self.0);
+            return Cow::Borrowed(self);
         }
 
         // For URLs that use the `git` convention (i.e., `ssh://git@github.com/...`), avoid dropping the
         // username.
         if is_ssh_git_username(&self.0) {
-            return Cow::Borrowed(&self.0);
+            return Cow::Borrowed(self);
         }
 
-        let mut url = self.0.clone();
-        let _ = url.set_username("");
-        let _ = url.set_password(None);
+        let mut url = self.clone();
+        url.remove_credentials();
         Cow::Owned(url)
     }
 

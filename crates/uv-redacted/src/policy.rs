@@ -62,7 +62,7 @@ impl Serialize for SafeUrl<Stripped> {
     where
         S: serde::Serializer,
     {
-        self.without_credentials().serialize(serializer)
+        serializer.serialize_str(self.without_credentials().as_str())
     }
 }
 
@@ -77,6 +77,7 @@ impl Serialize for SafeUrl<Raw> {
 
 #[cfg(test)]
 mod tests {
+    use std::borrow::Cow;
     use std::error::Error;
 
     use insta::assert_snapshot;
@@ -109,6 +110,33 @@ mod tests {
     }
 
     #[test]
+    fn credential_removal_retains_policy_and_query() -> Result<(), Box<dyn Error>> {
+        let input = "https://user:password@example.com/file.whl?sig=abc%2Bdef%3D&other=a+b";
+        let expected = "https://example.com/file.whl?sig=abc%2Bdef%3D&other=a+b";
+        let url = SafeUrl::parse(input)?;
+        let removed: Cow<'_, SafeUrl> = url.without_credentials();
+        assert_eq!(removed.as_str(), expected);
+        assert_snapshot!(removed.to_string(), @"https://example.com/file.whl?sig=****&other=a+b");
+        assert_snapshot!(format!("{removed:?}"), @r#"SafeUrl { scheme: "https", cannot_be_a_base: false, username: "", password: None, host: Some(Domain("example.com")), port: None, path: "/file.whl", query: Some("sig=****&other=a+b"), fragment: None }"#);
+        assert_eq!(url.as_str(), input);
+
+        let stripped = url.clone().with_policy(Stripped);
+        let removed: Cow<'_, SafeUrl<Stripped>> = stripped.without_credentials();
+        assert_eq!(
+            serde_json::to_string(&removed)?,
+            serde_json::to_string(expected)?
+        );
+
+        let raw = url.with_policy(Raw);
+        let removed: Cow<'_, SafeUrl<Raw>> = raw.without_credentials();
+        assert_eq!(
+            serde_json::to_string(&removed)?,
+            serde_json::to_string(expected)?
+        );
+        Ok(())
+    }
+
+    #[test]
     fn method_serialization_respects_policy() -> Result<(), Box<dyn Error>> {
         let input = "https://user:password@example.com/file.whl?sig=abc%2Bdef%3D";
         let url = SafeUrl::parse(input)?;
@@ -129,8 +157,9 @@ mod tests {
 
     #[test]
     fn borrowed_policy_retains_git_username() -> Result<(), Box<dyn Error>> {
-        let url = SafeUrl::parse("ssh://git@github.com/astral-sh/uv")?;
-        assert_snapshot!(serde_json::to_string(url.with_policy_ref(Stripped))?, @r#""ssh://git@github.com/astral-sh/uv""#);
+        let url = SafeUrl::parse("ssh://git@github.com/astral-sh/uv?sig=abc%2Bdef%3D")?;
+        assert_snapshot!(serde_json::to_string(url.with_policy_ref(Stripped))?, @r#""ssh://git@github.com/astral-sh/uv?sig=abc%2Bdef%3D""#);
+        assert_snapshot!(url.without_credentials().to_string(), @"ssh://git@github.com/astral-sh/uv?sig=****");
         Ok(())
     }
 
