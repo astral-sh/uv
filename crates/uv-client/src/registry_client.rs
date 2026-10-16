@@ -1250,7 +1250,9 @@ impl RegistryClient {
     ) -> Result<ResolutionMetadata, Error> {
         let cache_entry = self.cache.entry(
             CacheBucket::Wheels,
-            cache_shard.wheel_dir(filename.name.as_ref()),
+            cache_shard
+                .root_with_filename(header_filename)
+                .join(filename.name.as_str()),
             format!("{}.msgpack", filename.cache_key()),
         );
         let cache_control = match self.connectivity {

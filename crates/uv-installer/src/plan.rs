@@ -471,7 +471,9 @@ impl<'a> Planner<'a> {
                     let cache_entry = cache
                         .shard(
                             CacheBucket::Wheels,
-                            WheelCache::Url(&wheel.url).wheel_dir(wheel.name().as_ref()),
+                            WheelCache::Url(&wheel.url)
+                                .root_with_filename(wheel.header_filename.as_deref())
+                                .join(wheel.name().as_str()),
                         )
                         .entry(format!("{}.http", wheel.filename.cache_key()));
 

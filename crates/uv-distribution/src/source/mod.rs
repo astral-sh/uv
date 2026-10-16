@@ -23,7 +23,6 @@ use tracing::{Instrument, debug, info_span, instrument, warn};
 use uv_auth::CredentialsCache;
 use uv_cache::{Cache, CacheBucket, CacheEntry, CacheShard, Removal, WheelCache};
 use uv_cache_info::CacheInfo;
-use uv_cache_key::cache_digest;
 use uv_client::{
     BaseClientBuilder, CacheControl, CachedClientError, Connectivity, DataWithCachePolicy,
     RegistryClient, RetryState, validate_archive_filename,
@@ -3330,12 +3329,10 @@ pub(crate) fn url_cache_shard(
     url: &SafeUrl,
     header_filename: Option<&str>,
 ) -> CacheShard {
-    let mut root = WheelCache::Url(url).root();
-    if let Some(filename) = header_filename {
-        // Keep the URL shard at the same depth so package cleanup can locate built metadata.
-        root.set_extension(cache_digest(&filename));
-    }
-    cache.shard(CacheBucket::SourceDistributions, root)
+    cache.shard(
+        CacheBucket::SourceDistributions,
+        WheelCache::Url(url).root_with_filename(header_filename),
+    )
 }
 
 /// The result of extracting statically available metadata from a source distribution.

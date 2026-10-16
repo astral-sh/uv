@@ -425,7 +425,9 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 // Create a cache entry for the wheel.
                 let wheel_entry = self.build_context.cache().entry(
                     CacheBucket::Wheels,
-                    WheelCache::Url(&wheel.url).wheel_dir(wheel.name().as_ref()),
+                    WheelCache::Url(&wheel.url)
+                        .root_with_filename(wheel.header_filename.as_deref())
+                        .join(wheel.name().as_str()),
                     wheel.filename.cache_key(),
                 );
 

@@ -46,6 +46,16 @@ impl WheelCache<'_> {
         }
     }
 
+    /// The root directory scoped to an optional server-provided archive filename.
+    pub fn root_with_filename(&self, filename: Option<&str>) -> PathBuf {
+        let mut root = self.root();
+        if let Some(filename) = filename {
+            // Keep the shard at the same depth so package cleanup can locate cached metadata.
+            root.set_extension(cache_digest(&filename));
+        }
+        root
+    }
+
     /// A subdirectory in a bucket for wheels for a specific package.
     pub fn wheel_dir(&self, package_name: impl AsRef<Path>) -> PathBuf {
         self.root().join(package_name)
@@ -88,5 +98,28 @@ impl WheelCacheKind {
 impl AsRef<Path> for WheelCacheKind {
     fn as_ref(&self) -> &Path {
         self.to_str().as_ref()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use uv_redacted::SafeUrl;
+
+    use super::WheelCache;
+
+    /// Distinct header filenames must not share a shard even when their package names normalize
+    /// to the same name.
+    #[test]
+    fn header_filename_cache_shards() -> Result<(), Box<dyn std::error::Error>> {
+        let url = SafeUrl::parse("https://example.com/download")?;
+        let cache = WheelCache::Url(&url);
+        let uppercase = cache.root_with_filename(Some("Example-1.0-py3-none-any.whl"));
+        let lowercase = cache.root_with_filename(Some("example-1.0-py3-none-any.whl"));
+
+        assert_ne!(uppercase, lowercase);
+        assert_eq!(uppercase.parent(), cache.root().parent());
+        assert_eq!(lowercase.parent(), cache.root().parent());
+        assert_eq!(cache.root_with_filename(None), cache.root());
+        Ok(())
     }
 }
