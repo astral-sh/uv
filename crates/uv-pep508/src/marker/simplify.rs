@@ -258,25 +258,19 @@ fn simplify_with_queries(dnf: &mut Vec<Vec<MarkerExpression>>, mut queries: impl
         queries.finish_clause(dnf, clause, removed);
     }
 
-    let mut redundant = SmallVec::<[usize; 8]>::new();
+    // Track redundant clauses by index so each membership check is constant-time.
+    let mut redundant = SmallVec::<[bool; 8]>::from_elem(false, dnf.len());
     for clause in 0..dnf.len() {
-        if (0..dnf.len()).any(|other| {
-            other != clause
-                && redundant.binary_search(&other).is_err()
-                && queries.is_subset(dnf, other, clause)
-        }) {
-            redundant.push(clause);
-        }
-    }
-    if !redundant.is_empty() {
-        let mut redundant = redundant.into_iter().peekable();
-        let mut position = 0;
-        dnf.retain(|_| {
-            let keep = redundant.next_if_eq(&position).is_none();
-            position += 1;
-            keep
+        redundant[clause] = (0..dnf.len()).any(|other| {
+            other != clause && !redundant[other] && queries.is_subset(dnf, other, clause)
         });
     }
+    let mut position = 0;
+    dnf.retain(|_| {
+        let keep = !redundant[position];
+        position += 1;
+        keep
+    });
 }
 
 /// Clause comparisons and index updates used by the ordered simplification pass.
