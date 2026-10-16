@@ -899,7 +899,7 @@ mod tests {
 
     use serde::Deserialize;
 
-    use super::super::{LockParseError, VERSION};
+    use super::super::{LockParseError, MAX_VERSION};
     use super::{Cursor, Error, Lock, ValueDeserializer, from_str};
 
     const CANONICAL_LOCK: &str = r#"version = 1
@@ -1086,14 +1086,14 @@ version = "1.0.0"
 
     #[test]
     fn unsupported_lock_version_is_rejected() {
-        let version = VERSION + 1;
+        let version = MAX_VERSION + 1;
         let input = CANONICAL_LOCK.replacen("version = 1", &format!("version = {version}"), 1);
         let error = Lock::from_toml(&input).expect_err("unsupported lock versions are rejected");
 
         assert_matches!(
             error,
             LockParseError::UnsupportedVersion {
-                supported: VERSION,
+                supported: MAX_VERSION,
                 version: actual,
             } if actual == version
         );
@@ -1101,7 +1101,7 @@ version = "1.0.0"
 
     #[test]
     fn unparsable_unsupported_lock_version_is_identified() {
-        let version = VERSION + 1;
+        let version = MAX_VERSION + 1;
         let input = CANONICAL_LOCK
             .replacen("version = 1", &format!("version = {version}"), 1)
             .replacen("name = \"dependency\"", "name = false", 1);
@@ -1111,7 +1111,7 @@ version = "1.0.0"
         assert_matches!(
             error,
             LockParseError::UnparsableVersion {
-                supported: VERSION,
+                supported: MAX_VERSION,
                 version: actual,
                 ..
             } if actual == version

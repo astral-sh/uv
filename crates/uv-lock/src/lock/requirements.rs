@@ -5,13 +5,16 @@ use uv_configuration::{
     NormalizedConstraints, NormalizedOverrideEntries, NormalizedRequirements, Override,
     PackageOverride,
 };
+use uv_distribution_filename::DistExtension;
 use uv_distribution_types::{
     IndexMetadata, IndexUrl, Requirement, RequirementScope, RequirementSource, RequiresPython,
 };
 use uv_fs::normalize_path;
 use uv_git_types::GitUrl;
 use uv_pep508::VerbatimUrl;
-use uv_pypi_types::{ParsedArchiveUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl};
+use uv_pypi_types::{
+    ArchiveUrlFilename, ParsedArchiveUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl,
+};
 use uv_redacted::SafeUrl;
 
 use super::{LockError, LockErrorKind};
@@ -246,7 +249,7 @@ pub(super) fn normalize_requirement(
         RequirementSource::Url {
             mut location,
             subdirectory,
-            archive,
+            archive: _,
             url: _,
         } => {
             // Remove the credentials.
@@ -254,6 +257,10 @@ pub(super) fn normalize_requirement(
 
             // Remove the fragment from the URL; it's already present in the source.
             location.set_fragment(None);
+
+            // A declaration identifies its URL; response metadata does not change that identity.
+            let archive = DistExtension::from_path(location.path())
+                .map_or(ArchiveUrlFilename::Unknown, ArchiveUrlFilename::Url);
 
             // Reconstruct the PEP 508 URL from the underlying data.
             let url = SafeUrl::from(ParsedArchiveUrl {

@@ -1075,6 +1075,9 @@ impl MetadataSourceDist {
 #[derive(Clone, Debug, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
 struct MetadataSourceDistMetadata {
+    /// The server-provided filename for an opaque direct URL.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    filename: Option<Box<str>>,
     /// A hash of the source distribution.
     #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
     hashes: BTreeMap<HashAlgorithm, Hash>,
@@ -1106,6 +1109,7 @@ fn hashes_map(hash: &HashDigest) -> BTreeMap<HashAlgorithm, Hash> {
 impl MetadataSourceDistMetadata {
     fn from_sdist(sdist: &SourceDistMetadata) -> Self {
         Self {
+            filename: sdist.filename.clone(),
             hashes: sdist.hash.as_ref().map(hashes_map).unwrap_or_default(),
             size: sdist.size,
             upload_time: sdist.upload_time,
