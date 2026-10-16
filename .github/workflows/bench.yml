@@ -59,16 +59,18 @@ jobs:
           uv run --only-dev cargo codspeed build --locked -m walltime --profile profiling -p uv-bench --bench uv --bench workspace_discovery --bench git_fetch
 
       - name: "Create artifact archive"
+        shell: bash
         run: |
           mkdir -p target/codspeed-bin
           cp "$(uv run --only-dev which cargo-codspeed)" target/codspeed-bin/
-          tar -cvf benchmarks-walltime.tar target/codspeed target/codspeed-bin target/debug/uv .cache
+          tar -cf - target/codspeed target/codspeed-bin target/debug/uv .cache | zstd -T0 -3 -o benchmarks-walltime.tar.zst
 
       - name: "Upload benchmark artifacts"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: benchmarks-walltime
-          path: benchmarks-walltime.tar
+          path: benchmarks-walltime.tar.zst
+          compression-level: 0
           retention-days: 1
 
   benchmarks-walltime-run:
@@ -98,7 +100,8 @@ jobs:
           name: benchmarks-walltime
 
       - name: "Extract artifact archive"
-        run: tar -xvf benchmarks-walltime.tar
+        shell: bash
+        run: zstd -dc benchmarks-walltime.tar.zst | tar -xf -
 
       - name: "Add codspeed to PATH"
         run: echo "$GITHUB_WORKSPACE/target/codspeed-bin" >> "$GITHUB_PATH"
