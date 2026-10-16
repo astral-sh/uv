@@ -6,7 +6,7 @@ use std::str::FromStr;
 
 use arcstr::ArcStr;
 use itertools::Itertools;
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use version_ranges::Ranges;
 
@@ -1432,42 +1432,49 @@ impl MarkerTree {
         Self(INTERNER.lock().only_extras(self.0))
     }
 
-    /// Calls the provided function on every `extra` in this tree.
+    /// Calls the provided function on every `extra` node in this tree, visiting shared nodes once.
     ///
     /// The operator provided to the function is guaranteed to be
     /// `MarkerOperator::Equal` or `MarkerOperator::NotEqual`.
     pub fn visit_extras(self, mut f: impl FnMut(MarkerOperator, &ExtraName)) {
-        fn imp(tree: MarkerTree, f: &mut impl FnMut(MarkerOperator, &ExtraName)) {
+        fn imp(
+            tree: MarkerTree,
+            f: &mut impl FnMut(MarkerOperator, &ExtraName),
+            visited: &mut FxHashSet<MarkerTree>,
+        ) {
+            if !visited.insert(tree) {
+                return;
+            }
             match tree.kind() {
                 MarkerTreeKind::True | MarkerTreeKind::False => {}
                 MarkerTreeKind::Version(kind) => {
                     for (tree, _) in simplify::collect_edges(kind.edges()) {
-                        imp(tree, f);
+                        imp(tree, f, visited);
                     }
                 }
                 MarkerTreeKind::VersionString(kind) => {
                     for (tree, _) in simplify::collect_edges(kind.edges()) {
-                        imp(tree, f);
+                        imp(tree, f, visited);
                     }
                 }
                 MarkerTreeKind::String(kind) => {
                     for (tree, _) in simplify::collect_edges(kind.children()) {
-                        imp(tree, f);
+                        imp(tree, f, visited);
                     }
                 }
                 MarkerTreeKind::In(kind) => {
                     for (_, tree) in kind.children() {
-                        imp(tree, f);
+                        imp(tree, f, visited);
                     }
                 }
                 MarkerTreeKind::Contains(kind) => {
                     for (_, tree) in kind.children() {
-                        imp(tree, f);
+                        imp(tree, f, visited);
                     }
                 }
                 MarkerTreeKind::List(kind) => {
                     for (_, tree) in kind.children() {
-                        imp(tree, f);
+                        imp(tree, f, visited);
                     }
                 }
                 MarkerTreeKind::Extra(kind) => {
@@ -1477,12 +1484,12 @@ impl MarkerTree {
                         f(MarkerOperator::NotEqual, kind.name().extra());
                     }
                     for (_, tree) in kind.children() {
-                        imp(tree, f);
+                        imp(tree, f, visited);
                     }
                 }
             }
         }
-        imp(self, &mut f);
+        imp(self, &mut f, &mut FxHashSet::default());
     }
 
     fn simplify_extras_with_impl(self, is_extra: &impl Fn(&ExtraName) -> bool) -> Self {
@@ -3849,6 +3856,17 @@ mod test {
                 ),
             ]
         );
+    }
+
+    /// Both paths through each pair share the remaining pairs.
+    #[test]
+    fn visit_extras_shared_nodes() {
+        let marker = m(
+            "(extra == 'a0' or extra == 'a1') and (extra == 'b0' or extra == 'b1') and (extra == 'c0' or extra == 'c1')",
+        );
+        let mut extras = Vec::new();
+        marker.visit_extras(|_, extra| extras.push(extra.clone()));
+        assert_eq!(extras.len(), 6);
     }
 
     /// Case a: There is no version `3` (no trailing zero) in the interner yet.

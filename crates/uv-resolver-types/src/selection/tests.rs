@@ -372,7 +372,7 @@ fn independent_pairs_do_not_expand_to_dnf() {
         declared.push(ConflictSet::try_from(vec![first, second]).expect("conflict pair"));
     }
     let root = request(&mut graph, &requested);
-    let dependency = request(&mut graph, &[]);
+    let dependency = request(&mut graph, &[item("project", "result")]);
     graph.graph.add_edge(root, dependency, condition);
     let selection = graph
         .select([(root, MarkerTree::TRUE)], MarkerTree::TRUE, &declared)

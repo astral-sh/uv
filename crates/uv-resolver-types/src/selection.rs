@@ -153,7 +153,7 @@ impl ActivationGraph {
         loop {
             let bounds: Vec<_> = variables
                 .iter()
-                .map(|(name, item)| (name.clone(), justified[item], conflict_variable(item)))
+                .map(|(_, item)| (justified[item], conflict_variable(item)))
                 .collect();
             let mut cache = FxHashMap::default();
             let mut changed = false;
@@ -238,11 +238,11 @@ impl ActivationGraph {
 /// together without enumerating selections or expanding the diagram into DNF.
 fn supported_guard(
     marker: MarkerTree,
-    bounds: &[(ExtraName, MarkerTree, MarkerTree)],
+    bounds: &[(MarkerTree, MarkerTree)],
     index: usize,
     cache: &mut FxHashMap<(MarkerTree, usize), MarkerTree>,
 ) -> MarkerTree {
-    let Some((name, justified, assumed)) = bounds.get(index) else {
+    let Some((justified, assumed)) = bounds.get(index) else {
         return marker;
     };
     if marker.is_true() || marker.is_false() {
@@ -251,8 +251,8 @@ fn supported_guard(
     if let Some(result) = cache.get(&(marker, index)) {
         return *result;
     }
-    let low = marker.simplify_not_extras_with(|extra| extra == name);
-    let high = marker.simplify_extras_with(|extra| extra == name);
+    let low = marker.restrict(assumed.negate());
+    let high = marker.restrict(*assumed);
     let result = if low == high {
         supported_guard(low, bounds, index + 1, cache)
     } else {
