@@ -1,5 +1,3 @@
-use std::cmp::Reverse;
-use std::collections::HashSet;
 use std::fmt::{Display, Formatter};
 
 use arcstr::ArcStr;
@@ -9,7 +7,8 @@ use tracing::debug;
 use uv_distribution_filename::{BuildTag, WheelFilename};
 use uv_distribution_types::{
     File, IndexUrl, InstalledDist, MinimumLibcVersion, Name, RegistryBuiltDist, RegistryBuiltWheel,
-    RegistrySourceDist, RequiresPython, VariantsJsonContent, VariantsJsonFilename,
+    RegistrySourceDist, RequiresPython, VariantPreferences, VariantsJsonContent,
+    VariantsJsonFilename,
 };
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
@@ -432,7 +431,8 @@ impl PrioritizedDist {
         &self,
         metadata: &[(&IndexUrl, &VariantsJsonContent)],
     ) -> Option<Self> {
-        let supported = HashSet::new();
+        // Without target feature information, only variants without properties are compatible.
+        let preferences = VariantPreferences::default();
         let (best_index, (hash, _, priority, build_tag)) = self
             .0
             .wheels
@@ -443,12 +443,12 @@ impl PrioritizedDist {
                     return None;
                 };
                 let label = wheel.filename.variant()?;
-                metadata
+                let score = metadata
                     .iter()
-                    .any(|(source, metadata)| {
-                        *source == &wheel.index && metadata.is_compatible(label, &supported)
-                    })
-                    .then_some((index, (*hash, Reverse(label), *priority, build_tag)))
+                    .filter(|(source, _)| *source == &wheel.index)
+                    .filter_map(|(_, metadata)| metadata.score_variant(label, &preferences))
+                    .max()?;
+                Some((index, (*hash, score, *priority, build_tag)))
             })
             .max_by(|(_, left), (_, right)| left.cmp(right))?;
 
