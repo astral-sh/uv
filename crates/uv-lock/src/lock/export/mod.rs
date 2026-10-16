@@ -16,7 +16,7 @@ use uv_pep508::MarkerTree;
 use uv_pypi_types::ConflictItem;
 
 use uv_resolver_types::graph_ops::Reachable;
-use uv_resolver_types::universal_marker::resolve_activated_extras;
+use uv_resolver_types::universal_marker::ConflictMarkerContext;
 
 pub use crate::lock::export::metadata::{Metadata, PythonReport};
 pub(crate) use crate::lock::export::metadata::{
@@ -315,7 +315,9 @@ impl<'lock> ExportableRequirements<'lock> {
         }
 
         // Determine the reachability of each node in the graph.
-        let mut reachability = conflict_marker_reachability(&graph, &[], &activated_items);
+        let mut marker_context = ConflictMarkerContext::new(target.lock().conflicts());
+        let mut reachability =
+            conflict_marker_reachability(&graph, &[], &activated_items, &mut marker_context);
 
         // Collect all packages.
         let nodes = graph
@@ -429,6 +431,7 @@ fn conflict_marker_reachability<'lock>(
     graph: &Graph<Node<'lock>, Edge<'lock>>,
     fork_markers: &[Edge<'lock>],
     known_conflicts: &FxHashMap<ConflictItem, MarkerTree>,
+    marker_context: &mut ConflictMarkerContext<'_>,
 ) -> FxHashMap<NodeIndex, MarkerTree> {
     // For each node, track the conditions under which each conflict item is enabled.
     let mut conflict_maps =
@@ -481,7 +484,7 @@ fn conflict_marker_reachability<'lock>(
                 Node::Package(package) => Some(package.name()),
                 Node::Root => None,
             };
-            *marker = resolve_activated_extras(*marker, scope_package, conflict_map);
+            *marker = marker_context.resolve_activated_extras(*marker, scope_package, conflict_map);
         });
 
         // When we see an edge like `parent [dotenv]> flask`, we should take the reachability
@@ -511,7 +514,7 @@ fn conflict_marker_reachability<'lock>(
             let marker = match child_edge.weight() {
                 Edge::Prod { marker, .. } => {
                     // Resolve any active extras on the edge.
-                    resolve_activated_extras(*marker, scope_package, &parent_map)
+                    marker_context.resolve_activated_extras(*marker, scope_package, &parent_map)
                 }
                 Edge::Optional { extra, marker, .. } => {
                     // The optional edge is only active when its extra is active. Preserve the
@@ -525,7 +528,11 @@ fn conflict_marker_reachability<'lock>(
                     };
 
                     // Resolve any active extras on the edge.
-                    let marker = resolve_activated_extras(*marker, scope_package, &parent_map);
+                    let marker = marker_context.resolve_activated_extras(
+                        *marker,
+                        scope_package,
+                        &parent_map,
+                    );
                     marker.and(active_marker)
                 }
                 Edge::Dev { group, marker, .. } => {
@@ -537,7 +544,7 @@ fn conflict_marker_reachability<'lock>(
                     }
 
                     // Resolve any active extras on the edge.
-                    resolve_activated_extras(*marker, scope_package, &parent_map)
+                    marker_context.resolve_activated_extras(*marker, scope_package, &parent_map)
                 }
             };
 

@@ -123,6 +123,123 @@ impl ActivatedConflictItems {
     }
 }
 
+/// A view of universal markers under the declared conflict constraints.
+///
+/// Restriction can remove decisions that only distinguish invalid selections. The original
+/// markers remain authoritative outside those constraints, including during transitive conflict
+/// discovery and serialization. Keeping both views avoids encoding that compatibility behavior
+/// into each simplified marker.
+#[derive(Debug)]
+pub struct ConflictMarkerContext<'a> {
+    conflicts: &'a Conflicts,
+    constraints: FxHashMap<BTreeSet<ExtraName>, MarkerTree>,
+    restricted: FxHashMap<MarkerTree, (MarkerTree, MarkerTree)>,
+}
+
+impl<'conflicts> ConflictMarkerContext<'conflicts> {
+    /// Creates a context shared by all marker operations for one dependency selection.
+    pub fn new(conflicts: &'conflicts Conflicts) -> Self {
+        Self {
+            conflicts,
+            constraints: FxHashMap::default(),
+            restricted: FxHashMap::default(),
+        }
+    }
+
+    /// Evaluates the constraints once for a fixed set of activated conflict items.
+    ///
+    /// An invalid selection uses the original markers so callers can retain their conflict
+    /// diagnostics. This does not validate or discover the activated items.
+    pub fn for_selection<'a>(
+        &'a mut self,
+        activated: &'a ActivatedConflictItems,
+    ) -> ConflictMarkerSelection<'a, 'conflicts> {
+        let valid = self.conflicts.iter().all(|set| {
+            set.iter()
+                .filter(|item| activated.0.contains(&encode_conflict_item(item)))
+                .take(2)
+                .count()
+                < 2
+        });
+        ConflictMarkerSelection {
+            context: self,
+            activated,
+            valid,
+        }
+    }
+
+    /// Resolves symbolic activations without assuming they satisfy the declared conflicts.
+    ///
+    /// An activation can depend on the environment. Use the restricted marker only in the
+    /// environments where the substituted constraints hold, and the original marker elsewhere.
+    pub fn resolve_activated_extras(
+        &mut self,
+        marker: MarkerTree,
+        scope_package: Option<&PackageName>,
+        known_conflicts: &FxHashMap<ConflictItem, MarkerTree>,
+    ) -> MarkerTree {
+        let (restricted, constraints) = self.restrict(marker);
+        if restricted == marker {
+            return resolve_activated_extras(marker, scope_package, known_conflicts);
+        }
+
+        let constraints = resolve_activated_extras(constraints, scope_package, known_conflicts);
+        if constraints.is_false() {
+            return resolve_activated_extras(marker, scope_package, known_conflicts);
+        }
+        let restricted = resolve_activated_extras(restricted, scope_package, known_conflicts);
+        if constraints.is_true() {
+            return restricted;
+        }
+        let original = resolve_activated_extras(marker, scope_package, known_conflicts);
+        constraints
+            .and(restricted)
+            .or(constraints.negate().and(original))
+    }
+
+    /// Caches a compact representative and the constraints under which it agrees with the marker.
+    /// Only referenced conflict items can affect the result, so unrelated constraints are omitted.
+    fn restrict(&mut self, marker: MarkerTree) -> (MarkerTree, MarkerTree) {
+        if self.conflicts.is_empty() || marker.is_true() || marker.is_false() {
+            return (marker, MarkerTree::TRUE);
+        }
+        *self.restricted.entry(marker).or_insert_with(|| {
+            let mut referenced = BTreeSet::new();
+            marker.visit_extras(|_, extra| {
+                referenced.insert(extra.clone());
+            });
+            let constraints =
+                *self
+                    .constraints
+                    .entry(referenced)
+                    .or_insert_with_key(|referenced| {
+                        ConflictMarker::from_referenced_conflicts(self.conflicts, referenced).marker
+                    });
+            (marker.restrict(constraints), constraints)
+        })
+    }
+}
+
+/// Marker evaluation for a fixed selection, with its conflict constraints checked once.
+pub struct ConflictMarkerSelection<'a, 'conflicts> {
+    context: &'a mut ConflictMarkerContext<'conflicts>,
+    activated: &'a ActivatedConflictItems,
+    valid: bool,
+}
+
+impl ConflictMarkerSelection<'_, '_> {
+    /// Evaluates the compact marker when the selection satisfies its assumptions.
+    pub fn evaluate(&mut self, marker: UniversalMarker, env: &MarkerEnvironment) -> bool {
+        if !self.valid || !marker.has_conflict_marker() {
+            return marker.evaluate_activated(env, self.activated);
+        }
+        self.context
+            .restrict(marker.marker)
+            .0
+            .evaluate(env, &self.activated.0)
+    }
+}
+
 impl UniversalMarker {
     /// A constant universal marker that always evaluates to `true`.
     pub const TRUE: Self = Self {
@@ -532,6 +649,11 @@ impl ConflictMarker {
             });
         }
 
+        Self::from_referenced_conflicts(conflicts, &referenced)
+    }
+
+    /// Projects the declared constraints onto the conflict items used by a marker.
+    fn from_referenced_conflicts(conflicts: &Conflicts, referenced: &BTreeSet<ExtraName>) -> Self {
         let mut marker = Self::TRUE;
         for set in conflicts.iter() {
             for (first, second) in set
@@ -1217,6 +1339,68 @@ mod tests {
             MarkerTree::from_str("sys_platform == 'darwin'").expect("valid marker expression");
         assert!(!UniversalMarker::from_combined(pep508).has_conflict_marker());
         assert!(UniversalMarker::new(pep508, create_extra_marker("foo")).has_conflict_marker());
+    }
+
+    /// A compact marker can still depend on an extra, while its original form keeps invalid
+    /// selections reachable even outside the dependency's environment.
+    #[test]
+    fn conflict_context_preserves_invalid_selections() {
+        let conflicts = create_conflicts([create_set(["foo", "bar"])]);
+        let mut context = ConflictMarkerContext::new(&conflicts);
+        let linux = MarkerTree::from_str("sys_platform == 'linux'").expect("valid marker");
+        let foo = create_extra_marker("foo").marker;
+        let bar = create_extra_marker("bar").marker;
+        let original = UniversalMarker::from_combined(foo.and(linux).or(foo.and(bar)));
+        assert_eq!(context.restrict(original.combined()).0, foo.and(linux));
+
+        let package = create_package("pkg");
+        let foo = create_extra("foo");
+        let bar = create_extra("bar");
+        let activated = ActivatedConflictItems::new(
+            std::iter::empty::<&PackageName>(),
+            [(&package, &foo)].into_iter(),
+            std::iter::empty::<(&PackageName, &GroupName)>(),
+        );
+        let mut selection = context.for_selection(&activated);
+        assert!(!selection.evaluate(original, &marker_environment()));
+        assert!(selection.evaluate(original, &marker_environment().with_sys_platform("linux")));
+
+        let activated = ActivatedConflictItems::new(
+            std::iter::empty::<&PackageName>(),
+            [(&package, &foo), (&package, &bar)].into_iter(),
+            std::iter::empty::<(&PackageName, &GroupName)>(),
+        );
+        let mut selection = context.for_selection(&activated);
+        assert!(selection.evaluate(original, &marker_environment()));
+    }
+
+    /// Export activations can satisfy the constraints in some environments and violate them in
+    /// others. The latter must retain the original marker's behavior.
+    #[test]
+    fn conflict_context_resolves_conditional_activations() {
+        let conflicts = create_conflicts([create_set(["foo", "bar"])]);
+        let mut context = ConflictMarkerContext::new(&conflicts);
+        let linux = MarkerTree::from_str("sys_platform == 'linux'").expect("valid marker");
+        let darwin = MarkerTree::from_str("sys_platform == 'darwin'").expect("valid marker");
+        let foo = create_extra_marker("foo").marker;
+        let bar = create_extra_marker("bar").marker;
+        let original = foo.and(linux).or(foo.and(bar));
+        let known = FxHashMap::from_iter([
+            (
+                ConflictItem::from((create_package("pkg"), create_extra("foo"))),
+                MarkerTree::TRUE,
+            ),
+            (
+                ConflictItem::from((create_package("pkg"), create_extra("bar"))),
+                darwin,
+            ),
+        ]);
+
+        assert_eq!(
+            context.resolve_activated_extras(original, None, &known),
+            linux.or(darwin),
+        );
+        assert_eq!(context.restrict(original).0, foo.and(linux));
     }
 
     #[test]

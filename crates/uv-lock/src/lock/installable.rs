@@ -19,7 +19,7 @@ use uv_platform_tags::Tags;
 use uv_pypi_types::{ConflictKind, ConflictSet, ResolverMarkerEnvironment};
 
 use uv_resolver_types::UniversalMarker;
-use uv_resolver_types::universal_marker::ActivatedConflictItems;
+use uv_resolver_types::universal_marker::{ActivatedConflictItems, ConflictMarkerContext};
 
 use crate::lock::{
     Dependency, DependencySelectionContext, HashedDist, LockErrorKind, Package, PackageIndex,
@@ -762,6 +762,8 @@ trait InstallableExt<'lock>: Installable<'lock> {
             activated_extras.iter().copied(),
             activated_groups.iter().copied(),
         );
+        let mut marker_context = ConflictMarkerContext::new(self.lock().conflicts());
+        let mut selection = marker_context.for_selection(&activated);
 
         while let Some((package_index, extra)) = queue.pop_front() {
             let package = self.lock().package(package_index);
@@ -769,10 +771,7 @@ trait InstallableExt<'lock>: Installable<'lock> {
                 if validate_conflicts && dep.complexified_marker.has_conflict_marker() {
                     dependencies_for_conflict_validation.push((package, dep));
                 }
-                if !dep
-                    .complexified_marker
-                    .evaluate_activated(marker_env, &activated)
-                {
+                if !selection.evaluate(dep.complexified_marker, marker_env) {
                     continue;
                 }
 
