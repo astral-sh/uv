@@ -189,7 +189,7 @@ impl PythonRequirement {
     /// Return a [`MarkerTree`] representing the Python requirement.
     ///
     /// See: [`RequiresPython::to_marker_tree`]
-    pub(crate) fn to_marker_tree(&self) -> MarkerTree {
+    pub fn to_marker_tree(&self) -> MarkerTree {
         self.target_marker
     }
 }

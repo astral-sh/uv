@@ -8,7 +8,7 @@ use tracing::trace;
 use uv_configuration::{Constraints, DependencyModifierScope, DependencyModifiers};
 use uv_distribution::{DistributionDatabase, Reporter};
 use uv_distribution_types::{Dist, Identifier, Requirement, RequirementSource};
-use uv_resolver::{InMemoryIndex, MetadataResponse, ResolverEnvironment};
+use uv_resolver::{InMemoryIndex, MetadataResponse, PythonRequirement, ResolverEnvironment};
 use uv_types::{BuildContext, HashStrategy, HashVerification, RequestedRequirements};
 
 use crate::{Error, required_dist, validate_metadata_name};
@@ -75,18 +75,18 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
 
     /// Resolve the requirements from the provided source trees.
     ///
-    /// When the environment is not given, this treats all marker expressions
-    /// that reference the environment as true. In other words, it does
-    /// environment independent expression evaluation. (Which in turn devolves
-    /// to "only evaluate marker expressions that reference an extra name.")
+    /// In universal mode, markers must overlap the supported Python versions. Other environment
+    /// markers are treated as true, while markers that reference extras are evaluated normally.
     pub async fn resolve(
         self,
         env: &ResolverEnvironment,
+        python_requirement: &PythonRequirement,
     ) -> Result<(Vec<RequestedRequirements>, HashStrategy), Error> {
         let mut results = Vec::new();
         let mut futures = FuturesUnordered::new();
         let mut seen = FxHashSet::default();
         let mut hasher = self.hasher.clone();
+        let python_marker = python_requirement.to_marker_tree();
 
         // Queue up the initial requirements.
         let mut queue: VecDeque<_> = self
@@ -96,6 +96,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                     .apply(DependencyModifierScope::Global, self.requirements),
             )
             .filter(|requirement| requirement.evaluate_markers(env.marker_environment(), &[]))
+            .filter(|requirement| !python_marker.is_disjoint(requirement.marker))
             .map(|requirement| (*requirement).clone())
             .collect();
 
@@ -147,6 +148,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                     )) {
                         if requirement
                             .evaluate_markers(env.marker_environment(), lookahead.extras())
+                            && !python_marker.is_disjoint(requirement.marker)
                         {
                             queue.push_back((*requirement).clone());
                         }
