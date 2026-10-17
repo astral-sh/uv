@@ -583,33 +583,24 @@ struct ExpressionCache<'a> {
 
 /// Finds the source of one atomic expression without interpreting its values.
 fn expression_source(source: &str) -> &str {
-    let mut chars = source.char_indices().peekable();
     let mut quote = None;
-    while let Some((index, char)) = chars.next() {
+    for (index, char) in source.char_indices() {
         if let Some(quotation_mark) = quote {
             if char == quotation_mark {
                 quote = None;
             }
         } else if matches!(char, '\'' | '"') {
             quote = Some(char);
-        } else if char == ')' {
-            return source[..index].trim_end();
-        } else if char.is_whitespace() {
-            while chars.peek().is_some_and(|(_, char)| char.is_whitespace()) {
-                chars.next();
-            }
-            if let Some(&(next, _)) = chars.peek() {
-                let rest = &source[next..];
-                if rest
+        } else if char == ')'
+            || matches!(char, 'a' | 'o')
+                && source[index..]
                     .strip_prefix("and")
-                    .or_else(|| rest.strip_prefix("or"))
+                    .or_else(|| source[index..].strip_prefix("or"))
                     .is_some_and(|rest| {
                         rest.starts_with(char::is_whitespace) || rest.starts_with('(')
                     })
-                {
-                    return source[..index].trim_end();
-                }
-            }
+        {
+            return source[..index].trim_end();
         }
     }
     source.trim_end()
@@ -791,7 +782,10 @@ mod tests {
     use crate::cursor::Cursor;
     use crate::{MarkerTree, VerbatimUrl};
 
-    use super::{ExpressionCache, MAX_CACHED_EXPRESSIONS, parse_marker_expr, parse_markers};
+    use super::{
+        ExpressionCache, MAX_CACHED_EXPRESSIONS, expression_source, parse_marker_expr,
+        parse_markers,
+    };
 
     #[test]
     fn cached_expression_preserves_quoted_boolean_operators() {
@@ -805,13 +799,14 @@ mod tests {
                 .expect("valid marker");
         assert_eq!(cache.expressions.len(), 1);
 
-        let mut cursor = Cursor::new("sys_platform == 'linux and darwin)' and(os_name == 'posix')");
+        let mut cursor = Cursor::new("sys_platform == 'linux and darwin)'and(os_name == 'posix')");
+        assert_eq!(expression_source(cursor.remaining()), source);
         assert_eq!(
             parse_marker_expr::<VerbatimUrl>(&mut cursor, &mut cache, &mut |_, _| {})
                 .expect("cached marker"),
             expected
         );
-        assert_eq!(cursor.remaining(), " and(os_name == 'posix')");
+        assert_eq!(cursor.remaining(), "and(os_name == 'posix')");
     }
 
     #[test]
