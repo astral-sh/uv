@@ -178,6 +178,37 @@ fn sentinel_successor(version: &Version) -> Option<Version> {
     None
 }
 
+/// Return the exclusive upper bound of a release prefix, including its epoch.
+///
+/// Overflowing components are discarded as the increment carries to the preceding component.
+/// When every component is maximal, the prefix extends to the next epoch (or infinity).
+/// For full PEP 440 ranges, `earliest_prerelease` excludes the next prefix starting at `.dev0`.
+fn release_prefix_upper_bound(
+    version: &Version,
+    precision: usize,
+    earliest_prerelease: bool,
+) -> Bound<Version> {
+    let mut release = version.release()[..precision].to_vec();
+    let upper = loop {
+        if let Some(last) = release.pop() {
+            if let Some(next) = last.checked_add(1) {
+                release.push(next);
+                break Version::new(release).with_epoch(version.epoch());
+            }
+        } else {
+            let Some(epoch) = version.epoch().checked_add(1) else {
+                return Bound::Unbounded;
+            };
+            break Version::new([0]).with_epoch(epoch);
+        }
+    };
+    Bound::Excluded(if earliest_prerelease {
+        upper.with_dev(Some(0))
+    } else {
+        upper
+    })
+}
+
 impl From<VersionSpecifiers> for Ranges<Version> {
     /// Convert [`VersionSpecifiers`] to a PubGrub-compatible version range, using PEP 440
     /// semantics.
@@ -214,15 +245,8 @@ impl From<VersionSpecifier> for Ranges<Version> {
             })
             .complement(),
             Operator::TildeEqual => {
-                let release = version.release();
-                let [rest @ .., last, _] = &*release else {
-                    unreachable!("~= must have at least two segments");
-                };
-                let upper = Version::new(rest.iter().chain([&(last + 1)]))
-                    .with_epoch(version.epoch())
-                    .with_dev(Some(0));
-
-                Self::from_range_bounds(version..upper)
+                let upper = release_prefix_upper_bound(&version, version.release().len() - 1, true);
+                Self::from_range_bounds((Bound::Included(version), upper))
             }
             Operator::LessThan => {
                 // Per PEP 440: "The exclusive ordered comparison <V MUST NOT allow a
@@ -266,9 +290,8 @@ impl From<VersionSpecifier> for Ranges<Version> {
                         number: pre.number + 1,
                     }));
                 } else {
-                    let mut release = high.release().to_vec();
-                    *release.last_mut().unwrap() += 1;
-                    high = high.with_release(release);
+                    let upper = release_prefix_upper_bound(&high, high.release().len(), true);
+                    return Self::from_range_bounds((Bound::Included(low), upper));
                 }
                 Self::from_range_bounds(low..high)
             }
@@ -283,9 +306,8 @@ impl From<VersionSpecifier> for Ranges<Version> {
                         number: pre.number + 1,
                     }));
                 } else {
-                    let mut release = high.release().to_vec();
-                    *release.last_mut().unwrap() += 1;
-                    high = high.with_release(release);
+                    let upper = release_prefix_upper_bound(&high, high.release().len(), true);
+                    return Self::from_range_bounds((Bound::Included(low), upper)).complement();
                 }
                 Self::from_range_bounds(low..high).complement()
             }
@@ -344,36 +366,23 @@ pub fn release_specifier_to_range(specifier: VersionSpecifier, trim: bool) -> Ra
 
         // Trailing zeroes are semantically relevant.
         Operator::TildeEqual => {
-            let release = version.release();
-            let [rest @ .., last, _] = &*release else {
-                unreachable!("~= must have at least two segments");
-            };
-            let upper = Version::new(rest.iter().chain([&(last + 1)]));
-            Ranges::from_range_bounds(version_trimmed..upper)
+            let upper = release_prefix_upper_bound(
+                &version.only_release(),
+                version.release().len() - 1,
+                false,
+            );
+            Ranges::from_range_bounds((Bound::Included(version_trimmed), upper))
         }
-        Operator::EqualStar => {
+        Operator::EqualStar | Operator::NotEqualStar => {
             // For (not-)equal-star, trailing zeroes are still before the star.
             let low_full = version.only_release();
-            let high = {
-                let mut high = low_full.clone();
-                let mut release = high.release().to_vec();
-                *release.last_mut().unwrap() += 1;
-                high = high.with_release(release);
-                high
-            };
-            Ranges::from_range_bounds(version..high)
-        }
-        Operator::NotEqualStar => {
-            // For (not-)equal-star, trailing zeroes are still before the star.
-            let low_full = version.only_release();
-            let high = {
-                let mut high = low_full.clone();
-                let mut release = high.release().to_vec();
-                *release.last_mut().unwrap() += 1;
-                high = high.with_release(release);
-                high
-            };
-            Ranges::from_range_bounds(version..high).complement()
+            let upper = release_prefix_upper_bound(&low_full, low_full.release().len(), false);
+            let range = Ranges::from_range_bounds((Bound::Included(version), upper));
+            if operator == Operator::NotEqualStar {
+                range.complement()
+            } else {
+                range
+            }
         }
     }
 }
@@ -983,6 +992,127 @@ mod tests {
 
         let v = "0.12.0".parse::<Version>().unwrap();
         assert!(!range.contains(&v), "should exclude 0.12.0");
+    }
+
+    #[test]
+    fn constructed_maximum_release_prefix_ranges() {
+        for (prefix, upper) in [
+            (vec![1, u64::MAX], Version::new([2])),
+            (vec![1, u64::MAX, u64::MAX], Version::new([2])),
+            (vec![u64::MAX], Version::new([0]).with_epoch(1)),
+            (vec![u64::MAX, u64::MAX], Version::new([0]).with_epoch(1)),
+            (vec![u64::MAX, 1], Version::new([u64::MAX, 2])),
+            (vec![1, u64::MAX - 1], Version::new([1, u64::MAX])),
+            (vec![1, 0, u64::MAX], Version::new([1, 1])),
+        ] {
+            let lower = Version::new(&prefix);
+            let mut descendant = prefix.clone();
+            descendant.push(1);
+            let descendant = Version::new(descendant);
+            let mut below = prefix.clone();
+            if let Some(last) = below.last_mut() {
+                *last -= 1;
+            }
+            let below = Version::new(below);
+            for operator in [
+                Operator::EqualStar,
+                Operator::NotEqualStar,
+                Operator::TildeEqual,
+            ] {
+                let version = if operator == Operator::TildeEqual {
+                    Version::new(prefix.iter().copied().chain([0]))
+                } else {
+                    lower.clone()
+                };
+                let specifier = VersionSpecifier::from_version(operator, version).unwrap();
+                let included = operator != Operator::NotEqualStar;
+                let range = Ranges::from(specifier.clone());
+                let start = if operator == Operator::TildeEqual {
+                    lower.clone()
+                } else {
+                    lower.clone().with_dev(Some(0))
+                };
+                let expected = Ranges::from_range_bounds(start..upper.clone().with_dev(Some(0)));
+                assert_eq!(
+                    range,
+                    if included {
+                        expected
+                    } else {
+                        expected.complement()
+                    }
+                );
+                assert_eq!(range.contains(&lower), included);
+                assert_eq!(range.contains(&descendant), included);
+                assert_eq!(range.contains(&below), !included);
+                assert_eq!(range.contains(&upper.clone().with_dev(Some(0))), !included);
+                for trim in [false, true] {
+                    let range = release_specifier_to_range(specifier.clone(), trim);
+                    let expected = Ranges::from_range_bounds(lower.clone()..upper.clone());
+                    assert_eq!(
+                        range,
+                        if included {
+                            expected
+                        } else {
+                            expected.complement()
+                        }
+                    );
+                    assert_eq!(range.contains(&lower), included);
+                    assert_eq!(range.contains(&descendant), included);
+                    assert_eq!(range.contains(&below), !included);
+                    assert_eq!(range.contains(&upper), !included);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn constructed_maximum_release_only_star_range() {
+        let lower = Version::new([u64::MAX]);
+        let specifier = VersionSpecifier::equals_star_version(lower.clone());
+        let expected = Ranges::from_range_bounds(lower.clone()..Version::new([0]).with_epoch(1));
+        for trim in [false, true] {
+            let range = release_specifier_to_range(specifier.clone(), trim);
+            assert_eq!(range, expected);
+            assert!(range.contains(&Version::new([u64::MAX, u64::MAX, 1])));
+            assert!(!range.contains(&Version::new([u64::MAX - 1])));
+        }
+    }
+
+    #[test]
+    fn constructed_maximum_epoch_prefix_range() {
+        let lower = Version::new([u64::MAX]).with_epoch(u64::MAX);
+        let descendant = Version::new([u64::MAX, 1]).with_epoch(u64::MAX);
+        let below = Version::new([u64::MAX - 1]).with_epoch(u64::MAX);
+        for operator in [
+            Operator::EqualStar,
+            Operator::NotEqualStar,
+            Operator::TildeEqual,
+        ] {
+            let version = if operator == Operator::TildeEqual {
+                Version::new([u64::MAX, 0]).with_epoch(u64::MAX)
+            } else {
+                lower.clone()
+            };
+            let range = Ranges::from(VersionSpecifier::from_version(operator, version).unwrap());
+            let included = operator != Operator::NotEqualStar;
+            let start = if operator == Operator::TildeEqual {
+                lower.clone()
+            } else {
+                lower.clone().with_dev(Some(0))
+            };
+            let expected = Ranges::higher_than(start);
+            assert_eq!(
+                range,
+                if included {
+                    expected
+                } else {
+                    expected.complement()
+                }
+            );
+            assert_eq!(range.contains(&lower), included);
+            assert_eq!(range.contains(&descendant), included);
+            assert_eq!(range.contains(&below), !included);
+        }
     }
 
     /// Do not panic with `u64::MAX` causing an `u64::MAX + 1` overflow.
