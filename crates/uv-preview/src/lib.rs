@@ -463,6 +463,8 @@ pub enum PreviewFeature {
     /// Enables experimental support for [wheel variants](https://peps.python.org/pep-0825/).
     /// Variant wheels are not yet selectable.
     WheelVariants,
+    /// Edits and ad-hoc signs managed Python dylibs on macOS without invoking `install_name_tool`.
+    NativeMachoEdit,
 }
 
 impl Display for PreviewFeature {

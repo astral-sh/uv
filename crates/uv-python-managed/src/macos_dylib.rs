@@ -1,11 +1,20 @@
-use std::{io::ErrorKind, path::PathBuf};
+use std::ffi::CString;
+use std::fs::Permissions;
+use std::io::{ErrorKind, Write};
+use std::path::{Path, PathBuf};
 
 use uv_fs::Simplified as _;
+use uv_macho::{Error as MachoError, InstallName, SignedDylib, SigningIdentifier};
+use uv_preview::PreviewFeature;
 use uv_warnings::warn_user;
 
 use crate::managed::ManagedPythonInstallation;
 
 pub(crate) fn patch_dylib_install_name(dylib: PathBuf) -> Result<(), Error> {
+    if uv_preview::is_enabled(PreviewFeature::NativeMachoEdit) {
+        return patch_dylib_native(dylib);
+    }
+
     let output = match std::process::Command::new("install_name_tool")
         .arg("-id")
         .arg(&dylib)
@@ -31,6 +40,50 @@ pub(crate) fn patch_dylib_install_name(dylib: PathBuf) -> Result<(), Error> {
     Ok(())
 }
 
+fn patch_dylib_native(dylib: PathBuf) -> Result<(), Error> {
+    let resolved = fs_err::canonicalize(&dylib)?;
+    let permissions = fs_err::metadata(&resolved)?.permissions();
+    let original = fs_err::read(&resolved)?;
+    let filename = dylib
+        .file_name()
+        .ok_or_else(|| std::io::Error::new(ErrorKind::InvalidInput, "Missing dylib filename"))?;
+    let signed = CString::new(dylib.as_os_str().as_encoded_bytes())
+        .map_err(|_| MachoError::InvalidName)
+        .and_then(|name| {
+            let name = InstallName::new(&name)?;
+            let identifier = CString::new(filename.as_encoded_bytes())
+                .map_err(|_| MachoError::InvalidIdentifier)?;
+            let identifier = SigningIdentifier::new(&identifier)?;
+            uv_macho::set_install_name(&original, name, identifier)
+        })
+        .map_err(|source| Error::NativeRenameError { dylib, source })?;
+
+    // An existing installation may already have the right name but an invalid signature.
+    // Only skip replacement when re-signing produces exactly the original image.
+    if signed.as_bytes() == original {
+        return Ok(());
+    }
+
+    persist_signed_dylib(&resolved, permissions, &signed)
+}
+
+fn persist_signed_dylib(
+    resolved: &Path,
+    permissions: Permissions,
+    signed: &SignedDylib,
+) -> Result<(), Error> {
+    // Replacing the resolved file preserves symlinks and avoids modifying an inode
+    // whose signed pages may already be cached by the macOS kernel.
+    let parent = resolved.parent().ok_or_else(|| {
+        std::io::Error::new(ErrorKind::InvalidInput, "Missing dylib parent directory")
+    })?;
+    let mut temporary = uv_fs::tempfile_in(parent)?;
+    temporary.write_all(signed.as_bytes())?;
+    temporary.as_file().set_permissions(permissions)?;
+    uv_fs::persist_with_retry_sync(temporary, resolved)?;
+    Ok(())
+}
+
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
     #[error(transparent)]
@@ -44,6 +97,8 @@ For more information, see: https://developer.apple.com/xcode/")]
     MissingInstallNameTool,
     #[error("Failed to update the install name of the Python dynamic library located at `{}`", dylib.user_display())]
     RenameError { dylib: PathBuf, stderr: String },
+    #[error("Failed to update the install name of the Python dynamic library located at `{}`: {source}", dylib.user_display())]
+    NativeRenameError { dylib: PathBuf, source: MachoError },
 }
 
 impl Error {
@@ -59,5 +114,66 @@ impl Error {
             installation.executable(false).simplified_display(),
             error
         );
+    }
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use std::os::unix::fs::{MetadataExt, PermissionsExt};
+
+    use anyhow::Result;
+
+    use super::patch_dylib_native;
+
+    #[test]
+    fn patch_dylib_preserves_symlink_and_permissions() -> Result<()> {
+        let directory = tempfile::tempdir()?;
+        let dylib = directory.path().join("libfixture.dylib");
+        let link = directory.path().join("link.dylib");
+        fs_err::write(
+            &dylib,
+            include_bytes!("../../uv-macho/tests/fixtures/arm64.dylib"),
+        )?;
+        fs_err::set_permissions(&dylib, std::fs::Permissions::from_mode(0o755))?;
+        fs_err::os::unix::fs::symlink(&dylib, &link)?;
+        let before = fs_err::metadata(&dylib)?;
+
+        patch_dylib_native(link.clone())?;
+
+        let after = fs_err::metadata(&dylib)?;
+        assert_eq!(fs_err::read_link(&link)?, dylib);
+        assert_eq!(after.permissions().mode(), before.permissions().mode());
+        assert_ne!(after.ino(), before.ino());
+
+        patch_dylib_native(link.clone())?;
+        let unchanged = fs_err::metadata(&dylib)?;
+        assert_eq!(unchanged.ino(), after.ino());
+        assert_eq!(unchanged.modified()?, after.modified()?);
+
+        // Changing a Mach-O header flag invalidates the signature without changing the name.
+        let mut bytes = fs_err::read(&dylib)?;
+        bytes[24] ^= 1;
+        fs_err::write(&dylib, bytes)?;
+        patch_dylib_native(link)?;
+        assert_ne!(fs_err::metadata(&dylib)?.ino(), unchanged.ino());
+
+        Ok(())
+    }
+
+    #[test]
+    fn patch_dylib_failure_leaves_file_unchanged() -> Result<()> {
+        let directory = tempfile::tempdir()?;
+        let dylib = directory.path().join("libfixture.dylib");
+        let contents = b"not a Mach-O image";
+        fs_err::write(&dylib, contents)?;
+        let before = fs_err::metadata(&dylib)?;
+
+        assert!(patch_dylib_native(dylib.clone()).is_err());
+
+        assert_eq!(fs_err::read(&dylib)?, contents);
+        assert_eq!(fs_err::metadata(&dylib)?.ino(), before.ino());
+        assert_eq!(fs_err::read_dir(directory.path())?.count(), 1);
+
+        Ok(())
     }
 }
