@@ -284,26 +284,6 @@ impl MarkerOperator {
         }
     }
 
-    /// Negates this marker operator.
-    ///
-    /// If a negation doesn't exist, which is only the case for ~=, then this
-    /// returns `None`.
-    pub(crate) fn negate(self) -> Option<Self> {
-        Some(match self {
-            Self::Equal => Self::NotEqual,
-            Self::NotEqual => Self::Equal,
-            Self::TildeEqual => return None,
-            Self::LessThan => Self::GreaterEqual,
-            Self::LessEqual => Self::GreaterThan,
-            Self::GreaterThan => Self::LessEqual,
-            Self::GreaterEqual => Self::LessThan,
-            Self::In => Self::NotIn,
-            Self::NotIn => Self::In,
-            Self::Contains => Self::NotContains,
-            Self::NotContains => Self::Contains,
-        })
-    }
-
     /// Returns the marker operator and value whose union represents the given range.
     pub(crate) fn from_bounds(
         bounds: (Bound<&ArcStr>, Bound<&ArcStr>),
@@ -570,14 +550,6 @@ impl ExtraOperator {
             _ => None,
         }
     }
-
-    /// Negates this operator.
-    pub(crate) fn negate(&self) -> Self {
-        match self {
-            Self::Equal => Self::NotEqual,
-            Self::NotEqual => Self::Equal,
-        }
-    }
 }
 
 impl Display for ExtraOperator {
@@ -762,7 +734,7 @@ impl<'a> ExtrasEnvironment<'a> {
 /// will compare equally. Markers also support efficient polynomial-time operations,
 /// such as conjunction and disjunction.
 #[derive(Clone, Copy, Eq, Hash, PartialEq)]
-pub struct MarkerTree(NodeId);
+pub struct MarkerTree(pub(super) NodeId);
 
 impl Default for MarkerTree {
     fn default() -> Self {
@@ -1919,6 +1891,163 @@ mod test {
 
     fn m(s: &str) -> MarkerTree {
         s.parse().unwrap()
+    }
+
+    /// Every Boolean function of three extras must roundtrip to the same diagram. The cover
+    /// must also be prime and irredundant: deleting any literal or clause changes its meaning.
+    #[test]
+    fn isop_boolean_covers() {
+        let variables = [m("extra == 'a'"), m("extra == 'b'"), m("extra == 'c'")];
+        let minterms: Vec<_> = (0..8)
+            .map(|assignment| {
+                variables
+                    .iter()
+                    .enumerate()
+                    .fold(MarkerTree::TRUE, |clause, (index, variable)| {
+                        clause.and(if assignment & (1 << index) == 0 {
+                            variable.negate()
+                        } else {
+                            *variable
+                        })
+                    })
+            })
+            .collect();
+        for truth_table in 1..255 {
+            let marker = minterms
+                .iter()
+                .enumerate()
+                .filter(|(index, _)| truth_table & (1 << index) != 0)
+                .fold(MarkerTree::FALSE, |marker, (_, minterm)| {
+                    marker.or(*minterm)
+                });
+            let dnf = marker.to_dnf();
+            let clauses: Vec<_> = dnf
+                .iter()
+                .map(|clause| {
+                    clause
+                        .iter()
+                        .cloned()
+                        .map(MarkerTree::expression)
+                        .fold(MarkerTree::TRUE, MarkerTree::and)
+                })
+                .collect();
+            assert_eq!(
+                clauses
+                    .iter()
+                    .copied()
+                    .fold(MarkerTree::FALSE, MarkerTree::or),
+                marker
+            );
+            assert_eq!(
+                m(&marker.try_to_string().expect("nontrivial marker")),
+                marker
+            );
+            for (index, clause) in dnf.iter().enumerate() {
+                let rest = clauses
+                    .iter()
+                    .enumerate()
+                    .filter(|(other, _)| *other != index)
+                    .fold(MarkerTree::FALSE, |rest, (_, clause)| rest.or(*clause));
+                assert_ne!(
+                    rest, marker,
+                    "redundant clause in truth table {truth_table}"
+                );
+                for skipped in 0..clause.len() {
+                    let reduced = clause
+                        .iter()
+                        .enumerate()
+                        .filter(|(term, _)| *term != skipped)
+                        .map(|(_, term)| MarkerTree::expression(term.clone()))
+                        .fold(MarkerTree::TRUE, MarkerTree::and);
+                    assert_ne!(
+                        rest.or(reduced),
+                        marker,
+                        "non-prime clause in truth table {truth_table}"
+                    );
+                }
+            }
+        }
+        assert!(MarkerTree::TRUE.to_dnf().is_empty());
+        assert!(MarkerTree::FALSE.to_dnf().is_empty());
+    }
+
+    /// Cross-variable platform exclusions must not invalidate the extraction bounds.
+    #[test]
+    fn isop_platform_exclusions() {
+        let variables = [
+            m("os_name == 'nt'"),
+            m("sys_platform == 'linux'"),
+            m("extra == 'a'"),
+        ];
+        let minterms: Vec<_> = (0..8)
+            .map(|assignment| {
+                variables
+                    .iter()
+                    .enumerate()
+                    .fold(MarkerTree::TRUE, |clause, (index, variable)| {
+                        clause.and(if assignment & (1 << index) == 0 {
+                            variable.negate()
+                        } else {
+                            *variable
+                        })
+                    })
+            })
+            .collect();
+        for truth_table in 1..255 {
+            let marker = minterms
+                .iter()
+                .enumerate()
+                .filter(|(index, _)| truth_table & (1 << index) != 0)
+                .fold(MarkerTree::FALSE, |marker, (_, minterm)| {
+                    marker.or(*minterm)
+                });
+            if let Some(rendered) = marker.try_to_string() {
+                assert_eq!(m(&rendered), marker, "truth table {truth_table}");
+            }
+        }
+    }
+
+    /// Range decisions have more than two branches and may use both open and closed bounds.
+    /// Exercise every function over a three-way range partition and one Boolean variable.
+    #[test]
+    fn isop_range_covers_roundtrip() {
+        for partition in [
+            [
+                "python_full_version < '3.10'",
+                "python_full_version == '3.10'",
+                "python_full_version > '3.10'",
+            ],
+            [
+                "sys_platform == 'linux'",
+                "sys_platform == 'win32'",
+                "sys_platform != 'linux' and sys_platform != 'win32'",
+            ],
+            [
+                "platform_release < '24'",
+                "platform_release == '24'",
+                "platform_release > '24'",
+            ],
+        ] {
+            let extra = m("extra == 'a'");
+            let minterms: Vec<_> = partition
+                .into_iter()
+                .flat_map(|range| [m(range).and(extra), m(range).and(extra.negate())])
+                .collect();
+            for truth_table in 1..63 {
+                let marker = minterms
+                    .iter()
+                    .enumerate()
+                    .filter(|(index, _)| truth_table & (1 << index) != 0)
+                    .fold(MarkerTree::FALSE, |marker, (_, minterm)| {
+                        marker.or(*minterm)
+                    });
+                assert_eq!(
+                    m(&marker.try_to_string().expect("nontrivial marker")),
+                    marker,
+                    "truth table {truth_table}"
+                );
+            }
+        }
     }
 
     #[test]
@@ -3139,22 +3268,16 @@ mod test {
 
     #[test]
     fn test_complex_marker_simplification() {
-        // This expression should simplify to:
-        // `(implementation_name == 'pypy' and sys_platform != 'win32')
-        //   or (sys_platform == 'win32' or os_name != 'nt')
-        //   or (implementation != 'pypy' or os_name == 'nt')`
-        //
-        // However, simplifying this expression is NP-complete and requires an exponential
-        // algorithm such as Quine-McCluskey, which is not currently implemented.
+        // This function has multiple covers. Extraction chooses one in diagram variable order.
         assert_simplifies(
             "(implementation_name == 'pypy' and sys_platform != 'win32')
                 or (implementation_name != 'pypy' and sys_platform == 'win32')
                 or (sys_platform == 'win32' and os_name != 'nt')
                 or (sys_platform != 'win32' and os_name == 'nt')",
-            "(implementation_name == 'pypy' and sys_platform != 'win32') \
-                or (implementation_name != 'pypy' and sys_platform == 'win32') \
-                or (os_name != 'nt' and sys_platform == 'win32') \
-                or (os_name == 'nt' and sys_platform != 'win32')",
+            "(implementation_name == 'pypy' and os_name != 'nt') \
+                or (implementation_name != 'pypy' and os_name == 'nt') \
+                or (implementation_name == 'pypy' and sys_platform != 'win32') \
+                or (implementation_name != 'pypy' and sys_platform == 'win32')",
         );
 
         // This is a case we can simplify fully, but it's dependent on the variable order.
@@ -3557,20 +3680,20 @@ mod test {
         m(antecedent).implies(m(consequent)).is_true()
     }
 
-    /// Restoring Python bounds must place version decisions before extra decisions.
+    /// Adding Python bounds must keep version decisions before extras in the diagram.
     #[test]
-    fn complexified_markers_extra_order() {
-        let version = Version::new([3, 12]);
-        let marker = m("extra == 'dev'")
-            .complexify_python_versions(Bound::Included(&version), Bound::Unbounded);
+    fn complexified_extras() {
+        let marker = m("sys_platform == 'linux' or (sys_platform == 'darwin' and extra == 'foo')")
+            .complexify_python_versions(Bound::Included(&Version::new([3, 11])), Bound::Unbounded);
         assert_eq!(
             marker,
-            m("python_full_version >= '3.12' and extra == 'dev'")
+            m(
+                "python_full_version >= '3.11' and (sys_platform == 'linux' or (sys_platform == 'darwin' and extra == 'foo'))"
+            )
         );
-        assert!(marker.and(m("python_full_version < '3.12'")).is_false());
         assert_eq!(
-            marker.simplify_python_versions(Bound::Included(&version), Bound::Unbounded),
-            m("extra == 'dev'")
+            m(&marker.try_to_string().expect("nontrivial marker")),
+            marker
         );
     }
 

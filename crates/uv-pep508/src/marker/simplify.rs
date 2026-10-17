@@ -2,151 +2,161 @@ use std::fmt;
 use std::ops::Bound;
 
 use arcstr::ArcStr;
-use indexmap::{IndexMap, IndexSet};
+use indexmap::IndexMap;
 use itertools::Itertools;
 use rustc_hash::FxBuildHasher;
-use smallvec::SmallVec;
 use version_ranges::Ranges;
 
 use uv_pep440::{Version, VersionSpecifier};
 
-use crate::marker::tree::ContainerOperator;
-use crate::{ExtraOperator, MarkerExpression, MarkerOperator, MarkerTree, MarkerTreeKind};
+use crate::marker::algebra::INTERNER;
+use crate::marker::algebra::isop::{Cover, Guard};
+use crate::marker::tree::{ContainerOperator, MarkerTree};
+use crate::{ExtraOperator, MarkerExpression, MarkerOperator, MarkerTreeKind};
 
 /// Returns a simplified DNF expression for a given marker tree.
 ///
-/// Marker trees are represented as decision diagrams that cannot be directly serialized to.
-/// a boolean expression. Instead, you must traverse and collect all possible solutions to the
-/// diagram, which can be used to create a DNF expression, or all non-solutions to the diagram,
-/// which can be used to create a CNF expression.
-///
-/// We choose DNF as it is easier to simplify for user-facing output.
+/// Extract a shared cover before expanding it to clauses for user-facing output.
 pub(crate) fn to_dnf(tree: MarkerTree) -> Vec<Vec<MarkerExpression>> {
+    let cover = INTERNER.lock().isop(tree.0);
     let mut dnf = Vec::new();
-    collect_dnf(tree, &mut dnf, &mut Vec::new());
-    simplify(&mut dnf);
+    collect_cover(&cover, &mut dnf, &mut Vec::new());
     sort(&mut dnf);
     dnf
 }
 
-/// Walk a [`MarkerTree`] recursively and construct a DNF expression.
-///
-/// A decision diagram can be converted to DNF form by performing a depth-first traversal of
-/// the tree and collecting all paths to a `true` terminal node.
-///
-/// `path` is the list of marker expressions traversed on the current path.
-fn collect_dnf(
-    tree: MarkerTree,
+/// Expand a shared cover, rendering each single-variable guard with the marker range rules.
+fn collect_cover(
+    cover: &Cover,
     dnf: &mut Vec<Vec<MarkerExpression>>,
     path: &mut Vec<MarkerExpression>,
 ) {
-    match tree.kind() {
-        // Reached a `false` node, meaning the conjunction is irrelevant for DNF.
-        MarkerTreeKind::False => {}
-        // Reached a solution, store the conjunction.
-        MarkerTreeKind::True => {
+    match cover {
+        Cover::False => {}
+        Cover::True => {
             if !path.is_empty() {
                 dnf.push(path.clone());
             }
         }
-        MarkerTreeKind::Version(marker) => {
-            for (tree, range) in collect_edges(marker.edges()) {
-                // Detect whether the range for this edge can be simplified as an inequality.
-                if let Some(excluded) = range_inequality(&range) {
-                    let current = path.len();
-                    for version in excluded {
-                        path.push(MarkerExpression::Version {
-                            key: marker.key().into(),
-                            specifier: VersionSpecifier::not_equals_version(version.clone()),
-                        });
-                    }
+        Cover::Guard(guard) => collect_guard(Guard::Node(*guard), &Cover::True, dnf, path),
+        Cover::Branches(branches) => {
+            for (guard, suffix) in branches.iter() {
+                collect_guard(*guard, suffix, dnf, path);
+            }
+        }
+    }
+}
 
-                    collect_dnf(tree, dnf, path);
-                    path.truncate(current);
-                    continue;
+/// Render a single-variable guard directly into the path before expanding its suffix.
+fn collect_guard(
+    guard: Guard,
+    suffix: &Cover,
+    dnf: &mut Vec<Vec<MarkerExpression>>,
+    path: &mut Vec<MarkerExpression>,
+) {
+    let (tree, child) = match guard {
+        Guard::Node(node) => (MarkerTree(node), MarkerTree::TRUE),
+        Guard::Edge { node, child } => (MarkerTree(node), MarkerTree(child)),
+    };
+    match tree.kind() {
+        // Reached a `false` node, meaning the conjunction is irrelevant for DNF.
+        MarkerTreeKind::False => {}
+        MarkerTreeKind::True => collect_cover(suffix, dnf, path),
+        MarkerTreeKind::Version(marker) => {
+            let range = guard_range(marker.edges(), child);
+            // Detect whether the range can be simplified as an inequality.
+            if let Some(excluded) = range_inequality(&range) {
+                let current = path.len();
+                for version in excluded {
+                    path.push(MarkerExpression::Version {
+                        key: marker.key().into(),
+                        specifier: VersionSpecifier::not_equals_version(version.clone()),
+                    });
                 }
 
-                // Detect whether the range for this edge can be simplified as a star specifier.
-                if let Some(specifier) = star_range_specifier(&range) {
+                collect_cover(suffix, dnf, path);
+                path.truncate(current);
+                return;
+            }
+
+            // Detect whether the range can be simplified as a star specifier.
+            if let Some(specifier) = star_range_specifier(&range) {
+                path.push(MarkerExpression::Version {
+                    key: marker.key().into(),
+                    specifier,
+                });
+
+                collect_cover(suffix, dnf, path);
+                path.pop();
+                return;
+            }
+
+            for bounds in range.iter() {
+                let current = path.len();
+                for specifier in VersionSpecifier::from_release_only_bounds(bounds) {
                     path.push(MarkerExpression::Version {
                         key: marker.key().into(),
                         specifier,
                     });
-
-                    collect_dnf(tree, dnf, path);
-                    path.pop();
-                    continue;
                 }
 
-                for bounds in range.iter() {
-                    let current = path.len();
-                    for specifier in VersionSpecifier::from_release_only_bounds(bounds) {
-                        path.push(MarkerExpression::Version {
-                            key: marker.key().into(),
-                            specifier,
-                        });
-                    }
-
-                    collect_dnf(tree, dnf, path);
-                    path.truncate(current);
-                }
+                collect_cover(suffix, dnf, path);
+                path.truncate(current);
             }
         }
         MarkerTreeKind::VersionString(marker) => {
-            for (tree, range) in collect_edges(marker.edges()) {
-                for (lower, upper) in range.iter() {
-                    let current = path.len();
-                    let lower = lower.map(|version| ArcStr::from(version.to_string()));
-                    let upper = upper.map(|version| ArcStr::from(version.to_string()));
-                    for (operator, value) in
-                        MarkerOperator::from_bounds((lower.as_ref(), upper.as_ref()))
-                    {
-                        path.push(MarkerExpression::String {
-                            key: marker.key().into(),
-                            operator,
-                            value,
-                        });
-                    }
-                    collect_dnf(tree, dnf, path);
-                    path.truncate(current);
+            let range = guard_range(marker.edges(), child);
+            for (lower, upper) in range.iter() {
+                let current = path.len();
+                let lower = lower.map(|version| ArcStr::from(version.to_string()));
+                let upper = upper.map(|version| ArcStr::from(version.to_string()));
+                for (operator, value) in
+                    MarkerOperator::from_bounds((lower.as_ref(), upper.as_ref()))
+                {
+                    path.push(MarkerExpression::String {
+                        key: marker.key().into(),
+                        operator,
+                        value,
+                    });
                 }
+                collect_cover(suffix, dnf, path);
+                path.truncate(current);
             }
         }
         MarkerTreeKind::String(marker) => {
-            for (tree, range) in collect_edges(marker.children()) {
-                // Detect whether the range for this edge can be simplified as an inequality.
-                if let Some(excluded) = range_inequality(&range) {
-                    let current = path.len();
-                    for value in excluded {
-                        path.push(MarkerExpression::String {
-                            key: marker.key().into(),
-                            operator: MarkerOperator::NotEqual,
-                            value: value.clone(),
-                        });
-                    }
-
-                    collect_dnf(tree, dnf, path);
-                    path.truncate(current);
-                    continue;
+            let range = guard_range(marker.children(), child);
+            // Detect whether the range can be simplified as an inequality.
+            if let Some(excluded) = range_inequality(&range) {
+                let current = path.len();
+                for value in excluded {
+                    path.push(MarkerExpression::String {
+                        key: marker.key().into(),
+                        operator: MarkerOperator::NotEqual,
+                        value: value.clone(),
+                    });
                 }
 
-                for bounds in range.iter() {
-                    let current = path.len();
-                    for (operator, value) in MarkerOperator::from_bounds(bounds) {
-                        path.push(MarkerExpression::String {
-                            key: marker.key().into(),
-                            operator,
-                            value: value.clone(),
-                        });
-                    }
+                collect_cover(suffix, dnf, path);
+                path.truncate(current);
+                return;
+            }
 
-                    collect_dnf(tree, dnf, path);
-                    path.truncate(current);
+            for bounds in range.iter() {
+                let current = path.len();
+                for (operator, value) in MarkerOperator::from_bounds(bounds) {
+                    path.push(MarkerExpression::String {
+                        key: marker.key().into(),
+                        operator,
+                        value: value.clone(),
+                    });
                 }
+
+                collect_cover(suffix, dnf, path);
+                path.truncate(current);
             }
         }
         MarkerTreeKind::In(marker) => {
-            for (value, tree) in marker.children() {
+            for (value, _) in marker.children().filter(|(_, tree)| *tree == child) {
                 let operator = if value {
                     MarkerOperator::In
                 } else {
@@ -160,12 +170,12 @@ fn collect_dnf(
                 };
 
                 path.push(expr);
-                collect_dnf(tree, dnf, path);
+                collect_cover(suffix, dnf, path);
                 path.pop();
             }
         }
         MarkerTreeKind::Contains(marker) => {
-            for (value, tree) in marker.children() {
+            for (value, _) in marker.children().filter(|(_, tree)| *tree == child) {
                 let operator = if value {
                     MarkerOperator::Contains
                 } else {
@@ -179,12 +189,12 @@ fn collect_dnf(
                 };
 
                 path.push(expr);
-                collect_dnf(tree, dnf, path);
+                collect_cover(suffix, dnf, path);
                 path.pop();
             }
         }
         MarkerTreeKind::List(marker) => {
-            for (is_high, tree) in marker.children() {
+            for (is_high, _) in marker.children().filter(|(_, tree)| *tree == child) {
                 let expr = MarkerExpression::List {
                     pair: marker.pair().clone(),
                     operator: if is_high {
@@ -195,12 +205,12 @@ fn collect_dnf(
                 };
 
                 path.push(expr);
-                collect_dnf(tree, dnf, path);
+                collect_cover(suffix, dnf, path);
                 path.pop();
             }
         }
         MarkerTreeKind::Extra(marker) => {
-            for (value, tree) in marker.children() {
+            for (value, _) in marker.children().filter(|(_, tree)| *tree == child) {
                 let operator = if value {
                     ExtraOperator::Equal
                 } else {
@@ -213,449 +223,23 @@ fn collect_dnf(
                 };
 
                 path.push(expr);
-                collect_dnf(tree, dnf, path);
+                collect_cover(suffix, dnf, path);
                 path.pop();
             }
         }
     }
 }
 
-/// Simplifies a DNF expression.
-///
-/// A decision diagram is canonical, but only for a given variable order. Depending on the
-/// pre-defined order, the DNF expression produced by a decision tree can still be further
-/// simplified.
-///
-/// For example, the decision diagram for the expression `A or B` will be represented as
-/// `A or (not A and B)` or `B or (not B and A)`, depending on the variable order. In both
-/// cases, the negation in the second clause is redundant.
-///
-/// Completely simplifying a DNF expression is NP-hard and amounts to the set cover problem.
-/// Additionally, marker expressions can contain complex expressions involving version ranges
-/// that are not trivial to simplify. Instead, we choose to simplify at the boolean variable
-/// level without any truth table expansion. Combined with the normalization applied by decision
-/// trees, this seems to be sufficient in practice.
-///
-/// The number of clause comparisons is quadratic. Most user-facing markers are simple; the
-/// indexed path reduces the cost of comparing larger ones.
-fn simplify(dnf: &mut Vec<Vec<MarkerExpression>>) {
-    if dnf.len() <= 1 || (dnf.len() >= 8 && simplify_indexed(dnf)) {
-        return;
-    }
-    simplify_with_queries(dnf, LinearClauses);
-}
-
-/// Remove terms and clauses in encounter order using the chosen clause comparisons.
-/// Each removal affects later comparisons, so this order determines the rendered expression.
-fn simplify_with_queries(dnf: &mut Vec<Vec<MarkerExpression>>, mut queries: impl ClauseQueries) {
-    for clause in 0..dnf.len() {
-        let mut removed = queries.prepare_clause(clause);
-        for term in 0..dnf[clause].len() {
-            if queries.has_subset_with_negated(dnf, clause, term, &removed) {
-                queries.remove_term(clause, term, &mut removed);
-            }
-        }
-        queries.finish_clause(dnf, clause, removed);
-    }
-
-    // Track redundant clauses by index so each membership check is constant-time.
-    let mut redundant = SmallVec::<[bool; 8]>::from_elem(false, dnf.len());
-    for clause in 0..dnf.len() {
-        redundant[clause] = (0..dnf.len()).any(|other| {
-            other != clause && !redundant[other] && queries.is_subset(dnf, other, clause)
-        });
-    }
-    let mut position = 0;
-    dnf.retain(|_| {
-        let keep = !redundant[position];
-        position += 1;
-        keep
-    });
-}
-
-/// Clause comparisons and index updates used by the ordered simplification pass.
-trait ClauseQueries {
-    /// State needed to track removals while considering one clause.
-    type Removed;
-
-    /// Prepare optional candidate differences and the clause's removal state.
-    fn prepare_clause(&mut self, clause: usize) -> Self::Removed;
-    /// Test whether another clause is a subset after negating one term of the current clause.
-    /// Previously removed terms cannot justify another removal.
-    fn has_subset_with_negated(
-        &self,
-        dnf: &[Vec<MarkerExpression>],
-        clause: usize,
-        term: usize,
-        removed: &Self::Removed,
-    ) -> bool;
-    /// Update membership and cached differences after removing a term.
-    fn remove_term(&mut self, clause: usize, term: usize, removed: &mut Self::Removed);
-    /// Apply the marked removals to the clause and its index.
-    fn finish_clause(
-        &mut self,
-        dnf: &mut [Vec<MarkerExpression>],
-        clause: usize,
-        removed: Self::Removed,
-    );
-    /// Test whether the surviving terms of `left` are contained in `right`.
-    fn is_subset(&self, dnf: &[Vec<MarkerExpression>], left: usize, right: usize) -> bool;
-}
-
-/// Compare expressions directly without allocating an index.
-struct LinearClauses;
-
-impl ClauseQueries for LinearClauses {
-    type Removed = SmallVec<[usize; 8]>;
-
-    fn prepare_clause(&mut self, _clause: usize) -> Self::Removed {
-        SmallVec::new()
-    }
-
-    fn remove_term(&mut self, _clause: usize, term: usize, removed: &mut Self::Removed) {
-        removed.push(term);
-    }
-
-    #[inline]
-    fn finish_clause(
-        &mut self,
-        dnf: &mut [Vec<MarkerExpression>],
-        clause: usize,
-        removed: Self::Removed,
-    ) {
-        for term in removed.into_iter().rev() {
-            dnf[clause].remove(term);
-        }
-    }
-
-    #[inline]
-    fn has_subset_with_negated(
-        &self,
-        dnf: &[Vec<MarkerExpression>],
-        clause: usize,
-        term: usize,
-        removed: &Self::Removed,
-    ) -> bool {
-        let skipped = &dnf[clause][term];
-        dnf.iter().enumerate().any(|(other, expressions)| {
-            other != clause
-                && expressions.iter().all(|expression| {
-                    if expression == skipped {
-                        return false;
-                    }
-                    if is_negation(expression, skipped) {
-                        return true;
-                    }
-                    // Repeated terms match their first occurrence, even when a later one survives.
-                    dnf[clause]
-                        .iter()
-                        .position(|other| other == expression)
-                        .is_some_and(|position| !removed.contains(&position))
-                })
-        })
-    }
-
-    fn is_subset(&self, dnf: &[Vec<MarkerExpression>], left: usize, right: usize) -> bool {
-        dnf[left].iter().all(|term| dnf[right].contains(term))
-    }
-}
-
-/// Use interned terms when the clauses have no repeated terms and the index fits its budget.
-/// Returns `false` without changing the DNF when direct comparisons are needed.
-fn simplify_indexed(dnf: &mut Vec<Vec<MarkerExpression>>) -> bool {
-    const MAX_INDEX_WORDS: usize = 32 * 1024 * 1024 / size_of::<u64>();
-    let mut terms = IndexSet::<_, FxBuildHasher>::default();
-    let clauses: Vec<Vec<_>> = dnf
-        .iter()
-        .map(|clause| {
-            clause
-                .iter()
-                .map(|term| terms.insert_full(term).0)
-                .collect()
-        })
-        .collect();
-    let words = terms.len().div_ceil(64);
-    if dnf.len().saturating_mul(words) > MAX_INDEX_WORDS {
-        return false;
-    }
-    let negated: Vec<_> = terms
-        .iter()
-        .map(|expression| negate_expression(expression).and_then(|term| terms.get_index_of(&term)))
-        .collect();
-    drop(terms);
-    if words == 0 {
-        dnf.truncate(1);
-        return true;
-    }
-
-    // Cache differences only when many clauses reuse relatively few terms.
-    if clauses.len() >= 256 && clauses.len() > negated.len().saturating_mul(2) {
-        if let Some(queries) = IndexedClauses::<true>::new(clauses, &negated, words) {
-            simplify_with_queries(dnf, queries);
-            return true;
-        }
-    } else if let Some(queries) = IndexedClauses::<false>::new(clauses, &negated, words) {
-        simplify_with_queries(dnf, queries);
-        return true;
-    }
-    false
-}
-
-/// Interned clauses with optional cached differences. Cached comparisons store each clause
-/// contiguously; direct comparisons store the same word across clauses contiguously.
-struct IndexedClauses<'a, const CACHE: bool> {
-    clauses: Vec<Vec<usize>>,
-    negated: &'a [Option<usize>],
-    sets: Vec<u64>,
-    words: usize,
-    max_negations: usize,
-    candidates: Vec<(usize, SmallVec<[usize; 1]>)>,
-}
-
-impl<'a, const CACHE: bool> IndexedClauses<'a, CACHE> {
-    /// Build membership sets, rejecting clauses with repeated terms.
-    fn new(clauses: Vec<Vec<usize>>, negated: &'a [Option<usize>], words: usize) -> Option<Self> {
-        let mut index = Self {
-            sets: vec![0; clauses.len() * words],
-            clauses,
-            negated,
-            words,
-            max_negations: 0,
-            candidates: Vec::new(),
-        };
-        for (clause, terms) in index.clauses.iter().enumerate() {
-            for &term in terms {
-                let offset = index.offset(clause, term / 64);
-                let mask = 1 << (term % 64);
-                if index.sets[offset] & mask != 0 {
-                    return None;
-                }
-                index.sets[offset] |= mask;
-            }
-        }
-        if CACHE {
-            let mut counts = vec![0usize; negated.len()];
-            for &term in negated.iter().flatten() {
-                counts[term] += 1;
-            }
-            index.max_negations = counts.into_iter().max().unwrap_or(0);
-        }
-        Some(index)
-    }
-
-    /// Locate a word in the layout selected for these comparisons.
-    fn offset(&self, clause: usize, word: usize) -> usize {
-        if CACHE {
-            clause * self.words + word
-        } else {
-            word * self.clauses.len() + clause
-        }
-    }
-
-    /// Test membership without comparing marker expressions.
-    fn contains(&self, clause: usize, term: usize) -> bool {
-        self.sets[self.offset(clause, term / 64)] & (1 << (term % 64)) != 0
-    }
-
-    /// Visit terms present in `left` but absent from `right`, stopping on failure.
-    fn all_missing_from(
-        &self,
-        left: usize,
-        right: usize,
-        mut predicate: impl FnMut(usize) -> bool,
-    ) -> bool {
-        if self.words > 2 && self.words > self.clauses[left].len().min(self.clauses[right].len()) {
-            return self.clauses[left]
-                .iter()
-                .all(|&term| self.contains(right, term) || predicate(term));
-        }
-        for word in 0..self.words {
-            let mut missing =
-                self.sets[self.offset(left, word)] & !self.sets[self.offset(right, word)];
-            while missing != 0 {
-                if !predicate(word * 64 + missing.trailing_zeros() as usize) {
-                    return false;
-                }
-                missing &= missing - 1;
-            }
-        }
-        true
-    }
-}
-
-impl<const CACHE: bool> ClauseQueries for IndexedClauses<'_, CACHE> {
-    type Removed = ();
-
-    fn prepare_clause(&mut self, clause: usize) {
-        if CACHE {
-            self.candidates = (0..self.clauses.len())
-                .filter(|&other| other != clause)
-                .filter_map(|other| {
-                    let mut missing = SmallVec::new();
-                    self.all_missing_from(other, clause, |term| {
-                        if missing.len() == self.max_negations {
-                            return false;
-                        }
-                        missing.push(term);
-                        true
-                    })
-                    .then_some((other, missing))
-                })
-                .collect();
-        }
-    }
-
-    #[inline]
-    fn has_subset_with_negated(
-        &self,
-        _dnf: &[Vec<MarkerExpression>],
-        clause: usize,
-        term: usize,
-        _removed: &Self::Removed,
-    ) -> bool {
-        let skipped = self.clauses[clause][term];
-        let mask = 1 << (skipped % 64);
-        if CACHE {
-            self.candidates.iter().any(|(other, missing)| {
-                self.sets[*other * self.words + skipped / 64] & mask == 0
-                    && missing
-                        .iter()
-                        .all(|&term| self.negated[term] == Some(skipped))
-            })
-        } else {
-            let offset = (skipped / 64) * self.clauses.len();
-            let column = &self.sets[offset..offset + self.clauses.len()];
-            (0..self.clauses.len()).any(|other| {
-                other != clause
-                    && column[other] & mask == 0
-                    && self
-                        .all_missing_from(other, clause, |term| self.negated[term] == Some(skipped))
-            })
-        }
-    }
-
-    fn remove_term(&mut self, clause: usize, term: usize, _removed: &mut Self::Removed) {
-        let skipped = self.clauses[clause][term];
-        let offset = self.offset(clause, skipped / 64);
-        self.sets[offset] &= !(1 << (skipped % 64));
-        if CACHE {
-            self.candidates.retain_mut(|(other, missing)| {
-                if self.sets[*other * self.words + skipped / 64] & (1 << (skipped % 64)) != 0 {
-                    if missing.len() == self.max_negations {
-                        return false;
-                    }
-                    missing.push(skipped);
-                }
-                true
-            });
-        }
-    }
-
-    fn finish_clause(
-        &mut self,
-        dnf: &mut [Vec<MarkerExpression>],
-        clause: usize,
-        _removed: Self::Removed,
-    ) {
-        let mut position = 0;
-        dnf[clause].retain(|_| {
-            let keep = self.contains(clause, self.clauses[clause][position]);
-            position += 1;
-            keep
-        });
-        let clause_count = self.clauses.len();
-        self.clauses[clause].retain(|&term| {
-            let offset = if CACHE {
-                clause * self.words + term / 64
-            } else {
-                (term / 64) * clause_count + clause
-            };
-            self.sets[offset] & (1 << (term % 64)) != 0
-        });
-    }
-
-    fn is_subset(&self, _dnf: &[Vec<MarkerExpression>], left: usize, right: usize) -> bool {
-        (self.words <= 2 || self.clauses[left].len() <= self.clauses[right].len())
-            && self.all_missing_from(left, right, |_| false)
-    }
-}
-
-/// Remove redundant terms, then redundant clauses, in encounter order without allocating an index.
-/// Repeated terms are matched by their first position, which a bit set cannot represent.
-#[cfg(test)]
-fn simplify_linear(dnf: &mut Vec<Vec<MarkerExpression>>) {
-    for i in 0..dnf.len() {
-        let clause = &dnf[i];
-
-        // Find redundant terms in this clause.
-        let mut redundant_terms = Vec::new();
-        'term: for (skipped, skipped_term) in clause.iter().enumerate() {
-            for (j, other_clause) in dnf.iter().enumerate() {
-                if i == j {
-                    continue;
-                }
-
-                // Let X be this clause with a given term A set to it's negation.
-                // If there exists another clause that is a subset of X, the term A is
-                // redundant in this clause.
-                //
-                // For example, `A or (not A and B)` can be simplified to `A or B`,
-                // eliminating the `not A` term.
-                if other_clause.iter().all(|term| {
-                    // For the term to be redundant in this clause, the other clause can
-                    // contain the negation of the term but not the term itself.
-                    if term == skipped_term {
-                        return false;
-                    }
-                    if is_negation(term, skipped_term) {
-                        return true;
-                    }
-
-                    clause
-                        .iter()
-                        .position(|x| x == term)
-                        // If the term was already removed from this one, we cannot
-                        // depend on it for further simplification.
-                        .is_some_and(|i| !redundant_terms.contains(&i))
-                }) {
-                    redundant_terms.push(skipped);
-                    continue 'term;
-                }
-            }
-        }
-
-        // Eliminate any redundant terms.
-        redundant_terms.sort_by(|a, b| b.cmp(a));
-        for term in redundant_terms {
-            dnf[i].remove(term);
-        }
-    }
-
-    // Once we have eliminated redundant terms, there may also be redundant clauses.
-    // For example, `(A and B) or (not A and B)` would have been simplified above to
-    // `(A and B) or B` and can now be further simplified to just `B`.
-    let mut redundant_clauses = Vec::new();
-    'clause: for i in 0..dnf.len() {
-        let clause = &dnf[i];
-
-        for (j, other_clause) in dnf.iter().enumerate() {
-            // Ignore clauses that are going to be eliminated.
-            if i == j || redundant_clauses.contains(&j) {
-                continue;
-            }
-
-            // There is another clause that is a subset of this one, thus this clause is redundant.
-            if other_clause.iter().all(|term| clause.contains(term)) {
-                redundant_clauses.push(i);
-                continue 'clause;
-            }
-        }
-    }
-
-    // Eliminate any redundant clauses.
-    for i in redundant_clauses.into_iter().rev() {
-        dnf.remove(i);
-    }
+/// Collect only the accepting ranges of a single-variable guard in one pass.
+fn guard_range<'a, T: Clone + Ord + 'a>(
+    edges: impl Iterator<Item = (&'a Ranges<T>, MarkerTree)>,
+    child: MarkerTree,
+) -> Ranges<T> {
+    edges
+        .filter(|(_, tree)| *tree == child)
+        .flat_map(|(range, _)| range.iter())
+        .map(|(start, end)| (start.cloned(), end.cloned()))
+        .collect()
 }
 
 /// Sort the clauses in a DNF expression, for backwards compatibility. The goal is to avoid
@@ -748,365 +332,5 @@ fn star_range_specifier(range: &Ranges<Version>) -> Option<VersionSpecifier> {
         }
     } else {
         None
-    }
-}
-
-/// Returns `true` if the LHS is the negation of the RHS, or vice versa.
-fn is_negation(left: &MarkerExpression, right: &MarkerExpression) -> bool {
-    match left {
-        MarkerExpression::Version { key, specifier } => {
-            let MarkerExpression::Version {
-                key: key2,
-                specifier: specifier2,
-            } = right
-            else {
-                return false;
-            };
-
-            key == key2
-                && specifier.version() == specifier2.version()
-                && specifier
-                    .operator()
-                    .negate()
-                    .is_some_and(|negated| negated == *specifier2.operator())
-        }
-        MarkerExpression::VersionIn {
-            key,
-            versions,
-            operator,
-        } => {
-            let MarkerExpression::VersionIn {
-                key: key2,
-                versions: versions2,
-                operator: operator2,
-            } = right
-            else {
-                return false;
-            };
-
-            key == key2 && versions == versions2 && operator != operator2
-        }
-        MarkerExpression::String {
-            key,
-            operator,
-            value,
-        } => {
-            let MarkerExpression::String {
-                key: key2,
-                operator: operator2,
-                value: value2,
-            } = right
-            else {
-                return false;
-            };
-
-            key == key2
-                && value == value2
-                && operator
-                    .negate()
-                    .is_some_and(|negated| negated == *operator2)
-        }
-        MarkerExpression::Extra { operator, name } => {
-            let MarkerExpression::Extra {
-                name: name2,
-                operator: operator2,
-            } = right
-            else {
-                return false;
-            };
-
-            name == name2 && operator.negate() == *operator2
-        }
-        MarkerExpression::List { pair, operator } => {
-            let MarkerExpression::List {
-                pair: pair2,
-                operator: operator2,
-            } = right
-            else {
-                return false;
-            };
-
-            pair == pair2 && operator != operator2
-        }
-    }
-}
-
-/// Construct the single expression accepted by [`is_negation`] for this left operand.
-/// Returns `None` if the negation cannot be represented as one valid marker expression.
-fn negate_expression(expression: &MarkerExpression) -> Option<MarkerExpression> {
-    Some(match expression {
-        MarkerExpression::Version { key, specifier } => MarkerExpression::Version {
-            key: *key,
-            specifier: VersionSpecifier::from_version(
-                specifier.operator().negate()?,
-                specifier.version().clone(),
-            )
-            .ok()?,
-        },
-        MarkerExpression::VersionIn {
-            key,
-            versions,
-            operator,
-        } => MarkerExpression::VersionIn {
-            key: *key,
-            versions: versions.clone(),
-            operator: operator.negate(),
-        },
-        MarkerExpression::String {
-            key,
-            operator,
-            value,
-        } => MarkerExpression::String {
-            key: *key,
-            operator: operator.negate()?,
-            value: value.clone(),
-        },
-        MarkerExpression::List { pair, operator } => MarkerExpression::List {
-            pair: pair.clone(),
-            operator: operator.negate(),
-        },
-        MarkerExpression::Extra { name, operator } => MarkerExpression::Extra {
-            name: name.clone(),
-            operator: operator.negate(),
-        },
-    })
-}
-
-#[cfg(test)]
-mod tests {
-    use itertools::iproduct;
-    use uv_pep440::{Operator, Version, VersionSpecifier};
-
-    use super::{
-        LinearClauses, collect_dnf, is_negation, negate_expression, simplify, simplify_indexed,
-        simplify_linear, simplify_with_queries,
-    };
-    use crate::{MarkerExpression, MarkerTree, MarkerValueVersion};
-
-    fn expression(value: &str) -> MarkerExpression {
-        MarkerExpression::from_str(value)
-            .expect("valid marker expression")
-            .expect("nontrivial marker expression")
-    }
-
-    #[test]
-    fn negate_expression_matches_is_negation() {
-        let expressions: Vec<_> = [
-            "extra == 'a'",
-            "extra != 'a'",
-            "extra == 'b'",
-            "extra != 'b'",
-            "python_version == '3.10'",
-            "python_version != '3.10'",
-            "python_version >= '3.9'",
-            "python_version < '3.9'",
-            "python_version ~= '3.9'",
-            "python_version in '3.9 3.10'",
-            "python_version not in '3.9 3.10'",
-            "sys_platform == 'linux'",
-            "sys_platform != 'linux'",
-            "'linux' in sys_platform",
-            "'linux' not in sys_platform",
-            "'test' in extras",
-            "'test' not in extras",
-        ]
-        .into_iter()
-        .map(expression)
-        .chain([MarkerExpression::Version {
-            key: MarkerValueVersion::PythonVersion,
-            specifier: VersionSpecifier::from_version(Operator::ExactEqual, Version::new([3, 10]))
-                .expect("valid exact-equality version specifier"),
-        }])
-        .collect();
-        for left in &expressions {
-            for right in &expressions {
-                assert_eq!(
-                    is_negation(left, right),
-                    negate_expression(left).as_ref() == Some(right)
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn indexed_simplification_preserves_removal_order() {
-        let [a, not_a, b, not_b] = [
-            "extra == 'a'",
-            "extra != 'a'",
-            "extra == 'b'",
-            "extra != 'b'",
-        ]
-        .map(expression);
-        // After removing `a` from the first clause, `b` cannot be removed using the third.
-        let mut dnf = vec![
-            vec![a.clone(), b.clone()],
-            vec![not_a, b.clone()],
-            vec![a.clone(), not_b],
-        ];
-
-        assert!(simplify_indexed(&mut dnf));
-        assert_eq!(dnf, vec![vec![b], vec![a]]);
-    }
-
-    #[test]
-    fn indexed_simplification_matches_linear() {
-        let a = ["extra == 'a'", "extra != 'a'"].map(expression);
-        let b = ["extra == 'b'", "extra != 'b'"].map(expression);
-        // All nonempty clauses over two variables, with at most one term per variable.
-        let clauses: Vec<_> = a
-            .iter()
-            .chain(&b)
-            .map(|term| vec![term.clone()])
-            .chain(iproduct!(&a, &b).map(|(a, b)| vec![a.clone(), b.clone()]))
-            .collect();
-        for (first, second, third) in iproduct!(&clauses, &clauses, &clauses) {
-            let mut actual = vec![first.clone(), second.clone(), third.clone()];
-            let mut expected = actual.clone();
-            let mut linear = actual.clone();
-            simplify_linear(&mut expected);
-            simplify_with_queries(&mut linear, LinearClauses);
-            assert_eq!(linear, expected, "{first:?} or {second:?} or {third:?}");
-            assert!(simplify_indexed(&mut actual));
-            assert_eq!(actual, expected, "{first:?} or {second:?} or {third:?}");
-        }
-    }
-
-    #[test]
-    fn indexed_simplification_spans_multiple_words() {
-        // The 63 shared terms put the complementary pair on opposite sides of a word boundary.
-        let shared: Vec<_> = (0..63)
-            .map(|index| expression(&format!("extra == 'extra-{index}'")))
-            .collect();
-        let mut dnf = vec![shared.clone(), shared.clone()];
-        dnf[0].push(expression("extra == 'boundary'"));
-        dnf[1].push(expression("extra != 'boundary'"));
-
-        assert!(simplify_indexed(&mut dnf));
-        assert_eq!(dnf, vec![shared]);
-    }
-
-    #[test]
-    fn indexed_simplification_uses_surviving_terms_in_sparse_clauses() {
-        let [a, not_a, b, c, not_c] = [
-            "extra == 'a'",
-            "extra != 'a'",
-            "extra == 'b'",
-            "extra == 'c'",
-            "extra != 'c'",
-        ]
-        .map(expression);
-        let mut dnf = vec![
-            vec![a, b.clone(), c.clone()],
-            vec![not_a, b.clone(), c],
-            vec![b.clone(), not_c],
-        ];
-        // Five terms above plus 124 singleton terms require three words. The first clause
-        // becomes sparse after removing `a` and `c`, and the third clause must see only `b`.
-        let singletons: Vec<_> = (0..124)
-            .map(|index| vec![expression(&format!("platform_machine == 'arch-{index}'"))])
-            .collect();
-        dnf.extend(singletons.clone());
-
-        assert!(simplify_indexed(&mut dnf));
-        let mut expected = vec![vec![b]];
-        expected.extend(singletons);
-        assert_eq!(dnf, expected);
-    }
-
-    #[test]
-    fn indexed_simplification_eliminates_empty_clauses() {
-        let mut dnf = vec![Vec::new(), Vec::new()];
-        assert!(simplify_indexed(&mut dnf));
-        assert_eq!(dnf, vec![Vec::new()]);
-    }
-
-    #[test]
-    fn indexed_simplification_falls_back_for_repeated_terms() {
-        let term = expression("extra == 'a'");
-        // Eight clauses trigger indexing; a duplicate in the last one must leave the input intact.
-        let mut dnf = vec![vec![term.clone()]; 8];
-        dnf[7].push(term.clone());
-        let original = dnf.clone();
-
-        assert!(!simplify_indexed(&mut dnf));
-        assert_eq!(dnf, original);
-        simplify(&mut dnf);
-        assert_eq!(dnf, vec![vec![term.clone(), term]]);
-    }
-
-    #[test]
-    fn indexed_candidates_match_linear() {
-        for size in [24, 32] {
-            let extras: Vec<MarkerTree> = (0..size)
-                .map(|index| {
-                    format!("extra == 'extra-{index:03}'")
-                        .parse()
-                        .expect("valid extra marker")
-                })
-                .collect();
-            let mut marker: MarkerTree = "python_full_version < '3.11'"
-                .parse()
-                .expect("valid environment marker");
-            for left in 0..size {
-                for right in left + 1..size {
-                    marker = marker.or(extras[left].and(extras[right]));
-                }
-            }
-            let mut actual = Vec::new();
-            collect_dnf(marker, &mut actual, &mut Vec::new());
-            assert!(actual.len() >= 256);
-            let mut expected = actual.clone();
-            simplify_linear(&mut expected);
-            assert!(simplify_indexed(&mut actual));
-            assert_eq!(actual, expected);
-        }
-    }
-
-    #[test]
-    fn indexed_candidates_match_linear_across_words() {
-        let expressions: Vec<_> = (0..70)
-            .flat_map(|index| {
-                [
-                    expression(&format!("extra == 'candidate-{index}'")),
-                    expression(&format!("extra != 'candidate-{index}'")),
-                ]
-            })
-            .collect();
-        let mut state = 17u64;
-        for case in 0..40 {
-            let mut next = || {
-                state = state
-                    .wrapping_mul(6_364_136_223_846_793_005)
-                    .wrapping_add(1);
-                (state >> 32) as usize
-            };
-            let mut actual = Vec::new();
-            for _ in 0..512 {
-                let mut clause = Vec::new();
-                for _ in 0..2 + next() % 6 {
-                    let term = expressions[next() % expressions.len()].clone();
-                    if !clause.contains(&term) {
-                        clause.push(term);
-                    }
-                }
-                actual.push(clause);
-            }
-            let mut expected = actual.clone();
-            simplify_linear(&mut expected);
-            assert!(simplify_indexed(&mut actual));
-            assert_eq!(actual, expected, "case {case}");
-        }
-    }
-
-    #[test]
-    fn indexed_simplification_limits_dense_storage() {
-        // 16,384 singleton terms fill exactly 32 MiB; one more exceeds the index limit.
-        let mut actual: Vec<_> = (0..16_385)
-            .map(|index| vec![expression(&format!("extra == 'extra-{index}'"))])
-            .collect();
-        let expected = actual.clone();
-
-        assert!(!simplify_indexed(&mut actual));
-        assert_eq!(actual, expected);
     }
 }
