@@ -95,7 +95,7 @@ pub struct UniversalMarker {
 }
 
 /// An activated set of projects, extras, and groups, encoded once for repeated
-/// [`UniversalMarker::evaluate_activated`] calls.
+/// [`ConflictMarkerSelection::evaluate`] calls.
 #[derive(Debug)]
 pub struct ActivatedConflictItems(Vec<ExtraName>);
 
@@ -505,7 +505,7 @@ impl UniversalMarker {
     }
 
     /// Returns true if this universal marker is satisfied by an already encoded activated set.
-    pub fn evaluate_activated(
+    fn evaluate_activated(
         self,
         env: &MarkerEnvironment,
         activated: &ActivatedConflictItems,

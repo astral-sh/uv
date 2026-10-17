@@ -7810,7 +7810,6 @@ name = "uv-resolver-types"
 version = "0.0.93"
 dependencies = [
  "indexmap",
- "itertools 0.14.0",
  "petgraph",
  "reqwest",
  "rustc-hash",
