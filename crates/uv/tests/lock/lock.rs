@@ -22802,7 +22802,7 @@ fn lock_metadata_free_nested_group_conditional_registry_constraint() -> Result<(
             .as_inline_table()
             .and_then(|dependency| dependency.get("marker"))
             .and_then(toml_edit::Value::as_str)
-            .is_some_and(|marker| marker.starts_with("sys_platform == 'win32' or"))
+            .is_some_and(|marker| marker == "sys_platform == 'win32'")
     }) else {
         anyhow::bail!("other dependency group did not contain its base edge");
     };
