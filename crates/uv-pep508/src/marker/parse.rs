@@ -598,7 +598,13 @@ fn parse_marker_and<T: Pep508Url>(
     cursor: &mut Cursor,
     reporter: &mut impl Reporter,
 ) -> Result<Option<MarkerTree>, Pep508Error<T>> {
-    parse_marker_op(cursor, "and", MarkerTree::and, parse_marker_expr, reporter)
+    parse_marker_op(
+        cursor,
+        "and",
+        MarkerTree::and_all,
+        parse_marker_expr,
+        reporter,
+    )
 }
 
 /// ```text
@@ -612,7 +618,7 @@ fn parse_marker_or<T: Pep508Url>(
     parse_marker_op(
         cursor,
         "or",
-        MarkerTree::or,
+        MarkerTree::or_all,
         |cursor, reporter| parse_marker_and(cursor, reporter),
         reporter,
     )
@@ -623,7 +629,7 @@ fn parse_marker_or<T: Pep508Url>(
 fn parse_marker_op<T: Pep508Url, R: Reporter>(
     cursor: &mut Cursor,
     op: &str,
-    apply: fn(MarkerTree, MarkerTree) -> MarkerTree,
+    apply: fn([MarkerTree; 4]) -> MarkerTree,
     parse_inner: fn(&mut Cursor, &mut R) -> Result<Option<MarkerTree>, Pep508Error<T>>,
     reporter: &mut R,
 ) -> Result<Option<MarkerTree>, Pep508Error<T>> {
@@ -646,15 +652,19 @@ fn parse_marker_op<T: Pep508Url, R: Reporter>(
         }
     }
 
-    // Combining adjacent pairs avoids constructing every prefix of a growing diagram.
+    // Small batches avoid intermediate diagrams without an unbounded multiway expansion.
+    let identity = if op == "and" {
+        MarkerTree::TRUE
+    } else {
+        MarkerTree::FALSE
+    };
     while expressions.len() > 1 {
         let length = expressions.len();
-        for (output, index) in (0..length).step_by(2).enumerate() {
-            expressions[output] = if index + 1 < length {
-                apply(expressions[index], expressions[index + 1])
-            } else {
-                expressions[index]
-            };
+        for (output, index) in (0..length).step_by(4).enumerate() {
+            let mut batch = [identity; 4];
+            let operands = &expressions[index..(index + 4).min(length)];
+            batch[..operands.len()].copy_from_slice(operands);
+            expressions[output] = apply(batch);
             // All terms have been parsed, so constant results cannot hide errors or warnings.
             if (expressions[output].is_true() && op == "or")
                 || (expressions[output].is_false() && op == "and")
@@ -662,7 +672,7 @@ fn parse_marker_op<T: Pep508Url, R: Reporter>(
                 return Ok(Some(expressions[output]));
             }
         }
-        expressions.truncate(length.div_ceil(2));
+        expressions.truncate(length.div_ceil(4));
     }
     Ok(expressions.first().copied())
 }

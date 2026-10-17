@@ -822,6 +822,19 @@ impl MarkerTree {
         Self(INTERNER.lock().or_nontrivial(self.0, tree.0))
     }
 
+    /// Conjoins a parser batch; unused slots must be [`Self::TRUE`].
+    pub(crate) fn and_all(trees: [Self; 4]) -> Self {
+        if trees[2].is_true() && trees[3].is_true() {
+            return trees[0].and(trees[1]);
+        }
+        Self(INTERNER.lock().and_all(trees.map(|tree| tree.0)))
+    }
+
+    /// Disjoins a parser batch; unused slots must be [`Self::FALSE`].
+    pub(crate) fn or_all(trees: [Self; 4]) -> Self {
+        Self::and_all(trees.map(Self::negate)).negate()
+    }
+
     /// Returns a marker equivalent to the implication of this one and the given consequent.
     ///
     /// If the marker set is always `true`, then it can be said that `self`
@@ -2069,6 +2082,71 @@ mod test {
         (extra == 'a' and extra != 'a') and (python_version < invalid)
                                                               ^^^^^^^
         ");
+    }
+
+    /// Shared decisions need matching cofactors, including complemented branches.
+    #[test]
+    fn bounded_apply_shared_boolean_decisions() {
+        let first = m("extra == 'a' or extra == 'b'");
+        let second = m("extra != 'a' or extra == 'c'");
+        let third = m("extra == 'b' or extra != 'c'");
+        let fourth = m("extra != 'b' or extra == 'd'");
+        assert_eq!(
+            MarkerTree::and_all([first, second, third, fourth]),
+            first.and(second).and(third.and(fourth)),
+        );
+        assert_eq!(
+            MarkerTree::or_all([first, second, third, fourth]),
+            first.or(second).or(third.or(fourth)),
+        );
+    }
+
+    /// Four range decisions can have different boundaries but the same variable.
+    #[test]
+    fn bounded_apply_version_ranges() {
+        let first = m("python_full_version < '3.11' or extra == 'a'");
+        let second = m("python_full_version != '3.12' or extra == 'b'");
+        let third = m("python_full_version >= '3.10' or extra == 'c'");
+        let fourth = m("python_full_version < '3.14' or extra != 'a'");
+        assert_eq!(
+            MarkerTree::and_all([first, second, third, fourth]),
+            first.and(second).and(third.and(fourth)),
+        );
+        assert_eq!(
+            MarkerTree::or_all([first, second, third, fourth]),
+            first.or(second).or(third.or(fourth)),
+        );
+    }
+
+    #[test]
+    fn bounded_apply_string_ranges() {
+        let first = m("platform_machine != 'aarch64' or extra == 'a'");
+        let second = m("platform_machine < 'x86_64' or extra == 'b'");
+        let third = m("platform_machine == 'arm64' or extra == 'c'");
+        let fourth = m("extra != 'a'");
+        assert_eq!(
+            MarkerTree::and_all([first, second, third, fourth]),
+            first.and(second).and(third.and(fourth)),
+        );
+    }
+
+    /// Platform exclusions must still collapse an impossible combination to a constant.
+    #[test]
+    fn bounded_apply_platform_exclusions() {
+        let first = m("sys_platform == 'darwin'");
+        let second = m("extra == 'a'");
+        let third = m("os_name == 'nt'");
+        let fourth = m("extra == 'b'");
+        assert!(MarkerTree::and_all([first, second, third, fourth]).is_false());
+        assert!(
+            MarkerTree::or_all([
+                first.negate(),
+                second.negate(),
+                third.negate(),
+                fourth.negate(),
+            ])
+            .is_true()
+        );
     }
 
     #[test]

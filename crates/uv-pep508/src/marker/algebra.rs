@@ -71,6 +71,7 @@ use crate::{
     ExtraOperator, MarkerExpression, MarkerOperator, MarkerValueString, MarkerValueVersion,
 };
 
+mod apply;
 pub(super) mod isop;
 
 /// The global node interner.
@@ -103,6 +104,9 @@ struct InternerState {
     /// A cache for `AND` operations between two nodes.
     /// Note that `OR` is implemented in terms of `AND`.
     cache: FxHashMap<(NodeId, NodeId), NodeId>,
+
+    /// A bounded cache for conjunctions of up to four nodes.
+    cache_all: FxHashMap<[NodeId; 4], NodeId>,
 
     /// The [`NodeId`] for the disjunction of known, mutually incompatible markers.
     exclusions: Option<NodeId>,
