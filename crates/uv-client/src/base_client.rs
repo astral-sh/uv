@@ -691,7 +691,7 @@ impl<'a> BaseClientBuilder<'a> {
 
                 // Avoid uncloneable errors with a streaming body during publish.
                 if self.retries > 0 {
-                    client = client.with(UvRetryMiddleware(self.retry_policy()));
+                    client = client.with(UvRetryMiddleware::new(self.retry_policy()));
                 }
 
                 // When supplied, add the extra middleware.
