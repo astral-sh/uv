@@ -1,4 +1,4 @@
-//! Install-name editing for thin 64-bit macOS Mach-O dylibs.
+//! Install-name editing and ad-hoc signing for thin 64-bit macOS Mach-O dylibs.
 
 use std::num::TryFromIntError;
 
@@ -6,10 +6,12 @@ mod bytes;
 mod format;
 mod macho;
 mod names;
+mod regions;
+mod signature;
 
-pub use names::InstallName;
+pub use names::{InstallName, SigningIdentifier};
 
-/// An error reading or editing a Mach-O image.
+/// An error reading, editing, or signing a Mach-O image.
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]
 pub enum Error {
     #[error("Malformed Mach-O: {0}")]
@@ -22,32 +24,39 @@ pub enum Error {
     InsufficientHeaderPadding,
     #[error("The install name must be nonempty and contain no NUL bytes")]
     InvalidName,
+    #[error("The signing identifier must be nonempty and contain no NUL bytes")]
+    InvalidIdentifier,
     #[error("Mach-O image exceeds the supported size")]
     TooLarge,
     #[error("Mach-O integer exceeds the supported size")]
     IntegerConversion(#[from] TryFromIntError),
 }
 
-/// Replace a dylib's install name using existing header padding.
-///
-/// The input is never modified, and section data is never relocated. [`InstallName`]
-/// accepts non-UTF-8 Unix paths. The returned [`EditedDylib`] must be re-signed
-/// before loading it on macOS.
-pub fn replace_install_name(image: &[u8], name: InstallName<'_>) -> Result<EditedDylib, Error> {
-    Ok(EditedDylib {
-        bytes: macho::Layout::parse(image)?.replace_install_name(name)?,
-    })
-}
-
-/// An edited dylib whose code signature must be regenerated before loading it.
+/// A dylib with a completed ad-hoc signature covering its bytes.
 #[derive(Debug, PartialEq, Eq)]
-pub struct EditedDylib {
+pub struct SignedDylib {
     bytes: Vec<u8>,
 }
 
-impl EditedDylib {
-    /// Inspect the edited image without changing it.
+impl SignedDylib {
+    /// Borrow the signed image without invalidating its signature.
     pub fn as_bytes(&self) -> &[u8] {
         &self.bytes
     }
+}
+
+/// Replace a dylib's install name and generate an ad-hoc signature.
+///
+/// Both operations use the original image's validated layout. The input is never modified,
+/// and section data is never relocated. Existing requirements, entitlements, and runtime metadata
+/// are retained; certificate identity is removed. `identifier` is used when the image has no
+/// signing identifier. Unsupported signing metadata produces an error.
+pub fn set_install_name(
+    image: &[u8],
+    name: InstallName<'_>,
+    identifier: SigningIdentifier<'_>,
+) -> Result<SignedDylib, Error> {
+    Ok(SignedDylib {
+        bytes: macho::Layout::parse(image)?.set_install_name(name, identifier)?,
+    })
 }
