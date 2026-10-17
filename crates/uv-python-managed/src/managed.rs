@@ -405,12 +405,14 @@ impl ManagedPythonInstallation {
     /// If windowed is true, `pythonw.exe` is selected over `python.exe` on windows, with no changes
     /// on non-windows.
     pub fn executable(&self, windowed: bool) -> PathBuf {
+        let windows = self.key.os().is_windows();
+        let exe = if windows { ".exe" } else { "" };
         let version = match self.implementation() {
             ImplementationName::CPython => {
-                if cfg!(unix) {
-                    format!("{}.{}", self.key.major, self.key.minor)
-                } else {
+                if windows {
                     String::new()
+                } else {
+                    format!("{}.{}", self.key.major, self.key.minor)
                 }
             }
             // PyPy uses a full version number, even on Windows.
@@ -424,9 +426,9 @@ impl ManagedPythonInstallation {
         // GraalPy always uses `graalpy.exe` as the main executable
         let variant = if self.implementation() == ImplementationName::GraalPy {
             ""
-        } else if cfg!(unix) {
+        } else if !windows {
             self.key.variant.executable_suffix()
-        } else if cfg!(windows) && windowed {
+        } else if windowed {
             // Use windowed Python that doesn't open a terminal.
             "w"
         } else {
@@ -435,8 +437,7 @@ impl ManagedPythonInstallation {
 
         let name = format!(
             "{implementation}{version}{variant}{exe}",
-            implementation = self.implementation().executable_name(),
-            exe = std::env::consts::EXE_SUFFIX
+            implementation = self.implementation().executable_name()
         );
 
         let executable = executable_path_from_base(
@@ -450,17 +451,14 @@ impl ManagedPythonInstallation {
         // `python.exe` executable in free-threaded distributions on Windows.
         //
         // See https://github.com/astral-sh/uv/issues/8298
-        if cfg!(windows)
+        if windows
             && matches!(self.key.variant, PythonVariant::Freethreaded)
             && !executable.exists()
         {
             // This is the alternative executable name for the freethreaded variant
-            return self.python_dir().join(format!(
-                "python{}.{}t{}",
-                self.key.major,
-                self.key.minor,
-                std::env::consts::EXE_SUFFIX
-            ));
+            return self
+                .python_dir()
+                .join(format!("python{}.{}t{exe}", self.key.major, self.key.minor));
         }
 
         executable
@@ -508,6 +506,23 @@ impl ManagedPythonInstallation {
     /// The build version of this installation, if available.
     pub fn build(&self) -> Option<&str> {
         self.build.as_deref()
+    }
+
+    /// Return whether this installation matches a requested build version.
+    pub fn matches_build_constraint(&self, requested_build: &str) -> bool {
+        let Some(installation_build) = self.build() else {
+            debug!(
+                "Skipping managed installation `{self}`: a build version was requested but is not recorded for this installation"
+            );
+            return false;
+        };
+        if installation_build != requested_build {
+            debug!(
+                "Skipping managed installation `{self}`: requested build version `{requested_build}` does not match installation build version `{installation_build}`"
+            );
+            return false;
+        }
+        true
     }
 
     pub fn minor_version_key(&self) -> &PythonInstallationMinorVersionKey {
