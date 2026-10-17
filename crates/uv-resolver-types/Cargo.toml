@@ -28,7 +28,6 @@ uv-pypi-types = { workspace = true }
 uv-torch = { workspace = true }
 
 indexmap = { workspace = true }
-itertools = { workspace = true }
 petgraph = { workspace = true }
 reqwest = { workspace = true }
 rustc-hash = { workspace = true }

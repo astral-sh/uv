@@ -2,7 +2,6 @@ use std::borrow::Borrow;
 use std::collections::BTreeSet;
 use std::str::FromStr;
 
-use itertools::Itertools;
 use rustc_hash::FxHashMap;
 
 use uv_normalize::{ExtraName, GroupName, InvalidNameError, PackageName};
@@ -507,12 +506,7 @@ impl ConflictMarker {
         }
         let mut marker = Self::TRUE;
         for set in conflicts.iter() {
-            for (item1, item2) in set.iter().tuple_combinations() {
-                let pair = Self::from_conflict_item(item1)
-                    .negate()
-                    .or(Self::from_conflict_item(item2).negate());
-                marker = marker.and(pair);
-            }
+            marker = marker.and(Self::at_most_one(set.iter()));
         }
         marker
     }
@@ -534,16 +528,29 @@ impl ConflictMarker {
 
         let mut marker = Self::TRUE;
         for set in conflicts.iter() {
-            for (first, second) in set
+            let items = set
                 .iter()
-                .filter(|item| referenced.contains(&encode_conflict_item(item)))
-                .tuple_combinations()
-            {
-                let pair = Self::from_conflict_item(first)
-                    .negate()
-                    .or(Self::from_conflict_item(second).negate());
-                marker = marker.and(pair);
-            }
+                .filter(|item| referenced.contains(&encode_conflict_item(item)));
+            marker = marker.and(Self::at_most_one(items));
+        }
+        marker
+    }
+
+    /// Allows at most one item without enumerating every conflicting pair.
+    /// Each item excludes the union of all preceding items in the set.
+    fn at_most_one<'a>(items: impl Iterator<Item = &'a ConflictItem>) -> Self {
+        let mut items = items.map(Self::from_conflict_item);
+        let Some(mut previous_item) = items.next() else {
+            return Self::TRUE;
+        };
+        let mut previous = Self {
+            marker: MarkerTree::FALSE,
+        };
+        let mut marker = Self::TRUE;
+        for item in items {
+            previous = previous.or(previous_item);
+            marker = marker.and(previous.and(item).negate());
+            previous_item = item;
         }
         marker
     }
@@ -1065,6 +1072,29 @@ mod tests {
             assert!(
                 UniversalMarker::new(MarkerTree::TRUE, cm).evaluate_only_extras(&extras, &groups),
                 "expected `{extra_names:?}` to evaluate to `true` in `{cm:?}`"
+            );
+        }
+    }
+
+    #[test]
+    fn relevant_conflicts_as_marker() {
+        let conflicts = create_conflicts([
+            create_set(["foo", "bar", "baz"]),
+            create_set(["fox", "ant"]),
+        ]);
+        let pair = ConflictMarker::from_conflicts(&create_conflicts([create_set(["foo", "bar"])]));
+        for (referenced, expected) in [
+            (&[][..], ConflictMarker::TRUE),
+            (&["foo"][..], ConflictMarker::TRUE),
+            (&["foo", "fox"][..], ConflictMarker::TRUE),
+            (&["foo", "bar"][..], pair),
+        ] {
+            let markers = referenced
+                .iter()
+                .map(|extra| UniversalMarker::new(MarkerTree::TRUE, create_extra_marker(extra)));
+            assert_eq!(
+                ConflictMarker::from_relevant_conflicts(&conflicts, markers),
+                expected,
             );
         }
     }
