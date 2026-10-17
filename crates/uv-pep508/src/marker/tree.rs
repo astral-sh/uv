@@ -6,6 +6,7 @@ use std::str::FromStr;
 
 use arcstr::ArcStr;
 use itertools::Itertools;
+use rustc_hash::FxHashMap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use version_ranges::Ranges;
 
@@ -471,14 +472,6 @@ pub enum MarkerValueExtra {
 }
 
 impl MarkerValueExtra {
-    /// Returns the [`ExtraName`] for this value, if it is a valid extra.
-    pub fn as_extra(&self) -> Option<&ExtraName> {
-        match self {
-            Self::Extra(extra) => Some(extra),
-            Self::Arbitrary(_) => None,
-        }
-    }
-
     /// Convert the [`MarkerValueExtra`] to an [`ExtraName`], if possible.
     fn into_extra(self) -> Option<ExtraName> {
         match self {
@@ -880,6 +873,18 @@ impl MarkerTree {
             return disjoint;
         }
         INTERNER.lock().is_disjoint_nontrivial(self.0, other.0)
+    }
+
+    /// Returns whether this marker is unsatisfiable under known environment constraints.
+    ///
+    /// Unlike [`MarkerTree::is_false`], this checks combinations such as `os_name == 'posix'`
+    /// and `sys_platform == 'win32'` even when they occur in different decision branches.
+    /// Relationships not modeled by the marker algebra can still produce false negatives.
+    pub fn is_unreachable(self) -> bool {
+        if self.is_true() || self.is_false() {
+            return self.is_false();
+        }
+        INTERNER.lock().is_unreachable(self.0)
     }
 
     /// Returns the contents of this marker tree, if it contains at least one expression.
@@ -1391,6 +1396,23 @@ impl MarkerTree {
     #[must_use]
     pub fn without_extras(self) -> Self {
         Self(INTERNER.lock().without_extras(self.0))
+    }
+
+    /// Replace extras with the conditions under which they are enabled.
+    ///
+    /// Extras absent from `known_extras` are false. Substitution is simultaneous: extras in a
+    /// replacement marker are not themselves replaced. Shared subgraphs are transformed once,
+    /// without expanding the marker into disjunctive normal form.
+    #[must_use]
+    pub fn resolve_extras(self, known_extras: impl IntoIterator<Item = (ExtraName, Self)>) -> Self {
+        if self.is_true() || self.is_false() {
+            return self;
+        }
+        let known_extras: FxHashMap<_, _> = known_extras
+            .into_iter()
+            .map(|(name, marker)| (name, marker.0))
+            .collect();
+        Self(INTERNER.lock().resolve_extras(self.0, &known_extras))
     }
 
     /// Returns a new `MarkerTree` where only `extra` expressions are removed.
@@ -2016,6 +2038,85 @@ mod test {
                 .unwrap(),
             "python_full_version <= '3.12.1'"
         );
+    }
+
+    /// Replacements can introduce variables ordered before their original parent, and must
+    /// remain untouched even when they contain another extra being resolved.
+    #[test]
+    fn resolve_extras_substitutes_simultaneously() {
+        let known = [
+            (
+                "a".parse().expect("valid extra name"),
+                m("sys_platform == 'darwin' or extra == 'b'"),
+            ),
+            ("b".parse().expect("valid extra name"), MarkerTree::FALSE),
+        ];
+        assert_eq!(
+            m("python_version >= '3.10' and extra == 'a'").resolve_extras(known.clone()),
+            m("python_version >= '3.10' and (sys_platform == 'darwin' or extra == 'b')")
+        );
+        assert_eq!(
+            m("extra != 'a'").resolve_extras(known.clone()),
+            m("sys_platform != 'darwin' and extra != 'b'")
+        );
+        assert!(
+            m("extra == 'missing'")
+                .resolve_extras(known.clone())
+                .is_false()
+        );
+        assert!(
+            m("extra != 'missing'")
+                .resolve_extras(known.clone())
+                .is_true()
+        );
+        assert!(MarkerTree::TRUE.resolve_extras(known.clone()).is_true());
+        assert!(MarkerTree::FALSE.resolve_extras(known).is_false());
+    }
+
+    /// Replacing an extra can move a platform condition ahead of string, version-string,
+    /// and containment decisions. Complemented decisions must retain their branch values.
+    #[test]
+    fn resolve_extras_reorders_decisions() {
+        let known = [(
+            "a".parse().expect("valid extra name"),
+            m("sys_platform == 'darwin'"),
+        )];
+        for (marker, expected) in [
+            (
+                "implementation_name == 'cpython' and extra == 'a'",
+                "sys_platform == 'darwin' and implementation_name == 'cpython'",
+            ),
+            (
+                "platform_release >= '24' and extra == 'a'",
+                "sys_platform == 'darwin' and platform_release >= '24'",
+            ),
+            (
+                "'python' in implementation_name and extra == 'a'",
+                "sys_platform == 'darwin' and 'python' in implementation_name",
+            ),
+        ] {
+            assert_eq!(m(marker).resolve_extras(known.clone()), m(expected));
+            assert_eq!(
+                m(marker).negate().resolve_extras(known.clone()),
+                m(expected).negate(),
+            );
+        }
+    }
+
+    /// This diagram has only two decisions per pair but more than 16 million DNF paths.
+    #[test]
+    fn resolve_extras_shared_subgraphs() {
+        let condition = m("sys_platform == 'darwin'");
+        let mut known = Vec::new();
+        let mut marker = MarkerTree::TRUE;
+        for index in 0..24 {
+            let left = format!("pair-{index:02}-a");
+            let right = format!("pair-{index:02}-b");
+            marker = marker.and(m(&format!("extra == '{left}' or extra == '{right}'")));
+            known.push((left.parse().expect("valid extra name"), condition));
+            known.push((right.parse().expect("valid extra name"), condition));
+        }
+        assert_eq!(marker.resolve_extras(known), condition);
     }
 
     #[test]

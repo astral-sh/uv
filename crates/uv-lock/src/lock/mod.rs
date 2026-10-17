@@ -10263,14 +10263,7 @@ fn marker_is_unreachable(requires_python: &RequiresPython, marker: MarkerTree) -
         return false;
     }
 
-    environment.to_dnf().into_iter().all(|conjunction| {
-        let marker = conjunction
-            .into_iter()
-            .fold(MarkerTree::TRUE, |marker, expression| {
-                marker.and(MarkerTree::expression(expression))
-            });
-        requires_python.simplify_markers(marker).is_false()
-    })
+    environment.is_unreachable()
 }
 
 /// Simplify an edge marker using the PEP 508 conditions that must already hold to reach its parent
@@ -10596,6 +10589,41 @@ mod tests {
     use uv_warnings::anstream;
 
     use super::*;
+
+    /// The disjunctions retain an impossible platform combination across decision branches.
+    /// Removing the extra must still leave that combination unreachable.
+    #[test]
+    fn marker_reachability_checks_platform_exclusions() {
+        let requires_python =
+            RequiresPython::from_specifiers(">=3.8".parse().expect("valid bounds"));
+        let extra: MarkerTree = "extra == 'a'".parse().expect("valid marker");
+        let posix: MarkerTree = "os_name == 'posix'".parse().expect("valid marker");
+        let windows: MarkerTree = "sys_platform == 'win32'".parse().expect("valid marker");
+        let marker = posix.or(extra).and(windows.or(extra)).and(extra.negate());
+
+        assert!(marker_is_unreachable(&requires_python, marker));
+        assert!(!marker_is_unreachable(&requires_python, marker.or(windows)));
+    }
+
+    /// A reachable Python branch can mask incompatible platforms until the project's
+    /// Python bounds eliminate it.
+    #[test]
+    fn marker_reachability_checks_python_bounds() {
+        let python: MarkerTree = "python_full_version < '3.10'"
+            .parse()
+            .expect("valid marker");
+        let posix: MarkerTree = "os_name == 'posix'".parse().expect("valid marker");
+        let windows: MarkerTree = "sys_platform == 'win32'".parse().expect("valid marker");
+        let marker = posix.or(python).and(windows.or(python));
+
+        let requires_python =
+            RequiresPython::from_specifiers(">=3.8".parse().expect("valid bounds"));
+        assert!(!marker_is_unreachable(&requires_python, marker));
+
+        let requires_python =
+            RequiresPython::from_specifiers(">=3.10".parse().expect("valid bounds"));
+        assert!(marker_is_unreachable(&requires_python, marker));
+    }
 
     /// Assert a given display snapshot, stripping ANSI color codes.
     macro_rules! assert_stripped_snapshot {
