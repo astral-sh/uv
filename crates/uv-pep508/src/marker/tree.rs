@@ -1092,9 +1092,12 @@ impl MarkerTree {
                 }
             }
             MarkerTreeKind::VersionString(marker) => {
-                let Ok(version) = env.get_string(marker.key()).parse::<Version>() else {
-                    return false;
-                };
+                // Use one numeric value for unparseable releases so every comparison selects an
+                // edge, keeping evaluation consistent with range simplification and negation.
+                let version = env
+                    .get_string(marker.key())
+                    .parse::<Version>()
+                    .unwrap_or_else(|_| Version::new([0]));
                 for (range, tree) in marker.edges() {
                     if range.contains(&version) {
                         return tree.evaluate_reporter_impl(env, extras, reporter);
@@ -1904,6 +1907,56 @@ mod test {
         assert_eq!(
             marker.negate(),
             m(&marker.negate().try_to_string().unwrap())
+        );
+    }
+
+    #[test]
+    fn darwin_invalid_platform_release() {
+        for release in ["", "not-a-version", "3-invalid"] {
+            let env = env37()
+                .with_sys_platform("darwin")
+                .with_platform_release(release);
+            for (expression, expected) in [
+                ("platform_release == '24'", false),
+                ("platform_release != '24'", true),
+                ("platform_release == '0'", true),
+                ("platform_release != '0'", false),
+                ("platform_release < '0'", false),
+                ("platform_release <= '0'", true),
+                ("platform_release > '0'", false),
+                ("platform_release >= '0'", true),
+            ] {
+                let marker = m(expression);
+                for (marker, expected) in [(marker, expected), (marker.negate(), !expected)] {
+                    assert_eq!(marker.evaluate(&env, &[]), expected, "{expression}");
+                    if let Some(printed) = marker.try_to_string() {
+                        let roundtrip = m(&printed);
+                        assert_eq!(roundtrip, marker);
+                        assert_eq!(roundtrip.evaluate(&env, &[]), expected, "{printed}");
+                    } else {
+                        assert!(marker.is_true());
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn darwin_invalid_platform_release_composition() {
+        let env = env37()
+            .with_sys_platform("darwin")
+            .with_platform_release("3-invalid");
+        let lower = m("platform_release >= '9'");
+        let upper = m("platform_release < '24'");
+        assert!(!lower.evaluate(&env, &[]));
+        assert!(upper.evaluate(&env, &[]));
+        assert_eq!(
+            lower.or(upper).evaluate(&env, &[]),
+            lower.evaluate(&env, &[]) || upper.evaluate(&env, &[])
+        );
+        assert_eq!(
+            lower.and(upper).evaluate(&env, &[]),
+            lower.evaluate(&env, &[]) && upper.evaluate(&env, &[])
         );
     }
 
