@@ -1076,6 +1076,17 @@ impl Workspace {
         &self.sources
     }
 
+    /// Returns `true` if the workspace members are sourced by default.
+    pub fn default_source_members(&self) -> bool {
+        self.pyproject_toml
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.workspace.as_ref())
+            .and_then(|workspace| workspace.default_source_members)
+            .unwrap_or_default()
+    }
+
     /// The index table from the workspace `pyproject.toml`.
     pub fn indexes(&self) -> &[Index] {
         &self.indexes
@@ -2688,7 +2699,8 @@ mod tests {
                         "members": [
                           "packages/*"
                         ],
-                        "exclude": null
+                        "exclude": null,
+                        "default-source-members": null
                       },
                       "managed": null,
                       "package": null,
@@ -2790,7 +2802,8 @@ mod tests {
                         "members": [
                           "packages/*"
                         ],
-                        "exclude": null
+                        "exclude": null,
+                        "default-source-members": null
                       },
                       "managed": null,
                       "package": null,
@@ -3223,7 +3236,8 @@ mod tests {
                         ],
                         "exclude": [
                           "packages/bird-feeder"
-                        ]
+                        ],
+                        "default-source-members": null
                       },
                       "managed": null,
                       "package": null,
@@ -3334,7 +3348,8 @@ mod tests {
                         ],
                         "exclude": [
                           "packages/bird-feeder"
-                        ]
+                        ],
+                        "default-source-members": null
                       },
                       "managed": null,
                       "package": null,
@@ -3458,7 +3473,8 @@ mod tests {
                         ],
                         "exclude": [
                           "packages"
-                        ]
+                        ],
+                        "default-source-members": null
                       },
                       "managed": null,
                       "package": null,
@@ -3556,7 +3572,8 @@ mod tests {
                         ],
                         "exclude": [
                           "packages/*"
-                        ]
+                        ],
+                        "default-source-members": null
                       },
                       "managed": null,
                       "package": null,
