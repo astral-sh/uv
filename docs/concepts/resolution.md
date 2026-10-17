@@ -962,6 +962,54 @@ The `revision` field of the lockfile is used to track backwards compatible chang
 For example, adding a new field to distributions. Changes to the revision will not cause older
 versions of uv to error.
 
+### Experimental lockfile v2
+
+Enable the `lockfile-v2` [preview feature](./preview.md) to write version 2 lockfiles:
+
+```console
+$ uv lock --preview-features lockfile-v2
+```
+
+This upgrades an existing version 1 lockfile, retaining its locked package versions. Version 1
+lockfiles remain readable when the feature is enabled. Reading a version 2 lockfile requires the
+feature, including when using `--frozen`.
+
+Version 2 uses `[workspace]` instead of `[manifest]`, including its dependency-group and static
+dependency-metadata subtables. It uses `package.dependency-groups` instead of
+`package.dev-dependencies`, and `package.metadata.dependency-groups` instead of
+`package.metadata.requires-dev`. Groups with Python requirements store `requires-python` alongside
+their `dependencies`, instead of in a separate `group-requires-python` table. This applies to both
+package groups and projectless workspace roots.
+
+Workspace dependencies use `workspace.dependencies` instead of `manifest.requirements`. Package
+metadata and static dependency metadata retain `requires-dist` and `provides-extras`, reflecting
+their Core Metadata fields. A metadata table containing only dependency-group subtables omits the
+empty parent header.
+
+Name-only dependency edges and declarations use strings, such as `"requests"`, instead of inline
+tables. Declarations with specifiers, sources, extras, groups, or markers retain their tables.
+Resolved edges with extras, markers, or ambiguous package names also retain tables, with `extras`
+replacing `extra`. Global and package-specific relative `exclude-newer` cutoffs use
+`{ span = "P7D" }`, without the placeholder timestamps or separate `exclude-newer-span` field used
+in version 1.
+
+Dependency edges include only the version or source needed to identify their target uniquely. They
+also omit conflict conditions already implied by reaching their parent; readers evaluate edges in
+that parent context.
+
+Git sources record the repository URL separately from `branch`, `tag`, or `rev`, the resolved
+`commit`, and any `subdirectory`, archive `path`, or `lfs` setting. These fields replace the query
+parameters and fragment used in version 1.
+
+Supported and required environments use `supported-environments` and `required-environments`. The
+`resolution-markers` field continues to describe the resolution forks.
+
+!!! warning
+
+    Lockfile v2 is highly experimental. Its format may change incompatibly in patch releases,
+    without the compatibility guarantees described above. A version 2 lockfile may need to be
+    regenerated after upgrading uv.
+
 ## Learn more
 
 For more details about the internals of the resolver, see the

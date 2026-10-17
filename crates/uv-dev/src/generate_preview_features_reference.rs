@@ -274,6 +274,11 @@ mod tests {
         duplicated declarations in the recorded requirements, constraints, overrides, exclusions,
         and dependency groups.
 
+        ### `lockfile-v2` {#lockfile-v2}
+
+        Writes version 2 lockfiles. Highly experimental: the format may change incompatibly in
+        patch releases.
+
         ### `malware-check` {#malware-check}
 
         The `uv sync` command and other installation commands can check packages for malware using
