@@ -766,6 +766,11 @@ impl FromStr for MarkerTree {
 }
 
 impl MarkerTree {
+    /// Parses a marker while reporting diagnostics through the provided reporter.
+    pub fn parse(markers: &str, reporter: &mut impl Reporter) -> Result<Self, Pep508Error> {
+        parse::parse_markers(markers, reporter)
+    }
+
     /// An empty marker that always evaluates to `true`.
     pub const TRUE: Self = Self(NodeId::TRUE);
 
