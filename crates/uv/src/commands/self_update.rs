@@ -30,6 +30,9 @@ const UV_GITHUB_RELEASES_DOWNLOAD_PREFIX: &str =
 /// The suffix appended to the Astral mirror base for uv release downloads.
 const UV_MIRROR_SUFFIX: &str = "/github/uv/releases/download/";
 
+/// The suffix appended to a custom Astral mirror for the release page.
+const UV_MIRROR_RELEASE_TAG_SUFFIX: &str = "/github/uv/releases/tag/";
+
 /// Return the effective Astral mirror prefix for uv release downloads.
 fn effective_uv_mirror_prefix(astral_mirror_url: Option<&str>) -> String {
     format!(
@@ -51,6 +54,19 @@ fn installer_download_url(
         UV_MIRROR_SUFFIX,
         target_version
     ))
+}
+
+/// Return the release page URL shown after a successful official update.
+fn official_release_url(target_version: &Pep440Version, astral_mirror_url: Option<&str>) -> String {
+    if let Some(mirror) = custom_astral_mirror_url(astral_mirror_url) {
+        return format!(
+            "{}{}{}",
+            mirror.trim_end_matches('/'),
+            UV_MIRROR_RELEASE_TAG_SUFFIX,
+            target_version
+        );
+    }
+    format!("https://github.com/astral-sh/uv/releases/tag/{target_version}")
 }
 
 const AXOUPDATER_CONFIG_PATH: &str = "AXOUPDATER_CONFIG_PATH";
@@ -384,7 +400,7 @@ async fn run_official_updater(
             ":".bold(),
             format!("v{current_version}").bold().cyan(),
             format!("v{target_version}").bold().cyan(),
-            format!("https://github.com/astral-sh/uv/releases/tag/{target_version}").cyan(),
+            official_release_url(target_version, custom_astral_mirror.as_deref()).cyan(),
         )
     )?;
 
@@ -1047,6 +1063,22 @@ mod tests {
         assert_eq!(
             installer_download_url(&Pep440Version::new([1, 2, 3]), Some("")),
             None
+        );
+    }
+
+    #[test]
+    fn test_official_release_url_uses_custom_astral_mirror() {
+        let version = Pep440Version::new([1, 2, 3]);
+        assert_eq!(
+            official_release_url(
+                &version,
+                Some("https://nexus.example.com/repository/releases.astral.sh/"),
+            ),
+            "https://nexus.example.com/repository/releases.astral.sh/github/uv/releases/tag/1.2.3"
+        );
+        assert_eq!(
+            official_release_url(&version, None),
+            "https://github.com/astral-sh/uv/releases/tag/1.2.3"
         );
     }
 
