@@ -284,6 +284,26 @@ If you need to remove uv from your system, follow these steps:
         uninstall. Upgrading from an older version will not automatically remove the binaries from
         `~/.cargo/bin`.
 
+3.  Remove the install receipt, if the standalone installer was used:
+
+    === "macOS and Linux"
+
+        ```console
+        $ rm "${XDG_CONFIG_HOME:-$HOME/.config}/uv/uv-receipt.json"
+        ```
+
+    === "Windows"
+
+        ```pwsh-session
+        PS> rm "$env:LOCALAPPDATA\uv\uv-receipt.json"
+        ```
+
+    !!! note
+
+        The receipt records where the standalone installer put uv. Leaving it in place makes a later
+        `uv self update` report that multiple copies of uv are installed, even after uv has been
+        reinstalled through a package manager.
+
 ## Next steps
 
 See the [first steps](./first-steps.md) or jump straight to the [guides](../guides/index.md) to
