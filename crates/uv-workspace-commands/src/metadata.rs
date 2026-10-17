@@ -17,7 +17,7 @@ use uv_environment_operations::{
 };
 use uv_lock::{Lock, Metadata, Package};
 use uv_lock_operations::{
-    DiscoveredProject, FrozenWorkspace, LockError, LockMode, LockOperation, LockTarget,
+    DiscoveredProject, FrozenWorkspace, LockCommand, LockError, LockMode, LockOperation, LockTarget,
 };
 use uv_preview::{Preview, PreviewFeature};
 use uv_python_discovery::ConfigDiscovery;
@@ -167,6 +167,7 @@ pub async fn metadata(
 
             resolved_lock = match Box::pin(
                 LockOperation::new(
+                    LockCommand::WorkspaceMetadata,
                     mode,
                     &settings,
                     &client_builder,

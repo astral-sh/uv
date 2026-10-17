@@ -9,6 +9,7 @@ use uv_command_support::UvError;
 use uv_distribution::{LoweringError, MetadataError};
 use uv_distribution_types::{ExtraBuildRequiresError, IndexCredentialsError, IndexUrlError};
 use uv_errors::{Hinted, Hints};
+use uv_fs::Simplified;
 use uv_lock::{Lock, LockError as LockDataError, LockParseError};
 use uv_normalize::{GroupName, PackageName};
 use uv_pep440::VersionSpecifiers;
@@ -21,6 +22,8 @@ use uv_settings::{FrozenSource, LockedSource};
 use uv_types::HashStrategyError;
 use uv_workspace::dependency_groups::DependencyGroupError;
 use uv_workspace::{DefaultGroupsError, WorkspaceError};
+
+use crate::LockCommand;
 
 /// The source of a missing lockfile error.
 #[derive(Debug, Clone, Copy)]
@@ -63,10 +66,8 @@ pub enum LockError {
     )]
     LockFormat(PathBuf, usize, LockedSource),
 
-    #[error(
-        "Unable to find lockfile at `{1}`, but {0} was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag."
-    )]
-    MissingLockfile(MissingLockfileSource, PathBuf),
+    #[error("Unable to find lockfile at `{1}`, but {0} was provided.")]
+    MissingLockfile(MissingLockfileSource, PathBuf, LockCommand),
 
     #[error(
         "The lockfile at `uv.lock` needs to be updated, but {1} was provided: Missing workspace member `{0}`."
@@ -228,14 +229,27 @@ impl Hinted for LockError {
             Self::LockFormat(..) => Hints::from(
                 "To regenerate the lockfile, run `uv lock --refresh --preview-features lockfile-format-check`.",
             ),
+            Self::MissingLockfile(source, _, command) => {
+                let flag = match source {
+                    MissingLockfileSource::Frozen(_) => "--no-frozen",
+                    MissingLockfileSource::Locked(_) => "--no-locked",
+                };
+                if let LockCommand::LockProject(project) = command {
+                    Hints::from(format!(
+                        "To create a lockfile, run `uv {command} {flag}` with `--project` set to `{}`.",
+                        project.simplified_display(),
+                    ))
+                } else {
+                    Hints::from(format!("To create a lockfile, run `uv {command} {flag}`."))
+                }
+            }
             Self::OverlappingMarkers(_, rhs, replacement) => {
                 Hints::from(format!("replace `{rhs}` with `{replacement}`"))
             }
             Self::Resolve(error) => error.hints(),
             Self::Lock(error) => error.hints(),
             Self::PythonSelection(error) => error.hints(),
-            Self::MissingLockfile(..)
-            | Self::UnsupportedLockVersion(..)
+            Self::UnsupportedLockVersion(..)
             | Self::UnparsableLockVersion(..)
             | Self::LockSerialization(_)
             | Self::DisjointEnvironment(..)
