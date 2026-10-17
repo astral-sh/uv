@@ -3457,3 +3457,408 @@ conflicts = [[{"extra" = "foo"}, {"extra" = "bar"}]]
 
     Ok(())
 }
+
+/// Read the versions of multiple workspace members by repeating `--package`.
+#[test]
+fn version_get_multiple_packages() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]);
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [tool.uv.workspace]
+            members = ["child1", "child2", "child3"]
+        "#})?;
+
+    context
+        .temp_dir
+        .child("child1/pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "child1"
+            version = "1.0.0"
+            requires-python = ">=3.12"
+        "#})?;
+
+    context
+        .temp_dir
+        .child("child2/pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "child2"
+            version = "2.0.0"
+            requires-python = ">=3.12"
+        "#})?;
+
+    context
+        .temp_dir
+        .child("child3/pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "child3"
+            version = "3.0.0"
+            requires-python = ">=3.12"
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.version()
+        .arg("--package").arg("child1")
+        .arg("--package").arg("child3"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    child1 1.0.0
+    child3 3.0.0
+    ");
+
+    uv_snapshot!(context.filters(), context.version()
+        .arg("--package").arg("child1")
+        .arg("--package").arg("child3")
+        .arg("--output-format").arg("json"), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [
+      {
+        "package_name": "child1",
+        "version": "1.0.0",
+        "commit_info": null
+      },
+      {
+        "package_name": "child3",
+        "version": "3.0.0",
+        "commit_info": null
+      }
+    ]
+    "#);
+
+    // Bare versions can't be attributed to packages, so `--short` is rejected.
+    uv_snapshot!(context.filters(), context.version()
+        .arg("--package").arg("child1")
+        .arg("--package").arg("child3")
+        .arg("--short"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: `--short` cannot be used with multiple packages; use `--output-format json` to show the version of each package
+    ");
+
+    uv_snapshot!(context.filters(), context.version()
+        .arg("--package").arg("child1")
+        .arg("--package").arg("missing"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: The workspace does not have a member missing: [TEMP_DIR]/
+    ");
+
+    Ok(())
+}
+
+/// Bump the versions of all workspace members at once.
+#[test]
+fn version_bump_all_packages() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "root"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+
+            [tool.uv.workspace]
+            members = ["child"]
+        "#})?;
+
+    context
+        .temp_dir
+        .child("child/pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "child"
+            version = "1.2.3"
+            requires-python = ">=3.12"
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.version()
+        .arg("--all-packages")
+        .arg("--bump").arg("minor")
+        .arg("--dry-run"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    child 1.2.3 => 1.3.0
+    root 0.1.0 => 0.2.0
+    ");
+
+    // The dry run doesn't modify any member.
+    assert_snapshot!(context.read("child/pyproject.toml"), @r#"
+    [project]
+    name = "child"
+    version = "1.2.3"
+    requires-python = ">=3.12"
+    "#);
+
+    uv_snapshot!(context.filters(), context.version()
+        .arg("--all-packages")
+        .arg("--bump").arg("minor"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    child 1.2.3 => 1.3.0
+    root 0.1.0 => 0.2.0
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Checked in [TIME]
+    ");
+
+    assert_snapshot!(context.read("pyproject.toml"), @r#"
+    [project]
+    name = "root"
+    version = "0.2.0"
+    requires-python = ">=3.12"
+
+    [tool.uv.workspace]
+    members = ["child"]
+    "#);
+    assert_snapshot!(context.read("child/pyproject.toml"), @r#"
+    [project]
+    name = "child"
+    version = "1.3.0"
+    requires-python = ">=3.12"
+    "#);
+    assert_snapshot!(context.read("uv.lock"), @r#"
+    version = 1
+    revision = 5
+    requires-python = ">=3.12"
+
+    [options]
+    exclude-newer = "2024-03-25T00:00:00Z"
+
+    [manifest]
+    members = [
+        "child",
+        "root",
+    ]
+
+    [[package]]
+    name = "child"
+    version = "1.3.0"
+    source = { virtual = "child" }
+
+    [[package]]
+    name = "root"
+    version = "0.2.0"
+    source = { virtual = "." }
+    "#);
+
+    Ok(())
+}
+
+/// A member without a static version prevents all members from being updated.
+#[test]
+fn version_bump_all_packages_dynamic_member() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]);
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [tool.uv.workspace]
+            members = ["child1", "child2"]
+        "#})?;
+
+    context
+        .temp_dir
+        .child("child1/pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "child1"
+            version = "1.0.0"
+            requires-python = ">=3.12"
+        "#})?;
+
+    context
+        .temp_dir
+        .child("child2/pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "child2"
+            dynamic = ["version"]
+            requires-python = ">=3.12"
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.version()
+        .arg("--all-packages")
+        .arg("--bump").arg("patch"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: We cannot get or set dynamic project versions in: child2/pyproject.toml
+    ");
+
+    assert_snapshot!(context.read("child1/pyproject.toml"), @r#"
+    [project]
+    name = "child1"
+    version = "1.0.0"
+    requires-python = ">=3.12"
+    "#);
+
+    Ok(())
+}
+
+/// `--all-packages` requires at least one workspace member.
+#[test]
+fn version_all_packages_no_members() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]);
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r"
+            [tool.uv.workspace]
+            members = []
+        "})?;
+
+    uv_snapshot!(context.filters(), context.version()
+        .arg("--all-packages")
+        .arg("--bump").arg("patch"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: The workspace at `.` does not have any members
+    ");
+
+    Ok(())
+}
+
+/// When a bump fails for one of several members, the error names that member and no member is
+/// updated.
+#[test]
+fn version_bump_all_packages_must_increase() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]);
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [tool.uv.workspace]
+            members = ["child1", "child2"]
+        "#})?;
+
+    context
+        .temp_dir
+        .child("child1/pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "child1"
+            version = "1.0.0b1"
+            requires-python = ">=3.12"
+        "#})?;
+
+    context
+        .temp_dir
+        .child("child2/pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "child2"
+            version = "1.0.0"
+            requires-python = ">=3.12"
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.version()
+        .arg("--all-packages")
+        .arg("--bump").arg("stable"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to update the version of `child2`
+      cause: 1.0.0 => 1.0.0 didn't increase the version; provide the exact version to force an update
+    ");
+
+    assert_snapshot!(context.read("child1/pyproject.toml"), @r#"
+    [project]
+    name = "child1"
+    version = "1.0.0b1"
+    requires-python = ">=3.12"
+    "#);
+
+    Ok(())
+}
+
+/// Bumping several members re-syncs each of them, not only the first.
+#[test]
+#[cfg(feature = "test-pypi")]
+fn version_bump_all_packages_syncs_members() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [tool.uv.workspace]
+            members = ["child1", "child2"]
+        "#})?;
+
+    context
+        .temp_dir
+        .child("child1/pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "child1"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+
+            [build-system]
+            requires = ["hatchling"]
+            build-backend = "hatchling.build"
+        "#})?;
+    context
+        .temp_dir
+        .child("child1/src/child1/__init__.py")
+        .touch()?;
+
+    context
+        .temp_dir
+        .child("child2/pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "child2"
+            version = "0.2.0"
+            requires-python = ">=3.12"
+
+            [build-system]
+            requires = ["hatchling"]
+            build-backend = "hatchling.build"
+        "#})?;
+    context
+        .temp_dir
+        .child("child2/src/child2/__init__.py")
+        .touch()?;
+
+    uv_snapshot!(context.filters(), context.sync().arg("--all-packages"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + child1==0.1.0 (from file://[TEMP_DIR]/child1)
+     + child2==0.2.0 (from file://[TEMP_DIR]/child2)
+    ");
+
+    uv_snapshot!(context.filters(), context.version()
+        .arg("--all-packages")
+        .arg("--bump").arg("minor"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    child1 0.1.0 => 0.2.0
+    child2 0.2.0 => 0.3.0
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Uninstalled 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     - child1==0.1.0 (from file://[TEMP_DIR]/child1)
+     + child1==0.2.0 (from file://[TEMP_DIR]/child1)
+     - child2==0.2.0 (from file://[TEMP_DIR]/child2)
+     + child2==0.3.0 (from file://[TEMP_DIR]/child2)
+    ");
+
+    Ok(())
+}
