@@ -165,6 +165,18 @@ impl RequirementsSource {
                 input.user_display(),
             ));
         }
+        // Lockfile detection
+        else if filename
+            .and_then(|filename| filename.rsplit_once('.'))
+            .filter(|(stem, _)| !stem.is_empty())
+            .is_some_and(|(_, extension)| extension.eq_ignore_ascii_case("lock"))
+        {
+            return Err(anyhow::anyhow!(
+                "The file `{}` appears to be a lockfile, but lockfiles are not valid requirements inputs. Did you mean to run `uv pip install`?",
+                input.user_display(),
+            ));
+        }
+        //end
         Ok(Self::RequirementsTxt(input))
     }
 

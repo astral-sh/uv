@@ -1341,6 +1341,20 @@ impl std::error::Error for RequirementsTxtParserError {
 impl Display for RequirementsTxtFileError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let file = self.file.user_display();
+        let file_str = file.to_string();
+
+        // 1. Intercept lockfiles IMMEDIATELY at the absolute top of the formatter!
+        if std::path::Path::new(&file_str)
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("lock"))
+        {
+            return write!(
+                f,
+                "The file `{file}` appears to be a lockfile, but lockfiles are not valid requirements inputs. Did you mean to run `uv pip install`?"
+            );
+        }
+
+        // 2. Keep the exact original match statement for all normal text files
         match &self.error {
             RequirementsTxtParserError::Io(err) => err.fmt(f),
             RequirementsTxtParserError::Url { url, start, .. } => {
@@ -1445,7 +1459,15 @@ impl Display for RequirementsTxtFileError {
 
 impl std::error::Error for RequirementsTxtFileError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        self.error.source()
+        let file_str = self.file.user_display().to_string();
+        if std::path::Path::new(&file_str)
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("lock"))
+        {
+            None // Tell Rust there is absolutely NO underlying cause to print for lockfiles!
+        } else {
+            self.error.source()
+        }
     }
 }
 
