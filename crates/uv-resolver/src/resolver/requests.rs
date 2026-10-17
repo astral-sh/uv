@@ -9,10 +9,13 @@ use uv_normalize::PackageName;
 use uv_once_map::Registration;
 use uv_pep440::Version;
 
+use crate::prioritized_distribution::RegistryVariantsJson;
 use crate::pubgrub::Range;
 use crate::resolved::ResolvedDistRef;
 use crate::resolver::index::FxRegisteredEntry;
-use crate::resolver::{InMemoryIndex, MetadataResponse, Request, VersionsResponse};
+use crate::resolver::{
+    InMemoryIndex, MetadataResponse, Request, VariantsJsonResponse, VersionsResponse,
+};
 use crate::{PythonRequirement, ResolveError};
 
 /// A blocking solver-side handle for requesting metadata from the asynchronous fetcher.
@@ -83,6 +86,18 @@ impl RegisteredMetadata<'_> {
     }
 
     pub(crate) fn wait(&self) -> Arc<MetadataResponse> {
+        self.0.wait_blocking()
+    }
+}
+
+/// Index-level variant metadata registered for a selected package version.
+#[derive(Clone, Debug)]
+pub(crate) struct RegisteredVariantsJson<'index>(
+    FxRegisteredEntry<'index, RegistryVariantsJson, Arc<VariantsJsonResponse>>,
+);
+
+impl RegisteredVariantsJson<'_> {
+    pub(crate) fn wait(&self) -> Arc<VariantsJsonResponse> {
         self.0.wait_blocking()
     }
 }
@@ -193,6 +208,26 @@ impl MetadataRequests {
             Registration::Existing(entry) => entry,
         };
         Ok(RegisteredMetadata(entry))
+    }
+
+    /// Schedule variant metadata retrieval once for the selected package version.
+    pub(crate) fn request_variants_json(
+        &self,
+        variants_json: &RegistryVariantsJson,
+    ) -> Result<RegisteredVariantsJson<'_>, ResolveError> {
+        let entry = match self
+            .index
+            .variants_json()
+            .register_entry(variants_json.clone())
+        {
+            Registration::New(entry) => {
+                self.sender
+                    .blocking_send(Request::VariantsJson(variants_json.clone()))?;
+                entry
+            }
+            Registration::Existing(entry) => entry,
+        };
+        Ok(RegisteredVariantsJson(entry))
     }
 
     /// Schedule speculative candidate selection using an already-requested package version map.

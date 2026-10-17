@@ -17,7 +17,7 @@ pub enum VariantsJsonFilenameError {
 /// A `<name>-<version>-variants.json` filename.
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct VariantsJsonFilename {
-    pub(crate) name: PackageName,
+    pub name: PackageName,
     pub version: Version,
 }
 

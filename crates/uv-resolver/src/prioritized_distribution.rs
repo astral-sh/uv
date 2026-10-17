@@ -412,6 +412,10 @@ impl PrioritizedDist {
         }
     }
 
+    pub(crate) fn variants_json(&self) -> &[RegistryVariantsJson] {
+        &self.0.variants_json
+    }
+
     /// Insert the given built distribution into the [`PrioritizedDist`].
     pub(crate) fn insert_built(
         &mut self,

@@ -11,7 +11,8 @@ use uv_client::{FlatIndexEntry, OwnedArchive, SimpleDetailMetadata, VersionFiles
 use uv_configuration::BuildOptions;
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
-    IndexUrl, MinimumLibcVersion, RegistryBuiltWheel, RegistrySourceDist, RequiresPython,
+    IndexEntryFilename, IndexUrl, MinimumLibcVersion, RegistryBuiltWheel, RegistrySourceDist,
+    RequiresPython,
 };
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -22,7 +23,7 @@ use uv_warnings::warn_user_once;
 
 use crate::flat_index::FlatDistributions;
 use crate::prioritized_distribution::{
-    HashComparison, IncompatibleSource, IncompatibleWheel, PrioritizedDist,
+    HashComparison, IncompatibleSource, IncompatibleWheel, PrioritizedDist, RegistryVariantsJson,
     SourceDistCompatibility, WheelCompatibility,
 };
 use crate::yanks::AllowedYanks;
@@ -633,7 +634,18 @@ impl VersionMapLazy {
             )
             .expect("archived version files always deserializes");
             let mut priority_dist = init.cloned().unwrap_or_default();
-            for (filename, file) in files.all(&self.package_name) {
+            for (filename, file) in files.all_entries(&self.package_name) {
+                let filename = match filename {
+                    IndexEntryFilename::DistFilename(filename) => filename,
+                    IndexEntryFilename::VariantJson(filename) => {
+                        priority_dist.insert_variants_json(RegistryVariantsJson {
+                            filename,
+                            file,
+                            index: self.index.clone(),
+                        });
+                        continue;
+                    }
+                };
                 // Support resolving as if it were an earlier timestamp, at least as long files have
                 // upload time information.
                 let (excluded, upload_time) = if let Some(included_version_cutoff) =
