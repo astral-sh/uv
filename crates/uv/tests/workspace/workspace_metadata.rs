@@ -520,27 +520,35 @@ import iniconfig
       "conflicts": {
         "sets": []
       },
-      "module_owners": {
-        "iniconfig": [
-          {
-            "package_id": "iniconfig==2.0.0@registry+https://pypi.org/simple"
-          }
-        ],
-        "iniconfig._parse": [
-          {
-            "package_id": "iniconfig==2.0.0@registry+https://pypi.org/simple"
-          }
-        ],
-        "iniconfig._version": [
-          {
-            "package_id": "iniconfig==2.0.0@registry+https://pypi.org/simple"
-          }
-        ],
-        "iniconfig.exceptions": [
-          {
-            "package_id": "iniconfig==2.0.0@registry+https://pypi.org/simple"
-          }
-        ]
+      "modules": {
+        "iniconfig": {
+          "owners": [
+            {
+              "package_id": "iniconfig==2.0.0@registry+https://pypi.org/simple"
+            }
+          ]
+        },
+        "iniconfig._parse": {
+          "owners": [
+            {
+              "package_id": "iniconfig==2.0.0@registry+https://pypi.org/simple"
+            }
+          ]
+        },
+        "iniconfig._version": {
+          "owners": [
+            {
+              "package_id": "iniconfig==2.0.0@registry+https://pypi.org/simple"
+            }
+          ]
+        },
+        "iniconfig.exceptions": {
+          "owners": [
+            {
+              "package_id": "iniconfig==2.0.0@registry+https://pypi.org/simple"
+            }
+          ]
+        }
       },
       "resolution": {
         "iniconfig==2.0.0@registry+https://pypi.org/simple": {
@@ -740,7 +748,7 @@ fn workspace_metadata_script_exact_sync_removes_extraneous_packages() -> Result<
     insta::with_settings!({ filters => context.filters() }, {
         insta::assert_json_snapshot!(serde_json::json!({
             "installed_packages": metadata["environment"]["packages"],
-            "module_owners": metadata["module_owners"],
+            "modules": metadata["modules"],
             "resolution": metadata["resolution"],
         }), @r#"
         {
@@ -752,12 +760,14 @@ fn workspace_metadata_script_exact_sync_removes_extraneous_packages() -> Result<
               "version": "0.1.0"
             }
           },
-          "module_owners": {
-            "extra_module": [
-              {
-                "package_id": "metadata-extra==0.1.0@unmanaged+[SITE_PACKAGES]/metadata_extra-0.1.0.dist-info"
-              }
-            ]
+          "modules": {
+            "extra_module": {
+              "owners": [
+                {
+                  "package_id": "metadata-extra==0.1.0@unmanaged+[SITE_PACKAGES]/metadata_extra-0.1.0.dist-info"
+                }
+              ]
+            }
           },
           "resolution": {
             "script+[TEMP_DIR]/script.py": {
@@ -791,12 +801,12 @@ fn workspace_metadata_script_exact_sync_removes_extraneous_packages() -> Result<
             .status
             .success(),
         "installed_packages": metadata["environment"]["packages"],
-        "module_owners": metadata.get("module_owners"),
+        "modules": metadata.get("modules"),
     }), @r#"
     {
       "extraneous_installed": false,
       "installed_packages": {},
-      "module_owners": null
+      "modules": null
     }
     "#);
 
@@ -1260,22 +1270,26 @@ fn workspace_metadata_exact_sync_removes_extraneous_packages() -> Result<()> {
     insta::with_settings!({ filters => context.filters() }, {
         insta::assert_json_snapshot!(serde_json::json!({
             "extraneous_installed": extraneous_installed,
-            "module_owners": metadata["module_owners"],
+            "modules": metadata["modules"],
             "required_installed": required_installed,
         }), @r#"
         {
           "extraneous_installed": true,
-          "module_owners": {
-            "extra_module": [
-              {
-                "package_id": "metadata-extra==0.1.0@unmanaged+[SITE_PACKAGES]/metadata_extra-0.1.0.dist-info"
-              }
-            ],
-            "required_module": [
-              {
-                "package_id": "metadata-required==0.1.0@path+[TEMP_DIR]/metadata_required-0.1.0-py3-none-any.whl"
-              }
-            ]
+          "modules": {
+            "extra_module": {
+              "owners": [
+                {
+                  "package_id": "metadata-extra==0.1.0@unmanaged+[SITE_PACKAGES]/metadata_extra-0.1.0.dist-info"
+                }
+              ]
+            },
+            "required_module": {
+              "owners": [
+                {
+                  "package_id": "metadata-required==0.1.0@path+[TEMP_DIR]/metadata_required-0.1.0-py3-none-any.whl"
+                }
+              ]
+            }
           },
           "required_installed": true
         }
@@ -1305,17 +1319,19 @@ fn workspace_metadata_exact_sync_removes_extraneous_packages() -> Result<()> {
     insta::with_settings!({ filters => context.filters() }, {
         insta::assert_json_snapshot!(serde_json::json!({
             "extraneous_installed": extraneous_installed,
-            "module_owners": metadata["module_owners"],
+            "modules": metadata["modules"],
             "required_installed": required_installed,
         }), @r#"
         {
           "extraneous_installed": false,
-          "module_owners": {
-            "required_module": [
-              {
-                "package_id": "metadata-required==0.1.0@path+[TEMP_DIR]/metadata_required-0.1.0-py3-none-any.whl"
-              }
-            ]
+          "modules": {
+            "required_module": {
+              "owners": [
+                {
+                  "package_id": "metadata-required==0.1.0@path+[TEMP_DIR]/metadata_required-0.1.0-py3-none-any.whl"
+                }
+              ]
+            }
           },
           "required_installed": true
         }
@@ -1347,18 +1363,22 @@ fn workspace_metadata_exact_sync_removes_extraneous_packages() -> Result<()> {
         .success();
     let metadata: serde_json::Value = serde_json::from_slice(&output.get_output().stdout)?;
     insta::with_settings!({ filters => context.filters() }, {
-        insta::assert_json_snapshot!(metadata["module_owners"], @r#"
+        insta::assert_json_snapshot!(metadata["modules"], @r#"
         {
-          "extra_module": [
-            {
-              "package_id": "metadata-extra==0.1.0@unmanaged+[SITE_PACKAGES]/metadata_extra-0.1.0.dist-info"
-            }
-          ],
-          "required_module": [
-            {
-              "package_id": "metadata-required==0.1.0@path+[TEMP_DIR]/metadata_required-0.1.0-py3-none-any.whl"
-            }
-          ]
+          "extra_module": {
+            "owners": [
+              {
+                "package_id": "metadata-extra==0.1.0@unmanaged+[SITE_PACKAGES]/metadata_extra-0.1.0.dist-info"
+              }
+            ]
+          },
+          "required_module": {
+            "owners": [
+              {
+                "package_id": "metadata-required==0.1.0@path+[TEMP_DIR]/metadata_required-0.1.0-py3-none-any.whl"
+              }
+            ]
+          }
         }
         "#);
     });
@@ -1451,7 +1471,7 @@ dependencies = [
     insta::with_settings!({ filters => context.filters() }, {
         insta::assert_json_snapshot!(serde_json::json!({
             "environment": metadata["environment"],
-            "module_owners": metadata["module_owners"],
+            "modules": metadata["modules"],
         }), @r#"
         {
           "environment": {
@@ -1470,12 +1490,14 @@ dependencies = [
             },
             "root": "[VENV]/"
           },
-          "module_owners": {
-            "installed_module": [
-              {
-                "package_id": "installed-owner==0.1.0@path+[TEMP_DIR]/installed_owner-0.1.0-py3-none-any.whl"
-              }
-            ]
+          "modules": {
+            "installed_module": {
+              "owners": [
+                {
+                  "package_id": "installed-owner==0.1.0@path+[TEMP_DIR]/installed_owner-0.1.0-py3-none-any.whl"
+                }
+              ]
+            }
           }
         }
         "#);
@@ -1510,13 +1532,15 @@ dependencies = [
           "root": "[VENV]/"
         }
         "#);
-        insta::assert_json_snapshot!(lockfile_metadata["module_owners"], @r#"
+        insta::assert_json_snapshot!(lockfile_metadata["modules"], @r#"
         {
-          "installed_module": [
-            {
-              "package_id": "installed-owner==0.1.0@path+[TEMP_DIR]/installed_owner-0.1.0-py3-none-any.whl"
-            }
-          ]
+          "installed_module": {
+            "owners": [
+              {
+                "package_id": "installed-owner==0.1.0@path+[TEMP_DIR]/installed_owner-0.1.0-py3-none-any.whl"
+              }
+            ]
+          }
         }
         "#);
     });
@@ -1543,7 +1567,7 @@ dependencies = [
           "root": "[TEMP_DIR]/override-env"
         }
         "#);
-        insta::assert_json_snapshot!(metadata.get("module_owners"), @"null");
+        insta::assert_json_snapshot!(metadata.get("modules"), @"null");
     });
 
     Ok(())
@@ -1589,13 +1613,15 @@ fn workspace_metadata_lockfile_workspace_group_module_owners() -> Result<()> {
         .success();
     let metadata: serde_json::Value = serde_json::from_slice(&output.get_output().stdout)?;
     insta::with_settings!({ filters => context.filters() }, {
-        insta::assert_json_snapshot!(metadata["module_owners"], @r#"
+        insta::assert_json_snapshot!(metadata["modules"], @r#"
         {
-          "installed_module": [
-            {
-              "package_id": "installed-owner==0.1.0@path+[TEMP_DIR]/installed_owner-0.1.0-py3-none-any.whl"
-            }
-          ]
+          "installed_module": {
+            "owners": [
+              {
+                "package_id": "installed-owner==0.1.0@path+[TEMP_DIR]/installed_owner-0.1.0-py3-none-any.whl"
+              }
+            ]
+          }
         }
         "#);
     });
@@ -1631,13 +1657,15 @@ fn workspace_metadata_lockfile_workspace_group_module_owners() -> Result<()> {
           "root": "[TEMP_DIR]/metadata-env"
         }
         "#);
-        insta::assert_json_snapshot!(metadata["module_owners"], @r#"
+        insta::assert_json_snapshot!(metadata["modules"], @r#"
         {
-          "installed_module": [
-            {
-              "package_id": "installed-owner==0.1.0@path+[TEMP_DIR]/installed_owner-0.1.0-py3-none-any.whl"
-            }
-          ]
+          "installed_module": {
+            "owners": [
+              {
+                "package_id": "installed-owner==0.1.0@path+[TEMP_DIR]/installed_owner-0.1.0-py3-none-any.whl"
+              }
+            ]
+          }
         }
         "#);
     });
@@ -1742,35 +1770,45 @@ dependencies = [
       "conflicts": {
         "sets": []
       },
-      "module_owners": {
-        "café": [
-          {
-            "package_id": "typing-extensions==0.1.0@path+[TEMP_DIR]/typing_extensions-0.1.0-py3-none-any.whl"
-          }
-        ],
-        "gpu": [
-          {
-            "package_id": "gpu-a==0.1.0@path+[TEMP_DIR]/gpu_a-0.1.0-py3-none-any.whl"
-          },
-          {
-            "package_id": "gpu-b==0.1.0@path+[TEMP_DIR]/gpu_b-0.1.0-py3-none-any.whl"
-          }
-        ],
-        "gpu.a": [
-          {
-            "package_id": "gpu-a==0.1.0@path+[TEMP_DIR]/gpu_a-0.1.0-py3-none-any.whl"
-          }
-        ],
-        "gpu.b": [
-          {
-            "package_id": "gpu-b==0.1.0@path+[TEMP_DIR]/gpu_b-0.1.0-py3-none-any.whl"
-          }
-        ],
-        "typing_extensions": [
-          {
-            "package_id": "typing-extensions==0.1.0@path+[TEMP_DIR]/typing_extensions-0.1.0-py3-none-any.whl"
-          }
-        ]
+      "modules": {
+        "café": {
+          "owners": [
+            {
+              "package_id": "typing-extensions==0.1.0@path+[TEMP_DIR]/typing_extensions-0.1.0-py3-none-any.whl"
+            }
+          ]
+        },
+        "gpu": {
+          "owners": [
+            {
+              "package_id": "gpu-a==0.1.0@path+[TEMP_DIR]/gpu_a-0.1.0-py3-none-any.whl"
+            },
+            {
+              "package_id": "gpu-b==0.1.0@path+[TEMP_DIR]/gpu_b-0.1.0-py3-none-any.whl"
+            }
+          ]
+        },
+        "gpu.a": {
+          "owners": [
+            {
+              "package_id": "gpu-a==0.1.0@path+[TEMP_DIR]/gpu_a-0.1.0-py3-none-any.whl"
+            }
+          ]
+        },
+        "gpu.b": {
+          "owners": [
+            {
+              "package_id": "gpu-b==0.1.0@path+[TEMP_DIR]/gpu_b-0.1.0-py3-none-any.whl"
+            }
+          ]
+        },
+        "typing_extensions": {
+          "owners": [
+            {
+              "package_id": "typing-extensions==0.1.0@path+[TEMP_DIR]/typing_extensions-0.1.0-py3-none-any.whl"
+            }
+          ]
+        }
       },
       "members": [
         {
@@ -1916,16 +1954,18 @@ dependencies = [
         .assert()
         .success();
     let metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
-    let module_owners = serde_json::to_string_pretty(&metadata["module_owners"])?;
+    let module_owners = serde_json::to_string_pretty(&metadata["modules"])?;
 
     insta::with_settings!({ filters => context.filters() }, {
         insta::assert_snapshot!(module_owners, @r#"
         {
-          "shared": [
-            {
-              "package_id": "module-owner==0.1.0@path+[TEMP_DIR]/py312/module_owner-0.1.0-py3-none-any.whl"
-            }
-          ]
+          "shared": {
+            "owners": [
+              {
+                "package_id": "module-owner==0.1.0@path+[TEMP_DIR]/py312/module_owner-0.1.0-py3-none-any.whl"
+              }
+            ]
+          }
         }
         "#);
     });
@@ -1972,16 +2012,18 @@ package = false
     let metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
     insta::with_settings!({ filters => context.filters() }, {
         insta::assert_json_snapshot!(serde_json::json!({
-            "module_owners": metadata["module_owners"],
+            "modules": metadata["modules"],
             "resolution": metadata["resolution"],
         }), @r#"
         {
-          "module_owners": {
-            "stale": [
-              {
-                "package_id": "module-owner-root==0.1.0@unmanaged+[SITE_PACKAGES]/module_owner_root-0.1.0.dist-info"
-              }
-            ]
+          "modules": {
+            "stale": {
+              "owners": [
+                {
+                  "package_id": "module-owner-root==0.1.0@unmanaged+[SITE_PACKAGES]/module_owner_root-0.1.0.dist-info"
+                }
+              ]
+            }
           },
           "resolution": {
             "module-owner-root==0.1.0@virtual+[TEMP_DIR]/": {
@@ -2053,7 +2095,7 @@ fn workspace_metadata_module_owners_after_dependency_changes() -> Result<()> {
     insta::with_settings!({ filters => context.filters() }, {
         insta::assert_json_snapshot!(serde_json::json!({
             "installed_packages": metadata["environment"]["packages"],
-            "module_owners": metadata["module_owners"],
+            "modules": metadata["modules"],
         }), @r#"
         {
           "installed_packages": {
@@ -2064,12 +2106,14 @@ fn workspace_metadata_module_owners_after_dependency_changes() -> Result<()> {
               "version": "0.1.0"
             }
           },
-          "module_owners": {
-            "installed_module": [
-              {
-                "package_id": "module-owner==0.2.0@path+[TEMP_DIR]/module_owner-0.2.0-py3-none-any.whl"
-              }
-            ]
+          "modules": {
+            "installed_module": {
+              "owners": [
+                {
+                  "package_id": "module-owner==0.2.0@path+[TEMP_DIR]/module_owner-0.2.0-py3-none-any.whl"
+                }
+              ]
+            }
           }
         }
         "#);
@@ -2090,7 +2134,7 @@ fn workspace_metadata_module_owners_after_dependency_changes() -> Result<()> {
     insta::with_settings!({ filters => context.filters() }, {
         insta::assert_json_snapshot!(serde_json::json!({
             "installed_packages": metadata["environment"]["packages"],
-            "module_owners": metadata["module_owners"],
+            "modules": metadata["modules"],
             "resolution": metadata["resolution"],
         }), @r#"
         {
@@ -2102,12 +2146,14 @@ fn workspace_metadata_module_owners_after_dependency_changes() -> Result<()> {
               "version": "0.1.0"
             }
           },
-          "module_owners": {
-            "installed_module": [
-              {
-                "package_id": "module-owner==0.1.0@unmanaged+[SITE_PACKAGES]/module_owner-0.1.0.dist-info"
-              }
-            ]
+          "modules": {
+            "installed_module": {
+              "owners": [
+                {
+                  "package_id": "module-owner==0.1.0@unmanaged+[SITE_PACKAGES]/module_owner-0.1.0.dist-info"
+                }
+              ]
+            }
           },
           "resolution": {
             "module-owner-root==0.1.0@virtual+[TEMP_DIR]/": {
@@ -2183,7 +2229,7 @@ fn workspace_metadata_installed_packages_with_duplicate_names() -> Result<()> {
     insta::with_settings!({ filters => context.filters() }, {
         insta::assert_json_snapshot!(serde_json::json!({
             "installed_packages": metadata["environment"]["packages"],
-            "module_owners": metadata["module_owners"],
+            "modules": metadata["modules"],
         }), @r#"
         {
           "installed_packages": {
@@ -2200,15 +2246,17 @@ fn workspace_metadata_installed_packages_with_duplicate_names() -> Result<()> {
               "version": "0.2.0"
             }
           },
-          "module_owners": {
-            "shared": [
-              {
-                "package_id": "module-owner==0.1.0@unmanaged+[SITE_PACKAGES]/module_owner-0.1.0.dist-info"
-              },
-              {
-                "package_id": "module-owner==0.2.0@unmanaged+[SITE_PACKAGES]/module_owner-0.2.0.dist-info"
-              }
-            ]
+          "modules": {
+            "shared": {
+              "owners": [
+                {
+                  "package_id": "module-owner==0.1.0@unmanaged+[SITE_PACKAGES]/module_owner-0.1.0.dist-info"
+                },
+                {
+                  "package_id": "module-owner==0.2.0@unmanaged+[SITE_PACKAGES]/module_owner-0.2.0.dist-info"
+                }
+              ]
+            }
           }
         }
         "#);
@@ -2257,7 +2305,7 @@ fn workspace_metadata_installed_packages_without_modules() -> Result<()> {
     insta::with_settings!({ filters => context.filters() }, {
         insta::assert_json_snapshot!(serde_json::json!({
             "installed_packages": metadata["environment"]["packages"],
-            "module_owners": metadata["module_owners"],
+            "modules": metadata["modules"],
         }), @r#"
         {
           "installed_packages": {
@@ -2274,7 +2322,7 @@ fn workspace_metadata_installed_packages_without_modules() -> Result<()> {
               "version": "0.1.0"
             }
           },
-          "module_owners": null
+          "modules": null
         }
         "#);
     });
@@ -3295,30 +3343,38 @@ fn workspace_metadata_group_only() -> Result<()> {
         .assert()
         .success();
     let metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
-    let module_owners = serde_json::to_string_pretty(&metadata["module_owners"])?;
+    let module_owners = serde_json::to_string_pretty(&metadata["modules"])?;
 
     insta::assert_snapshot!(module_owners, @r#"
     {
-      "iniconfig": [
-        {
-          "package_id": "iniconfig==2.0.0@registry+https://pypi.org/simple"
-        }
-      ],
-      "iniconfig._parse": [
-        {
-          "package_id": "iniconfig==2.0.0@registry+https://pypi.org/simple"
-        }
-      ],
-      "iniconfig._version": [
-        {
-          "package_id": "iniconfig==2.0.0@registry+https://pypi.org/simple"
-        }
-      ],
-      "iniconfig.exceptions": [
-        {
-          "package_id": "iniconfig==2.0.0@registry+https://pypi.org/simple"
-        }
-      ]
+      "iniconfig": {
+        "owners": [
+          {
+            "package_id": "iniconfig==2.0.0@registry+https://pypi.org/simple"
+          }
+        ]
+      },
+      "iniconfig._parse": {
+        "owners": [
+          {
+            "package_id": "iniconfig==2.0.0@registry+https://pypi.org/simple"
+          }
+        ]
+      },
+      "iniconfig._version": {
+        "owners": [
+          {
+            "package_id": "iniconfig==2.0.0@registry+https://pypi.org/simple"
+          }
+        ]
+      },
+      "iniconfig.exceptions": {
+        "owners": [
+          {
+            "package_id": "iniconfig==2.0.0@registry+https://pypi.org/simple"
+          }
+        ]
+      }
     }
     "#);
 

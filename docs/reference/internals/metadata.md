@@ -58,8 +58,9 @@ An installed distribution is matched by normalized name to a package in the sele
 matched entry then uses that package's resolution node ID. The entry's `version` reports the actual
 installed version; node IDs should be treated as opaque.
 
-`module_owners` maps importable module names to package IDs in `environment.packages`. IDs for
-packages outside the selected resolution do not appear in `resolution`.
+`modules` maps importable module names to objects whose `owners` array contains `package_id`
+references to `environment.packages`. IDs for packages outside the selected resolution do not appear
+in `resolution`. The map is omitted when empty.
 
 ## Handling multiple versions of a package
 
@@ -227,12 +228,14 @@ Here is a human-readable annotated example:
   "requires_python": ">=3.12",
   // Module owners refer to entries in `environment.packages`.
   // Matched package IDs also refer to nodes in `resolution`.
-  "module_owners": {
-    "idna": [
-      {
-        "package_id": "idna==3.10@unmanaged+/workspace/.venv/lib/python3.12/site-packages/idna-3.10.dist-info"
-      }
-    ]
+  "modules": {
+    "idna": {
+      "owners": [
+        {
+          "package_id": "idna==3.10@unmanaged+/workspace/.venv/lib/python3.12/site-packages/idna-3.10.dist-info"
+        }
+      ]
+    }
   },
   // A list of workspace members
   "members": [
