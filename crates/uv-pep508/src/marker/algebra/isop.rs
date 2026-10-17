@@ -208,14 +208,14 @@ impl InternerGuard<'_> {
                 let lower_edges = if let Edges::Version { edges } = &lower_node.children
                     && lower_node.var == *variable
                 {
-                    Some(edges.as_slice())
+                    Some(edges.as_ref())
                 } else {
                     None
                 };
                 let upper_edges = if let Edges::Version { edges } = &upper_node.children
                     && upper_node.var == *variable
                 {
-                    Some(edges.as_slice())
+                    Some(edges.as_ref())
                 } else {
                     None
                 };
@@ -239,14 +239,14 @@ impl InternerGuard<'_> {
                 let lower_edges = if let Edges::String { edges } = &lower_node.children
                     && lower_node.var == *variable
                 {
-                    Some(edges.as_slice())
+                    Some(edges.as_ref())
                 } else {
                     None
                 };
                 let upper_edges = if let Edges::String { edges } = &upper_node.children
                     && upper_node.var == *variable
                 {
-                    Some(edges.as_slice())
+                    Some(edges.as_ref())
                 } else {
                     None
                 };
@@ -275,7 +275,7 @@ fn guard_edges<T: Clone + Ord>(
     edges: &[(Ranges<T>, NodeId)],
     parent: NodeId,
     child: NodeId,
-) -> SmallVec<(Ranges<T>, NodeId)> {
+) -> Box<[(Ranges<T>, NodeId)]> {
     let range = edges
         .iter()
         .filter(|(_, candidate)| candidate.negate(parent) == child)

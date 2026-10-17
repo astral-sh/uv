@@ -929,6 +929,7 @@ impl InternerGuard<'_> {
         let clipped = Ranges::from_range_bounds((last_lower.cloned(), Bound::Unbounded));
         *new.last_mut().unwrap() = (clipped, last_node_id);
 
+        let new = new.into_boxed_slice();
         self.create_node(node.var.clone(), Edges::Version { edges: new })
             .negate(i)
     }
@@ -1386,6 +1387,8 @@ impl NodeId {
 type SmallVec<T> = smallvec::SmallVec<[T; 5]>;
 
 /// The edges of a decision node.
+///
+/// Range payloads are stored separately so Boolean nodes do not reserve space for range edges.
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
 pub(crate) enum Edges {
     // The edges of a version variable, representing a disjoint set of ranges that cover
@@ -1394,7 +1397,7 @@ pub(crate) enum Edges {
     // Invariant: All ranges are simple, meaning they can be represented by a bounded
     // interval without gaps. Additionally, there are at least two edges in the set.
     Version {
-        edges: SmallVec<(Ranges<Version>, NodeId)>,
+        edges: Box<[(Ranges<Version>, NodeId)]>,
     },
     // The edges of a string variable, representing a disjoint set of ranges that cover
     // the output space.
@@ -1402,7 +1405,7 @@ pub(crate) enum Edges {
     // Invariant: All ranges are simple, meaning they can be represented by a bounded
     // interval without gaps. Additionally, there are at least two edges in the set.
     String {
-        edges: SmallVec<(Ranges<ArcStr>, NodeId)>,
+        edges: Box<[(Ranges<ArcStr>, NodeId)]>,
     },
     // The edges of a boolean variable, representing the values `true` (the `high` child)
     // and `false` (the `low` child).
@@ -1532,7 +1535,7 @@ impl Edges {
     }
 
     /// Returns an [`Edges`] where values in the given range are `true`.
-    fn from_range<T>(range: &Ranges<T>) -> SmallVec<(Ranges<T>, NodeId)>
+    fn from_range<T>(range: &Ranges<T>) -> Box<[(Ranges<T>, NodeId)]>
     where
         T: Ord + Clone,
     {
@@ -1554,7 +1557,7 @@ impl Edges {
         //
         // The ranges are disjoint so we don't care about equality.
         edges.sort_by(|(range1, _), (range2, _)| compare_disjoint_range_start(range1, range2));
-        edges
+        edges.into_boxed_slice()
     }
 
     /// Merge two [`Edges`], applying the given operation (e.g., `AND` or `OR`) to all intersecting edges.
@@ -1626,12 +1629,12 @@ impl Edges {
     /// In that case, we drop any ranges that do not exist in the domain of both edges. Note that
     /// this should not occur in practice because `requires-python` bounds are global.
     fn apply_ranges<T>(
-        left_edges: &SmallVec<(Ranges<T>, NodeId)>,
+        left_edges: &[(Ranges<T>, NodeId)],
         left_parent: NodeId,
-        right_edges: &SmallVec<(Ranges<T>, NodeId)>,
+        right_edges: &[(Ranges<T>, NodeId)],
         right_parent: NodeId,
         mut apply: impl FnMut(NodeId, NodeId) -> NodeId,
-    ) -> SmallVec<(Ranges<T>, NodeId)>
+    ) -> Box<[(Ranges<T>, NodeId)]>
     where
         T: Clone + Ord,
     {
@@ -1667,7 +1670,7 @@ impl Edges {
             }
         }
 
-        combined
+        combined.into_boxed_slice()
     }
 
     // Returns `true` if two [`Edges`] are disjoint.
@@ -1703,9 +1706,9 @@ impl Edges {
 
     // Returns `true` if all intersecting ranges in two range maps are disjoint.
     fn is_disjoint_ranges<T>(
-        left_edges: &SmallVec<(Ranges<T>, NodeId)>,
+        left_edges: &[(Ranges<T>, NodeId)],
         left_parent: NodeId,
-        right_edges: &SmallVec<(Ranges<T>, NodeId)>,
+        right_edges: &[(Ranges<T>, NodeId)],
         right_parent: NodeId,
         interner: &mut InternerGuard<'_>,
     ) -> bool
@@ -1752,10 +1755,10 @@ impl Edges {
     /// Maps the children and coalesces adjacent ranges that now share a child.
     /// This keeps equivalent decisions identical when we intern the resulting node.
     fn map_ranges<T>(
-        edges: &SmallVec<(Ranges<T>, NodeId)>,
+        edges: &[(Ranges<T>, NodeId)],
         parent: NodeId,
         mut map: impl FnMut(NodeId) -> NodeId,
-    ) -> SmallVec<(Ranges<T>, NodeId)>
+    ) -> Box<[(Ranges<T>, NodeId)]>
     where
         T: Clone + Ord,
     {
@@ -1771,7 +1774,7 @@ impl Edges {
                 mapped.push((range.clone(), child));
             }
         }
-        mapped
+        mapped.into_boxed_slice()
     }
 
     // Returns an iterator over all direct children of this node.
