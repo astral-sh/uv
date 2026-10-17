@@ -275,7 +275,7 @@ fn guard_edges<T: Clone + Ord>(
     edges: &[(Ranges<T>, NodeId)],
     parent: NodeId,
     child: NodeId,
-) -> Box<[(Ranges<T>, NodeId)]> {
+) -> SmallVec<(Ranges<T>, NodeId)> {
     let range = edges
         .iter()
         .filter(|(_, candidate)| candidate.negate(parent) == child)
