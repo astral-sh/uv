@@ -3,11 +3,14 @@ use std::time::{Duration, SystemTime, SystemTimeError};
 use std::{io, iter};
 
 use http::status::StatusCode;
+use http::{Extensions, Method};
 use itertools::Itertools;
-use reqwest::Response;
+use reqwest::{Request, Response};
+use reqwest_middleware::{Middleware, Next};
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::{
-    RetryPolicy, Retryable, RetryableStrategy, default_on_request_error, default_on_request_success,
+    RetryPolicy, RetryTransientMiddleware, Retryable, RetryableStrategy, default_on_request_error,
+    default_on_request_success,
 };
 use rustls::{AlertDescription, Error as RustlsError};
 use tracing::{debug, trace};
@@ -16,15 +19,35 @@ use uv_redacted::SafeUrl;
 
 use crate::{RequestBuilder, WrappedReqwestError};
 
+/// Passes the request method to the retry strategy.
+pub(crate) struct UvRetryMiddleware(pub(crate) ExponentialBackoff);
+
+#[async_trait::async_trait]
+impl Middleware for UvRetryMiddleware {
+    async fn handle(
+        &self,
+        request: Request,
+        extensions: &mut Extensions,
+        next: Next<'_>,
+    ) -> reqwest_middleware::Result<Response> {
+        // RetryableStrategy::handle receives only the result, so carry this request's method
+        // into the strategy that classifies its errors.
+        let strategy = UvRetryableStrategy(request.method().clone());
+        RetryTransientMiddleware::new_with_policy_and_strategy(self.0, strategy)
+            .handle(request, extensions, next)
+            .await
+    }
+}
+
 /// An extension over [`DefaultRetryableStrategy`] that logs transient request failures and
 /// adds additional retry cases.
-pub(crate) struct UvRetryableStrategy;
+struct UvRetryableStrategy(Method);
 
 impl RetryableStrategy for UvRetryableStrategy {
     fn handle(&self, res: &Result<Response, reqwest_middleware::Error>) -> Option<Retryable> {
         let retryable = match res {
             Ok(success) => default_on_request_success(success),
-            Err(err) => retryable_on_request_failure(err),
+            Err(err) => retryable_on_request_failure_inner(err, Some(&self.0)),
         };
 
         // Log on transient errors
@@ -190,6 +213,13 @@ impl RetryState {
 ///   of different crates processing the stream, including `io::Error` layers
 /// * Any `h2` error
 pub fn retryable_on_request_failure(err: &(dyn Error + 'static)) -> Option<Retryable> {
+    retryable_on_request_failure_inner(err, None)
+}
+
+fn retryable_on_request_failure_inner(
+    err: &(dyn Error + 'static),
+    method: Option<&Method>,
+) -> Option<Retryable> {
     // First, try to show a nice trace log
     if let Some((Some(status), Some(url))) = find_source::<WrappedReqwestError>(&err)
         .map(|request_err| (request_err.status(), request_err.url()))
@@ -241,6 +271,13 @@ pub fn retryable_on_request_failure(err: &(dyn Error + 'static)) -> Option<Retry
             }
             if is_retryable_status_error(reqwest_err) {
                 trace!("Transient nested reqwest status code error");
+                return Some(Retryable::Transient);
+            }
+
+            // Hyper's dropped dispatch task is a request error with no public discriminator.
+            // It may have sent the request, so only replay it if the HTTP method is safe.
+            if reqwest_err.is_request() && method.is_some_and(Method::is_safe) {
+                trace!("Transient unclassified reqwest request error for safe method");
                 return Some(Retryable::Transient);
             }
 
@@ -401,11 +438,43 @@ mod tests {
     use insta::assert_debug_snapshot;
     use reqwest::Client;
     use reqwest_middleware::ClientWithMiddleware;
+    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+    use tokio::net::TcpListener;
     use tracing_test::traced_test;
     use wiremock::matchers::path;
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
-    use crate::{UvRetryableStrategy, retryable_on_request_failure};
+    use crate::retryable_on_request_failure;
+
+    #[tokio::test]
+    async fn unclassified_request_errors_respect_method() -> Result<()> {
+        let listener = TcpListener::bind("127.0.0.1:0").await?;
+        let url: SafeUrl = format!("http://{}", listener.local_addr()?).parse()?;
+        let server = async {
+            let (stream, _) = listener.accept().await?;
+            let mut stream = BufReader::new(stream);
+            let mut request = String::new();
+            while stream.read_line(&mut request).await? != 0 {
+                if request.ends_with("\r\n\r\n") {
+                    break;
+                }
+            }
+            stream
+                .get_mut()
+                .write_all(b"invalid HTTP response\r\n\r\n")
+                .await
+        };
+        let client = Client::new();
+        let (served, response) = tokio::join!(server, client.get(url.as_str()).send());
+        served?;
+        let error = response.expect_err("invalid response must fail");
+        assert!(error.is_request());
+        assert!(retryable_on_request_failure(&error).is_none());
+        let result = Err(reqwest_middleware::Error::Reqwest(error));
+        assert!(UvRetryableStrategy(Method::POST).handle(&result).is_none());
+        assert!(UvRetryableStrategy(Method::HEAD).handle(&result) == Some(Retryable::Transient));
+        Ok(())
+    }
 
     #[tokio::test]
     #[traced_test]
@@ -423,7 +492,7 @@ mod tests {
             .send()
             .await?;
         assert!(matches!(
-            UvRetryableStrategy.handle(&Ok(response)),
+            UvRetryableStrategy(Method::GET).handle(&Ok(response)),
             Some(Retryable::Transient)
         ));
 
@@ -438,7 +507,7 @@ mod tests {
             .error_for_status()
             .expect_err("expected a 503 response");
         assert!(matches!(
-            UvRetryableStrategy.handle(&Err(err.into())),
+            UvRetryableStrategy(Method::GET).handle(&Err(err.into())),
             Some(Retryable::Transient)
         ));
 
@@ -457,7 +526,7 @@ mod tests {
             err: err.into(),
         });
         assert!(matches!(
-            UvRetryableStrategy.handle(&Err(err)),
+            UvRetryableStrategy(Method::GET).handle(&Err(err)),
             Some(Retryable::Transient)
         ));
 
@@ -497,7 +566,7 @@ mod tests {
                 .await;
 
             let middleware_retry =
-                UvRetryableStrategy.handle(&response) == Some(Retryable::Transient);
+                UvRetryableStrategy(Method::GET).handle(&response) == Some(Retryable::Transient);
 
             let response = client
                 .get(format!("{}/{}", server.uri(), status))

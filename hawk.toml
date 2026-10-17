@@ -29,14 +29,6 @@ package = "uv-redacted"
 # Keep public APIs that are consumed by downstream Rust integrations.
 
 [[override]]
-lint = "hawk::unnecessary_public"
-crate = "uv_client"
-item = "base_client::BaseClientBuilder::<'a>::custom_client"
-kind = "inherent_method"
-level = "expect"
-reason = "used by Pixi to provide its own HTTP client"
-
-[[override]]
 lint = "hawk::dead_public"
 crate = "uv_client"
 item = "base_client::BaseClientBuilder::<'a>::extra_middleware"
