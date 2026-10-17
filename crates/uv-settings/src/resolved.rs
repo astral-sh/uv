@@ -5,6 +5,7 @@ use uv_configuration::{
 };
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExtraBuildVariables, IndexLocations, PackageConfigSettings,
+    ProxyIndexConfigError,
 };
 use uv_install_wheel::LinkMode;
 use uv_pep440::Version;
@@ -194,10 +195,12 @@ pub fn resolve_prerelease(global: PrereleaseMode, mut package: PrereleasePackage
     }
 }
 
-impl From<ResolverOptions> for ResolverSettings {
-    fn from(value: ResolverOptions) -> Self {
-        Self {
-            index_locations: value.indexes.into(),
+impl TryFrom<ResolverOptions> for ResolverSettings {
+    type Error = ProxyIndexConfigError;
+
+    fn try_from(value: ResolverOptions) -> Result<Self, Self::Error> {
+        Ok(Self {
+            index_locations: value.indexes.try_into()?,
             resolution: value.resolution.unwrap_or_default(),
             prerelease: resolve_prerelease(
                 value.prerelease.unwrap_or_default(),
@@ -237,7 +240,7 @@ impl From<ResolverOptions> for ResolverSettings {
                 NoBinary::from_args(value.no_binary, value.no_binary_package.unwrap_or_default()),
                 NoBuild::from_args(value.no_build, value.no_build_package.unwrap_or_default()),
             ),
-        }
+        })
     }
 }
 
@@ -253,10 +256,12 @@ pub struct ResolverInstallerSettings {
     pub reinstall: Reinstall,
 }
 
-impl From<ResolverInstallerOptions> for ResolverInstallerSettings {
-    fn from(value: ResolverInstallerOptions) -> Self {
-        let index_locations = value.indexes.into();
-        Self {
+impl TryFrom<ResolverInstallerOptions> for ResolverInstallerSettings {
+    type Error = ProxyIndexConfigError;
+
+    fn try_from(value: ResolverInstallerOptions) -> Result<Self, Self::Error> {
+        let index_locations = value.indexes.try_into()?;
+        Ok(Self {
             resolver: ResolverSettings {
                 build_options: BuildOptions::new(
                     NoBinary::from_args(
@@ -304,7 +309,7 @@ impl From<ResolverInstallerOptions> for ResolverInstallerSettings {
             },
             compile_bytecode: value.compile_bytecode.unwrap_or_default(),
             reinstall: value.reinstall.unwrap_or_default(),
-        }
+        })
     }
 }
 
