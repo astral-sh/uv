@@ -245,6 +245,41 @@ To enable shell autocompletion for uvx, run one of the following:
 
 Then restart the shell or source the shell config file.
 
+### Offline generation
+
+Generating autocompletions can take a while, and generating autocompletions for multiple tools can quickly add up to slow a shell's startup time by several seconds. One possible solution to that problem is to generate the autocompletions offline, then load a prepared script at runtime. Below is an example of the technique implemented in PowerShell.
+
+```pwsh
+# Function for generating autocompletion files
+function Generate-Autocompletions {
+  param (
+    $Command,
+    $OutputFile
+  )
+
+  $Command | Out-String | Invoke-Expression > (Join-Path -Path ($PROFILE | Split-Path) -ChildPath $OutputFile)
+}
+
+# Function for loading autocompletion files
+function Load-Autocompletions {
+  param (
+    $OutputFile
+  )
+
+  . $(Join-Path -Path ($PROFILE | Split-Path) -ChildPath $OutputFile)
+}
+
+# Generate autocompletion files for uv:
+Generate-Autocompletions 'uv generate-shell-completion powershell' '_uv.ps1'
+Generate-Autocompletions 'uvx --generate-shell-completion powershell' '_uvx.ps1'
+
+# Then add this to your $PROFILE:
+Load-Autocompletions '_uv.ps1'
+Load-Autocompletions '_uvx.ps1'
+```
+
+Note that this technique requires regeneration of the autocompletion files every time a tool's CLI is changed.
+
 ## Uninstallation
 
 If you need to remove uv from your system, follow these steps:
