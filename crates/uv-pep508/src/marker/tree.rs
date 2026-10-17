@@ -6,7 +6,7 @@ use std::str::FromStr;
 
 use arcstr::ArcStr;
 use itertools::Itertools;
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use version_ranges::Ranges;
 
@@ -1396,42 +1396,51 @@ impl MarkerTree {
         Self(INTERNER.lock().only_extras(self.0))
     }
 
-    /// Calls the provided function on every `extra` in this tree.
+    /// Calls the provided function on every `extra` decision node in this tree.
+    ///
+    /// Shared subgraphs are visited only once.
     ///
     /// The operator provided to the function is guaranteed to be
     /// `MarkerOperator::Equal` or `MarkerOperator::NotEqual`.
     pub fn visit_extras(self, mut f: impl FnMut(MarkerOperator, &ExtraName)) {
-        fn imp(tree: MarkerTree, f: &mut impl FnMut(MarkerOperator, &ExtraName)) {
+        fn imp(
+            tree: MarkerTree,
+            f: &mut impl FnMut(MarkerOperator, &ExtraName),
+            visited: &mut FxHashSet<MarkerTree>,
+        ) {
+            if tree.is_true() || tree.is_false() || !visited.insert(tree) {
+                return;
+            }
             match tree.kind() {
                 MarkerTreeKind::True | MarkerTreeKind::False => {}
                 MarkerTreeKind::Version(kind) => {
                     for (tree, _) in simplify::collect_edges(kind.edges()) {
-                        imp(tree, f);
+                        imp(tree, f, visited);
                     }
                 }
                 MarkerTreeKind::VersionString(kind) => {
                     for (tree, _) in simplify::collect_edges(kind.edges()) {
-                        imp(tree, f);
+                        imp(tree, f, visited);
                     }
                 }
                 MarkerTreeKind::String(kind) => {
                     for (tree, _) in simplify::collect_edges(kind.children()) {
-                        imp(tree, f);
+                        imp(tree, f, visited);
                     }
                 }
                 MarkerTreeKind::In(kind) => {
                     for (_, tree) in kind.children() {
-                        imp(tree, f);
+                        imp(tree, f, visited);
                     }
                 }
                 MarkerTreeKind::Contains(kind) => {
                     for (_, tree) in kind.children() {
-                        imp(tree, f);
+                        imp(tree, f, visited);
                     }
                 }
                 MarkerTreeKind::List(kind) => {
                     for (_, tree) in kind.children() {
-                        imp(tree, f);
+                        imp(tree, f, visited);
                     }
                 }
                 MarkerTreeKind::Extra(kind) => {
@@ -1441,12 +1450,12 @@ impl MarkerTree {
                         f(MarkerOperator::NotEqual, kind.name().extra());
                     }
                     for (_, tree) in kind.children() {
-                        imp(tree, f);
+                        imp(tree, f, visited);
                     }
                 }
             }
         }
-        imp(self, &mut f);
+        imp(self, &mut f, &mut FxHashSet::default());
     }
 
     fn simplify_extras_with_impl(self, is_extra: &impl Fn(&ExtraName) -> bool) -> Self {
@@ -1859,6 +1868,7 @@ impl schemars::JsonSchema for MarkerTree {
 
 #[cfg(test)]
 mod test {
+    use std::cell::Cell;
     use std::ops::Bound;
     use std::str::FromStr;
 
@@ -3918,6 +3928,37 @@ mod test {
             .only_extras(),
             m("os_name == 'Linux' or os_name != 'Linux'"),
         );
+    }
+
+    /// Shared suffixes must be visited once even when no extra is replaced.
+    #[test]
+    fn visit_and_restrict_shared_extra_subgraphs() {
+        let marker = m(
+            "(extra == 'a' or extra == 'b') and (extra == 'c' or extra == 'd') and (extra == 'e' or extra == 'f')",
+        );
+        let mut visits = 0;
+        marker.visit_extras(|_, _| visits += 1);
+        assert_eq!(visits, 6);
+
+        let restrictions = Cell::new(0);
+        assert_eq!(
+            marker.simplify_extras_with(|_| {
+                restrictions.set(restrictions.get() + 1);
+                false
+            }),
+            marker
+        );
+        assert_eq!(restrictions.get(), 6);
+
+        restrictions.set(0);
+        assert_eq!(
+            marker.simplify_not_extras_with(|_| {
+                restrictions.set(restrictions.get() + 1);
+                false
+            }),
+            marker
+        );
+        assert_eq!(restrictions.get(), 6);
     }
 
     #[test]
