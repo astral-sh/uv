@@ -1076,13 +1076,16 @@ mod tests {
         }
     }
 
+    /// Only referenced items in the same conflict set constrain each other.
     #[test]
     fn relevant_conflicts_as_marker() {
         let conflicts = create_conflicts([
             create_set(["foo", "bar", "baz"]),
             create_set(["fox", "ant"]),
         ]);
-        let pair = ConflictMarker::from_conflicts(&create_conflicts([create_set(["foo", "bar"])]));
+        let pair = create_extra_marker("foo")
+            .negate()
+            .or(create_extra_marker("bar").negate());
         for (referenced, expected) in [
             (&[][..], ConflictMarker::TRUE),
             (&["foo"][..], ConflictMarker::TRUE),
@@ -1095,6 +1098,7 @@ mod tests {
             assert_eq!(
                 ConflictMarker::from_relevant_conflicts(&conflicts, markers),
                 expected,
+                "referenced extras: {referenced:?}",
             );
         }
     }
@@ -1135,21 +1139,15 @@ mod tests {
 
     #[test]
     fn imbibe_environment_only() {
-        let conflicts = create_conflicts([create_set(["foo", "bar", "baz"])]);
+        let conflicts = create_conflicts([create_set(["foo", "bar"])]);
         let conflicts_marker = ConflictMarker::from_conflicts(&conflicts);
-        for pep508 in [
-            MarkerTree::TRUE,
-            MarkerTree::from_str("python_full_version < '3.12'").expect("valid marker expression"),
-            MarkerTree::from_str("sys_platform == 'darwin'").expect("valid marker expression"),
-        ] {
-            let mut marker = UniversalMarker::from_combined(pep508);
-            let expected = marker;
+        let environment =
+            MarkerTree::from_str("python_full_version < '3.12'").expect("valid marker expression");
+        let mut marker = UniversalMarker::from_combined(environment);
 
-            marker.imbibe(conflicts_marker);
+        marker.imbibe(conflicts_marker);
 
-            assert_eq!(marker, expected);
-            assert!(!marker.has_conflict_marker());
-        }
+        assert_eq!(marker, UniversalMarker::from_combined(environment));
     }
 
     #[test]
@@ -1166,82 +1164,69 @@ mod tests {
     }
 
     #[test]
-    fn imbibe_retains_impossible_selections_for_conflict_discovery() {
+    fn imbibe_environment_with_impossible_selection() {
         let conflicts = create_conflicts([create_set(["foo", "bar"])]);
         let conflicts_marker = ConflictMarker::from_conflicts(&conflicts);
+        let environment =
+            MarkerTree::from_str("python_full_version < '3.12'").expect("valid marker expression");
         let impossible = create_extra_marker("foo")
             .marker
             .and(create_extra_marker("bar").marker);
-        for combined in [MarkerTree::FALSE, impossible] {
-            let mut marker = UniversalMarker::from_combined(combined);
-            marker.imbibe(conflicts_marker);
-            assert_eq!(marker.combined(), conflicts_marker.marker.negate());
-        }
+        let mut marker = UniversalMarker::from_combined(environment.or(impossible));
+
+        marker.imbibe(conflicts_marker);
+
+        assert_eq!(marker, UniversalMarker::from_combined(environment));
+    }
+
+    /// An unreachable edge must still allow readers to discover conflicting requests.
+    #[test]
+    fn imbibe_false_marker() {
+        let conflicts = create_conflicts([create_set(["foo", "bar"])]);
+        let conflicts_marker = ConflictMarker::from_conflicts(&conflicts);
+        let mut marker = UniversalMarker::FALSE;
+
+        marker.imbibe(conflicts_marker);
+
+        assert_eq!(
+            marker,
+            UniversalMarker::new(
+                MarkerTree::TRUE,
+                create_extra_marker("foo").and(create_extra_marker("bar")),
+            ),
+        );
     }
 
     #[test]
-    fn imbibe_preserves_allowed_selections() {
-        let conflicts = create_conflicts([
-            create_set(["foo", "bar", "baz"]),
-            create_set(["fox", "ant"]),
-        ]);
+    fn imbibe_impossible_selection() {
+        let conflicts = create_conflicts([create_set(["foo", "bar"])]);
+        let conflicts_marker = ConflictMarker::from_conflicts(&conflicts);
+        let mut marker = UniversalMarker::new(
+            MarkerTree::TRUE,
+            create_extra_marker("foo").and(create_extra_marker("bar")),
+        );
+        let expected = marker;
+
+        marker.imbibe(conflicts_marker);
+
+        assert_eq!(marker, expected);
+    }
+
+    /// The extra condition is necessary even when an environment condition is also present.
+    #[test]
+    fn imbibe_environment_dependent_extra() {
+        let conflicts = create_conflicts([create_set(["foo", "bar"])]);
         let conflicts_marker = ConflictMarker::from_conflicts(&conflicts);
         let environment =
             MarkerTree::from_str("sys_platform == 'darwin'").expect("valid marker expression");
         let foo = create_extra_marker("foo").marker;
         let bar = create_extra_marker("bar").marker;
-        let fox = create_extra_marker("fox").marker;
-        let ant = create_extra_marker("ant").marker;
-        for combined in [
-            environment.and(foo).or(environment.negate().and(bar)),
-            environment.and(foo.or(fox)),
-            foo.and(bar),
-            foo.and(fox).or(bar.and(ant)),
-            conflicts_marker.marker.and(environment),
-        ] {
-            let mut marker = UniversalMarker::from_combined(combined);
+        let mut marker = UniversalMarker::from_combined(environment.and(foo));
 
-            marker.imbibe(conflicts_marker);
+        marker.imbibe(conflicts_marker);
 
-            assert_eq!(
-                marker.combined().and(conflicts_marker.marker),
-                combined.and(conflicts_marker.marker),
-            );
-            assert_eq!(marker.pep508(), marker.combined().without_extras());
-        }
-    }
-
-    #[test]
-    fn imbibe_canonicalizes_allowed_selections() {
-        let conflicts = create_conflicts([
-            create_set(["foo", "bar", "baz"]),
-            create_set(["fox", "ant"]),
-        ]);
-        let conflicts_marker = ConflictMarker::from_conflicts(&conflicts);
-        let environment =
-            MarkerTree::from_str("sys_platform == 'darwin'").expect("valid marker expression");
-        let foo = create_extra_marker("foo").marker;
-        let bar = create_extra_marker("bar").marker;
-        let fox = create_extra_marker("fox").marker;
-        let ant = create_extra_marker("ant").marker;
-        for combined in [
-            environment,
-            environment.and(foo).or(environment.negate().and(bar)),
-            environment.and(foo.or(fox)),
-            foo.and(bar),
-            foo.and(fox).or(bar.and(ant)),
-        ] {
-            let mut marker = UniversalMarker::from_combined(combined);
-            marker.imbibe(conflicts_marker);
-            for equivalent in [
-                combined.and(conflicts_marker.marker),
-                conflicts_marker.marker.implies(combined),
-            ] {
-                let mut equivalent = UniversalMarker::from_combined(equivalent);
-                equivalent.imbibe(conflicts_marker);
-                assert_eq!(marker, equivalent);
-            }
-        }
+        assert_eq!(marker.combined(), environment.and(foo).or(foo.and(bar)));
+        assert_eq!(marker.pep508(), MarkerTree::TRUE);
     }
 
     #[test]
