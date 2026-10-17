@@ -2,7 +2,6 @@ use std::borrow::Borrow;
 use std::collections::BTreeSet;
 use std::str::FromStr;
 
-use itertools::Itertools;
 use rustc_hash::FxHashMap;
 
 use uv_normalize::{ExtraName, GroupName, InvalidNameError, PackageName};
@@ -624,12 +623,7 @@ impl ConflictMarker {
         }
         let mut marker = Self::TRUE;
         for set in conflicts.iter() {
-            for (item1, item2) in set.iter().tuple_combinations() {
-                let pair = Self::from_conflict_item(item1)
-                    .negate()
-                    .or(Self::from_conflict_item(item2).negate());
-                marker = marker.and(pair);
-            }
+            marker = marker.and(Self::at_most_one(set.iter()));
         }
         marker
     }
@@ -642,6 +636,9 @@ impl ConflictMarker {
         conflicts: &Conflicts,
         markers: impl IntoIterator<Item = UniversalMarker>,
     ) -> Self {
+        if conflicts.is_empty() {
+            return Self::TRUE;
+        }
         let mut referenced = BTreeSet::new();
         for marker in markers {
             marker.marker.visit_extras(|_, extra| {
@@ -654,18 +651,30 @@ impl ConflictMarker {
 
     /// Projects the declared constraints onto the conflict items used by a marker.
     fn from_referenced_conflicts(conflicts: &Conflicts, referenced: &BTreeSet<ExtraName>) -> Self {
+        if referenced.is_empty() {
+            return Self::TRUE;
+        }
         let mut marker = Self::TRUE;
         for set in conflicts.iter() {
-            for (first, second) in set
+            let items = set
                 .iter()
-                .filter(|item| referenced.contains(&encode_conflict_item(item)))
-                .tuple_combinations()
-            {
-                let pair = Self::from_conflict_item(first)
-                    .negate()
-                    .or(Self::from_conflict_item(second).negate());
-                marker = marker.and(pair);
-            }
+                .filter(|item| referenced.contains(&encode_conflict_item(item)));
+            marker = marker.and(Self::at_most_one(items));
+        }
+        marker
+    }
+
+    /// Allows at most one item without enumerating every conflicting pair.
+    /// Each item excludes the union of all preceding items in the set.
+    fn at_most_one<'a>(items: impl Iterator<Item = &'a ConflictItem>) -> Self {
+        let mut previous = Self {
+            marker: MarkerTree::FALSE,
+        };
+        let mut marker = Self::TRUE;
+        for item in items {
+            let item = Self::from_conflict_item(item);
+            marker = marker.and(previous.and(item).negate());
+            previous = previous.or(item);
         }
         marker
     }
