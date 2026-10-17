@@ -28,6 +28,7 @@ inherits = "ci"
 [test-groups]
 serial = { max-threads = 1 }
 io-bound = { max-threads = 1 }
+python-install-macos = { max-threads = 4 }
 
 [[profile.default.overrides]]
 filter = 'test(native_auth)'
@@ -41,6 +42,12 @@ test-group = 'serial'
 platform = 'cfg(target_os = "windows")'
 filter = 'test(/^python_install::/) + test(/^python_update::/) + test(/^python_find::/)'
 test-group = 'io-bound'
+priority = 1 # Start earlier so these can complete before the end
+
+[[profile.ci-macos.overrides]]
+platform = 'cfg(target_os = "macos")'
+filter = 'test(/^python_install::/) + test(/^python_upgrade::/) + test(/^python_find::/)'
+test-group = 'python-install-macos'
 priority = 1 # Start earlier so these can complete before the end
 
 [scripts.setup.setup-hook-unix]
