@@ -3021,6 +3021,26 @@ mod test {
         );
     }
 
+    /// Absorbing a condition must merge the string ranges that now share a child.
+    #[test]
+    fn coalesce_mapped_string_ranges() {
+        let extra = m("extra == 'test'");
+        let architecture = m("platform_machine == 'x86_64'");
+        let redundant = m("platform_machine == 'aarch64'").and(extra);
+
+        assert_eq!(redundant.or(architecture).or(extra), architecture.or(extra));
+    }
+
+    /// Absorbing a condition must merge the version ranges that now share a child.
+    #[test]
+    fn coalesce_mapped_version_ranges() {
+        let extra = m("extra == 'test'");
+        let version = m("python_full_version == '3.12'");
+        let redundant = m("python_full_version == '3.10'").and(extra);
+
+        assert_eq!(redundant.or(version).or(extra), version.or(extra));
+    }
+
     #[test]
     fn test_complex_marker_simplification() {
         // This expression should simplify to:
