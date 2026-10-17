@@ -1,14 +1,15 @@
 use std::cell::RefCell;
-use std::io::{Read, Seek, SeekFrom, Write};
-use std::net::TcpListener;
-use std::pin::Pin;
+use std::io::{Seek, SeekFrom, Write};
+use std::pin::pin;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::mpsc;
 use std::time::{Duration, UNIX_EPOCH};
 use std::{assert_matches, io};
 
 use anyhow::{Result, anyhow};
 use reqwest::Response;
+use tokio::runtime::Builder;
+use tokio::sync::Notify;
 use wiremock::matchers::{any, header, method, path, query_param};
 use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
@@ -44,88 +45,66 @@ async fn cached_text(
         .map_err(|err| anyhow!("{err:?}"))
 }
 
-/// A request whose connection dispatch task is lost is retried on a new connection.
+/// A lost dispatch task and a subsequent HTTP error consume the same retry budget.
 #[test]
-fn retries_request_after_dispatch_runtime_stops() -> Result<()> {
-    let listener = TcpListener::bind(("127.0.0.1", 0))?;
-    let address = listener.local_addr()?;
-    let (request_seen_tx, request_seen_rx) = mpsc::channel();
-    let (release_server_tx, release_server_rx) = mpsc::channel();
-    let server = std::thread::spawn(move || -> Result<()> {
-        let (mut first_stream, _) = listener.accept()?;
-        let mut request = Vec::new();
-        let mut buffer = [0; 1024];
-        loop {
-            let read = first_stream.read(&mut buffer)?;
-            request.extend_from_slice(&buffer[..read]);
-            if request.windows(4).any(|window| window == b"\r\n\r\n") {
-                break;
-            }
-        }
-        request_seen_tx.send(())?;
-        release_server_rx.recv()?;
-        drop(first_stream);
-
-        let (mut second_stream, _) = listener.accept()?;
-        let mut request = Vec::new();
-        loop {
-            let read = second_stream.read(&mut buffer)?;
-            request.extend_from_slice(&buffer[..read]);
-            if request.windows(4).any(|window| window == b"\r\n\r\n") {
-                break;
-            }
-        }
-        second_stream.write_all(
-            b"HTTP/1.1 200 OK\r\ncontent-length: 2\r\ncache-control: no-store\r\nconnection: close\r\n\r\nok",
-        )?;
-        Ok(())
+fn dispatch_and_http_errors_share_retry_budget() -> Result<()> {
+    let first_runtime = Builder::new_current_thread().enable_all().build()?;
+    let request_seen = Arc::new(Notify::new());
+    let first_request_seen = request_seen.clone();
+    let server = first_runtime.block_on(async {
+        let server = MockServer::start().await;
+        let requests = AtomicUsize::new(0);
+        Mock::given(method("GET"))
+            .and(path("/metadata"))
+            .respond_with(move |_: &Request| {
+                if requests.fetch_add(1, Ordering::Relaxed) == 0 {
+                    first_request_seen.notify_one();
+                    ResponseTemplate::new(200).set_delay(Duration::from_secs(60))
+                } else {
+                    ResponseTemplate::new(503)
+                }
+            })
+            .expect(2)
+            .mount(&server)
+            .await;
+        server
     });
 
     let client = CachedClient::new(
         BaseClientBuilder::default()
+            // A read timer bound to the first runtime would panic after that runtime stops.
             .custom_client(reqwest::Client::new())
             .retries(1)
             .no_retry_delay(true)
             .build()?,
     );
-    let url = format!("http://{address}/metadata").parse()?;
-    let request = client.uncached().for_host(&url).get(url.clone()).build()?;
     let cache = tempfile::tempdir()?;
     let entry = CacheEntry::new(cache.path(), "response");
-    let mut fetch: Pin<Box<_>> = Box::pin(client.get_serde_with_retry(
+    let url = format!("{}/metadata", server.uri()).parse()?;
+    let request = client.uncached().for_host(&url).get(url).build()?;
+    let mut fetch = pin!(client.get_serde_with_retry(
         request,
         &entry,
         CacheControl::None,
         async |response, _| response.text().await,
     ));
 
-    let first_runtime = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()?;
     first_runtime.block_on(async {
-        let request_seen = tokio::task::spawn_blocking(move || request_seen_rx.recv());
         tokio::select! {
             result = &mut fetch => Err(anyhow!("request finished before its runtime stopped: {result:?}")),
-            seen = request_seen => {
-                seen??;
-                Ok(())
-            }
+            () = request_seen.notified() => Ok(()),
         }
     })?;
     drop(first_runtime);
-    release_server_tx.send(())?;
 
-    let second_runtime = tokio::runtime::Builder::new_current_thread()
+    Builder::new_current_thread()
         .enable_all()
-        .build()?;
-    let result = second_runtime
-        .block_on(fetch)
-        .map_err(|err| anyhow!("{err:?}"))?;
-    assert_eq!(result, "ok");
-    server
-        .join()
-        .map_err(|_| anyhow!("test server thread panicked"))??;
-    Ok(())
+        .build()?
+        .block_on(async {
+            assert_matches!(fetch.await, Err(CachedClientError::Client(err)) if err.retries() == 1);
+            server.verify().await;
+            Ok(())
+        })
 }
 
 /// Cacheable flat-index responses whose URLs differ only in a redacted query value can both be used
