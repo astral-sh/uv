@@ -47,12 +47,15 @@
 
 use std::cmp::Ordering;
 use std::fmt;
+use std::hash::BuildHasher;
 use std::ops::Bound;
 use std::sync::{LazyLock, Mutex, MutexGuard};
 
 use arcstr::ArcStr;
+use hashbrown::HashTable;
+use hashbrown::hash_table::Entry;
 use itertools::{Either, Itertools};
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxBuildHasher, FxHashMap};
 use version_ranges::Ranges;
 
 use uv_normalize::ExtraName;
@@ -93,9 +96,9 @@ pub(crate) struct InternerShared {
 /// The mutable [`Interner`] state, stored behind a lock.
 #[derive(Default)]
 struct InternerState {
-    /// A map from a [`Node`] to a unique [`NodeId`], representing an index
-    /// into [`InternerShared`].
-    unique: FxHashMap<Node, NodeId>,
+    /// Unique node IDs and their cached hashes. Equality compares the immutable
+    /// nodes in [`InternerShared`].
+    unique: HashTable<(u64, NodeId)>,
 
     /// A cache for `AND` operations between two nodes.
     /// Note that `OR` is implemented in terms of `AND`.
@@ -151,15 +154,20 @@ impl InternerGuard<'_> {
             return if flipped { first.not() } else { first };
         }
 
-        // Insert the node.
-        // Probing before inserting keeps the clone off the common path where an isomorphic node
-        // has already been interned. Cloning a [`Node`] copies every outgoing edge range.
-        let id = if let Some(&id) = self.state.unique.get(&node) {
-            id
-        } else {
-            let id = NodeId::new(self.shared.nodes.push(node.clone()), false);
-            self.state.unique.insert(node, id);
-            id
+        // The shared store owns each node. The index only needs its ID, so new
+        // nodes do not duplicate their outgoing edge ranges in the hash table.
+        let hash = FxBuildHasher.hash_one(&node);
+        let id = match self.state.unique.entry(
+            hash,
+            |(stored_hash, id)| *stored_hash == hash && self.shared.node(*id) == &node,
+            |(hash, _)| *hash,
+        ) {
+            Entry::Occupied(entry) => entry.get().1,
+            Entry::Vacant(entry) => {
+                let id = NodeId::new(self.shared.nodes.push(node), false);
+                entry.insert((hash, id));
+                id
+            }
         };
 
         if flipped { id.not() } else { id }
@@ -405,8 +413,9 @@ impl InternerGuard<'_> {
             "`and_nontrivial` requires a non-trivial conjunction"
         );
 
-        // The operation was memoized.
-        if let Some(result) = self.state.cache.get(&(xi, yi)) {
+        // Conjunction is commutative, so either operand order shares one entry.
+        let key = if xi < yi { (xi, yi) } else { (yi, xi) };
+        if let Some(result) = self.state.cache.get(&key) {
             return *result;
         }
 
@@ -458,7 +467,7 @@ impl InternerGuard<'_> {
         //
         // ADDs often contain duplicated subgraphs in distinct branches due to the restricted
         // variable ordering. Memoizing allows ADD operations to remain polynomial time.
-        self.state.cache.insert((xi, yi), node);
+        self.state.cache.insert(key, node);
 
         node
     }
@@ -1979,13 +1988,64 @@ impl fmt::Debug for NodeId {
 
 #[cfg(test)]
 mod tests {
-    use super::{INTERNER, NodeId};
-    use crate::MarkerExpression;
+    use uv_pep440::{Version, VersionSpecifier};
+
+    use super::{INTERNER, Interner, NodeId};
+    use crate::{MarkerExpression, MarkerValueVersion};
 
     fn expr(s: &str) -> NodeId {
         INTERNER
             .lock()
             .expression(MarkerExpression::from_str(s).unwrap().unwrap())
+    }
+
+    #[test]
+    fn interned_nodes_survive_index_growth() {
+        let interner = Interner::default();
+        let mut guard = interner.lock();
+        let nodes: Vec<_> = (0..128)
+            .map(|minor| {
+                guard.expression(MarkerExpression::Version {
+                    key: MarkerValueVersion::PythonFullVersion,
+                    specifier: VersionSpecifier::equals_version(Version::new([3, minor])),
+                })
+            })
+            .collect();
+        let count = interner.shared.nodes.count();
+        for (minor, node) in nodes.into_iter().enumerate() {
+            let version = Version::new([3, minor as u64]);
+            let duplicate = guard.expression(MarkerExpression::Version {
+                key: MarkerValueVersion::PythonFullVersion,
+                specifier: VersionSpecifier::equals_version(version.clone()),
+            });
+            let complement = guard.expression(MarkerExpression::Version {
+                key: MarkerValueVersion::PythonFullVersion,
+                specifier: VersionSpecifier::not_equals_version(version),
+            });
+            assert_eq!(duplicate.0, node.0);
+            assert_eq!(complement.0, node.not().0);
+        }
+        assert_eq!(interner.shared.nodes.count(), count);
+    }
+
+    #[test]
+    fn conjunction_cache_is_commutative() {
+        let interner = Interner::default();
+        let mut guard = interner.lock();
+        let left = guard.expression(
+            MarkerExpression::from_str("python_version >= '3.10'")
+                .expect("valid marker expression")
+                .expect("valid marker expression"),
+        );
+        let right = guard.expression(
+            MarkerExpression::from_str("extra == 'test'")
+                .expect("valid marker expression")
+                .expect("valid marker expression"),
+        );
+        let result = guard.and(left, right);
+        let entries = guard.state.cache.len();
+        assert_eq!(guard.and(right, left).0, result.0);
+        assert_eq!(guard.state.cache.len(), entries);
     }
 
     #[test]
