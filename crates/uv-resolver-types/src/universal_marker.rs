@@ -324,11 +324,16 @@ impl UniversalMarker {
 
     /// Returns true if this universal marker contains a conflict marker.
     ///
-    /// Conflict items are encoded as `extra` expressions in `marker`, while `pep508` is the same
-    /// canonical marker with all `extra` expressions removed. Since [`MarkerTree`] equality is
-    /// semantic, the trees differ exactly when the marker depends on a conflict item.
+    /// Conflict items are encoded as `extra` expressions in the canonical full marker.
+    /// The cached PEP 508 projection can overapproximate the full marker after a conjunction,
+    /// so differing markers do not necessarily indicate a remaining conflict item.
     pub fn has_conflict_marker(self) -> bool {
-        self.marker != self.pep508
+        if self.marker == self.pep508 {
+            return false;
+        }
+        let mut has_conflict = false;
+        self.marker.visit_extras(|_, _| has_conflict = true);
+        has_conflict
     }
 
     /// Returns true if this universal marker is disjoint with the one given.
