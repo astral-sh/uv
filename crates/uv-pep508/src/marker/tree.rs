@@ -2056,6 +2056,42 @@ mod test {
         );
     }
 
+    /// An odd number of terms leaves an unpaired expression during balanced construction.
+    #[test]
+    fn parse_boolean_chains() {
+        let conjunction =
+            m("extra == 'a' and extra == 'b' and extra == 'c' and extra == 'd' and extra == 'e'");
+        let disjunction =
+            m("extra != 'a' or extra != 'b' or extra != 'c' or extra != 'd' or extra != 'e'");
+        assert_eq!(
+            conjunction,
+            m("extra == 'a'")
+                .and(m("extra == 'b'"))
+                .and(m("extra == 'c'"))
+                .and(m("extra == 'd'"))
+                .and(m("extra == 'e'")),
+        );
+        assert_eq!(conjunction.negate(), disjunction);
+        assert_eq!(
+            m("extra == 'a' and(extra == 'b' or(extra == 'c'))"),
+            m("extra == 'a'").and(m("extra == 'b'").or(m("extra == 'c'"))),
+        );
+    }
+
+    #[test]
+    fn parse_constant_boolean_chain_trailing_error() {
+        assert_snapshot!(parse_err("(extra == 'a' or extra != 'a') or (python_version < invalid)"), @"
+        Expected a quoted string or a valid marker name, found `invalid`
+        (extra == 'a' or extra != 'a') or (python_version < invalid)
+                                                            ^^^^^^^
+        ");
+        assert_snapshot!(parse_err("(extra == 'a' and extra != 'a') and (python_version < invalid)"), @"
+        Expected a quoted string or a valid marker name, found `invalid`
+        (extra == 'a' and extra != 'a') and (python_version < invalid)
+                                                              ^^^^^^^
+        ");
+    }
+
     #[test]
     fn darwin_platform_release() {
         let baseline = m("sys_platform == 'darwin' and platform_release == '24.0.0'");
