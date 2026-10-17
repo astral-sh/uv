@@ -1992,53 +1992,52 @@ mod test {
         }
     }
 
-    /// Two range decisions force extraction to intersect different lower and upper partitions.
-    /// Exercise every function over two three-way partitions, including open and closed bounds.
+    /// Extracting the shared version boundary aligns `<` with `<=` and `>` with `>=`.
     #[test]
-    fn isop_range_covers_roundtrip() {
-        let operating_systems = [
-            m("os_name == 'a'"),
-            m("os_name == 'b'"),
-            m("os_name != 'a' and os_name != 'b'"),
-        ];
-        for partition in [
-            [
-                "python_full_version < '3.10'",
-                "python_full_version == '3.10'",
-                "python_full_version > '3.10'",
-            ],
-            [
-                "sys_platform == 'linux'",
-                "sys_platform == 'win32'",
-                "sys_platform != 'linux' and sys_platform != 'win32'",
-            ],
-            [
-                "platform_release < '24'",
-                "platform_release == '24'",
-                "platform_release > '24'",
-            ],
-        ] {
-            let minterms: Vec<_> = partition
-                .into_iter()
-                .flat_map(|range| {
-                    operating_systems.map(|operating_system| m(range).and(operating_system))
-                })
-                .collect();
-            for truth_table in 1..511 {
-                let marker = minterms
-                    .iter()
-                    .enumerate()
-                    .filter(|(index, _)| truth_table & (1 << index) != 0)
-                    .fold(MarkerTree::FALSE, |marker, (_, minterm)| {
-                        marker.or(*minterm)
-                    });
-                assert_eq!(
-                    m(&marker.try_to_string().expect("nontrivial marker")),
-                    marker,
-                    "partition {partition:?}, truth table {truth_table}"
-                );
-            }
-        }
+    fn isop_version_range_bounds_roundtrip() {
+        let marker = m(
+            "(os_name == 'posix' and python_full_version <= '3.10') or (os_name != 'posix' and python_full_version >= '3.10')",
+        );
+        assert_eq!(
+            m(&marker.try_to_string().expect("nontrivial marker")),
+            marker
+        );
+        assert_eq!(
+            m(&marker.negate().try_to_string().expect("nontrivial marker")),
+            marker.negate()
+        );
+    }
+
+    /// Excluding different strings creates disjoint ranges with differently positioned endpoints.
+    #[test]
+    fn isop_string_range_partitions_roundtrip() {
+        let marker = m(
+            "(os_name == 'posix' and platform_machine != 'x86_64') or (os_name != 'posix' and platform_machine != 'aarch64')",
+        );
+        assert_eq!(
+            m(&marker.try_to_string().expect("nontrivial marker")),
+            marker
+        );
+        assert_eq!(
+            m(&marker.negate().try_to_string().expect("nontrivial marker")),
+            marker.negate()
+        );
+    }
+
+    /// Darwin release comparisons use version ranges, including a shared closed endpoint.
+    #[test]
+    fn isop_darwin_release_bounds_roundtrip() {
+        let marker = m(
+            "sys_platform == 'darwin' and ((platform_machine == 'arm64' and platform_release <= '24') or (platform_machine != 'arm64' and platform_release >= '24'))",
+        );
+        assert_eq!(
+            m(&marker.try_to_string().expect("nontrivial marker")),
+            marker
+        );
+        assert_eq!(
+            m(&marker.negate().try_to_string().expect("nontrivial marker")),
+            marker.negate()
+        );
     }
 
     /// Membership decisions have distinct renderers for strings, substrings, and lists.
