@@ -2069,6 +2069,14 @@ mod test {
             m("extra == 'a' and extra == 'b' and extra == 'c' and extra == 'd' and extra == 'e'");
         let disjunction =
             m("extra != 'a' or extra != 'b' or extra != 'c' or extra != 'd' or extra != 'e'");
+        assert_eq!(
+            conjunction,
+            m("extra == 'a'")
+                .and(m("extra == 'b'"))
+                .and(m("extra == 'c'"))
+                .and(m("extra == 'd'"))
+                .and(m("extra == 'e'")),
+        );
         assert_eq!(conjunction.negate(), disjunction);
         assert_eq!(
             m("extra == 'a' and(extra == 'b' or(extra == 'c'))"),
