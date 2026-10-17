@@ -1060,7 +1060,11 @@ impl<'lock> PylockToml {
         Ok(Self {
             lock_version,
             created_by,
-            environments: None,
+            environments: if target.lock().supported_environments().is_empty() {
+                None
+            } else {
+                Some(target.lock().simplified_supported_environments())
+            },
             requires_python: Some(requires_python),
             extras,
             dependency_groups,
@@ -1167,6 +1171,21 @@ impl<'lock> PylockToml {
 
         doc.insert("lock-version", value(self.lock_version.to_string()));
         doc.insert("created-by", value(self.created_by.as_str()));
+        // An unconditional marker makes the lock valid in every environment.
+        if let Some(environments) = self.environments.as_ref().and_then(|environments| {
+            environments
+                .iter()
+                .copied()
+                .map(MarkerTree::contents)
+                .collect::<Option<Vec<_>>>()
+        }) {
+            doc.insert(
+                "environments",
+                value(Array::from_iter(
+                    environments.iter().map(ToString::to_string),
+                )),
+            );
+        }
         if let Some(ref requires_python) = self.requires_python {
             doc.insert("requires-python", value(requires_python.to_string()));
         }
