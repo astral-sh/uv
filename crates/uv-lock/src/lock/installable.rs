@@ -1,11 +1,9 @@
-use std::collections::BTreeSet;
 use std::collections::VecDeque;
 use std::collections::hash_map::Entry;
 use std::path::Path;
 use std::sync::Arc;
 
 use either::Either;
-use itertools::Itertools;
 use petgraph::Graph;
 use rustc_hash::{FxHashMap, FxHashSet};
 
@@ -16,7 +14,7 @@ use uv_configuration::{
 use uv_distribution_types::{Edge, FirstParty, Node, Resolution, ResolvedDist};
 use uv_normalize::{DefaultExtras, ExtraName, GroupName, PackageName};
 use uv_platform_tags::Tags;
-use uv_pypi_types::{ConflictKind, ConflictSet, ResolverMarkerEnvironment};
+use uv_pypi_types::{ConflictKind, ConflictSet, Conflicts, ResolverMarkerEnvironment};
 
 use uv_resolver_types::UniversalMarker;
 use uv_resolver_types::universal_marker::ActivatedConflictItems;
@@ -26,6 +24,42 @@ use crate::lock::{
     SelectedDependency, TagPolicy,
 };
 use crate::{Lock, LockError};
+
+/// Record an extra and reject conflicts with previously activated extras.
+/// Dependency callers must evaluate the edge and parent reachability markers first, so inactive
+/// requests cannot cause conflicts. Repeated requests for the same extra are ignored.
+fn activate_extra<'lock>(
+    conflicts: &Conflicts,
+    activated_extras: &mut Vec<(&'lock PackageName, &'lock ExtraName)>,
+    package: &'lock PackageName,
+    extra: &'lock ExtraName,
+) -> Result<(), LockError> {
+    let requested = (package, extra);
+    if activated_extras.contains(&requested) {
+        return Ok(());
+    }
+    for set in conflicts.iter().filter(|set| set.contains(package, extra)) {
+        if let Some(&active) = activated_extras
+            .iter()
+            .find(|(package, extra)| set.contains(package, *extra))
+        {
+            let [first, second] = if active < requested {
+                [active, requested]
+            } else {
+                [requested, active]
+            };
+            return Err(LockErrorKind::ConflictingExtra {
+                package1: first.0.clone(),
+                extra1: first.1.clone(),
+                package2: second.0.clone(),
+                extra2: second.1.clone(),
+            }
+            .into());
+        }
+    }
+    activated_extras.push(requested);
+    Ok(())
+}
 
 fn newly_activated_extras<'lock>(
     dep: &'lock Dependency,
@@ -319,7 +353,12 @@ trait InstallableExt<'lock>: Installable<'lock> {
                 if groups.prod() {
                     activated_projects.push(&dist.id.name);
                     for extra in extras.extra_names(dist.optional_dependencies.keys()) {
-                        activated_extras.push((&dist.id.name, extra));
+                        activate_extra(
+                            self.lock().conflicts(),
+                            &mut activated_extras,
+                            &dist.id.name,
+                            extra,
+                        )?;
                     }
                 }
             }
@@ -410,6 +449,15 @@ trait InstallableExt<'lock>: Installable<'lock> {
                     continue;
                 }
 
+                for (package, extra) in additional_activated_extras {
+                    activate_extra(
+                        self.lock().conflicts(),
+                        &mut activated_extras,
+                        package,
+                        extra,
+                    )?;
+                }
+
                 let dep_dist = self.lock().package(dep.index);
 
                 // Add the package to the graph.
@@ -452,14 +500,6 @@ trait InstallableExt<'lock>: Installable<'lock> {
                     // satisfied, so we can safely drop the conflict marker.
                     Edge::Dev(group.clone()),
                 );
-
-                // Persist any self-extras activated by this group dependency (e.g., a group
-                // that references `pkg[extra]`). Without this, conflict markers on transitive
-                // dependencies gated by the activated extra would not evaluate to `true`
-                // during the graph traversals below.
-                for key in additional_activated_extras {
-                    activated_extras.push(key);
-                }
 
                 // Push its dependencies on the queue.
                 add_reachability(
@@ -577,6 +617,15 @@ trait InstallableExt<'lock>: Installable<'lock> {
                         name: root_name.clone(),
                     })?;
 
+                for extra in &dependency.extras {
+                    activate_extra(
+                        self.lock().conflicts(),
+                        &mut activated_extras,
+                        &dist.id.name,
+                        extra,
+                    )?;
+                }
+
                 // Add the package to the graph.
                 let package_index = self.lock().by_id[&dist.id];
                 let index = match inverse[package_index.0] {
@@ -611,17 +660,6 @@ trait InstallableExt<'lock>: Installable<'lock> {
 
                 // Add the edge.
                 petgraph.add_edge(root, index, Edge::Dev(group.clone()));
-
-                // Persist any self-extras activated by this group dependency. Mirrors the
-                // handling in the package-level `dependency_groups` loop above; without this,
-                // conflict markers on transitive dependencies gated by the activated extra
-                // would not evaluate to `true` during the graph traversals below.
-                for extra in &dependency.extras {
-                    let key = (&dist.id.name, extra);
-                    if !activated_extras.contains(&key) {
-                        activated_extras.push(key);
-                    }
-                }
 
                 // Push its dependencies on the queue.
                 add_reachability(
@@ -674,8 +712,6 @@ trait InstallableExt<'lock>: Installable<'lock> {
         // conflicts. In which case, we skip all of this and just do the one
         // traversal below.
         if has_conflicts {
-            let mut activated_extras_set: BTreeSet<(&PackageName, &ExtraName)> =
-                activated_extras.iter().copied().collect();
             let mut queue = queue.clone();
             let mut reachability = conflict_reachability;
             while let Some((package_index, extra)) = queue.pop_front() {
@@ -708,9 +744,13 @@ trait InstallableExt<'lock>: Installable<'lock> {
                     // preliminary traversal. Otherwise, an unreachable package could activate an
                     // extra and cause the conflict check below to report a false positive.
 
-                    for key in additional_activated_extras {
-                        activated_extras_set.insert(key);
-                        activated_extras.push(key);
+                    for (package, extra) in additional_activated_extras {
+                        activate_extra(
+                            self.lock().conflicts(),
+                            &mut activated_extras,
+                            package,
+                            extra,
+                        )?;
                     }
                     // Push its dependencies on the queue.
                     if add_reachability(&mut reachability, (dep.index, None), dep_reachability) {
@@ -724,32 +764,6 @@ trait InstallableExt<'lock>: Installable<'lock> {
                         ) {
                             queue.push_back((dep.index, Some(extra)));
                         }
-                    }
-                }
-            }
-            // At time of writing, it's somewhat expected that the set of
-            // conflicting extras is pretty small. With that said, the
-            // time complexity of the following routine is pretty gross.
-            // Namely, `set.contains` is linear in the size of the set,
-            // iteration over all conflicts is also obviously linear in
-            // the number of conflicting sets and then for each of those,
-            // we visit every possible pair of activated extra from above,
-            // which is quadratic in the total number of extras enabled. I
-            // believe the simplest improvement here, if it's necessary, is
-            // to adjust the `Conflicts` internals to own these sorts of
-            // checks. ---AG
-            for set in self.lock().conflicts().iter() {
-                for ((pkg1, extra1), (pkg2, extra2)) in
-                    activated_extras_set.iter().tuple_combinations()
-                {
-                    if set.contains(pkg1, *extra1) && set.contains(pkg2, *extra2) {
-                        return Err(LockErrorKind::ConflictingExtra {
-                            package1: (*pkg1).clone(),
-                            extra1: (*extra1).clone(),
-                            package2: (*pkg2).clone(),
-                            extra2: (*extra2).clone(),
-                        }
-                        .into());
                     }
                 }
             }
@@ -1041,6 +1055,7 @@ mod tests {
     use std::str::FromStr;
     use std::sync::LazyLock;
 
+    use itertools::Itertools;
     use petgraph::visit::EdgeRef;
     use uv_configuration::{DependencyGroups, ExtrasSpecification};
     use uv_distribution_types::Name;

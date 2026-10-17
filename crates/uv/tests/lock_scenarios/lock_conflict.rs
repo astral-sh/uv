@@ -225,6 +225,78 @@ fn extra_conflict_discovery_respects_parent_reachability() -> Result<()> {
     Ok(())
 }
 
+/// Reject the extra requested by `helper` before traversing its dependencies, which would
+/// introduce a second conflict and obscure the request that first made the selection invalid.
+#[test]
+fn extra_conflict_is_reported_before_traversing_invalid_extra() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "app"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["probe[foo]"]
+
+        [project.optional-dependencies]
+        cpu = ["helper"]
+        gpu = ["probe[bar]"]
+
+        [tool.uv]
+        conflicts = [
+            [{ package = "probe", extra = "foo" }, { package = "probe", extra = "bar" }],
+            [{ extra = "cpu" }, { extra = "gpu" }],
+        ]
+        "#,
+    )?;
+    context.temp_dir.child("uv.lock").write_str(
+        r#"
+        version = 1
+        revision = 5
+        requires-python = ">=3.12"
+        conflicts = [
+            [{ package = "probe", extra = "foo" }, { package = "probe", extra = "bar" }],
+            [{ package = "app", extra = "cpu" }, { package = "app", extra = "gpu" }],
+        ]
+
+        [[package]]
+        name = "app"
+        source = { virtual = "." }
+        dependencies = [{ name = "probe", extra = ["foo"] }]
+
+        [package.optional-dependencies]
+        cpu = [{ name = "helper" }]
+        gpu = [{ name = "probe", extra = ["bar"] }]
+
+        [package.metadata]
+        provides-extras = ["cpu", "gpu"]
+
+        [[package]]
+        name = "helper"
+        source = { virtual = "helper" }
+        dependencies = [
+            { name = "app", extra = ["gpu"], marker = "extra == 'extra-3-app-gpu'" },
+        ]
+
+        [[package]]
+        name = "probe"
+        source = { virtual = "probe" }
+
+        [package.optional-dependencies]
+        foo = []
+        bar = []
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--extra").arg("cpu"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Found conflicting extras `app[cpu]` and `app[gpu]` enabled simultaneously
+    ");
+
+    Ok(())
+}
+
 /// This tests a "basic" case for specifying conflicting extras.
 ///
 /// Namely, we check that 1) without declaring them conflicting,
