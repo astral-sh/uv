@@ -16352,10 +16352,19 @@ fn repacked_wheel_with_entrypoint(
     section: &str,
     entrypoint_name: &str,
 ) -> Result<PathBuf> {
-    context.init().arg("--lib").arg("foo").assert().success();
-    context.build().arg("--wheel").arg("foo").assert().success();
-
     let built_wheel = context.temp_dir.join("foo/dist/foo-0.1.0-py3-none-any.whl");
+    let (_, wheel) = generate_wheel(
+        &"foo".parse()?,
+        &"0.1.0".parse()?,
+        &[],
+        &BTreeMap::new(),
+        Some(&">=3.12".parse()?),
+        "py3-none-any",
+        &[],
+    );
+    fs::create_dir_all(context.temp_dir.join("foo/dist"))?;
+    fs::write(&built_wheel, wheel)?;
+
     let unpacked = context.temp_dir.join("foo-unpacked");
     uv_extract::unzip(File::open(&built_wheel)?, &unpacked)?;
 
