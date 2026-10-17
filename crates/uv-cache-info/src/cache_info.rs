@@ -225,7 +225,29 @@ impl CacheInfo {
 
         // If we have any globs, first cluster them using LCP and then do a single pass on each group.
         if !globs.is_empty() {
-            for (glob_base, glob_patterns) in cluster_globs(&globs) {
+            let mut symlink_groups: BTreeMap<PathBuf, Vec<String>> = BTreeMap::new();
+            let mut clusterable = Vec::new();
+            for glob in &globs {
+                let single = cluster_globs(std::slice::from_ref(glob));
+                // Literal bases can traverse symlinks, while the walker does not follow directory
+                // symlinks beneath its root. Keep those bases when combining other glob rules.
+                if single.iter().any(|(base, _)| {
+                    base.ancestors()
+                        .any(|ancestor| directory.join(ancestor).is_symlink())
+                }) {
+                    // Combine patterns with the same base without lifting traversal above
+                    // another symlink farther down the path.
+                    for (base, patterns) in single {
+                        symlink_groups.entry(base).or_default().extend(patterns);
+                    }
+                } else {
+                    clusterable.push(glob);
+                }
+            }
+            let groups = symlink_groups
+                .into_iter()
+                .chain(cluster_globs(&clusterable));
+            for (glob_base, glob_patterns) in groups {
                 let walker = globwalk::GlobWalkerBuilder::from_patterns(
                     directory.join(glob_base),
                     &glob_patterns,
