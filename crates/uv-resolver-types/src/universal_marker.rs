@@ -969,26 +969,26 @@ mod tests {
         let cm = ConflictMarker::from_conflicts(&conflicts);
         assert_eq!(
             to_str(cm),
-            "extra != 'extra-3-pkg-foo' or extra != 'extra-3-pkg-bar'"
+            "extra != 'extra-3-pkg-bar' or extra != 'extra-3-pkg-foo'"
         );
 
         let conflicts = create_conflicts([create_set(["foo", "bar", "baz"])]);
         let cm = ConflictMarker::from_conflicts(&conflicts);
         assert_eq!(
             to_str(cm),
-            "(extra != 'extra-3-pkg-baz' and extra != 'extra-3-pkg-foo') \
+            "(extra != 'extra-3-pkg-bar' and extra != 'extra-3-pkg-baz') \
              or (extra != 'extra-3-pkg-bar' and extra != 'extra-3-pkg-foo') \
-             or (extra != 'extra-3-pkg-bar' and extra != 'extra-3-pkg-baz')",
+             or (extra != 'extra-3-pkg-baz' and extra != 'extra-3-pkg-foo')",
         );
 
         let conflicts = create_conflicts([create_set(["foo", "bar"]), create_set(["fox", "ant"])]);
         let cm = ConflictMarker::from_conflicts(&conflicts);
         assert_eq!(
             to_str(cm),
-            "(extra != 'extra-3-pkg-bar' and extra != 'extra-3-pkg-fox') or \
+            "(extra != 'extra-3-pkg-ant' and extra != 'extra-3-pkg-bar') or \
              (extra != 'extra-3-pkg-ant' and extra != 'extra-3-pkg-foo') or \
-             (extra != 'extra-3-pkg-ant' and extra != 'extra-3-pkg-bar') or \
-             (extra == 'extra-3-pkg-bar' and extra != 'extra-3-pkg-foo' and extra != 'extra-3-pkg-fox')",
+             (extra != 'extra-3-pkg-bar' and extra != 'extra-3-pkg-fox') or \
+             (extra != 'extra-3-pkg-foo' and extra != 'extra-3-pkg-fox')",
         );
         // I believe because markers are put into DNF, the marker we get here
         // is a lot bigger than what we might expect. Namely, this is how it's
@@ -1064,7 +1064,7 @@ mod tests {
             UniversalMarker::new(MarkerTree::TRUE, foo.negate().or(bar.negate()));
         assert_eq!(
             format!("{dep_conflict_marker:?}"),
-            "extra != 'extra-3-pkg-foo' or extra != 'extra-3-pkg-bar'"
+            "extra != 'extra-3-pkg-bar' or extra != 'extra-3-pkg-foo'"
         );
         dep_conflict_marker.imbibe(conflicts_marker);
         assert_eq!(format!("{dep_conflict_marker:?}"), "true");
