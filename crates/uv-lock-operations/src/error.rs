@@ -79,9 +79,14 @@ pub enum LockError {
     UnsupportedLockVersion(u32, u32),
 
     #[error(
-        "Failed to parse `uv.lock`, which uses an unsupported schema version (v{1}, but only v{0} is supported). Downgrade to a compatible uv version, or remove the `uv.lock` prior to running `uv lock` or `uv sync`."
+        "Failed to parse `uv.lock`, which uses a version {1} schema, while this version of uv only supports version {0}"
     )]
     UnparsableLockVersion(u32, u32, #[source] toml::de::Error),
+
+    #[error(
+        "Failed to parse `uv.lock`, which uses a revision {_1} schema, while this version of uv only supports up to revision {_0}"
+    )]
+    UnparsableLockRevision(u32, u32, #[source] toml::de::Error),
 
     #[error("Failed to serialize `uv.lock`")]
     LockSerialization(#[from] toml_edit::ser::Error),
@@ -175,6 +180,11 @@ impl From<LockParseError> for LockError {
                 version,
                 source,
             } => Self::UnparsableLockVersion(supported, version, source),
+            LockParseError::UnparsableRevision {
+                supported,
+                revision,
+                source,
+            } => Self::UnparsableLockRevision(supported, revision, source),
             LockParseError::Toml(source) => Self::UvLockParse(source),
         }
     }
@@ -190,6 +200,7 @@ impl From<LockError> for UvError {
             LockError::Resolve(error) => Self::from(*error),
             error @ (LockError::UnsupportedLockVersion(..)
             | LockError::UnparsableLockVersion(..)
+            | LockError::UnparsableLockRevision(..)
             | LockError::LockSerialization(_)
             | LockError::OverlappingMarkers(..)
             | LockError::DisjointEnvironment(..)
@@ -222,6 +233,12 @@ impl From<LockError> for UvError {
 impl Hinted for LockError {
     fn hints(&self) -> Hints<'_> {
         match self {
+            Self::UnparsableLockVersion(supported, actual, _)
+            | Self::UnparsableLockRevision(supported, actual, _)
+                if actual > supported =>
+            {
+                Hints::from("Try upgrading to a newer version of uv")
+            }
             Self::LockMismatch(..) | Self::LockWorkspaceMismatch(..) => {
                 Hints::from("To update the lockfile, run `uv lock`.")
             }
@@ -237,6 +254,7 @@ impl Hinted for LockError {
             Self::MissingLockfile(..)
             | Self::UnsupportedLockVersion(..)
             | Self::UnparsableLockVersion(..)
+            | Self::UnparsableLockRevision(..)
             | Self::LockSerialization(_)
             | Self::DisjointEnvironment(..)
             | Self::EmptyEnvironment
