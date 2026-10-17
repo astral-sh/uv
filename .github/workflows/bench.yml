@@ -31,6 +31,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
+          key: ${{ hashFiles('Cargo.toml') }}
           save-if: ${{ inputs.save-rust-cache == 'true' }}
 
       - name: "Install Rust toolchain"
@@ -155,6 +156,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
+          key: ${{ hashFiles('Cargo.toml') }}
           save-if: ${{ inputs.save-rust-cache == 'true' }}
 
       - name: "Install Rust toolchain"
