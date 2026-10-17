@@ -1001,10 +1001,9 @@ impl Hash for Version {
         for i in self.release().iter().rev().skip_while(|x| **x == 0) {
             i.hash(state);
         }
-        self.pre().hash(state);
-        self.dev().hash(state);
-        self.post().hash(state);
-        self.local().hash(state);
+        // Internal bounds can have distinct suffix fields that compare equal.
+        // Hash the same semantic suffix key used by ordering and equality.
+        sortable_tuple(self).hash(state);
     }
 }
 
@@ -2933,11 +2932,45 @@ pub static MIN_VERSION: LazyLock<Version> =
 
 #[cfg(test)]
 mod tests {
+    use std::collections::hash_map::DefaultHasher;
     use std::str::FromStr;
 
     use crate::VersionSpecifier;
 
     use super::*;
+
+    #[test]
+    fn equivalent_internal_bounds_hash_equally() {
+        let prerelease = Version::new([0]).with_pre(Some(Prerelease {
+            kind: PrereleaseKind::Alpha,
+            number: 0,
+        }));
+        let post = Version::new([0]).with_post(Some(0));
+        let minimum = Version::new([0]).with_min(Some(0));
+        let pairs = [
+            (prerelease.clone().with_dev(Some(u64::MAX)), prerelease),
+            (post.clone().with_dev(Some(u64::MAX)), post),
+            (
+                Version::new([0]).with_max(Some(0)),
+                Version::new([0]).with_post(Some(u64::MAX)),
+            ),
+            (
+                minimum.clone().with_pre(Some(Prerelease {
+                    kind: PrereleaseKind::Beta,
+                    number: 0,
+                })),
+                minimum,
+            ),
+        ];
+        for (left, right) in pairs {
+            assert_eq!(left, right);
+            let mut left_hash = DefaultHasher::new();
+            let mut right_hash = DefaultHasher::new();
+            left.hash(&mut left_hash);
+            right.hash(&mut right_hash);
+            assert_eq!(left_hash.finish(), right_hash.finish());
+        }
+    }
 
     /// <https://github.com/pypa/packaging/blob/237ff3aa348486cf835a980592af3a59fccd6101/tests/test_version.py#L24-L81>
     #[test]
