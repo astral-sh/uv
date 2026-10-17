@@ -1992,10 +1992,15 @@ mod test {
         }
     }
 
-    /// Range decisions have more than two branches and may use both open and closed bounds.
-    /// Exercise every function over a three-way range partition and one Boolean variable.
+    /// Two range decisions force extraction to intersect different lower and upper partitions.
+    /// Exercise every function over two three-way partitions, including open and closed bounds.
     #[test]
     fn isop_range_covers_roundtrip() {
+        let operating_systems = [
+            m("os_name == 'a'"),
+            m("os_name == 'b'"),
+            m("os_name != 'a' and os_name != 'b'"),
+        ];
         for partition in [
             [
                 "python_full_version < '3.10'",
@@ -2013,12 +2018,13 @@ mod test {
                 "platform_release > '24'",
             ],
         ] {
-            let extra = m("extra == 'a'");
             let minterms: Vec<_> = partition
                 .into_iter()
-                .flat_map(|range| [m(range).and(extra), m(range).and(extra.negate())])
+                .flat_map(|range| {
+                    operating_systems.map(|operating_system| m(range).and(operating_system))
+                })
                 .collect();
-            for truth_table in 1..63 {
+            for truth_table in 1..511 {
                 let marker = minterms
                     .iter()
                     .enumerate()
@@ -2029,10 +2035,26 @@ mod test {
                 assert_eq!(
                     m(&marker.try_to_string().expect("nontrivial marker")),
                     marker,
-                    "truth table {truth_table}"
+                    "partition {partition:?}, truth table {truth_table}"
                 );
             }
         }
+    }
+
+    /// Membership decisions have distinct renderers for strings, substrings, and lists.
+    #[test]
+    fn isop_membership_covers_roundtrip() {
+        let marker = m(
+            "(os_name in 'posixnt' and 'python' in implementation_name) or 'dev' in dependency_groups",
+        );
+        assert_eq!(
+            m(&marker.try_to_string().expect("nontrivial marker")),
+            marker
+        );
+        assert_eq!(
+            m(&marker.negate().try_to_string().expect("nontrivial marker")),
+            marker.negate()
+        );
     }
 
     #[test]
