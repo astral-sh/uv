@@ -509,7 +509,8 @@ async fn perform_install(
         }
         (vec![], unsatisfied)
     } else {
-        // If we can find one existing installation that matches the request, it is satisfied
+        // If we can find one existing installation that matches the request, it is satisfied,
+        // unless its executable is missing, in which case it is reinstalled
         let mut satisfied = Vec::new();
         let mut unsatisfied = Vec::new();
 
@@ -522,7 +523,14 @@ async fn perform_install(
                     .iter()
                     .find(|inst| request.download.key() == inst.key())
                 {
-                    if matches_build(request.download.build(), installation.build()) {
+                    if !installation.has_executable() {
+                        debug!(
+                            "Executable missing for `{}`, will reinstall",
+                            installation.key()
+                        );
+                        changelog.existing.insert(installation.key().clone());
+                        unsatisfied.push(Cow::Borrowed(request));
+                    } else if matches_build(request.download.build(), installation.build()) {
                         debug!("Found `{}` for request `{}`", installation.key(), request);
                         satisfied.push(installation);
                     } else {
@@ -542,8 +550,17 @@ async fn perform_install(
                 .iter()
                 .find(|inst| request.matches_installation(inst))
             {
-                debug!("Found `{}` for request `{}`", installation.key(), request);
-                satisfied.push(installation);
+                if installation.has_executable() {
+                    debug!("Found `{}` for request `{}`", installation.key(), request);
+                    satisfied.push(installation);
+                } else {
+                    debug!(
+                        "Executable missing for `{}`, will reinstall",
+                        installation.key()
+                    );
+                    changelog.existing.insert(installation.key().clone());
+                    unsatisfied.push(Cow::Borrowed(request));
+                }
             } else {
                 debug!("No installation found for request `{}`", request);
                 unsatisfied.push(Cow::Borrowed(request));
