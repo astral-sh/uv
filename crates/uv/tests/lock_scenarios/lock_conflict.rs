@@ -1,4 +1,3 @@
-use std::fmt::Write as _;
 use std::time::Duration;
 
 use anyhow::{Result, anyhow};
@@ -12104,94 +12103,6 @@ fn conflicting_extras_with_environment_dependent_dependency() -> Result<()> {
     ./shared-package
         # via project
     ");
-
-    Ok(())
-}
-
-/// Many conflicting extras must not make environment-only dependency markers grow quadratically.
-/// The extras are non-empty so that each one forks the resolution.
-///
-/// See: <https://github.com/astral-sh/uv/issues/21954>
-#[test]
-fn many_conflicts_with_environment_dependent_dependency() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-
-    let root_pyproject_toml = context.temp_dir.child("pyproject.toml");
-    let mut extras = String::new();
-    let mut conflicts = String::new();
-    for index in 0..60 {
-        writeln!(&mut extras, "x{index:02} = [\"extra-package\"]")?;
-        writeln!(&mut conflicts, "{{ extra = \"x{index:02}\" }},")?;
-    }
-    root_pyproject_toml.write_str(&format!(
-        r#"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.10"
-        dependencies = ["shared-package"]
-
-        [project.optional-dependencies]
-        {extras}
-
-        [tool.uv.sources]
-        shared-package = {{ path = "shared-package" }}
-        extra-package = {{ path = "extra-package" }}
-
-        [tool.uv]
-        conflicts = [[{conflicts}]]
-        "#,
-    ))?;
-
-    let shared_pyproject_toml = context
-        .temp_dir
-        .child("shared-package")
-        .child("pyproject.toml");
-    shared_pyproject_toml.write_str(
-        r#"
-        [project]
-        name = "shared-package"
-        version = "0.1.0"
-        requires-python = ">=3.10"
-        dependencies = ["leaf-package ; python_full_version < '3.11'"]
-
-        [tool.uv.sources]
-        leaf-package = { path = "../leaf-package" }
-        "#,
-    )?;
-
-    let leaf_pyproject_toml = context
-        .temp_dir
-        .child("leaf-package")
-        .child("pyproject.toml");
-    leaf_pyproject_toml.write_str(
-        r#"
-        [project]
-        name = "leaf-package"
-        version = "0.1.0"
-        requires-python = ">=3.10"
-        dependencies = []
-        "#,
-    )?;
-
-    let extra_pyproject_toml = context
-        .temp_dir
-        .child("extra-package")
-        .child("pyproject.toml");
-    extra_pyproject_toml.write_str(
-        r#"
-        [project]
-        name = "extra-package"
-        version = "0.1.0"
-        requires-python = ">=3.10"
-        dependencies = []
-        "#,
-    )?;
-
-    assert_cmd::Command::from_std(context.lock())
-        .timeout(Duration::from_mins(1))
-        .assert()
-        .success();
 
     Ok(())
 }

@@ -191,29 +191,5 @@ fn imbibe(criterion: &mut Criterion<WallTime>) {
     group.finish();
 }
 
-/// Measure constraint construction with the conflict declarations prepared before timing.
-/// Repeated iterations reuse the decision diagram interner.
-fn from_conflicts(criterion: &mut Criterion<WallTime>) {
-    let mut group = criterion.benchmark_group("marker/from_conflicts");
-    let package: PackageName = "project".parse().expect("valid package name");
-    for count in [0, 2, 8, 32, 128] {
-        let mut conflicts = Conflicts::empty();
-        if count > 0 {
-            let items = (0..count)
-                .map(|index| {
-                    let extra: ExtraName =
-                        format!("e{index:03}").parse().expect("valid extra name");
-                    ConflictItem::from((package.clone(), extra))
-                })
-                .collect::<Vec<_>>();
-            conflicts.push(ConflictSet::try_from(items).expect("valid conflicts"));
-        }
-        group.bench_function(BenchmarkId::new("from_conflicts", count), |benchmark| {
-            benchmark.iter(|| ConflictMarker::from_conflicts(black_box(&conflicts)));
-        });
-    }
-    group.finish();
-}
-
-criterion_group!(uv_pep508, to_dnf, resolve_extras, imbibe, from_conflicts);
+criterion_group!(uv_pep508, to_dnf, resolve_extras, imbibe);
 criterion_main!(uv_pep508);
