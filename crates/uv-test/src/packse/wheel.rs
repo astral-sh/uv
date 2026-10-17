@@ -22,6 +22,8 @@ use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::Requirement;
 
+use super::scenario::{PackageMetadata, Variant};
+
 /// Generate a wheel (`.whl`) as an in-memory ZIP archive.
 ///
 /// Returns `(filename, bytes)`.
@@ -34,6 +36,59 @@ pub fn generate_wheel(
     tag: &str,
     entry_points: &[String],
 ) -> (String, Vec<u8>) {
+    let files = entry_point_files(name, version, entry_points);
+
+    generate_wheel_with_files(
+        name,
+        version,
+        requires,
+        extras,
+        requires_python,
+        tag,
+        &files
+            .iter()
+            .map(|(path, contents)| (path.as_str(), contents.as_str()))
+            .collect::<Vec<_>>(),
+    )
+}
+
+/// Generate a variant wheel with its per-wheel variant metadata.
+pub(super) fn generate_variant_wheel(
+    name: &PackageName,
+    version: &Version,
+    package: &PackageMetadata,
+    variant: &Variant,
+    label: &str,
+    tag: &str,
+    variant_metadata: &str,
+) -> (String, Vec<u8>) {
+    let normalized = name.as_dist_info_name();
+    let mut files = entry_point_files(name, version, &package.entry_points);
+    files.push((
+        format!("{normalized}-{version}.dist-info/variant.json"),
+        variant_metadata.to_string(),
+    ));
+
+    let (_, bytes) = generate_wheel_with_files(
+        name,
+        version,
+        variant.requires.as_deref().unwrap_or(&package.requires),
+        &package.extras,
+        package.requires_python.as_ref(),
+        tag,
+        &files
+            .iter()
+            .map(|(path, contents)| (path.as_str(), contents.as_str()))
+            .collect::<Vec<_>>(),
+    );
+    (format!("{normalized}-{version}-{tag}-{label}.whl"), bytes)
+}
+
+fn entry_point_files(
+    name: &PackageName,
+    version: &Version,
+    entry_points: &[String],
+) -> Vec<(String, String)> {
     let mut files = Vec::new();
     if !entry_points.is_empty() {
         let normalized = name.as_dist_info_name();
@@ -51,18 +106,7 @@ pub fn generate_wheel(
         files.push((format!("{normalized}/cli.py"), build_cli_module(name)));
     }
 
-    generate_wheel_with_files(
-        name,
-        version,
-        requires,
-        extras,
-        requires_python,
-        tag,
-        &files
-            .iter()
-            .map(|(path, contents)| (path.as_str(), contents.as_str()))
-            .collect::<Vec<_>>(),
-    )
+    files
 }
 
 /// Generate a wheel (`.whl`) with additional files as an in-memory ZIP archive.

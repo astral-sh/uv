@@ -1,9 +1,10 @@
 //! Typed representation of the vendored Packse scenario TOML files.
 //!
 //! The nested TOML tables map directly onto [`Scenario::packages`]:
-//! `[packages.<name>.versions.<version>]` becomes a [`PackageName`] key, then a [`Version`] key.
+//! `[packages.<name>.versions.<version>]` becomes a [`PackageName`] key, then a [`Version`] key,
+//! with variant properties under `variants.<label>.properties.<namespace>`.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::path::Path;
 use std::str::FromStr;
@@ -117,7 +118,7 @@ pub struct PackageMetadata {
     )]
     pub sdist: Option<ArtifactMetadata>,
 
-    /// Whether to produce wheels, and optionally their shared metadata.
+    /// Whether to produce non-variant wheels, and optionally their shared metadata.
     #[serde(
         default = "default_artifact",
         deserialize_with = "deserialize_artifact"
@@ -129,9 +130,36 @@ pub struct PackageMetadata {
     pub yanked: bool,
 
     /// Specific wheel tags to produce (e.g., `["cp312-abi3-win_amd64"]`).
-    /// An empty list means produce only the default `py3-none-any` wheel.
+    /// Variants use these tags unless they specify their own. An empty list defaults to
+    /// `py3-none-any`.
     #[serde(default)]
     pub wheel_tags: Vec<WheelTag>,
+
+    /// Namespaces in priority order for the variant wheels of this package version.
+    /// This must be non-empty and include every namespace used in `variants`.
+    #[serde(default)]
+    pub variant_namespaces: Vec<String>,
+
+    /// Variant labels mapped to their properties and optional wheel tags.
+    #[serde(default)]
+    pub variants: BTreeMap<String, Variant>,
+}
+
+/// A set of wheels with the same variant label and properties.
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Variant {
+    /// Wheel tags for this variant. If empty, use the package version's wheel tags.
+    #[serde(default)]
+    pub wheel_tags: Vec<WheelTag>,
+
+    /// Dependencies for this variant. If omitted, use the package version's dependencies.
+    #[serde(default)]
+    pub requires: Option<Vec<Requirement>>,
+
+    /// Variant namespaces, features, and their possible values.
+    #[serde(default)]
+    pub properties: BTreeMap<String, BTreeMap<String, BTreeSet<String>>>,
 }
 
 fn deserialize_artifact<'de, D>(

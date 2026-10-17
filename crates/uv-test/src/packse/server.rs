@@ -7,7 +7,7 @@
 //! Cached build dependencies are exposed through the same `/simple/*` and
 //! `/files/*` routes as scenario packages.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -27,9 +27,10 @@ use crate::vendor::{VendorArtifact, vendor_artifacts};
 
 use super::scenario::{Scenario, WheelTag};
 use super::scenarios_dir;
-use super::wheel::{generate_sdist, generate_wheel, sha256_hex};
+use super::wheel::{generate_sdist, generate_variant_wheel, generate_wheel, sha256_hex};
 
 const PACKSE_UPLOAD_TIME: &str = "2024-03-24T00:00:00Z";
+const VARIANT_SCHEMA: &str = "https://variants-schema.wheelnext.dev/peps/825/v0.1.1.json";
 
 /// Information about a single distribution file (metadata for the Simple API).
 struct DistInfo {
@@ -124,7 +125,7 @@ impl PackseServer {
         format!("{}/files/{filename}", self.server.url())
     }
 
-    /// Return the filename and advertised SHA-256 digest of each distribution.
+    /// Return the filename and advertised SHA-256 digest of each file.
     pub fn files(&self) -> impl Iterator<Item = (&str, &str)> {
         self.index
             .packages
@@ -144,13 +145,7 @@ fn build_server_index(scenario: &Scenario) -> ServerIndex {
 
         for (version, meta) in &package.versions {
             if let Some(wheel_metadata) = &meta.wheel {
-                let tags = if meta.wheel_tags.is_empty() {
-                    vec!["py3-none-any"]
-                } else {
-                    meta.wheel_tags.iter().map(WheelTag::as_str).collect()
-                };
-
-                for tag in tags {
+                for tag in wheel_tags(&meta.wheel_tags) {
                     let (filename, bytes) = generate_wheel(
                         package_name,
                         version,
@@ -170,6 +165,70 @@ fn build_server_index(scenario: &Scenario) -> ServerIndex {
                         yanked: meta.yanked,
                     });
                 }
+            }
+
+            if !meta.variants.is_empty() {
+                let variants: BTreeMap<_, _> = meta
+                    .variants
+                    .iter()
+                    .map(|(label, variant)| (label, &variant.properties))
+                    .collect();
+                let variant_metadata = |variants: &BTreeMap<_, _>| {
+                    json!({
+                        "$schema": VARIANT_SCHEMA,
+                        "default-priorities": { "namespace": meta.variant_namespaces },
+                        "variants": variants,
+                    })
+                    .to_string()
+                };
+
+                for (label, variant) in &meta.variants {
+                    let variant_json =
+                        variant_metadata(&BTreeMap::from([(label, &variant.properties)]));
+                    let tags = if variant.wheel_tags.is_empty() {
+                        &meta.wheel_tags
+                    } else {
+                        &variant.wheel_tags
+                    };
+                    for tag in wheel_tags(tags) {
+                        let (filename, bytes) = generate_variant_wheel(
+                            package_name,
+                            version,
+                            meta,
+                            variant,
+                            label,
+                            tag,
+                            &variant_json,
+                        );
+                        let sha256 = sha256_hex(&bytes);
+                        files.insert(filename.clone(), FileData::Bytes(bytes.into()));
+                        dists.push(DistInfo {
+                            filename,
+                            sha256,
+                            requires_python: meta.requires_python.clone(),
+                            upload_time: meta
+                                .wheel
+                                .as_ref()
+                                .and_then(|wheel| wheel.upload_time.clone()),
+                            yanked: meta.yanked,
+                        });
+                    }
+                }
+
+                let filename = format!(
+                    "{}-{version}-variants.json",
+                    package_name.as_dist_info_name()
+                );
+                let bytes = variant_metadata(&variants).into_bytes();
+                let sha256 = sha256_hex(&bytes);
+                files.insert(filename.clone(), FileData::Bytes(bytes.into()));
+                dists.push(DistInfo {
+                    filename,
+                    sha256,
+                    requires_python: None,
+                    upload_time: None,
+                    yanked: false,
+                });
             }
 
             if let Some(sdist_metadata) = &meta.sdist {
@@ -224,6 +283,12 @@ fn build_server_index(scenario: &Scenario) -> ServerIndex {
     ServerIndex { packages, files }
 }
 
+fn wheel_tags(tags: &[WheelTag]) -> impl Iterator<Item = &str> {
+    tags.iter()
+        .map(WheelTag::as_str)
+        .chain(tags.is_empty().then_some("py3-none-any"))
+}
+
 fn handle_request(
     req: &Request,
     server_uri: &str,
@@ -258,7 +323,14 @@ fn handle_request(
 
 /// Build a response for a distribution file, including support for single byte ranges.
 pub fn distribution_file_response(req: &Request, filename: &str, bytes: &[u8]) -> ResponseTemplate {
-    let content_type = content_type_for_filename(filename);
+    let content_type = if Path::new(filename)
+        .extension()
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("json"))
+    {
+        "application/json"
+    } else {
+        content_type_for_filename(filename)
+    };
     let Some(range) = req.headers.get("range") else {
         return ResponseTemplate::new(200)
             .insert_header("Accept-Ranges", "bytes")
@@ -368,16 +440,19 @@ fn build_simple_api_response(
                 "filename": dist.filename,
                 "url": url,
                 "hashes": {},
-                "upload-time": dist.upload_time.as_deref().unwrap_or(PACKSE_UPLOAD_TIME),
             });
             if hashes {
                 file_obj["hashes"] = json!({ "sha256": dist.sha256 });
             }
-            if let Some(rp) = &dist.requires_python {
-                file_obj["requires-python"] = json!(rp);
-            }
-            if dist.yanked {
-                file_obj["yanked"] = json!(true);
+            if !dist.filename.ends_with("-variants.json") {
+                file_obj["upload-time"] =
+                    json!(dist.upload_time.as_deref().unwrap_or(PACKSE_UPLOAD_TIME));
+                if let Some(requires_python) = &dist.requires_python {
+                    file_obj["requires-python"] = json!(requires_python);
+                }
+                if dist.yanked {
+                    file_obj["yanked"] = json!(true);
+                }
             }
             file_obj
         })
