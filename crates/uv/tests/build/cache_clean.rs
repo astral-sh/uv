@@ -13,11 +13,12 @@ use std::process::Command;
 use uv_cache::Cache;
 #[cfg(unix)]
 use uv_fs::link::{LinkMode, LinkOptions, link_dir};
+use uv_python_managed::ManagedPythonInstallations;
 use uv_static::EnvVars;
 
-#[cfg(unix)]
-use uv_test::assert_path_missing;
 use uv_test::uv_snapshot;
+#[cfg(unix)]
+use uv_test::{ReadOnlyDirectoryGuard, assert_path_missing};
 
 /// `cache clean` should remove all packages.
 #[test]
@@ -47,6 +48,146 @@ fn clean_all() -> Result<()> {
 
     assert!(context.cache_dir.child(".lock").is_file());
 
+    Ok(())
+}
+
+/// Only a full cache clean removes abandoned Python downloads outside the cache directory.
+#[test]
+fn clean_python_staging() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_managed_python_dirs()
+        .with_filtered_sizes_and_units();
+    context.cache_dir.child("cached").write_str("cache data")?;
+    let managed = context.temp_dir.child("managed");
+    let stale = managed.child(".temp/.tmp-stale");
+    stale.create_dir_all()?;
+    stale.child("download").write_str("download data")?;
+    let installed = managed.child("installed");
+    installed.create_dir_all()?;
+
+    uv_snapshot!(context.filters(), context.clean().arg("example"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    No cache entries found
+    ");
+    stale.assert(predicates::path::exists());
+
+    uv_snapshot!(context.filters(), context.clean(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Clearing cache at: [CACHE_DIR]/
+    Removed 1 file ([SIZE])
+    Cleared temporary Python installation files at: managed/.temp
+    ");
+    stale.assert(predicates::path::missing());
+    installed.assert(predicates::path::exists());
+    Ok(())
+}
+
+/// An inaccessible staging entry should not prevent cleanup of other abandoned downloads.
+#[cfg(unix)]
+#[test]
+fn clean_python_staging_after_partial_failure() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]).with_managed_python_dirs();
+    let scratch = context.temp_dir.child("managed/.temp");
+    let blocked = scratch.child(".tmp-blocked");
+    blocked.create_dir_all()?;
+    blocked.child("marker").touch()?;
+    let _guard = ReadOnlyDirectoryGuard::new(blocked.path())?;
+    let removable = scratch.child(".tmp-removable");
+    removable.create_dir_all()?;
+    removable.child("marker").touch()?;
+
+    uv_snapshot!(context.filters(), context.clean(), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Clearing cache at: [CACHE_DIR]/
+    No cache entries found
+    Cleared temporary Python installation files at: managed/.temp
+    error: Failed to clear temporary Python installation files at: managed/.temp
+      cause: failed to remove `[TEMP_DIR]/managed/.temp/[TMP]`: Permission denied (os error 13)
+    ");
+    blocked.child("marker").assert(predicates::path::exists());
+    removable.assert(predicates::path::missing());
+    Ok(())
+}
+
+/// Replacing the scratch path during cleanup must not redirect deletion to another directory.
+#[cfg(unix)]
+#[tokio::test]
+async fn clean_python_staging_after_directory_redirect() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]).with_managed_python_dirs();
+    let managed = context.temp_dir.child("managed");
+    let scratch = managed.child(".temp");
+    scratch.child(".tmp-first").create_dir_all()?;
+    scratch.child(".tmp-second").create_dir_all()?;
+    let redirected = context.temp_dir.child("redirected");
+    redirected.child(".tmp-first").create_dir_all()?;
+    redirected.child(".tmp-second").create_dir_all()?;
+    let original = managed.child(".temp-original");
+    let installations = ManagedPythonInstallations::from_settings(Some(managed.to_path_buf()))?;
+    let lock = installations.lock().await?;
+    let mut redirect_result = None;
+
+    installations.clear_scratch(&lock, |result| {
+        if redirect_result.is_none() {
+            redirect_result = Some(result.and_then(|()| {
+                fs_err::rename(scratch.path(), original.path())?;
+                uv_fs::replace_symlink(redirected.path(), scratch.path())
+            }));
+        }
+    })?;
+    redirect_result.transpose()?;
+
+    assert!(fs_err::read_dir(original.path())?.next().is_none());
+    redirected
+        .child(".tmp-first")
+        .assert(predicates::path::exists());
+    redirected
+        .child(".tmp-second")
+        .assert(predicates::path::exists());
+    Ok(())
+}
+
+/// Python staging cleanup does not require a cache directory.
+#[test]
+fn clean_python_staging_without_cache() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]).with_managed_python_dirs();
+    fs_err::remove_dir_all(context.cache_dir.path())?;
+    let managed = context.temp_dir.child("managed");
+    let stale = managed.child(".temp/.tmp-stale");
+    stale.create_dir_all()?;
+    uv_snapshot!(context.filters(), context.clean(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    No cache found at: [CACHE_DIR]/
+    Cleared temporary Python installation files at: managed/.temp
+    ");
+    stale.assert(predicates::path::missing());
+    Ok(())
+}
+
+/// A Python staging failure must not prevent removal of the package cache.
+#[tokio::test]
+async fn clean_cache_when_python_staging_locked() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]).with_managed_python_dirs();
+    let cached = context.cache_dir.child("cached");
+    cached.touch()?;
+    let managed = context.temp_dir.child("managed");
+    let stale = managed.child(".temp/.tmp-stale");
+    stale.create_dir_all()?;
+    let installations = ManagedPythonInstallations::from_settings(Some(managed.to_path_buf()))?;
+    let _lock = installations.lock().await?;
+
+    uv_snapshot!(context.filters(), context.clean().arg("--force").env(EnvVars::UV_LOCK_TIMEOUT, "1"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Clearing cache at: [CACHE_DIR]/
+    Removed 1 file (0B)
+    error: Timeout ([TIME]) when waiting for lock on `managed` at `managed/.lock`, is another uv process running? You can set `UV_LOCK_TIMEOUT` to increase the timeout.
+    ");
+    cached.assert(predicates::path::missing());
+    stale.assert(predicates::path::exists());
     Ok(())
 }
 
@@ -550,20 +691,25 @@ fn clean_package_empty_shard_without_search_permission() -> Result<()> {
 }
 
 #[tokio::test]
-async fn cache_timeout() {
-    let context = uv_test::test_context!("3.12");
+async fn cache_timeout_cleans_python_staging() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]).with_managed_python_dirs();
+    let stale = context.temp_dir.child("managed/.temp/.tmp-stale");
+    stale.create_dir_all()?;
 
     // Simulate another uv process running and locking the cache, e.g., with a source build.
     let _cache = Cache::from_path(context.cache_dir.path())
         .with_exclusive_lock()
-        .await;
+        .await?;
 
     uv_snapshot!(context.filters(), context.clean().env(EnvVars::UV_LOCK_TIMEOUT, "1"), @"
     exit_code: 2 (failure)
     ----- stderr -----
     Cache is currently in-use, waiting for other uv processes to finish (use `--force` to override)
+    Cleared temporary Python installation files at: managed/.temp
     error: Timeout ([TIME]) when waiting for lock on `[CACHE_DIR]/` at `[CACHE_DIR]/.lock`, is another uv process running? You can set `UV_LOCK_TIMEOUT` to increase the timeout.
     ");
+    stale.assert(predicates::path::missing());
+    Ok(())
 }
 
 /// `cache clean` should handle file paths normally restricted by Win32 path normalization.
