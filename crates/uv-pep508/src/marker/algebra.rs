@@ -134,36 +134,45 @@ pub(crate) struct InternerGuard<'a> {
 
 impl InternerGuard<'_> {
     /// Creates a decision node with the given variable and children.
-    fn create_node(&mut self, var: Variable, children: Edges) -> NodeId {
-        let mut node = Node { var, children };
-        let mut first = node.children.nodes().next().unwrap();
+    fn create_node(&mut self, var: Variable, mut children: EdgeBuilder) -> NodeId {
+        let mut first = children.nodes().next().unwrap();
 
         // With a complemented edge representation, there are two ways to represent the same node:
         // complementing the root and all children edges results in the same node. To ensure markers
         // are canonical, the first child edge is never complemented.
         let mut flipped = false;
         if first.is_complement() {
-            node = node.not();
+            children = children.not();
             first = first.not();
             flipped = true;
         }
 
         // Reduction: If all children refer to the same node, we eliminate the parent node
         // and just return the child.
-        if node.children.nodes().all(|node| node == first) {
+        if children.nodes().all(|node| node == first) {
             return if flipped { first.not() } else { first };
         }
 
-        // The shared store owns each node. The index only needs its ID, so new
-        // nodes do not duplicate their outgoing edge ranges in the hash table.
-        let hash = FxBuildHasher.hash_one(&node);
+        // Temporary and stored nodes use the same borrowed key, regardless of their
+        // range containers. Only newly interned nodes need boxed range payloads.
+        let key = (&var, children.as_ref());
+        let hash = FxBuildHasher.hash_one(&key);
         let id = match self.state.unique.entry(
             hash,
-            |(stored_hash, id)| *stored_hash == hash && self.shared.node(*id) == &node,
+            |(stored_hash, id)| {
+                *stored_hash == hash && {
+                    let node = self.shared.node(*id);
+                    (&node.var, node.children.as_ref()) == key
+                }
+            },
             |(hash, _)| *hash,
         ) {
             Entry::Occupied(entry) => entry.get().1,
             Entry::Vacant(entry) => {
+                let node = Node {
+                    var,
+                    children: children.into_boxed(),
+                };
                 let id = NodeId::new(self.shared.nodes.push(node), false);
                 entry.insert((hash, id));
                 id
@@ -790,7 +799,7 @@ impl InternerGuard<'_> {
 
     /// Rebuild a decision after substitution, allowing children to introduce earlier variables.
     /// Calling `create_node` directly would violate the diagram's variable ordering.
-    fn rebuild_node(&mut self, variable: &Variable, children: Edges) -> NodeId {
+    fn rebuild_node(&mut self, variable: &Variable, children: EdgeBuilder) -> NodeId {
         match children {
             Edges::Boolean { high, low } => {
                 let condition = self.create_node(variable.clone(), Edges::from_bool(true));
@@ -929,7 +938,6 @@ impl InternerGuard<'_> {
         let clipped = Ranges::from_range_bounds((last_lower.cloned(), Bound::Unbounded));
         *new.last_mut().unwrap() = (clipped, last_node_id);
 
-        let new = new.into_boxed_slice();
         self.create_node(node.var.clone(), Edges::Version { edges: new })
             .negate(i)
     }
@@ -1388,34 +1396,49 @@ type SmallVec<T> = smallvec::SmallVec<[T; 5]>;
 
 /// The edges of a decision node.
 ///
-/// Range payloads are stored separately so Boolean nodes do not reserve space for range edges.
+/// Stored nodes use boxed ranges, while [`EdgeBuilder`] keeps short ranges inline until insertion.
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
-pub(crate) enum Edges {
+pub(crate) enum Edges<
+    VersionEdges = Box<[(Ranges<Version>, NodeId)]>,
+    StringEdges = Box<[(Ranges<ArcStr>, NodeId)]>,
+> {
     // The edges of a version variable, representing a disjoint set of ranges that cover
     // the output space.
     //
     // Invariant: All ranges are simple, meaning they can be represented by a bounded
     // interval without gaps. Additionally, there are at least two edges in the set.
-    Version {
-        edges: Box<[(Ranges<Version>, NodeId)]>,
-    },
+    Version { edges: VersionEdges },
     // The edges of a string variable, representing a disjoint set of ranges that cover
     // the output space.
     //
     // Invariant: All ranges are simple, meaning they can be represented by a bounded
     // interval without gaps. Additionally, there are at least two edges in the set.
-    String {
-        edges: Box<[(Ranges<ArcStr>, NodeId)]>,
-    },
+    String { edges: StringEdges },
     // The edges of a boolean variable, representing the values `true` (the `high` child)
     // and `false` (the `low` child).
-    Boolean {
-        high: NodeId,
-        low: NodeId,
-    },
+    Boolean { high: NodeId, low: NodeId },
 }
 
-impl Edges {
+/// Temporary edges whose range buffers are boxed only when the interner inserts a new node.
+type EdgeBuilder = Edges<SmallVec<(Ranges<Version>, NodeId)>, SmallVec<(Ranges<ArcStr>, NodeId)>>;
+
+/// The common borrowed representation used for hashing and comparing edge containers.
+type EdgesRef<'a> = Edges<&'a [(Ranges<Version>, NodeId)], &'a [(Ranges<ArcStr>, NodeId)]>;
+
+impl EdgeBuilder {
+    /// Box the range buffers for a newly interned node.
+    fn into_boxed(self) -> Edges {
+        match self {
+            Self::Version { edges } => Edges::Version {
+                edges: edges.into_boxed_slice(),
+            },
+            Self::String { edges } => Edges::String {
+                edges: edges.into_boxed_slice(),
+            },
+            Self::Boolean { high, low } => Edges::Boolean { high, low },
+        }
+    }
+
     /// Returns the [`Edges`] for a boolean variable.
     fn from_bool(complemented: bool) -> Self {
         if complemented {
@@ -1535,7 +1558,7 @@ impl Edges {
     }
 
     /// Returns an [`Edges`] where values in the given range are `true`.
-    fn from_range<T>(range: &Ranges<T>) -> Box<[(Ranges<T>, NodeId)]>
+    fn from_range<T>(range: &Ranges<T>) -> SmallVec<(Ranges<T>, NodeId)>
     where
         T: Ord + Clone,
     {
@@ -1557,9 +1580,11 @@ impl Edges {
         //
         // The ranges are disjoint so we don't care about equality.
         edges.sort_by(|(range1, _), (range2, _)| compare_disjoint_range_start(range1, range2));
-        edges.into_boxed_slice()
+        edges
     }
+}
 
+impl Edges {
     /// Merge two [`Edges`], applying the given operation (e.g., `AND` or `OR`) to all intersecting edges.
     ///
     /// For example, given two nodes corresponding to the same boolean variable:
@@ -1581,13 +1606,13 @@ impl Edges {
         right_edges: &Self,
         right_parent: NodeId,
         mut apply: impl FnMut(NodeId, NodeId) -> NodeId,
-    ) -> Self {
+    ) -> EdgeBuilder {
         match (self, right_edges) {
             // For version or string variables, we have to split and merge the overlapping ranges.
-            (Self::Version { edges }, Self::Version { edges: right_edges }) => Self::Version {
+            (Self::Version { edges }, Self::Version { edges: right_edges }) => Edges::Version {
                 edges: Self::apply_ranges(edges, parent, right_edges, right_parent, apply),
             },
-            (Self::String { edges }, Self::String { edges: right_edges }) => Self::String {
+            (Self::String { edges }, Self::String { edges: right_edges }) => Edges::String {
                 edges: Self::apply_ranges(edges, parent, right_edges, right_parent, apply),
             },
             // For boolean variables, we simply merge the low and high edges.
@@ -1597,7 +1622,7 @@ impl Edges {
                     high: right_high,
                     low: right_low,
                 },
-            ) => Self::Boolean {
+            ) => Edges::Boolean {
                 high: apply(high.negate(parent), right_high.negate(right_parent)),
                 low: apply(low.negate(parent), right_low.negate(right_parent)),
             },
@@ -1634,7 +1659,7 @@ impl Edges {
         right_edges: &[(Ranges<T>, NodeId)],
         right_parent: NodeId,
         mut apply: impl FnMut(NodeId, NodeId) -> NodeId,
-    ) -> Box<[(Ranges<T>, NodeId)]>
+    ) -> SmallVec<(Ranges<T>, NodeId)>
     where
         T: Clone + Ord,
     {
@@ -1670,7 +1695,7 @@ impl Edges {
             }
         }
 
-        combined.into_boxed_slice()
+        combined
     }
 
     // Returns `true` if two [`Edges`] are disjoint.
@@ -1737,15 +1762,15 @@ impl Edges {
     }
 
     // Apply the given function to all direct children of this node.
-    fn map(&self, parent: NodeId, mut f: impl FnMut(NodeId) -> NodeId) -> Self {
+    fn map(&self, parent: NodeId, mut f: impl FnMut(NodeId) -> NodeId) -> EdgeBuilder {
         match self {
-            Self::Version { edges: map } => Self::Version {
+            Self::Version { edges: map } => Edges::Version {
                 edges: Self::map_ranges(map, parent, f),
             },
-            Self::String { edges: map } => Self::String {
+            Self::String { edges: map } => Edges::String {
                 edges: Self::map_ranges(map, parent, f),
             },
-            Self::Boolean { high, low } => Self::Boolean {
+            Self::Boolean { high, low } => Edges::Boolean {
                 low: f(low.negate(parent)),
                 high: f(high.negate(parent)),
             },
@@ -1758,7 +1783,7 @@ impl Edges {
         edges: &[(Ranges<T>, NodeId)],
         parent: NodeId,
         mut map: impl FnMut(NodeId) -> NodeId,
-    ) -> Box<[(Ranges<T>, NodeId)]>
+    ) -> SmallVec<(Ranges<T>, NodeId)>
     where
         T: Clone + Ord,
     {
@@ -1774,42 +1799,69 @@ impl Edges {
                 mapped.push((range.clone(), child));
             }
         }
-        mapped.into_boxed_slice()
+        mapped
+    }
+}
+
+impl<VersionEdges, StringEdges> Edges<VersionEdges, StringEdges>
+where
+    VersionEdges: AsRef<[(Ranges<Version>, NodeId)]>,
+    StringEdges: AsRef<[(Ranges<ArcStr>, NodeId)]>,
+{
+    /// Borrow a common key for temporary and stored edge containers.
+    fn as_ref(&self) -> EdgesRef<'_> {
+        match self {
+            Self::Version { edges } => Edges::Version {
+                edges: edges.as_ref(),
+            },
+            Self::String { edges } => Edges::String {
+                edges: edges.as_ref(),
+            },
+            Self::Boolean { high, low } => Edges::Boolean {
+                high: *high,
+                low: *low,
+            },
+        }
     }
 
     // Returns an iterator over all direct children of this node.
     fn nodes(&self) -> impl Iterator<Item = NodeId> + '_ {
         match self {
             Self::Version { edges: map } => {
-                Either::Left(Either::Left(map.iter().map(|(_, node)| *node)))
+                Either::Left(Either::Left(map.as_ref().iter().map(|(_, node)| *node)))
             }
             Self::String { edges: map } => {
-                Either::Left(Either::Right(map.iter().map(|(_, node)| *node)))
+                Either::Left(Either::Right(map.as_ref().iter().map(|(_, node)| *node)))
             }
             Self::Boolean { high, low } => Either::Right([*high, *low].into_iter()),
         }
     }
+}
 
-    // Returns the complement of this [`Edges`].
-    fn not(self) -> Self {
-        match self {
-            Self::Version { edges: map } => Self::Version {
-                edges: map
-                    .into_iter()
-                    .map(|(range, node)| (range, node.not()))
-                    .collect(),
-            },
-            Self::String { edges: map } => Self::String {
-                edges: map
-                    .into_iter()
-                    .map(|(range, node)| (range, node.not()))
-                    .collect(),
-            },
-            Self::Boolean { high, low } => Self::Boolean {
-                high: high.not(),
-                low: low.not(),
-            },
+impl<VersionEdges, StringEdges> Edges<VersionEdges, StringEdges>
+where
+    VersionEdges: AsMut<[(Ranges<Version>, NodeId)]>,
+    StringEdges: AsMut<[(Ranges<ArcStr>, NodeId)]>,
+{
+    // Returns the complement of this [`Edges`], reusing its range buffers.
+    fn not(mut self) -> Self {
+        match &mut self {
+            Self::Version { edges } => {
+                for (_, node) in edges.as_mut() {
+                    *node = node.not();
+                }
+            }
+            Self::String { edges } => {
+                for (_, node) in edges.as_mut() {
+                    *node = node.not();
+                }
+            }
+            Self::Boolean { high, low } => {
+                *high = high.not();
+                *low = low.not();
+            }
         }
+        self
     }
 }
 
