@@ -4,6 +4,7 @@ use indoc::{formatdoc, indoc};
 use predicates::prelude::predicate;
 use serde_json::json;
 use sha2::{Digest, Sha256};
+use uv_distribution_types::PEP_825_SCHEMA;
 use uv_static::EnvVars;
 use uv_test::archive::generate_source_archive;
 use uv_test::uv_snapshot;
@@ -109,7 +110,7 @@ async fn selected_variant_metadata_is_cached() -> Result<()> {
         .respond_with(
             ResponseTemplate::new(200)
                 .set_body_json(json!({
-                    "$schema": "https://variants-schema.wheelnext.dev/peps/825/v0.1.1.json",
+                    "$schema": PEP_825_SCHEMA,
                     "default-priorities": { "namespace": ["x86_64"] },
                     "variants": { "null": {} },
                 }))
@@ -162,7 +163,7 @@ async fn variant_metadata_hashes_are_verified() -> Result<()> {
         .child("requirements.in")
         .write_str("ok==1.0.0")?;
     let first_sidecar = json!({
-        "$schema": "https://variants-schema.wheelnext.dev/peps/825/v0.1.1.json",
+        "$schema": PEP_825_SCHEMA,
         "default-priorities": { "namespace": ["x86_64"] },
         "variants": { "null": {} },
     })
@@ -508,7 +509,7 @@ fn invalid_variant_metadata() -> Result<()> {
     )?;
     links.child("ok-1.0.0-variants.json").write_str(
         &json!({
-            "$schema": "https://variants-schema.wheelnext.dev/peps/825/v0.1.1.json",
+            "$schema": PEP_825_SCHEMA,
             "default-priorities": { "namespace": ["cuda"] },
             "variants": { "null": { "cuda": { "version": ["12"] } } },
         })
