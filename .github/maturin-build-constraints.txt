@@ -1,0 +1,2 @@
+# The sdist smoke-test image bundles pip 24.0, which does not support pylock.toml.
+maturin==1.15.0

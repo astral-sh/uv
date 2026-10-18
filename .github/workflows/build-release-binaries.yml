@@ -39,10 +39,6 @@ jobs:
   sdist:
     name: sdist
     runs-on: depot-ubuntu-24.04-4
-    env:
-      # pip >=26.1 supports installing pylock files.
-      # renovate: datasource=pypi depName=pip
-      PIP_VERSION: "26.2.1"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -71,7 +67,7 @@ jobs:
           # Ensure maturin did not update the workspace Cargo.lock.
           git diff --exit-code -- Cargo.lock
           python scripts/repair-sdist-cargo-lock.py dist/${PACKAGE_NAME}-*.tar.gz
-          cp .github/pylock.maturin.toml dist/
+          cp .github/maturin-build-constraints.txt dist/
       - name: "Test sdist"
         uses: astral-sh/github-actions/release-smoke-test@76d2758fc5c4394ada46510f46605deb7cec477e
         with:
@@ -81,9 +77,7 @@ jobs:
           run: |
             apt-get update
             apt-get install -y --no-install-recommends cmake
-            pip install --upgrade --only-binary=:all: "pip==${{ env.PIP_VERSION }}"
-            pip install --only-binary=:all: -r /dist/pylock.maturin.toml
-            pip install /dist/${PACKAGE_NAME}-*.tar.gz --no-index --no-build-isolation --force-reinstall --config-settings=maturin.build-args=--locked
+            PIP_CONSTRAINT=/dist/maturin-build-constraints.txt pip install /dist/${PACKAGE_NAME}-*.tar.gz --force-reinstall --config-settings=maturin.build-args=--locked
             ${MODULE_NAME} --help
             python -m ${MODULE_NAME} --help
             uvx --help
@@ -106,7 +100,7 @@ jobs:
           # Ensure maturin did not update the workspace Cargo.lock.
           git diff --exit-code -- Cargo.lock
           python scripts/repair-sdist-cargo-lock.py crates/uv-build/dist/${PACKAGE_NAME}_build-*.tar.gz
-          cp .github/pylock.maturin.toml crates/uv-build/dist/
+          cp .github/maturin-build-constraints.txt crates/uv-build/dist/
       - name: "Test sdist uv-build"
         uses: astral-sh/github-actions/release-smoke-test@76d2758fc5c4394ada46510f46605deb7cec477e
         with:
@@ -116,9 +110,7 @@ jobs:
           run: |
             apt-get update
             apt-get install -y --no-install-recommends cmake
-            pip install --upgrade --only-binary=:all: "pip==${{ env.PIP_VERSION }}"
-            pip install --only-binary=:all: -r /dist/pylock.maturin.toml
-            pip install /dist/${PACKAGE_NAME}_build-*.tar.gz --no-index --no-build-isolation --force-reinstall --config-settings=maturin.build-args=--locked
+            PIP_CONSTRAINT=/dist/maturin-build-constraints.txt pip install /dist/${PACKAGE_NAME}_build-*.tar.gz --force-reinstall --config-settings=maturin.build-args=--locked
             ${MODULE_NAME}-build --help
             python -m ${MODULE_NAME}_build --help
       - name: "Upload sdist uv-build"
