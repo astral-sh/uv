@@ -24,7 +24,7 @@ use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_distribution_types::{
     BuiltDist, DerivationChain, Dist, DistErrorKind, Identifier, IndexCapabilities, IndexLocations,
     IndexMetadata, IndexUrl, InstalledDist, Name, RemoteSource, Requirement, RequiresPython,
-    ResolutionRecorder, ResolvedDist, SourceDist, VersionOrUrlRef,
+    ResolutionRecorder, ResolvedDist, SourceDist, VariantsJsonContent, VersionOrUrlRef,
 };
 use uv_git::GitResolver;
 use uv_normalize::PackageName;
@@ -35,7 +35,7 @@ use uv_pep508::{
 use uv_platform_tags::{IncompatibleTag, Tags};
 use uv_preview::PreviewFeature;
 use uv_pypi_types::{ConflictItem, ConflictItemRef, ConflictKindRef, Conflicts, VerbatimParsedUrl};
-use uv_resolver_types::PackageNodeKind;
+use uv_resolver_types::{PackageNodeKind, VariantsJsonMetadataError};
 use uv_static::EnvVars;
 use uv_torch::TorchStrategy;
 use uv_types::{BuildContext, HashStrategy, InstalledPackagesProvider};
@@ -73,6 +73,7 @@ use crate::resolver::environment::{
 };
 pub(crate) use crate::resolver::fork_map::{ForkMap, ForkSet};
 pub use crate::resolver::index::InMemoryIndex;
+use crate::resolver::index::ParsedVariantsJsonResponse;
 use crate::resolver::indexes::Indexes;
 use crate::resolver::package_source::PackageSource;
 pub use crate::resolver::provider::{
@@ -1843,7 +1844,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             } => {
                 if uv_preview::is_enabled(PreviewFeature::WheelVariants)
                     && let Some(variants_json) = pins.variants_json(name, version)
-                    && let VariantsJsonResponse::Unavailable(reason) = &*variants_json.wait()
+                    && let Err(reason) = &*variants_json.wait()
                 {
                     return Ok(Dependencies::Unavailable(
                         self.record_unavailable_metadata(name, version, reason),
@@ -2145,6 +2146,19 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     .boxed_local()
                     .await
                     .map_err(ResolveError::Client)?;
+                let response = match response {
+                    VariantsJsonResponse::Found(contents) => {
+                        VariantsJsonContent::from_slice(&contents).map_err(|source| {
+                            MetadataUnavailable::InvalidVariantMetadata(Arc::new(
+                                VariantsJsonMetadataError {
+                                    filename: variants_json.filename.clone(),
+                                    source,
+                                },
+                            ))
+                        })
+                    }
+                    VariantsJsonResponse::Unavailable(reason) => Err(reason),
+                };
                 Ok(Some(Response::VariantsJson {
                     variants_json,
                     response,
@@ -3443,7 +3457,7 @@ enum Response {
     /// The response to a variant metadata request.
     VariantsJson {
         variants_json: RegistryVariantsJson,
-        response: VariantsJsonResponse,
+        response: ParsedVariantsJsonResponse,
     },
 }
 
