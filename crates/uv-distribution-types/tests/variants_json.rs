@@ -1,16 +1,32 @@
 use insta::{assert_json_snapshot, assert_snapshot};
 use serde_json::json;
 
-use uv_distribution_types::{
-    PEP_825_SCHEMA, PEP_850_SCHEMA, SupportedVariantProperties, VariantsJsonContent,
-};
+use uv_distribution_types::{PEP_825_SCHEMA, PEP_850_SCHEMA, VariantsJsonContent};
 
 /// PEP 825 compares the best compatible value for each feature, then the variant label.
 #[test]
 fn rank_variants() -> Result<(), Box<dyn std::error::Error>> {
     let metadata: VariantsJsonContent = serde_json::from_value(json!({
-        "$schema": PEP_825_SCHEMA,
-        "default-priorities": {"namespace": ["nvidia", "x86_64", "other"]},
+        "$schema": PEP_850_SCHEMA,
+        "default-priorities": {
+            "namespace": ["nvidia", "x86_64", "debug", "plugin", "builtin"]
+        },
+        "providers": {
+            "nvidia": {
+                "static-properties": {
+                    "arch": ["sm120"],
+                    "cuda": ["13.0", "12.0"]
+                },
+                "feature-order": ["cuda", "arch"]
+            },
+            "x86_64": {"static-properties": {"level": ["v4", "v3", "v2"]}},
+            "debug": {
+                "optional": true,
+                "static-properties": {"debug": ["on"]}
+            },
+            "plugin": {"requires": ["some-plugin"]},
+            "builtin": {"builtin": "abi_dependency"}
+        },
         "variants": {
             "gpu": {"nvidia": {"cuda": ["13.0"]}},
             "gpu_cpuv2": {"nvidia": {"cuda": ["13.0"]}, "x86_64": {"level": ["v2"]}},
@@ -21,15 +37,15 @@ fn rank_variants() -> Result<(), Box<dyn std::error::Error>> {
             "lower_feature": {"nvidia": {"arch": ["sm120"]}},
             "unsupported_value": {"nvidia": {"cuda": ["14.0"]}},
             "unsupported_feature": {"nvidia": {"other": ["on"]}},
-            "unsupported_namespace": {"other": {"level": ["on"]}},
+            "optional_provider": {"debug": {"debug": ["on"]}},
+            "unsupported_plugin": {"plugin": {"feature": ["value"]}},
+            "unsupported_builtin": {"builtin": {"torch": ["2"]}},
             "null": {}
         }
     }))?;
-    let preferences: SupportedVariantProperties = serde_json::from_value(json!({
-        "nvidia": [["cuda", ["13.0", "12.0"]], ["arch", ["sm120"]]],
-        "x86_64": [["level", ["v4", "v3", "v2"]]]
-    }))?;
-    let mut ranked = [
+    let supported_properties = metadata.static_supported_properties();
+    let mut ranked = Vec::new();
+    for label in [
         "gpu",
         "gpu_cpuv2",
         "gpu_cpuv4",
@@ -38,35 +54,41 @@ fn rank_variants() -> Result<(), Box<dyn std::error::Error>> {
         "older_cuda",
         "lower_feature",
         "null",
+    ] {
+        let score = metadata
+            .score_variant(&label.parse()?, &supported_properties)
+            .ok_or_else(|| format!("variant `{label}` should be compatible"))?;
+        ranked.push((label, score));
+    }
+    ranked.sort_by(|left, right| right.1.cmp(&left.1));
+
+    let ranked = ranked
+        .into_iter()
+        .map(|(label, _)| label)
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert_snapshot!(ranked, @r#"
+    gpu_cpuv4
+    gpu_cpuv2
+    gpu
+    multiple_values
+    older_cuda
+    lower_feature
+    cpuv4
+    null
+    "#);
+
+    for label in [
         "unsupported_value",
         "unsupported_feature",
-        "unsupported_namespace",
+        "optional_provider",
+        "unsupported_plugin",
+        "unsupported_builtin",
         "missing",
-    ]
-    .into_iter()
-    .map(|label| Ok((label, metadata.score_variant(&label.parse()?, &preferences))))
-    .collect::<Result<Vec<_>, Box<dyn std::error::Error>>>()?;
-    ranked.sort_by(|left, right| right.1.cmp(&left.1));
-    assert_snapshot!(
-        ranked
-            .iter()
-            .map(|(label, score)| format!("{label}: {}", score.is_some()))
-            .collect::<Vec<_>>()
-            .join("\n"),
-        @r#"
-    gpu_cpuv4: true
-    gpu_cpuv2: true
-    gpu: true
-    multiple_values: true
-    older_cuda: true
-    lower_feature: true
-    cpuv4: true
-    null: true
-    unsupported_value: false
-    unsupported_feature: false
-    unsupported_namespace: false
-    missing: false
-    "#);
+    ] {
+        let score = metadata.score_variant(&label.parse()?, &supported_properties);
+        assert_eq!(score, None, "{label} should be incompatible");
+    }
     Ok(())
 }
 

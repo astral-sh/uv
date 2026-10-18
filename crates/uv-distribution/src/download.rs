@@ -1,4 +1,3 @@
-use std::collections::HashSet;
 use std::path::Path;
 
 use uv_cache_info::CacheInfo;
@@ -35,7 +34,9 @@ pub(crate) fn variant_compatible(filename: &WheelFilename, archive: &Path) -> Re
     let path = archive.join(format!("{dist_info}.dist-info/variant.json"));
     let metadata = read_wheel_variant(&path, label)
         .map_err(|err| Error::WheelMetadata(path, Box::new(err)))?;
-    Ok(metadata.is_compatible(label, &HashSet::new()))
+    Ok(metadata
+        .score_variant(label, &metadata.static_supported_properties())
+        .is_some())
 }
 
 /// A locally available wheel.
