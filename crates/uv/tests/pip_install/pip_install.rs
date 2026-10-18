@@ -36,6 +36,8 @@ use uv_test::archive::write_tar_gz;
 use uv_test::decode_token;
 use uv_test::find_links::FindLinksServer;
 use uv_test::package_server::PackageServer;
+#[cfg(feature = "test-universal")]
+use uv_test::packse::scenario::Scenario;
 use uv_test::packse::{PackseServer, generate_wheel, generate_wheel_with_files};
 use uv_test::{
     DEFAULT_PYTHON_VERSION, TestContext, apply_filters, copy_dir_ignore, download_to_disk, get_bin,
@@ -4518,6 +4520,54 @@ fn install_build_policy_cache() {
      + idna==3.6
     "
     );
+}
+
+/// A cached wheel uploaded after the cutoff must not replace the source distribution
+/// selected by the resolver.
+#[cfg(feature = "test-universal")]
+#[test]
+fn exclude_newer_does_not_reuse_cached_wheel() -> Result<()> {
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "exclude-newer-cached-wheel"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.a.versions."1.0.0"]
+        sdist = { upload_time = "2024-03-24T00:00:00Z" }
+        wheel = { upload_time = "2024-03-24T12:00:00Z" }
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
+    let context = uv_test::test_context!("3.12");
+
+    // Cache the published wheel, then clear the environment but keep the cache.
+    context
+        .pip_install()
+        .arg("a")
+        .arg("--index-url")
+        .arg(server.index_url())
+        .arg("--only-binary")
+        .arg(":all:")
+        .assert()
+        .success();
+    context.reset_venv();
+
+    // The cutoff falls between the two uploads, so we must prepare a wheel from the source.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("a")
+        .arg("--index-url").arg(server.index_url())
+        .arg("--exclude-newer").arg("2024-03-24T06:00:00Z"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + a==1.0.0
+    ");
+
+    Ok(())
 }
 
 /// Respect `--only-binary` flags in `requirements.txt`
