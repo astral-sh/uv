@@ -245,7 +245,7 @@ impl FlatDistributions {
 
         // Determine a compatibility for the wheel based on tags.
         let priority = match tags {
-            Some(tags) => match filename.compatibility(tags) {
+            Some(tags) => match filename.tag_compatibility(tags) {
                 TagCompatibility::Incompatible(tag) => {
                     return WheelCompatibility::Incompatible(IncompatibleWheel::Tag(tag));
                 }
