@@ -315,7 +315,7 @@ impl IntoPipOptions for ResolverArgs {
             }),
             no_build_isolation: flag(no_build_isolation, build_isolation, "build-isolation")?,
             no_build_isolation_package: Some(no_build_isolation_package),
-            exclude_newer,
+            exclude_newer: exclude_newer.and_then(Maybe::into_option),
             exclude_newer_package: exclude_newer_package.map(ExcludeNewerPackage::from_iter),
             link_mode,
             no_sources: if no_sources { Some(true) } else { None },
@@ -383,7 +383,7 @@ impl IntoPipOptions for InstallerArgs {
                     .collect::<PackageConfigSettings>()
             }),
             no_build_isolation: flag(no_build_isolation, build_isolation, "build-isolation")?,
-            exclude_newer,
+            exclude_newer: exclude_newer.and_then(Maybe::into_option),
             exclude_newer_package: exclude_newer_package.map(ExcludeNewerPackage::from_iter),
             link_mode,
             compile_bytecode: flag(compile_bytecode, no_compile_bytecode, "compile-bytecode")?,
@@ -486,7 +486,7 @@ impl IntoPipOptions for ResolverInstallerArgs {
             }),
             no_build_isolation: flag(no_build_isolation, build_isolation, "build-isolation")?,
             no_build_isolation_package: Some(no_build_isolation_package),
-            exclude_newer,
+            exclude_newer: exclude_newer.and_then(Maybe::into_option),
             exclude_newer_package: exclude_newer_package.map(ExcludeNewerPackage::from_iter),
             link_mode,
             compile_bytecode: flag(compile_bytecode, no_compile_bytecode, "compile-bytecode")?,
@@ -521,7 +521,7 @@ impl IntoPipOptions for FetchArgs {
         Ok(PipOptions {
             index_strategy,
             keyring_provider,
-            exclude_newer,
+            exclude_newer: exclude_newer.and_then(Maybe::into_option),
             exclude_newer_package: exclude_newer_package.map(ExcludeNewerPackage::from_iter),
             ..index_args.into_pip_options(configured_indexes)?
         })
@@ -673,7 +673,7 @@ pub(crate) fn resolver_options(
         )?,
         extra_build_dependencies: None,
         extra_build_variables: None,
-        exclude_newer,
+        exclude_newer: exclude_newer.and_then(Maybe::into_option),
         exclude_newer_package: exclude_newer_package.map(ExcludeNewerPackage::from_iter),
         link_mode,
         torch_backend: None,
@@ -844,7 +844,7 @@ pub(crate) fn resolver_installer_options(
         )?,
         extra_build_dependencies: None,
         extra_build_variables: None,
-        exclude_newer,
+        exclude_newer: exclude_newer.and_then(Maybe::into_option),
         exclude_newer_package: exclude_newer_package.map(ExcludeNewerPackage::from_iter),
         link_mode,
         compile_bytecode: flag(compile_bytecode, no_compile_bytecode, "compile-bytecode")?,
