@@ -1023,7 +1023,7 @@ jobs:
         # Use the script's lockfile without revalidating its exclude-newer setting.
         run: ./uv run --frozen --python "${PYTHON_VERSION}" --no-build --script scripts/registries-test.py --uv ./uv --color always
         env:
-          # Custom registries may not provide upload dates.
+          # NVIDIA's index does not provide upload dates.
           UV_EXCLUDE_NEWER: "false"
           UV_LOCKED: "false"
           UV_TEST_ASTRAL_PKG: transformer-engine
@@ -1109,7 +1109,7 @@ jobs:
         # Use the script's lockfile without revalidating its exclude-newer setting.
         run: ./uv run --frozen --python "${PYTHON_VERSION}" --no-build --script scripts/registries-test.py --uv ./uv --color always --all --auth-method env
         env:
-          # Custom registries may not provide upload dates.
+          # Test registry authentication without the workflow's PyPI cutoff.
           UV_EXCLUDE_NEWER: "false"
           UV_LOCKED: "false"
           RUST_LOG: uv=debug
@@ -1143,7 +1143,7 @@ jobs:
         # Use the script's lockfile without revalidating its exclude-newer setting.
         run: ./uv run --frozen --python "${PYTHON_VERSION}" --no-build --script scripts/registries-test.py --uv ./uv --color always --all --auth-method text-store
         env:
-          # Custom registries may not provide upload dates.
+          # Test registry authentication without the workflow's PyPI cutoff.
           UV_EXCLUDE_NEWER: "false"
           UV_LOCKED: "false"
           RUST_LOG: uv=debug
