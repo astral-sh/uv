@@ -1321,7 +1321,7 @@ impl ToolListSettings {
             show_python,
             outdated: flag(outdated, no_outdated, "outdated")?.unwrap_or(false),
             args: ResolverInstallerOptions {
-                exclude_newer: exclude_newer.and_then(Maybe::into_option),
+                exclude_newer,
                 exclude_newer_package: exclude_newer_package.map(ExcludeNewerPackage::from_iter),
                 ..ResolverInstallerOptions::default()
             },
@@ -2994,7 +2994,6 @@ impl FormatSettings {
             extra_args,
             version,
             exclude_newer: exclude_newer
-                .and_then(Maybe::into_option)
                 .and_then(ExcludeNewerOverride::into_value)
                 .map(|value| value.timestamp()),
             no_project,
@@ -4391,7 +4390,7 @@ impl VenvSettings {
                     system: flag(system, no_system, "system")?,
                     index_strategy,
                     keyring_provider,
-                    exclude_newer: exclude_newer.and_then(Maybe::into_option),
+                    exclude_newer,
                     exclude_newer_package: exclude_newer_package
                         .map(ExcludeNewerPackage::from_iter),
                     link_mode,
