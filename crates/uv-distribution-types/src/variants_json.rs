@@ -1,5 +1,6 @@
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt;
 
 use itertools::{Either, Itertools};
 use serde::{Deserialize, Serialize};
@@ -46,6 +47,23 @@ type VariantProperties = BTreeMap<VariantNamespace, BTreeMap<VariantFeature, Vec
 #[serde(transparent)]
 pub struct SupportedVariantProperties {
     properties: BTreeMap<VariantNamespace, Vec<(VariantFeature, Vec<VariantValue>)>>,
+}
+
+/// A supported feature and its compatible values, ordered from most to least preferred.
+#[derive(Debug, Clone)]
+pub struct SupportedVariantFeature {
+    pub name: VariantFeature,
+    pub values: Vec<VariantValue>,
+}
+
+/// A non-static provider requested by variant metadata.
+#[derive(Clone, Copy)]
+pub enum VariantProviderRequest<'a> {
+    Plugin {
+        requires: &'a [String],
+        plugin_api: Option<&'a str>,
+    },
+    Builtin(&'a str),
 }
 
 /// The priority of a compatible variant. Higher scores are preferred.
@@ -157,6 +175,48 @@ impl VariantsJsonContent {
         SupportedVariantProperties { properties }
     }
 
+    /// Collect compatible features from static and detected providers.
+    pub fn supported_properties<'a>(
+        &self,
+        detected: impl IntoIterator<Item = (&'a VariantNamespace, &'a [SupportedVariantFeature])>,
+    ) -> SupportedVariantProperties {
+        let mut supported = self.static_supported_properties();
+        for (namespace, features) in detected {
+            let features = features
+                .iter()
+                .map(|feature| (feature.name.clone(), feature.values.clone()))
+                .collect();
+            supported.properties.insert(namespace.clone(), features);
+        }
+        supported
+    }
+
+    /// Return the enabled providers that need properties to be detected.
+    pub fn provider_requests(
+        &self,
+    ) -> impl Iterator<Item = (&VariantNamespace, VariantProviderRequest<'_>)> {
+        self.providers
+            .iter()
+            .flat_map(|providers| providers.iter())
+            .filter_map(|(namespace, provider)| {
+                if provider.optional {
+                    return None;
+                }
+                let request = match &provider.kind {
+                    ProviderKind::Plugin {
+                        requires,
+                        plugin_api,
+                    } => VariantProviderRequest::Plugin {
+                        requires,
+                        plugin_api: plugin_api.as_deref(),
+                    },
+                    ProviderKind::Builtin { builtin } => VariantProviderRequest::Builtin(builtin),
+                    ProviderKind::Static { .. } => return None,
+                };
+                Some((namespace, request))
+            })
+    }
+
     /// Parse and validate the contents of a variant metadata file.
     pub fn from_slice(contents: &[u8]) -> Result<Self, VariantsJsonParseError> {
         match serde_json::from_slice(contents) {
@@ -222,7 +282,7 @@ struct VariantsJsonWire {
 }
 
 #[derive(Debug, thiserror::Error)]
-enum VariantMetadataError {
+pub enum VariantMetadataError {
     #[error("Invalid variant namespace: `{0}`")]
     InvalidNamespace(String),
     #[error("Invalid variant feature: `{0}`")]
@@ -389,9 +449,23 @@ struct VariantsJsonSchema {
     schema: String,
 }
 
+/// A validated variant namespace.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(try_from = "String")]
-struct VariantNamespace(String);
+pub struct VariantNamespace(String);
+
+impl VariantNamespace {
+    /// Return the namespace as a string.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl fmt::Display for VariantNamespace {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0)
+    }
+}
 
 impl TryFrom<String> for VariantNamespace {
     type Error = VariantMetadataError;
@@ -405,9 +479,10 @@ impl TryFrom<String> for VariantNamespace {
     }
 }
 
+/// A validated variant feature.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(try_from = "String")]
-struct VariantFeature(String);
+pub struct VariantFeature(String);
 
 impl TryFrom<String> for VariantFeature {
     type Error = VariantMetadataError;
@@ -421,9 +496,10 @@ impl TryFrom<String> for VariantFeature {
     }
 }
 
+/// A validated variant value.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(try_from = "String")]
-struct VariantValue(String);
+pub struct VariantValue(String);
 
 impl TryFrom<String> for VariantValue {
     type Error = VariantMetadataError;
