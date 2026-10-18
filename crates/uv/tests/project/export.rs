@@ -4563,6 +4563,42 @@ fn pep_751_no_packages() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
+#[test]
+fn pep_751_supported_environments() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+
+            [tool.uv]
+            environments = [
+                "sys_platform == 'linux' and python_full_version >= '3.12'",
+                "sys_platform == 'darwin'",
+            ]
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.export().args(["--format", "pylock.toml", "--no-header"]), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    lock-version = "1.0"
+    created-by = "uv"
+    environments = ["sys_platform == 'linux'", "sys_platform == 'darwin'"]
+    requires-python = ">=3.12"
+    packages = []
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    "#);
+
+    Ok(())
+}
+
 /// Indexes such as HTML-only indexes don't always provide hashes, but pylock.toml requires at
 /// least one hash per package file, so uv downloads the files and computes the hashes.
 #[test]
