@@ -6,7 +6,7 @@ use std::str::FromStr;
 
 use arcstr::ArcStr;
 use itertools::Itertools;
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use version_ranges::Ranges;
 
@@ -1315,6 +1315,8 @@ impl MarkerTree {
     /// For example, if `is_extra('dev')` is true, given
     /// `sys_platform == 'linux' and extra == 'dev'`, the marker will be simplified to
     /// `sys_platform == 'linux'`.
+    ///
+    /// The predicate must return a consistent result for each extra during this call.
     #[must_use]
     pub fn simplify_extras_with(self, is_extra: impl Fn(&ExtraName) -> bool) -> Self {
         // Because `simplify_extras_with_impl` is recursive, and we need to use
@@ -1351,6 +1353,8 @@ impl MarkerTree {
     /// For example, if `is_extra('dev')` is true, given
     /// `sys_platform == 'linux' and extra != 'dev'`, the marker will be simplified to
     /// `sys_platform == 'linux'`.
+    ///
+    /// The predicate must return a consistent result for each extra during this call.
     #[must_use]
     pub fn simplify_not_extras_with(self, is_extra: impl Fn(&ExtraName) -> bool) -> Self {
         // Because `simplify_extras_with_impl` is recursive, and we need to use
@@ -1400,57 +1404,45 @@ impl MarkerTree {
         Self(INTERNER.lock().only_extras(self.0))
     }
 
-    /// Calls the provided function on every `extra` in this tree.
+    /// Calls the provided function on every `extra` decision node in this tree.
+    ///
+    /// Shared subgraphs are visited only once. A node and its complement are visited separately.
     ///
     /// The operator provided to the function is guaranteed to be
     /// `MarkerOperator::Equal` or `MarkerOperator::NotEqual`.
     pub fn visit_extras(self, mut f: impl FnMut(MarkerOperator, &ExtraName)) {
-        fn imp(tree: MarkerTree, f: &mut impl FnMut(MarkerOperator, &ExtraName)) {
-            match tree.kind() {
-                MarkerTreeKind::True | MarkerTreeKind::False => {}
-                MarkerTreeKind::Version(kind) => {
-                    for (tree, _) in simplify::collect_edges(kind.edges()) {
-                        imp(tree, f);
-                    }
-                }
-                MarkerTreeKind::VersionString(kind) => {
-                    for (tree, _) in simplify::collect_edges(kind.edges()) {
-                        imp(tree, f);
-                    }
-                }
-                MarkerTreeKind::String(kind) => {
-                    for (tree, _) in simplify::collect_edges(kind.children()) {
-                        imp(tree, f);
-                    }
-                }
-                MarkerTreeKind::In(kind) => {
-                    for (_, tree) in kind.children() {
-                        imp(tree, f);
-                    }
-                }
-                MarkerTreeKind::Contains(kind) => {
-                    for (_, tree) in kind.children() {
-                        imp(tree, f);
-                    }
-                }
-                MarkerTreeKind::List(kind) => {
-                    for (_, tree) in kind.children() {
-                        imp(tree, f);
-                    }
-                }
-                MarkerTreeKind::Extra(kind) => {
-                    if kind.low.is_false() {
-                        f(MarkerOperator::Equal, kind.name().extra());
-                    } else {
-                        f(MarkerOperator::NotEqual, kind.name().extra());
-                    }
-                    for (_, tree) in kind.children() {
-                        imp(tree, f);
-                    }
+        fn imp(
+            tree: MarkerTree,
+            f: &mut impl FnMut(MarkerOperator, &ExtraName),
+            visited: &mut Option<FxHashSet<MarkerTree>>,
+        ) {
+            if tree.is_true() || tree.is_false() {
+                return;
+            }
+            let node = INTERNER.shared.node(tree.0);
+            // A single path cannot revisit a node. Start caching when traversal first branches.
+            if visited.is_none() && node.children.has_multiple_nonterminal_children() {
+                *visited = Some(FxHashSet::default());
+            }
+            if let Some(visited) = visited
+                && !visited.insert(tree)
+            {
+                return;
+            }
+            if let Variable::Extra(extra) = &node.var
+                && let Edges::Boolean { low, .. } = node.children
+            {
+                if low.negate(tree.0).is_false() {
+                    f(MarkerOperator::Equal, extra.extra());
+                } else {
+                    f(MarkerOperator::NotEqual, extra.extra());
                 }
             }
+            for child in node.children.nodes() {
+                imp(MarkerTree(child.negate(tree.0)), f, visited);
+            }
         }
-        imp(self, &mut f);
+        imp(self, &mut f, &mut None);
     }
 
     fn simplify_extras_with_impl(self, is_extra: &impl Fn(&ExtraName) -> bool) -> Self {
@@ -4050,6 +4042,91 @@ mod test {
                 or (os_name == 'nt' and sys_platform == 'win32')")
             .only_extras(),
             m("os_name == 'Linux' or os_name != 'Linux'"),
+        );
+    }
+
+    /// Shared suffixes must be visited once even when several paths reach them.
+    #[test]
+    fn visit_extras_shared_subgraphs() {
+        let marker = m(
+            "(extra == 'a' or extra == 'b') and (extra == 'c' or extra == 'd') and (extra == 'e' or extra == 'f')",
+        );
+        let mut visits = Vec::new();
+        marker.visit_extras(|operator, extra| visits.push(format!("{operator} {extra}")));
+        insta::assert_debug_snapshot!(visits, @r#"
+        [
+            "!= a",
+            "!= c",
+            "!= e",
+            "== f",
+            "== d",
+            "== b",
+        ]
+        "#);
+    }
+
+    /// Unchanged subgraphs still need memoization to avoid repeatedly traversing them.
+    #[test]
+    fn restrict_extras_shared_subgraphs() {
+        let marker = m(
+            "(extra == 'a' or extra == 'b') and (extra == 'c' or extra == 'd') and (extra == 'e' or extra == 'f')",
+        );
+        let restrictions = Cell::new(0);
+        assert_eq!(
+            marker.simplify_extras_with(|_| {
+                restrictions.set(restrictions.get() + 1);
+                false
+            }),
+            marker
+        );
+        assert_eq!(restrictions.get(), 6);
+
+        restrictions.set(0);
+        assert_eq!(
+            marker.simplify_not_extras_with(|_| {
+                restrictions.set(restrictions.get() + 1);
+                false
+            }),
+            marker
+        );
+        assert_eq!(restrictions.get(), 6);
+    }
+
+    /// A shared node and its complement contribute different extra predicates.
+    #[test]
+    fn visit_extras_complemented_subgraphs() {
+        let marker = m(
+            "(implementation_name == 'cpython' and extra == 'a') or (implementation_name != 'cpython' and extra != 'a')",
+        );
+        let mut visits = Vec::new();
+        marker.visit_extras(|operator, extra| visits.push((operator, extra.to_string())));
+        insta::assert_debug_snapshot!(visits, @r#"
+        [
+            (
+                NotEqual,
+                "a",
+            ),
+            (
+                Equal,
+                "a",
+            ),
+        ]
+        "#);
+    }
+
+    /// Complemented references must not reuse the uncomplemented restriction result.
+    #[test]
+    fn restrict_extras_complemented_subgraphs() {
+        let marker = m(
+            "(implementation_name == 'cpython' and extra == 'a') or (implementation_name != 'cpython' and extra != 'a')",
+        );
+        assert_eq!(
+            marker.simplify_extras_with(|_| true),
+            m("implementation_name == 'cpython'")
+        );
+        assert_eq!(
+            marker.simplify_not_extras_with(|_| true),
+            m("implementation_name != 'cpython'")
         );
     }
 

@@ -2,9 +2,7 @@ use std::fmt;
 use std::ops::Bound;
 
 use arcstr::ArcStr;
-use indexmap::IndexMap;
 use itertools::Itertools;
-use rustc_hash::FxBuildHasher;
 use version_ranges::Ranges;
 
 use uv_pep440::{Version, VersionSpecifier};
@@ -256,28 +254,6 @@ fn sort(dnf: &mut [Vec<MarkerExpression>]) {
             .map(MarkerExpression::kind)
             .cmp(b.iter().map(MarkerExpression::kind))
     });
-}
-
-/// Merge any edges that lead to identical subtrees into a single range.
-pub(crate) fn collect_edges<'a, T>(
-    map: impl ExactSizeIterator<Item = (&'a Ranges<T>, MarkerTree)>,
-) -> IndexMap<MarkerTree, Ranges<T>, FxBuildHasher>
-where
-    T: Ord + Clone + 'a,
-{
-    let mut paths: IndexMap<_, Ranges<_>, FxBuildHasher> = IndexMap::default();
-    for (range, tree) in map {
-        // OK because all ranges are guaranteed to be non-empty.
-        let (start, end) = range.bounding_range().unwrap();
-        // Combine the ranges.
-        let range = Ranges::from_range_bounds((start.cloned(), end.cloned()));
-        paths
-            .entry(tree)
-            .and_modify(|union| *union = union.union(&range))
-            .or_insert_with(|| range.clone());
-    }
-
-    paths
 }
 
 /// Returns `Some` if the expression can be simplified as an inequality consisting
