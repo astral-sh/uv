@@ -638,11 +638,17 @@ impl VersionMapLazy {
                 let filename = match filename {
                     IndexEntryFilename::DistFilename(filename) => filename,
                     IndexEntryFilename::VariantJson(filename) => {
-                        priority_dist.insert_variants_json(RegistryVariantsJson {
-                            filename,
-                            file,
-                            index: self.index.clone(),
-                        });
+                        if !priority_dist
+                            .variants_json()
+                            .iter()
+                            .any(|variants_json| variants_json.index == self.index)
+                        {
+                            priority_dist.insert_variants_json(RegistryVariantsJson {
+                                filename,
+                                file,
+                                index: self.index.clone(),
+                            });
+                        }
                         continue;
                     }
                 };
