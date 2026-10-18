@@ -1,7 +1,5 @@
 //! Tests for direct URL hashes discovered from package metadata.
 
-use std::collections::BTreeMap;
-
 use anyhow::Result;
 use assert_fs::fixture::ChildPath;
 use assert_fs::prelude::*;
@@ -11,7 +9,7 @@ use wiremock::MockServer;
 
 use uv_redacted::SafeUrl;
 use uv_test::archive::generate_source_archive;
-use uv_test::packse::{generate_wheel, mount_mismatched_distribution};
+use uv_test::packse::{WheelBuilder, mount_mismatched_distribution};
 use uv_test::{TestContext as UvTestContext, uv_snapshot};
 
 /// A test context for exercising hashes discovered from forged wheel metadata.
@@ -58,24 +56,9 @@ impl DirectUrlHashTestContext {
 
         let name = "metadata-parent".parse()?;
         let version = "1.0.0".parse()?;
-        let (wheel_filename, authentic_wheel) = generate_wheel(
-            &name,
-            &version,
-            &[],
-            &BTreeMap::new(),
-            None,
-            "py3-none-any",
-            &[],
-        );
-        let (_, forged_wheel) = generate_wheel(
-            &name,
-            &version,
-            &[dependency],
-            &BTreeMap::new(),
-            None,
-            "py3-none-any",
-            &[],
-        );
+        let wheel = WheelBuilder::new(&name, &version);
+        let (wheel_filename, authentic_wheel) = wheel.build();
+        let (_, forged_wheel) = wheel.requires(&[dependency]).build();
         let wheel_hash = hex::encode(Sha256::digest(&authentic_wheel));
         let server = MockServer::start().await;
         let wheel_path = format!("/files/{wheel_filename}");

@@ -50,7 +50,7 @@ use uv_test::assert_link_target;
 use uv_test::diff_snapshot;
 use uv_test::package_server::PackageServer;
 use uv_test::packse::scenario::{ArtifactMetadata, Package, PackageMetadata, Scenario};
-use uv_test::packse::{PackseServer, generate_wheel};
+use uv_test::packse::{PackseServer, WheelBuilder};
 use uv_test::{
     DEFAULT_PYTHON_VERSION, TestContext, copy_dir_ignore, download_to_disk, uv_snapshot,
 };
@@ -20260,31 +20260,18 @@ fn overrides_preserve_alternative_optional_extras() -> Result<()> {
 
     // The host requests the same dependency from either optional extra.
     let wheels = context.temp_dir.child("wheels");
-    let (filename, wheel) = generate_wheel(
-        &"extra-host".parse()?,
-        &"1".parse()?,
-        &["extra-leaf==1; extra == 'a' or extra == 'b'".parse()?],
-        &BTreeMap::from([
+    let (filename, wheel) = WheelBuilder::new(&"extra-host".parse()?, &"1".parse()?)
+        .requires(&["extra-leaf==1; extra == 'a' or extra == 'b'".parse()?])
+        .extras(&BTreeMap::from([
             ("a".parse()?, Vec::new()),
             ("b".parse()?, Vec::new()),
             ("unrelated".parse()?, Vec::new()),
-        ]),
-        None,
-        "py3-none-any",
-        &[],
-    );
+        ]))
+        .build();
     wheels.child(filename).write_binary(&wheel)?;
 
     // The override selects a different version of the optional dependency.
-    let (filename, wheel) = generate_wheel(
-        &"extra-leaf".parse()?,
-        &"2".parse()?,
-        &[],
-        &BTreeMap::new(),
-        None,
-        "py3-none-any",
-        &[],
-    );
+    let (filename, wheel) = WheelBuilder::new(&"extra-leaf".parse()?, &"2".parse()?).build();
     wheels.child(filename).write_binary(&wheel)?;
 
     context

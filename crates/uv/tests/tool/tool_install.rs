@@ -1,4 +1,3 @@
-use std::collections::BTreeMap;
 #[cfg(any(feature = "test-git", feature = "test-git-lfs"))]
 use std::collections::BTreeSet;
 #[cfg(feature = "test-git")]
@@ -21,9 +20,7 @@ use sha2::{Digest, Sha256};
 use uv_fs::Simplified;
 use uv_static::EnvVars;
 
-use uv_test::packse::{
-    PackseServer, generate_wheel, generate_wheel_with_files, scenario::Scenario,
-};
+use uv_test::packse::{PackseServer, WheelBuilder, scenario::Scenario};
 use uv_test::{copy_dir_ignore, uv_snapshot};
 
 #[cfg(feature = "test-git")]
@@ -6359,36 +6356,23 @@ fn tool_install_with_build_hashes() -> Result<()> {
             .with_filtered_exe_suffix()
             .with_tool_dirs();
         let bin_dir = context.temp_dir.child("bin");
-        let (filename, wheel) = generate_wheel(
-            &"build-dependency".parse()?,
-            &"1.0.0".parse()?,
-            &[],
-            &BTreeMap::new(),
-            None,
-            "py3-none-any",
-            &[],
-        );
+        let (filename, wheel) =
+            WheelBuilder::new(&"build-dependency".parse()?, &"1.0.0".parse()?).build();
         let hash = hex::encode(Sha256::digest(&wheel));
         context
             .temp_dir
             .child("wheels")
             .child(filename)
             .write_binary(&wheel)?;
-        let (filename, wheel) = generate_wheel_with_files(
-            &"hash-tool".parse()?,
-            &"1.0.0".parse()?,
-            &[],
-            &BTreeMap::new(),
-            None,
-            "py3-none-any",
-            &[
+        let (filename, wheel) = WheelBuilder::new(&"hash-tool".parse()?, &"1.0.0".parse()?)
+            .files(&[
                 ("hash_tool/cli.py", "def main():\n    print('tool-ok')\n"),
                 (
                     "hash_tool-1.0.0.dist-info/entry_points.txt",
                     "[console_scripts]\nhash-tool = hash_tool.cli:main\n",
                 ),
-            ],
-        );
+            ])
+            .build();
         context
             .temp_dir
             .child("wheels")

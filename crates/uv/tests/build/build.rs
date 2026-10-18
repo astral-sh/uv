@@ -1,5 +1,3 @@
-use std::collections::BTreeMap;
-
 use anyhow::{Result, anyhow};
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
@@ -15,7 +13,7 @@ use std::process::Command;
 use uv_redacted::SafeUrl;
 use uv_static::EnvVars;
 use uv_test::package_server::PackageServer;
-use uv_test::packse::generate_wheel;
+use uv_test::packse::WheelBuilder;
 use uv_test::{
     DEFAULT_PYTHON_VERSION, TestContext, apply_filters, capture_uv_snapshot, get_bin, uv_snapshot,
 };
@@ -2757,15 +2755,8 @@ fn build_fast_path() -> Result<()> {
 fn build_fast_path_require_hashes() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_filter(("/crates/uv/../../", "/"));
     let built_by_uv = current_dir()?.join("../../test/packages/built-by-uv");
-    let (filename, wheel) = generate_wheel(
-        &"uv-build".parse()?,
-        &uv_version::version().parse()?,
-        &[],
-        &BTreeMap::new(),
-        None,
-        "py3-none-any",
-        &[],
-    );
+    let (filename, wheel) =
+        WheelBuilder::new(&"uv-build".parse()?, &uv_version::version().parse()?).build();
     context
         .temp_dir
         .child("wheels")
@@ -4043,15 +4034,7 @@ fn build_workspace_constraint_hashes() -> Result<()> {
         ("dynamic-dependency", "1.0.0"),
         ("project", "0.1.0"),
     ] {
-        let (filename, wheel) = generate_wheel(
-            &name.parse()?,
-            &version.parse()?,
-            &[],
-            &BTreeMap::new(),
-            None,
-            "py3-none-any",
-            &[],
-        );
+        let (filename, wheel) = WheelBuilder::new(&name.parse()?, &version.parse()?).build();
         if name == "build-dependency" {
             build_hash = hex::encode(Sha256::digest(&wheel));
         }
