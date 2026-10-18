@@ -594,7 +594,7 @@ impl InternerGuard<'_> {
         i: NodeId,
         f: &impl Fn(&Variable) -> Option<bool>,
     ) -> NodeId {
-        self.restrict_by_cached(i, f, &mut FxHashMap::default())
+        self.restrict_by_cached(i, f, &mut None)
     }
 
     /// Restrict each signed node once, including unchanged shared subgraphs.
@@ -602,12 +602,14 @@ impl InternerGuard<'_> {
         &mut self,
         i: NodeId,
         f: &impl Fn(&Variable) -> Option<bool>,
-        cache: &mut FxHashMap<NodeId, NodeId>,
+        cache: &mut Option<FxHashMap<NodeId, NodeId>>,
     ) -> NodeId {
         if matches!(i, NodeId::TRUE | NodeId::FALSE) {
             return i;
         }
-        if let Some(&result) = cache.get(&i) {
+        // Nodes reached before caching begins lie on a unique prefix.
+        let cache_result = cache.is_some();
+        if let Some(&result) = cache.as_ref().and_then(|cache| cache.get(&i)) {
             return result;
         }
 
@@ -618,12 +620,18 @@ impl InternerGuard<'_> {
             let node = if value { high } else { low };
             self.restrict_by_cached(node.negate(i), f, cache)
         } else {
+            // A single path cannot revisit a node. Start caching when traversal first branches.
+            if cache.is_none() && node.children.has_multiple_nonterminal_children() {
+                *cache = Some(FxHashMap::default());
+            }
             let children = node
                 .children
                 .map(i, |node| self.restrict_by_cached(node, f, cache));
             self.create_node(node.var.clone(), children)
         };
-        cache.insert(i, result);
+        if cache_result && let Some(cache) = cache {
+            cache.insert(i, result);
+        }
         result
     }
 
@@ -1819,8 +1827,8 @@ impl Edges {
         mapped
     }
 
-    // Returns an iterator over all direct children of this node.
-    fn nodes(&self) -> impl Iterator<Item = NodeId> + '_ {
+    /// Returns an iterator over all direct children of this node.
+    pub(crate) fn nodes(&self) -> impl Iterator<Item = NodeId> + '_ {
         match self {
             Self::Version { edges: map } => {
                 Either::Left(Either::Left(map.iter().map(|(_, node)| *node)))
@@ -1830,6 +1838,14 @@ impl Edges {
             }
             Self::Boolean { high, low } => Either::Right([*high, *low].into_iter()),
         }
+    }
+
+    /// Returns whether more than one edge leads to a nonterminal node.
+    pub(crate) fn has_multiple_nonterminal_children(&self) -> bool {
+        self.nodes()
+            .filter(|node| !node.is_true() && !node.is_false())
+            .nth(1)
+            .is_some()
     }
 
     // Returns the complement of this [`Edges`].
