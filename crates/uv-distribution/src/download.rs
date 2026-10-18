@@ -7,7 +7,7 @@ use uv_metadata::{find_flat_dist_info, read_flat_wheel_metadata, read_wheel_vari
 use uv_preview::PreviewFeature;
 use uv_pypi_types::{HashDigest, HashDigests, ResolutionMetadata};
 
-use crate::Error;
+use crate::{Error, supported_variant_properties};
 
 /// Allow variant wheels from an index when the wheel variants preview is enabled.
 pub fn check_supported_wheel_variant(dist: &BuiltDist) -> Result<(), Error> {
@@ -35,7 +35,7 @@ pub(crate) fn variant_compatible(filename: &WheelFilename, archive: &Path) -> Re
     let metadata = read_wheel_variant(&path, label)
         .map_err(|err| Error::WheelMetadata(path, Box::new(err)))?;
     Ok(metadata
-        .score_variant(label, &metadata.static_supported_properties())
+        .score_variant(label, &supported_variant_properties(&metadata))
         .is_some())
 }
 

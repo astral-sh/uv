@@ -1,0 +1,187 @@
+use std::cell::LazyCell;
+use std::sync::LazyLock;
+
+use anyhow::{Context, ensure};
+use tracing::debug;
+use uv_distribution_types::{SupportedVariantFeature, VariantFeature, VariantValue};
+use uv_pep440::Version;
+use uv_static::EnvVars;
+use uv_torch::NvidiaGpu;
+
+use crate::variant::VendoredVariantProvider;
+
+const MIN_CUDA_MAJOR: u64 = 11;
+const MAX_CUDA_MAJOR: u64 = 15;
+const MAX_CUDA_MINOR: u64 = 20;
+const MIN_COMPUTE_CAPABILITY: (u8, u8) = (5, 0);
+
+/// Bound memory use when an override exceeds the automatic detection range.
+const MAX_CUDA_VERSION_VALUES: usize = 1_024;
+
+// TODO: Move the NVIDIA variant provider into its own crate.
+/// The vendored implementation of `nvidia-variant-provider` 0.0.1.
+pub(super) struct NvidiaVariantProvider {
+    /// Cache capabilities so every package and installation stage uses the same result.
+    properties: LazyLock<Option<Vec<SupportedVariantFeature>>>,
+}
+
+impl NvidiaVariantProvider {
+    pub(super) const fn new() -> Self {
+        Self {
+            properties: LazyLock::new(|| match Self::detect_properties() {
+                Ok(properties) => properties,
+                Err(err) => {
+                    debug!("Skipping NVIDIA variant provider: {err}");
+                    None
+                }
+            }),
+        }
+    }
+
+    fn detect_properties() -> anyhow::Result<Option<Vec<SupportedVariantFeature>>> {
+        let gpu = LazyCell::new(|| match NvidiaGpu::detect() {
+            Ok(gpu) => gpu,
+            Err(err) => {
+                debug!("Failed to detect NVIDIA GPU capabilities: {err}");
+                None
+            }
+        });
+        let cuda_version_variable = EnvVars::NV_VARIANT_PROVIDER_FORCE_CUDA_DRIVER_VERSION;
+        let cuda_version = if let Some(value) = Self::read_override(cuda_version_variable) {
+            value.parse::<Version>().context(format!(
+                "Invalid value for `{cuda_version_variable}`: `{value}`"
+            ))?
+        } else {
+            let Some(gpu) = gpu.as_ref() else {
+                return Ok(None);
+            };
+            if gpu.cuda_version < Version::new([MIN_CUDA_MAJOR, 0])
+                || gpu.cuda_version > Version::new([MAX_CUDA_MAJOR, MAX_CUDA_MINOR])
+            {
+                debug!(
+                    "Skipping NVIDIA variant provider: CUDA user-mode driver version {} is \
+                     outside the supported range {MIN_CUDA_MAJOR}.0 to \
+                     {MAX_CUDA_MAJOR}.{MAX_CUDA_MINOR}",
+                    gpu.cuda_version
+                );
+                return Ok(None);
+            }
+            gpu.cuda_version.clone()
+        };
+        let compute_capability_variable = EnvVars::NV_VARIANT_PROVIDER_FORCE_SM_ARCH;
+        let compute_capability =
+            if let Some(value) = Self::read_override(compute_capability_variable) {
+                Some(NvidiaGpu::parse_compute_capability(&value).context(format!(
+                    "Invalid value for `{compute_capability_variable}`: `{value}`"
+                ))?)
+            } else {
+                gpu.as_ref().and_then(|gpu| gpu.compute_capability)
+            };
+        Ok(Some(Self::properties_for_capabilities(
+            &cuda_version,
+            compute_capability,
+        )?))
+    }
+
+    fn read_override(name: &str) -> Option<String> {
+        let value = std::env::var(name).ok()?;
+        (!value.is_empty()).then_some(value)
+    }
+
+    /// Implement the ordered properties of `nvidia-variant-provider` 0.0.1.
+    ///
+    /// See <https://github.com/wheelnext/nvidia-variant-provider/blob/v0.0.1/nvidia_variant_provider/plugin.py>.
+    fn properties_for_capabilities(
+        cuda_version: &Version,
+        compute_capability: Option<(u8, u8)>,
+    ) -> anyhow::Result<Vec<SupportedVariantFeature>> {
+        let release = cuda_version.release();
+        let detected_major = release[0];
+        // `packaging.version.Version.minor` treats a missing minor release as zero.
+        let detected_minor = release.get(1).copied().unwrap_or(0);
+        let versions_for_major = |major: u64, max_minor: u64| {
+            (0..=max_minor)
+                .rev()
+                .map(move |minor| format!("{major}.{minor}"))
+                .chain([major.to_string()])
+        };
+        let mut properties = Vec::new();
+        // The provider allows forced CUDA versions outside the automatic detection range.
+        if detected_major >= MIN_CUDA_MAJOR {
+            let lower_bound = versions_for_major(detected_major, detected_minor)
+                .chain(
+                    (MIN_CUDA_MAJOR..detected_major)
+                        .rev()
+                        .flat_map(|major| versions_for_major(major, MAX_CUDA_MINOR)),
+                )
+                .take(MAX_CUDA_VERSION_VALUES + 1)
+                .map(VariantValue::try_from)
+                .collect::<Result<Vec<_>, _>>()?;
+            ensure!(
+                lower_bound.len() <= MAX_CUDA_VERSION_VALUES,
+                "CUDA version `{cuda_version}` exceeds the limit of \
+                 {MAX_CUDA_VERSION_VALUES} variant values"
+            );
+            properties.push(SupportedVariantFeature {
+                name: VariantFeature::try_from("cuda_version_lower_bound".to_string())?,
+                values: lower_bound,
+            });
+        }
+        if detected_major <= MAX_CUDA_MAJOR {
+            let upper_bound = (detected_major + 1..=MAX_CUDA_MAJOR)
+                .rev()
+                .flat_map(|major| versions_for_major(major, MAX_CUDA_MINOR))
+                .chain(
+                    (0..=MAX_CUDA_MINOR)
+                        .rev()
+                        .take_while(|minor| *minor > detected_minor)
+                        .map(|minor| format!("{detected_major}.{minor}")),
+                )
+                .map(VariantValue::try_from)
+                .collect::<Result<Vec<_>, _>>()?;
+            if !upper_bound.is_empty() {
+                properties.push(SupportedVariantFeature {
+                    name: VariantFeature::try_from("cuda_version_upper_bound".to_string())?,
+                    values: upper_bound,
+                });
+            }
+        }
+        if let Some((major, minor)) = compute_capability
+            && (major, minor) >= MIN_COMPUTE_CAPABILITY
+        {
+            let architectures = (0..=minor)
+                .rev()
+                .map(|minor| format!("{major}{minor}_real"))
+                .chain([format!("{major}0_virtual")])
+                .map(VariantValue::try_from)
+                .collect::<Result<_, _>>()?;
+            properties.push(SupportedVariantFeature {
+                name: VariantFeature::try_from("sm_arch".to_string())?,
+                values: architectures,
+            });
+        }
+        Ok(properties)
+    }
+}
+
+impl VendoredVariantProvider for NvidiaVariantProvider {
+    fn namespace(&self) -> &'static str {
+        "nvidia"
+    }
+
+    fn plugin_api(&self) -> Option<&'static str> {
+        Some("nvidia_variant_provider.plugin:NvidiaVariantPlugin")
+    }
+
+    fn package_name(&self) -> &'static str {
+        "nvidia-variant-provider"
+    }
+
+    fn package_version(&self) -> Version {
+        Version::new([0, 0, 1])
+    }
+
+    fn properties(&self) -> Option<&[SupportedVariantFeature]> {
+        self.properties.as_deref()
+    }
+}
