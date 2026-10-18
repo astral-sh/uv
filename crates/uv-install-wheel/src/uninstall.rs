@@ -204,7 +204,7 @@ fn is_path_in_scheme(
             .insert(distribution.to_string())
         {
             warn_user!(
-                "Invalid RECORD entry in {} that escapes the Python environment, skipping: {}",
+                "Invalid `RECORD` entry in `{}` that escapes the Python environment, skipping: {}",
                 distribution,
                 path
             );

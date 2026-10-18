@@ -5,9 +5,11 @@ use std::fmt;
 use anyhow::bail;
 
 use uv_cache::Refresh;
-use uv_configuration::{BuildIsolation, Reinstall, Upgrade};
-use uv_distribution_types::{ConfigSettings, PackageConfigSettings, Requirement};
-use uv_resolver::{ExcludeNewerPackage, PrereleaseMode, PrereleasePackage};
+use uv_configuration::{
+    BuildIsolation, ExcludeNewerPackage, PrereleaseMode, PrereleasePackage, Reinstall, Upgrade,
+};
+use uv_distribution_types::{ConfigSettings, Index, PackageConfigSettings, Requirement};
+use uv_normalize::PackageName;
 use uv_settings::{
     Combine, EnvFlag, IndexOptions, PipOptions, ResolverInstallerOptions, ResolverOptions,
 };
@@ -17,7 +19,7 @@ use crate::{
     BuildIsolationArgs, BuildOptionsArgs, CompileBytecodeArgs, ExcludeNewerArgs, FetchArgs,
     IndexArgs, InstallerArgs, Maybe, PackageBuildIsolationArgs, PackageExcludeNewerArgs,
     RefreshArgs, RegistryClientArgs, ReinstallArgs, ResolverArgs, ResolverInstallerArgs,
-    SourcesArgs, VersionSelectionArgs,
+    SourcesArgs, UpgradeArgs, VersionSelectionArgs,
 };
 
 /// An error caused by an invalid combination of command-line arguments.
@@ -33,7 +35,7 @@ impl fmt::Display for ArgumentError {
 impl Error for ArgumentError {}
 
 /// Given a boolean flag pair (like `--upgrade` and `--no-upgrade`), resolve the value of the flag.
-pub fn flag(yes: bool, no: bool, name: &str) -> anyhow::Result<Option<bool>> {
+pub(crate) fn flag(yes: bool, no: bool, name: &str) -> anyhow::Result<Option<bool>> {
     debug_assert!(
         !name.starts_with("no-"),
         "flag names must not include the `no-` prefix"
@@ -57,7 +59,7 @@ pub fn flag(yes: bool, no: bool, name: &str) -> anyhow::Result<Option<bool>> {
 
 /// The source of a boolean flag value.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum FlagSource {
+pub(crate) enum FlagSource {
     /// The flag was set via command-line argument.
     Cli,
     /// The flag was set via environment variable.
@@ -78,7 +80,7 @@ impl fmt::Display for FlagSource {
 
 /// A boolean flag value with its source.
 #[derive(Debug, Clone, Copy)]
-pub enum Flag {
+pub(crate) enum Flag {
     /// The flag is not set.
     Disabled,
     /// The flag is enabled with a known source.
@@ -91,12 +93,12 @@ pub enum Flag {
 
 impl Flag {
     /// Create a flag that is explicitly disabled.
-    pub const fn disabled() -> Self {
+    pub(crate) const fn disabled() -> Self {
         Self::Disabled
     }
 
     /// Create an enabled flag from a CLI argument.
-    pub const fn from_cli(name: &'static str) -> Self {
+    pub(crate) const fn from_cli(name: &'static str) -> Self {
         Self::Enabled {
             source: FlagSource::Cli,
             name,
@@ -104,7 +106,7 @@ impl Flag {
     }
 
     /// Create an enabled flag from workspace/project configuration.
-    pub const fn from_config(name: &'static str) -> Self {
+    pub(crate) const fn from_config(name: &'static str) -> Self {
         Self::Enabled {
             source: FlagSource::Config,
             name,
@@ -112,16 +114,8 @@ impl Flag {
     }
 
     /// Returns `true` if the flag is set.
-    pub fn is_enabled(self) -> bool {
+    pub(crate) fn is_enabled(self) -> bool {
         matches!(self, Self::Enabled { .. })
-    }
-
-    /// Returns the source of the flag, if it is set.
-    pub fn source(self) -> Option<FlagSource> {
-        match self {
-            Self::Disabled => None,
-            Self::Enabled { source, .. } => Some(source),
-        }
     }
 }
 
@@ -135,7 +129,7 @@ impl From<Flag> for bool {
 ///
 /// The CLI argument takes precedence over the environment variable. Returns a [`Flag`] with the
 /// resolved value and source.
-pub fn resolve_flag(cli_flag: bool, name: &'static str, env_flag: EnvFlag) -> Flag {
+pub(crate) fn resolve_flag(cli_flag: bool, name: &'static str, env_flag: EnvFlag) -> Flag {
     if cli_flag {
         Flag::Enabled {
             source: FlagSource::Cli,
@@ -155,7 +149,7 @@ pub fn resolve_flag(cli_flag: bool, name: &'static str, env_flag: EnvFlag) -> Fl
 ///
 /// If either flag is set on the command line, both environment variables are ignored so the CLI
 /// retains precedence over the full pair.
-pub fn resolve_flag_pair(
+pub(crate) fn resolve_flag_pair(
     cli_flag: bool,
     cli_no_flag: bool,
     name: &'static str,
@@ -192,7 +186,7 @@ pub fn resolve_flag_pair(
 ///
 /// This function checks if both flags are enabled (truthy) and reports an error if so, including
 /// the source of each flag (CLI or environment variable) in the error message.
-pub fn check_conflicts(flag_a: Flag, flag_b: Flag) -> anyhow::Result<()> {
+pub(crate) fn check_conflicts(flag_a: Flag, flag_b: Flag) -> anyhow::Result<()> {
     if let (
         Flag::Enabled {
             source: source_a,
@@ -240,11 +234,16 @@ impl TryFrom<RefreshArgs> for Refresh {
     }
 }
 
-impl TryFrom<ResolverArgs> for PipOptions {
-    type Error = anyhow::Error;
+/// Convert command-line arguments into [`PipOptions`].
+pub(crate) trait IntoPipOptions {
+    /// Convert command-line arguments into pip options using the effective configuration.
+    fn into_pip_options(self, configured_indexes: &[Index]) -> anyhow::Result<PipOptions>;
+}
 
-    fn try_from(args: ResolverArgs) -> anyhow::Result<Self> {
-        let ResolverArgs {
+impl IntoPipOptions for ResolverArgs {
+    /// Convert resolver arguments into pip options using the effective configuration.
+    fn into_pip_options(self, configured_indexes: &[Index]) -> anyhow::Result<PipOptions> {
+        let Self {
             index_args,
             upgrade,
             no_upgrade,
@@ -285,7 +284,7 @@ impl TryFrom<ResolverArgs> for PipOptions {
                     no_sources,
                     no_sources_package,
                 },
-        } = args;
+        } = self;
 
         if !upgrade_group.is_empty() {
             bail!(ArgumentError(format!(
@@ -294,7 +293,7 @@ impl TryFrom<ResolverArgs> for PipOptions {
             )));
         }
 
-        Ok(Self {
+        Ok(PipOptions {
             upgrade: flag(upgrade, no_upgrade, "upgrade")?,
             upgrade_package: Some(upgrade_package),
             index_strategy,
@@ -325,16 +324,15 @@ impl TryFrom<ResolverArgs> for PipOptions {
             } else {
                 Some(no_sources_package)
             },
-            ..Self::try_from(index_args)?
+            ..index_args.into_pip_options(configured_indexes)?
         })
     }
 }
 
-impl TryFrom<InstallerArgs> for PipOptions {
-    type Error = anyhow::Error;
-
-    fn try_from(args: InstallerArgs) -> anyhow::Result<Self> {
-        let InstallerArgs {
+impl IntoPipOptions for InstallerArgs {
+    /// Convert installer arguments into pip options using the effective configuration.
+    fn into_pip_options(self, configured_indexes: &[Index]) -> anyhow::Result<PipOptions> {
+        let Self {
             index_args,
             reinstall:
                 ReinstallArgs {
@@ -370,9 +368,9 @@ impl TryFrom<InstallerArgs> for PipOptions {
                     no_sources,
                     no_sources_package,
                 },
-        } = args;
+        } = self;
 
-        Ok(Self {
+        Ok(PipOptions {
             reinstall: flag(reinstall, no_reinstall, "reinstall")?,
             reinstall_package: Some(reinstall_package),
             index_strategy,
@@ -395,16 +393,15 @@ impl TryFrom<InstallerArgs> for PipOptions {
             } else {
                 Some(no_sources_package)
             },
-            ..Self::try_from(index_args)?
+            ..index_args.into_pip_options(configured_indexes)?
         })
     }
 }
 
-impl TryFrom<ResolverInstallerArgs> for PipOptions {
-    type Error = anyhow::Error;
-
-    fn try_from(args: ResolverInstallerArgs) -> anyhow::Result<Self> {
-        let ResolverInstallerArgs {
+impl IntoPipOptions for ResolverInstallerArgs {
+    /// Convert resolver and installer arguments into pip options using the effective configuration.
+    fn into_pip_options(self, configured_indexes: &[Index]) -> anyhow::Result<PipOptions> {
+        let Self {
             index_args,
             upgrade,
             no_upgrade,
@@ -456,7 +453,7 @@ impl TryFrom<ResolverInstallerArgs> for PipOptions {
                     no_sources,
                     no_sources_package,
                 },
-        } = args;
+        } = self;
 
         if !upgrade_group.is_empty() {
             bail!(ArgumentError(format!(
@@ -465,7 +462,7 @@ impl TryFrom<ResolverInstallerArgs> for PipOptions {
             )));
         }
 
-        Ok(Self {
+        Ok(PipOptions {
             upgrade: flag(upgrade, no_upgrade, "upgrade")?,
             upgrade_package: Some(upgrade_package),
             reinstall: flag(reinstall, no_reinstall, "reinstall")?,
@@ -499,16 +496,15 @@ impl TryFrom<ResolverInstallerArgs> for PipOptions {
             } else {
                 Some(no_sources_package)
             },
-            ..Self::try_from(index_args)?
+            ..index_args.into_pip_options(configured_indexes)?
         })
     }
 }
 
-impl TryFrom<FetchArgs> for PipOptions {
-    type Error = anyhow::Error;
-
-    fn try_from(args: FetchArgs) -> anyhow::Result<Self> {
-        let FetchArgs {
+impl IntoPipOptions for FetchArgs {
+    /// Convert package-fetch arguments into pip options using the effective configuration.
+    fn into_pip_options(self, configured_indexes: &[Index]) -> anyhow::Result<PipOptions> {
+        let Self {
             index_args,
             registry_client:
                 RegistryClientArgs {
@@ -520,21 +516,21 @@ impl TryFrom<FetchArgs> for PipOptions {
                     exclude_newer: ExcludeNewerArgs { exclude_newer },
                     exclude_newer_package,
                 },
-        } = args;
+        } = self;
 
-        Ok(Self {
+        Ok(PipOptions {
             index_strategy,
             keyring_provider,
             exclude_newer,
             exclude_newer_package: exclude_newer_package.map(ExcludeNewerPackage::from_iter),
-            ..Self::try_from(index_args)?
+            ..index_args.into_pip_options(configured_indexes)?
         })
     }
 }
 
 impl IndexArgs {
     /// Resolve the index arguments shared by pip, resolver, and installer settings.
-    fn resolve(self) -> IndexOptions {
+    fn resolve(self, configured_indexes: &[Index]) -> anyhow::Result<IndexOptions> {
         let Self {
             default_index,
             index,
@@ -546,16 +542,21 @@ impl IndexArgs {
 
         let default_index = default_index
             .and_then(Maybe::into_option)
+            .map(|index| index.resolve(configured_indexes))
+            .transpose()?
             .map(|index| vec![index]);
-        let index = index.map(|indexes| {
-            indexes
-                .into_iter()
-                .flatten()
-                .filter_map(Maybe::into_option)
-                .collect()
-        });
+        let index = index
+            .map(|indexes| {
+                indexes
+                    .into_iter()
+                    .flatten()
+                    .filter_map(Maybe::into_option)
+                    .map(|index| index.resolve(configured_indexes))
+                    .collect::<anyhow::Result<Vec<_>>>()
+            })
+            .transpose()?;
 
-        IndexOptions {
+        Ok(IndexOptions {
             index: default_index.combine(index),
             index_url: index_url.and_then(Maybe::into_option),
             extra_index_url: extra_index_url
@@ -563,24 +564,25 @@ impl IndexArgs {
             no_index: no_index.then_some(true),
             find_links: find_links
                 .map(|links| links.into_iter().filter_map(Maybe::into_option).collect()),
-        }
+        })
     }
 }
 
-impl TryFrom<IndexArgs> for PipOptions {
-    type Error = anyhow::Error;
-
-    fn try_from(args: IndexArgs) -> anyhow::Result<Self> {
-        Ok(Self::from(
-            args.resolve().relative_to(&env::current_dir()?)?,
+impl IntoPipOptions for IndexArgs {
+    /// Convert index arguments into pip options, resolving configured index names.
+    fn into_pip_options(self, configured_indexes: &[Index]) -> anyhow::Result<PipOptions> {
+        Ok(PipOptions::from(
+            self.resolve(configured_indexes)?
+                .relative_to(&env::current_dir()?)?,
         ))
     }
 }
 
 /// Construct the [`ResolverOptions`] from the [`ResolverArgs`] and [`BuildOptionsArgs`].
-pub fn resolver_options(
+pub(crate) fn resolver_options(
     resolver_args: ResolverArgs,
     build_args: BuildOptionsArgs,
+    configured_indexes: &[Index],
 ) -> anyhow::Result<ResolverOptions> {
     let ResolverArgs {
         index_args,
@@ -631,10 +633,12 @@ pub fn resolver_options(
         no_binary,
         binary,
         no_binary_package,
+        require_build_hashes,
+        no_require_build_hashes,
     } = build_args;
 
     ResolverOptions {
-        indexes: index_args.resolve(),
+        indexes: index_args.resolve(configured_indexes)?,
         upgrade: Upgrade::from_args(
             flag(upgrade, no_upgrade, "upgrade")?,
             upgrade_package.into_iter().map(Requirement::from).collect(),
@@ -662,6 +666,11 @@ pub fn resolver_options(
             flag(no_build_isolation, build_isolation, "build-isolation")?,
             no_build_isolation_package,
         ),
+        require_build_hashes: flag(
+            require_build_hashes,
+            no_require_build_hashes,
+            "require-build-hashes",
+        )?,
         extra_build_dependencies: None,
         extra_build_variables: None,
         exclude_newer,
@@ -691,10 +700,45 @@ pub fn resolver_options(
     .map_err(Into::into)
 }
 
+/// Construct the [`ResolverOptions`] for an [`UpgradeArgs`] invocation.
+pub(crate) fn upgrade_options(
+    args: UpgradeArgs,
+    configured_indexes: &[Index],
+) -> anyhow::Result<(Vec<PackageName>, Vec<PackageName>, ResolverOptions)> {
+    let UpgradeArgs {
+        packages,
+        exclude,
+        require_build_hashes,
+        no_require_build_hashes,
+        index_args,
+        registry_client:
+            RegistryClientArgs {
+                index_strategy,
+                keyring_provider,
+            },
+    } = args;
+
+    let options = ResolverOptions {
+        indexes: index_args.resolve(configured_indexes)?,
+        index_strategy,
+        keyring_provider,
+        require_build_hashes: flag(
+            require_build_hashes,
+            no_require_build_hashes,
+            "require-build-hashes",
+        )?,
+        ..ResolverOptions::default()
+    }
+    .relative_to(&env::current_dir()?)?;
+
+    Ok((packages, exclude, options))
+}
+
 /// Construct the [`ResolverInstallerOptions`] from the [`ResolverInstallerArgs`] and [`BuildOptionsArgs`].
-pub fn resolver_installer_options(
+pub(crate) fn resolver_installer_options(
     resolver_installer_args: ResolverInstallerArgs,
     build_args: BuildOptionsArgs,
+    configured_indexes: &[Index],
 ) -> anyhow::Result<ResolverInstallerOptions> {
     let ResolverInstallerArgs {
         index_args,
@@ -756,10 +800,12 @@ pub fn resolver_installer_options(
         no_binary,
         binary,
         no_binary_package,
+        require_build_hashes,
+        no_require_build_hashes,
     } = build_args;
 
     ResolverInstallerOptions {
-        indexes: index_args.resolve(),
+        indexes: index_args.resolve(configured_indexes)?,
         upgrade: Upgrade::from_args(
             flag(upgrade, no_upgrade, "upgrade")?,
             upgrade_package.into_iter().map(Requirement::from).collect(),
@@ -791,6 +837,11 @@ pub fn resolver_installer_options(
             flag(no_build_isolation, build_isolation, "build-isolation")?,
             no_build_isolation_package,
         ),
+        require_build_hashes: flag(
+            require_build_hashes,
+            no_require_build_hashes,
+            "require-build-hashes",
+        )?,
         extra_build_dependencies: None,
         extra_build_variables: None,
         exclude_newer,

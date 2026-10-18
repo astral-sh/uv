@@ -1,4 +1,3 @@
-use std::path::Path;
 use std::str::FromStr;
 
 use rustc_hash::FxHashMap;
@@ -7,13 +6,12 @@ use tracing::trace;
 use uv_distribution_types::{IndexUrl, InstalledDist, InstalledDistKind};
 use uv_normalize::PackageName;
 use uv_pep440::{Operator, Version};
-use uv_pep508::{MarkerTree, VerbatimUrl, VersionOrUrl};
+use uv_pep508::{MarkerTree, VersionOrUrl};
 use uv_pypi_types::{HashDigest, HashDigests, HashError};
 use uv_requirements_txt::{RequirementEntry, RequirementsTxtRequirement};
 
-use crate::lock::PylockTomlPackage;
+use crate::ResolverEnvironment;
 use crate::universal_marker::UniversalMarker;
-use crate::{LockError, ResolverEnvironment};
 
 #[derive(thiserror::Error, Debug)]
 pub enum PreferenceError {
@@ -79,45 +77,22 @@ impl Preference {
         }))
     }
 
-    /// Create a [`Preference`] from a locked distribution.
-    pub fn from_lock(
-        package: &crate::lock::Package,
-        install_path: &Path,
-    ) -> Result<Option<Self>, LockError> {
-        let Some(version) = package.version() else {
-            return Ok(None);
-        };
-        Ok(Some(Self {
-            name: package.id.name.clone(),
-            version: version.clone(),
+    /// Create a preference for a version recorded in a lockfile.
+    pub fn from_locked(
+        name: PackageName,
+        version: Version,
+        index: Option<IndexUrl>,
+        fork_markers: Vec<UniversalMarker>,
+    ) -> Self {
+        Self {
+            name,
+            version,
             marker: MarkerTree::TRUE,
-            index: PreferenceIndex::from(package.index(install_path)?),
-            fork_markers: package.fork_markers().to_vec(),
+            index: PreferenceIndex::from(index),
+            fork_markers,
             hashes: HashDigests::empty(),
             source: PreferenceSource::Lock,
-        }))
-    }
-
-    /// Create a [`Preference`] from a locked distribution.
-    pub fn from_pylock_toml(package: &PylockTomlPackage) -> Result<Option<Self>, LockError> {
-        let Some(version) = package.version.as_ref() else {
-            return Ok(None);
-        };
-        Ok(Some(Self {
-            name: package.name.clone(),
-            version: version.clone(),
-            marker: MarkerTree::TRUE,
-            index: PreferenceIndex::from(
-                package
-                    .index
-                    .as_ref()
-                    .map(|index| IndexUrl::from(VerbatimUrl::from(index.clone()))),
-            ),
-            // `pylock.toml` doesn't have fork annotations.
-            fork_markers: vec![],
-            hashes: HashDigests::empty(),
-            source: PreferenceSource::Lock,
-        }))
+        }
     }
 
     /// Create a [`Preference`] from an installed distribution.

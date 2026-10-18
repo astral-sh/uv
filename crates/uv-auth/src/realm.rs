@@ -1,7 +1,6 @@
 use std::hash::{Hash, Hasher};
 use std::{fmt::Display, fmt::Formatter};
-use url::Url;
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 use uv_small_str::SmallString;
 
 /// Used to determine if authentication information should be retained on a new URL.
@@ -30,14 +29,8 @@ pub struct Realm {
     port: Option<u16>,
 }
 
-impl From<&DisplaySafeUrl> for Realm {
-    fn from(url: &DisplaySafeUrl) -> Self {
-        Self::from(&**url)
-    }
-}
-
-impl From<&Url> for Realm {
-    fn from(url: &Url) -> Self {
+impl From<&SafeUrl> for Realm {
+    fn from(url: &SafeUrl) -> Self {
         Self {
             scheme: SmallString::from(url.scheme()),
             host: url.host_str().map(SmallString::from),
@@ -103,8 +96,8 @@ impl RealmRef<'_> {
     }
 }
 
-impl<'a> From<&'a Url> for RealmRef<'a> {
-    fn from(url: &'a Url) -> Self {
+impl<'a> From<&'a SafeUrl> for RealmRef<'a> {
+    fn from(url: &'a SafeUrl) -> Self {
         Self {
             scheme: url.scheme(),
             host: url.host_str(),
@@ -153,109 +146,109 @@ impl<'a> From<&'a Realm> for RealmRef<'a> {
 
 #[cfg(test)]
 mod tests {
-    use url::{ParseError, Url};
+    use uv_redacted::{SafeUrl, SafeUrlError};
 
     use crate::Realm;
 
     #[test]
-    fn test_should_retain_auth() -> Result<(), ParseError> {
+    fn test_should_retain_auth() -> Result<(), SafeUrlError> {
         // Exact match (https)
         assert_eq!(
-            Realm::from(&Url::parse("https://example.com")?),
-            Realm::from(&Url::parse("https://example.com")?)
+            Realm::from(&SafeUrl::parse("https://example.com")?),
+            Realm::from(&SafeUrl::parse("https://example.com")?)
         );
 
         // Exact match (with port)
         assert_eq!(
-            Realm::from(&Url::parse("https://example.com:1234")?),
-            Realm::from(&Url::parse("https://example.com:1234")?)
+            Realm::from(&SafeUrl::parse("https://example.com:1234")?),
+            Realm::from(&SafeUrl::parse("https://example.com:1234")?)
         );
 
         // Exact match (http)
         assert_eq!(
-            Realm::from(&Url::parse("http://example.com")?),
-            Realm::from(&Url::parse("http://example.com")?)
+            Realm::from(&SafeUrl::parse("http://example.com")?),
+            Realm::from(&SafeUrl::parse("http://example.com")?)
         );
 
         // Okay, path differs
         assert_eq!(
-            Realm::from(&Url::parse("http://example.com/foo")?),
-            Realm::from(&Url::parse("http://example.com/bar")?)
+            Realm::from(&SafeUrl::parse("http://example.com/foo")?),
+            Realm::from(&SafeUrl::parse("http://example.com/bar")?)
         );
 
         // Okay, default port differs (https)
         assert_eq!(
-            Realm::from(&Url::parse("https://example.com:443")?),
-            Realm::from(&Url::parse("https://example.com")?)
+            Realm::from(&SafeUrl::parse("https://example.com:443")?),
+            Realm::from(&SafeUrl::parse("https://example.com")?)
         );
 
         // Okay, default port differs (http)
         assert_eq!(
-            Realm::from(&Url::parse("http://example.com:80")?),
-            Realm::from(&Url::parse("http://example.com")?)
+            Realm::from(&SafeUrl::parse("http://example.com:80")?),
+            Realm::from(&SafeUrl::parse("http://example.com")?)
         );
 
         // Mismatched scheme
         assert_ne!(
-            Realm::from(&Url::parse("https://example.com")?),
-            Realm::from(&Url::parse("http://example.com")?)
+            Realm::from(&SafeUrl::parse("https://example.com")?),
+            Realm::from(&SafeUrl::parse("http://example.com")?)
         );
 
         // Mismatched scheme, we explicitly do not allow upgrade to https
         assert_ne!(
-            Realm::from(&Url::parse("http://example.com")?),
-            Realm::from(&Url::parse("https://example.com")?)
+            Realm::from(&SafeUrl::parse("http://example.com")?),
+            Realm::from(&SafeUrl::parse("https://example.com")?)
         );
 
         // Mismatched host
         assert_ne!(
-            Realm::from(&Url::parse("https://foo.com")?),
-            Realm::from(&Url::parse("https://bar.com")?)
+            Realm::from(&SafeUrl::parse("https://foo.com")?),
+            Realm::from(&SafeUrl::parse("https://bar.com")?)
         );
 
         // Mismatched port
         assert_ne!(
-            Realm::from(&Url::parse("https://example.com:1234")?),
-            Realm::from(&Url::parse("https://example.com:5678")?)
+            Realm::from(&SafeUrl::parse("https://example.com:1234")?),
+            Realm::from(&SafeUrl::parse("https://example.com:5678")?)
         );
 
         // Mismatched port, with one as default for scheme
         assert_ne!(
-            Realm::from(&Url::parse("https://example.com:443")?),
-            Realm::from(&Url::parse("https://example.com:5678")?)
+            Realm::from(&SafeUrl::parse("https://example.com:443")?),
+            Realm::from(&SafeUrl::parse("https://example.com:5678")?)
         );
         assert_ne!(
-            Realm::from(&Url::parse("https://example.com:1234")?),
-            Realm::from(&Url::parse("https://example.com:443")?)
+            Realm::from(&SafeUrl::parse("https://example.com:1234")?),
+            Realm::from(&SafeUrl::parse("https://example.com:443")?)
         );
 
         // Mismatched port, with default for a different scheme
         assert_ne!(
-            Realm::from(&Url::parse("https://example.com:80")?),
-            Realm::from(&Url::parse("https://example.com")?)
+            Realm::from(&SafeUrl::parse("https://example.com:80")?),
+            Realm::from(&SafeUrl::parse("https://example.com")?)
         );
 
         Ok(())
     }
 
     #[test]
-    fn test_is_subdomain_of() -> Result<(), ParseError> {
+    fn test_is_subdomain_of() -> Result<(), SafeUrlError> {
         use crate::realm::RealmRef;
 
         // Subdomain relationship: sub.example.com is a subdomain of example.com
-        let subdomain_url = Url::parse("https://sub.example.com")?;
-        let domain_url = Url::parse("https://example.com")?;
+        let subdomain_url = SafeUrl::parse("https://sub.example.com")?;
+        let domain_url = SafeUrl::parse("https://example.com")?;
         let subdomain = RealmRef::from(&subdomain_url);
         let domain = RealmRef::from(&domain_url);
         assert!(subdomain.is_subdomain_of(domain));
 
         // Deeper subdomain: foo.bar.example.com is a subdomain of example.com
-        let deep_subdomain_url = Url::parse("https://foo.bar.example.com")?;
+        let deep_subdomain_url = SafeUrl::parse("https://foo.bar.example.com")?;
         let deep_subdomain = RealmRef::from(&deep_subdomain_url);
         assert!(deep_subdomain.is_subdomain_of(domain));
 
         // Deeper subdomain: foo.bar.example.com is also a subdomain of bar.example.com
-        let parent_subdomain_url = Url::parse("https://bar.example.com")?;
+        let parent_subdomain_url = SafeUrl::parse("https://bar.example.com")?;
         let parent_subdomain = RealmRef::from(&parent_subdomain_url);
         assert!(deep_subdomain.is_subdomain_of(parent_subdomain));
 
@@ -266,54 +259,54 @@ mod tests {
         assert!(!domain.is_subdomain_of(domain));
 
         // Different TLD: example.org is not a subdomain of example.com
-        let different_tld_url = Url::parse("https://example.org")?;
+        let different_tld_url = SafeUrl::parse("https://example.org")?;
         let different_tld = RealmRef::from(&different_tld_url);
         assert!(!different_tld.is_subdomain_of(domain));
 
         // Partial match but not a subdomain: notexample.com is not a subdomain of example.com
-        let partial_match_url = Url::parse("https://notexample.com")?;
+        let partial_match_url = SafeUrl::parse("https://notexample.com")?;
         let partial_match = RealmRef::from(&partial_match_url);
         assert!(!partial_match.is_subdomain_of(domain));
 
         // Different scheme: http subdomain is not a subdomain of https domain
-        let http_subdomain_url = Url::parse("http://sub.example.com")?;
-        let https_domain_url = Url::parse("https://example.com")?;
+        let http_subdomain_url = SafeUrl::parse("http://sub.example.com")?;
+        let https_domain_url = SafeUrl::parse("https://example.com")?;
         let http_subdomain = RealmRef::from(&http_subdomain_url);
         let https_domain = RealmRef::from(&https_domain_url);
         assert!(!http_subdomain.is_subdomain_of(https_domain));
 
         // Different port: same subdomain with different port is not a subdomain
-        let subdomain_port_8080_url = Url::parse("https://sub.example.com:8080")?;
-        let domain_port_9090_url = Url::parse("https://example.com:9090")?;
+        let subdomain_port_8080_url = SafeUrl::parse("https://sub.example.com:8080")?;
+        let domain_port_9090_url = SafeUrl::parse("https://example.com:9090")?;
         let subdomain_port_8080 = RealmRef::from(&subdomain_port_8080_url);
         let domain_port_9090 = RealmRef::from(&domain_port_9090_url);
         assert!(!subdomain_port_8080.is_subdomain_of(domain_port_9090));
 
         // Same port: subdomain with same explicit port is a subdomain
-        let subdomain_with_port_url = Url::parse("https://sub.example.com:8080")?;
-        let domain_with_port_url = Url::parse("https://example.com:8080")?;
+        let subdomain_with_port_url = SafeUrl::parse("https://sub.example.com:8080")?;
+        let domain_with_port_url = SafeUrl::parse("https://example.com:8080")?;
         let subdomain_with_port = RealmRef::from(&subdomain_with_port_url);
         let domain_with_port = RealmRef::from(&domain_with_port_url);
         assert!(subdomain_with_port.is_subdomain_of(domain_with_port));
 
         // Default port handling: subdomain with implicit port is a subdomain
-        let subdomain_default_url = Url::parse("https://sub.example.com")?;
-        let domain_explicit_443_url = Url::parse("https://example.com:443")?;
+        let subdomain_default_url = SafeUrl::parse("https://sub.example.com")?;
+        let domain_explicit_443_url = SafeUrl::parse("https://example.com:443")?;
         let subdomain_default = RealmRef::from(&subdomain_default_url);
         let domain_explicit_443 = RealmRef::from(&domain_explicit_443_url);
         assert!(subdomain_default.is_subdomain_of(domain_explicit_443));
 
         // Edge case: empty host (shouldn't happen with valid URLs but testing defensive code)
-        let file_url = Url::parse("file:///path/to/file")?;
-        let https_url = Url::parse("https://example.com")?;
+        let file_url = SafeUrl::parse("file:///path/to/file")?;
+        let https_url = SafeUrl::parse("https://example.com")?;
         let file_realm = RealmRef::from(&file_url);
         let https_realm = RealmRef::from(&https_url);
         assert!(!file_realm.is_subdomain_of(https_realm));
         assert!(!https_realm.is_subdomain_of(file_realm));
 
         // Subdomain with path (path should be ignored)
-        let subdomain_with_path_url = Url::parse("https://sub.example.com/path")?;
-        let domain_with_path_url = Url::parse("https://example.com/other")?;
+        let subdomain_with_path_url = SafeUrl::parse("https://sub.example.com/path")?;
+        let domain_with_path_url = SafeUrl::parse("https://example.com/other")?;
         let subdomain_with_path = RealmRef::from(&subdomain_with_path_url);
         let domain_with_path = RealmRef::from(&domain_with_path_url);
         assert!(subdomain_with_path.is_subdomain_of(domain_with_path));

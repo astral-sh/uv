@@ -2,8 +2,8 @@ use anyhow::{Result, anyhow};
 use assert_cmd::prelude::*;
 use assert_fs::fixture::ChildPath;
 use assert_fs::prelude::*;
-use url::Url;
 
+use uv_redacted::SafeUrl;
 use uv_test::uv_snapshot;
 
 #[test]
@@ -159,7 +159,7 @@ fn freeze_direct_archive_hashes() -> Result<()> {
 fn freeze_direct_archive_hash_roundtrip() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let site_packages = ChildPath::new(context.site_packages());
-    let wheel_url = Url::from_file_path(
+    let wheel_url = SafeUrl::from_file_path(
         context
             .workspace_root
             .join("test/links/ok-1.0.0-py3-none-any.whl"),
@@ -207,14 +207,14 @@ fn freeze_direct_archive_hash_roundtrip() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
-      × Failed to read `ok @ file://[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl#subdirectory=src&sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa`
-      ╰─▶ Hash mismatch for `ok @ file://[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl#subdirectory=src&sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa`
+    error: Failed to read `ok @ file://[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl#subdirectory=src&sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa`
+      cause: Hash mismatch for `ok @ file://[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl#subdirectory=src&sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa`
 
-          Expected:
-            sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+             Expected:
+               sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
-          Computed:
-            sha256:79f0b33e6ce1e09eaa1784c8eee275dfe84d215d9c65c652f07c18e85fdaac5f
+             Computed:
+               sha256:79f0b33e6ce1e09eaa1784c8eee275dfe84d215d9c65c652f07c18e85fdaac5f
     ");
 
     Ok(())

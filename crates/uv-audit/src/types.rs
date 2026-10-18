@@ -3,7 +3,7 @@
 use jiff::Timestamp;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 use uv_small_str::SmallString;
 
 /// Represents a resolved dependency, with a normalized name and PEP 440 version.
@@ -90,7 +90,7 @@ pub struct Vulnerability {
     /// A full-length description of the vulnerability, if available.
     pub description: Option<String>,
     /// A link to more information about the vulnerability, if available.
-    pub link: Option<DisplaySafeUrl>,
+    pub link: Option<SafeUrl>,
     /// Zero or more versions that fix the vulnerability.
     pub fix_versions: Vec<Version>,
     /// Zero or more aliases for this vulnerability in other databases.
@@ -107,7 +107,7 @@ impl Vulnerability {
         id: VulnerabilityID,
         summary: Option<String>,
         description: Option<String>,
-        link: Option<DisplaySafeUrl>,
+        link: Option<SafeUrl>,
         fix_versions: Vec<Version>,
         aliases: Vec<VulnerabilityID>,
         published: Option<Timestamp>,
@@ -144,12 +144,9 @@ impl Vulnerability {
     /// For our purposes we prefer PYSEC IDs, then GHSA, then CVE, then whatever
     /// primary ID the vulnerability came with.
     pub fn best_id(&self) -> &VulnerabilityID {
-        self.ids()
-            .find(|id| {
-                id.as_str().starts_with("PYSEC-")
-                    || id.as_str().starts_with("GHSA-")
-                    || id.as_str().starts_with("CVE-")
-            })
+        ["PYSEC-", "GHSA-", "CVE-"]
+            .into_iter()
+            .find_map(|prefix| self.ids().find(|id| id.as_str().starts_with(prefix)))
             .unwrap_or(&self.id)
     }
 }

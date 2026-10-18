@@ -2,12 +2,13 @@ use std::path::Path;
 
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
-use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
+use assert_fs::fixture::{ChildPath, FileWriteStr, PathChild, PathCreateDir};
 use async_zip::base::write::ZipFileWriter;
 use async_zip::{Compression, ZipEntryBuilder};
 use futures::executor::block_on;
-use url::Url;
+use indoc::{formatdoc, indoc};
 
+use uv_redacted::SafeUrl;
 use uv_static::EnvVars;
 use uv_test::{copy_dir_ignore, uv_snapshot};
 
@@ -98,15 +99,15 @@ fn workspace_metadata_simple() {
         {
           "name": "foo",
           "path": "[TEMP_DIR]/foo",
-          "id": "foo==0.1.0@editable+[TEMP_DIR]/foo/"
+          "id": "foo==0.1.0@editable+[TEMP_DIR]/foo"
         }
       ],
       "resolution": {
-        "foo==0.1.0@editable+[TEMP_DIR]/foo/": {
+        "foo==0.1.0@editable+[TEMP_DIR]/foo": {
           "name": "foo",
           "version": "0.1.0",
           "source": {
-            "editable": "[TEMP_DIR]/foo/"
+            "editable": "[TEMP_DIR]/foo"
           },
           "kind": "package",
           "dependencies": []
@@ -156,15 +157,15 @@ fn workspace_metadata_quiet() {
         {
           "name": "foo",
           "path": "[TEMP_DIR]/foo",
-          "id": "foo==0.1.0@editable+[TEMP_DIR]/foo/"
+          "id": "foo==0.1.0@editable+[TEMP_DIR]/foo"
         }
       ],
       "resolution": {
-        "foo==0.1.0@editable+[TEMP_DIR]/foo/": {
+        "foo==0.1.0@editable+[TEMP_DIR]/foo": {
           "name": "foo",
           "version": "0.1.0",
           "source": {
-            "editable": "[TEMP_DIR]/foo/"
+            "editable": "[TEMP_DIR]/foo"
           },
           "kind": "package",
           "dependencies": []
@@ -197,6 +198,7 @@ fn workspace_metadata_ignores_unusable_environment() -> Result<()> {
     context.init().arg("foo").assert().success();
 
     let workspace = context.temp_dir.child("foo");
+    context.lock().current_dir(&workspace).assert().success();
     let environment = workspace.child(".venv");
     environment.create_dir_all()?;
 
@@ -229,6 +231,235 @@ fn workspace_metadata_ignores_unusable_environment() -> Result<()> {
       "empty_environment": null
     }
     "#);
+
+    // Remove the manifest to check environment discovery from the lockfile alone.
+    fs_err::remove_file(workspace.child("pyproject.toml"))?;
+    let output = context
+        .workspace_metadata()
+        .current_dir(&workspace)
+        .args(["--frozen", "--preview-features", "frozen-lockfile"])
+        .assert()
+        .success();
+    let broken: serde_json::Value = serde_json::from_slice(&output.get_output().stdout)?;
+    insta::assert_json_snapshot!(broken.get("environment"), @"null");
+
+    let output = context
+        .workspace_metadata()
+        .current_dir(&workspace)
+        .args(["--frozen", "--preview-features", "frozen-lockfile"])
+        .env(EnvVars::UV_PROJECT_ENVIRONMENT, "missing-env")
+        .assert()
+        .success();
+    let missing: serde_json::Value = serde_json::from_slice(&output.get_output().stdout)?;
+    insta::assert_json_snapshot!(missing.get("environment"), @"null");
+    assert!(!workspace.child("missing-env").exists());
+
+    Ok(())
+}
+
+/// Lockfile metadata requires revision 5 or later.
+#[test]
+fn workspace_metadata_lockfile_requires_revision() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("uv.lock").write_str(indoc! {r#"
+        version = 1
+        revision = 4
+        requires-python = ">=3.12"
+
+        [[package]]
+        name = "project"
+        version = "1.0.0"
+        source = { virtual = "." }
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.workspace_metadata().args([
+        "--frozen", "--preview-features", "workspace-metadata", "--preview-features", "frozen-lockfile"
+    ]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Frozen lockfile discovery requires a lockfile with revision 5 or later; run `uv lock` to update it
+    ");
+    Ok(())
+}
+
+/// Frozen metadata retains locked member paths when workspace manifests move those members.
+#[test]
+fn workspace_metadata_lockfile_keeps_stale_member_path() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    pyproject.write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv.workspace]
+        members = ["foo"]
+    "#})?;
+    context
+        .temp_dir
+        .child("foo/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "foo"
+        version = "1.0"
+    "#})?;
+    context.lock().arg("--offline").assert().success();
+
+    let output = context
+        .workspace_metadata()
+        .args([
+            "--frozen",
+            "--offline",
+            "--preview-features",
+            "workspace-metadata,frozen-lockfile",
+        ])
+        .assert()
+        .success();
+    let metadata: serde_json::Value = serde_json::from_slice(&output.get_output().stdout)?;
+    insta::with_settings!({ filters => context.filters() }, {
+        insta::assert_json_snapshot!(metadata["members"], @r#"
+        [
+          {
+            "id": "foo==1.0@virtual+[TEMP_DIR]/foo",
+            "name": "foo",
+            "path": "[TEMP_DIR]/foo"
+          },
+          {
+            "id": "root==1.0@virtual+[TEMP_DIR]/",
+            "name": "root",
+            "path": "[TEMP_DIR]/"
+          }
+        ]
+        "#);
+    });
+
+    fs_err::rename(
+        context.temp_dir.child("foo"),
+        context.temp_dir.child("moved"),
+    )?;
+    pyproject.write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv.workspace]
+        members = ["moved"]
+    "#})?;
+    let output = context
+        .workspace_metadata()
+        .args([
+            "--frozen",
+            "--offline",
+            "--preview-features",
+            "workspace-metadata,frozen-lockfile",
+        ])
+        .assert()
+        .success();
+    let moved_metadata: serde_json::Value = serde_json::from_slice(&output.get_output().stdout)?;
+    assert_eq!(moved_metadata, metadata);
+
+    fs_err::remove_file(&pyproject)?;
+    fs_err::remove_file(context.temp_dir.child("moved/pyproject.toml"))?;
+    let output = context
+        .workspace_metadata()
+        .args([
+            "--frozen",
+            "--offline",
+            "--preview-features",
+            "workspace-metadata,frozen-lockfile",
+        ])
+        .assert()
+        .success();
+    let lockfile_metadata: serde_json::Value = serde_json::from_slice(&output.get_output().stdout)?;
+    assert_eq!(lockfile_metadata, metadata);
+
+    Ok(())
+}
+
+#[test]
+fn workspace_metadata_lockfile() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.workspace_metadata().arg("-qq"), @"
+    exit_code: 0 (success)
+    ");
+    assert!(!context.temp_dir.child("uv.lock").exists());
+
+    uv_snapshot!(context.filters(), context.workspace_metadata().arg("--frozen"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    warning: The `uv workspace metadata` command is experimental and may change without warning. Pass `--preview-features workspace-metadata` to disable this warning.
+    error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
+    ");
+    uv_snapshot!(context.filters(), context.workspace_metadata().arg("--locked"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    warning: The `uv workspace metadata` command is experimental and may change without warning. Pass `--preview-features workspace-metadata` to disable this warning.
+    error: Unable to find lockfile at `uv.lock`, but `--locked` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
+    ");
+
+    context
+        .workspace_metadata()
+        .arg("--sync")
+        .assert()
+        .success();
+    let lockfile = context.read("uv.lock");
+
+    pyproject_toml.write_str(&context.read("pyproject.toml").replace("0.1.0", "0.2.0"))?;
+    let assert = context.workspace_metadata().assert().success();
+    let metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
+    let member_id = metadata["members"][0]["id"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("missing workspace member ID"))?;
+    insta::assert_json_snapshot!(metadata["resolution"][member_id]["version"], @r#""0.2.0""#);
+    assert_eq!(lockfile, context.read("uv.lock"));
+
+    // Synchronization must respect an explicit request not to update the lockfile.
+    uv_snapshot!(context.filters(), context.workspace_metadata().arg("--sync").arg("--locked"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    warning: The `uv workspace metadata` command is experimental and may change without warning. Pass `--preview-features workspace-metadata` to disable this warning.
+    Resolved 1 package in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+    assert_eq!(lockfile, context.read("uv.lock"));
+
+    let assert = context
+        .workspace_metadata()
+        .arg("--sync")
+        .arg("--frozen")
+        .assert()
+        .success();
+    let metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
+    let member_id = metadata["members"][0]["id"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("missing workspace member ID"))?;
+    insta::assert_json_snapshot!(metadata["resolution"][member_id]["version"], @r#""0.1.0""#);
+    assert_eq!(lockfile, context.read("uv.lock"));
+
+    context
+        .workspace_metadata()
+        .arg("--sync")
+        .assert()
+        .success();
+    assert_ne!(lockfile, context.read("uv.lock"));
+    context
+        .workspace_metadata()
+        .arg("--locked")
+        .assert()
+        .success();
 
     Ok(())
 }
@@ -271,6 +502,14 @@ import iniconfig
           "path": "[CACHE_DIR]/environments-v2/script-[HASH]/[BIN]/[PYTHON]",
           "version": "3.12.[X]",
           "implementation": "cpython"
+        },
+        "packages": {
+          "iniconfig==2.0.0@registry+https://pypi.org/simple": {
+            "name": "iniconfig",
+            "version": "2.0.0",
+            "path": "[CACHE_DIR]/environments-v2/script-[HASH]/[PYTHON-LIB]/site-packages/iniconfig-2.0.0.dist-info",
+            "editable": false
+          }
         }
       },
       "script": {
@@ -446,6 +685,7 @@ fn workspace_metadata_script_includes_existing_environment() -> Result<()> {
     insta::with_settings!({ filters => context.filters() }, {
         insta::assert_json_snapshot!(metadata["environment"], @r#"
         {
+          "packages": {},
           "python": {
             "implementation": "cpython",
             "path": "[CACHE_DIR]/environments-v2/script-[HASH]/[BIN]/[PYTHON]",
@@ -455,6 +695,110 @@ fn workspace_metadata_script_includes_existing_environment() -> Result<()> {
         }
         "#);
     });
+
+    Ok(())
+}
+
+#[test]
+fn workspace_metadata_script_exact_sync_removes_extraneous_packages() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let script = context.temp_dir.child("script.py");
+    script.write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = []
+        # ///
+        "#
+    })?;
+
+    let extraneous = context
+        .temp_dir
+        .child("metadata_extra-0.1.0-py3-none-any.whl");
+    write_wheel(
+        extraneous.path(),
+        "metadata-extra",
+        "metadata_extra-0.1.0",
+        &[("extra_module.py", "")],
+    )?;
+
+    context
+        .pip_install()
+        .arg(extraneous.path())
+        .assert()
+        .success();
+
+    let assert = context
+        .workspace_metadata()
+        .arg("--script")
+        .arg(script.path())
+        .arg("--sync")
+        .arg("--active")
+        .env(EnvVars::VIRTUAL_ENV, context.venv.path())
+        .assert()
+        .success();
+    let metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
+    insta::with_settings!({ filters => context.filters() }, {
+        insta::assert_json_snapshot!(serde_json::json!({
+            "installed_packages": metadata["environment"]["packages"],
+            "module_owners": metadata["module_owners"],
+            "resolution": metadata["resolution"],
+        }), @r#"
+        {
+          "installed_packages": {
+            "metadata-extra==0.1.0@unmanaged+[SITE_PACKAGES]/metadata_extra-0.1.0.dist-info": {
+              "editable": false,
+              "name": "metadata-extra",
+              "path": "[SITE_PACKAGES]/metadata_extra-0.1.0.dist-info",
+              "version": "0.1.0"
+            }
+          },
+          "module_owners": {
+            "extra_module": [
+              {
+                "package_id": "metadata-extra==0.1.0@unmanaged+[SITE_PACKAGES]/metadata_extra-0.1.0.dist-info"
+              }
+            ]
+          },
+          "resolution": {
+            "script+[TEMP_DIR]/script.py": {
+              "dependencies": [],
+              "kind": "script",
+              "path": "[TEMP_DIR]/script.py"
+            }
+          }
+        }
+        "#);
+    });
+    context.pip_show().arg("metadata-extra").assert().success();
+
+    let assert = context
+        .workspace_metadata()
+        .arg("--script")
+        .arg(script.path())
+        .arg("--sync")
+        .arg("--exact")
+        .arg("--active")
+        .env(EnvVars::VIRTUAL_ENV, context.venv.path())
+        .assert()
+        .success();
+    let metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
+
+    insta::assert_json_snapshot!(serde_json::json!({
+        "extraneous_installed": context
+            .pip_show()
+            .arg("metadata-extra")
+            .output()?
+            .status
+            .success(),
+        "installed_packages": metadata["environment"]["packages"],
+        "module_owners": metadata.get("module_owners"),
+    }), @r#"
+    {
+      "extraneous_installed": false,
+      "installed_packages": {},
+      "module_owners": null
+    }
+    "#);
 
     Ok(())
 }
@@ -472,7 +816,7 @@ fn workspace_metadata_script_dependency_edges() -> Result<()> {
         "metadata_edge_child-0.1.0",
         &[],
     )?;
-    let child_url = Url::from_file_path(child.path())
+    let child_url = SafeUrl::from_file_path(child.path())
         .map_err(|()| anyhow::anyhow!("failed to convert wheel path to file URL"))?;
 
     let first = context
@@ -488,7 +832,7 @@ fn workspace_metadata_script_dependency_edges() -> Result<()> {
         ),
         &[],
     )?;
-    let first_url = Url::from_file_path(first.path())
+    let first_url = SafeUrl::from_file_path(first.path())
         .map_err(|()| anyhow::anyhow!("failed to convert wheel path to file URL"))?;
 
     let second = context
@@ -504,7 +848,7 @@ fn workspace_metadata_script_dependency_edges() -> Result<()> {
         ),
         &[],
     )?;
-    let second_url = Url::from_file_path(second.path())
+    let second_url = SafeUrl::from_file_path(second.path())
         .map_err(|()| anyhow::anyhow!("failed to convert wheel path to file URL"))?;
 
     let script = context.temp_dir.child("script.py");
@@ -589,7 +933,7 @@ fn workspace_metadata_dependency_edges_include_parent_reachability() -> Result<(
         .temp_dir
         .child("metadata_child-0.1.0-py3-none-any.whl");
     write_wheel(child.path(), "metadata-child", "metadata_child-0.1.0", &[])?;
-    let child_url = Url::from_file_path(child.path())
+    let child_url = SafeUrl::from_file_path(child.path())
         .map_err(|()| anyhow::anyhow!("failed to convert wheel path to file URL"))?;
 
     let parent = context
@@ -603,7 +947,7 @@ fn workspace_metadata_dependency_edges_include_parent_reachability() -> Result<(
         &format!("Requires-Dist: metadata-child @ {child_url}\n"),
         &[],
     )?;
-    let parent_url = Url::from_file_path(parent.path())
+    let parent_url = SafeUrl::from_file_path(parent.path())
         .map_err(|()| anyhow::anyhow!("failed to convert wheel path to file URL"))?;
 
     context.init().arg("project").assert().success();
@@ -618,6 +962,12 @@ dependencies = [
 ]
 "#
     ))?;
+    context
+        .lock()
+        .current_dir(&project)
+        .arg("--offline")
+        .assert()
+        .success();
 
     let assert = context
         .workspace_metadata()
@@ -637,7 +987,35 @@ dependencies = [
         insta::assert_json_snapshot!(parent_node["dependencies"], @r#"
         [
           {
-            "id": "metadata-child==0.1.0@path+[TEMP_DIR]/metadata_child-0.1.0-py3-none-any.whl",
+            "id": "metadata-child==0.1.0@path+[TEMP_DIR]/project/../metadata_child-0.1.0-py3-none-any.whl",
+            "marker": "sys_platform == 'linux'"
+          }
+        ]
+        "#);
+    });
+
+    // Remove the manifest to discover the workspace and its environment from the lockfile.
+    fs_err::remove_file(project.child("pyproject.toml"))?;
+    let assert = context
+        .workspace_metadata()
+        .current_dir(&project)
+        .arg("--frozen")
+        .args(["--preview-features", "frozen-lockfile"])
+        .assert()
+        .success();
+    let lockfile_metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
+    let resolution = lockfile_metadata["resolution"]
+        .as_object()
+        .ok_or_else(|| anyhow::anyhow!("metadata resolution was not an object"))?;
+    let parent_node = resolution
+        .iter()
+        .find_map(|(id, node)| id.starts_with("metadata-parent==").then_some(node))
+        .ok_or_else(|| anyhow::anyhow!("missing metadata-parent resolution node"))?;
+    insta::with_settings!({ filters => context.filters() }, {
+        insta::assert_json_snapshot!(parent_node["dependencies"], @r#"
+        [
+          {
+            "id": "metadata-child==0.1.0@path+[TEMP_DIR]/project/../metadata_child-0.1.0-py3-none-any.whl",
             "marker": "sys_platform == 'linux'"
           }
         ]
@@ -692,6 +1070,32 @@ fn workspace_metadata_sync_centralized_environment() -> Result<()> {
         metadata["environment"]["root"].as_str().map(Path::new),
         Some(target.as_path())
     );
+
+    // Remove the manifest to discover the workspace and its environment from the lockfile.
+    fs_err::remove_file(context.temp_dir.child("pyproject.toml"))?;
+    let assert = context
+        .workspace_metadata()
+        .arg("--frozen")
+        .args(["--preview-features", "frozen-lockfile"])
+        .arg("--preview-features")
+        .arg("workspace-metadata,centralized-project-envs")
+        .assert()
+        .success();
+    let lockfile_metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
+    assert_eq!(
+        lockfile_metadata["environment"]["root"]
+            .as_str()
+            .map(Path::new),
+        Some(target.as_path())
+    );
+    let mut filters = context.filters();
+    filters.push((
+        r#"(\[CACHE_DIR\]/environments-v2/)[^/" ]+"#,
+        "$1[ENVIRONMENT]",
+    ));
+    insta::with_settings!({ filters => filters }, {
+        insta::assert_json_snapshot!(lockfile_metadata["environment"]["root"], @r#""[CACHE_DIR]/environments-v2/[ENVIRONMENT]""#);
+    });
 
     Ok(())
 }
@@ -752,6 +1156,232 @@ fn workspace_metadata_sync_active_environment() -> Result<()> {
         Some(active.path())
     );
 
+    // Remove the manifest to discover the workspace and its environment from the lockfile.
+    fs_err::remove_file(context.temp_dir.child("pyproject.toml"))?;
+    let assert = context
+        .workspace_metadata()
+        .args([
+            "--frozen",
+            "--preview-features",
+            "frozen-lockfile",
+            "--active",
+        ])
+        .env(EnvVars::UV_PROJECT_ENVIRONMENT, ".venv")
+        .env(EnvVars::VIRTUAL_ENV, active.path())
+        .assert()
+        .success();
+    let lockfile_metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
+    insta::with_settings!({ filters => context.filters() }, {
+        insta::assert_json_snapshot!(lockfile_metadata["environment"]["root"], @r#""[TEMP_DIR]/active""#);
+    });
+
+    Ok(())
+}
+
+#[test]
+fn workspace_metadata_exact_requires_sync() {
+    let context = uv_test::test_context!("3.12");
+
+    uv_snapshot!(context.filters(), context.workspace_metadata().arg("--exact"), @r"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: the following required arguments were not provided:
+      --sync
+
+    Usage: uv workspace metadata --sync --cache-dir [CACHE_DIR] --exact --exclude-newer <EXCLUDE_NEWER>
+
+    For more information, try '--help'.
+    ");
+}
+
+#[test]
+fn workspace_metadata_exact_sync_removes_extraneous_packages() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let required = context
+        .temp_dir
+        .child("metadata_required-0.1.0-py3-none-any.whl");
+    write_wheel(
+        required.path(),
+        "metadata-required",
+        "metadata_required-0.1.0",
+        &[("required_module.py", "")],
+    )?;
+    let required_url = SafeUrl::from_file_path(required.path())
+        .map_err(|()| anyhow::anyhow!("failed to convert wheel path to file URL"))?;
+
+    let extraneous = context
+        .temp_dir
+        .child("metadata_extra-0.1.0-py3-none-any.whl");
+    write_wheel(
+        extraneous.path(),
+        "metadata-extra",
+        "metadata_extra-0.1.0",
+        &[("extra_module.py", "")],
+    )?;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+            [project]
+            name = "module-owner-root"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["metadata-required @ {required_url}"]
+            "#
+        })?;
+
+    context
+        .pip_install()
+        .arg(extraneous.path())
+        .assert()
+        .success();
+
+    let assert = context
+        .workspace_metadata()
+        .arg("--sync")
+        .assert()
+        .success();
+    let metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
+    let extraneous_installed = context
+        .pip_show()
+        .arg("metadata-extra")
+        .output()?
+        .status
+        .success();
+    let required_installed = context
+        .pip_show()
+        .arg("metadata-required")
+        .output()?
+        .status
+        .success();
+
+    insta::with_settings!({ filters => context.filters() }, {
+        insta::assert_json_snapshot!(serde_json::json!({
+            "extraneous_installed": extraneous_installed,
+            "module_owners": metadata["module_owners"],
+            "required_installed": required_installed,
+        }), @r#"
+        {
+          "extraneous_installed": true,
+          "module_owners": {
+            "extra_module": [
+              {
+                "package_id": "metadata-extra==0.1.0@unmanaged+[SITE_PACKAGES]/metadata_extra-0.1.0.dist-info"
+              }
+            ],
+            "required_module": [
+              {
+                "package_id": "metadata-required==0.1.0@path+[TEMP_DIR]/metadata_required-0.1.0-py3-none-any.whl"
+              }
+            ]
+          },
+          "required_installed": true
+        }
+        "#);
+    });
+
+    let assert = context
+        .workspace_metadata()
+        .arg("--sync")
+        .arg("--exact")
+        .assert()
+        .success();
+    let metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
+    let extraneous_installed = context
+        .pip_show()
+        .arg("metadata-extra")
+        .output()?
+        .status
+        .success();
+    let required_installed = context
+        .pip_show()
+        .arg("metadata-required")
+        .output()?
+        .status
+        .success();
+
+    insta::with_settings!({ filters => context.filters() }, {
+        insta::assert_json_snapshot!(serde_json::json!({
+            "extraneous_installed": extraneous_installed,
+            "module_owners": metadata["module_owners"],
+            "required_installed": required_installed,
+        }), @r#"
+        {
+          "extraneous_installed": false,
+          "module_owners": {
+            "required_module": [
+              {
+                "package_id": "metadata-required==0.1.0@path+[TEMP_DIR]/metadata_required-0.1.0-py3-none-any.whl"
+              }
+            ]
+          },
+          "required_installed": true
+        }
+        "#);
+    });
+
+    // Remove the manifest and required distribution to exercise installation from the lockfile.
+    fs_err::remove_file(context.temp_dir.child("pyproject.toml"))?;
+    context
+        .pip_uninstall()
+        .arg("metadata-required")
+        .assert()
+        .success();
+    context
+        .pip_install()
+        .arg(extraneous.path())
+        .assert()
+        .success();
+
+    let output = context
+        .workspace_metadata()
+        .args([
+            "--frozen",
+            "--sync",
+            "--preview-features",
+            "frozen-lockfile",
+        ])
+        .assert()
+        .success();
+    let metadata: serde_json::Value = serde_json::from_slice(&output.get_output().stdout)?;
+    insta::with_settings!({ filters => context.filters() }, {
+        insta::assert_json_snapshot!(metadata["module_owners"], @r#"
+        {
+          "extra_module": [
+            {
+              "package_id": "metadata-extra==0.1.0@unmanaged+[SITE_PACKAGES]/metadata_extra-0.1.0.dist-info"
+            }
+          ],
+          "required_module": [
+            {
+              "package_id": "metadata-required==0.1.0@path+[TEMP_DIR]/metadata_required-0.1.0-py3-none-any.whl"
+            }
+          ]
+        }
+        "#);
+    });
+    context.pip_show().arg("metadata-extra").assert().success();
+
+    // Exact synchronization also removes unrelated packages without a workspace manifest.
+    context
+        .workspace_metadata()
+        .args([
+            "--frozen",
+            "--sync",
+            "--exact",
+            "--preview-features",
+            "frozen-lockfile",
+        ])
+        .assert()
+        .success();
+    uv_snapshot!(context.filters(), context.pip_freeze(), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    metadata-required==0.1.0
+    ");
+
     Ok(())
 }
 
@@ -781,9 +1411,9 @@ fn workspace_metadata_includes_existing_environment() -> Result<()> {
         &[("missing_module.py", "")],
     )?;
 
-    let installed_owner_url = Url::from_file_path(installed_owner.path())
+    let installed_owner_url = SafeUrl::from_file_path(installed_owner.path())
         .map_err(|()| anyhow::anyhow!("failed to convert wheel path to file URL"))?;
-    let missing_owner_url = Url::from_file_path(missing_owner.path())
+    let missing_owner_url = SafeUrl::from_file_path(missing_owner.path())
         .map_err(|()| anyhow::anyhow!("failed to convert wheel path to file URL"))?;
 
     context
@@ -825,6 +1455,14 @@ dependencies = [
         }), @r#"
         {
           "environment": {
+            "packages": {
+              "installed-owner==0.1.0@path+[TEMP_DIR]/installed_owner-0.1.0-py3-none-any.whl": {
+                "editable": false,
+                "name": "installed-owner",
+                "path": "[SITE_PACKAGES]/installed_owner-0.1.0.dist-info",
+                "version": "0.1.0"
+              }
+            },
             "python": {
               "implementation": "cpython",
               "path": "[VENV]/[BIN]/[PYTHON]",
@@ -844,6 +1482,165 @@ dependencies = [
     });
 
     context.pip_show().arg("missing-owner").assert().failure();
+
+    // Remove the manifest to discover the workspace and its environment from the lockfile.
+    fs_err::remove_file(context.temp_dir.child("pyproject.toml"))?;
+    let output = context
+        .workspace_metadata()
+        .args(["--frozen", "--preview-features", "frozen-lockfile"])
+        .assert()
+        .success();
+    let lockfile_metadata: serde_json::Value = serde_json::from_slice(&output.get_output().stdout)?;
+    insta::with_settings!({ filters => context.filters() }, {
+        insta::assert_json_snapshot!(lockfile_metadata["environment"], @r#"
+        {
+          "packages": {
+            "installed-owner==0.1.0@path+[TEMP_DIR]/installed_owner-0.1.0-py3-none-any.whl": {
+              "editable": false,
+              "name": "installed-owner",
+              "path": "[SITE_PACKAGES]/installed_owner-0.1.0.dist-info",
+              "version": "0.1.0"
+            }
+          },
+          "python": {
+            "implementation": "cpython",
+            "path": "[VENV]/[BIN]/[PYTHON]",
+            "version": "3.12.[X]"
+          },
+          "root": "[VENV]/"
+        }
+        "#);
+        insta::assert_json_snapshot!(lockfile_metadata["module_owners"], @r#"
+        {
+          "installed_module": [
+            {
+              "package_id": "installed-owner==0.1.0@path+[TEMP_DIR]/installed_owner-0.1.0-py3-none-any.whl"
+            }
+          ]
+        }
+        "#);
+    });
+    context.pip_show().arg("missing-owner").assert().failure();
+
+    let override_env = context.temp_dir.child("override-env");
+    context.venv().arg(override_env.path()).assert().success();
+    let output = context
+        .workspace_metadata()
+        .args(["--frozen", "--preview-features", "frozen-lockfile"])
+        .env(EnvVars::UV_PROJECT_ENVIRONMENT, "override-env")
+        .assert()
+        .success();
+    let metadata: serde_json::Value = serde_json::from_slice(&output.get_output().stdout)?;
+    insta::with_settings!({ filters => context.filters() }, {
+        insta::assert_json_snapshot!(metadata["environment"], @r#"
+        {
+          "packages": {},
+          "python": {
+            "implementation": "cpython",
+            "path": "[TEMP_DIR]/override-env/[BIN]/[PYTHON]",
+            "version": "3.12.[X]"
+          },
+          "root": "[TEMP_DIR]/override-env"
+        }
+        "#);
+        insta::assert_json_snapshot!(metadata.get("module_owners"), @"null");
+    });
+
+    Ok(())
+}
+
+/// Module owners include dependencies selected by a non-project workspace's groups.
+#[test]
+fn workspace_metadata_lockfile_workspace_group_module_owners() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_python_names()
+        .with_filtered_virtualenv_bin();
+    let wheel = context
+        .temp_dir
+        .child("installed_owner-0.1.0-py3-none-any.whl");
+    write_wheel(
+        wheel.path(),
+        "installed-owner",
+        "installed_owner-0.1.0",
+        &[("installed_module.py", "")],
+    )?;
+    let wheel_url = SafeUrl::from_file_path(wheel.path())
+        .map_err(|()| anyhow::anyhow!("failed to convert wheel path to file URL"))?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [tool.uv.workspace]
+        members = []
+
+        [dependency-groups]
+        docs = ["installed-owner @ {wheel_url}"]
+    "#})?;
+    context.lock().arg("--offline").assert().success();
+    context.pip_install().arg(wheel.path()).assert().success();
+
+    // Remove the manifest to discover the workspace and its environment from the lockfile.
+    fs_err::remove_file(context.temp_dir.child("pyproject.toml"))?;
+    let output = context
+        .workspace_metadata()
+        .arg("--frozen")
+        .args(["--preview-features", "frozen-lockfile"])
+        .assert()
+        .success();
+    let metadata: serde_json::Value = serde_json::from_slice(&output.get_output().stdout)?;
+    insta::with_settings!({ filters => context.filters() }, {
+        insta::assert_json_snapshot!(metadata["module_owners"], @r#"
+        {
+          "installed_module": [
+            {
+              "package_id": "installed-owner==0.1.0@path+[TEMP_DIR]/installed_owner-0.1.0-py3-none-any.whl"
+            }
+          ]
+        }
+        "#);
+    });
+    // Synchronization creates the requested environment and installs workspace-group dependencies.
+    let output = context
+        .workspace_metadata()
+        .args([
+            "--frozen",
+            "--sync",
+            "--preview-features",
+            "frozen-lockfile",
+        ])
+        .env(EnvVars::UV_PROJECT_ENVIRONMENT, "metadata-env")
+        .assert()
+        .success();
+    let metadata: serde_json::Value = serde_json::from_slice(&output.get_output().stdout)?;
+    insta::with_settings!({ filters => context.filters() }, {
+        insta::assert_json_snapshot!(metadata["environment"], @r#"
+        {
+          "packages": {
+            "installed-owner==0.1.0@path+[TEMP_DIR]/installed_owner-0.1.0-py3-none-any.whl": {
+              "editable": false,
+              "name": "installed-owner",
+              "path": "[TEMP_DIR]/metadata-env/[PYTHON-LIB]/site-packages/installed_owner-0.1.0.dist-info",
+              "version": "0.1.0"
+            }
+          },
+          "python": {
+            "implementation": "cpython",
+            "path": "[TEMP_DIR]/metadata-env/[BIN]/[PYTHON]",
+            "version": "3.12.[X]"
+          },
+          "root": "[TEMP_DIR]/metadata-env"
+        }
+        "#);
+        insta::assert_json_snapshot!(metadata["module_owners"], @r#"
+        {
+          "installed_module": [
+            {
+              "package_id": "installed-owner==0.1.0@path+[TEMP_DIR]/installed_owner-0.1.0-py3-none-any.whl"
+            }
+          ]
+        }
+        "#);
+    });
 
     Ok(())
 }
@@ -875,11 +1672,11 @@ fn workspace_metadata_module_owners_from_locked_wheels() -> Result<()> {
         ],
     )?;
 
-    let gpu_a_url = Url::from_file_path(gpu_a.path())
+    let gpu_a_url = SafeUrl::from_file_path(gpu_a.path())
         .map_err(|()| anyhow::anyhow!("failed to convert wheel path to file URL"))?;
-    let gpu_b_url = Url::from_file_path(gpu_b.path())
+    let gpu_b_url = SafeUrl::from_file_path(gpu_b.path())
         .map_err(|()| anyhow::anyhow!("failed to convert wheel path to file URL"))?;
-    let typing_extensions_url = Url::from_file_path(typing_extensions.path())
+    let typing_extensions_url = SafeUrl::from_file_path(typing_extensions.path())
         .map_err(|()| anyhow::anyhow!("failed to convert wheel path to file URL"))?;
 
     context
@@ -915,6 +1712,26 @@ dependencies = [
           "path": "[VENV]/[BIN]/[PYTHON]",
           "version": "3.12.[X]",
           "implementation": "cpython"
+        },
+        "packages": {
+          "gpu-a==0.1.0@path+[TEMP_DIR]/gpu_a-0.1.0-py3-none-any.whl": {
+            "name": "gpu-a",
+            "version": "0.1.0",
+            "path": "[SITE_PACKAGES]/gpu_a-0.1.0.dist-info",
+            "editable": false
+          },
+          "gpu-b==0.1.0@path+[TEMP_DIR]/gpu_b-0.1.0-py3-none-any.whl": {
+            "name": "gpu-b",
+            "version": "0.1.0",
+            "path": "[SITE_PACKAGES]/gpu_b-0.1.0.dist-info",
+            "editable": false
+          },
+          "typing-extensions==0.1.0@path+[TEMP_DIR]/typing_extensions-0.1.0-py3-none-any.whl": {
+            "name": "typing-extensions",
+            "version": "0.1.0",
+            "path": "[SITE_PACKAGES]/typing_extensions-0.1.0.dist-info",
+            "editable": false
+          }
         }
       },
       "workspace": {
@@ -1073,9 +1890,9 @@ fn workspace_metadata_module_owners_use_installed_package_id() -> Result<()> {
         &[("shared.py", "")],
     )?;
 
-    let module_owner_311_url = Url::from_file_path(module_owner_311.path())
+    let module_owner_311_url = SafeUrl::from_file_path(module_owner_311.path())
         .map_err(|()| anyhow::anyhow!("failed to convert wheel path to file URL"))?;
-    let module_owner_312_url = Url::from_file_path(module_owner_312.path())
+    let module_owner_312_url = SafeUrl::from_file_path(module_owner_312.path())
         .map_err(|()| anyhow::anyhow!("failed to convert wheel path to file URL"))?;
 
     context
@@ -1117,7 +1934,7 @@ dependencies = [
 }
 
 #[test]
-fn workspace_metadata_module_owners_ignore_stale_virtual_package() -> Result<()> {
+fn workspace_metadata_module_owners_include_stale_virtual_package() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let stale_owner = context
@@ -1153,13 +1970,344 @@ package = false
         .assert()
         .success();
     let metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
-    let module_owners = if let Some(module_owners) = metadata.get("module_owners") {
-        serde_json::to_string_pretty(module_owners)?
-    } else {
-        "<missing>".to_string()
-    };
+    insta::with_settings!({ filters => context.filters() }, {
+        insta::assert_json_snapshot!(serde_json::json!({
+            "module_owners": metadata["module_owners"],
+            "resolution": metadata["resolution"],
+        }), @r#"
+        {
+          "module_owners": {
+            "stale": [
+              {
+                "package_id": "module-owner-root==0.1.0@unmanaged+[SITE_PACKAGES]/module_owner_root-0.1.0.dist-info"
+              }
+            ]
+          },
+          "resolution": {
+            "module-owner-root==0.1.0@virtual+[TEMP_DIR]/": {
+              "dependencies": [],
+              "kind": "package",
+              "name": "module-owner-root",
+              "source": {
+                "virtual": "[TEMP_DIR]/"
+              },
+              "version": "0.1.0"
+            },
+            "workspace+[TEMP_DIR]/": {
+              "dependencies": [],
+              "kind": "workspace",
+              "path": "[TEMP_DIR]/"
+            }
+          }
+        }
+        "#);
+    });
 
-    insta::assert_snapshot!(module_owners, @"<missing>");
+    Ok(())
+}
+
+#[test]
+fn workspace_metadata_module_owners_after_dependency_changes() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let installed_owner = context
+        .temp_dir
+        .child("module_owner-0.1.0-py3-none-any.whl");
+    write_wheel(
+        installed_owner.path(),
+        "module-owner",
+        "module_owner-0.1.0",
+        &[("installed_module.py", "")],
+    )?;
+    let locked_owner = context
+        .temp_dir
+        .child("module_owner-0.2.0-py3-none-any.whl");
+    write_wheel_with_metadata(
+        locked_owner.path(),
+        "module-owner",
+        "0.2.0",
+        "module_owner-0.2.0",
+        "",
+        &[("replacement_module.py", "")],
+    )?;
+    let locked_owner_url = SafeUrl::from_file_path(locked_owner.path())
+        .map_err(|()| anyhow::anyhow!("failed to convert wheel path to file URL"))?;
+
+    context
+        .pip_install()
+        .arg(installed_owner.path())
+        .assert()
+        .success();
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    pyproject.write_str(&formatdoc! {r#"
+        [project]
+        name = "module-owner-root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["module-owner @ {locked_owner_url}"]
+        "#
+    })?;
+
+    // A selected package owns modules from an older installed version with the same name.
+    let assert = context.workspace_metadata().assert().success();
+    let metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
+    insta::with_settings!({ filters => context.filters() }, {
+        insta::assert_json_snapshot!(serde_json::json!({
+            "installed_packages": metadata["environment"]["packages"],
+            "module_owners": metadata["module_owners"],
+        }), @r#"
+        {
+          "installed_packages": {
+            "module-owner==0.2.0@path+[TEMP_DIR]/module_owner-0.2.0-py3-none-any.whl": {
+              "editable": false,
+              "name": "module-owner",
+              "path": "[SITE_PACKAGES]/module_owner-0.1.0.dist-info",
+              "version": "0.1.0"
+            }
+          },
+          "module_owners": {
+            "installed_module": [
+              {
+                "package_id": "module-owner==0.2.0@path+[TEMP_DIR]/module_owner-0.2.0-py3-none-any.whl"
+              }
+            ]
+          }
+        }
+        "#);
+    });
+
+    pyproject.write_str(indoc! {r#"
+        [project]
+        name = "module-owner-root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+        "#
+    })?;
+
+    // Without a declaration, the installed package remains available without a dependency edge.
+    let assert = context.workspace_metadata().assert().success();
+    let metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
+    insta::with_settings!({ filters => context.filters() }, {
+        insta::assert_json_snapshot!(serde_json::json!({
+            "installed_packages": metadata["environment"]["packages"],
+            "module_owners": metadata["module_owners"],
+            "resolution": metadata["resolution"],
+        }), @r#"
+        {
+          "installed_packages": {
+            "module-owner==0.1.0@unmanaged+[SITE_PACKAGES]/module_owner-0.1.0.dist-info": {
+              "editable": false,
+              "name": "module-owner",
+              "path": "[SITE_PACKAGES]/module_owner-0.1.0.dist-info",
+              "version": "0.1.0"
+            }
+          },
+          "module_owners": {
+            "installed_module": [
+              {
+                "package_id": "module-owner==0.1.0@unmanaged+[SITE_PACKAGES]/module_owner-0.1.0.dist-info"
+              }
+            ]
+          },
+          "resolution": {
+            "module-owner-root==0.1.0@virtual+[TEMP_DIR]/": {
+              "dependencies": [],
+              "kind": "package",
+              "name": "module-owner-root",
+              "source": {
+                "virtual": "[TEMP_DIR]/"
+              },
+              "version": "0.1.0"
+            },
+            "workspace+[TEMP_DIR]/": {
+              "dependencies": [],
+              "kind": "workspace",
+              "path": "[TEMP_DIR]/"
+            }
+          }
+        }
+        "#);
+    });
+
+    Ok(())
+}
+
+/// Duplicate distribution metadata must retain distinct inventory entries and module owners.
+#[test]
+fn workspace_metadata_installed_packages_with_duplicate_names() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "module-owner-root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+        "#
+        })?;
+
+    let editable_source = context.temp_dir.child("editable-source");
+    editable_source.create_dir_all()?;
+    let editable_url = SafeUrl::from_directory_path(editable_source.path())
+        .map_err(|()| anyhow::anyhow!("failed to convert source path to file URL"))?;
+    let site_packages = ChildPath::new(context.site_packages());
+    site_packages.child("shared.py").write_str("")?;
+    let installed = site_packages.child("module_owner-0.1.0.dist-info");
+    installed.child("METADATA").write_str(indoc! {"
+        Metadata-Version: 2.1
+        Name: module-owner
+        Version: 0.1.0
+        "
+    })?;
+    installed.child("RECORD").write_str("shared.py,,\n")?;
+    let editable = site_packages.child("module_owner-0.2.0.dist-info");
+    editable.child("METADATA").write_str(indoc! {"
+        Metadata-Version: 2.1
+        Name: module-owner
+        Version: 0.2.0
+        "
+    })?;
+    editable.child("RECORD").write_str("shared.py,,\n")?;
+    editable.child("direct_url.json").write_str(
+        &serde_json::json!({
+            "url": editable_url.as_str(),
+            "dir_info": {"editable": true},
+        })
+        .to_string(),
+    )?;
+
+    let assert = context.workspace_metadata().assert().success();
+    let metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
+    insta::with_settings!({ filters => context.filters() }, {
+        insta::assert_json_snapshot!(serde_json::json!({
+            "installed_packages": metadata["environment"]["packages"],
+            "module_owners": metadata["module_owners"],
+        }), @r#"
+        {
+          "installed_packages": {
+            "module-owner==0.1.0@unmanaged+[SITE_PACKAGES]/module_owner-0.1.0.dist-info": {
+              "editable": false,
+              "name": "module-owner",
+              "path": "[SITE_PACKAGES]/module_owner-0.1.0.dist-info",
+              "version": "0.1.0"
+            },
+            "module-owner==0.2.0@unmanaged+[SITE_PACKAGES]/module_owner-0.2.0.dist-info": {
+              "editable": true,
+              "name": "module-owner",
+              "path": "[SITE_PACKAGES]/module_owner-0.2.0.dist-info",
+              "version": "0.2.0"
+            }
+          },
+          "module_owners": {
+            "shared": [
+              {
+                "package_id": "module-owner==0.1.0@unmanaged+[SITE_PACKAGES]/module_owner-0.1.0.dist-info"
+              },
+              {
+                "package_id": "module-owner==0.2.0@unmanaged+[SITE_PACKAGES]/module_owner-0.2.0.dist-info"
+              }
+            ]
+          }
+        }
+        "#);
+    });
+
+    Ok(())
+}
+
+#[test]
+fn workspace_metadata_installed_packages_without_modules() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filtered_missing_file_error();
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    pyproject.write_str(indoc! {r#"
+        [project]
+        name = "module-owner-root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+        "#
+    })?;
+
+    let site_packages = ChildPath::new(context.site_packages());
+    site_packages
+        .child("missing_record-0.1.0.dist-info/METADATA")
+        .write_str(indoc! {"
+        Metadata-Version: 2.1
+        Name: missing-record
+        Version: 0.1.0
+        "
+        })?;
+    site_packages
+        .child("stub_only-0.1.0.dist-info/METADATA")
+        .write_str(indoc! {"
+        Metadata-Version: 2.1
+        Name: stub-only
+        Version: 0.1.0
+        "
+        })?;
+    site_packages.child("stub_only.pyi").write_str("")?;
+    site_packages
+        .child("stub_only-0.1.0.dist-info/RECORD")
+        .write_str("stub_only.pyi,,\n")?;
+
+    let assert = context.workspace_metadata().assert().success();
+    let metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
+    insta::with_settings!({ filters => context.filters() }, {
+        insta::assert_json_snapshot!(serde_json::json!({
+            "installed_packages": metadata["environment"]["packages"],
+            "module_owners": metadata["module_owners"],
+        }), @r#"
+        {
+          "installed_packages": {
+            "missing-record==0.1.0@unmanaged+[SITE_PACKAGES]/missing_record-0.1.0.dist-info": {
+              "editable": false,
+              "name": "missing-record",
+              "path": "[SITE_PACKAGES]/missing_record-0.1.0.dist-info",
+              "version": "0.1.0"
+            },
+            "stub-only==0.1.0@unmanaged+[SITE_PACKAGES]/stub_only-0.1.0.dist-info": {
+              "editable": false,
+              "name": "stub-only",
+              "path": "[SITE_PACKAGES]/stub_only-0.1.0.dist-info",
+              "version": "0.1.0"
+            }
+          },
+          "module_owners": null
+        }
+        "#);
+    });
+
+    // Missing module records for a selected package make module ownership incomplete.
+    let declared = context
+        .temp_dir
+        .child("missing_record-0.1.0-py3-none-any.whl");
+    write_wheel(
+        declared.path(),
+        "missing-record",
+        "missing_record-0.1.0",
+        &[],
+    )?;
+    let declared_url = SafeUrl::from_file_path(declared.path())
+        .map_err(|()| anyhow::anyhow!("failed to convert wheel path to file URL"))?;
+    pyproject.write_str(&formatdoc! {r#"
+        [project]
+        name = "module-owner-root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["missing-record @ {declared_url}"]
+        "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.workspace_metadata(), @r#"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    warning: The `uv workspace metadata` command is experimental and may change without warning. Pass `--preview-features workspace-metadata` to disable this warning.
+    Resolved 2 packages in [TIME]
+    error: Failed to inspect environment
+      cause: failed to open file `[SITE_PACKAGES]/missing_record-0.1.0.dist-info/RECORD`: [OS ERROR 2]
+    "#);
 
     Ok(())
 }
@@ -1171,7 +2319,7 @@ fn workspace_metadata_module_owners_failure_is_error() -> Result<()> {
     let gpu_a = context.temp_dir.child("gpu_a-0.1.0-py3-none-any.whl");
     write_wheel(gpu_a.path(), "gpu-a", "gpu_a-0.1.0", &[("gpu/a.py", "")])?;
 
-    let gpu_a_url = Url::from_file_path(gpu_a.path())
+    let gpu_a_url = SafeUrl::from_file_path(gpu_a.path())
         .map_err(|()| anyhow::anyhow!("failed to convert wheel path to file URL"))?;
 
     context
@@ -1195,9 +2343,9 @@ dependencies = [
     exit_code: 2 (failure)
     ----- stderr -----
     warning: The `uv workspace metadata` command is experimental and may change without warning. Pass `--preview-features workspace-metadata` to disable this warning.
-    error: Failed to collect module owners
-      Caused by: Failed to determine installation plan
-      Caused by: Distribution not found at: file://[TEMP_DIR]/gpu_a-0.1.0-py3-none-any.whl
+    error: Failed to inspect environment
+      cause: Failed to determine installation plan
+      cause: Distribution not found at: file://[TEMP_DIR]/gpu_a-0.1.0-py3-none-any.whl
     "#);
 
     Ok(())
@@ -1237,7 +2385,7 @@ fn workspace_metadata_root_workspace() -> Result<()> {
         {
           "name": "albatross",
           "path": "[TEMP_DIR]/workspace",
-          "id": "albatross==0.1.0@editable+[TEMP_DIR]/workspace/"
+          "id": "albatross==0.1.0@editable+[TEMP_DIR]/workspace"
         },
         {
           "name": "bird-feeder",
@@ -1251,11 +2399,11 @@ fn workspace_metadata_root_workspace() -> Result<()> {
         }
       ],
       "resolution": {
-        "albatross==0.1.0@editable+[TEMP_DIR]/workspace/": {
+        "albatross==0.1.0@editable+[TEMP_DIR]/workspace": {
           "name": "albatross",
           "version": "0.1.0",
           "source": {
-            "editable": "[TEMP_DIR]/workspace/"
+            "editable": "[TEMP_DIR]/workspace"
           },
           "kind": "package",
           "dependencies": [
@@ -1388,13 +2536,7 @@ fn workspace_metadata_virtual_workspace() -> Result<()> {
         &workspace,
     )?;
 
-    let mut filters = context.filters();
-    filters.push((
-        r"(?m)^WARN Ignoring non-directory workspace member: `[^\n]+`\n",
-        "",
-    ));
-
-    uv_snapshot!(filters, context.workspace_metadata().current_dir(&workspace), @r#"
+    uv_snapshot!(context.filters(), context.workspace_metadata().current_dir(&workspace), @r#"
     exit_code: 0 (success)
     ----- stdout -----
     {
@@ -1654,7 +2796,7 @@ fn workspace_metadata_from_member() -> Result<()> {
         {
           "name": "albatross",
           "path": "[TEMP_DIR]/workspace",
-          "id": "albatross==0.1.0@editable+[TEMP_DIR]/workspace/"
+          "id": "albatross==0.1.0@editable+[TEMP_DIR]/workspace"
         },
         {
           "name": "bird-feeder",
@@ -1668,11 +2810,11 @@ fn workspace_metadata_from_member() -> Result<()> {
         }
       ],
       "resolution": {
-        "albatross==0.1.0@editable+[TEMP_DIR]/workspace/": {
+        "albatross==0.1.0@editable+[TEMP_DIR]/workspace": {
           "name": "albatross",
           "version": "0.1.0",
           "source": {
-            "editable": "[TEMP_DIR]/workspace/"
+            "editable": "[TEMP_DIR]/workspace"
           },
           "kind": "package",
           "dependencies": [
@@ -1836,7 +2978,7 @@ fn workspace_metadata_multiple_members() {
         {
           "name": "pkg-a",
           "path": "[TEMP_DIR]/pkg-a",
-          "id": "pkg-a==0.1.0@editable+[TEMP_DIR]/pkg-a/"
+          "id": "pkg-a==0.1.0@editable+[TEMP_DIR]/pkg-a"
         },
         {
           "name": "pkg-b",
@@ -1850,11 +2992,11 @@ fn workspace_metadata_multiple_members() {
         }
       ],
       "resolution": {
-        "pkg-a==0.1.0@editable+[TEMP_DIR]/pkg-a/": {
+        "pkg-a==0.1.0@editable+[TEMP_DIR]/pkg-a": {
           "name": "pkg-a",
           "version": "0.1.0",
           "source": {
-            "editable": "[TEMP_DIR]/pkg-a/"
+            "editable": "[TEMP_DIR]/pkg-a"
           },
           "kind": "package",
           "dependencies": []
@@ -1922,15 +3064,15 @@ fn workspace_metadata_single_project() {
         {
           "name": "my-project",
           "path": "[TEMP_DIR]/my-project",
-          "id": "my-project==0.1.0@editable+[TEMP_DIR]/my-project/"
+          "id": "my-project==0.1.0@editable+[TEMP_DIR]/my-project"
         }
       ],
       "resolution": {
-        "my-project==0.1.0@editable+[TEMP_DIR]/my-project/": {
+        "my-project==0.1.0@editable+[TEMP_DIR]/my-project": {
           "name": "my-project",
           "version": "0.1.0",
           "source": {
-            "editable": "[TEMP_DIR]/my-project/"
+            "editable": "[TEMP_DIR]/my-project"
           },
           "kind": "package",
           "dependencies": []
@@ -1985,15 +3127,15 @@ fn workspace_metadata_with_excluded() -> Result<()> {
         {
           "name": "albatross",
           "path": "[TEMP_DIR]/workspace",
-          "id": "albatross==0.1.0@editable+[TEMP_DIR]/workspace/"
+          "id": "albatross==0.1.0@editable+[TEMP_DIR]/workspace"
         }
       ],
       "resolution": {
-        "albatross==0.1.0@editable+[TEMP_DIR]/workspace/": {
+        "albatross==0.1.0@editable+[TEMP_DIR]/workspace": {
           "name": "albatross",
           "version": "0.1.0",
           "source": {
-            "editable": "[TEMP_DIR]/workspace/"
+            "editable": "[TEMP_DIR]/workspace"
           },
           "kind": "package",
           "dependencies": [
@@ -2231,15 +3373,15 @@ fn workspace_metadata_various_dependency_rainbow() -> Result<()> {
         {
           "name": "albatross",
           "path": "[TEMP_DIR]/workspace",
-          "id": "albatross==0.1.0@editable+[TEMP_DIR]/workspace/"
+          "id": "albatross==0.1.0@editable+[TEMP_DIR]/workspace"
         }
       ],
       "resolution": {
-        "albatross:dev==0.1.0@editable+[TEMP_DIR]/workspace/": {
+        "albatross:dev==0.1.0@editable+[TEMP_DIR]/workspace": {
           "name": "albatross",
           "version": "0.1.0",
           "source": {
-            "editable": "[TEMP_DIR]/workspace/"
+            "editable": "[TEMP_DIR]/workspace"
           },
           "kind": {
             "group": "dev"
@@ -2250,11 +3392,11 @@ fn workspace_metadata_various_dependency_rainbow() -> Result<()> {
             }
           ]
         },
-        "albatross==0.1.0@editable+[TEMP_DIR]/workspace/": {
+        "albatross==0.1.0@editable+[TEMP_DIR]/workspace": {
           "name": "albatross",
           "version": "0.1.0",
           "source": {
-            "editable": "[TEMP_DIR]/workspace/"
+            "editable": "[TEMP_DIR]/workspace"
           },
           "kind": "package",
           "dependencies": [
@@ -2265,28 +3407,28 @@ fn workspace_metadata_various_dependency_rainbow() -> Result<()> {
           "optional_dependencies": [
             {
               "name": "io",
-              "id": "albatross[io]==0.1.0@editable+[TEMP_DIR]/workspace/"
+              "id": "albatross[io]==0.1.0@editable+[TEMP_DIR]/workspace"
             }
           ],
           "dependency_groups": [
             {
               "name": "dev",
-              "id": "albatross:dev==0.1.0@editable+[TEMP_DIR]/workspace/"
+              "id": "albatross:dev==0.1.0@editable+[TEMP_DIR]/workspace"
             }
           ]
         },
-        "albatross[io]==0.1.0@editable+[TEMP_DIR]/workspace/": {
+        "albatross[io]==0.1.0@editable+[TEMP_DIR]/workspace": {
           "name": "albatross",
           "version": "0.1.0",
           "source": {
-            "editable": "[TEMP_DIR]/workspace/"
+            "editable": "[TEMP_DIR]/workspace"
           },
           "kind": {
             "extra": "io"
           },
           "dependencies": [
             {
-              "id": "albatross==0.1.0@editable+[TEMP_DIR]/workspace/"
+              "id": "albatross==0.1.0@editable+[TEMP_DIR]/workspace"
             },
             {
               "id": "anyio==4.3.0@registry+https://pypi.org/simple"

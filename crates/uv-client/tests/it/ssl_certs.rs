@@ -1,3 +1,4 @@
+use std::assert_matches;
 use std::io::Write;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
@@ -9,13 +10,12 @@ use temp_env::async_with_vars;
 use tempfile::{NamedTempFile, TempDir};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
-use url::Url;
 
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Certificates, RegistryClientBuilder};
 use uv_distribution_types::IndexUrl;
-use uv_errors::{ErrorOptions, Hint, write_error_chain_with_options};
-use uv_redacted::DisplaySafeUrl;
+use uv_errors::{ErrorOptions, Hinted, write_error_chain_with_options};
+use uv_redacted::SafeUrl;
 use uv_static::EnvVars;
 
 use crate::http_util::{
@@ -260,7 +260,7 @@ impl TestClient {
             let mut rendered = String::new();
             write_error_chain_with_options(
                 &error,
-                error.hints(),
+                &error.hints(),
                 ErrorOptions::default().with_stream(&mut rendered),
             )
             .unwrap();
@@ -324,8 +324,9 @@ impl TestClient {
     /// valid client certificate was presented.
     async fn expect_mtls_connect_fails(&self, cert: &TestCertificate) {
         self.expect_mtls_connect_fails_with_server_tls_error(cert, |server_tls_err| {
-            assert!(
-                matches!(server_tls_err, rustls::Error::NoCertificatesPresented),
+            assert_matches!(
+                server_tls_err,
+                rustls::Error::NoCertificatesPresented,
                 "expected NoCertificatesPresented, got: {server_tls_err}"
             );
         })
@@ -349,7 +350,7 @@ impl TestClient {
     /// Assert that an HTTPS connection to a public host succeeds.
     #[cfg(feature = "test-pypi")]
     async fn expect_https_connect_succeeds_for_host(&self, host: &str) {
-        let url = DisplaySafeUrl::from_str(&format!("https://{host}/")).unwrap();
+        let url = SafeUrl::from_str(&format!("https://{host}/")).unwrap();
         let vars = self.ssl_vars();
         let system_certs = self.system_certs;
         async_with_vars(vars, async {
@@ -367,7 +368,7 @@ impl TestClient {
     /// error on the client side.
     #[cfg(feature = "test-pypi")]
     async fn expect_https_connect_fails_for_host(&self, host: &str) {
-        let url = DisplaySafeUrl::from_str(&format!("https://{host}/")).unwrap();
+        let url = SafeUrl::from_str(&format!("https://{host}/")).unwrap();
         let vars = self.ssl_vars();
         let system_certs = self.system_certs;
         async_with_vars(vars, async {
@@ -426,21 +427,21 @@ async fn send_request(
     system_certs: bool,
     cert: Option<&Path>,
 ) -> Result<reqwest::Response, reqwest_middleware::Error> {
-    let url = DisplaySafeUrl::from_str(&format!("https://{addr}")).unwrap();
+    let url = SafeUrl::from_str(&format!("https://{addr}")).unwrap();
     send_request_to_with_cert(&url, system_certs, cert).await
 }
 
 /// Send a GET request to an arbitrary URL using a fresh registry client.
 #[cfg(feature = "test-pypi")]
 async fn send_request_to(
-    url: &DisplaySafeUrl,
+    url: &SafeUrl,
     system_certs: bool,
 ) -> Result<reqwest::Response, reqwest_middleware::Error> {
     send_request_to_with_cert(url, system_certs, None).await
 }
 
 async fn send_request_to_with_cert(
-    url: &DisplaySafeUrl,
+    url: &SafeUrl,
     system_certs: bool,
     cert: Option<&Path>,
 ) -> Result<reqwest::Response, reqwest_middleware::Error> {
@@ -465,7 +466,7 @@ async fn send_request_to_with_cert(
         .cached_client()
         .uncached()
         .for_host(url)
-        .get(Url::from(url.clone()))
+        .get(url.clone())
         .send()
         .await
 }
@@ -859,13 +860,11 @@ async fn test_mtls_with_wrong_client_cert() -> Result<()> {
         .ssl_cert_file(&server_cert.trust_path)
         .ssl_client_cert(&other_cert.client_cert_path)
         .expect_mtls_connect_fails_with_server_tls_error(&server_cert, |server_tls_err| {
-            assert!(
-                matches!(
-                    server_tls_err,
-                    rustls::Error::InvalidCertificate(
-                        rustls::CertificateError::BadSignature
-                            | rustls::CertificateError::UnknownIssuer
-                    )
+            assert_matches!(
+                server_tls_err,
+                rustls::Error::InvalidCertificate(
+                    rustls::CertificateError::BadSignature
+                        | rustls::CertificateError::UnknownIssuer
                 ),
                 "expected InvalidCertificate(BadSignature | UnknownIssuer), got: {server_tls_err}"
             );

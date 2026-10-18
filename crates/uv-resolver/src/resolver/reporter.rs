@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use uv_distribution_types::{BuildableSource, VersionOrUrlRef};
 use uv_normalize::PackageName;
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 
 pub trait Reporter: Send + Sync {
     /// Callback to invoke when a dependency is resolved.
@@ -28,10 +28,10 @@ pub trait Reporter: Send + Sync {
     fn on_download_complete(&self, name: &PackageName, id: usize);
 
     /// Callback to invoke when a repository checkout begins.
-    fn on_checkout_start(&self, url: &DisplaySafeUrl, rev: &str) -> usize;
+    fn on_checkout_start(&self, url: &SafeUrl, rev: &str) -> usize;
 
     /// Callback to invoke when a repository checkout completes.
-    fn on_checkout_complete(&self, url: &DisplaySafeUrl, rev: &str, id: usize);
+    fn on_checkout_complete(&self, url: &SafeUrl, rev: &str, id: usize);
 }
 
 impl dyn Reporter {
@@ -57,11 +57,11 @@ impl uv_distribution::Reporter for Facade {
         self.reporter.on_build_complete(source, id);
     }
 
-    fn on_checkout_start(&self, url: &DisplaySafeUrl, rev: &str) -> usize {
+    fn on_checkout_start(&self, url: &SafeUrl, rev: &str) -> usize {
         self.reporter.on_checkout_start(url, rev)
     }
 
-    fn on_checkout_complete(&self, url: &DisplaySafeUrl, rev: &str, id: usize) {
+    fn on_checkout_complete(&self, url: &SafeUrl, rev: &str, id: usize) {
         self.reporter.on_checkout_complete(url, rev, id);
     }
 

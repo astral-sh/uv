@@ -42,31 +42,31 @@ pub struct ResolutionMetadata {
 impl ResolutionMetadata {
     /// Parse the [`ResolutionMetadata`] from a `METADATA` file, as included in a built distribution (wheel).
     pub fn parse_metadata(content: &[u8]) -> Result<Self, MetadataError> {
-        let headers = Headers::parse(content)?;
+        let headers = Headers::parse(content);
 
         let name = PackageName::from_owned(
             headers
-                .get_first_value("Name")
+                .get_first_value("Name")?
                 .ok_or(MetadataError::FieldNotFound("Name"))?,
         )?;
         let version = Version::from_str(
             &headers
-                .get_first_value("Version")
+                .get_first_value("Version")?
                 .ok_or(MetadataError::FieldNotFound("Version"))?,
         )
         .map_err(MetadataError::Pep440VersionError)?;
         let requires_dist = headers
-            .get_all_values("Requires-Dist")
+            .get_all_values("Requires-Dist")?
             .map(|requires_dist| LenientRequirement::from_str(&requires_dist))
             .map_ok(Requirement::from)
             .collect::<Result<Box<_>, _>>()?;
         let requires_python = headers
-            .get_first_value("Requires-Python")
+            .get_first_value("Requires-Python")?
             .map(|requires_python| LenientVersionSpecifiers::from_str(&requires_python))
             .transpose()?
             .map(VersionSpecifiers::from);
         let provides_extra = headers
-            .get_all_values("Provides-Extra")
+            .get_all_values("Provides-Extra")?
             .filter_map(
                 |provides_extra| match ExtraName::from_owned(provides_extra) {
                     Ok(extra_name) => Some(extra_name),
@@ -78,7 +78,7 @@ impl ResolutionMetadata {
             )
             .collect::<Box<_>>();
         let dynamic = headers
-            .get_all_values("Dynamic")
+            .get_all_values("Dynamic")?
             .any(|field| field == "Version");
 
         Ok(Self {
@@ -95,12 +95,12 @@ impl ResolutionMetadata {
     /// or later _and_ none of the required fields (`Requires-Python`, `Requires-Dist`, and
     /// `Provides-Extra`) are marked as dynamic.
     pub fn parse_pkg_info(content: &[u8]) -> Result<Self, MetadataError> {
-        let headers = Headers::parse(content)?;
+        let headers = Headers::parse(content);
 
         // To rely on a source distribution's `PKG-INFO` file, the `Metadata-Version` field must be
         // present and set to a value of at least `2.2`.
         let metadata_version = headers
-            .get_first_value("Metadata-Version")
+            .get_first_value("Metadata-Version")?
             .ok_or(MetadataError::FieldNotFound("Metadata-Version"))?;
 
         // Parse the version into (major, minor).
@@ -111,7 +111,7 @@ impl ResolutionMetadata {
 
         // If any of the fields we need are marked as dynamic, we can't use the `PKG-INFO` file.
         let mut dynamic = false;
-        for field in headers.get_all_values("Dynamic") {
+        for field in headers.get_all_values("Dynamic")? {
             match field.as_str() {
                 "Requires-Python" => return Err(MetadataError::DynamicField("Requires-Python")),
                 "Requires-Dist" => return Err(MetadataError::DynamicField("Requires-Dist")),
@@ -124,29 +124,29 @@ impl ResolutionMetadata {
         // The `Name` and `Version` fields are required, and can't be dynamic.
         let name = PackageName::from_owned(
             headers
-                .get_first_value("Name")
+                .get_first_value("Name")?
                 .ok_or(MetadataError::FieldNotFound("Name"))?,
         )?;
         let version = Version::from_str(
             &headers
-                .get_first_value("Version")
+                .get_first_value("Version")?
                 .ok_or(MetadataError::FieldNotFound("Version"))?,
         )
         .map_err(MetadataError::Pep440VersionError)?;
 
         // The remaining fields are required to be present.
         let requires_dist = headers
-            .get_all_values("Requires-Dist")
+            .get_all_values("Requires-Dist")?
             .map(|requires_dist| LenientRequirement::from_str(&requires_dist))
             .map_ok(Requirement::from)
             .collect::<Result<Box<_>, _>>()?;
         let requires_python = headers
-            .get_first_value("Requires-Python")
+            .get_first_value("Requires-Python")?
             .map(|requires_python| LenientVersionSpecifiers::from_str(&requires_python))
             .transpose()?
             .map(VersionSpecifiers::from);
         let provides_extra = headers
-            .get_all_values("Provides-Extra")
+            .get_all_values("Provides-Extra")?
             .filter_map(
                 |provides_extra| match ExtraName::from_owned(provides_extra) {
                     Ok(extra_name) => Some(extra_name),
@@ -272,6 +272,7 @@ impl ResolutionMetadata {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
     use std::str::FromStr;
 
     use uv_normalize::PackageName;
@@ -284,11 +285,11 @@ mod tests {
     fn test_parse_metadata() {
         let s = "Metadata-Version: 1.0";
         let meta = ResolutionMetadata::parse_metadata(s.as_bytes());
-        assert!(matches!(meta, Err(MetadataError::FieldNotFound("Name"))));
+        assert_matches!(meta, Err(MetadataError::FieldNotFound("Name")));
 
         let s = "Metadata-Version: 1.0\nName: asdf";
         let meta = ResolutionMetadata::parse_metadata(s.as_bytes());
-        assert!(matches!(meta, Err(MetadataError::FieldNotFound("Version"))));
+        assert_matches!(meta, Err(MetadataError::FieldNotFound("Version")));
 
         let s = "Metadata-Version: 1.0\nName: asdf\nVersion: 1.0";
         let meta = ResolutionMetadata::parse_metadata(s.as_bytes()).unwrap();
@@ -307,25 +308,22 @@ mod tests {
 
         let s = "Metadata-Version: 1.0\nName: =?utf-8?q?=C3=A4_space?= <x@y.org>\nVersion: 1.0";
         let meta = ResolutionMetadata::parse_metadata(s.as_bytes());
-        assert!(matches!(meta, Err(MetadataError::InvalidName(_))));
+        assert_matches!(meta, Err(MetadataError::InvalidName(_)));
     }
 
     #[test]
     fn test_parse_pkg_info() {
         let s = "Metadata-Version: 2.1";
         let meta = ResolutionMetadata::parse_pkg_info(s.as_bytes());
-        assert!(matches!(
-            meta,
-            Err(MetadataError::UnsupportedMetadataVersion(_))
-        ));
+        assert_matches!(meta, Err(MetadataError::UnsupportedMetadataVersion(_)));
 
         let s = "Metadata-Version: 2.2\nName: asdf";
         let meta = ResolutionMetadata::parse_pkg_info(s.as_bytes());
-        assert!(matches!(meta, Err(MetadataError::FieldNotFound("Version"))));
+        assert_matches!(meta, Err(MetadataError::FieldNotFound("Version")));
 
         let s = "Metadata-Version: 2.3\nName: asdf";
         let meta = ResolutionMetadata::parse_pkg_info(s.as_bytes());
-        assert!(matches!(meta, Err(MetadataError::FieldNotFound("Version"))));
+        assert_matches!(meta, Err(MetadataError::FieldNotFound("Version")));
 
         let s = "Metadata-Version: 2.3\nName: asdf\nVersion: 1.0";
         let meta = ResolutionMetadata::parse_pkg_info(s.as_bytes()).unwrap();
@@ -334,7 +332,7 @@ mod tests {
 
         let s = "Metadata-Version: 2.3\nName: asdf\nVersion: 1.0\nDynamic: Requires-Dist";
         let meta = ResolutionMetadata::parse_pkg_info(s.as_bytes()).unwrap_err();
-        assert!(matches!(meta, MetadataError::DynamicField("Requires-Dist")));
+        assert_matches!(meta, MetadataError::DynamicField("Requires-Dist"));
 
         let s = "Metadata-Version: 2.3\nName: asdf\nVersion: 1.0\nRequires-Dist: foo";
         let meta = ResolutionMetadata::parse_pkg_info(s.as_bytes()).unwrap();
@@ -351,7 +349,7 @@ mod tests {
     "#;
         let pyproject = PyProjectToml::from_toml(s, "pyproject.toml").unwrap();
         let meta = ResolutionMetadata::parse_pyproject_toml(pyproject, None);
-        assert!(matches!(meta, Err(MetadataError::FieldNotFound("version"))));
+        assert_matches!(meta, Err(MetadataError::FieldNotFound("version")));
 
         let s = r#"
         [project]
@@ -360,7 +358,7 @@ mod tests {
     "#;
         let pyproject = PyProjectToml::from_toml(s, "pyproject.toml").unwrap();
         let meta = ResolutionMetadata::parse_pyproject_toml(pyproject, None);
-        assert!(matches!(meta, Err(MetadataError::DynamicField("version"))));
+        assert_matches!(meta, Err(MetadataError::DynamicField("version")));
 
         let s = r#"
         [project]

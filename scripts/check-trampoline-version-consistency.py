@@ -7,6 +7,9 @@ comparing the locked versions in both Cargo.lock files.
 
 # /// script
 # requires-python = ">=3.12"
+# [tool.uv]
+# no-build = true
+# exclude-newer = "P7D"
 # ///
 
 from __future__ import annotations

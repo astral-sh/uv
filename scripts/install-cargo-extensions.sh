@@ -15,7 +15,7 @@ set -eu
 
 CARGO_AUDITABLE_INSTALL="cargo install cargo-auditable \
     --locked \
-    --version 0.7.4"
+    --version 0.7.6"
 
 # In Linux containers running on x86_64, build a static musl binary so the installed tool works in
 # musl-based environments (Alpine, etc.).

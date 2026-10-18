@@ -2,7 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
-use anyhow::{Result, anyhow};
+use anyhow::{Result, anyhow, bail};
 use clap::Parser;
 use poloto::build;
 use resvg::usvg::fontdb;
@@ -20,23 +20,29 @@ pub(crate) struct RenderBenchmarksArgs {
 
 pub(crate) fn render_benchmarks(args: &RenderBenchmarksArgs) -> Result<()> {
     let mut results: BenchmarkResults = serde_json::from_slice(&fs_err::read(&args.path)?)?;
+    assert_eq!(
+        results.schema_version, 2,
+        "unsupported hyperfine JSON schema version"
+    );
 
-    // Replace the command with a shorter name. (The command typically includes the benchmark name,
-    // but we assume we're running over a single benchmark here.)
+    // Each result measures the same workload (e.g., resolve-warm or install-cold),
+    // so skip that and only use the tool name as the plot label.
     for result in &mut results.results {
-        if result.command.starts_with("uv") {
-            result.command = "uv".into();
-        } else if result.command.starts_with("pip-compile") {
-            result.command = "pip-compile".into();
-        } else if result.command.starts_with("pip-sync") {
-            result.command = "pip-sync".into();
-        } else if result.command.starts_with("poetry") {
-            result.command = "Poetry".into();
-        } else if result.command.starts_with("pdm") {
-            result.command = "PDM".into();
+        let benchmark_name = result.name.as_deref().unwrap_or(&result.command);
+        result.command = if benchmark_name.starts_with("uv") {
+            "uv"
+        } else if benchmark_name.starts_with("pip-compile") {
+            "pip-compile"
+        } else if benchmark_name.starts_with("pip-sync") {
+            "pip-sync"
+        } else if benchmark_name.starts_with("poetry") {
+            "Poetry"
+        } else if benchmark_name.starts_with("pdm") {
+            "PDM"
         } else {
-            return Err(anyhow!("unknown command: {}", result.command));
+            bail!("could not find command name in benchmark '{benchmark_name}'");
         }
+        .into();
     }
 
     let fontdb = load_fonts();
@@ -54,7 +60,8 @@ pub(crate) fn render_benchmarks(args: &RenderBenchmarksArgs) -> Result<()> {
 fn plot_benchmark(heading: &str, results: &BenchmarkResults) -> Result<String> {
     let mut data = Vec::new();
     for result in &results.results {
-        data.push((result.mean, &result.command));
+        assert_eq!(result.summary.time_wall_clock.unit, "second");
+        data.push((result.summary.time_wall_clock.mean, &result.command));
     }
 
     let theme = poloto::render::Theme::light();
@@ -119,11 +126,24 @@ fn load_fonts() -> fontdb::Database {
 
 #[derive(Debug, Deserialize)]
 struct BenchmarkResults {
+    schema_version: u64,
     results: Vec<BenchmarkResult>,
 }
 
 #[derive(Debug, Deserialize)]
 struct BenchmarkResult {
     command: String,
+    name: Option<String>,
+    summary: BenchmarkSummary,
+}
+
+#[derive(Debug, Deserialize)]
+struct BenchmarkSummary {
+    time_wall_clock: MetricSummary,
+}
+
+#[derive(Debug, Deserialize)]
+struct MetricSummary {
+    unit: String,
     mean: f64,
 }

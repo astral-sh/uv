@@ -86,5 +86,7 @@ handoff, using the existing template as its starting structure. Replace the temp
 the issue title, identify the issue using its canonical owner/repository#number reference, and
 include its classification. Replace every instructional placeholder with issue-specific content
 explaining the report, draft response, classification reasoning, related issues or pull requests,
-and supporting evidence. Add or adjust sections when that makes the document clearer, and keep the
-README consistent with the structured JSON result.
+and supporting evidence. Format related issues and pull requests in the `## Related` section as a
+Markdown bullet list with one item per issue or pull request. If none were found, say so without
+using a list. Add or adjust sections when that makes the document clearer, and keep the README
+consistent with the structured JSON result.

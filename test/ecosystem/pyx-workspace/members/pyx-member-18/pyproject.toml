@@ -1,0 +1,28 @@
+[project]
+name = "pyx-member-18"
+version = "0.1.0"
+requires-python = "==3.14.*"
+dependencies = [
+    "polars==1.39.3",
+    "pyx-member-06",
+    "pyx-member-22",
+    "pyx-member-23",
+    "sqlalchemy==2.0.49",
+    "types-boto3[s3]==1.42.88",
+]
+
+[project.optional-dependencies]
+aws = [
+    "boto3==1.42.88",
+    "botocore==1.42.88",
+]
+
+[dependency-groups]
+dev = [
+    "pytest==9.0.3",
+    "inline-snapshot==0.32.6",
+    "pyx-member-33",
+    "ruff==0.15.18",
+    "deptry==0.25.1",
+    "ty==0.0.51",
+]

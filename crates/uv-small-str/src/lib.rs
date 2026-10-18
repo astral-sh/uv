@@ -1,14 +1,30 @@
 use std::borrow::Cow;
 use std::cmp::PartialEq;
 use std::ops::Deref;
+use std::str::Utf8Error;
 
-/// An optimized type for immutable identifiers. Represented as an [`arcstr::ArcStr`] internally.
+use arcstr::ArcStr;
+
+/// An optimized type for immutable identifiers. Represented as an [`ArcStr`] internally.
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct SmallString(arcstr::ArcStr);
+pub struct SmallString(ArcStr);
 
-impl From<arcstr::ArcStr> for SmallString {
+impl SmallString {
+    /// Allocate a string of `length` bytes and initialize its zeroed buffer.
+    ///
+    /// Returns an error if the initialized bytes are not valid UTF-8.
     #[inline]
-    fn from(s: arcstr::ArcStr) -> Self {
+    pub fn init_with(
+        length: usize,
+        initializer: impl FnOnce(&mut [u8]),
+    ) -> Result<Self, Utf8Error> {
+        ArcStr::init_with(length, initializer).map(Self)
+    }
+}
+
+impl From<ArcStr> for SmallString {
+    #[inline]
+    fn from(s: ArcStr) -> Self {
         Self(s)
     }
 }

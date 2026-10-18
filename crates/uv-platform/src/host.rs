@@ -164,6 +164,8 @@ fn unquote(s: &str) -> &str {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
+
     use insta::assert_debug_snapshot;
 
     use super::*;
@@ -228,7 +230,7 @@ VERSION_ID=40
         let os_type =
             OsType::from_env().expect("OsType should be available on supported platforms");
         cfg_select! {
-            target_os = "linux" => { assert!(matches!(os_type, OsType::Linux(_))); },
+            target_os = "linux" => { assert_matches!(os_type, OsType::Linux(_)); },
             target_os = "macos" => { assert_eq!(os_type, OsType::Darwin); },
             target_os = "windows" => { assert_eq!(os_type, OsType::Windows); },
             _ => {},
@@ -240,8 +242,8 @@ VERSION_ID=40
         let os_release =
             OsRelease::from_env().expect("OsRelease should be available on supported platforms");
         cfg_select! {
-            unix => { assert!(matches!(os_release, OsRelease::Unix(_))); },
-            windows => { assert!(matches!(os_release, OsRelease::Windows { .. })); },
+            unix => { assert_matches!(os_release, OsRelease::Unix(_)); },
+            windows => { assert_matches!(os_release, OsRelease::Windows { .. }); },
             _ => {},
         }
     }

@@ -1,5 +1,6 @@
 [files]
 extend-exclude = [
+    ".git/**",
     "**/snapshots/",
     "test/ecosystem/**",
     "test/requirements/**/*.in",

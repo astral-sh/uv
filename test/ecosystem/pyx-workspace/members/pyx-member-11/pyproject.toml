@@ -1,0 +1,26 @@
+[project]
+name = "pyx-member-11"
+version = "0.1.0"
+requires-python = "==3.14.*"
+dependencies = [
+    "linehaul==1.0.3",
+    "packaging==26.0",
+    "pyx-member-22",
+    "types-boto3[s3]==1.42.88",
+]
+
+[project.optional-dependencies]
+aws = [
+    "boto3==1.42.88",
+    "botocore==1.42.88",
+]
+
+[dependency-groups]
+dev = [
+    "deptry==0.25.1",
+    "inline-snapshot==0.32.6",
+    "ruff==0.15.18",
+    "ty==0.0.51",
+    "pytest==9.0.3",
+    "pyx-member-33",
+]

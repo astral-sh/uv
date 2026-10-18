@@ -62,9 +62,9 @@ fn backtrack_to_missing_package() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because c was not found in the package registry and a<=1.0.0 depends on c, we can conclude that a<=1.0.0 cannot be used.
-          And because all versions of b depend on a==1.0.0 and you require b, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      cause: Because c was not found in the package registry and a<=1.0.0 depends on c, we can conclude that a<=1.0.0 cannot be used.
+             And because all versions of b depend on a==1.0.0 and you require b, we can conclude that your requirements are unsatisfiable.
     ");
 
     context.assert_not_installed("a");
@@ -142,8 +142,8 @@ fn requires_exact_version_does_not_exist() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because there is no version of a==2.0.0 and you require a==2.0.0, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      cause: Because there is no version of a==2.0.0 and you require a==2.0.0, we can conclude that your requirements are unsatisfiable.
     ");
 
     context.assert_not_installed("a");
@@ -172,8 +172,8 @@ fn requires_greater_version_does_not_exist() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only a<=1.0.0 is available and you require a>1.0.0, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      cause: Because only a<=1.0.0 is available and you require a>1.0.0, we can conclude that your requirements are unsatisfiable.
     ");
 
     context.assert_not_installed("a");
@@ -203,8 +203,8 @@ fn requires_less_version_does_not_exist() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only a>=2.0.0 is available and you require a<2.0.0, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      cause: Because only a>=2.0.0 is available and you require a<2.0.0, we can conclude that your requirements are unsatisfiable.
     ");
 
     context.assert_not_installed("a");
@@ -230,8 +230,8 @@ fn requires_package_does_not_exist() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because a was not found in the package registry and you require a, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      cause: Because a was not found in the package registry and you require a, we can conclude that your requirements are unsatisfiable.
     ");
 
     context.assert_not_installed("a");
@@ -262,9 +262,9 @@ fn transitive_requires_package_does_not_exist() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because b was not found in the package registry and all versions of a depend on b, we can conclude that all versions of a cannot be used.
-          And because you require a, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      cause: Because b was not found in the package registry and all versions of a depend on b, we can conclude that all versions of a cannot be used.
+             And because you require a, we can conclude that your requirements are unsatisfiable.
     ");
 
     context.assert_not_installed("a");
@@ -342,13 +342,13 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because a<=1.0.0 depends on b==1.0.0 and c<=1.0.0 depends on a<2.0.0, we can conclude that c<=1.0.0 depends on b==1.0.0.
-          And because c>=2.0.0 depends on a>=3.0.0 and a>=3.0.0 depends on b==3.0.0, we can conclude that all versions of c depend on one of:
-              b<=1.0.0
-              b>=3.0.0
+    error: No solution found when resolving dependencies
+      cause: Because a<=1.0.0 depends on b==1.0.0 and c<=1.0.0 depends on a<2.0.0, we can conclude that c<=1.0.0 depends on b==1.0.0.
+             And because c>=2.0.0 depends on a>=3.0.0 and a>=3.0.0 depends on b==3.0.0, we can conclude that all versions of c depend on one of:
+                 b<=1.0.0
+                 b>=3.0.0
 
-          And because you require b>=2.0.0,<3.0.0 and c, we can conclude that your requirements are unsatisfiable.
+             And because you require b>=2.0.0,<3.0.0 and c, we can conclude that your requirements are unsatisfiable.
     ");
 
     // Only the `2.x` versions of `a` are available since `a==1.0.0` and `a==3.0.0` require incompatible versions of `b`, but all available versions of `c` exclude that range of `a` so resolution fails.
@@ -420,13 +420,13 @@ fn dependency_excludes_range_of_compatible_versions() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because a<=1.0.0 depends on b==1.0.0 and c<=1.0.0 depends on a<2.0.0, we can conclude that c<=1.0.0 depends on b==1.0.0.
-          And because c>=2.0.0 depends on a>=3.0.0 and a>=3.0.0 depends on b==3.0.0, we can conclude that all versions of c depend on one of:
-              b<=1.0.0
-              b>=3.0.0
+    error: No solution found when resolving dependencies
+      cause: Because a<=1.0.0 depends on b==1.0.0 and c<=1.0.0 depends on a<2.0.0, we can conclude that c<=1.0.0 depends on b==1.0.0.
+             And because c>=2.0.0 depends on a>=3.0.0 and a>=3.0.0 depends on b==3.0.0, we can conclude that all versions of c depend on one of:
+                 b<=1.0.0
+                 b>=3.0.0
 
-          And because you require b>=2.0.0,<3.0.0 and c, we can conclude that your requirements are unsatisfiable.
+             And because you require b>=2.0.0,<3.0.0 and c, we can conclude that your requirements are unsatisfiable.
     ");
 
     // Only the `2.x` versions of `a` are available since `a==1.0.0` and `a==3.0.0` require incompatible versions of `b`, but all available versions of `c` exclude that range of `a` so resolution fails.
@@ -473,18 +473,18 @@ fn excluded_only_compatible_version() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because a<=1.0.0 depends on b==1.0.0 and a>=3.0.0 depends on b==3.0.0, we can conclude that all of:
-              a<=1.0.0
-              a>=3.0.0
-          depend on one of:
-              b==1.0.0
-              b==3.0.0
+    error: No solution found when resolving dependencies
+      cause: Because a<=1.0.0 depends on b==1.0.0 and a>=3.0.0 depends on b==3.0.0, we can conclude that all of:
+                 a<=1.0.0
+                 a>=3.0.0
+             depend on one of:
+                 b==1.0.0
+                 b==3.0.0
 
-          And because you require one of:
-              a<2.0.0
-              a>2.0.0
-          and b>=2.0.0,<3.0.0, we can conclude that your requirements are unsatisfiable.
+             And because you require one of:
+                 a<2.0.0
+                 a>2.0.0
+             and b>=2.0.0,<3.0.0, we can conclude that your requirements are unsatisfiable.
     ");
 
     // Only `a==1.2.0` is available since `a==1.0.0` and `a==3.0.0` require incompatible versions of `b`. The user has excluded that version of `a` so resolution fails.
@@ -514,11 +514,11 @@ fn excluded_only_version() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only a==1.0.0 is available and you require one of:
-              a<1.0.0
-              a>1.0.0
-          we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      cause: Because only a==1.0.0 is available and you require one of:
+                 a<1.0.0
+                 a>1.0.0
+             we can conclude that your requirements are unsatisfiable.
     ");
 
     // Only `a==1.0.0` is available but the user excluded it.
@@ -705,9 +705,9 @@ fn extra_incompatible_with_extra() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because all versions of a[extra-c] depend on b==2.0.0 and all versions of a[extra-b] depend on b==1.0.0, we can conclude that all versions of a[extra-b] and all versions of a[extra-c] are incompatible.
-          And because you require a[extra-b] and a[extra-c], we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      cause: Because all versions of a[extra-c] depend on b==2.0.0 and all versions of a[extra-b] depend on b==1.0.0, we can conclude that all versions of a[extra-b] and all versions of a[extra-c] are incompatible.
+             And because you require a[extra-b] and a[extra-c], we can conclude that your requirements are unsatisfiable.
     ");
 
     // Because both `extra_b` and `extra_c` are requested and they require incompatible versions of `b`, `a` cannot be installed.
@@ -746,9 +746,9 @@ fn extra_incompatible_with_root() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because all versions of a[extra] depend on b==1.0.0 and you require a[extra], we can conclude that you require b==1.0.0.
-          And because you require b==2.0.0, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      cause: Because all versions of a[extra] depend on b==1.0.0 and you require a[extra], we can conclude that you require b==1.0.0.
+             And because you require b==2.0.0, we can conclude that your requirements are unsatisfiable.
     ");
 
     // Because the user requested `b==2.0.0` but the requested extra requires `b==1.0.0`, the dependencies cannot be satisfied.
@@ -901,8 +901,8 @@ fn direct_incompatible_versions() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because you require a==1.0.0 and a==2.0.0, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      cause: Because you require a==1.0.0 and a==2.0.0, we can conclude that your requirements are unsatisfiable.
     ");
 
     context.assert_not_installed("a");
@@ -935,9 +935,9 @@ fn transitive_incompatible_versions() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because all versions of a depend on b==2.0.0 and b==1.0.0, we can conclude that all versions of a cannot be used.
-          And because you require a==1.0.0, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      cause: Because all versions of a depend on b==2.0.0 and b==1.0.0, we can conclude that all versions of a cannot be used.
+             And because you require a==1.0.0, we can conclude that your requirements are unsatisfiable.
     ");
 
     context.assert_not_installed("a");
@@ -974,9 +974,9 @@ fn transitive_incompatible_with_root_version() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because all versions of a depend on b==2.0.0 and you require a, we can conclude that you require b==2.0.0.
-          And because you require b==1.0.0, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      cause: Because all versions of a depend on b==2.0.0 and you require a, we can conclude that you require b==2.0.0.
+             And because you require b==1.0.0, we can conclude that your requirements are unsatisfiable.
     ");
 
     context.assert_not_installed("a");
@@ -1018,9 +1018,9 @@ fn transitive_incompatible_with_transitive() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because all versions of b depend on c==2.0.0 and all versions of a depend on c==1.0.0, we can conclude that all versions of a and all versions of b are incompatible.
-          And because you require a and b, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      cause: Because all versions of b depend on c==2.0.0 and all versions of a depend on c==1.0.0, we can conclude that all versions of a and all versions of b are incompatible.
+             And because you require a and b, we can conclude that your requirements are unsatisfiable.
     ");
 
     context.assert_not_installed("a");
@@ -1083,8 +1083,8 @@ fn local_greater_than() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only a==1.2.3+foo is available and you require a>1.2.3, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      cause: Because only a==1.2.3+foo is available and you require a>1.2.3, we can conclude that your requirements are unsatisfiable.
     ");
 
     context.assert_not_installed("a");
@@ -1146,8 +1146,8 @@ fn local_less_than() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only a==1.2.3+foo is available and you require a<1.2.3, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      cause: Because only a==1.2.3+foo is available and you require a<1.2.3, we can conclude that your requirements are unsatisfiable.
     ");
 
     context.assert_not_installed("a");
@@ -1333,9 +1333,9 @@ fn local_transitive_conflicting() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because all versions of a depend on b==2.0.0+bar and you require a, we can conclude that you require b==2.0.0+bar.
-          And because you require b==2.0.0+foo, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      cause: Because all versions of a depend on b==2.0.0+bar and you require a, we can conclude that you require b==2.0.0+bar.
+             And because you require b==2.0.0+foo, we can conclude that your requirements are unsatisfiable.
     ");
 
     context.assert_not_installed("a");
@@ -1457,9 +1457,9 @@ fn local_transitive_greater_than() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because all versions of a depend on b>2.0.0 and you require a, we can conclude that you require b>2.0.0.
-          And because you require b==2.0.0+foo, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      cause: Because all versions of a depend on b>2.0.0 and you require a, we can conclude that you require b>2.0.0.
+             And because you require b==2.0.0+foo, we can conclude that your requirements are unsatisfiable.
     ");
 
     context.assert_not_installed("a");
@@ -1539,9 +1539,9 @@ fn local_transitive_less_than() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because all versions of a depend on b<2.0.0 and you require a, we can conclude that you require b<2.0.0.
-          And because you require b==2.0.0+foo, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      cause: Because all versions of a depend on b<2.0.0 and you require a, we can conclude that you require b<2.0.0.
+             And because you require b==2.0.0+foo, we can conclude that your requirements are unsatisfiable.
     ");
 
     context.assert_not_installed("a");
@@ -1681,8 +1681,8 @@ fn post_equal_not_available() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because there is no version of a==1.2.3.post0 and you require a==1.2.3.post0, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      cause: Because there is no version of a==1.2.3.post0 and you require a==1.2.3.post0, we can conclude that your requirements are unsatisfiable.
     ");
 
     context.assert_not_installed("a");
@@ -1778,8 +1778,8 @@ fn post_greater_than_post_not_available() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only a<=1.2.3.post1 is available and you require a>1.2.3.post2, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      cause: Because only a<=1.2.3.post1 is available and you require a>1.2.3.post2, we can conclude that your requirements are unsatisfiable.
     ");
 
     context.assert_not_installed("a");
@@ -1874,8 +1874,8 @@ fn post_greater_than() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only a==1.2.3.post1 is available and you require a>1.2.3, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      cause: Because only a==1.2.3.post1 is available and you require a>1.2.3, we can conclude that your requirements are unsatisfiable.
     ");
 
     context.assert_not_installed("a");
@@ -1903,8 +1903,8 @@ fn post_less_than_or_equal() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only a==1.2.3.post1 is available and you require a<=1.2.3, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      cause: Because only a==1.2.3.post1 is available and you require a<=1.2.3, we can conclude that your requirements are unsatisfiable.
     ");
 
     context.assert_not_installed("a");
@@ -1965,8 +1965,8 @@ fn post_less_than() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only a==1.2.3.post1 is available and you require a<1.2.3, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      cause: Because only a==1.2.3.post1 is available and you require a<1.2.3, we can conclude that your requirements are unsatisfiable.
     ");
 
     context.assert_not_installed("a");
@@ -1995,8 +1995,8 @@ fn post_local_greater_than_post() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only a<=1.2.3.post1 is available and you require a>1.2.3.post1, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      cause: Because only a<=1.2.3.post1 is available and you require a>1.2.3.post1, we can conclude that your requirements are unsatisfiable.
     ");
 
     context.assert_not_installed("a");
@@ -2025,8 +2025,8 @@ fn post_local_greater_than() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only a<=1.2.3.post1+local is available and you require a>1.2.3, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      cause: Because only a<=1.2.3.post1+local is available and you require a>1.2.3, we can conclude that your requirements are unsatisfiable.
     ");
 
     context.assert_not_installed("a");
@@ -2054,8 +2054,8 @@ fn post_simple() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because there is no version of a==1.2.3 and you require a==1.2.3, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      cause: Because there is no version of a==1.2.3 and you require a==1.2.3, we can conclude that your requirements are unsatisfiable.
     ");
 
     context.assert_not_installed("a");
@@ -4039,6 +4039,95 @@ fn transitive_prerelease_redundant_stable_preference_plain_first() {
     context.assert_installed("c", "1.0.0");
 }
 
+/// The resolver reaches the backtracking threshold while rejecting newer releases with distinct incompatible Python requirements, then selects an older compatible release.
+///
+/// ```text
+/// python-greater-than-current-backtrack-many
+/// ├── environment
+/// │   └── python3.9
+/// ├── root
+/// │   └── requires a
+/// │       ├── satisfied by a-1.0.0
+/// │       ├── satisfied by a-2.0.0
+/// │       ├── satisfied by a-3.0.0
+/// │       ├── satisfied by a-4.0.0
+/// │       ├── satisfied by a-5.0.0
+/// │       ├── satisfied by a-6.0.0
+/// │       ├── satisfied by a-7.0.0
+/// │       ├── satisfied by a-8.0.0
+/// │       ├── satisfied by a-9.0.0
+/// │       ├── satisfied by a-10.0.0
+/// │       ├── satisfied by a-11.0.0
+/// │       ├── satisfied by a-12.0.0
+/// │       ├── satisfied by a-13.0.0
+/// │       ├── satisfied by a-14.0.0
+/// │       ├── satisfied by a-15.0.0
+/// │       ├── satisfied by a-16.0.0
+/// │       ├── satisfied by a-17.0.0
+/// │       ├── satisfied by a-18.0.0
+/// │       ├── satisfied by a-19.0.0
+/// │       └── satisfied by a-20.0.0
+/// └── a
+///     ├── a-1.0.0
+///     ├── a-2.0.0
+///     │   └── requires python>=3.10 (incompatible with environment)
+///     ├── a-3.0.0
+///     │   └── requires python>=3.10.1 (incompatible with environment)
+///     ├── a-4.0.0
+///     │   └── requires python>=3.10.2 (incompatible with environment)
+///     ├── a-5.0.0
+///     │   └── requires python>=3.10.3 (incompatible with environment)
+///     ├── a-6.0.0
+///     │   └── requires python>=3.10.4 (incompatible with environment)
+///     ├── a-7.0.0
+///     │   └── requires python>=3.10.5 (incompatible with environment)
+///     ├── a-8.0.0
+///     │   └── requires python>=3.10.6 (incompatible with environment)
+///     ├── a-9.0.0
+///     │   └── requires python>=3.10.7 (incompatible with environment)
+///     ├── a-10.0.0
+///     │   └── requires python>=3.10.8 (incompatible with environment)
+///     ├── a-11.0.0
+///     │   └── requires python>=3.10.9 (incompatible with environment)
+///     ├── a-12.0.0
+///     │   └── requires python>=3.10.10 (incompatible with environment)
+///     ├── a-13.0.0
+///     │   └── requires python>=3.10.11 (incompatible with environment)
+///     ├── a-14.0.0
+///     │   └── requires python>=3.10.12 (incompatible with environment)
+///     ├── a-15.0.0
+///     │   └── requires python>=3.10.13 (incompatible with environment)
+///     ├── a-16.0.0
+///     │   └── requires python>=3.10.14 (incompatible with environment)
+///     ├── a-17.0.0
+///     │   └── requires python>=3.10.15 (incompatible with environment)
+///     ├── a-18.0.0
+///     │   └── requires python>=3.10.16 (incompatible with environment)
+///     ├── a-19.0.0
+///     │   └── requires python>=3.10.17 (incompatible with environment)
+///     └── a-20.0.0
+///         └── requires python>=3.10.18 (incompatible with environment)
+/// ```
+#[test]
+fn python_greater_than_current_backtrack_many() {
+    let context = uv_test::test_context!("3.9");
+    let server =
+        PackseServer::new("requires_python/python-greater-than-current-backtrack-many.toml");
+
+    uv_snapshot!(context.filters(), command(&context, &server)
+        .arg("a")
+        , @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + a==1.0.0
+    ");
+
+    context.assert_installed("a", "1.0.0");
+}
+
 /// The user requires a package where recent versions require a Python version greater than the current version, but an older version is compatible.
 ///
 /// ```text
@@ -4109,24 +4198,24 @@ fn python_greater_than_current_excluded() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because the current Python version (3.9.[X]) does not satisfy Python>=3.10 and a==2.0.0 depends on Python>=3.10, we can conclude that a==2.0.0 cannot be used.
-          And because only the following versions of a are available:
-              a<=2.0.0
-              a>=3.0.0
-          we can conclude that a>=2.0.0,<3.0.0 cannot be used. (1)
+    error: No solution found when resolving dependencies
+      cause: Because the current Python version (3.9.[X]) does not satisfy Python>=3.10 and a==2.0.0 depends on Python>=3.10, we can conclude that a==2.0.0 cannot be used.
+             And because only the following versions of a are available:
+                 a<=2.0.0
+                 a>=3.0.0
+             we can conclude that a>=2.0.0,<3.0.0 cannot be used. (1)
 
-          Because the current Python version (3.9.[X]) does not satisfy Python>=3.11 and a==3.0.0 depends on Python>=3.11, we can conclude that a==3.0.0 cannot be used.
-          And because we know from (1) that a>=2.0.0,<3.0.0 cannot be used, we can conclude that a>=2.0.0,<=3.0.0 cannot be used.
-          And because only the following versions of a are available:
-              a<=3.0.0
-              a>=4.0.0
-          we can conclude that a>=2.0.0,<4.0.0 cannot be used. (2)
+             Because the current Python version (3.9.[X]) does not satisfy Python>=3.11 and a==3.0.0 depends on Python>=3.11, we can conclude that a==3.0.0 cannot be used.
+             And because we know from (1) that a>=2.0.0,<3.0.0 cannot be used, we can conclude that a>=2.0.0,<=3.0.0 cannot be used.
+             And because only the following versions of a are available:
+                 a<=3.0.0
+                 a>=4.0.0
+             we can conclude that a>=2.0.0,<4.0.0 cannot be used. (2)
 
-          Because the current Python version (3.9.[X]) does not satisfy Python>=3.12 and a==4.0.0 depends on Python>=3.12, we can conclude that a==4.0.0 cannot be used.
-          And because only a<=4.0.0 is available, we can conclude that a>=4.0.0 cannot be used.
-          And because we know from (2) that a>=2.0.0,<4.0.0 cannot be used, we can conclude that a>=2.0.0 cannot be used.
-          And because you require a>=2.0.0, we can conclude that your requirements are unsatisfiable.
+             Because the current Python version (3.9.[X]) does not satisfy Python>=3.12 and a==4.0.0 depends on Python>=3.12, we can conclude that a==4.0.0 cannot be used.
+             And because only a<=4.0.0 is available, we can conclude that a>=4.0.0 cannot be used.
+             And because we know from (2) that a>=2.0.0,<4.0.0 cannot be used, we can conclude that a>=2.0.0 cannot be used.
+             And because you require a>=2.0.0, we can conclude that your requirements are unsatisfiable.
     ");
 
     context.assert_not_installed("a");
@@ -4177,8 +4266,8 @@ fn python_greater_than_current_many() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because there is no version of a==1.0.0 and you require a==1.0.0, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      cause: Because there is no version of a==1.0.0 and you require a==1.0.0, we can conclude that your requirements are unsatisfiable.
     ");
 
     context.assert_not_installed("a");
@@ -4208,9 +4297,9 @@ fn python_greater_than_current_patch() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because the current Python version (3.13) does not satisfy Python>=3.13.2 and a==1.0.0 depends on Python>=3.13.2, we can conclude that a==1.0.0 cannot be used.
-          And because you require a==1.0.0, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      cause: Because the current Python version (3.13) does not satisfy Python>=3.13.2 and a==1.0.0 depends on Python>=3.13.2, we can conclude that a==1.0.0 cannot be used.
+             And because you require a==1.0.0, we can conclude that your requirements are unsatisfiable.
     ");
 
     context.assert_not_installed("a");
@@ -4239,9 +4328,9 @@ fn python_greater_than_current() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because the current Python version (3.9.[X]) does not satisfy Python>=3.10 and a==1.0.0 depends on Python>=3.10, we can conclude that a==1.0.0 cannot be used.
-          And because you require a==1.0.0, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      cause: Because the current Python version (3.9.[X]) does not satisfy Python>=3.10 and a==1.0.0 depends on Python>=3.10, we can conclude that a==1.0.0 cannot be used.
+             And because you require a==1.0.0, we can conclude that your requirements are unsatisfiable.
     ");
 
     context.assert_not_installed("a");
@@ -4302,9 +4391,9 @@ fn python_version_does_not_exist() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because the current Python version (3.12.[X]) does not satisfy Python>=3.30 and a==1.0.0 depends on Python>=3.30, we can conclude that a==1.0.0 cannot be used.
-          And because you require a==1.0.0, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      cause: Because the current Python version (3.12.[X]) does not satisfy Python>=3.30 and a==1.0.0 depends on Python>=3.30, we can conclude that a==1.0.0 cannot be used.
+             And because you require a==1.0.0, we can conclude that your requirements are unsatisfiable.
     ");
 
     context.assert_not_installed("a");
@@ -4418,8 +4507,8 @@ fn canonical_empty_requirement() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ you require a<0.dev0, which does not allow any versions
+    error: No solution found when resolving dependencies
+      cause: you require a<0.dev0, which does not allow any versions
     ");
 
     context.assert_not_installed("a");
@@ -4459,9 +4548,9 @@ fn equivalent_dependency_ranges() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because all versions of a depend on c<=1.0 and you require a, we can conclude that you require c<=1.0.
-          And because you require c>=2.0, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      cause: Because all versions of a depend on c<=1.0 and you require a, we can conclude that you require c<=1.0.
+             And because you require c>=2.0, we can conclude that your requirements are unsatisfiable.
     ");
 
     // Both versions of `a` require the same logical range of `c`, which conflicts with the root requirement.
@@ -4558,9 +4647,9 @@ fn no_sdist_no_wheels_with_matching_abi() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because a==1.0.0 has no wheels with a matching Python ABI tag (e.g., `cp312`) and only a==1.0.0 is available, we can conclude that all versions of a cannot be used.
-          And because you require a, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      cause: Because a==1.0.0 has no wheels with a matching Python ABI tag (e.g., `cp312`) and only a==1.0.0 is available, we can conclude that all versions of a cannot be used.
+             And because you require a, we can conclude that your requirements are unsatisfiable.
 
     hint: You require CPython 3.12 (`cp312`), but we only found wheels for `a` (v1.0.0) with the following Python ABI tag: `graalpy240_310_native`
     ");
@@ -4591,9 +4680,9 @@ fn no_sdist_no_wheels_with_matching_platform() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because a==1.0.0 has no wheels with a matching platform tag (e.g., `manylinux_2_17_x86_64`) and only a==1.0.0 is available, we can conclude that all versions of a cannot be used.
-          And because you require a, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      cause: Because a==1.0.0 has no wheels with a matching platform tag (e.g., `manylinux_2_17_x86_64`) and only a==1.0.0 is available, we can conclude that all versions of a cannot be used.
+             And because you require a, we can conclude that your requirements are unsatisfiable.
 
     hint: Wheels are available for `a` (v1.0.0) on the following platform: `macosx_10_0_ppc64`
     ");
@@ -4624,9 +4713,9 @@ fn no_sdist_no_wheels_with_matching_python() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because a==1.0.0 has no wheels with a matching Python implementation tag (e.g., `cp312`) and only a==1.0.0 is available, we can conclude that all versions of a cannot be used.
-          And because you require a, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      cause: Because a==1.0.0 has no wheels with a matching Python implementation tag (e.g., `cp312`) and only a==1.0.0 is available, we can conclude that all versions of a cannot be used.
+             And because you require a, we can conclude that your requirements are unsatisfiable.
 
     hint: You require CPython 3.12 (`cp312`), but we only found wheels for `a` (v1.0.0) with the following Python implementation tag: `graalpy310`
     ");
@@ -4658,9 +4747,9 @@ fn no_wheels_no_build() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because a==1.0.0 has no usable wheels and only a==1.0.0 is available, we can conclude that all versions of a cannot be used.
-          And because you require a, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      cause: Because a==1.0.0 has no usable wheels and only a==1.0.0 is available, we can conclude that all versions of a cannot be used.
+             And because you require a, we can conclude that your requirements are unsatisfiable.
 
     hint: Wheels are required for `a` because building from source is disabled for `a` (i.e., with `--no-build-package a`)
     ");
@@ -4750,9 +4839,9 @@ fn only_wheels_no_binary() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because a==1.0.0 has no source distribution and only a==1.0.0 is available, we can conclude that all versions of a cannot be used.
-          And because you require a, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      cause: Because a==1.0.0 has no source distribution and only a==1.0.0 is available, we can conclude that all versions of a cannot be used.
+             And because you require a, we can conclude that your requirements are unsatisfiable.
 
     hint: A source distribution is required for `a` because using pre-built wheels is disabled for `a` (i.e., with `--no-binary-package a`)
     ");
@@ -4841,12 +4930,12 @@ fn package_only_yanked_in_range() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because a==1.0.0 was yanked and only the following versions of a are available:
-              a<=0.1.0
-              a==1.0.0
-          we can conclude that a>0.1.0 cannot be used.
-          And because you require a>0.1.0, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      cause: Because a==1.0.0 was yanked and only the following versions of a are available:
+                 a<=0.1.0
+                 a==1.0.0
+             we can conclude that a>0.1.0 cannot be used.
+             And because you require a>0.1.0, we can conclude that your requirements are unsatisfiable.
     ");
 
     // Since there are other versions of `a` available, yanked versions should not be selected without explicit opt-in.
@@ -4875,9 +4964,9 @@ fn package_only_yanked() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because a==1.0.0 was yanked and only a==1.0.0 is available, we can conclude that all versions of a cannot be used.
-          And because you require a, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      cause: Because a==1.0.0 was yanked and only a==1.0.0 is available, we can conclude that all versions of a cannot be used.
+             And because you require a, we can conclude that your requirements are unsatisfiable.
     ");
 
     // Yanked versions should not be installed, even if they are the only one available.
@@ -5023,12 +5112,12 @@ fn transitive_package_only_yanked_in_range() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because b==1.0.0 was yanked and only the following versions of b are available:
-              b<=0.1
-              b==1.0.0
-          we can conclude that b>0.1 cannot be used.
-          And because all versions of a depend on b>0.1 and you require a, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      cause: Because b==1.0.0 was yanked and only the following versions of b are available:
+                 b<=0.1
+                 b==1.0.0
+             we can conclude that b>0.1 cannot be used.
+             And because all versions of a depend on b>0.1 and you require a, we can conclude that your requirements are unsatisfiable.
     ");
 
     // Yanked versions should not be installed, even if they are the only valid version in a range.
@@ -5061,9 +5150,9 @@ fn transitive_package_only_yanked() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because b==1.0.0 was yanked and only b==1.0.0 is available, we can conclude that all versions of b cannot be used.
-          And because all versions of a depend on b and you require a, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      cause: Because b==1.0.0 was yanked and only b==1.0.0 is available, we can conclude that all versions of b cannot be used.
+             And because all versions of a depend on b and you require a, we can conclude that your requirements are unsatisfiable.
     ");
 
     // Yanked versions should not be installed, even if they are the only one available.
@@ -5156,9 +5245,9 @@ fn transitive_yanked_and_unyanked_dependency() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because c==2.0.0 was yanked and all versions of a depend on c==2.0.0, we can conclude that all versions of a cannot be used.
-          And because you require a, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      cause: Because c==2.0.0 was yanked and all versions of a depend on c==2.0.0, we can conclude that all versions of a cannot be used.
+             And because you require a, we can conclude that your requirements are unsatisfiable.
     ");
 
     // Since the user did not explicitly select the yanked version, it cannot be used.

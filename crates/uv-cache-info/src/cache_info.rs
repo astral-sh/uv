@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use serde::Deserialize;
 use tracing::{debug, info_span, warn};
 
-use uv_fs::Simplified;
+use uv_fs::{Simplified, created_time};
 
 use crate::git_info::{Commit, Tags};
 use crate::glob::cluster_globs;
@@ -126,7 +126,7 @@ impl CacheInfo {
                     };
                     if !metadata.is_file() {
                         warn!(
-                            "Expected file for cache key, but found directory: `{}`",
+                            "Expected file for cache key, but found directory: {}",
                             path.display()
                         );
                         continue;
@@ -154,13 +154,13 @@ impl CacheInfo {
                     };
                     if !metadata.is_dir() {
                         warn!(
-                            "Expected directory for cache key, but found file: `{}`",
+                            "Expected directory for cache key, but found file: {}",
                             path.display()
                         );
                         continue;
                     }
 
-                    if let Ok(created) = metadata.created() {
+                    if let Ok(created) = created_time(&path, &metadata) {
                         // Prefer the creation time.
                         directories.insert(
                             dir,
@@ -262,7 +262,7 @@ impl CacheInfo {
                         if !entry.path_is_symlink() {
                             // don't warn if it was a symlink - it may legitimately resolve to a directory
                             warn!(
-                                "Expected file for cache key, but found directory: `{}`",
+                                "Expected file for cache key, but found directory: {}",
                                 entry.path().display()
                             );
                         }

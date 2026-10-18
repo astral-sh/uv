@@ -1,6 +1,7 @@
 use uv_distribution_filename::DistExtension;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pypi_types::{HashDigest, HashDigests};
+use uv_redacted::policy::Raw;
 
 use crate::{
     BuiltDist, Diagnostic, Dist, IndexMetadata, Name, RequirementSource, ResolvedDist, SourceDist,
@@ -8,9 +9,8 @@ use crate::{
 
 /// A set of packages pinned at specific versions.
 ///
-/// This is similar to [`ResolverOutput`], but represents a resolution for a subset of all
-/// marker environments. For example, the resolution is guaranteed to contain at most one version
-/// for a given package.
+/// This represents a resolution for a subset of marker environments and contains at most one
+/// version of each package.
 #[derive(Debug, Default, Clone)]
 pub struct Resolution {
     graph: petgraph::graph::DiGraph<Node, Edge>,
@@ -31,7 +31,7 @@ impl Resolution {
         &self.graph
     }
 
-    /// Add [`Diagnostics`] to the resolution.
+    /// Add [`ResolutionDiagnostic`]s to the resolution.
     #[must_use]
     pub fn with_diagnostics(mut self, diagnostics: Vec<ResolutionDiagnostic>) -> Self {
         self.diagnostics.extend(diagnostics);
@@ -220,7 +220,7 @@ impl From<&ResolvedDist> for RequirementSource {
                     location.set_fragment(None);
                     Self::Url {
                         url: wheel.url.clone(),
-                        location,
+                        location: location.with_policy(Raw),
                         subdirectory: None,
                         ext: DistExtension::Wheel,
                     }
@@ -248,7 +248,7 @@ impl From<&ResolvedDist> for RequirementSource {
                     location.set_fragment(None);
                     Self::Url {
                         url: sdist.url.clone(),
-                        location,
+                        location: location.with_policy(Raw),
                         subdirectory: sdist.subdirectory.clone(),
                         ext: DistExtension::Source(sdist.ext),
                     }

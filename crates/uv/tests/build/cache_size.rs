@@ -1,23 +1,11 @@
 use assert_cmd::assert::OutputAssertExt;
 
-use uv_test::{TestContext, uv_snapshot};
+use uv_test::uv_snapshot;
 
-/// Preserve cache sizes in snapshots so human-readable and machine output remain distinguishable.
-fn cache_size_filters(context: &TestContext) -> Vec<(&str, &str)> {
-    context
-        .filters()
-        .into_iter()
-        .filter(|(_, replacement)| *replacement != "$1[SIZE]")
-        .collect()
-}
-
-/// Test that `cache size` returns 0 for an empty cache directory (raw output).
+/// Test that `cache size` returns 0 when the cache directory does not exist.
 #[test]
-fn cache_size_empty_raw() {
-    let context = uv_test::test_context!("3.12");
-
-    // Clean cache first to ensure truly empty state
-    context.clean().assert().success();
+fn cache_size_missing_raw() {
+    let context = uv_test::test_context_with_versions!(&[]).with_cache_dir("missing-cache");
 
     uv_snapshot!(context.cache_size().arg("--preview"), @"
     exit_code: 0 (success)
@@ -29,13 +17,13 @@ fn cache_size_empty_raw() {
 /// Test that `cache size` returns raw bytes after installing packages.
 #[test]
 fn cache_size_with_packages_raw() {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_cache_size();
 
     // Install a requirement to populate the cache.
     context.pip_install().arg("iniconfig").assert().success();
 
     // Check cache size is now positive (raw bytes).
-    uv_snapshot!(context.with_filtered_cache_size().filters(), context.cache_size().arg("--preview"), @"
+    uv_snapshot!(context.filters(), context.cache_size().arg("--preview"), @"
     exit_code: 0 (success)
     ----- stdout -----
     [SIZE]
@@ -45,24 +33,23 @@ fn cache_size_with_packages_raw() {
 /// Test that `cache size --human` returns human-readable format after installing packages.
 #[test]
 fn cache_size_with_packages_human() {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_cache_size();
 
     // Install a requirement to populate the cache.
     context.pip_install().arg("iniconfig").assert().success();
 
     // Check cache size with --human flag
-    uv_snapshot!(context.with_filtered_cache_size().filters(), context.cache_size().arg("--preview").arg("--human"), @"
+    uv_snapshot!(context.filters(), context.cache_size().arg("--preview").arg("--human"), @"
     exit_code: 0 (success)
     ----- stdout -----
-    [SIZE]
+    [SIZE]KiB
     ");
 }
 
 /// Explicit output formats override terminal detection.
 #[test]
 fn cache_size_output_formats() {
-    let context = uv_test::test_context!("3.12");
-    context.clean().assert().success();
+    let context = uv_test::test_context_with_versions!(&[]).with_cache_dir("missing-cache");
 
     uv_snapshot!(context.cache_size().arg("--preview").arg("--output-format").arg("auto"), @"
     exit_code: 0 (success)
@@ -70,7 +57,7 @@ fn cache_size_output_formats() {
     0
     ");
 
-    uv_snapshot!(cache_size_filters(&context), context.cache_size().arg("--preview").arg("--output-format").arg("human"), @"
+    uv_snapshot!(context.filters(), context.cache_size().arg("--preview").arg("--output-format").arg("human"), @"
     exit_code: 0 (success)
     ----- stdout -----
     0B
@@ -86,23 +73,21 @@ fn cache_size_output_formats() {
 /// Existing human-readable flags remain equivalent to `--output-format human`.
 #[test]
 fn cache_size_human_aliases() {
-    let context = uv_test::test_context!("3.12");
-    context.clean().assert().success();
-    let filters = cache_size_filters(&context);
+    let context = uv_test::test_context_with_versions!(&[]).with_cache_dir("missing-cache");
 
-    uv_snapshot!(&filters, context.cache_size().arg("--preview").arg("--human"), @"
+    uv_snapshot!(context.filters(), context.cache_size().arg("--preview").arg("--human"), @"
     exit_code: 0 (success)
     ----- stdout -----
     0B
     ");
 
-    uv_snapshot!(&filters, context.cache_size().arg("--preview").arg("-H"), @"
+    uv_snapshot!(context.filters(), context.cache_size().arg("--preview").arg("-H"), @"
     exit_code: 0 (success)
     ----- stdout -----
     0B
     ");
 
-    uv_snapshot!(&filters, context.cache_size().arg("--preview").arg("--human-readable"), @"
+    uv_snapshot!(context.filters(), context.cache_size().arg("--preview").arg("--human-readable"), @"
     exit_code: 0 (success)
     ----- stdout -----
     0B

@@ -41,6 +41,7 @@ doc-valid-idents = [
 ]
 
 disallowed-types = [
+  { path = "url::Url", reason = "Use `uv_redacted::SafeUrl` for redacted formatting and an explicit serialization policy." },
   "std::fs::DirEntry",
   "std::fs::File",
   "std::fs::OpenOptions",

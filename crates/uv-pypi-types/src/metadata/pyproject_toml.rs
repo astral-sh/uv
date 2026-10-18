@@ -122,6 +122,8 @@ pub struct ToolPoetry {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
+
     use super::PyProjectToml;
     use crate::MetadataError;
 
@@ -156,9 +158,9 @@ mod tests {
         )
         .unwrap();
 
-        assert!(matches!(
+        assert_matches!(
             pyproject_toml.requires_python(),
             Err(MetadataError::DynamicField("requires-python"))
-        ));
+        );
     }
 }

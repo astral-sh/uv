@@ -7,7 +7,7 @@ use std::sync::LazyLock;
 use percent_encoding::percent_decode_str;
 use thiserror::Error;
 use uv_cache_key::RepositoryUrl;
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 use uv_static::EnvVars;
 
 mod github;
@@ -79,11 +79,19 @@ pub enum GitUrlParseError {
     #[error(
         "Unsupported Git URL scheme `{0}:` in `{1}` (expected one of `https:`, `ssh:`, or `file:`)"
     )]
-    UnsupportedGitScheme(String, DisplaySafeUrl),
+    UnsupportedGitScheme(String, SafeUrl),
     #[error(
         "Ambiguous Git URL `{0}`: the path contains multiple `@` characters. If the Git revision contains `@`, percent-encode it as `%40`"
     )]
-    AmbiguousRevision(DisplaySafeUrl),
+    AmbiguousRevision(SafeUrl),
+    #[error(
+        "Exact Git revision `{revision}` does not match precise commit `{precise}` for `{url}`"
+    )]
+    MismatchedRevision {
+        revision: String,
+        precise: GitOid,
+        url: Box<SafeUrl>,
+    },
 }
 
 /// A URL reference to a Git repository.
@@ -91,13 +99,14 @@ pub enum GitUrlParseError {
 pub struct GitUrl {
     /// The URL of the Git repository, with any query parameters, fragments, and leading `git+`
     /// removed.
-    url: DisplaySafeUrl,
+    url: SafeUrl,
     /// The canonical repository identity used for comparison and hashing.
     repository: RepositoryUrl,
     /// The reference to the commit to use, which could be a branch, tag or revision.
     reference: GitReference,
-    /// The precise commit to use, if known.
-    precise: Option<GitOid>,
+    /// The resolved commit for a named or ambiguous reference, if known. Exact commit references
+    /// store their commit in [`GitReference::Commit`] instead.
+    resolved: Option<GitOid>,
     /// Git LFS configuration for this repository.
     lfs: GitLfs,
 }
@@ -105,7 +114,7 @@ pub struct GitUrl {
 impl GitUrl {
     /// Create a new [`GitUrl`] from a repository URL and a reference.
     fn from_reference(
-        url: DisplaySafeUrl,
+        url: SafeUrl,
         reference: GitReference,
         lfs: GitLfs,
     ) -> Result<Self, GitUrlParseError> {
@@ -114,7 +123,7 @@ impl GitUrl {
 
     /// Create a new [`GitUrl`] from a repository URL and a precise commit.
     pub fn from_commit(
-        url: DisplaySafeUrl,
+        url: SafeUrl,
         reference: GitReference,
         precise: GitOid,
         lfs: GitLfs,
@@ -124,7 +133,7 @@ impl GitUrl {
 
     /// Create a new [`GitUrl`] from a repository URL and a precise commit, if known.
     pub fn from_fields(
-        url: DisplaySafeUrl,
+        url: SafeUrl,
         reference: GitReference,
         precise: Option<GitOid>,
         lfs: GitLfs,
@@ -138,31 +147,50 @@ impl GitUrl {
                 ));
             }
         }
-        Ok(Self {
+
+        let git = Self {
             repository: RepositoryUrl::new(url.clone()),
             url,
             reference,
-            precise,
+            resolved: None,
             lfs,
-        })
+        };
+        match precise {
+            Some(precise) => git.with_precise(precise),
+            None => Ok(git),
+        }
     }
 
     /// Set the precise [`GitOid`] to use for this Git URL.
-    #[must_use]
-    pub fn with_precise(mut self, precise: GitOid) -> Self {
-        self.precise = Some(precise);
-        self
+    pub fn with_precise(mut self, precise: GitOid) -> Result<Self, GitUrlParseError> {
+        match self.reference.as_commit() {
+            Some(commit) => {
+                if commit != precise {
+                    return Err(GitUrlParseError::MismatchedRevision {
+                        revision: commit.to_string(),
+                        precise,
+                        url: Box::new(self.url.clone()),
+                    });
+                }
+            }
+            None => self.resolved = Some(precise),
+        }
+
+        Ok(self)
     }
 
-    /// Set the [`GitReference`] to use for this Git URL.
+    /// Set the [`GitReference`] to use for this Git URL, clearing any resolved commit if it changes.
     #[must_use]
     pub fn with_reference(mut self, reference: GitReference) -> Self {
-        self.reference = reference;
+        if self.reference != reference {
+            self.resolved = None;
+            self.reference = reference;
+        }
         self
     }
 
     /// Return the [`Url`] of the Git repository.
-    pub fn url(&self) -> &DisplaySafeUrl {
+    pub fn url(&self) -> &SafeUrl {
         &self.url
     }
 
@@ -176,9 +204,16 @@ impl GitUrl {
         &self.reference
     }
 
-    /// Return the precise commit, if known.
+    /// Return the precise commit, whether requested directly or resolved from a named reference.
     pub fn precise(&self) -> Option<GitOid> {
-        self.precise
+        self.reference.as_commit().or(self.resolved_commit())
+    }
+
+    /// Return the commit obtained by resolving a reference, if known.
+    ///
+    /// Returns `None` when the reference is itself a full commit.
+    pub fn resolved_commit(&self) -> Option<GitOid> {
+        self.resolved
     }
 
     /// Return the Git LFS configuration.
@@ -198,7 +233,7 @@ impl PartialEq for GitUrl {
     fn eq(&self, other: &Self) -> bool {
         self.repository == other.repository
             && self.reference == other.reference
-            && self.precise == other.precise
+            && self.resolved == other.resolved
             && self.lfs == other.lfs
     }
 }
@@ -216,7 +251,7 @@ impl Ord for GitUrl {
         self.repository
             .cmp(&other.repository)
             .then_with(|| self.reference.cmp(&other.reference))
-            .then_with(|| self.precise.cmp(&other.precise))
+            .then_with(|| self.resolved.cmp(&other.resolved))
             .then_with(|| self.lfs.cmp(&other.lfs))
     }
 }
@@ -225,16 +260,16 @@ impl std::hash::Hash for GitUrl {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.repository.hash(state);
         self.reference.hash(state);
-        self.precise.hash(state);
+        self.resolved.hash(state);
         self.lfs.hash(state);
     }
 }
 
-impl TryFrom<DisplaySafeUrl> for GitUrl {
+impl TryFrom<SafeUrl> for GitUrl {
     type Error = GitUrlParseError;
 
     /// Initialize a [`GitUrl`] source from a URL.
-    fn try_from(mut url: DisplaySafeUrl) -> Result<Self, Self::Error> {
+    fn try_from(mut url: SafeUrl) -> Result<Self, Self::Error> {
         // Remove any query parameters and fragments.
         url.set_fragment(None);
         url.set_query(None);
@@ -261,28 +296,18 @@ impl TryFrom<DisplaySafeUrl> for GitUrl {
     }
 }
 
-impl From<GitUrl> for DisplaySafeUrl {
+impl From<GitUrl> for SafeUrl {
     fn from(git: GitUrl) -> Self {
+        let precise = git.precise();
         let mut url = git.url;
 
         // If we have a precise commit, add `@` and the commit hash to the URL.
-        if let Some(precise) = git.precise {
+        if let Some(precise) = precise {
             let path = format!("{}@{}", url.path(), precise);
             url.set_path(&path);
-        } else {
-            // Otherwise, add the branch or tag name.
-            match git.reference {
-                GitReference::Branch(rev)
-                | GitReference::Tag(rev)
-                | GitReference::BranchOrTag(rev)
-                | GitReference::NamedRef(rev)
-                | GitReference::BranchOrTagOrCommit(rev) => {
-                    let rev = GitReference::encode_rev(&rev);
-                    let path = format!("{}@{}", url.path(), rev);
-                    url.set_path(&path);
-                }
-                GitReference::DefaultBranch => {}
-            }
+        } else if let Some(rev) = git.reference.as_url_rev() {
+            let path = format!("{}@{}", url.path(), rev);
+            url.set_path(&path);
         }
 
         url
@@ -301,7 +326,7 @@ mod tests {
 
     #[test]
     fn parse_percent_encoded_reference() -> Result<(), Box<dyn std::error::Error>> {
-        let url = DisplaySafeUrl::parse("https://example.com/pkg.git@dev%401%232")?;
+        let url = SafeUrl::parse("https://example.com/pkg.git@dev%401%232")?;
         let git = GitUrl::try_from(url)?;
 
         assert_eq!(git.url().as_str(), "https://example.com/pkg.git");
@@ -313,7 +338,7 @@ mod tests {
     #[test]
     fn parse_ssh_url_with_username_and_percent_encoded_reference()
     -> Result<(), Box<dyn std::error::Error>> {
-        let url = DisplaySafeUrl::parse("ssh://git@github.com/example/example.git@abc%401.2.3")?;
+        let url = SafeUrl::parse("ssh://git@github.com/example/example.git@abc%401.2.3")?;
         let git = GitUrl::try_from(url)?;
 
         assert_eq!(
@@ -327,7 +352,7 @@ mod tests {
 
     #[test]
     fn reject_ambiguous_reference() -> Result<(), Box<dyn std::error::Error>> {
-        let url = DisplaySafeUrl::parse("https://example.com/pkg.git@dev@1.2.3")?;
+        let url = SafeUrl::parse("https://example.com/pkg.git@dev@1.2.3")?;
         let err = GitUrl::try_from(url).unwrap_err();
 
         assert_eq!(
@@ -339,13 +364,123 @@ mod tests {
     }
 
     #[test]
+    fn full_commit_reference() -> Result<(), Box<dyn std::error::Error>> {
+        let commit = "0dacfd662c64cb4ceb16e6cf65a157a8b715b979".parse::<GitOid>()?;
+        let git = GitUrl::try_from(SafeUrl::parse(
+            "https://example.com/pkg.git@0DACFD662C64CB4CEB16E6CF65A157A8B715B979",
+        )?)?;
+
+        assert_eq!(git.reference(), &GitReference::Commit(commit));
+        assert_eq!(git.precise(), Some(commit));
+        assert_eq!(git, git.clone().with_precise(commit)?);
+
+        // Explicit branches and tags can have names that look like full commit hashes.
+        assert_eq!(
+            git.clone()
+                .with_reference(GitReference::Branch(commit.to_string()))
+                .precise(),
+            None
+        );
+        assert_eq!(
+            git.with_reference(GitReference::Tag(commit.to_string()))
+                .precise(),
+            None
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn reject_mismatched_exact_revision() -> Result<(), Box<dyn std::error::Error>> {
+        let url = SafeUrl::parse("https://git:secret-token@example.com/pkg.git")?;
+        let requested_revision = "0dacfd662c64cb4ceb16e6cf65a157a8b715b979";
+        let precise = "b270df1a2fb5d012294e9aaf05e7e0bab1e6a389".parse::<GitOid>()?;
+
+        let error = GitUrl::from_commit(
+            url.clone(),
+            GitReference::from_rev(requested_revision.to_string()),
+            precise,
+            GitLfs::Disabled,
+        )
+        .expect_err("mismatched full revision must be rejected");
+        assert_eq!(
+            error.to_string(),
+            "Exact Git revision `0dacfd662c64cb4ceb16e6cf65a157a8b715b979` does not match precise commit `b270df1a2fb5d012294e9aaf05e7e0bab1e6a389` for `https://git:****@example.com/pkg.git`"
+        );
+
+        let git = GitUrl::from_reference(
+            url.clone(),
+            GitReference::from_rev(requested_revision.to_string()),
+            GitLfs::Disabled,
+        )?;
+        assert!(git.with_precise(precise).is_err());
+
+        let uppercase_revision = requested_revision.to_ascii_uppercase();
+        let expected = requested_revision.parse::<GitOid>()?;
+        assert!(
+            GitUrl::from_commit(
+                url.clone(),
+                GitReference::from_rev(uppercase_revision),
+                expected,
+                GitLfs::Disabled,
+            )
+            .is_ok()
+        );
+
+        assert!(
+            GitUrl::from_commit(
+                url.clone(),
+                GitReference::from_rev("0dacfd6".to_string()),
+                precise,
+                GitLfs::Disabled,
+            )
+            .is_ok()
+        );
+
+        assert!(
+            GitUrl::from_commit(
+                url,
+                GitReference::Branch(requested_revision.to_string()),
+                precise,
+                GitLfs::Disabled,
+            )
+            .is_ok()
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn changing_reference_clears_precise_commit() -> Result<(), Box<dyn std::error::Error>> {
+        let url = SafeUrl::parse("https://example.com/pkg.git")?;
+        let precise = "0dacfd662c64cb4ceb16e6cf65a157a8b715b979".parse::<GitOid>()?;
+        let reference = GitReference::Branch("main".to_string());
+        let git = GitUrl::from_commit(url, reference.clone(), precise, GitLfs::Disabled)?;
+
+        assert_eq!(
+            git.clone().with_reference(reference).precise(),
+            Some(precise)
+        );
+        let commit = "b270df1a2fb5d012294e9aaf05e7e0bab1e6a389".parse::<GitOid>()?;
+        let git = git.with_reference(GitReference::from_rev(commit.to_string()));
+        assert_eq!(git.precise(), Some(commit));
+        assert_eq!(
+            git.with_reference(GitReference::Branch("main".to_string()))
+                .precise(),
+            None
+        );
+
+        Ok(())
+    }
+
+    #[test]
     fn display_percent_encodes_reference() -> Result<(), Box<dyn std::error::Error>> {
         let git = GitUrl::from_reference(
-            DisplaySafeUrl::parse("https://example.com/pkg.git")?,
+            SafeUrl::parse("https://example.com/pkg.git")?,
             GitReference::from_rev("refs/pull/493/head@1#2%".to_string()),
             GitLfs::Disabled,
         )?;
-        let url = DisplaySafeUrl::from(git);
+        let url = SafeUrl::from(git);
 
         assert_eq!(
             url.as_str(),

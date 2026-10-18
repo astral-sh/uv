@@ -1,0 +1,24 @@
+{
+  "version": 2,
+  "repositories": {
+    "uv": {
+      "name": "astral-sh/uv",
+      "id": 699532645,
+      "oidc_subject": "legacy"
+    }
+  },
+  "rules": [
+    {
+      "caller": "uv",
+      "environment": "release",
+      "caller_ref": "refs/heads/main",
+      "caller_workflow": "release.yml",
+      "on": ["workflow_dispatch"],
+      "permissions": {
+        "contents": "write",
+        "workflows": "write"
+      },
+      "target": "uv"
+    }
+  ]
+}

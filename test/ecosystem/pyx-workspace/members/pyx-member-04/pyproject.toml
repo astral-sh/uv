@@ -1,0 +1,13 @@
+[project]
+name = "pyx-member-04"
+version = "0.1.0"
+requires-python = "==3.14.*"
+dependencies = [
+]
+
+[dependency-groups]
+dev = [
+    "deptry==0.25.1",
+    "ruff==0.15.18",
+    "ty==0.0.51",
+]

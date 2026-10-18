@@ -1,6 +1,6 @@
 [package]
 name = "uv-install-wheel"
-version = "0.0.70"
+version = "0.0.93"
 description = "This is an internal component crate of uv"
 keywords = ["wheel", "python"]
 
@@ -30,15 +30,16 @@ uv-shell = { workspace = true }
 uv-trampoline-builder = { workspace = true }
 uv-warnings = { workspace = true }
 
-configparser = { workspace = true }
+astral-ini = { workspace = true }
+astral-mail-headers = { workspace = true }
 csv = { workspace = true }
 data-encoding = { workspace = true }
 fs-err = { workspace = true }
 itertools = { workspace = true }
-mailparse = { workspace = true }
 owo-colors = { workspace = true }
 pathdiff = { workspace = true }
-regex = { workspace = true }
+regex = { workspace = true, features = ["perf", "unicode"] }
+regex-automata = { workspace = true }
 rustc-hash = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }

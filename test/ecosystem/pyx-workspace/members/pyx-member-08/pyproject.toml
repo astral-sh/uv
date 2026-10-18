@@ -1,0 +1,20 @@
+[project]
+name = "pyx-member-08"
+version = "0.1.0"
+requires-python = "==3.14.*"
+dependencies = [
+]
+
+[dependency-groups]
+dev = [
+    "deptry==0.25.1",
+    "pytest==9.0.3",
+    "ruff==0.15.18",
+    "ty==0.0.51",
+    "packaging==26.0",
+    "urllib3==2.7.0",
+    "pyx-member-29",
+    "pyx-member-33",
+    "sentry-sdk==2.57.0",
+    "rfc3986==2.0.0",
+]

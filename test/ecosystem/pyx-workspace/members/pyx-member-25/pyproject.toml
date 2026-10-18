@@ -1,0 +1,20 @@
+[project]
+name = "pyx-member-25"
+version = "0.1.0"
+requires-python = "==3.14.*"
+dependencies = [
+    "anyio==4.13.0",
+    "opentelemetry-exporter-otlp-proto-http==1.41.0",
+    "opentelemetry-sdk==1.41.0",
+]
+
+[dependency-groups]
+dev = [
+    "deptry==0.25.1",
+    "dirty-equals==0.11",
+    "inline-snapshot==0.32.6",
+    "pytest==9.0.3",
+    "pyx-member-33",
+    "ruff==0.15.18",
+    "ty==0.0.51",
+]

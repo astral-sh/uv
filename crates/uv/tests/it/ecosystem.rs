@@ -1,8 +1,7 @@
 use anyhow::{Context, Result};
-use assert_fs::fixture::ChildPath;
 use insta::assert_snapshot;
 use std::path::Path;
-use uv_resolver::Lock;
+use uv_lock::Lock;
 use uv_static::EnvVars;
 
 // These tests just run `uv lock` on an assorted of ecosystem
@@ -33,6 +32,51 @@ fn black() -> Result<()> {
     lock_ecosystem_package("3.12", "black")
 }
 
+// Source: https://github.com/pypa/cibuildwheel/blob/294735312765b09d24a2fbec22660ce817587d55/pyproject.toml
+#[test]
+fn cibuildwheel() -> Result<()> {
+    lock_ecosystem_package_without_build("3.12", "cibuildwheel")
+}
+
+// Source: https://github.com/cookiecutter/cookiecutter/blob/083dd3c6104124221e2cbc3e13e0929795861ed5/pyproject.toml
+#[test]
+fn cookiecutter() -> Result<()> {
+    lock_ecosystem_package_without_build("3.12", "cookiecutter")
+}
+
+// Source: https://github.com/pallets/flask/blob/06ea505ce2b2042af26e96d35ebf159af7c0869d/pyproject.toml
+#[test]
+fn flask() -> Result<()> {
+    lock_ecosystem_package_without_build("3.12", "flask")
+}
+
+// Source: https://github.com/encode/httpx/blob/767cf6baa608a56d03f8fe438a39c2013904f0ae/pyproject.toml
+//
+// Replace the dynamically derived version with the version from the pinned
+// revision so locking does not execute the build backend.
+#[test]
+fn httpx() -> Result<()> {
+    lock_ecosystem_package_without_build("3.12", "httpx")
+}
+
+// Source: https://github.com/simonw/llm/blob/512659547241a61e30116e9ada4db34a624062ae/pyproject.toml
+#[test]
+fn llm() -> Result<()> {
+    lock_ecosystem_package_without_build("3.12", "llm")
+}
+
+// Source: https://github.com/openai/openai-python/blob/6d9262d5c666a1e4d47f63178db907ba3087ac5d/pyproject.toml
+#[test]
+fn openai_python() -> Result<()> {
+    lock_ecosystem_package_without_build("3.12", "openai-python")
+}
+
+// Source: https://github.com/pytest-dev/pytest-cov/blob/66c8a526b1246b5eb8fb1bc218878131bc628622/pyproject.toml
+#[test]
+fn pytest_cov() -> Result<()> {
+    lock_ecosystem_package_without_build("3.12", "pytest-cov")
+}
+
 // Source: astral-sh/pyx at 5752f1cd9766b9df934658ceaeb10eb37986e54d.
 //
 // This fixture combines the external project and dependency-group requirements
@@ -43,6 +87,15 @@ fn black() -> Result<()> {
 #[test]
 fn pyx_external() -> Result<()> {
     lock_ecosystem_package_without_build("3.14", "pyx-external")
+}
+
+// Source: astral-sh/pyx at 5752f1cd9766b9df934658ceaeb10eb37986e54d.
+//
+// The sdist-only `atlas-provider-sqlalchemy` dependency is omitted, and the
+// exact Python patch requirement is widened to Python 3.14.
+#[test]
+fn pyx_workspace() -> Result<()> {
+    lock_ecosystem_package_without_build("3.14", "pyx-workspace")
 }
 
 // Source: https://github.com/python-poetry/poetry/blob/811a12dae0fe81f199e3f1b88b8b8be9eed543c2/pyproject.toml
@@ -84,6 +137,24 @@ fn saleor() -> Result<()> {
     lock_ecosystem_package("3.12", "saleor")
 }
 
+// Source: https://github.com/getsentry/sentry/blob/3d20b99264b1afa6d4d3b356c3bba0d27cd069ae/pyproject.toml
+//
+// Use the upstream Python 3.13 interpreter and public package index, omitting
+// dependencies distributed only as source archives.
+#[test]
+fn sentry() -> Result<()> {
+    lock_ecosystem_package_without_build("3.13", "sentry")
+}
+
+// Source: https://github.com/zulip/zulip/blob/73a1152e4b1a3dfee3c7d161ce1fb711600f95b8/pyproject.toml
+//
+// Keep the application's production and development dependency groups while
+// omitting Git-only and source-only dependencies.
+#[test]
+fn zulip() -> Result<()> {
+    lock_ecosystem_package_without_build("3.12", "zulip")
+}
+
 // Currently ignored because the project doesn't build with `uv` yet.
 //
 // Source: https://github.com/apache/airflow/blob/c55438d9b2eb9b6680641eefdd0cbc67a28d1d29/pyproject.toml
@@ -121,6 +192,7 @@ fn jupyterlab() -> Result<()> {
 //
 // The dynamically derived project version is replaced with the version from
 // the pinned release. The sdist-only `pybars4` dependency is omitted.
+// The Python range is capped below 3.13 because the `autogen` extra requires NumPy 1.x wheels.
 #[test]
 fn semantic_kernel() -> Result<()> {
     if skip_slow_ecosystem_test_on_non_linux_ci() {
@@ -146,13 +218,11 @@ fn lock_ecosystem_package_without_build(python_version: &str, name: &str) -> Res
 }
 
 fn lock_ecosystem_package_with_args(python_version: &str, name: &str, args: &[&str]) -> Result<()> {
-    let mut context = uv_test::test_context!(python_version);
-    context.copy_ecosystem_project(name);
-
     // Cache source distribution builds to speed up the tests.
     let cache_dir =
         std::path::absolute(Path::new("../../target/ecosystem-test-caches").join(name))?;
-    context.cache_dir = ChildPath::new(cache_dir);
+    let context = uv_test::test_context!(python_version).with_cache_dir(cache_dir);
+    context.copy_ecosystem_project(name);
 
     let mut command = context.lock();
     command.env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER);

@@ -9,18 +9,24 @@ use flate2::write::GzEncoder;
 use fs_err::File;
 use futures_lite::future::block_on;
 use globset::{Glob, GlobSet};
+use itertools::Itertools;
 use rustc_hash::FxHashSet;
 use std::io;
 use std::io::{BufReader, Cursor, Read, Write};
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Component, Path, PathBuf};
 use std::pin::Pin;
 use std::task::{Context, Poll};
+use tar_codec::{ArchiveBuilder as _, Builder, EntryMetadata, FilePayload, TarEncoder};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use tokio_tar::{EntryType, Header};
 use tracing::{debug, trace};
 use uv_distribution_filename::{SourceDistExtension, SourceDistFilename};
 use uv_fs::{Simplified, normalize_path};
 use uv_globfilter::{GlobDirFilter, PortableGlobParser};
+use uv_pypi_types::BuildKind;
+use uv_static::TarBackend;
 use uv_warnings::warn_user_once;
 use walkdir::WalkDir;
 
@@ -30,6 +36,7 @@ pub fn build_source_dist(
     source_dist_directory: &Path,
     uv_version: &str,
     show_warnings: bool,
+    tar_backend: TarBackend,
 ) -> Result<SourceDistFilename, Error> {
     let pyproject_toml = PyProjectToml::parse(&source_tree.join("pyproject.toml"))?;
     let filename = SourceDistFilename {
@@ -44,8 +51,16 @@ pub fn build_source_dist(
     }
 
     let temp_file = uv_fs::tempfile_in(source_dist_directory)?;
-    let writer = TarGzWriter::new(temp_file.as_file(), &source_dist_path);
-    write_source_dist(source_tree, writer, uv_version, show_warnings)?;
+    match tar_backend {
+        TarBackend::TarCodec => {
+            let writer = TarCodecGzWriter::new(temp_file.as_file(), &source_dist_path);
+            write_source_dist(source_tree, writer, uv_version, show_warnings)?;
+        }
+        TarBackend::TokioTar => {
+            let writer = TokioTarGzWriter::new(temp_file.as_file(), &source_dist_path);
+            write_source_dist(source_tree, writer, uv_version, show_warnings)?;
+        }
+    }
     temp_file
         .persist(&source_dist_path)
         .map_err(|err| Error::Persist(source_dist_path.clone(), err.error))?;
@@ -75,14 +90,12 @@ pub fn list_source_dist(
 fn source_dist_matcher(
     source_tree: &Path,
     pyproject_toml: &PyProjectToml,
-    settings: BuildBackendSettings,
+    settings: &BuildBackendSettings,
+    license_files: &[String],
     show_warnings: bool,
 ) -> Result<(GlobDirFilter, GlobSet), Error> {
     // File and directories to include in the source directory
     let mut include_globs = Vec::new();
-    let mut includes: Vec<String> = settings.source_include;
-    // pyproject.toml is always included.
-    includes.push(globset::escape("pyproject.toml"));
 
     // Check that the source tree contains a module.
     let (src_root, modules_relative) = find_roots(
@@ -93,6 +106,9 @@ fn source_dist_matcher(
         settings.namespace,
         show_warnings,
     )?;
+    let mut includes = Vec::with_capacity(modules_relative.len() + 1);
+    // pyproject.toml is always included.
+    includes.push(globset::escape("pyproject.toml"));
     for module_relative in modules_relative {
         // The wheel must not include any files included by the source distribution (at least until we
         // have files generated in the source dist -> wheel build step).
@@ -101,9 +117,9 @@ fn source_dist_matcher(
         let import_path = normalize_path(path).portable_display().to_string();
         includes.push(format!("{}/**", globset::escape(&import_path)));
     }
-    for include in includes {
+    for include in settings.source_include.iter().chain(&includes) {
         let glob = PortableGlobParser::Uv
-            .parse(&include)
+            .parse(include)
             .map_err(|err| Error::PortableGlob {
                 field: "tool.uv.build-backend.source-include".to_string(),
                 source: err,
@@ -125,10 +141,14 @@ fn source_dist_matcher(
     }
 
     // Include the license files
-    for license_files in pyproject_toml.license_files_source_dist() {
-        trace!("Including license files at: {license_files}`");
+    for license_file in license_files {
+        trace!("Including license file at: {license_file}");
+        let glob = Glob::new(&globset::escape(license_file)).expect("escaped globset is parseable");
+        include_globs.push(glob);
+    }
+    if let Some(license_file) = pyproject_toml.legacy_license_file() {
         let glob = PortableGlobParser::Pep639
-            .parse(license_files)
+            .parse(license_file)
             .map_err(|err| Error::PortableGlob {
                 field: "project.license-files".to_string(),
                 source: err,
@@ -173,17 +193,19 @@ fn source_dist_matcher(
             source: err,
         })?;
 
-    let mut excludes: Vec<String> = Vec::new();
-    if settings.default_excludes {
-        excludes.extend(DEFAULT_EXCLUDES.iter().map(ToString::to_string));
-    }
-    for exclude in settings.source_exclude {
-        // Avoid duplicate entries.
-        if !excludes.contains(&exclude) {
-            excludes.push(exclude);
-        }
-    }
-    debug!("Source dist excludes: {:?}", excludes);
+    let defaults = if settings.default_excludes {
+        DEFAULT_EXCLUDES
+    } else {
+        &[]
+    };
+    let excludes = defaults
+        .iter()
+        .copied()
+        .chain(settings.source_exclude.iter().map(String::as_str));
+    debug!(
+        "Source dist excludes: {:?}",
+        excludes.clone().unique().collect::<Vec<_>>()
+    );
     let exclude_matcher = build_exclude_matcher(excludes)?;
     if exclude_matcher.is_match("pyproject.toml") {
         return Err(Error::PyprojectTomlExcluded);
@@ -199,13 +221,8 @@ fn write_source_dist(
     show_warnings: bool,
 ) -> Result<SourceDistFilename, Error> {
     let pyproject_toml = PyProjectToml::parse(&source_tree.join("pyproject.toml"))?;
-    for warning in pyproject_toml.check_build_system(uv_version) {
-        warn_user_once!("{warning}");
-    }
-    let settings = pyproject_toml
-        .settings()
-        .cloned()
-        .unwrap_or_else(BuildBackendSettings::default);
+    pyproject_toml.warn_build_system(uv_version, BuildKind::Sdist);
+    let settings = pyproject_toml.settings();
 
     let filename = SourceDistFilename {
         name: pyproject_toml.name().clone(),
@@ -263,8 +280,13 @@ fn write_source_dist(
         &pyproject_path,
     )?;
 
-    let (include_matcher, exclude_matcher) =
-        source_dist_matcher(source_tree, &pyproject_toml, settings, show_warnings)?;
+    let (include_matcher, exclude_matcher) = source_dist_matcher(
+        source_tree,
+        &pyproject_toml,
+        &settings,
+        &metadata.license_files,
+        show_warnings,
+    )?;
 
     let mut files_visited = 0;
     let mut written_directories = FxHashSet::<PathBuf>::default();
@@ -307,7 +329,7 @@ fn write_source_dist(
             .strip_prefix(source_tree)
             .expect("walkdir starts with root");
 
-        if !include_matcher.match_path(relative) || exclude_matcher.is_match(relative) {
+        if !include_matcher.match_path(relative, &entry) || exclude_matcher.is_match(relative) {
             trace!("Excluding from sdist: {}", relative.user_display());
             continue;
         }
@@ -389,9 +411,8 @@ impl<W: Write + Unpin> AsyncWrite for SyncWriter<W> {
     }
 
     fn poll_flush(self: Pin<&mut Self>, _context: &mut Context<'_>) -> Poll<io::Result<()>> {
-        // `tokio::io::copy` flushes after each copied entry. Forwarding those flushes to the gzip
-        // encoder changes the deflate stream, even though the tar payload is identical. The
-        // encoder is finalized by `GzEncoder::finish` when the archive is closed.
+        // Per-entry flushes change the deflate stream, even though the tar payload is identical.
+        // The encoder is finalized by `GzEncoder::finish` after the tar archive is closed.
         Poll::Ready(Ok(()))
     }
 
@@ -400,16 +421,30 @@ impl<W: Write + Unpin> AsyncWrite for SyncWriter<W> {
     }
 }
 
-struct TarGzWriter<W: Write + Unpin + Send> {
+struct TokioTarGzWriter<W: Write + Unpin + Send> {
     path: PathBuf,
     tar: tokio_tar::Builder<SyncWriter<GzEncoder<W>>>,
 }
 
-impl<W: Write + Unpin + Send> TarGzWriter<W> {
+impl<W: Write + Unpin + Send> TokioTarGzWriter<W> {
     fn new(writer: W, path: impl Into<PathBuf>) -> Self {
         let path = path.into();
-        let enc = GzEncoder::new(writer, Compression::default());
-        let tar = tokio_tar::Builder::new_non_terminated(SyncWriter::new(enc));
+        let gzip = GzEncoder::new(writer, Compression::default());
+        let tar = tokio_tar::Builder::new_non_terminated(SyncWriter::new(gzip));
+        Self { path, tar }
+    }
+}
+
+struct TarCodecGzWriter<W: Write + Unpin> {
+    path: PathBuf,
+    tar: Builder<TarEncoder<SyncWriter<GzEncoder<W>>>>,
+}
+
+impl<W: Write + Unpin> TarCodecGzWriter<W> {
+    fn new(writer: W, path: impl Into<PathBuf>) -> Self {
+        let path = path.into();
+        let gzip = GzEncoder::new(writer, Compression::default());
+        let tar = TarEncoder::new(SyncWriter::new(gzip)).builder();
         Self { path, tar }
     }
 }
@@ -440,7 +475,7 @@ fn normalize_toml10_datetimes(value: &mut toml::Value) {
     }
 }
 
-impl<W: Write + Unpin + Send> DirectoryWriter for TarGzWriter<W> {
+impl<W: Write + Unpin + Send> DirectoryWriter for TokioTarGzWriter<W> {
     fn write_bytes(&mut self, path: &str, bytes: &[u8]) -> Result<(), Error> {
         let mut header = Header::new_gnu();
         // Work around bug in Python's std tar module
@@ -468,22 +503,12 @@ impl<W: Write + Unpin + Send> DirectoryWriter for TarGzWriter<W> {
         header.set_entry_type(EntryType::Regular);
         // Preserve the executable bit, especially for scripts
         #[cfg(unix)]
-        let executable_bit = {
-            use std::os::unix::fs::PermissionsExt;
-            metadata.permissions().mode() & 0o111 != 0
-        };
+        let executable_bit = metadata.permissions().mode() & 0o111 != 0;
         // Windows has no executable bit
         #[cfg(not(unix))]
         let executable_bit = false;
 
-        // Set reasonable defaults to avoid 0o000 permissions, while avoiding adding the exact
-        // filesystem permissions to the archive for reproducibility. Where applicable, the
-        // operating system filters the stored permission by the user's umask when unpacking.
-        if executable_bit {
-            header.set_mode(0o755);
-        } else {
-            header.set_mode(0o644);
-        }
+        header.set_mode(if executable_bit { 0o755 } else { 0o644 });
         header.set_size(metadata.len());
         let reader = BufReader::new(File::open(file)?);
         block_on(
@@ -516,6 +541,52 @@ impl<W: Write + Unpin + Send> DirectoryWriter for TarGzWriter<W> {
             .into_inner()
             .finish()
             .map_err(|err| Error::TarWrite(path, err))?;
+        Ok(())
+    }
+}
+
+impl<W: Write + Unpin> DirectoryWriter for TarCodecGzWriter<W> {
+    fn write_bytes(&mut self, path: &str, bytes: &[u8]) -> Result<(), Error> {
+        block_on(self.tar.add_file(path, bytes, EntryMetadata::default()))
+            .map_err(|err| Error::TarCodecWrite(self.path.clone(), err))?;
+        Ok(())
+    }
+
+    fn write_file(&mut self, path: &str, file: &Path) -> Result<(), Error> {
+        let metadata = fs_err::metadata(file)?;
+        // Preserve the executable bit, especially for scripts
+        #[cfg(unix)]
+        let executable_bit = metadata.permissions().mode() & 0o111 != 0;
+        // Windows has no executable bit
+        #[cfg(not(unix))]
+        let executable_bit = false;
+
+        let reader = BufReader::new(File::open(file)?);
+        let payload = FilePayload::new(metadata.len(), SyncReader::new(reader));
+        block_on(self.tar.add_file(
+            path,
+            payload,
+            EntryMetadata::default().executable(executable_bit),
+        ))
+        .map_err(|err| Error::TarCodecWrite(self.path.clone(), err))?;
+        Ok(())
+    }
+
+    fn write_directory(&mut self, directory: &str) -> Result<(), Error> {
+        block_on(self.tar.add_directory(directory))
+            .map_err(|err| Error::TarCodecWrite(self.path.clone(), err))?;
+        Ok(())
+    }
+
+    fn close(self, _dist_info_dir: &str) -> Result<(), Error> {
+        let path = self.path;
+        let encoder = block_on(self.tar.finish_into_inner())
+            .map_err(|err| Error::TarCodecWrite(path.clone(), err))?;
+        encoder
+            .into_inner()
+            .into_inner()
+            .finish()
+            .map_err(|err| Error::GzipWrite(path, err))?;
         Ok(())
     }
 }

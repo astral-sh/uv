@@ -3,7 +3,9 @@ source: crates/uv-requirements-txt/src/lib.rs
 expression: actual
 ---
 RequirementsTxtFileError {
-    file: "<REQUIREMENTS_DIR>/hash.txt",
+    file: Local(
+        "<REQUIREMENTS_DIR>/hash.txt",
+    ),
     error: Pep508 {
         source: Pep508Error {
             message: String(

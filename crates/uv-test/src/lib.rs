@@ -1,13 +1,20 @@
 // The `unreachable_pub` is to silence false positives in RustRover.
 #![allow(dead_code, unreachable_pub)]
 
+pub mod archive;
 pub mod find_links;
 mod http_server;
+pub mod package_server;
 pub mod packse;
+mod path;
 pub mod pypi_proxy;
 mod vendor;
 
+pub use path::{assert_link_target, assert_path_missing};
+
 use std::borrow::BorrowMut;
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::ffi::OsString;
 use std::io::Write as _;
 use std::iter::Iterator;
@@ -15,13 +22,11 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 use std::str::FromStr;
 use std::{env, io};
-use uv_python::downloads::ManagedPythonDownloadList;
+use uv_python_managed::downloads::ManagedPythonDownloadList;
 
 use assert_cmd::assert::{Assert, OutputAssertExt};
 use assert_fs::assert::PathAssert;
-use assert_fs::fixture::{
-    ChildPath, FileWriteStr, PathChild, PathCopy, PathCreateDir, SymlinkToFile,
-};
+use assert_fs::fixture::{ChildPath, FileWriteStr, PathChild, PathCreateDir, SymlinkToFile};
 use base64::{Engine, prelude::BASE64_STANDARD as base64};
 use futures::StreamExt;
 use indoc::{formatdoc, indoc};
@@ -29,13 +34,13 @@ use itertools::Itertools;
 use predicates::prelude::predicate;
 use regex::{Regex, regex};
 use tokio::io::AsyncWriteExt;
+use walkdir::WalkDir;
 
 use uv_cache::{Cache, CacheBucket};
 use uv_fs::Simplified;
-use uv_python::managed::ManagedPythonInstallations;
-use uv_python::{
-    EnvironmentPreference, PythonInstallation, PythonPreference, PythonRequest, PythonVersion,
-};
+use uv_python_discovery::PythonInstallation;
+use uv_python_managed::ManagedPythonInstallations;
+use uv_python_types::{EnvironmentPreference, PythonPreference, PythonRequest, PythonVersion};
 use uv_static::EnvVars;
 
 // Shared test timestamp for deterministic package availability and relative times.
@@ -44,26 +49,23 @@ static TEST_TIMESTAMP: &str = "2024-03-25T00:00:00Z";
 pub const DEFAULT_PYTHON_VERSION: &str = "3.12";
 
 // The expected latest patch version for each Python minor version.
-const LATEST_PYTHON_3_15: &str = "3.15.0rc1";
-const LATEST_PYTHON_3_14: &str = "3.14.7";
-const LATEST_PYTHON_3_13: &str = "3.13.15";
-pub const LATEST_PYTHON_3_12: &str = "3.12.13";
-const LATEST_PYTHON_3_11: &str = "3.11.15";
-const LATEST_PYTHON_3_10: &str = "3.10.20";
+const LATEST_PYTHON_3_16: &str = "3.16.0a1";
+const LATEST_PYTHON_3_15: &str = "3.15.0";
+const LATEST_PYTHON_3_14: &str = "3.14.8";
+const LATEST_PYTHON_3_13: &str = "3.13.16";
+pub const LATEST_PYTHON_3_12: &str = "3.12.15";
+const LATEST_PYTHON_3_11: &str = "3.11.17";
+const LATEST_PYTHON_3_10: &str = "3.10.22";
 
 /// Create a new [`TestContext`] with the given Python version.
 ///
 /// Creates a virtual environment for the test.
 ///
-/// This macro captures the uv binary path at compile time using `env!("CARGO_BIN_EXE_uv")`,
-/// which is only available in the test crate.
+/// Resolves the uv binary path at runtime via [`get_bin!`].
 #[macro_export]
 macro_rules! test_context {
     ($python_version:expr) => {
-        $crate::TestContext::new_with_bin(
-            $python_version,
-            std::path::PathBuf::from(env!("CARGO_BIN_EXE_uv")),
-        )
+        $crate::TestContext::new_with_bin($python_version, $crate::get_bin!())
     };
 }
 
@@ -71,26 +73,28 @@ macro_rules! test_context {
 ///
 /// Unlike [`test_context!`], this does not create a virtual environment.
 ///
-/// This macro captures the uv binary path at compile time using `env!("CARGO_BIN_EXE_uv")`,
-/// which is only available in the test crate.
+/// Resolves the uv binary path at runtime via [`get_bin!`].
 #[macro_export]
 macro_rules! test_context_with_versions {
     ($python_versions:expr) => {
-        $crate::TestContext::new_with_versions_and_bin(
-            $python_versions,
-            std::path::PathBuf::from(env!("CARGO_BIN_EXE_uv")),
-        )
+        $crate::TestContext::new_with_versions_and_bin($python_versions, $crate::get_bin!())
     };
 }
 
 /// Return the path to the uv binary.
 ///
-/// This macro captures the uv binary path at compile time using `env!("CARGO_BIN_EXE_uv")`,
-/// which is only available in the test crate.
+/// Reads the path supplied by Cargo or nextest at runtime, so compiled tests
+/// remain usable when the target directory is relocated.
+///
+/// This path is only available in the `uv` package's integration tests and benchmarks.
 #[macro_export]
 macro_rules! get_bin {
     () => {
-        std::path::PathBuf::from(env!("CARGO_BIN_EXE_uv"))
+        std::path::PathBuf::from(
+            std::env::var_os("NEXTEST_BIN_EXE_uv")
+                .or_else(|| std::env::var_os("CARGO_BIN_EXE_uv"))
+                .expect("Cargo or nextest should provide the uv binary path"),
+        )
     };
 }
 
@@ -99,8 +103,6 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
     (r"--cache-dir [^\s]+", "--cache-dir [CACHE_DIR]"),
     // Operation times
     (r"(\s|\()(\d+m )?(\d+\.)?\d+(ms|s)", "$1[TIME]"),
-    // File sizes
-    (r"(\s|\()(\d+\.)?\d+([KM]i)?B", "$1[SIZE]"),
     // Timestamps
     (r"tv_sec: \d+", "tv_sec: [TIME]"),
     (r"tv_nsec: \d+", "tv_nsec: [TIME]"),
@@ -119,14 +121,13 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
         r"(?ms)^([ \t]*custom_certificates: )(?:None|Some\(\n.*?^[ \t]*\),\n[ \t]*\)),",
         "${1}[CERTIFICATES],",
     ),
-    // Filter SSL certificate loading debug messages (environment-dependent)
-    (r"DEBUG Loaded \d+ certificate\(s\) from [^\n]+\n", ""),
 ];
 
 /// Create a context for tests which simplifies shared behavior across tests.
 ///
 /// * Set the current directory to a temporary directory (`temp_dir`).
 /// * Set the cache dir to a different temporary directory (`cache_dir`).
+/// * Share the Python download cache unless explicitly disabled.
 /// * Set a shared test timestamp so snapshots don't change after a new release.
 /// * Set the venv to a fresh `.venv` in `temp_dir`
 pub struct TestContext {
@@ -174,6 +175,51 @@ impl TestContext {
         new
     }
 
+    /// Set the cache directory for all commands and update its snapshot filters.
+    ///
+    /// Relative paths are resolved against the test working directory.
+    #[must_use]
+    pub fn with_cache_dir(mut self, cache_dir: impl AsRef<Path>) -> Self {
+        let cache_dir = if cache_dir.as_ref().is_absolute() {
+            cache_dir.as_ref().to_path_buf()
+        } else {
+            self.temp_dir
+                .join(cache_dir.as_ref().components().collect::<PathBuf>())
+        };
+
+        self.filters
+            .retain(|(_, replacement)| replacement != "[CACHE_DIR]/");
+        self.cache_dir = ChildPath::new(cache_dir);
+
+        for pattern in Self::path_patterns(&self.cache_dir) {
+            self.filters
+                .insert(0, (pattern, "[CACHE_DIR]/".to_string()));
+        }
+
+        self
+    }
+
+    /// Return the sorted paths of all regular files in a cache bucket.
+    pub fn cache_files(&self, bucket: CacheBucket) -> anyhow::Result<Vec<PathBuf>> {
+        let cache = Cache::from_path(self.cache_dir.path());
+        let mut files = Vec::new();
+        for entry in WalkDir::new(cache.bucket(bucket)).min_depth(1) {
+            let entry = entry?;
+            if entry.file_type().is_file() {
+                files.push(entry.path().to_path_buf());
+            }
+        }
+        files.sort();
+        Ok(files)
+    }
+
+    /// Set an environment variable for all commands created from this context.
+    #[must_use]
+    pub fn with_env(mut self, key: impl Into<OsString>, value: impl Into<OsString>) -> Self {
+        self.extra_env.push((key.into(), value.into()));
+        self
+    }
+
     /// Set the "exclude newer" timestamp for all commands in this context.
     #[must_use]
     pub fn with_exclude_newer(mut self, exclude_newer: &str) -> Self {
@@ -188,6 +234,35 @@ impl TestContext {
         self.extra_env
             .push((EnvVars::UV_HTTP_TIMEOUT.into(), http_timeout.into()));
         self
+    }
+
+    /// Set the number of HTTP retries for all commands in this context.
+    #[must_use]
+    pub fn with_http_retries(mut self, http_retries: &str) -> Self {
+        self.extra_env
+            .push((EnvVars::UV_HTTP_RETRIES.into(), http_retries.into()));
+        self
+    }
+
+    /// Configure one HTTP retry with a one-second timeout for all commands in this context.
+    #[must_use]
+    pub fn with_fast_http_retry(self) -> Self {
+        self.with_http_timeout("1").with_http_retries("1")
+    }
+
+    /// Omit incidental HTTP retries from a snapshot that asserts the eventual error.
+    ///
+    /// Keep the final error and its causes. Context filters run before the standard timing filter.
+    #[must_use]
+    pub fn with_filtered_http_retries(self) -> Self {
+        self.with_filter((
+            r"(?m)^  cause: Request failed after [1-9]\d* retr(?:y|ies) in \d+\.\ds\r?\n",
+            "",
+        ))
+        .with_filter((
+            r"(?m)^error: Request failed after [1-9]\d* retr(?:y|ies) in \d+\.\ds\r?\n  cause: ",
+            "error: ",
+        ))
     }
 
     /// Set the "concurrent installs" for all commands in this context.
@@ -218,6 +293,12 @@ impl TestContext {
                 format!("{verb} [N] packages"),
             ));
         }
+        self.with_filtered_file_counts()
+    }
+
+    /// Filter removed file counts without hiding exact package counts.
+    #[must_use]
+    pub fn with_filtered_file_counts(mut self) -> Self {
         self.filters.push((
             "Removed \\d+ files?".to_string(),
             "Removed [N] files".to_string(),
@@ -225,16 +306,36 @@ impl TestContext {
         self
     }
 
-    /// Add extra filtering for cache size output
+    /// Filter file sizes while retaining their units so human-readable output remains distinguishable.
+    #[must_use]
+    pub fn with_filtered_sizes(mut self) -> Self {
+        self.filters.push((
+            r"(\s|\()(\d+\.)?\d+(([KMGT]i)?B)".to_string(),
+            "$1[SIZE]$3".to_string(),
+        ));
+        self
+    }
+
+    /// Filter file sizes and units when the units vary across environments.
+    #[must_use]
+    pub fn with_filtered_sizes_and_units(mut self) -> Self {
+        self.filters.push((
+            r"(\s|\()(\d+\.)?\d+([KMGT]i)?B".to_string(),
+            "$1[SIZE]".to_string(),
+        ));
+        self
+    }
+
+    /// Filter cache size output while retaining human-readable units.
     #[must_use]
     pub fn with_filtered_cache_size(mut self) -> Self {
         // Filter raw byte counts (numbers on their own line)
         self.filters
             .push((r"(?m)^\d+\n".to_string(), "[SIZE]\n".to_string()));
-        // Filter human-readable sizes (e.g., "384.2 KiB")
+        // Filter human-readable sizes (e.g., "384.2 KiB") while retaining their units.
         self.filters.push((
-            r"(?m)^\d+(\.\d+)? [KMGT]i?B\n".to_string(),
-            "[SIZE]\n".to_string(),
+            r"(?m)^\d+(\.\d+)?( ?[KMGT]i?B)\n".to_string(),
+            "[SIZE]$2\n".to_string(),
         ));
         self
     }
@@ -253,7 +354,7 @@ impl TestContext {
     #[must_use]
     pub fn with_filtered_missing_file_error(mut self) -> Self {
         // The exact message string depends on the system language, so we remove it.
-        // We want to only remove the phrase after `Caused by:`
+        // Keep the severity or cause prefix while removing the operating system's message.
         self.filters.push((
             r"[^:\n]* \(os error 2\)".to_string(),
             " [OS ERROR 2]".to_string(),
@@ -368,7 +469,10 @@ impl TestContext {
             "/[BIN]/".to_string(),
         ));
         self.filters.push((
-            format!(r"[\\/]{}", venv_bin_path(PathBuf::new()).to_string_lossy()),
+            format!(
+                r"[\\/]{}\b",
+                venv_bin_path(PathBuf::new()).to_string_lossy()
+            ),
             "/[BIN]".to_string(),
         ));
         self
@@ -440,7 +544,7 @@ impl TestContext {
                 self.filters.extend(
                     Self::path_patterns(executable.read_link().unwrap())
                         .into_iter()
-                        .map(|pattern| (format! {" -> {pattern}"}, String::new())),
+                        .map(|pattern| (format!(" -> {pattern}"), String::new())),
                 );
             }
             // Drop links that are byproducts of the test context too
@@ -537,6 +641,7 @@ impl TestContext {
         // Filter the latest patch versions with [LATEST] placeholder
         // The order matters - we want to match the full version first
         for (minor, patch) in [
+            ("3.16", LATEST_PYTHON_3_16.strip_prefix("3.16.").unwrap()),
             ("3.15", LATEST_PYTHON_3_15.strip_prefix("3.15.").unwrap()),
             ("3.14", LATEST_PYTHON_3_14.strip_prefix("3.14.").unwrap()),
             ("3.13", LATEST_PYTHON_3_13.strip_prefix("3.13.").unwrap()),
@@ -616,19 +721,11 @@ impl TestContext {
         self
     }
 
-    /// Use a shared global cache for Python downloads.
+    /// Disable the shared Python download cache for tests that require fresh downloads or isolated cache state.
     #[must_use]
-    pub fn with_python_download_cache(mut self) -> Self {
-        self.extra_env.push((
-            EnvVars::UV_PYTHON_CACHE_DIR.into(),
-            // Respect `UV_PYTHON_CACHE_DIR` if set, or use the default cache directory
-            env::var_os(EnvVars::UV_PYTHON_CACHE_DIR).unwrap_or_else(|| {
-                uv_cache::Cache::from_settings(false, None)
-                    .unwrap()
-                    .bucket(CacheBucket::Python)
-                    .into()
-            }),
-        ));
+    pub fn without_python_download_cache(mut self) -> Self {
+        self.extra_env
+            .retain(|(key, _)| key != EnvVars::UV_PYTHON_CACHE_DIR);
         self
     }
 
@@ -658,6 +755,21 @@ impl TestContext {
         self
     }
 
+    /// Configure isolated directories for installed tools and their executable entry points.
+    #[must_use]
+    pub fn with_tool_dirs(mut self) -> Self {
+        self.extra_env.push((
+            EnvVars::UV_TOOL_DIR.into(),
+            self.temp_dir.join("tools").into(),
+        ));
+        self.extra_env.push((
+            EnvVars::XDG_BIN_HOME.into(),
+            self.temp_dir.join("bin").into(),
+        ));
+
+        self
+    }
+
     #[must_use]
     pub fn with_versions_as_managed(mut self, versions: &[&str]) -> Self {
         self.extra_env.push((
@@ -672,6 +784,13 @@ impl TestContext {
     #[must_use]
     pub fn with_filter(mut self, filter: (impl Into<String>, impl Into<String>)) -> Self {
         self.filters.push((filter.0.into(), filter.1.into()));
+        self
+    }
+
+    /// Add custom filters to the `TestContext`.
+    #[must_use]
+    pub fn with_filters(mut self, filters: impl IntoIterator<Item = (String, String)>) -> Self {
+        self.filters.extend(filters);
         self
     }
 
@@ -773,11 +892,9 @@ impl TestContext {
         self.cache_dir = ChildPath::new(tmp.path()).child("cache");
         fs_err::create_dir_all(&self.cache_dir)?;
         let replacement = format!("[{name}]/[CACHE_DIR]/");
-        self.filters.extend(
-            Self::path_patterns(&self.cache_dir)
-                .into_iter()
-                .map(|pattern| (pattern, replacement.clone())),
-        );
+        for pattern in Self::path_patterns(&self.cache_dir) {
+            self.filters.insert(0, (pattern, replacement.clone()));
+        }
         self._extra_tempdirs.push(tmp);
         Ok(self)
     }
@@ -887,14 +1004,25 @@ impl TestContext {
             .expect("CARGO_MANIFEST_DIR should be doubly nested in workspace")
             .to_path_buf();
 
-        let download_list = ManagedPythonDownloadList::new_only_embedded().unwrap();
+        let download_list = if python_versions.is_empty() {
+            None
+        } else {
+            Some(
+                ManagedPythonDownloadList::new_only_embedded()
+                    .expect("Failed to load embedded Python downloads"),
+            )
+        };
 
         let python_versions: Vec<_> = python_versions
             .iter()
             .map(|version| PythonVersion::from_str(version).unwrap())
             .zip(
-                python_installations_for_versions(&temp_dir, python_versions, &download_list)
-                    .expect("Failed to find test Python versions"),
+                python_installations_for_versions(
+                    &temp_dir,
+                    python_versions,
+                    download_list.as_ref(),
+                )
+                .expect("Failed to find test Python versions"),
             )
             .collect();
 
@@ -916,10 +1044,7 @@ impl TestContext {
                 .map(|pattern| (pattern, "[UV]".to_string())),
         );
 
-        // Exclude `link-mode` on Windows since we set it in the remote test suite
         if cfg!(windows) {
-            filters.push((" --link-mode <LINK_MODE>".to_string(), String::new()));
-            filters.push((r#"link-mode = "copy"\n"#.to_string(), String::new()));
             // Unix uses "exit status", Windows uses "exit code"
             filters.push((r"exit code: ".to_string(), "exit status: ".to_string()));
         }
@@ -1091,7 +1216,16 @@ impl TestContext {
             python_versions,
             uv_bin,
             filters,
-            extra_env: vec![],
+            extra_env: vec![(
+                EnvVars::UV_PYTHON_CACHE_DIR.into(),
+                // Respect `UV_PYTHON_CACHE_DIR` if set, or use the default cache directory.
+                env::var_os(EnvVars::UV_PYTHON_CACHE_DIR).unwrap_or_else(|| {
+                    Cache::from_settings(false, None)
+                        .expect("Failed to determine the shared Python download cache")
+                        .bucket(CacheBucket::Python)
+                        .into()
+                }),
+            )],
             _root: root,
             _extra_tempdirs: vec![],
         }
@@ -1101,6 +1235,13 @@ impl TestContext {
     pub fn command(&self) -> Command {
         let mut command = self.new_command();
         self.add_shared_options(&mut command, true);
+        command
+    }
+
+    /// Create a command for an external program with the test environment.
+    pub fn external_command(&self, program: impl AsRef<Path>) -> Command {
+        let mut command = Self::new_command_with(program.as_ref());
+        self.add_shared_env(&mut command, false);
         command
     }
 
@@ -1211,15 +1352,18 @@ impl TestContext {
             .env(EnvVars::UV_PYTHON_DOWNLOADS, "never")
             .env(EnvVars::UV_PYTHON_SEARCH_PATH, self.python_path())
             .env(EnvVars::UV_EXCLUDE_NEWER, TEST_TIMESTAMP)
-            .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, TEST_TIMESTAMP)
-            .env(EnvVars::UV_TEST_AVAILABLE_VERSION_CUTOFF, TEST_TIMESTAMP)
+            .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, TEST_TIMESTAMP)
+            .env(
+                EnvVars::UV_INTERNAL__TEST_AVAILABLE_VERSION_CUTOFF,
+                TEST_TIMESTAMP,
+            )
             // Keep Python discovery hermetic and avoid mutating global state, like the Windows
             // registry, unless a test opts in explicitly.
             .env(EnvVars::UV_PYTHON_NO_REGISTRY, "1")
             .env(EnvVars::UV_PYTHON_INSTALL_REGISTRY, "0")
             // Since downloads, fetches and builds run in parallel, their message output order is
             // non-deterministic, so can't capture them in test output.
-            .env(EnvVars::UV_TEST_NO_CLI_PROGRESS, "1")
+            .env(EnvVars::UV_INTERNAL__TEST_NO_CLI_PROGRESS, "1")
             // I believe the intent of all tests is that they are run outside the
             // context of an existing git repository. And when they aren't, state
             // from the parent git repository can bleed into the behavior of `uv
@@ -1902,7 +2046,7 @@ impl TestContext {
     /// This panics (fails the current test) for any failure.
     pub fn copy_ecosystem_project(&self, name: &str) {
         let project_dir = PathBuf::from(format!("../../test/ecosystem/{name}"));
-        self.temp_dir.copy_from(project_dir, &["*"]).unwrap();
+        copy_dir_ignore(project_dir, &self.temp_dir).expect("Failed to copy ecosystem project");
         // If there is a (gitignore) lockfile, remove it.
         if let Err(err) = fs_err::remove_file(self.temp_dir.join("uv.lock")) {
             assert_eq!(
@@ -1922,8 +2066,7 @@ impl TestContext {
     ///
     /// This assumes that a lock has already been performed.
     pub fn diff_lock(&self, change: impl Fn(&Self) -> Command) -> String {
-        let lock_path = ChildPath::new(self.temp_dir.join("uv.lock"));
-        let old_lock = fs_err::read_to_string(&lock_path).unwrap();
+        let old_lock = self.read("uv.lock");
         let (snapshot, output) = run_and_format(
             change(self),
             self.filters(),
@@ -1932,7 +2075,7 @@ impl TestContext {
             None,
         );
         assert!(output.status.success(), "{snapshot}");
-        let new_lock = fs_err::read_to_string(&lock_path).unwrap();
+        let new_lock = self.read("uv.lock");
         diff_snapshot(&old_lock, &new_lock, 10)
     }
 
@@ -1940,6 +2083,15 @@ impl TestContext {
     pub fn read(&self, file: impl AsRef<Path>) -> String {
         fs_err::read_to_string(self.temp_dir.join(&file))
             .unwrap_or_else(|_| panic!("Missing file: `{}`", file.user_display()))
+    }
+
+    /// Read a file as bytes, resolving relative paths against the temporary directory.
+    #[track_caller]
+    pub fn read_bytes(&self, file: impl AsRef<Path>) -> Vec<u8> {
+        match fs_err::read(self.temp_dir.join(&file)) {
+            Ok(contents) => contents,
+            Err(error) => panic!("Failed to read `{}`: {error}", file.user_display()),
+        }
     }
 
     /// Creates a new `Command` that is intended to be suitable for use in
@@ -1960,7 +2112,6 @@ impl TestContext {
             // For linux distributions
             EnvVars::PATH,
             // For debugging tests.
-            EnvVars::RUST_LOG,
             EnvVars::RUST_BACKTRACE,
             // Windows System configuration.
             EnvVars::SYSTEMDRIVE,
@@ -1983,6 +2134,10 @@ impl TestContext {
             .filter(|name| !passthrough.contains(name))
         {
             command.env_remove(env_var);
+        }
+
+        if let Some(rust_log) = env::var_os(EnvVars::UV_INTERNAL__TEST_RUST_LOG) {
+            command.env(EnvVars::RUST_LOG, rust_log);
         }
 
         command
@@ -2121,9 +2276,13 @@ pub fn python_path_with_versions(
     temp_dir: &ChildPath,
     python_versions: &[&str],
 ) -> anyhow::Result<OsString> {
-    let download_list = ManagedPythonDownloadList::new_only_embedded().unwrap();
+    let download_list = if python_versions.is_empty() {
+        None
+    } else {
+        Some(ManagedPythonDownloadList::new_only_embedded()?)
+    };
     Ok(env::join_paths(
-        python_installations_for_versions(temp_dir, python_versions, &download_list)?
+        python_installations_for_versions(temp_dir, python_versions, download_list.as_ref())?
             .into_iter()
             .map(|path| path.parent().unwrap().to_path_buf()),
     )?)
@@ -2135,12 +2294,15 @@ pub fn python_path_with_versions(
 fn python_installations_for_versions(
     temp_dir: &ChildPath,
     python_versions: &[&str],
-    download_list: &ManagedPythonDownloadList,
+    download_list: Option<&ManagedPythonDownloadList>,
 ) -> anyhow::Result<Vec<PathBuf>> {
     let cache = Cache::from_path(temp_dir.child("cache").to_path_buf())
         .init_no_wait()?
         .expect("No cache contention when setting up Python in tests");
     let _preview = uv_preview::test::with_features(&[]);
+    let Some(download_list) = download_list else {
+        return Ok(Vec::new());
+    };
     let selected_pythons = python_versions
         .iter()
         .map(|python_version| {
@@ -2148,6 +2310,7 @@ fn python_installations_for_versions(
                 &PythonRequest::parse(python_version),
                 EnvironmentPreference::OnlySystem,
                 PythonPreference::Managed,
+                None,
                 download_list,
                 &cache,
             ) {
@@ -2172,15 +2335,30 @@ pub enum WindowsFilters {
     Universal,
 }
 
+thread_local! {
+    /// Reuse compiled patterns across snapshots and contexts on the same test thread.
+    static SNAPSHOT_FILTER_CACHE: RefCell<HashMap<String, Regex>> = RefCell::new(HashMap::new());
+}
+
 /// Helper method to apply filters to a string. Useful when `!uv_snapshot` cannot be used.
 pub fn apply_filters<T: AsRef<str>>(mut snapshot: String, filters: impl AsRef<[(T, T)]>) -> String {
-    for (matcher, replacement) in filters.as_ref() {
-        // TODO(konstin): Cache regex compilation
-        let re = Regex::new(matcher.as_ref()).expect("Do you need to regex::escape your filter?");
+    let filters = filters.as_ref();
+    // Release the thread-local borrow before converting the caller's filters.
+    let mut compiled_filters = SNAPSHOT_FILTER_CACHE.take();
+    for (matcher, replacement) in filters {
+        let matcher = matcher.as_ref();
+        if !compiled_filters.contains_key(matcher) {
+            compiled_filters.insert(
+                matcher.to_owned(),
+                Regex::new(matcher).expect("Do you need to regex::escape your filter?"),
+            );
+        }
+        let re = &compiled_filters[matcher];
         if re.is_match(&snapshot) {
             snapshot = re.replace_all(&snapshot, replacement.as_ref()).to_string();
         }
     }
+    SNAPSHOT_FILTER_CACHE.set(compiled_filters);
     snapshot
 }
 
@@ -2199,7 +2377,8 @@ pub fn run_and_format<T: AsRef<str>>(
         run_and_format_silent(command, filters, function_name, windows_filters, input);
     eprintln!("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Unfiltered output ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     eprintln!(
-        "----- stdout -----\n{}\n----- stderr -----\n{}",
+        "----- exit status -----\n{}\n----- stdout -----\n{}\n----- stderr -----\n{}",
+        output.status,
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr),
     );
@@ -2216,6 +2395,8 @@ pub fn run_and_format_silent<T: AsRef<str>>(
     windows_filters: Option<WindowsFilters>,
     input: Option<&str>,
 ) -> (String, Output) {
+    assert_effective_cache_directory(command.borrow_mut());
+
     let program = command
         .borrow_mut()
         .get_program()
@@ -2272,6 +2453,11 @@ pub fn run_and_format_silent<T: AsRef<str>>(
             "failure"
         },
     );
+    if output.status.code().is_none() {
+        snapshot.push_str("exit_status: ");
+        snapshot.push_str(&output.status.to_string());
+        snapshot.push('\n');
+    }
     if !output.stdout.is_empty() {
         snapshot.push_str("----- stdout -----\n");
         snapshot.push_str(&String::from_utf8_lossy(&output.stdout));
@@ -2335,6 +2521,33 @@ pub fn run_and_format_silent<T: AsRef<str>>(
     (snapshot, output)
 }
 
+/// Reject cache environment overrides hidden by an explicit cache-directory argument.
+///
+/// Context commands always include `--cache-dir`, so setting `UV_CACHE_DIR` after constructing
+/// one cannot change its cache. Check the completed command immediately before execution so
+/// snapshots cannot silently pass without exercising their intended cache configuration.
+fn assert_effective_cache_directory(command: &Command) {
+    let cache_directory_override = command
+        .get_envs()
+        .find(|(name, value)| *name == EnvVars::UV_CACHE_DIR && value.is_some());
+
+    if cache_directory_override.is_none() {
+        return;
+    }
+
+    let explicit_cache_directory = command.get_args().any(|argument| {
+        argument == "--cache-dir"
+            || argument
+                .to_str()
+                .is_some_and(|argument| argument.starts_with("--cache-dir="))
+    });
+
+    assert!(
+        !explicit_cache_directory,
+        "`UV_CACHE_DIR` is ignored because this command already supplies `--cache-dir`; configure `TestContext::cache_dir` instead"
+    );
+}
+
 /// Recursively copy a directory and its contents, skipping gitignored files.
 pub fn copy_dir_ignore(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> anyhow::Result<()> {
     for entry in ignore::Walk::new(&src) {
@@ -2342,7 +2555,7 @@ pub fn copy_dir_ignore(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> anyhow::
         let relative = entry.path().strip_prefix(&src)?;
         let ty = entry.file_type().unwrap();
         if ty.is_dir() {
-            fs_err::create_dir(dst.as_ref().join(relative))?;
+            fs_err::create_dir_all(dst.as_ref().join(relative))?;
         } else {
             fs_err::copy(entry.path(), dst.as_ref().join(relative))?;
         }
@@ -2418,12 +2631,7 @@ pub async fn download_to_disk(url: &str, path: &Path) {
         .build()
         .expect("failed to build base client");
     let url = url.parse().unwrap();
-    let response = client
-        .for_host(&url)
-        .get(reqwest::Url::from(url))
-        .send()
-        .await
-        .unwrap();
+    let response = client.for_host(&url).get(url).send().await.unwrap();
 
     let mut file = fs_err::tokio::File::create(path).await.unwrap();
     let mut stream = response.bytes_stream();
@@ -2525,4 +2733,175 @@ macro_rules! uv_snapshot {
         ::insta::assert_snapshot!(snapshot, @$snapshot);
         output
     }};
+}
+
+#[cfg(all(test, unix))]
+mod process_status_tests {
+    use std::process::Command;
+
+    use super::run_and_format_silent;
+
+    #[test]
+    fn reports_signal() {
+        let mut command = Command::new("sh");
+        command.args(["-c", "kill -TERM $$"]);
+        let filters: &[(&str, &str)] = &[];
+        let (snapshot, _) = run_and_format_silent(command, filters, "reports_signal", None, None);
+
+        insta::assert_snapshot!(snapshot, @"
+        exit_code: -1 (failure)
+        exit_status: signal: 15 (SIGTERM)
+        ");
+    }
+
+    #[test]
+    fn preserves_exit_code() {
+        let mut command = Command::new("sh");
+        command.args(["-c", "exit 7"]);
+        let filters: &[(&str, &str)] = &[];
+        let (snapshot, _) =
+            run_and_format_silent(command, filters, "preserves_exit_code", None, None);
+
+        insta::assert_snapshot!(snapshot, @"exit_code: 7 (failure)");
+    }
+}
+
+#[cfg(test)]
+mod cache_directory_tests {
+    use std::process::Command;
+
+    use uv_static::EnvVars;
+
+    use super::assert_effective_cache_directory;
+
+    #[test]
+    #[should_panic(expected = "`UV_CACHE_DIR` is ignored")]
+    fn rejects_environment_override_with_explicit_cache_argument() {
+        let mut command = Command::new("uv");
+        command
+            .arg("--cache-dir")
+            .arg("context-cache")
+            .env(EnvVars::UV_CACHE_DIR, "ignored-cache");
+
+        assert_effective_cache_directory(&command);
+    }
+
+    #[test]
+    #[should_panic(expected = "`UV_CACHE_DIR` is ignored")]
+    fn rejects_environment_override_with_inline_cache_argument() {
+        let mut command = Command::new("uv");
+        command
+            .arg("--cache-dir=context-cache")
+            .env(EnvVars::UV_CACHE_DIR, "ignored-cache");
+
+        assert_effective_cache_directory(&command);
+    }
+
+    #[test]
+    fn allows_environment_override_without_explicit_cache_argument() {
+        let mut command = Command::new("uv");
+        command
+            .arg("cache")
+            .arg("dir")
+            .env(EnvVars::UV_CACHE_DIR, "effective-cache");
+
+        assert_effective_cache_directory(&command);
+    }
+
+    #[test]
+    fn allows_removed_environment_override_with_explicit_cache_argument() {
+        let mut command = Command::new("uv");
+        command
+            .arg("--cache-dir")
+            .arg("context-cache")
+            .env_remove(EnvVars::UV_CACHE_DIR);
+
+        assert_effective_cache_directory(&command);
+    }
+}
+
+#[cfg(test)]
+mod file_read_tests {
+    use std::path::PathBuf;
+
+    use assert_fs::prelude::*;
+
+    use super::TestContext;
+
+    #[test]
+    fn reads_non_utf8_bytes() -> anyhow::Result<()> {
+        let context = TestContext::new_with_versions_and_bin(&[], PathBuf::from("uv"));
+        let bytes = [0, 0xff, 0x80, b'\n'];
+        context.temp_dir.child("binary").write_binary(&bytes)?;
+
+        assert_eq!(context.read_bytes("binary"), bytes);
+
+        Ok(())
+    }
+
+    #[test]
+    fn reads_absolute_path_outside_project() -> anyhow::Result<()> {
+        let context = TestContext::new_with_versions_and_bin(&[], PathBuf::from("uv"));
+        let file = context.cache_dir.child("binary");
+        file.write_binary(&[0xff, 0])?;
+
+        assert_eq!(context.read_bytes(file), [0xff, 0]);
+
+        Ok(())
+    }
+
+    #[test]
+    #[should_panic(expected = "Failed to read `missing.bin`")]
+    fn reports_missing_file() {
+        let context = TestContext::new_with_versions_and_bin(&[], PathBuf::from("uv"));
+
+        context.read_bytes("missing.bin");
+    }
+}
+
+#[cfg(test)]
+mod copy_dir_ignore_tests {
+    use anyhow::Result;
+    use assert_fs::prelude::*;
+    use predicates::prelude::predicate;
+
+    use super::copy_dir_ignore;
+
+    #[test]
+    fn copy_fixture_into_nested_destination() -> Result<()> {
+        let root = assert_fs::TempDir::new()?;
+        let source = root.child("source");
+        source.child(".git").create_dir_all()?;
+        source.child(".gitignore").write_str("ignored.txt\n")?;
+        source.child("module.py").write_str("VALUE = 1\n")?;
+        source
+            .child("ignored.txt")
+            .write_str("local build output")?;
+
+        let destination = root.child("nested/destination");
+        copy_dir_ignore(&source, &destination)?;
+
+        destination.child("module.py").assert("VALUE = 1\n");
+        destination
+            .child("ignored.txt")
+            .assert(predicate::path::missing());
+        Ok(())
+    }
+
+    #[test]
+    fn copy_fixture_into_existing_destination() -> Result<()> {
+        let root = assert_fs::TempDir::new()?;
+        let source = root.child("source");
+        source.child("module.py").write_str("VALUE = 1\n")?;
+
+        let destination = root.child("destination");
+        destination
+            .child("existing.txt")
+            .write_str("existing file")?;
+        copy_dir_ignore(&source, &destination)?;
+
+        destination.child("module.py").assert("VALUE = 1\n");
+        destination.child("existing.txt").assert("existing file");
+        Ok(())
+    }
 }
