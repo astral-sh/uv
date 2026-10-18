@@ -830,7 +830,7 @@ impl VersionMapLazy {
 
         // Determine a compatibility for the wheel based on tags.
         let priority = if let Some(tags) = &self.tags {
-            match filename.compatibility(tags) {
+            match filename.tag_compatibility(tags) {
                 TagCompatibility::Incompatible(tag) => {
                     return WheelCompatibility::Incompatible(IncompatibleWheel::Tag(tag));
                 }

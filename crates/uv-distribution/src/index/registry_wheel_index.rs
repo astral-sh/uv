@@ -396,8 +396,8 @@ impl<'a> RegistryWheelIndex<'a> {
                 .then_with(|| {
                     a.dist
                         .filename
-                        .compatibility(tags)
-                        .cmp(&b.dist.filename.compatibility(tags))
+                        .tag_compatibility(tags)
+                        .cmp(&b.dist.filename.tag_compatibility(tags))
                         .then_with(|| a.built.cmp(&b.built))
                 })
         });
