@@ -15,7 +15,7 @@ env:
   CARGO_TERM_COLOR: always
   PYTHON_VERSION: "3.12"
   RUSTUP_MAX_RETRIES: 10
-  # Stabilize unlocked PyPI resolutions; registry tests unset this to use their script's lockfile.
+  # Stabilize unlocked PyPI resolutions.
   UV_EXCLUDE_NEWER: "2026-10-11T00:00:00Z"
   UV_LOCKED: 1
 
@@ -1020,8 +1020,10 @@ jobs:
         run: chmod +x ./uv
 
       - name: "Run public registry tests"
-        run: env -u UV_EXCLUDE_NEWER ./uv run --locked --python "${PYTHON_VERSION}" --no-build --script scripts/registries-test.py --uv ./uv --color always
+        run: ./uv run --locked --python "${PYTHON_VERSION}" --no-build --script scripts/registries-test.py --uv ./uv --color always
         env:
+          # Use the registry test script's exclude-newer setting and lockfile.
+          UV_EXCLUDE_NEWER: ""
           UV_TEST_ASTRAL_PKG: transformer-engine
           UV_TEST_ASTRAL_PUBLIC: "true"
           UV_TEST_ASTRAL_URL: https://wheels.astral.sh/simple/cu128/
@@ -1102,8 +1104,10 @@ jobs:
           echo "UV_TEST_GCP_TOKEN=$UV_TEST_GCP_TOKEN" >> $GITHUB_ENV
 
       - name: "Run registry tests with environment variable backend"
-        run: env -u UV_EXCLUDE_NEWER ./uv run --locked --python "${PYTHON_VERSION}" --no-build --script scripts/registries-test.py --uv ./uv --color always --all --auth-method env
+        run: ./uv run --locked --python "${PYTHON_VERSION}" --no-build --script scripts/registries-test.py --uv ./uv --color always --all --auth-method env
         env:
+          # Use the registry test script's exclude-newer setting and lockfile.
+          UV_EXCLUDE_NEWER: ""
           RUST_LOG: uv=debug
           UV_TEST_ARTIFACTORY_REQUIRE_METADATA_RANGE_REQUESTS: "true"
           UV_TEST_ARTIFACTORY_TOKEN: ${{ secrets.UV_TEST_ARTIFACTORY_TOKEN }}
@@ -1132,8 +1136,10 @@ jobs:
           UV_TEST_GITLAB_USERNAME: token
 
       - name: "Run registry tests with text store backend"
-        run: env -u UV_EXCLUDE_NEWER ./uv run --locked --python "${PYTHON_VERSION}" --no-build --script scripts/registries-test.py --uv ./uv --color always --all --auth-method text-store
+        run: ./uv run --locked --python "${PYTHON_VERSION}" --no-build --script scripts/registries-test.py --uv ./uv --color always --all --auth-method text-store
         env:
+          # Use the registry test script's exclude-newer setting and lockfile.
+          UV_EXCLUDE_NEWER: ""
           RUST_LOG: uv=debug
           UV_TEST_ARTIFACTORY_REQUIRE_METADATA_RANGE_REQUESTS: "true"
           UV_TEST_ARTIFACTORY_TOKEN: ${{ secrets.UV_TEST_ARTIFACTORY_TOKEN }}

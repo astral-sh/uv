@@ -4785,7 +4785,7 @@ pub struct FormatArgs {
     ///
     /// Use `false` to disable `exclude-newer`.
     #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER, value_hint = ValueHint::Other)]
-    exclude_newer: Option<ExcludeNewerOverride>,
+    exclude_newer: Option<Maybe<ExcludeNewerOverride>>,
 
     /// Additional arguments to pass to Ruff.
     ///
@@ -6898,7 +6898,7 @@ pub struct ExcludeNewerArgs {
         help_heading = "Resolver options",
         value_hint = ValueHint::Other,
     )]
-    exclude_newer: Option<ExcludeNewerOverride>,
+    exclude_newer: Option<Maybe<ExcludeNewerOverride>>,
 }
 
 /// Arguments that filter packages by global and package-specific upload dates.

@@ -1141,6 +1141,8 @@ fn run_pep723_script_lock() -> Result<()> {
         # dependencies = [
         #   "iniconfig",
         # ]
+        # [tool.uv]
+        # exclude-newer = "2024-03-25T00:00:00Z"
         # ///
 
         import iniconfig
@@ -1205,8 +1207,8 @@ fn run_pep723_script_lock() -> Result<()> {
      + iniconfig==2.0.0
     ");
 
-    // With a lockfile, running with `--locked` should not warn.
-    uv_snapshot!(context.filters(), context.run().arg("--locked").arg("main.py"), @"
+    // An empty environment variable falls back to the script's cutoff and keeps the lockfile valid.
+    uv_snapshot!(context.filters(), context.run().env(EnvVars::UV_EXCLUDE_NEWER, "").arg("--locked").arg("main.py"), @"
     exit_code: 0 (success)
     ----- stdout -----
     Hello, world!
