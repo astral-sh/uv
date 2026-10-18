@@ -1215,9 +1215,8 @@ impl RegistryClient {
                 .get_serde_with_retry(req, &cache_entry, cache_control, response_callback)
                 .await?)
         } else {
-            // If we lack PEP 658 support, try using HTTP range requests to read only the
-            // `.dist-info/METADATA` file from the zip, and if that also fails, download the whole wheel
-            // into the cache and read from there
+            // Without PEP 658, read the metadata from the wheel using HTTP range requests.
+            // If the server doesn't support range requests, fall back to streaming the wheel.
             self.wheel_metadata_no_pep658(
                 filename,
                 url,

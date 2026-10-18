@@ -1,12 +1,42 @@
+use std::collections::HashSet;
 use std::path::Path;
 
 use uv_cache_info::CacheInfo;
 use uv_distribution_filename::WheelFilename;
-use uv_distribution_types::{BuildInfo, CachedDist, Dist, Hashed};
-use uv_metadata::read_flat_wheel_metadata;
+use uv_distribution_types::{BuildInfo, BuiltDist, CachedDist, Dist, Hashed};
+use uv_metadata::{find_flat_dist_info, read_flat_wheel_metadata, read_wheel_variant};
+use uv_preview::PreviewFeature;
 use uv_pypi_types::{HashDigest, HashDigests, ResolutionMetadata};
 
 use crate::Error;
+
+/// Allow variant wheels from an index when the wheel variants preview is enabled.
+pub fn check_supported_wheel_variant(dist: &BuiltDist) -> Result<(), Error> {
+    let filename = dist.wheel_filename();
+    if filename.variant().is_some()
+        && (dist.index().is_none() || !uv_preview::is_enabled(PreviewFeature::WheelVariants))
+    {
+        return Err(Error::UnsupportedWheelVariant(Box::new(filename.clone())));
+    }
+    Ok(())
+}
+
+/// Whether an extracted wheel's variant properties are supported by the target system.
+pub(crate) fn variant_compatible(filename: &WheelFilename, archive: &Path) -> Result<bool, Error> {
+    let Some(label) = filename.variant() else {
+        return Ok(true);
+    };
+    if !uv_preview::is_enabled(PreviewFeature::WheelVariants) {
+        return Ok(false);
+    }
+
+    let dist_info = find_flat_dist_info(filename, archive)
+        .map_err(|err| Error::WheelMetadata(archive.to_path_buf(), Box::new(err)))?;
+    let path = archive.join(format!("{dist_info}.dist-info/variant.json"));
+    let metadata = read_wheel_variant(&path, label)
+        .map_err(|err| Error::WheelMetadata(path, Box::new(err)))?;
+    Ok(metadata.is_compatible(label, &HashSet::new()))
+}
 
 /// A locally available wheel.
 #[derive(Debug, Clone)]
