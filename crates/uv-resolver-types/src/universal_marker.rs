@@ -819,21 +819,24 @@ pub fn resolve_activated_extras(
         return marker;
     }
 
-    let mut replacements = Vec::new();
+    let scoped_extras = scope_package.into_iter().flat_map(|package| {
+        known_conflicts
+            .iter()
+            .filter_map(move |(conflict_item, &condition)| {
+                if conflict_item.package() == package
+                    && let Some(extra) = conflict_item.extra()
+                {
+                    Some((extra.clone(), condition))
+                } else {
+                    None
+                }
+            })
+    });
+    let encoded_extras = known_conflicts
+        .iter()
+        .map(|(conflict_item, &condition)| (encode_conflict_item(conflict_item), condition));
     // Encoded conflict names take precedence over unencoded package extras.
-    if let Some(package) = scope_package {
-        for (conflict_item, &condition) in known_conflicts {
-            if conflict_item.package() == package
-                && let Some(extra) = conflict_item.extra()
-            {
-                replacements.push((extra.clone(), condition));
-            }
-        }
-    }
-    for (conflict_item, &condition) in known_conflicts {
-        replacements.push((encode_conflict_item(conflict_item), condition));
-    }
-    marker.resolve_extras(replacements)
+    marker.resolve_extras(scoped_extras.chain(encoded_extras))
 }
 
 #[cfg(test)]

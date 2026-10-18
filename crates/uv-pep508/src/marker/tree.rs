@@ -1402,10 +1402,14 @@ impl MarkerTree {
     ///
     /// Extras absent from `known_extras` are false. Substitution is simultaneous: extras in a
     /// replacement marker are not themselves replaced. Shared subgraphs are transformed once,
-    /// without expanding the marker into disjunctive normal form.
+    /// without expanding the marker into disjunctive normal form. `known_extras` is iterated only
+    /// when this marker contains an `extra` expression.
     #[must_use]
     pub fn resolve_extras(self, known_extras: impl IntoIterator<Item = (ExtraName, Self)>) -> Self {
         if self.is_true() || self.is_false() {
+            return self;
+        }
+        if !INTERNER.shared.contains_extras(self.0) {
             return self;
         }
         let known_extras: FxHashMap<_, _> = known_extras
@@ -1887,6 +1891,8 @@ impl schemars::JsonSchema for MarkerTree {
 
 #[cfg(test)]
 mod test {
+    use std::cell::Cell;
+    use std::iter;
     use std::ops::Bound;
     use std::str::FromStr;
 
@@ -2037,6 +2043,56 @@ mod test {
                 .try_to_string()
                 .unwrap(),
             "python_full_version <= '3.12.1'"
+        );
+    }
+
+    /// Extra-free shared subgraphs do not need replacement conditions, even when negated.
+    #[test]
+    fn resolve_extras_skips_unreferenced_replacements() {
+        let marker = m("(os_name == 'nt' or sys_platform == 'linux') and \
+             (python_version >= '3.12' or implementation_name == 'pypy')");
+        let replacements_built = Cell::new(0);
+        let replacements = iter::once_with(|| {
+            replacements_built.set(replacements_built.get() + 1);
+            ("a".parse().expect("valid extra name"), MarkerTree::TRUE)
+        });
+
+        assert_eq!(marker.resolve_extras(replacements.clone()), marker);
+        assert_eq!(
+            marker.negate().resolve_extras(replacements),
+            marker.negate()
+        );
+        assert_eq!(replacements_built.get(), 0);
+    }
+
+    /// PEP 751 list markers do not substitute the singular `extra` variable.
+    #[test]
+    fn resolve_extras_preserves_list_markers() {
+        let marker = m("'a' in extras and 'dev' in dependency_groups");
+        let replacements_built = Cell::new(0);
+        let replacements = iter::once_with(|| {
+            replacements_built.set(replacements_built.get() + 1);
+            ("a".parse().expect("valid extra name"), MarkerTree::FALSE)
+        });
+
+        assert_eq!(marker.resolve_extras(replacements), marker);
+        assert_eq!(replacements_built.get(), 0);
+    }
+
+    /// Constructing a replacement can acquire the interner lock itself.
+    #[test]
+    fn resolve_extras_collects_replacements_before_locking() {
+        let marker = m("python_version >= '3.10' and extra == 'a'");
+        let replacements = iter::once_with(|| {
+            (
+                "a".parse().expect("valid extra name"),
+                m("sys_platform == 'darwin'"),
+            )
+        });
+
+        assert_eq!(
+            marker.resolve_extras(replacements),
+            m("python_version >= '3.10' and sys_platform == 'darwin'")
         );
     }
 

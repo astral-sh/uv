@@ -52,7 +52,7 @@ use std::sync::{LazyLock, Mutex, MutexGuard};
 
 use arcstr::ArcStr;
 use itertools::{Either, Itertools};
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use version_ranges::Ranges;
 
 use uv_normalize::ExtraName;
@@ -107,6 +107,37 @@ impl InternerShared {
     /// Returns the node for the given [`NodeId`].
     pub(crate) fn node(&self, id: NodeId) -> &Node {
         &self.nodes[id.index()]
+    }
+
+    /// Returns whether a reachable node tests the singular `extra` variable.
+    ///
+    /// Complemented references have the same variables, so shared nodes are visited once
+    /// regardless of their polarity. List-valued `extras` and `dependency_groups` are distinct.
+    pub(crate) fn contains_extras(&self, marker: NodeId) -> bool {
+        let mut pending = SmallVec::from_slice(&[marker]);
+        let mut visited = FxHashSet::default();
+        while let Some(marker) = pending.pop() {
+            if marker.is_true() || marker.is_false() {
+                continue;
+            }
+            let node = self.node(marker);
+            match &node.var {
+                Variable::Extra(_) => return true,
+                Variable::String(_)
+                | Variable::VersionString(_)
+                | Variable::Version(_)
+                | Variable::In { .. }
+                | Variable::Contains { .. }
+                | Variable::List(_) => {
+                    for child in node.children.nodes() {
+                        if !child.is_true() && !child.is_false() && visited.insert(child.index()) {
+                            pending.push(child);
+                        }
+                    }
+                }
+            }
+        }
+        false
     }
 }
 
