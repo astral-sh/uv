@@ -121,6 +121,8 @@ pub enum PylockTomlErrorKind {
     MissingSource(PackageName),
     #[error("Package `{0}` uses a Git archive, which pylock.toml export does not support")]
     GitArchiveUnsupported(PackageName),
+    #[error("Package `{0}` resolved to a wheel variant, which pylock.toml export does not support")]
+    WheelVariantUnsupported(PackageName),
     #[error("Package `{0}` does not include a compatible wheel for the current platform")]
     MissingWheel(PackageName),
     #[error("`packages.wheel` entry for `{0}` must have a `path` or `url`")]
@@ -511,6 +513,9 @@ impl<'lock> PylockToml {
             };
 
             match &**dist {
+                Dist::Built(dist) if dist.wheel_filename().variant().is_some() => {
+                    return Err(PylockTomlErrorKind::WheelVariantUnsupported(package.name));
+                }
                 Dist::Built(BuiltDist::DirectUrl(dist)) => {
                     package.archive = Some(PylockTomlArchive {
                         url: Some((*dist.location).clone().with_policy(Raw)),

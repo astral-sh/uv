@@ -7044,6 +7044,7 @@ dependencies = [
  "tokio-util",
  "tracing",
  "uv-distribution-filename",
+ "uv-distribution-types",
  "uv-normalize",
  "uv-pypi-types",
 ]

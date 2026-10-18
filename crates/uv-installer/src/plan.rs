@@ -10,6 +10,7 @@ use uv_cache_info::Timestamp;
 use uv_configuration::{BuildOptions, Reinstall};
 use uv_distribution::{
     BuiltWheelIndex, HttpArchivePointer, PathArchivePointer, RegistryWheelIndex,
+    check_supported_wheel_variant,
 };
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
@@ -341,14 +342,10 @@ impl<'a> Planner<'a> {
         //    So, e.g., if a package is marked as `--reinstall`, we _expect_ that it's not passed in
         //    as [`ResolvedDist::Installed`] here.
         for dist in self.resolution.distributions() {
-            // TODO(konsti): Support installing wheel variants.
-            if let Some(filename) = dist.wheel_filename()
-                && filename.variant().is_some()
+            if let ResolvedDist::Installable { dist, .. } = dist
+                && let Dist::Built(built) = dist.as_ref()
             {
-                return Err(uv_distribution::Error::UnsupportedWheelVariant(Box::new(
-                    filename.clone(),
-                ))
-                .into());
+                check_supported_wheel_variant(built)?;
             }
             // Check if the package should be reinstalled.
             let reinstall = reinstall.contains_package(dist.name())
@@ -389,6 +386,8 @@ impl<'a> Planner<'a> {
                                 );
                             }
                             RequirementSatisfaction::Satisfied => {
+                                // TODO(konsti): Reinstall if the resolver selected a different
+                                // wheel variant, even when the installed variant is compatible.
                                 debug!("Requirement already installed: {installed}");
                                 continue;
                             }
