@@ -92,6 +92,7 @@ fn create_venv_no_lib64_symlink_on_py315_plus() {
     assert!(!lib64.exists() || (lib64.is_dir() && !lib64.is_symlink()));
 }
 
+#[test]
 #[cfg(unix)]
 fn create_venv_ksh() {
     let context = uv_test::test_context_with_versions!(&["3.12"]);
