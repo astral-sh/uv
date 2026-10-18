@@ -1,5 +1,3 @@
-use std::cmp::Reverse;
-use std::collections::HashSet;
 use std::fmt::{Display, Formatter};
 
 use arcstr::ArcStr;
@@ -9,7 +7,8 @@ use tracing::debug;
 use uv_distribution_filename::{BuildTag, WheelFilename};
 use uv_distribution_types::{
     File, IndexUrl, InstalledDist, MinimumLibcVersion, Name, RegistryBuiltDist, RegistryBuiltWheel,
-    RegistrySourceDist, RequiresPython, VariantsJsonContent, VariantsJsonFilename,
+    RegistrySourceDist, RequiresPython, VariantPreferences, VariantsJsonContent,
+    VariantsJsonFilename,
 };
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
@@ -444,11 +443,11 @@ impl PrioritizedDist {
             return None;
         }
         // TODO(konsti): Get the target's supported properties from variant providers.
-        let supported = HashSet::new();
+        let preferences = VariantPreferences::default();
         // Prefer wheels whose advertised hash matches a required hash, followed by wheels with
         // no advertised hash, then mismatches. If no hashes are required, all wheels match.
         // The installer verifies required hashes against the downloaded wheel.
-        // Break ties by variant label (lexicographically first), platform tags, then build tag.
+        // Break ties by variant rank, platform tags, then build tag.
         let (best_index, (hash, _, priority, build_tag)) = self
             .0
             .wheels
@@ -459,14 +458,14 @@ impl PrioritizedDist {
                     return None;
                 };
                 let label = wheel.filename.variant()?;
-                metadata
+                let score = metadata
                     .iter()
-                    .any(|(source, metadata)| {
-                        *source == &wheel.index && metadata.is_compatible(label, &supported)
-                    })
-                    .then_some((index, (*hash, Reverse(label), *priority, build_tag)))
+                    .filter(|(source, _)| *source == &wheel.index)
+                    .filter_map(|(_, metadata)| metadata.score_variant(label, &preferences))
+                    .max()?;
+                Some((index, (*hash, score, *priority, build_tag)))
             })
-            .max_by_key(|(_, priority)| *priority)?;
+            .max_by(|(_, left), (_, right)| left.cmp(right))?;
 
         // Keep the ordinary wheel if its advertised hash ranks higher.
         if let Some((_, WheelCompatibility::Compatible(existing_hash, ..))) = self.best_wheel()
