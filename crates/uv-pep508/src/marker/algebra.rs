@@ -52,9 +52,10 @@ use std::sync::{LazyLock, Mutex, MutexGuard};
 
 use arcstr::ArcStr;
 use itertools::{Either, Itertools};
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use version_ranges::Ranges;
 
+use uv_normalize::ExtraName;
 use uv_pep440::{Operator, Version, VersionPattern, VersionSpecifier, release_specifier_to_range};
 
 use crate::marker::MarkerValueExtra;
@@ -106,6 +107,37 @@ impl InternerShared {
     /// Returns the node for the given [`NodeId`].
     pub(crate) fn node(&self, id: NodeId) -> &Node {
         &self.nodes[id.index()]
+    }
+
+    /// Returns whether a reachable node tests the singular `extra` variable.
+    ///
+    /// Complemented references have the same variables, so shared nodes are visited once
+    /// regardless of their polarity. List-valued `extras` and `dependency_groups` are distinct.
+    pub(crate) fn contains_extras(&self, marker: NodeId) -> bool {
+        let mut pending = SmallVec::from_slice(&[marker]);
+        let mut visited = FxHashSet::default();
+        while let Some(marker) = pending.pop() {
+            if marker.is_true() || marker.is_false() {
+                continue;
+            }
+            let node = self.node(marker);
+            match &node.var {
+                Variable::Extra(_) => return true,
+                Variable::String(_)
+                | Variable::VersionString(_)
+                | Variable::Version(_)
+                | Variable::In { .. }
+                | Variable::Contains { .. }
+                | Variable::List(_) => {
+                    for child in node.children.nodes() {
+                        if !child.is_true() && !child.is_false() && visited.insert(child.index()) {
+                            pending.push(child);
+                        }
+                    }
+                }
+            }
+        }
+        false
     }
 }
 
@@ -717,6 +749,112 @@ impl InternerGuard<'_> {
         result
     }
 
+    /// Substitute the activation condition for each extra without enumerating DNF paths.
+    pub(crate) fn resolve_extras(
+        &mut self,
+        marker: NodeId,
+        known_extras: &FxHashMap<ExtraName, NodeId>,
+    ) -> NodeId {
+        self.resolve_extras_cached(marker, known_extras, &mut FxHashMap::default())
+    }
+
+    /// Transform each signed node once, retaining the sharing between decision paths.
+    fn resolve_extras_cached(
+        &mut self,
+        marker: NodeId,
+        known_extras: &FxHashMap<ExtraName, NodeId>,
+        cache: &mut FxHashMap<NodeId, NodeId>,
+    ) -> NodeId {
+        if marker.is_true() || marker.is_false() {
+            return marker;
+        }
+        if let Some(&result) = cache.get(&marker) {
+            return result;
+        }
+
+        let node = self.shared.node(marker);
+        let result = if let (Variable::Extra(name), Edges::Boolean { high, low }) =
+            (&node.var, &node.children)
+        {
+            let condition = known_extras
+                .get(name.extra())
+                .copied()
+                .unwrap_or(NodeId::FALSE);
+            if condition.is_true() {
+                self.resolve_extras_cached(high.negate(marker), known_extras, cache)
+            } else if condition.is_false() {
+                self.resolve_extras_cached(low.negate(marker), known_extras, cache)
+            } else {
+                let high = self.resolve_extras_cached(high.negate(marker), known_extras, cache);
+                let low = self.resolve_extras_cached(low.negate(marker), known_extras, cache);
+                let high = self.and(condition, high);
+                let low = self.and(condition.not(), low);
+                self.or(high, low)
+            }
+        } else {
+            let mut changed = false;
+            let children = node.children.map(marker, |child| {
+                let result = self.resolve_extras_cached(child, known_extras, cache);
+                changed |= result != child;
+                result
+            });
+            if changed {
+                self.rebuild_node(&node.var, children)
+            } else {
+                marker
+            }
+        };
+        cache.insert(marker, result);
+        result
+    }
+
+    /// Rebuild a decision after substitution, allowing children to introduce earlier variables.
+    /// Calling `create_node` directly would violate the diagram's variable ordering.
+    fn rebuild_node(&mut self, variable: &Variable, children: Edges) -> NodeId {
+        match children {
+            Edges::Boolean { high, low } => {
+                let condition = self.create_node(variable.clone(), Edges::from_bool(true));
+                let high = self.and(condition, high);
+                let low = self.and(condition.not(), low);
+                self.or(high, low)
+            }
+            Edges::Version { edges } => {
+                let mut result = NodeId::FALSE;
+                for (range, child) in edges {
+                    if child.is_false() {
+                        continue;
+                    }
+                    let condition = self.create_node(
+                        variable.clone(),
+                        Edges::Version {
+                            edges: Edges::from_range(&range),
+                        },
+                    );
+                    let branch = self.and(condition, child);
+                    result = self.or(result, branch);
+                }
+                result
+            }
+            Edges::String { edges } => {
+                let mut result = NodeId::FALSE;
+                for (range, child) in edges {
+                    if child.is_false() {
+                        continue;
+                    }
+                    let condition = self.create_node(
+                        variable.clone(),
+                        Edges::String {
+                            edges: Edges::from_range(&range),
+                        },
+                    );
+                    let branch = self.and(condition, child);
+                    result = self.or(result, branch);
+                }
+                result
+            }
+        }
+    }
+
     /// Returns a new tree where the only nodes remaining are `extra` nodes.
     ///
     /// If there are no extra nodes, then this returns a tree that is always
@@ -927,6 +1065,12 @@ impl InternerGuard<'_> {
         }
         self.create_node(node.var.clone(), Edges::Version { edges: new })
             .negate(i)
+    }
+
+    /// Check satisfiability without expanding paths, including known cross-variable exclusions.
+    pub(crate) fn is_unreachable(&mut self, marker: NodeId) -> bool {
+        let exclusions = self.exclusions();
+        self.and(marker, exclusions.not()).is_false()
     }
 
     /// The disjunction of known incompatible conditions.
