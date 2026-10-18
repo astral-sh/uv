@@ -3179,10 +3179,10 @@ pub struct InitArgs {
     #[arg(long, value_enum, conflicts_with = "script")]
     vcs: Option<VersionControlSystem>,
 
-    /// Initialize a build-backend of choice for the project.
+    /// Initialize a build-backend of choice for the project [env: UV_INIT_BUILD_BACKEND=]
     ///
     /// Implicitly sets `--package`.
-    #[arg(long, value_enum, conflicts_with_all=["script", "no_package"], env = EnvVars::UV_INIT_BUILD_BACKEND)]
+    #[arg(long, value_enum, conflicts_with_all=["script", "no_package"])]
     build_backend: Option<ProjectBuildBackend>,
 
     /// Invalid option name for build backend.

@@ -806,6 +806,7 @@ pub struct EnvironmentOptions {
     pub venv_clear: EnvFlag,
     pub venv_relocatable: EnvFlag,
     pub init_bare: EnvFlag,
+    pub init_build_backend: Option<String>,
     pub malware_check: EnvFlag,
     pub malware_check_url: Option<SafeUrl>,
     pub run_recursion_depth: Option<u32>,
@@ -962,6 +963,7 @@ impl EnvironmentOptions {
             venv_clear: EnvFlag::new(EnvVars::UV_VENV_CLEAR)?,
             venv_relocatable: EnvFlag::new(EnvVars::UV_VENV_RELOCATABLE)?,
             init_bare: EnvFlag::new(EnvVars::UV_INIT_BARE)?,
+            init_build_backend: parse_string_environment_variable(EnvVars::UV_INIT_BUILD_BACKEND)?,
             malware_check: EnvFlag::new(EnvVars::UV_MALWARE_CHECK)?,
             malware_check_url: parse_string_environment_variable(EnvVars::UV_MALWARE_CHECK_URL)?
                 .map(|value| {

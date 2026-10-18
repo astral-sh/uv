@@ -10,6 +10,7 @@ use std::str::FromStr;
 use std::time::Duration;
 
 use anyhow::{Result, bail};
+use clap::ValueEnum;
 use rustc_hash::FxHashSet;
 
 use uv_audit::{VulnerabilityID, VulnerabilityServiceFormat};
@@ -48,7 +49,7 @@ use uv_settings::{
     ResolverInstallerOptions, ResolverInstallerSchema, ResolverInstallerSettings, ResolverOptions,
     ResolverSettings, resolve_build_hash_checking, resolve_prerelease,
 };
-use uv_static::EnvVars;
+use uv_static::{EnvVars, InvalidEnvironmentVariable};
 use uv_torch::{AmdGpuArchitecture, TorchMode};
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::{DependencyType, ExtraBuildDependencies, OverrideDependency};
@@ -521,6 +522,33 @@ impl InitSettings {
             .unwrap_or_default();
 
         let no_description = no_description || (bare && description.is_none());
+
+        // `UV_INIT_BUILD_BACKEND` only sets a default, so it yields to `--no-package` and
+        // `--script` instead of conflicting with them like `--build-backend` does.
+        let build_backend = match build_backend {
+            Some(build_backend) => Some(build_backend),
+            None if script || no_package || r#virtual => None,
+            None => environment
+                .init_build_backend
+                .map(|value| {
+                    ProjectBuildBackend::from_str(&value, false).map_err(|_| {
+                        InvalidEnvironmentVariable {
+                            name: EnvVars::UV_INIT_BUILD_BACKEND.to_string(),
+                            value,
+                            err: format!(
+                                "expected one of: {}",
+                                ProjectBuildBackend::value_variants()
+                                    .iter()
+                                    .filter_map(ValueEnum::to_possible_value)
+                                    .map(|value| value.get_name().to_string())
+                                    .collect::<Vec<_>>()
+                                    .join(", ")
+                            ),
+                        }
+                    })
+                })
+                .transpose()?,
+        };
 
         if r#virtual && lib {
             bail!("`--virtual` and `--lib` are mutually exclusive");

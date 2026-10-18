@@ -14,6 +14,7 @@ doc-valid-idents = [
   "AArch64",
   "UV_DEV",
   "UV_FROZEN",
+  "UV_INIT_BUILD_BACKEND",
   "UV_ISOLATED",
   "UV_LOCKED",
   "UV_MANAGED_PYTHON",

@@ -276,6 +276,93 @@ fn init_application_no_package_other_python_exists() -> Result<()> {
     Ok(())
 }
 
+/// `--no-package` takes precedence over `UV_INIT_BUILD_BACKEND`, but not over `--build-backend`.
+///
+/// See: <https://github.com/astral-sh/uv/issues/17335>
+#[test]
+fn init_application_no_package_build_backend_env() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let child = context.temp_dir.child("foo");
+    child.create_dir_all()?;
+
+    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--app").arg("--no-package").arg("--build-backend").arg("setuptools"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: the argument '--no-package' cannot be used with '--build-backend <BUILD_BACKEND>'
+
+    Usage: uv init --cache-dir [CACHE_DIR] --app --no-package [PATH]
+
+    For more information, try '--help'.
+    ");
+
+    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--app").arg("--no-package").env(EnvVars::UV_INIT_BUILD_BACKEND, "setuptools"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Initialized project `foo`
+    ");
+
+    let pyproject = context.read("foo/pyproject.toml");
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject, @r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        requires-python = ">=3.12"
+        dependencies = []
+        "#
+        );
+    });
+
+    child.child("main.py").assert(predicate::path::is_file());
+    child.child("src").assert(predicate::path::missing());
+
+    Ok(())
+}
+
+/// `--script` takes precedence over `UV_INIT_BUILD_BACKEND`.
+#[test]
+fn init_script_build_backend_env() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let child = context.temp_dir.child("foo");
+    child.create_dir_all()?;
+
+    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--script").arg("main.py").env(EnvVars::UV_INIT_BUILD_BACKEND, "setuptools"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Initialized script at `main.py`
+    ");
+
+    child
+        .child("pyproject.toml")
+        .assert(predicate::path::missing());
+
+    Ok(())
+}
+
+/// An invalid `UV_INIT_BUILD_BACKEND` is reported when it would be used.
+#[test]
+fn init_build_backend_env_invalid() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let child = context.temp_dir.child("foo");
+    child.create_dir_all()?;
+
+    uv_snapshot!(context.filters(), context.init().current_dir(&child).env(EnvVars::UV_INIT_BUILD_BACKEND, "unknown"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to parse environment variable `UV_INIT_BUILD_BACKEND` with invalid value `unknown`: expected one of: uv, hatch, flit, pdm, poetry, setuptools, maturin, scikit
+    ");
+
+    Ok(())
+}
+
 /// Run `uv init --app --package` to create a packaged application project
 #[test]
 fn init_application_package() -> Result<()> {
