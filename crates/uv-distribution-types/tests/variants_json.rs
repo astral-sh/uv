@@ -1,7 +1,72 @@
 use insta::{assert_json_snapshot, assert_snapshot};
 use serde_json::json;
 
-use uv_distribution_types::VariantsJsonContent;
+use uv_distribution_types::{VariantPreferences, VariantsJsonContent};
+
+/// PEP 825 compares the best compatible value for each feature, then the variant label.
+#[test]
+fn rank_variants() -> Result<(), Box<dyn std::error::Error>> {
+    let metadata: VariantsJsonContent = serde_json::from_value(json!({
+        "$schema": "https://variants-schema.wheelnext.dev/peps/825/v0.1.1.json",
+        "default-priorities": {"namespace": ["nvidia", "x86_64", "other"]},
+        "variants": {
+            "gpu": {"nvidia": {"cuda": ["13.0"]}},
+            "gpu_cpuv2": {"nvidia": {"cuda": ["13.0"]}, "x86_64": {"level": ["v2"]}},
+            "gpu_cpuv4": {"nvidia": {"cuda": ["13.0"]}, "x86_64": {"level": ["v4"]}},
+            "cpuv4": {"x86_64": {"level": ["v4"]}},
+            "multiple_values": {"nvidia": {"cuda": ["12.0", "13.0", "14.0"]}},
+            "older_cuda": {"nvidia": {"cuda": ["12.0"]}},
+            "lower_feature": {"nvidia": {"arch": ["sm120"]}},
+            "unsupported_value": {"nvidia": {"cuda": ["14.0"]}},
+            "unsupported_feature": {"nvidia": {"other": ["on"]}},
+            "unsupported_namespace": {"other": {"level": ["on"]}},
+            "null": {}
+        }
+    }))?;
+    let preferences: VariantPreferences = serde_json::from_value(json!({
+        "nvidia": [["cuda", ["13.0", "12.0"]], ["arch", ["sm120"]]],
+        "x86_64": [["level", ["v4", "v3", "v2"]]]
+    }))?;
+    let mut ranked = [
+        "gpu",
+        "gpu_cpuv2",
+        "gpu_cpuv4",
+        "cpuv4",
+        "multiple_values",
+        "older_cuda",
+        "lower_feature",
+        "null",
+        "unsupported_value",
+        "unsupported_feature",
+        "unsupported_namespace",
+        "missing",
+    ]
+    .into_iter()
+    .map(|label| Ok((label, metadata.score_variant(&label.parse()?, &preferences))))
+    .collect::<Result<Vec<_>, Box<dyn std::error::Error>>>()?;
+    ranked.sort_by(|left, right| right.1.cmp(&left.1));
+    assert_snapshot!(
+        ranked
+            .iter()
+            .map(|(label, score)| format!("{label}: {}", score.is_some()))
+            .collect::<Vec<_>>()
+            .join("\n"),
+        @r#"
+    gpu_cpuv4: true
+    gpu_cpuv2: true
+    gpu: true
+    multiple_values: true
+    older_cuda: true
+    lower_feature: true
+    cpuv4: true
+    null: true
+    unsupported_value: false
+    unsupported_feature: false
+    unsupported_namespace: false
+    missing: false
+    "#);
+    Ok(())
+}
 
 /// Empty namespaces are removed during validation.
 #[test]
