@@ -3249,29 +3249,29 @@ fn tool_install_git() {
 
     // Unnamed Git Install
     uv_snapshot!(context.filters(), context.tool_install()
-        .arg("git+https://github.com/psf/black@24.2.0")
+        .arg("git+https://github.com/astral-sh/uv-dynamic-requires-python-test@75a612dc87fc215e999a25a0efc376cbf9831afa#subdirectory=static")
         .env(EnvVars::PATH, path.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved 6 packages in [TIME]
-    Prepared 4 packages in [TIME]
-    Installed 6 packages in [TIME]
-     + black==24.2.0 (from git+https://github.com/psf/black@6fdf8a4af28071ed1d079c01122b34c5d587207a)
-     + click==8.1.7
-     + mypy-extensions==1.0.0
-     + packaging==24.0
-     + pathspec==0.12.1
-     + platformdirs==4.2.0
-    Installed 2 executables: black, blackd
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + static-requires-python-tool==0.1.0 (from git+https://github.com/astral-sh/uv-dynamic-requires-python-test@75a612dc87fc215e999a25a0efc376cbf9831afa#subdirectory=static)
+    Installed 1 executable: static-requires-python-tool
     ");
 
-    tool_dir.child("black").assert(predicate::path::is_dir());
     tool_dir
-        .child("black")
+        .child("static-requires-python-tool")
+        .assert(predicate::path::is_dir());
+    tool_dir
+        .child("static-requires-python-tool")
         .child("uv-receipt.toml")
         .assert(predicate::path::exists());
 
-    let executable = bin_dir.child(format!("black{}", std::env::consts::EXE_SUFFIX));
+    let executable = bin_dir.child(format!(
+        "static-requires-python-tool{}",
+        std::env::consts::EXE_SUFFIX
+    ));
     assert!(executable.exists());
 
     fs_err::remove_dir_all(&bin_dir).expect("Failed to remove bin dir.");
@@ -3279,28 +3279,28 @@ fn tool_install_git() {
 
     // Named Git Install
     uv_snapshot!(context.filters(), context.tool_install()
-        .arg("black @ git+https://github.com/psf/black@24.2.0")
+        .arg("static-requires-python-tool @ git+https://github.com/astral-sh/uv-dynamic-requires-python-test@75a612dc87fc215e999a25a0efc376cbf9831afa#subdirectory=static")
         .env(EnvVars::PATH, path.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved 6 packages in [TIME]
-    Installed 6 packages in [TIME]
-     + black==24.2.0 (from git+https://github.com/psf/black@6fdf8a4af28071ed1d079c01122b34c5d587207a)
-     + click==8.1.7
-     + mypy-extensions==1.0.0
-     + packaging==24.0
-     + pathspec==0.12.1
-     + platformdirs==4.2.0
-    Installed 2 executables: black, blackd
+    Resolved 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + static-requires-python-tool==0.1.0 (from git+https://github.com/astral-sh/uv-dynamic-requires-python-test@75a612dc87fc215e999a25a0efc376cbf9831afa#subdirectory=static)
+    Installed 1 executable: static-requires-python-tool
     ");
 
-    tool_dir.child("black").assert(predicate::path::is_dir());
     tool_dir
-        .child("black")
+        .child("static-requires-python-tool")
+        .assert(predicate::path::is_dir());
+    tool_dir
+        .child("static-requires-python-tool")
         .child("uv-receipt.toml")
         .assert(predicate::path::exists());
 
-    let executable = bin_dir.child(format!("black{}", std::env::consts::EXE_SUFFIX));
+    let executable = bin_dir.child(format!(
+        "static-requires-python-tool{}",
+        std::env::consts::EXE_SUFFIX
+    ));
     assert!(executable.exists());
 }
 
