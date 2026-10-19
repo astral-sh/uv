@@ -5,7 +5,6 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
-use std::collections::BTreeMap;
 #[cfg(all(unix, feature = "test-universal"))]
 use std::os::unix::fs::FileTypeExt;
 #[cfg(all(feature = "test-universal", feature = "test-git"))]
@@ -19,9 +18,7 @@ use uv_static::EnvVars;
 use uv_test::archive::generate_source_archive;
 #[cfg(feature = "test-universal")]
 use uv_test::copy_dir_ignore;
-use uv_test::packse::PackseServer;
-use uv_test::packse::generate_wheel;
-use uv_test::packse::scenario::Scenario;
+use uv_test::packse::{PackseServer, WheelBuilder, scenario::Scenario};
 #[cfg(all(feature = "test-universal", feature = "test-git"))]
 use uv_test::{READ_ONLY_GITHUB_SSH_DEPLOY_KEY, READ_ONLY_GITHUB_TOKEN, decode_token};
 use uv_test::{TestContext, apply_filters, uv_snapshot};
@@ -5864,15 +5861,7 @@ fn pep_751_output_file_relative_paths() -> Result<()> {
         .temp_dir
         .child("child/src/child/__init__.py")
         .touch()?;
-    let (filename, wheel) = generate_wheel(
-        &"helper".parse()?,
-        &"1.0.0".parse()?,
-        &[],
-        &BTreeMap::new(),
-        None,
-        "py3-none-any",
-        &[],
-    );
+    let (filename, wheel) = WheelBuilder::new(&"helper".parse()?, &"1.0.0".parse()?).build();
     context.temp_dir.child(filename).write_binary(&wheel)?;
     let sdist = generate_source_archive(&"sdist".parse()?, &"1.0.0".parse()?, "", None)?;
     context

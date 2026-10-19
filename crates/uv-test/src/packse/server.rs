@@ -27,7 +27,7 @@ use crate::vendor::{VendorArtifact, vendor_artifacts};
 
 use super::scenario::{Scenario, WheelTag};
 use super::scenarios_dir;
-use super::wheel::{generate_sdist, generate_wheel, sha256_hex};
+use super::wheel::{DEFAULT_WHEEL_TAG, WheelBuilder, generate_sdist, sha256_hex};
 
 const PACKSE_UPLOAD_TIME: &str = "2024-03-24T00:00:00Z";
 
@@ -144,22 +144,19 @@ fn build_server_index(scenario: &Scenario) -> ServerIndex {
 
         for (version, meta) in &package.versions {
             if let Some(wheel_metadata) = &meta.wheel {
+                let wheel = WheelBuilder::new(package_name, version)
+                    .requires(&meta.requires)
+                    .extras(&meta.extras)
+                    .requires_python(meta.requires_python.as_ref())
+                    .entry_points(&meta.entry_points);
                 let tags = if meta.wheel_tags.is_empty() {
-                    vec!["py3-none-any"]
+                    vec![DEFAULT_WHEEL_TAG]
                 } else {
                     meta.wheel_tags.iter().map(WheelTag::as_str).collect()
                 };
 
                 for tag in tags {
-                    let (filename, bytes) = generate_wheel(
-                        package_name,
-                        version,
-                        &meta.requires,
-                        &meta.extras,
-                        meta.requires_python.as_ref(),
-                        tag,
-                        &meta.entry_points,
-                    );
+                    let (filename, bytes) = wheel.tag(tag).build();
                     let sha256 = sha256_hex(&bytes);
                     files.insert(filename.clone(), FileData::Bytes(bytes.into()));
                     dists.push(DistInfo {

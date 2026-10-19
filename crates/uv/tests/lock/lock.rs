@@ -1,5 +1,4 @@
 #[cfg(feature = "test-universal")]
-use std::collections::BTreeMap;
 #[cfg(all(feature = "test-universal", feature = "test-git"))]
 use std::process::Command;
 
@@ -32,7 +31,7 @@ use uv_test::archive::{generate_source_archive, write_tar_gz};
 #[cfg(feature = "test-universal")]
 use uv_test::package_server::PackageServer;
 #[cfg(feature = "test-universal")]
-use uv_test::packse::{PackseServer, generate_wheel_with_files, scenario::Scenario};
+use uv_test::packse::{PackseServer, WheelBuilder, scenario::Scenario};
 #[cfg(all(feature = "test-universal", feature = "test-git"))]
 use uv_test::{READ_ONLY_GITHUB_TOKEN, decode_token};
 use uv_test::{diff_snapshot, uv_snapshot};
@@ -2096,15 +2095,9 @@ fn lock_sdist_url() -> Result<()> {
 /// Create a deterministic wheel whose module can be imported by a source build backend.
 #[cfg(feature = "test-universal")]
 fn locked_build_dependency_wheel(module: &str) -> Result<Vec<u8>> {
-    let (_, wheel) = generate_wheel_with_files(
-        &"review-dep".parse()?,
-        &"1.0.0".parse()?,
-        &[],
-        &BTreeMap::new(),
-        None,
-        "py3-none-any",
-        &[("review_dep/payload.py", module)],
-    );
+    let (_, wheel) = WheelBuilder::new(&"review-dep".parse()?, &"1.0.0".parse()?)
+        .files(&[("review_dep/payload.py", module)])
+        .build();
     Ok(wheel)
 }
 
@@ -2539,15 +2532,9 @@ fn lock_wheel_path_relock_hash_mismatch() -> Result<()> {
     let name = "demo-pkg".parse()?;
     let version = "1.0.0".parse()?;
     let [(filename, trusted), (_, replacement)] = ["original", "replacement"].map(|contents| {
-        generate_wheel_with_files(
-            &name,
-            &version,
-            &[],
-            &BTreeMap::new(),
-            None,
-            "py3-none-any",
-            &[("demo_pkg/data.txt", contents)],
-        )
+        WheelBuilder::new(&name, &version)
+            .files(&[("demo_pkg/data.txt", contents)])
+            .build()
     });
     let archive = context.temp_dir.child(&filename);
     let trusted_digest = hex::encode(Sha256::digest(&trusted));
@@ -46648,15 +46635,9 @@ fn lock_resolution_inputs_local_source_constraints() -> Result<()> {
     "#})?;
     let server = PackseServer::from_scenario(&scenario);
     let context = uv_test::test_context!("3.12");
-    let (filename, wheel) = generate_wheel_with_files(
-        &"provider".parse()?,
-        &"1.0.0".parse()?,
-        &["b==1.0.0a1".parse()?],
-        &BTreeMap::new(),
-        None,
-        "py3-none-any",
-        &[],
-    );
+    let (filename, wheel) = WheelBuilder::new(&"provider".parse()?, &"1.0.0".parse()?)
+        .requires(&["b==1.0.0a1".parse()?])
+        .build();
     context.temp_dir.child(&filename).write_binary(&wheel)?;
     let pyproject = context.temp_dir.child("pyproject.toml");
     let source = SafeUrl::from_file_path(context.temp_dir.child(&filename).path())

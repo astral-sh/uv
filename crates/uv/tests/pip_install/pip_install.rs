@@ -1,4 +1,3 @@
-use std::collections::BTreeMap;
 use std::fmt::Write;
 #[cfg(windows)]
 use std::os::windows::ffi::OsStrExt;
@@ -38,7 +37,7 @@ use uv_test::find_links::FindLinksServer;
 use uv_test::package_server::PackageServer;
 #[cfg(feature = "test-universal")]
 use uv_test::packse::scenario::Scenario;
-use uv_test::packse::{PackseServer, generate_wheel, generate_wheel_with_files};
+use uv_test::packse::{PackseServer, WheelBuilder};
 use uv_test::{
     DEFAULT_PYTHON_VERSION, TestContext, apply_filters, copy_dir_ignore, download_to_disk, get_bin,
     uv_snapshot, venv_bin_path,
@@ -192,18 +191,12 @@ fn install_wheel_script_with_shell_launcher_preserves_encoding_cookie() -> Resul
 #[cfg(unix)]
 fn install_ascii_wheel_script_in_non_ascii_environment() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&["3.12"]);
-    let (filename, wheel) = generate_wheel_with_files(
-        &"ascii-script".parse()?,
-        &"1.0.0".parse()?,
-        &[],
-        &BTreeMap::default(),
-        None,
-        "py3-none-any",
-        &[(
+    let (filename, wheel) = WheelBuilder::new(&"ascii-script".parse()?, &"1.0.0".parse()?)
+        .files(&[(
             "ascii_script-1.0.0.data/scripts/ascii-script",
             "#!python\n# coding: ascii\nprint('ok')\n",
-        )],
-    );
+        )])
+        .build();
     fs::write(context.temp_dir.join(&filename), wheel)?;
 
     let venv = context.temp_dir.join("café env");
@@ -235,18 +228,12 @@ fn install_ascii_wheel_script_in_non_ascii_environment() -> Result<()> {
 #[cfg(unix)]
 fn install_wheel_script_does_not_execute_decoded_interpreter_path() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&["3.12"]);
-    let (filename, wheel) = generate_wheel_with_files(
-        &"encoded-script".parse()?,
-        &"1.0.0".parse()?,
-        &[],
-        &BTreeMap::default(),
-        None,
-        "py3-none-any",
-        &[(
+    let (filename, wheel) = WheelBuilder::new(&"encoded-script".parse()?, &"1.0.0".parse()?)
+        .files(&[(
             "encoded_script-1.0.0.data/scripts/encoded-script",
             "#!python\n# coding: utf-7\nprint('ok')\n",
-        )],
-    );
+        )])
+        .build();
     fs::write(context.temp_dir.join(&filename), wheel)?;
 
     let venv = context
@@ -4872,15 +4859,9 @@ fn install_copy_long_paths() -> Result<()> {
             let context = TestContext::new_with_bin("3.10", uv_bin.clone());
             let destination = context.site_packages().join(&file);
             assert!(destination.as_os_str().encode_wide().count() > 260);
-            let (filename, wheel) = generate_wheel_with_files(
-                &"long-paths".parse()?,
-                &"1.0.0".parse()?,
-                &[],
-                &BTreeMap::default(),
-                None,
-                "py3-none-any",
-                &[(&file, "data")],
-            );
+            let (filename, wheel) = WheelBuilder::new(&"long-paths".parse()?, &"1.0.0".parse()?)
+                .files(&[(&file, "data")])
+                .build();
             fs::write(context.temp_dir.join(&filename), wheel)?;
 
             // Both the destination and the temporary-file path can exceed MAX_PATH. Neither
@@ -10791,24 +10772,8 @@ fn verify_hashes_public_pin_local_version() -> Result<()> {
     let name = "hash-probe".parse()?;
     let public_version = "1.0.0".parse()?;
     let local_version = "1.0.0+local".parse()?;
-    let (_, public_wheel) = generate_wheel(
-        &name,
-        &public_version,
-        &[],
-        &BTreeMap::default(),
-        None,
-        "py3-none-any",
-        &[],
-    );
-    let (local_wheel_filename, local_wheel) = generate_wheel(
-        &name,
-        &local_version,
-        &[],
-        &BTreeMap::default(),
-        None,
-        "py3-none-any",
-        &[],
-    );
+    let (_, public_wheel) = WheelBuilder::new(&name, &public_version).build();
+    let (local_wheel_filename, local_wheel) = WheelBuilder::new(&name, &local_version).build();
     let public_hash = hex::encode(Sha256::digest(&public_wheel));
     let local_hash = hex::encode(Sha256::digest(&local_wheel));
     let context = context
@@ -16470,15 +16435,9 @@ fn repacked_wheel_with_entrypoint(
     entrypoint_name: &str,
 ) -> Result<PathBuf> {
     let built_wheel = context.temp_dir.join("foo/dist/foo-0.1.0-py3-none-any.whl");
-    let (_, wheel) = generate_wheel(
-        &"foo".parse()?,
-        &"0.1.0".parse()?,
-        &[],
-        &BTreeMap::new(),
-        Some(&">=3.12".parse()?),
-        "py3-none-any",
-        &[],
-    );
+    let (_, wheel) = WheelBuilder::new(&"foo".parse()?, &"0.1.0".parse()?)
+        .requires_python(Some(&">=3.12".parse()?))
+        .build();
     fs::create_dir_all(context.temp_dir.join("foo/dist"))?;
     fs::write(&built_wheel, wheel)?;
 

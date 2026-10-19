@@ -1,5 +1,3 @@
-use std::collections::BTreeMap;
-
 use anyhow::{Result, anyhow};
 use assert_cmd::prelude::*;
 use assert_fs::{fixture::ChildPath, prelude::*};
@@ -18,7 +16,7 @@ use uv_fs::Simplified;
 use uv_redacted::SafeUrl;
 use uv_static::EnvVars;
 use uv_test::package_server::PackageServer;
-use uv_test::packse::{PackseServer, generate_wheel, generate_wheel_with_files};
+use uv_test::packse::{PackseServer, WheelBuilder};
 
 use uv_test::{TestContext, download_to_disk, uv_snapshot, venv_bin_path};
 
@@ -564,15 +562,8 @@ fn sync_lockfile_without_workspace_sources() -> Result<()> {
 #[test]
 fn sync_frozen_project_build_sources() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let (helper_filename, helper_wheel) = generate_wheel(
-        &"build-helper".parse()?,
-        &"1.0.0".parse()?,
-        &[],
-        &BTreeMap::new(),
-        None,
-        "py3-none-any",
-        &[],
-    );
+    let (helper_filename, helper_wheel) =
+        WheelBuilder::new(&"build-helper".parse()?, &"1.0.0".parse()?).build();
     context
         .temp_dir
         .child(helper_filename)
@@ -631,15 +622,8 @@ fn sync_frozen_project_build_sources() -> Result<()> {
             return filename
     "#})?;
 
-    let (child_filename, child_wheel) = generate_wheel(
-        &"child".parse()?,
-        &"1.0.0".parse()?,
-        &[],
-        &BTreeMap::new(),
-        None,
-        "py3-none-any",
-        &[],
-    );
+    let (child_filename, child_wheel) =
+        WheelBuilder::new(&"child".parse()?, &"1.0.0".parse()?).build();
     child.child(child_filename).write_binary(&child_wheel)?;
 
     uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
@@ -18846,15 +18830,7 @@ fn build_hash_project() -> Result<(TestContext, String)> {
         ("dynamic-dependency", "1.0.0"),
         ("project", "0.1.0"),
     ] {
-        let (filename, wheel) = generate_wheel(
-            &name.parse()?,
-            &version.parse()?,
-            &[],
-            &BTreeMap::new(),
-            None,
-            "py3-none-any",
-            &[],
-        );
+        let (filename, wheel) = WheelBuilder::new(&name.parse()?, &version.parse()?).build();
         if name == "build-dependency" {
             build_hash = hex::encode(Sha256::digest(&wheel));
         }
@@ -19640,15 +19616,9 @@ fn project_build_hashes_untrusted_metadata() -> Result<()> {
         .child("wheels/dynamic_dependency-1.0.0-py3-none-any.whl");
     let child_hash = hex::encode(Sha256::digest(context.read_bytes(child.path())));
     let child_url = SafeUrl::from_file_path(child.path()).expect("absolute wheel path");
-    let (filename, wheel) = generate_wheel(
-        &"build-dependency".parse()?,
-        &"1.0.0".parse()?,
-        &[format!("dynamic-dependency @ {child_url}#sha256={child_hash}").parse()?],
-        &BTreeMap::new(),
-        None,
-        "py3-none-any",
-        &[],
-    );
+    let (filename, wheel) = WheelBuilder::new(&"build-dependency".parse()?, &"1.0.0".parse()?)
+        .requires(&[format!("dynamic-dependency @ {child_url}#sha256={child_hash}").parse()?])
+        .build();
     let hash = hex::encode(Sha256::digest(&wheel));
     context
         .temp_dir
@@ -19801,29 +19771,17 @@ fn project_build_hashes_locked_script_run_with_no_sync() -> Result<()> {
         "#);
     });
 
-    let (filename, changed_wheel) = generate_wheel_with_files(
-        &"build-dependency".parse()?,
-        &"1.0.0".parse()?,
-        &[],
-        &BTreeMap::new(),
-        None,
-        "py3-none-any",
-        &[("build_dependency/changed.py", "changed = True\n")],
-    );
+    let (filename, changed_wheel) =
+        WheelBuilder::new(&"build-dependency".parse()?, &"1.0.0".parse()?)
+            .files(&[("build_dependency/changed.py", "changed = True\n")])
+            .build();
     package
         .child("wheels")
         .child(filename)
         .write_binary(&changed_wheel)?;
     let changed_hash = hex::encode(Sha256::digest(&changed_wheel));
-    let (filename, newer_wheel) = generate_wheel(
-        &"build-dependency".parse()?,
-        &"2.0.0".parse()?,
-        &[],
-        &BTreeMap::new(),
-        None,
-        "py3-none-any",
-        &[],
-    );
+    let (filename, newer_wheel) =
+        WheelBuilder::new(&"build-dependency".parse()?, &"2.0.0".parse()?).build();
     package
         .child("wheels")
         .child(filename)
