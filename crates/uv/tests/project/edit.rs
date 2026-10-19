@@ -5063,7 +5063,7 @@ fn add_lower_bound_local() -> Result<()> {
         name = "a"
         version = "1.2.3+foo"
         source = { registry = "http://[LOCALHOST]/simple/" }
-        sdist = { url = "http://[LOCALHOST]/files/a-1.2.3+foo.tar.gz", hash = "sha256:2fd6e9af06ed622c5b242c080167ffec11fd4c3360dc28d9700aba4c9f3d4a43", upload-time = "2024-03-24T00:00:00Z" }
+        sdist = { url = "http://[LOCALHOST]/files/a-1.2.3+foo.tar.gz", hash = "sha256:ad87d4fde153bfe9227496123b581e7c3dcba36f4e12c3af105904f20a3cd31c", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
             { url = "http://[LOCALHOST]/files/a-1.2.3+foo-py3-none-any.whl", hash = "sha256:2fd8eec176cad72b6c4372682485914aff65d215fb8cd71c85e9ed4511fa8bbe", upload-time = "2024-03-24T00:00:00Z" },
         ]
