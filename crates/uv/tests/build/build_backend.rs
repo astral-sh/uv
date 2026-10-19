@@ -1,8 +1,8 @@
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
-use assert_fs::fixture::{FileTouch, FileWriteBin, FileWriteStr, PathChild, PathCreateDir};
 #[cfg(unix)]
-use assert_fs::fixture::{SymlinkToDir, SymlinkToFile};
+use assert_fs::fixture::SymlinkToFile;
+use assert_fs::fixture::{FileTouch, FileWriteBin, FileWriteStr, PathChild, PathCreateDir};
 use flate2::bufread::GzDecoder;
 use fs_err::File;
 use futures::io::AllowStdIo;
@@ -1615,19 +1615,12 @@ fn venv_in_source_tree() -> Result<()> {
         .assert()
         .success();
 
-    // An empty interpreter keeps the fixture small when the builder traverses it before
-    // finding `pyvenv.cfg` or the `lib64` symlink.
     let venv = context.temp_dir.child("src/foo/.venv");
-    venv.child("pyvenv.cfg").touch()?;
+    context.venv().arg(venv.path()).assert().success();
+
+    // Reject the virtual environment before attempting to read its files.
     #[cfg(unix)]
-    {
-        venv.child("bin/python3").touch()?;
-        venv.child("bin/python").symlink_to_file("python3")?;
-        venv.child("lib").create_dir_all()?;
-        venv.child("lib64").symlink_to_dir("lib")?;
-    }
-    #[cfg(windows)]
-    venv.child("Scripts/python.exe").touch()?;
+    venv.child("broken").symlink_to_file("missing")?;
 
     uv_snapshot!(context.filters(), context.build(), @"
     exit_code: 2 (failure)

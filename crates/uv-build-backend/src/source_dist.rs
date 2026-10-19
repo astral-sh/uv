@@ -2,7 +2,8 @@ use crate::metadata::DEFAULT_EXCLUDES;
 use crate::wheel::build_exclude_matcher;
 use crate::{
     BuildBackendSettings, DirectoryWriter, Error, FileList, ListWriter, PyProjectToml,
-    error_on_venv, find_roots, write_directory_once, write_file_with_directories,
+    compare_build_entries, error_on_venv, find_roots, write_directory_once,
+    write_file_with_directories,
 };
 use flate2::Compression;
 use flate2::write::GzEncoder;
@@ -293,7 +294,7 @@ fn write_source_dist(
     let top_level_directory = PathBuf::from(&top_level).join("");
     write_directory_once(&mut writer, &mut written_directories, &top_level_directory)?;
     for entry in WalkDir::new(source_tree)
-        .sort_by_file_name()
+        .sort_by(compare_build_entries)
         .into_iter()
         .filter_entry(|entry| {
             // TODO(konsti): This should be prettier.
