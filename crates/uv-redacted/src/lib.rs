@@ -589,31 +589,27 @@ impl<P: SerializationPolicy> Display for SafeUrl<P> {
 }
 
 impl<P: SerializationPolicy> Debug for SafeUrl<P> {
+    #[inline(never)]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        debug_with_redacted_credentials(&self.0, f)
+        let url = &self.0;
+        let (username, password) = redacted_credentials(url);
+
+        f.debug_struct("SafeUrl")
+            .field("scheme", &url.scheme())
+            .field("cannot_be_a_base", &url.cannot_be_a_base())
+            .field("username", &username)
+            .field("password", &password)
+            .field("host", &url.host())
+            .field("port", &url.port())
+            .field("path", &url.path())
+            .field(
+                "query",
+                &url.query()
+                    .map(|query| redacted_query(query, url.query_pairs())),
+            )
+            .field("fragment", &url.fragment())
+            .finish()
     }
-}
-
-/// Share debug formatting across policies and keep the formatter out of callers.
-#[inline(never)]
-fn debug_with_redacted_credentials(url: &Url, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    let (username, password) = redacted_credentials(url);
-
-    f.debug_struct("SafeUrl")
-        .field("scheme", &url.scheme())
-        .field("cannot_be_a_base", &url.cannot_be_a_base())
-        .field("username", &username)
-        .field("password", &password)
-        .field("host", &url.host())
-        .field("port", &url.port())
-        .field("path", &url.path())
-        .field(
-            "query",
-            &url.query()
-                .map(|query| redacted_query(query, url.query_pairs())),
-        )
-        .field("fragment", &url.fragment())
-        .finish()
 }
 
 impl From<Url> for SafeUrl {
