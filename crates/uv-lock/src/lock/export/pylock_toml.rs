@@ -123,6 +123,8 @@ pub enum PylockTomlErrorKind {
     GitArchiveUnsupported(PackageName),
     #[error("Package `{0}` resolved to a wheel variant, which pylock.toml export does not support")]
     WheelVariantUnsupported(PackageName),
+    #[error("`packages.archive.path` does not support wheel variants: `{0}`")]
+    ArchivePathWheelVariantUnsupported(WheelFilename),
     #[error("Package `{0}` does not include a compatible wheel for the current platform")]
     MissingWheel(PackageName),
     #[error("`packages.wheel` entry for `{0}` must have a `path` or `url`")]
@@ -1905,6 +1907,12 @@ impl PylockTomlArchive {
                 DistExtension::Wheel => {
                     let filename = WheelFilename::from_str(filename)?;
                     validate_wheel_filename(&filename, name, version)?;
+                    // TODO(konsti): Support installing wheel variants from `packages.archive.path`.
+                    if filename.variant().is_some() {
+                        return Err(PylockTomlErrorKind::ArchivePathWheelVariantUnsupported(
+                            filename,
+                        ));
+                    }
                     let install_path = install_path.join(path);
                     validate_path_size(&install_path, self.size)?;
                     let url = VerbatimUrl::from_absolute_path(&install_path)
