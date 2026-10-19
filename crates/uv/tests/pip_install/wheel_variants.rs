@@ -669,14 +669,12 @@ fn variant_wheels_without_preview_or_index_metadata_are_rejected() -> Result<()>
     ");
 
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg("--preview-features")
-        .arg("wheel-variants")
         .arg("ok @ https://example.com/ok-1.0.0-9-py3-none-any-null.whl")
         .arg("--offline"), @"
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to download `ok @ https://example.com/ok-1.0.0-9-py3-none-any-null.whl`
-      cause: Installing wheel variants from direct URLs is not supported: `ok-1.0.0-9-py3-none-any-null.whl`
+      cause: Wheel variant `ok-1.0.0-9-py3-none-any-null.whl` requires `--preview-features wheel-variants`
     ");
 
     Ok(())

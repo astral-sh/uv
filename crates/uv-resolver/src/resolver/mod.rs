@@ -23,15 +23,13 @@ use tracing::{Level, debug, info, instrument, trace, warn};
 
 use uv_configuration::{Constraints, DependencyModifiers, IndexStrategy};
 use uv_distribution::{ArchiveMetadata, DistributionDatabase, supported_variant_properties};
-use uv_distribution_filename::VariantLabel;
 use uv_distribution_types::{
     BuiltDist, DerivationChain, Dist, DistErrorKind, Identifier, IndexCapabilities, IndexLocations,
-    IndexMetadata, IndexUrl, InstalledDist, Name, PathBuiltDist, RemoteSource, Requirement,
+    IndexMetadata, IndexUrl, InstalledDist, Name, RemoteSource, RequestedDist, Requirement,
     RequiresPython, ResolutionRecorder, ResolvedDist, SourceDist, VariantsJsonContent,
     VersionOrUrlRef,
 };
 use uv_git::GitResolver;
-use uv_metadata::read_archive_wheel_variant;
 use uv_normalize::PackageName;
 use uv_pep440::{MIN_VERSION, Version, VersionSpecifiers, release_specifiers_to_ranges};
 use uv_pep508::{
@@ -1296,22 +1294,21 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             // TODO(konsti): Enforce source restrictions here before stabilizing wheel variants.
             // `pip compile --no-deps` skips lookahead and can emit variants from unsupported
             // sources. While wheel variants are in preview, it also bypasses the preview check.
-            let incompatible_tag = if filename.variant().is_some()
-                && env.marker_environment().is_none()
-            {
-                // Universal lockfiles cannot yet record wheel variants.
-                Some(IncompatibleTag::Variant)
-            } else if !python_requirement.target().matches_wheel_tag(filename) {
-                Some(IncompatibleTag::AbiPythonVersion)
-            } else if let BuiltDist::Path(wheel) = dist
-                && wheel.filename.variant().is_some()
-                && let Some(tags) = &self.tags
-                && let TagCompatibility::Incompatible(tag) = wheel.filename.tag_compatibility(tags)
-            {
-                Some(tag)
-            } else {
-                None
-            };
+            let incompatible_tag =
+                if filename.variant().is_some() && env.marker_environment().is_none() {
+                    // Universal lockfiles cannot yet record wheel variants.
+                    Some(IncompatibleTag::Variant)
+                } else if !python_requirement.target().matches_wheel_tag(filename) {
+                    Some(IncompatibleTag::AbiPythonVersion)
+                } else if let BuiltDist::Path(_) | BuiltDist::DirectUrl(_) = dist
+                    && filename.variant().is_some()
+                    && let Some(tags) = &self.tags
+                    && let TagCompatibility::Incompatible(tag) = filename.tag_compatibility(tags)
+                {
+                    Some(tag)
+                } else {
+                    None
+                };
             if let Some(tag) = incompatible_tag {
                 return Ok(Some(ResolverVersion::Unavailable(
                     filename.version.clone(),
@@ -1339,12 +1336,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             }
         }
 
-        if let Dist::Built(BuiltDist::Path(wheel)) = dist
-            && let Some(label) = wheel.filename.variant().cloned()
-            && uv_preview::is_enabled(PreviewFeature::WheelVariants)
+        if uv_preview::is_enabled(PreviewFeature::WheelVariants)
+            && let Dist::Built(wheel) = dist
+            && let Some(label) = wheel.wheel_filename().variant().cloned()
             && let Some(tags) = &self.tags
+            && let Some(variant) = requests.read_wheel_variant(wheel)?
         {
-            let unavailable = match requests.read_local_wheel_variant(wheel, label.clone())? {
+            let unavailable = match variant {
                 Ok(variant) => {
                     let supported = supported_variant_properties(&variant, tags.python_platform());
                     // TODO(konsti): Include the unsupported properties in the resolver error.
@@ -2300,19 +2298,33 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     ) -> Result<Option<Response>, ResolveError> {
         match request {
             // TODO(konsti): This read stands in for a request to evaluate arbitrary providers
-            // off the resolver thread. That request should reuse the `variant.json` parsed with
-            // the wheel's core metadata, reading it here only when an override supplies the
-            // core metadata.
-            Request::LocalWheelVariant {
-                wheel,
-                label,
-                response,
-            } => {
-                let result =
-                    read_archive_wheel_variant(&wheel.filename, &wheel.install_path, &label)
-                        .boxed_local()
-                        .await
-                        .map_err(|err| MetadataUnavailable::InvalidStructure(Arc::new(err)));
+            // off the resolver thread.
+            Request::WheelVariant { wheel, response } => {
+                let result = match provider
+                    .get_wheel_variant_metadata(&wheel)
+                    .boxed_local()
+                    .await
+                {
+                    Ok(metadata) => Ok(metadata.map(Ok)),
+                    Err(uv_distribution::Error::WheelMetadata(_, err)) => Ok(Some(Err(
+                        MetadataUnavailable::InvalidStructure(Arc::new(*err)),
+                    ))),
+                    Err(uv_distribution::Error::Client(err)) => {
+                        provider::classify_metadata_error(err)
+                            .map(|reason| Some(Err(reason)))
+                            .map_err(uv_distribution::Error::from)
+                    }
+                    Err(err) => Err(err),
+                }
+                .map_err(|err| {
+                    let dist = Box::new(RequestedDist::Installable(Dist::Built(wheel)));
+                    ResolveError::Dist(
+                        DistErrorKind::from_requested_dist(&dist, &err),
+                        dist,
+                        DerivationChain::default(),
+                        Arc::new(err),
+                    )
+                })?;
                 let _ = response.send(result);
                 Ok(None)
             }
@@ -3587,11 +3599,10 @@ pub(crate) enum Request {
     Installed(InstalledDist),
     /// A request to fetch variant metadata for a selected version.
     VariantsJson(RegistryVariantsJson),
-    /// A request to read the embedded variant metadata from a local wheel.
-    LocalWheelVariant {
-        wheel: PathBuiltDist,
-        label: VariantLabel,
-        response: oneshot::Sender<ParsedVariantsJsonResponse>,
+    /// A request to read embedded variant metadata from a wheel.
+    WheelVariant {
+        wheel: BuiltDist,
+        response: oneshot::Sender<Option<ParsedVariantsJsonResponse>>,
     },
     /// A request to pre-fetch the metadata for a package and the best-guess distribution.
     Prefetch(PackageName, Range<Version>, PythonRequirement),
@@ -3649,8 +3660,8 @@ impl Display for Request {
             Self::VariantsJson(variants_json) => {
                 write!(f, "Variant metadata `{}`", variants_json.filename)
             }
-            Self::LocalWheelVariant { wheel, .. } => {
-                write!(f, "Variant metadata `{}`", wheel.filename)
+            Self::WheelVariant { wheel, .. } => {
+                write!(f, "Variant metadata `{}`", wheel.wheel_filename())
             }
             Self::Prefetch(package_name, range, _) => {
                 write!(f, "Prefetch {package_name} {range}")

@@ -36,6 +36,7 @@ use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
 use uv_pep508::{MarkerEnvironment, MarkerTree, VerbatimUrl};
 use uv_platform_tags::{TagCompatibility, TagPriority, Tags};
+use uv_preview::PreviewFeature;
 use uv_pypi_types::{HashDigests, Hashes, ParsedGitDirectoryUrl, VcsKind};
 use uv_redacted::SafeUrl;
 use uv_redacted::policy::{Raw, Stripped};
@@ -1445,6 +1446,13 @@ impl<'lock> PylockToml {
             {
                 let hashes = HashDigests::from(dist.hashes.clone());
                 let dist = dist.to_dist(install_path, &package.name, package.version.as_ref())?;
+                if let Dist::Built(BuiltDist::DirectUrl(wheel)) = &dist
+                    && wheel.filename.variant().is_some()
+                    && uv_preview::is_enabled(PreviewFeature::WheelVariants)
+                    && !wheel.filename.tag_compatibility(tags).is_compatible()
+                {
+                    return Err(PylockTomlErrorKind::IncompatibleWheelOnly(package.name).into());
+                }
                 let dist = ResolvedDist::Installable {
                     dist: Arc::new(dist),
                     version: package.version,
