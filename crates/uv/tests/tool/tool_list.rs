@@ -12,7 +12,7 @@ use wiremock::{
 
 #[test]
 fn tool_list() {
-    let context = uv_test::test_context!("3.12")
+    let context = uv_test::test_context_with_versions!(&["3.12"])
         .with_filtered_exe_suffix()
         .with_tool_dirs();
 
@@ -34,7 +34,7 @@ fn tool_list() {
 
 #[test]
 fn tool_list_paths() {
-    let context = uv_test::test_context!("3.12")
+    let context = uv_test::test_context_with_versions!(&["3.12"])
         .with_filtered_exe_suffix()
         .with_tool_dirs();
 
@@ -57,7 +57,7 @@ fn tool_list_paths() {
 #[cfg(windows)]
 #[test]
 fn tool_list_paths_windows() {
-    let context = uv_test::test_context!("3.12")
+    let context = uv_test::test_context_with_versions!(&["3.12"])
         .clear_filters()
         .with_filtered_windows_temp_dir()
         .with_tool_dirs();
@@ -80,7 +80,7 @@ fn tool_list_paths_windows() {
 
 #[test]
 fn tool_list_empty() {
-    let context = uv_test::test_context!("3.12")
+    let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_exe_suffix()
         .with_tool_dirs();
 
@@ -93,7 +93,7 @@ fn tool_list_empty() {
 
 #[test]
 fn tool_list_outdated_empty() {
-    let context = uv_test::test_context!("3.12")
+    let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_exe_suffix()
         .with_tool_dirs();
 
@@ -108,7 +108,7 @@ fn tool_list_outdated_empty() {
 
 #[test]
 fn tool_list_outdated() {
-    let context = uv_test::test_context!("3.12")
+    let context = uv_test::test_context_with_versions!(&["3.12"])
         .with_filtered_exe_suffix()
         .with_tool_dirs();
 
@@ -132,7 +132,7 @@ fn tool_list_outdated() {
 
 #[tokio::test]
 async fn tool_list_outdated_respects_configured_index() -> Result<()> {
-    let context = uv_test::test_context!("3.12")
+    let context = uv_test::test_context_with_versions!(&["3.12"])
         .with_filtered_exe_suffix()
         .with_tool_dirs();
 
@@ -186,7 +186,7 @@ async fn tool_list_outdated_respects_configured_index() -> Result<()> {
 
 #[test]
 fn tool_list_outdated_respects_exclude_newer() {
-    let context = uv_test::test_context!("3.12")
+    let context = uv_test::test_context_with_versions!(&["3.12"])
         .with_filtered_exe_suffix()
         .with_tool_dirs();
 
@@ -209,7 +209,7 @@ fn tool_list_outdated_respects_exclude_newer() {
 
 #[test]
 fn tool_list_outdated_recomputes_relative_exclude_newer() {
-    let context = uv_test::test_context!("3.12")
+    let context = uv_test::test_context_with_versions!(&["3.12"])
         .with_filtered_exe_suffix()
         .with_tool_dirs();
 
@@ -242,7 +242,7 @@ fn tool_list_outdated_recomputes_relative_exclude_newer() {
 
 #[test]
 fn tool_list_outdated_cli_exclude_newer() {
-    let context = uv_test::test_context!("3.12")
+    let context = uv_test::test_context_with_versions!(&["3.12"])
         .with_filtered_exe_suffix()
         .with_tool_dirs();
 
@@ -265,7 +265,7 @@ fn tool_list_outdated_cli_exclude_newer() {
 
 #[test]
 fn tool_list_missing_receipt() {
-    let context = uv_test::test_context!("3.12")
+    let context = uv_test::test_context_with_versions!(&["3.12"])
         .with_filtered_exe_suffix()
         .with_tool_dirs();
     let tool_dir = context.temp_dir.child("tools");
@@ -288,7 +288,7 @@ fn tool_list_missing_receipt() {
 
 #[test]
 fn tool_list_bad_environment() -> Result<()> {
-    let context = uv_test::test_context!("3.12")
+    let context = uv_test::test_context_with_versions!(&["3.12"])
         .with_filtered_python_names()
         .with_filtered_virtualenv_bin()
         .with_filtered_exe_suffix()
@@ -331,7 +331,7 @@ fn tool_list_bad_environment() -> Result<()> {
 
 #[test]
 fn tool_list_deprecated() -> Result<()> {
-    let context = uv_test::test_context!("3.12")
+    let context = uv_test::test_context_with_versions!(&["3.12"])
         .with_filtered_exe_suffix()
         .with_tool_dirs();
     let tool_dir = context.temp_dir.child("tools");
@@ -407,7 +407,7 @@ fn tool_list_deprecated() -> Result<()> {
 
 #[test]
 fn tool_list_show_version_specifiers() {
-    let context = uv_test::test_context!("3.12")
+    let context = uv_test::test_context_with_versions!(&["3.12"])
         .with_filtered_exe_suffix()
         .with_tool_dirs();
 
@@ -445,7 +445,7 @@ fn tool_list_show_version_specifiers() {
 
 #[test]
 fn tool_list_show_with() {
-    let context = uv_test::test_context!("3.12")
+    let context = uv_test::test_context_with_versions!(&["3.12"])
         .with_filtered_exe_suffix()
         .with_tool_dirs();
 
@@ -534,7 +534,7 @@ fn tool_list_show_with() {
 
 #[test]
 fn tool_list_show_extras() {
-    let context = uv_test::test_context!("3.12")
+    let context = uv_test::test_context_with_versions!(&["3.12"])
         .with_filtered_exe_suffix()
         .with_tool_dirs();
 
@@ -616,7 +616,7 @@ fn tool_list_show_extras() {
 
 #[test]
 fn tool_list_show_python() {
-    let context = uv_test::test_context!("3.12")
+    let context = uv_test::test_context_with_versions!(&["3.12"])
         .with_filtered_exe_suffix()
         .with_tool_dirs();
 
@@ -639,7 +639,7 @@ fn tool_list_show_python() {
 
 #[test]
 fn tool_list_show_all() {
-    let context = uv_test::test_context!("3.12")
+    let context = uv_test::test_context_with_versions!(&["3.12"])
         .with_filtered_exe_suffix()
         .with_tool_dirs();
 
