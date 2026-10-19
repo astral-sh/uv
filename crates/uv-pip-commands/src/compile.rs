@@ -309,7 +309,7 @@ pub async fn pip_compile(
         // be able to use `PythonInstallation::find(...)` here.
         let request = if let Some(version) = python_version.as_ref() {
             // TODO(zanieb): We should consolidate `VersionRequest` and `PythonVersion`
-            PythonRequest::Version(VersionRequest::from(version))
+            PythonRequest::Version(VersionRequest::try_from(version)?)
         } else {
             PythonRequest::default()
         };

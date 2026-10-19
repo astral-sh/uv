@@ -2075,6 +2075,26 @@ fn compile_python_invalid_version() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn compile_python_version_too_many_components() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("requirements.in")
+        .write_str("anyio")?;
+
+    uv_snapshot!(context.pip_compile()
+        .arg("requirements.in")
+        .arg("--python-version")
+        .arg("3.12.1.1"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Invalid version request: 3.12.1.1
+    ");
+
+    Ok(())
+}
+
 /// Resolve a specific version of Black against an invalid Python version.
 #[test]
 fn compile_python_dev_version() -> Result<()> {
