@@ -7,6 +7,7 @@ use sha2::{Digest, Sha256};
 use uv_distribution_types::PEP_825_SCHEMA;
 use uv_static::EnvVars;
 use uv_test::archive::generate_source_archive;
+use uv_test::packse::{PackseServer, scenario::Scenario};
 use uv_test::uv_snapshot;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -752,46 +753,28 @@ fn no_binary_metadata_ignores_variant_wheels() -> Result<()> {
 }
 
 /// A variant wheel cannot provide metadata for an sdist, even when it is the only wheel.
-#[tokio::test]
-async fn sdist_metadata_ignores_variant_wheels() -> Result<()> {
-    let server = MockServer::start().await;
-    let context = uv_test::test_context!("3.12").with_filter((server.uri(), "http://[LOCALHOST]"));
-    let sdist = generate_source_archive(&"ok".parse()?, &"1.0.0".parse()?, "", None)?;
+#[test]
+fn sdist_metadata_ignores_variant_wheels() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "sdist-metadata-ignores-variant"
+        root = {}
+        expected.satisfiable = true
 
-    let simple_index = json!({
-        "meta": { "api-version": "1.0" },
-        "name": "ok",
-        "files": [
-            {
-                "filename": "ok-1.0.0.tar.gz",
-                "url": format!("{}/files/ok-1.0.0.tar.gz", server.uri()),
-                "hashes": {},
-            },
-            {
-                "filename": "ok-1.0.0-py3-none-any-cpu.whl",
-                "url": format!("{}/files/ok-1.0.0-py3-none-any-cpu.whl", server.uri()),
-                "hashes": {},
-            },
-        ],
-    });
-    Mock::given(method("GET"))
-        .and(path("/simple/ok/"))
-        .respond_with(ResponseTemplate::new(200).set_body_raw(
-            simple_index.to_string(),
-            "application/vnd.pypi.simple.v1+json",
-        ))
-        .mount(&server)
-        .await;
-    Mock::given(method("GET"))
-        .and(path("/files/ok-1.0.0.tar.gz"))
-        .respond_with(ResponseTemplate::new(200).set_body_bytes(sdist))
-        .mount(&server)
-        .await;
+        [packages.ok.versions."1.0.0"]
+        wheel = false
+
+        [packages.ok.versions."1.0.0".variants]
+        namespaces = ["cpu"]
+
+        [packages.ok.versions."1.0.0".variants.wheels]
+        cpu.requires = ["variant-only"]
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--index-url")
-        .arg(format!("{}/simple/", server.uri()))
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg(server.index_url())
         .arg("ok==1.0.0"), @"
     exit_code: 0 (success)
     ----- stderr -----
