@@ -1867,13 +1867,11 @@ fn extra_depends_on_conflicting_extra_transitive() -> Result<()> {
         members = ["indirection"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
-
-        [tool.setuptools.packages.find]
-        include = ["example"]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
+    context.temp_dir.child("src/example/__init__.py").touch()?;
 
     // Create the indirection subproject
     let subproject_dir = context.temp_dir.child("indirection");
@@ -1892,10 +1890,13 @@ fn extra_depends_on_conflicting_extra_transitive() -> Result<()> {
         example = { workspace = true }
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
+    subproject_dir
+        .child("src/indirection/__init__.py")
+        .touch()?;
 
     // This succeeds, but probably shouldn't. There's an unconditional conflict in `example[foo]
     // -> indirection[bar] -> example[bar]`, which means `example[foo]` can never be used.

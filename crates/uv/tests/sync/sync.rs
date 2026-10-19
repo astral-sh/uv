@@ -2630,8 +2630,8 @@ fn sync_non_project_dev_dependencies() -> Result<()> {
         dependencies = ["iniconfig>=1"]
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
     child
@@ -3354,8 +3354,8 @@ fn sync_non_project_group() -> Result<()> {
         baz = ["typing-extensions"]
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
     child
@@ -4804,8 +4804,8 @@ fn sync_relative_wheel() -> Result<()> {
     ok = { path = "wheels/ok-1.0.0-py3-none-any.whl" }
 
     [build-system]
-    requires = ["hatchling"]
-    build-backend = "hatchling.build"
+    requires = ["uv_build>=0.7,<10000"]
+    build-backend = "uv_build"
     "#;
 
     context
@@ -10095,8 +10095,8 @@ fn sync_override_package() -> Result<()> {
         requires-python = ">=3.12"
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [tool.uv]
         package = false
@@ -10122,8 +10122,8 @@ fn sync_override_package() -> Result<()> {
         dependencies = ["core"]
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [tool.uv.sources]
         core = { path = "./core" }
@@ -10158,8 +10158,8 @@ fn sync_override_package() -> Result<()> {
         dependencies = ["core"]
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [tool.uv.sources]
         core = { path = "./core", package = true }
@@ -10188,8 +10188,8 @@ fn sync_override_package() -> Result<()> {
         requires-python = ">=3.12"
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
 
@@ -10215,8 +10215,8 @@ fn sync_override_package() -> Result<()> {
         dependencies = ["core"]
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [tool.uv.sources]
         core = { path = "./core", package = false }
@@ -10245,8 +10245,8 @@ fn sync_override_package() -> Result<()> {
         requires-python = ">=3.12"
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [tool.uv]
         package = true
@@ -10264,8 +10264,8 @@ fn sync_override_package() -> Result<()> {
         dependencies = ["core"]
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [tool.uv.sources]
         core = { path = "./core", package = false }
@@ -10294,8 +10294,8 @@ fn sync_override_package() -> Result<()> {
         dependencies = ["core"]
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [tool.uv.sources]
         core = { path = "./core" }
@@ -11744,8 +11744,8 @@ fn sync_all_extras() -> Result<()> {
         testing = ["packaging>=24"]
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
     child
@@ -11775,6 +11775,7 @@ fn sync_all_extras() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 8 packages in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 2 packages in [TIME]
     Installed 1 package in [TIME]
      + packaging==24.0
@@ -12012,8 +12013,8 @@ fn sync_all_groups() -> Result<()> {
         testing = ["packaging>=24"]
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
     child
@@ -12043,6 +12044,7 @@ fn sync_all_groups() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 8 packages in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 2 packages in [TIME]
     Installed 1 package in [TIME]
      + packaging==24.0
@@ -15312,8 +15314,8 @@ fn repeated_dev_member_all_packages() -> Result<()> {
         members = ["second"]
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
 
@@ -15336,8 +15338,8 @@ fn repeated_dev_member_all_packages() -> Result<()> {
         dependencies = ["iniconfig"]
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
 
@@ -15748,8 +15750,8 @@ fn conflicting_editable() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = []
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
         )?;
     context
@@ -15899,8 +15901,8 @@ fn undeclared_editable() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = []
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
         )?;
     context
@@ -17606,8 +17608,8 @@ fn toggle_workspace_editable() -> Result<()> {
         dependencies = ["iniconfig>=1"]
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
     child
@@ -17708,7 +17710,7 @@ fn toggle_workspace_editable() -> Result<()> {
      ~ child==0.1.0 (from file://[TEMP_DIR]/child)
     ");
 
-    assert!(!context.site_packages().join("_child.pth").exists());
+    assert!(!context.site_packages().join("child.pth").exists());
 
     uv_snapshot!(context.filters(), context.sync().arg("--editable"), @"
     exit_code: 0 (success)
@@ -17719,7 +17721,7 @@ fn toggle_workspace_editable() -> Result<()> {
      ~ child==0.1.0 (from file://[TEMP_DIR]/child)
     ");
 
-    assert!(context.site_packages().join("_child.pth").exists());
+    assert!(context.site_packages().join("child.pth").exists());
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -17802,8 +17804,8 @@ fn toggle_workspace_editable() -> Result<()> {
         );
     });
 
-    // Verify that `_child.pth` does not exist in the site-packages directory.
-    assert!(!context.site_packages().join("_child.pth").exists());
+    // Verify that `child.pth` does not exist in the site-packages directory.
+    assert!(!context.site_packages().join("child.pth").exists());
 
     // But `--editable` on the command line should override the lockfile.
     uv_snapshot!(context.filters(), context.sync().arg("--editable"), @"
@@ -17815,8 +17817,8 @@ fn toggle_workspace_editable() -> Result<()> {
      ~ child==0.1.0 (from file://[TEMP_DIR]/child)
     ");
 
-    // Verify that `_child.pth` exists in the site-packages directory.
-    assert!(context.site_packages().join("_child.pth").exists());
+    // Verify that `child.pth` exists in the site-packages directory.
+    assert!(context.site_packages().join("child.pth").exists());
 
     Ok(())
 }
@@ -17837,8 +17839,8 @@ fn workspace_editable_conflict() -> Result<()> {
         dependencies = ["iniconfig>=1"]
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
     child1
@@ -17861,8 +17863,8 @@ fn workspace_editable_conflict() -> Result<()> {
         child1 = { workspace = true }
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
     child2
@@ -18073,8 +18075,8 @@ fn workspace_editable_conflict() -> Result<()> {
         child1 = { workspace = true, editable = true }
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
 
@@ -18155,10 +18157,11 @@ fn sync_no_sources_editable_to_package_switch() -> Result<()> {
         requires-python = ">=3.8"
 
         [build-system]
-        requires = ["setuptools>=61", "wheel"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
+    local_dep.child("src/anyio/__init__.py").touch()?;
 
     // Create main project with editable source for the local dependency.
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -18174,13 +18177,14 @@ fn sync_no_sources_editable_to_package_switch() -> Result<()> {
         anyio = { path = "./local_dep", editable = true }
 
         [build-system]
-        requires = ["setuptools>=67"]
-        build-backend = "setuptools.build_meta"
-
-        [tool.setuptools.packages.find]
-        exclude = ["local_dep*"]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
+    context
+        .temp_dir
+        .child("src/test_no_sources/__init__.py")
+        .touch()?;
 
     // Step 1: `uv sync --no-sources` should install `anyio` from PyPI.
     uv_snapshot!(context.filters(), context.sync().arg("--no-sources"), @"
@@ -18299,8 +18303,8 @@ fn sync_reinstalls_on_version_change() -> Result<()> {
         requires-python = ">=3.12"
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
     child
@@ -18334,8 +18338,8 @@ fn sync_reinstalls_on_version_change() -> Result<()> {
         requires-python = ">=3.12"
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
 
