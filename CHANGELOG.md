@@ -3,6 +3,87 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.13.2
+
+Released on 2026-10-19.
+
+### Enhancements
+
+- Fix venv activation command for ksh ([#22538](https://github.com/astral-sh/uv/pull/22538))
+- Include installed packages in workspace metadata ([#22395](https://github.com/astral-sh/uv/pull/22395))
+- Include supported environments in `pylock.toml` exports ([#22596](https://github.com/astral-sh/uv/pull/22596))
+- Preserve wheel script encodings in shell launchers ([#22526](https://github.com/astral-sh/uv/pull/22526))
+- Retain diagnostics for script Python discovery failures ([#22549](https://github.com/astral-sh/uv/pull/22549))
+- Retry dropped HTTP dispatch tasks ([#22672](https://github.com/astral-sh/uv/pull/22672))
+- Skip script path lookup for non-relocatable environments ([#22572](https://github.com/astral-sh/uv/pull/22572))
+- Use PEP 508 URLs for build backend requirements ([#22577](https://github.com/astral-sh/uv/pull/22577))
+
+### Preview features
+
+- Fetch index-level variant metadata ([#22511](https://github.com/astral-sh/uv/pull/22511))
+- Recognize variant metadata in package indexes ([#22509](https://github.com/astral-sh/uv/pull/22509))
+
+### Performance
+
+- Avoid cloning resolver metadata for virtual package nodes ([#22565](https://github.com/astral-sh/uv/pull/22565))
+- Avoid expanding environment-only conflict markers ([#22615](https://github.com/astral-sh/uv/pull/22615))
+- Balance Boolean marker chains during parsing ([#22675](https://github.com/astral-sh/uv/pull/22675))
+- Cache workspace member names by path ([#22635](https://github.com/astral-sh/uv/pull/22635))
+- Extract marker DNF covers from decision diagrams ([#22651](https://github.com/astral-sh/uv/pull/22651))
+- Index dependency endpoints within each resolver fork ([#22625](https://github.com/astral-sh/uv/pull/22625))
+- Memoize repeated marker traversals ([#22674](https://github.com/astral-sh/uv/pull/22674))
+- Resolve extras and check marker reachability without DNF ([#22608](https://github.com/astral-sh/uv/pull/22608))
+- Serialize only the CycloneDX fields emitted by uv ([#22431](https://github.com/astral-sh/uv/pull/22431))
+- Store marker range edges outside decision nodes ([#22681](https://github.com/astral-sh/uv/pull/22681))
+- Upgrade toml_parser to 1.1.5 ([#22679](https://github.com/astral-sh/uv/pull/22679))
+- uv-build: remove jiff dependency ([#22539](https://github.com/astral-sh/uv/pull/22539))
+
+### Bug fixes
+
+- Coalesce marker ranges after mapping their children ([#22680](https://github.com/astral-sh/uv/pull/22680))
+- Defer publish credential prompts until authentication lookup fails ([#22593](https://github.com/astral-sh/uv/pull/22593))
+- Do not panic on conflicts with fixed-priority packages ([#22589](https://github.com/astral-sh/uv/pull/22589))
+- Exclude nonmatching files from recursive build globs ([#22581](https://github.com/astral-sh/uv/pull/22581))
+- Handle invalid Python version requests without panicking ([#22727](https://github.com/astral-sh/uv/pull/22727))
+- Honor `pylock.toml` environment restrictions during installation ([#22594](https://github.com/astral-sh/uv/pull/22594))
+- Only reuse locally built wheels when the resolver selects a source distribution ([#22685](https://github.com/astral-sh/uv/pull/22685))
+- Prefer retention of `SafeUrl` across internal APIs ([#22601](https://github.com/astral-sh/uv/pull/22601))
+- Reject invalid pylock output paths ([#22725](https://github.com/astral-sh/uv/pull/22725))
+- Remove `SafeUrl` dereferencing to `url::Url` ([#22622](https://github.com/astral-sh/uv/pull/22622))
+- Resolve fresh managed Python installations to absolute paths ([#22547](https://github.com/astral-sh/uv/pull/22547))
+- Resolve license globs before packaging ([#22583](https://github.com/astral-sh/uv/pull/22583))
+- Retain `SafeUrl` policies when removing credentials ([#22617](https://github.com/astral-sh/uv/pull/22617))
+- Show `pip check` incompatibilities in quiet mode ([#22544](https://github.com/astral-sh/uv/pull/22544))
+- Store parsed URLs in direct-origin metadata ([#22646](https://github.com/astral-sh/uv/pull/22646))
+- Use full URLs for flat-index cache keys ([#22630](https://github.com/astral-sh/uv/pull/22630))
+
+### Rust API
+
+- Gate raw `uv-pep508` URL APIs behind `unsafe-url` ([#22623](https://github.com/astral-sh/uv/pull/22623))
+
+### Documentation
+
+- Clarify documentation and correct stale guidance ([#22542](https://github.com/astral-sh/uv/pull/22542))
+
+### Other changes
+
+- Adopt stable macOS signing identifiers ([#22648](https://github.com/astral-sh/uv/pull/22648))
+- Benchmark marker operations ([#22610](https://github.com/astral-sh/uv/pull/22610))
+- Build wall-time benchmarks on a larger runner ([#22659](https://github.com/astral-sh/uv/pull/22659))
+- Compress benchmark artifacts with zstd ([#22660](https://github.com/astral-sh/uv/pull/22660))
+- Encode URL serialization policies in the type system ([#22600](https://github.com/astral-sh/uv/pull/22600))
+- Fix overlapping promotion dispatch rules ([#22540](https://github.com/astral-sh/uv/pull/22540))
+- Fold identical functions in Linux uv-build wheels ([#22573](https://github.com/astral-sh/uv/pull/22573))
+- Increase the Windows ARM trampoline test timeout ([#22566](https://github.com/astral-sh/uv/pull/22566))
+- Reduce marker interner storage and share conjunction cache entries ([#22676](https://github.com/astral-sh/uv/pull/22676))
+- Restore merge-revision checkout for walltime benchmarks ([#22562](https://github.com/astral-sh/uv/pull/22562))
+- Reuse warm Git benchmark caches ([#22657](https://github.com/astral-sh/uv/pull/22657))
+- Seed Python builds used by managed discovery tests ([#22654](https://github.com/astral-sh/uv/pull/22654))
+- Seed Python variants used by Unix debug tests ([#22652](https://github.com/astral-sh/uv/pull/22652))
+- Sync latest Python releases ([#22578](https://github.com/astral-sh/uv/pull/22578))
+- Use a builder for Packse wheel fixtures ([#22689](https://github.com/astral-sh/uv/pull/22689))
+- Use one codegen unit for benchmark builds ([#22667](https://github.com/astral-sh/uv/pull/22667))
+
 ## 0.13.1
 
 Released on 2026-10-14.
@@ -71,13 +152,11 @@ There are no breaking changes to the configuration of the [uv build backend](htt
   uv continues to use compatible Python installations that are already present. For example, `uv venv` can still use an installed Python 3.14. If no suitable interpreter is installed and automatic downloads are enabled, commands such as `uv venv` and `uvx python` can now download Python 3.15.
 
   You can opt out of this behavior by requesting Python 3.14 explicitly, e.g., `uv venv --python 3.14`. For projects, use `uv python pin 3.14` to record the version in `.python-version`.
-
 - **Honor `--require-hashes` in included constraints files** ([#22275](https://github.com/astral-sh/uv/pull/22275))
 
   Previously, uv ignored `--require-hashes` in constraints files included with `-c` from a requirements file. Now, uv honors the directive and requires hashes for all requirements in the installation. Installs that previously succeeded can now fail if a requirement is missing a hash.
 
   You cannot opt out while the directive is present. Add the missing hashes to your requirements, or remove the `--require-hashes` directive from the included constraints file if hash checking is not intended.
-
 - **Prefer native Python on Windows ARM64** ([#22100](https://github.com/astral-sh/uv/pull/22100))
 
   Previously, ARM64 builds of uv preferred emulated `x86_64` Python installations because native wheel support was limited. Now, uv prefers native ARM64 (`aarch64`) interpreters across Python versions.
@@ -87,13 +166,11 @@ There are no breaking changes to the configuration of the [uv build backend](htt
   When a native interpreter is unavailable, uv continues to fall back to `x86_64`, then 32-bit `x86`.
 
   You can opt out of this behavior by setting `UV_PYTHON_ARCH=x86_64` or requesting an explicit architecture, e.g., `cpython-3.14-windows-x86_64`. If you are using `setup-uv`, you can set [`python-arch: x86_64`](https://github.com/astral-sh/setup-uv#python-architecture) instead.
-
 - **Reject editable requirements in included constraints files** ([#22282](https://github.com/astral-sh/uv/pull/22282))
 
   Previously, uv silently ignored editable (`-e`) requirements in constraints files included with `-c` from a requirements file. Now, uv rejects these requirements with an error, matching [pip's behavior](https://pip.pypa.io/en/stable/user_guide/#constraints-files).
 
   You cannot opt out of this behavior. Move editable requirements to a requirements file passed with `-r`, or pass them directly with `--editable`, instead of including them in a constraints file.
-
 - **Omit the distutils startup patch on Python 3.10 and later** ([#22096](https://github.com/astral-sh/uv/pull/22096))
 
   Previously, uv installed `_virtualenv.py` and `_virtualenv.pth` into every new virtual environment to prevent distutils configuration from changing installation paths. Now, like [`virtualenv` 21.6.0](https://github.com/pypa/virtualenv/releases/tag/21.6.0), uv omits these files on Python 3.10 and later, which already ignore the affected configuration keys. This reduces Python startup overhead. Python 3.9 and earlier retain the patch.
@@ -101,7 +178,6 @@ There are no breaking changes to the configuration of the [uv build backend](htt
   You cannot opt out of this behavior. Existing virtual environments are not modified automatically. Recreate an environment with Python 3.10 or later to remove the patch.
 
   This stabilizes the `no-distutils-patch` preview feature.
-
 - **Treat requirement-file option values as single paths** ([#22290](https://github.com/astral-sh/uv/pull/22290))
 
   Previously, uv split values passed to `--constraint`, `--override`, `--exclude`, and `--build-constraint` on spaces, even when quoted. Now, each value is treated as a single path, allowing file paths containing spaces.
@@ -109,7 +185,6 @@ There are no breaking changes to the configuration of the [uv build backend](htt
   You cannot opt out of this behavior. Repeat the option to provide multiple files. For example, replace `-c "a.txt b.txt"` with `-c a.txt -c b.txt`.
 
   Space-separated lists in `UV_CONSTRAINT`, `UV_OVERRIDE`, `UV_EXCLUDE`, and `UV_BUILD_CONSTRAINT` remain supported.
-
 - **Use `tar-codec` for tar archives by default** ([#22094](https://github.com/astral-sh/uv/pull/22094))
 
   Previously, uv used `astral-tokio-tar` to extract tar archives, build source distributions with `uv_build`, and read their metadata for `uv publish`. Now, uv uses `tar-codec`, which applies stricter validation when reading archives.
@@ -119,13 +194,12 @@ There are no breaking changes to the configuration of the [uv build backend](htt
   You can opt out of this behavior by setting `UV_LEGACY_TAR_BACKEND=1`.
 
   This stabilizes the `tar-codec` preview feature.
-
 - **Reject `uv build --clear` output directories that contain a build source**
-  ([#22276](https://github.com/astral-sh/uv/pull/22276))
+([#22276](https://github.com/astral-sh/uv/pull/22276))
 
   Previously, `uv build --clear` could delete a project or input source distribution when the
-  output directory contained the source. Now, uv rejects these output directories, including
-  equivalent paths reached through symlinks, before clearing any build output.
+output directory contained the source. Now, uv rejects these output directories, including
+equivalent paths reached through symlinks, before clearing any build output.
 
   Select an output directory that does not contain any build sources, or omit `--clear`.
 
@@ -198,3 +272,4 @@ See [changelogs/0.2.x](./changelogs/0.2.x.md)
 See [changelogs/0.1.x](./changelogs/0.1.x.md)
 
 <!-- prettier-ignore-end -->
+
