@@ -3,11 +3,12 @@ use std::sync::Arc;
 use tokio::sync::mpsc::Sender;
 
 use uv_distribution_types::{
-    Dist, DistributionId, Identifier, IndexMetadata, IndexUrl, Name, ResolutionRecorder,
+    DistributionId, Identifier, IndexMetadata, IndexUrl, Name, ResolutionRecorder,
 };
 use uv_normalize::PackageName;
 use uv_once_map::Registration;
 use uv_pep440::Version;
+use uv_pypi_types::VerbatimParsedUrl;
 
 use crate::pubgrub::Range;
 use crate::resolved::ResolvedDistRef;
@@ -25,21 +26,21 @@ pub(crate) struct MetadataRequests {
 
 /// A distribution request whose cache identity is derived from the requested distribution.
 pub(crate) enum MetadataRequest<'a> {
-    Dist(Dist),
+    Url(PackageName, Box<VerbatimParsedUrl>),
     Resolved(ResolvedDistRef<'a>),
 }
 
 impl MetadataRequest<'_> {
     fn id(&self) -> DistributionId {
         match self {
-            Self::Dist(dist) => dist.distribution_id(),
+            Self::Url(_, url) => url.verbatim.distribution_id(),
             Self::Resolved(dist) => dist.distribution_id(),
         }
     }
 
     fn into_request(self) -> Request {
         match self {
-            Self::Dist(dist) => Request::Dist(dist),
+            Self::Url(name, url) => Request::Url(name, url),
             Self::Resolved(dist) => Request::from(dist),
         }
     }
@@ -48,7 +49,7 @@ impl MetadataRequest<'_> {
 impl Name for MetadataRequest<'_> {
     fn name(&self) -> &PackageName {
         match self {
-            Self::Dist(dist) => dist.name(),
+            Self::Url(name, _) => name,
             Self::Resolved(dist) => dist.name(),
         }
     }
@@ -167,7 +168,12 @@ impl MetadataRequests {
         if let Some(recorder) = &self.recorder {
             recorder.dependency_metadata(request.name());
         }
-        if self.index.distributions().register(request.id()) {
+        let resolve_url = match &request {
+            MetadataRequest::Url(_, url) => self.index.register_url(url),
+            MetadataRequest::Resolved(_) => false,
+        };
+        let fetch_metadata = self.index.distributions().register(request.id());
+        if resolve_url || fetch_metadata {
             self.sender.blocking_send(request.into_request())?;
         }
         Ok(())
@@ -211,14 +217,18 @@ impl MetadataRequests {
     }
 
     /// Acquire metadata registered during input preparation or package visitation.
-    pub(crate) fn metadata(&self, dist: &Dist) -> Result<RegisteredMetadata<'_>, ResolveError> {
+    pub(crate) fn url_metadata(
+        &self,
+        name: &PackageName,
+        url: &VerbatimParsedUrl,
+    ) -> Result<RegisteredMetadata<'_>, ResolveError> {
         if let Some(recorder) = &self.recorder {
-            recorder.dependency_metadata(dist.name());
+            recorder.dependency_metadata(name);
         }
         self.index
             .distributions()
-            .get_registered(dist.distribution_id())
+            .get_registered(url.verbatim.distribution_id())
             .map(RegisteredMetadata)
-            .ok_or_else(|| ResolveError::UnregisteredTask(dist.to_string()))
+            .ok_or_else(|| ResolveError::UnregisteredTask(format!("{name} @ {}", url.verbatim)))
     }
 }

@@ -20,7 +20,7 @@ use uv_cache::{ArchiveFileId, ArchiveId, Cache, CacheBucket, CacheEntry, WheelCa
 use uv_cache_info::{CacheInfo, Timestamp};
 use uv_client::{
     CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
-    RequestBuilder, RetryState,
+    RequestBuilder, RetryState, validate_archive_filename,
 };
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
@@ -36,7 +36,10 @@ use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_platform_tags::Tags;
 use uv_preview::PreviewFeature;
-use uv_pypi_types::{HashDigest, HashDigests, PyProjectToml, ResolutionMetadata};
+use uv_pypi_types::{
+    ArchiveUrlFilename, HashDigest, HashDigests, ParsedArchiveUrl, ParsedUrl, PyProjectToml,
+    ResolutionMetadata, VerbatimParsedUrl,
+};
 use uv_python_types::PythonVariant;
 use uv_redacted::SafeUrl;
 use uv_threads::initialize_rayon_once;
@@ -134,6 +137,39 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             recorder.dependency_metadata(name);
         }
         self.build_context.dependency_metadata().get(name, version)
+    }
+
+    /// Resolve the archive filename of a URL before constructing its distribution.
+    pub async fn resolve_url(
+        &self,
+        name: &PackageName,
+        url: &VerbatimParsedUrl,
+    ) -> Result<Dist, Error> {
+        let mut url = url.clone();
+        if let ParsedUrl::Archive(archive) = &mut url.parsed_url {
+            self.resolve_archive_url(archive, Some(name)).await?;
+        }
+        Ok(Dist::from_url(name.clone(), url)?)
+    }
+
+    /// Discover an archive filename when its URL does not identify the archive format.
+    pub async fn resolve_archive_url(
+        &self,
+        archive: &mut ParsedArchiveUrl,
+        package_hint: Option<&PackageName>,
+    ) -> Result<(), Error> {
+        match &archive.archive {
+            ArchiveUrlFilename::Unknown => {
+                let filename = self
+                    .client
+                    .managed(|client| client.archive_filename(&archive.url, package_hint))
+                    .await?;
+                archive.archive = ArchiveUrlFilename::from_header(filename)
+                    .map_err(|error| Error::ArchiveFilename(archive.url.clone(), error))?;
+            }
+            ArchiveUrlFilename::Url(_) | ArchiveUrlFilename::Header { .. } => {}
+        }
+        Ok(())
     }
 
     /// Set the build stack to use for the [`DistributionDatabase`].
@@ -389,7 +425,9 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 // Create a cache entry for the wheel.
                 let wheel_entry = self.build_context.cache().entry(
                     CacheBucket::Wheels,
-                    WheelCache::Url(&wheel.url).wheel_dir(wheel.name().as_ref()),
+                    WheelCache::Url(&wheel.url)
+                        .root_with_filename(wheel.header_filename.as_deref())
+                        .join(wheel.name().as_str()),
                     wheel.filename.cache_key(),
                 );
 
@@ -806,6 +844,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
         let download = |response: reqwest::Response, _: &mut RetryState| {
             async {
+                if let BuiltDist::DirectUrl(wheel) = dist
+                    && let Some(expected) = wheel.header_filename.as_deref()
+                {
+                    validate_archive_filename(&wheel.url, response.headers(), expected)?;
+                }
                 let hashes = if let BuiltDist::Registry(wheels) = dist {
                     hashes.with_index_hashes(wheels.best_wheel().file.hashes.as_slice())
                 } else {
@@ -1159,6 +1202,12 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         // Errors returned from this loop reach the outer retry classifier, which may restart
         // the full download.
         loop {
+            if response.status() != reqwest::StatusCode::PARTIAL_CONTENT
+                && let BuiltDist::DirectUrl(wheel) = dist
+                && let Some(expected) = wheel.header_filename.as_deref()
+            {
+                validate_archive_filename(&wheel.url, response.headers(), expected)?;
+            }
             // Reject conflicting full-response lengths before reading the body. A range response's
             // Content-Length describes only that range, so it cannot be compared to the wheel size.
             if response.status() == reqwest::StatusCode::OK

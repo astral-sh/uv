@@ -8,10 +8,10 @@ use tracing::trace;
 use uv_configuration::{Constraints, DependencyModifierScope, DependencyModifiers};
 use uv_distribution::{DistributionDatabase, Reporter};
 use uv_distribution_types::{Dist, Identifier, Requirement, RequirementSource};
-use uv_resolver::{InMemoryIndex, MetadataResponse, ResolverEnvironment};
+use uv_resolver::{InMemoryIndex, MetadataResponse, PythonRequirement, ResolverEnvironment};
 use uv_types::{BuildContext, HashStrategy, HashVerification, RequestedRequirements};
 
-use crate::{Error, required_dist};
+use crate::{Error, required_dist, validate_metadata_name};
 
 /// A resolver for resolving lookahead requirements from direct URLs.
 ///
@@ -75,18 +75,18 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
 
     /// Resolve the requirements from the provided source trees.
     ///
-    /// When the environment is not given, this treats all marker expressions
-    /// that reference the environment as true. In other words, it does
-    /// environment independent expression evaluation. (Which in turn devolves
-    /// to "only evaluate marker expressions that reference an extra name.")
+    /// In universal mode, markers must overlap the supported Python versions. Other environment
+    /// markers are treated as true, while markers that reference extras are evaluated normally.
     pub async fn resolve(
         self,
         env: &ResolverEnvironment,
+        python_requirement: &PythonRequirement,
     ) -> Result<(Vec<RequestedRequirements>, HashStrategy), Error> {
         let mut results = Vec::new();
         let mut futures = FuturesUnordered::new();
         let mut seen = FxHashSet::default();
         let mut hasher = self.hasher.clone();
+        let python_marker = python_requirement.to_marker_tree();
 
         // Queue up the initial requirements.
         let mut queue: VecDeque<_> = self
@@ -96,6 +96,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                     .apply(DependencyModifierScope::Global, self.requirements),
             )
             .filter(|requirement| requirement.evaluate_markers(env.marker_environment(), &[]))
+            .filter(|requirement| !python_marker.is_disjoint(requirement.marker))
             .map(|requirement| (*requirement).clone())
             .collect();
 
@@ -147,6 +148,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                     )) {
                         if requirement
                             .evaluate_markers(env.marker_environment(), lookahead.extras())
+                            && !python_marker.is_disjoint(requirement.marker)
                         {
                             queue.push_back((*requirement).clone());
                         }
@@ -169,7 +171,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
 
         // Determine whether the requirement represents a local distribution and convert to a
         // buildable distribution.
-        let Some(dist) = required_dist(&requirement)? else {
+        let Some(dist) = required_dist(&requirement, &self.database).await? else {
             return Ok(None);
         };
 
@@ -185,7 +187,9 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
         // Fetch the metadata for the distribution.
         let metadata = {
             let id = dist.distribution_id();
-            if let Some(response) = self.index.distributions().register_or_wait(&id).await {
+            if let Some(response) = self.index.distributions().register_or_wait(&id).await
+                && self.index.is_url_metadata_valid(&dist)
+            {
                 let MetadataResponse::Found(archive) = &*response else {
                     panic!("Failed to find metadata for: {requirement}");
                 };
@@ -196,18 +200,19 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                     .database
                     .get_or_build_wheel_metadata(&dist, hasher.metadata_policy(&dist))
                     .await
-                    .map_err(|err| Error::from_dist(dist, err))?;
+                    .map_err(|err| Error::from_dist(dist.clone(), err))?;
 
                 let metadata = archive.metadata.clone();
 
                 // Insert the metadata into the index.
                 self.index
-                    .distributions()
-                    .done(id, Arc::new(MetadataResponse::Found(archive)));
+                    .insert_url(&dist, Arc::new(MetadataResponse::Found(archive)));
 
                 metadata
             }
         };
+
+        validate_metadata_name(&requirement.name, &metadata.name)?;
 
         // Respect recursive extras by propagating the source extras to the dependencies.
         let package = metadata.name.clone();

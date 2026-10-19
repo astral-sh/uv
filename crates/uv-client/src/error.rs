@@ -184,6 +184,7 @@ impl Error {
             | ErrorKind::InvalidContentTypeHeader(..)
             | ErrorKind::MissingArchiveFilename(_)
             | ErrorKind::InvalidContentDisposition(..)
+            | ErrorKind::MismatchedArchiveFilename { .. }
             | ErrorKind::UnsupportedMediaType(..)
             | ErrorKind::Offline(_) => true,
             ErrorKind::Git(error) => error.is_user_failure(),
@@ -556,6 +557,15 @@ pub enum ErrorKind {
 
     #[error("Invalid `Content-Disposition` header for `{0}`")]
     InvalidContentDisposition(SafeUrl, #[source] ContentDispositionError),
+
+    #[error(
+        "Filename in `Content-Disposition` header for `{url}` changed from `{expected}` to `{actual}`"
+    )]
+    MismatchedArchiveFilename {
+        url: SafeUrl,
+        expected: String,
+        actual: String,
+    },
 
     #[error("Unsupported `Content-Type` \"{1}\" for `{0}`. Expected JSON or HTML.")]
     UnsupportedMediaType(SafeUrl, String),

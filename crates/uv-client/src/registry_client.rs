@@ -47,7 +47,7 @@ use crate::remote_metadata::wheel_metadata_from_remote_zip;
 use crate::rkyvutil::OwnedArchive;
 use crate::{
     BaseClient, CachedClient, Error, ErrorKind, FlatIndexClient, RedirectClientWithMiddleware,
-    RetryState, content_disposition_filename,
+    RetryState, content_disposition_filename, validate_archive_filename,
 };
 
 /// A builder for an [`RegistryClient`].
@@ -209,6 +209,7 @@ impl<'a> RegistryClientBuilder<'a> {
             client,
             read_timeout,
             flat_indexes: Arc::default(),
+            archive_filename_locks: Arc::default(),
             parse_concurrency: Arc::new(Semaphore::new(
                 thread::available_parallelism().map_or(1, |parallelism| parallelism.get().min(4)),
             )),
@@ -237,6 +238,8 @@ pub struct RegistryClient {
     read_timeout: Duration,
     /// The flat index entries for each `--find-links`-style index URL, with one slot per index.
     flat_indexes: Arc<Mutex<FlatIndexCache>>,
+    /// Serialize filename discovery for each URL, including across clones of this client.
+    archive_filename_locks: Arc<Mutex<FxHashMap<SafeUrl, Arc<Mutex<()>>>>>,
     /// Bound CPU work for large remote index responses independently of network requests.
     parse_concurrency: Arc<Semaphore>,
     /// Limit decoded input bytes held by offloaded parsers, independently of parsed output size.
@@ -286,11 +289,25 @@ impl RegistryClient {
     ) -> Result<String, Error> {
         let mut url = location.clone();
         url.set_fragment(None);
+        let lock = self
+            .archive_filename_locks
+            .lock()
+            .await
+            .entry(url.clone())
+            .or_default()
+            .clone();
+        let _guard = lock.lock().await;
         let cache_entry = self.cache.entry(
             CacheBucket::ArchiveFilenames,
             "url",
             format!("{}.msgpack", cache_digest(&url)),
         );
+        #[cfg(windows)]
+        let _lock = cache_entry
+            .with_file(format!("{}.lock", cache_digest(&url)))
+            .lock()
+            .await
+            .map_err(ErrorKind::CacheLock)?;
         let cache_control = match self.connectivity {
             Connectivity::Online => CacheControl::from(
                 self.cache
@@ -1031,6 +1048,7 @@ impl RegistryClient {
                     &wheel.filename,
                     &wheel.url,
                     None,
+                    wheel.header_filename.as_deref(),
                     WheelCache::Url(&wheel.url),
                     capabilities,
                 )
@@ -1212,6 +1230,7 @@ impl RegistryClient {
                 filename,
                 url,
                 Some(index),
+                None,
                 WheelCache::Index(index),
                 capabilities,
             )
@@ -1225,12 +1244,15 @@ impl RegistryClient {
         filename: &'data WheelFilename,
         url: &'data SafeUrl,
         index: Option<&'data IndexUrl>,
+        header_filename: Option<&'data str>,
         cache_shard: WheelCache<'data>,
         capabilities: &'data IndexCapabilities,
     ) -> Result<ResolutionMetadata, Error> {
         let cache_entry = self.cache.entry(
             CacheBucket::Wheels,
-            cache_shard.wheel_dir(filename.name.as_ref()),
+            cache_shard
+                .root_with_filename(header_filename)
+                .join(filename.name.as_str()),
             format!("{}.msgpack", filename.cache_key()),
         );
         let cache_control = match self.connectivity {
@@ -1369,6 +1391,10 @@ impl RegistryClient {
         // Stream the file, searching for the METADATA.
         let read_metadata_stream = |response: Response, _: &mut RetryState| {
             async {
+                if let Some(expected) = header_filename {
+                    validate_archive_filename(url, response.headers(), expected)
+                        .map_err(Error::into_kind)?;
+                }
                 let reader = response
                     .bytes_stream()
                     .map_err(|err| self.handle_response_errors(err))
@@ -1893,6 +1919,7 @@ impl Connectivity {
 mod tests {
     use std::assert_matches;
     use std::str::FromStr;
+    use std::time::Duration;
 
     use insta::{assert_debug_snapshot, assert_snapshot};
     use tokio::sync::Semaphore;
@@ -1915,6 +1942,35 @@ mod tests {
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     type Error = Box<dyn std::error::Error>;
+
+    #[tokio::test]
+    async fn archive_filename_concurrent_cache() -> Result<(), Error> {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("cache-control", "max-age=3600")
+                    .insert_header(
+                        "content-disposition",
+                        "attachment; filename=example-1.0.tar.gz",
+                    )
+                    .set_delay(Duration::from_millis(50)),
+            )
+            .expect(1)
+            .mount(&server)
+            .await;
+        let client =
+            RegistryClientBuilder::new(BaseClientBuilder::default(), Cache::temp()?).build()?;
+        let cloned = client.clone();
+        let location = SafeUrl::parse(&format!("{}/download", server.uri()))?;
+        let (first, second) = tokio::join!(
+            client.archive_filename(&location, None),
+            cloned.archive_filename(&location, None),
+        );
+        assert_snapshot!(first?, @"example-1.0.tar.gz");
+        assert_snapshot!(second?, @"example-1.0.tar.gz");
+        Ok(())
+    }
 
     #[tokio::test]
     async fn archive_filename_redirect() -> Result<(), Error> {

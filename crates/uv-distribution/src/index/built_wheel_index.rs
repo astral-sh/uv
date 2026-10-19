@@ -16,7 +16,7 @@ use crate::Error;
 use crate::index::cached_wheel::{CachedWheel, ResolvedWheel};
 use crate::source::{
     HASHES, HTTP_REVISION, HttpRevisionPointer, LOCAL_REVISION, LocalRevisionPointer,
-    RevisionHashes,
+    RevisionHashes, url_cache_shard,
 };
 
 /// A local index of built distributions for a specific source distribution.
@@ -58,10 +58,10 @@ impl<'a> BuiltWheelIndex<'a> {
     /// This method does not perform any freshness checks and assumes that the source distribution
     /// is already up-to-date.
     pub fn url(&self, source_dist: &DirectUrlSourceDist) -> Result<Option<CachedWheel>, Error> {
-        // For direct URLs, cache directly under the hash of the URL itself.
-        let cache_shard = self.cache.shard(
-            CacheBucket::SourceDistributions,
-            WheelCache::Url(source_dist.url.raw()).root(),
+        let cache_shard = url_cache_shard(
+            self.cache,
+            source_dist.url.raw(),
+            source_dist.header_filename.as_deref(),
         );
 
         // Read the revision from the cache.

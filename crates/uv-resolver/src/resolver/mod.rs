@@ -1036,8 +1036,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 }
 
                 // Emit a request to fetch the metadata for this distribution.
-                let dist = Dist::from_url(name.clone(), url.clone())?;
-                requests.enqueue_metadata(MetadataRequest::Dist(dist))?;
+                requests
+                    .enqueue_metadata(MetadataRequest::Url(name.clone(), Box::new(url.clone())))?;
             }
             PackageSource::Registry(index) => {
                 requests.enqueue_package(name, index)?;
@@ -1187,8 +1187,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             url.verbatim
         );
 
-        let dist = Dist::from_url(name.clone(), url.clone())?;
-        let registered = requests.metadata(&dist)?;
+        let registered = requests.url_metadata(name, url)?;
+        // Discovery can fail before metadata exists, including when metadata was preloaded.
+        let dist = self.index.resolved_url(name.clone(), url.clone())?;
         let response = registered.wait();
 
         // If we failed to fetch the metadata for a URL, we can't proceed.
@@ -1212,6 +1213,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             }
         };
 
+        // URL metadata can be shared by requirements with different declared names.
+        if &metadata.name != name {
+            return Err(ResolveError::MismatchedPackageName {
+                request: "distribution metadata",
+                expected: name.clone(),
+                actual: metadata.name.clone(),
+            });
+        }
         let version = &metadata.version;
 
         // The version is incompatible with the requirement.
@@ -2069,15 +2078,74 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             warn!("`{dist}` {message}");
                         }
                     }
-                    self.index
-                        .distributions()
-                        .done(dist.distribution_id(), Arc::new(metadata));
+                    self.index.insert_url(&dist, Arc::new(metadata));
                 }
                 None => {}
             }
         }
 
         Ok::<(), ResolveError>(())
+    }
+
+    /// Fetch metadata after the URL has been classified as a concrete distribution.
+    async fn fetch_dist<Provider: ResolverProvider>(
+        &self,
+        dist: &Dist,
+        provider: &Provider,
+    ) -> Result<MetadataResponse, ResolveError> {
+        if let Some(version) = dist.version() {
+            if let Some(index) = dist.index() {
+                // Check the implicit indexes for pre-provided metadata.
+                let versions_response = self.index.implicit().get(dist.name());
+                if let Some(VersionsResponse::Found(version_maps)) = versions_response.as_deref() {
+                    for version_map in version_maps {
+                        if version_map.index() == Some(index) {
+                            let Some(metadata) = version_map.get_metadata(version) else {
+                                continue;
+                            };
+                            debug!("Found registry-provided metadata for: {dist}");
+                            return Ok(MetadataResponse::Found(ArchiveMetadata::from_metadata23(
+                                metadata,
+                            )));
+                        }
+                    }
+                }
+
+                // Check the explicit indexes for pre-provided metadata.
+                let versions_response = self
+                    .index
+                    .explicit()
+                    .get(&(dist.name().clone(), index.clone()));
+                if let Some(VersionsResponse::Found(version_maps)) = versions_response.as_deref() {
+                    for version_map in version_maps {
+                        let Some(metadata) = version_map.get_metadata(version) else {
+                            continue;
+                        };
+                        debug!("Found registry-provided metadata for: {dist}");
+                        return Ok(MetadataResponse::Found(ArchiveMetadata::from_metadata23(
+                            metadata,
+                        )));
+                    }
+                }
+            }
+        }
+
+        let metadata = provider
+            .get_or_build_wheel_metadata(dist)
+            .boxed_local()
+            .await?;
+
+        if let MetadataResponse::Found(metadata) = &metadata {
+            if &metadata.metadata.name != dist.name() {
+                return Err(ResolveError::MismatchedPackageName {
+                    request: "distribution metadata",
+                    expected: dist.name().clone(),
+                    actual: metadata.metadata.name.clone(),
+                });
+            }
+        }
+
+        Ok(metadata)
     }
 
     #[instrument(skip_all, fields(%request))]
@@ -2102,70 +2170,29 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 )))
             }
 
+            // Resolve opaque archive URLs before fetching their metadata.
+            Request::Url(name, url) => {
+                let dist = match provider.resolve_url(&name, &url).await {
+                    Ok(dist) => dist,
+                    Err(error) => {
+                        let error = Arc::new(ResolveError::Distribution(error));
+                        self.index.fail_url(&url, error.clone());
+                        return Err(ResolveError::UrlResolution(error));
+                    }
+                };
+                let metadata = match self.fetch_dist(&dist, provider).await {
+                    Ok(metadata) => metadata,
+                    Err(error) => {
+                        let error = Arc::new(error);
+                        self.index.fail_url(&url, error.clone());
+                        return Err(ResolveError::UrlResolution(error));
+                    }
+                };
+                Ok(Some(Response::Dist { dist, metadata }))
+            }
             // Fetch distribution metadata from the distribution database.
             Request::Dist(dist) => {
-                if let Some(version) = dist.version() {
-                    if let Some(index) = dist.index() {
-                        // Check the implicit indexes for pre-provided metadata.
-                        let versions_response = self.index.implicit().get(dist.name());
-                        if let Some(VersionsResponse::Found(version_maps)) =
-                            versions_response.as_deref()
-                        {
-                            for version_map in version_maps {
-                                if version_map.index() == Some(index) {
-                                    let Some(metadata) = version_map.get_metadata(version) else {
-                                        continue;
-                                    };
-                                    debug!("Found registry-provided metadata for: {dist}");
-                                    return Ok(Some(Response::Dist {
-                                        dist,
-                                        metadata: MetadataResponse::Found(
-                                            ArchiveMetadata::from_metadata23(metadata),
-                                        ),
-                                    }));
-                                }
-                            }
-                        }
-
-                        // Check the explicit indexes for pre-provided metadata.
-                        let versions_response = self
-                            .index
-                            .explicit()
-                            .get(&(dist.name().clone(), index.clone()));
-                        if let Some(VersionsResponse::Found(version_maps)) =
-                            versions_response.as_deref()
-                        {
-                            for version_map in version_maps {
-                                let Some(metadata) = version_map.get_metadata(version) else {
-                                    continue;
-                                };
-                                debug!("Found registry-provided metadata for: {dist}");
-                                return Ok(Some(Response::Dist {
-                                    dist,
-                                    metadata: MetadataResponse::Found(
-                                        ArchiveMetadata::from_metadata23(metadata),
-                                    ),
-                                }));
-                            }
-                        }
-                    }
-                }
-
-                let metadata = provider
-                    .get_or_build_wheel_metadata(&dist)
-                    .boxed_local()
-                    .await?;
-
-                if let MetadataResponse::Found(metadata) = &metadata {
-                    if &metadata.metadata.name != dist.name() {
-                        return Err(ResolveError::MismatchedPackageName {
-                            request: "distribution metadata",
-                            expected: dist.name().clone(),
-                            actual: metadata.metadata.name.clone(),
-                        });
-                    }
-                }
-
+                let metadata = self.fetch_dist(&dist, provider).await?;
                 Ok(Some(Response::Dist { dist, metadata }))
             }
 
@@ -3293,6 +3320,8 @@ fn widen_to_gap(version: &Version, known_versions: Option<&[Version]>) -> Range<
 pub(crate) enum Request {
     /// A request to fetch the metadata for a package.
     Package(PackageName, Option<IndexMetadata>),
+    /// A request to resolve a URL and fetch its distribution metadata.
+    Url(PackageName, Box<VerbatimParsedUrl>),
     /// A request to fetch the metadata for a built or source distribution.
     Dist(Dist),
     /// A request to fetch the metadata from an already-installed distribution.
@@ -3343,6 +3372,9 @@ impl Display for Request {
         match self {
             Self::Package(package_name, _) => {
                 write!(f, "Versions {package_name}")
+            }
+            Self::Url(name, url) => {
+                write!(f, "Metadata `{name} @ {}`", url.verbatim)
             }
             Self::Dist(dist) => {
                 write!(f, "Metadata `{dist}`")

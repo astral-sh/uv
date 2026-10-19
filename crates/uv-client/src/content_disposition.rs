@@ -5,6 +5,9 @@ use http::HeaderMap;
 use http::header::CONTENT_DISPOSITION;
 use percent_encoding::percent_decode;
 use rustc_hash::FxHashSet;
+use uv_redacted::SafeUrl;
+
+use crate::{Error, ErrorKind};
 
 /// An invalid filename in a `Content-Disposition` response header.
 #[derive(Debug, thiserror::Error)]
@@ -79,6 +82,26 @@ pub fn content_disposition_filename(
         return Err(ContentDispositionError::InvalidFilename);
     }
     Ok(None)
+}
+
+/// Require a full archive response to advertise the filename used to resolve its distribution.
+pub fn validate_archive_filename(
+    location: &SafeUrl,
+    headers: &HeaderMap,
+    expected: &str,
+) -> Result<(), Error> {
+    let actual = content_disposition_filename(headers)
+        .map_err(|error| ErrorKind::InvalidContentDisposition(location.clone(), error))?
+        .ok_or_else(|| ErrorKind::MissingArchiveFilename(location.clone()))?;
+    if actual != expected {
+        return Err(ErrorKind::MismatchedArchiveFilename {
+            url: location.clone(),
+            expected: expected.to_owned(),
+            actual,
+        }
+        .into());
+    }
+    Ok(())
 }
 
 /// Decode the UTF-8 form of an RFC 8187 extended parameter value.
@@ -187,9 +210,39 @@ impl<'a> Parser<'a> {
 mod tests {
     use http::HeaderMap;
     use http::header::{CONTENT_DISPOSITION, HeaderValue};
-    use insta::assert_debug_snapshot;
+    use insta::{assert_debug_snapshot, assert_snapshot};
+    use uv_redacted::SafeUrl;
 
-    use super::content_disposition_filename;
+    use super::{content_disposition_filename, validate_archive_filename};
+
+    #[test]
+    fn archive_filename_consistency() -> Result<(), Box<dyn std::error::Error>> {
+        let location = SafeUrl::parse("https://example.com/download")?;
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            CONTENT_DISPOSITION,
+            HeaderValue::from_static("attachment; filename=example-1.0.tar.gz"),
+        );
+        validate_archive_filename(&location, &headers, "example-1.0.tar.gz")?;
+
+        let error = validate_archive_filename(&location, &headers, "example-2.0.tar.gz")
+            .expect_err("the filename must match the resolved distribution");
+        assert_snapshot!(error, @"Filename in `Content-Disposition` header for `https://example.com/download` changed from `example-2.0.tar.gz` to `example-1.0.tar.gz`");
+
+        headers.remove(CONTENT_DISPOSITION);
+        let error = validate_archive_filename(&location, &headers, "example-1.0.tar.gz")
+            .expect_err("the response must advertise the resolved filename");
+        assert_snapshot!(error, @"Missing filename in `Content-Disposition` header for `https://example.com/download`");
+
+        headers.insert(
+            CONTENT_DISPOSITION,
+            HeaderValue::from_static("attachment; filename=first.tar.gz; filename=second.tar.gz"),
+        );
+        let error = validate_archive_filename(&location, &headers, "example-1.0.tar.gz")
+            .expect_err("the response must contain an unambiguous filename");
+        assert_snapshot!(error, @"Invalid `Content-Disposition` header for `https://example.com/download`");
+        Ok(())
+    }
 
     #[test]
     fn filename_parameters() {

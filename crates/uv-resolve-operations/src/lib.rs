@@ -154,7 +154,13 @@ pub async fn resolve(
                     .with_recorder(recorder.clone()),
                 )
                 .with_reporter(Arc::new(ResolverReporter::from(printer)))
-                .resolve(unnamed.into_iter())
+                .resolve(unnamed.into_iter().filter(|requirement| {
+                    requirement
+                        .evaluate_optional_environment(resolver_env.marker_environment(), &[])
+                        && !python_requirement
+                            .to_marker_tree()
+                            .is_disjoint(requirement.marker)
+                }))
                 .await?,
             );
         }
@@ -298,7 +304,13 @@ pub async fn resolve(
                     .with_recorder(recorder.clone()),
                 )
                 .with_reporter(Arc::new(ResolverReporter::from(printer)))
-                .resolve(unnamed.into_iter())
+                .resolve(unnamed.into_iter().filter(|requirement| {
+                    requirement
+                        .evaluate_optional_environment(resolver_env.marker_environment(), &[])
+                        && !python_requirement
+                            .to_marker_tree()
+                            .is_disjoint(requirement.marker)
+                }))
                 .await?,
             );
         }
@@ -342,7 +354,7 @@ pub async fn resolve(
                 .with_recorder(recorder.clone()),
             )
             .with_reporter(Arc::new(ResolverReporter::from(printer)))
-            .resolve(&resolver_env)
+            .resolve(&resolver_env, &python_requirement)
             .await?;
             hasher = updated_hasher;
             lookaheads
