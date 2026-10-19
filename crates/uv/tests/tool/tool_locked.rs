@@ -23,9 +23,10 @@ use wiremock::{
 use uv_extract::hash::Hasher;
 use uv_fs::PythonExt;
 use uv_pypi_types::{HashAlgorithm, HashDigest};
+use uv_redacted::SafeUrl;
 use uv_static::EnvVars;
 use uv_test::archive::{generate_source_archive, write_tar_gz};
-use uv_test::packse::generate_wheel_with_files;
+use uv_test::packse::WheelBuilder;
 use uv_test::{TestContext, uv_snapshot};
 
 #[cfg(feature = "test-pypi")]
@@ -63,15 +64,11 @@ fn tool(
     if let Some(lock) = lock {
         files.push((&pylock_path, lock));
     }
-    let (filename, bytes) = generate_wheel_with_files(
-        &"locked-tool".parse()?,
-        &version.parse()?,
-        &["idna>=3.3,<3.5".parse()?],
-        &BTreeMap::new(),
-        python.map(str::parse).transpose()?.as_ref(),
-        "py3-none-any",
-        &files,
-    );
+    let (filename, bytes) = WheelBuilder::new(&"locked-tool".parse()?, &version.parse()?)
+        .requires(&["idna>=3.3,<3.5".parse()?])
+        .requires_python(python.map(str::parse).transpose()?.as_ref())
+        .files(&files)
+        .build();
     context
         .temp_dir
         .child("wheels")
@@ -108,15 +105,10 @@ async fn packaged_lock_overrides_and_excludes() -> Result<()> {
         } else {
             BTreeMap::new()
         };
-        let (filename, wheel) = generate_wheel_with_files(
-            &name.parse()?,
-            &version.parse()?,
-            &dependencies,
-            &extras,
-            None,
-            "py3-none-any",
-            &[],
-        );
+        let (filename, wheel) = WheelBuilder::new(&name.parse()?, &version.parse()?)
+            .requires(&dependencies)
+            .extras(&extras)
+            .build();
         let hash = hex::encode(Sha256::digest(&wheel));
         let url = format!("{}/files/{filename}", server.uri());
         index_files
@@ -543,18 +535,10 @@ async fn packaged_lock_removed_packages_do_not_require_old_indexes() -> Result<(
     let mut idna_hash = None;
     let mut beta_hash = None;
     for (name, version) in [("idna", "3.5"), ("beta", "2.0")] {
-        let (filename, wheel) = generate_wheel_with_files(
-            &name.parse()?,
-            &version.parse()?,
-            &[],
-            &BTreeMap::new(),
-            None,
-            "py3-none-any",
-            &[],
-        );
+        let (filename, wheel) = WheelBuilder::new(&name.parse()?, &version.parse()?).build();
         let path = context.temp_dir.child("wheels").child(filename);
         path.write_binary(&wheel)?;
-        let url = url::Url::from_file_path(path.path())
+        let url = SafeUrl::from_file_path(path.path())
             .map_err(|()| anyhow::anyhow!("Could not create a file URL"))?;
         let hash = hex::encode(Sha256::digest(&wheel));
         writeln!(overrides, "{name} @ {url}#sha256={hash}")?;
@@ -627,14 +611,8 @@ async fn packaged_lock_preserves_tool_url_hash_on_upgrade() -> Result<()> {
         .with_filtered_counts()
         .with_tool_dirs();
     context.temp_dir.child("wheels").create_dir_all()?;
-    let (filename, bytes) = generate_wheel_with_files(
-        &"locked-tool".parse()?,
-        &"1.0.0".parse()?,
-        &[],
-        &BTreeMap::new(),
-        None,
-        "py3-none-any",
-        &[
+    let (filename, bytes) = WheelBuilder::new(&"locked-tool".parse()?, &"1.0.0".parse()?)
+        .files(&[
             (
                 "locked_tool-1.0.0.dist-info/pylock.toml",
                 "lock-version = \"1.0\"\ncreated-by = \"test\"\npackages = []\n",
@@ -644,8 +622,8 @@ async fn packaged_lock_preserves_tool_url_hash_on_upgrade() -> Result<()> {
                 "[console_scripts]\nlocked-tool = locked_tool.cli:main\n",
             ),
             ("locked_tool/cli.py", "def main(): pass\n"),
-        ],
-    );
+        ])
+        .build();
     context
         .temp_dir
         .child("wheels")
@@ -655,7 +633,7 @@ async fn packaged_lock_preserves_tool_url_hash_on_upgrade() -> Result<()> {
         .temp_dir
         .child("wheels/locked_tool-1.0.0-py3-none-any.whl");
     let hash = hex::encode(Sha256::digest(fs_err::read(wheel.path())?));
-    let wheel_url = url::Url::from_file_path(wheel.path())
+    let wheel_url = SafeUrl::from_file_path(wheel.path())
         .map_err(|()| anyhow::anyhow!("Could not create a file URL"))?;
     let requirement = format!("locked-tool @ {wheel_url}#sha256={hash}&egg=locked-tool");
     context
@@ -738,15 +716,7 @@ async fn packaged_lock_override_cannot_activate_tool_extra() -> Result<()> {
     context.temp_dir.child("wheels").create_dir_all()?;
     let server = MockServer::start().await;
     let index = format!("{}/simple", server.uri());
-    let (filename, bytes) = generate_wheel_with_files(
-        &"epsilon".parse()?,
-        &"1.0".parse()?,
-        &[],
-        &BTreeMap::new(),
-        None,
-        "py3-none-any",
-        &[],
-    );
+    let (filename, bytes) = WheelBuilder::new(&"epsilon".parse()?, &"1.0".parse()?).build();
     let hash = hex::encode(Sha256::digest(&bytes));
     Mock::given(method("GET"))
         .and(path("/simple/epsilon/"))
@@ -769,18 +739,12 @@ async fn packaged_lock_override_cannot_activate_tool_extra() -> Result<()> {
         .respond_with(ResponseTemplate::new(200).set_body_bytes(bytes))
         .mount(&server)
         .await;
-    let (filename, bytes) = generate_wheel_with_files(
-        &"idna".parse()?,
-        &"3.5".parse()?,
-        &["locked-tool[feature]".parse()?],
-        &BTreeMap::new(),
-        None,
-        "py3-none-any",
-        &[],
-    );
+    let (filename, bytes) = WheelBuilder::new(&"idna".parse()?, &"3.5".parse()?)
+        .requires(&["locked-tool[feature]".parse()?])
+        .build();
     let override_wheel = context.temp_dir.child("wheels").child(filename);
     override_wheel.write_binary(&bytes)?;
-    let override_url = url::Url::from_file_path(override_wheel.path())
+    let override_url = SafeUrl::from_file_path(override_wheel.path())
         .map_err(|()| anyhow::anyhow!("Could not create a file URL"))?;
     context
         .temp_dir
@@ -793,22 +757,21 @@ async fn packaged_lock_override_cannot_activate_tool_extra() -> Result<()> {
         &format!("sha256 = \"{}\"", "0".repeat(64)),
         "wheels",
     );
-    let (filename, bytes) = generate_wheel_with_files(
-        &"locked-tool".parse()?,
-        &"1.0.0".parse()?,
-        &["idna>=3.3,<3.5".parse()?],
-        &BTreeMap::from([("feature".parse()?, vec!["epsilon==1.0".parse()?])]),
-        None,
-        "py3-none-any",
-        &[
+    let (filename, bytes) = WheelBuilder::new(&"locked-tool".parse()?, &"1.0.0".parse()?)
+        .requires(&["idna>=3.3,<3.5".parse()?])
+        .extras(&BTreeMap::from([(
+            "feature".parse()?,
+            vec!["epsilon==1.0".parse()?],
+        )]))
+        .files(&[
             ("locked_tool-1.0.0.dist-info/pylock.toml", &lock),
             (
                 "locked_tool-1.0.0.dist-info/entry_points.txt",
                 "[console_scripts]\nlocked-tool = locked_tool.cli:main\n",
             ),
             ("locked_tool/cli.py", "def main(): pass\n"),
-        ],
-    );
+        ])
+        .build();
     context
         .temp_dir
         .child("wheels")
@@ -835,25 +798,20 @@ async fn packaged_lock_refines_python_for_tool() -> Result<()> {
             "lock-version = \"1.0\"\ncreated-by = \"test\"\nrequires-python = \"{lock_python}\"\npackages = []\n"
         );
         let metadata_path = format!("locked_tool-{version}.dist-info");
-        let (filename, wheel) = generate_wheel_with_files(
-            &"locked-tool".parse()?,
-            &version.parse()?,
-            &[],
-            &BTreeMap::new(),
-            Some(&">=3.12".parse()?),
-            "py3-none-any",
-            &[
-                (
-                    "locked_tool/cli.py",
-                    "import sys\ndef main(): print('.'.join(str(x) for x in sys.version_info[:2]))\n",
-                ),
-                (
-                    &format!("{metadata_path}/entry_points.txt"),
-                    "[console_scripts]\nlocked-tool = locked_tool.cli:main\n",
-                ),
-                (&format!("{metadata_path}/pylock.toml"), &lock),
-            ],
-        );
+        let (filename, wheel) = WheelBuilder::new(&"locked-tool".parse()?, &version.parse()?)
+            .requires_python(Some(&">=3.12".parse()?))
+            .files(&[
+                    (
+                        "locked_tool/cli.py",
+                        "import sys\ndef main(): print('.'.join(str(x) for x in sys.version_info[:2]))\n",
+                    ),
+                    (
+                        &format!("{metadata_path}/entry_points.txt"),
+                        "[console_scripts]\nlocked-tool = locked_tool.cli:main\n",
+                    ),
+                    (&format!("{metadata_path}/pylock.toml"), &lock),
+                ])
+            .build();
         let url = format!("{}/files/{filename}", server.uri());
         files.push(json!({
             "filename": filename,
@@ -1002,14 +960,8 @@ async fn packaged_lock_root_direct_hashes() -> Result<()> {
         .with_filtered_counts()
         .with_tool_dirs();
     context.temp_dir.child("wheels").create_dir_all()?;
-    let (filename, bytes) = generate_wheel_with_files(
-        &"locked-tool".parse()?,
-        &"1.0.0".parse()?,
-        &[],
-        &BTreeMap::new(),
-        None,
-        "py3-none-any",
-        &[
+    let (filename, bytes) = WheelBuilder::new(&"locked-tool".parse()?, &"1.0.0".parse()?)
+        .files(&[
             (
                 "locked_tool-1.0.0.dist-info/pylock.toml",
                 "lock-version = \"1.0\"\ncreated-by = \"test\"\npackages = []\n",
@@ -1019,11 +971,11 @@ async fn packaged_lock_root_direct_hashes() -> Result<()> {
                 "[console_scripts]\nlocked-tool = locked_tool.cli:main\n",
             ),
             ("locked_tool/cli.py", "def main(): pass\n"),
-        ],
-    );
+        ])
+        .build();
     let wheel = context.temp_dir.child("wheels").child(filename);
     wheel.write_binary(&bytes)?;
-    let url = url::Url::from_file_path(wheel.path())
+    let url = SafeUrl::from_file_path(wheel.path())
         .map_err(|()| anyhow::anyhow!("Could not create a file URL"))?;
     let hash = hex::encode(Sha256::digest(&bytes));
     let requirement = format!(
@@ -1082,14 +1034,8 @@ async fn packaged_lock_binds_hashless_tool_wheel() -> Result<()> {
     let name = "race-tool".parse()?;
     let version = "1.0.0".parse()?;
     let make_wheel = |message: &str, lock: &str| {
-        generate_wheel_with_files(
-            &name,
-            &version,
-            &[],
-            &BTreeMap::new(),
-            None,
-            "py3-none-any",
-            &[
+        WheelBuilder::new(&name, &version)
+            .files(&[
                 (
                     "race_tool/cli.py",
                     &format!("def main(): print({message:?})\n"),
@@ -1099,8 +1045,8 @@ async fn packaged_lock_binds_hashless_tool_wheel() -> Result<()> {
                     "[console_scripts]\nrace-tool = race_tool.cli:main\n",
                 ),
                 ("race_tool-1.0.0.dist-info/pylock.toml", lock),
-            ],
-        )
+            ])
+            .build()
     };
     let (filename, first) = make_wheel(
         "first",
@@ -1178,15 +1124,7 @@ async fn packaged_lock_respects_index_priority() -> Result<()> {
     let server = MockServer::start().await;
     let first_index = format!("{}/first", server.uri());
     let second_index = format!("{}/second", server.uri());
-    let (filename, wheel) = generate_wheel_with_files(
-        &"idna".parse()?,
-        &"3.3".parse()?,
-        &[],
-        &BTreeMap::new(),
-        None,
-        "py3-none-any",
-        &[],
-    );
+    let (filename, wheel) = WheelBuilder::new(&"idna".parse()?, &"3.3".parse()?).build();
     let hash = hex::encode(Sha256::digest(&wheel));
     for (index, prefix) in [(&first_index, "first"), (&second_index, "second")] {
         let url = format!("{index}/files/{filename}");
@@ -1310,15 +1248,7 @@ async fn packaged_lock_refresh_rechecks_index() -> Result<()> {
     context.temp_dir.child("wheels").create_dir_all()?;
     let server = MockServer::start().await;
     let index = format!("{}/simple", server.uri());
-    let (filename, wheel) = generate_wheel_with_files(
-        &"idna".parse()?,
-        &"3.3".parse()?,
-        &[],
-        &BTreeMap::new(),
-        None,
-        "py3-none-any",
-        &[],
-    );
+    let (filename, wheel) = WheelBuilder::new(&"idna".parse()?, &"3.3".parse()?).build();
     let hash = hex::encode(Sha256::digest(&wheel));
     let url = format!("{}/files/{filename}", server.uri());
     let requests = Arc::new(AtomicUsize::new(0));
@@ -1403,15 +1333,7 @@ async fn packaged_lock_configured_index_and_constraints() -> Result<()> {
     context.temp_dir.child("wheels").create_dir_all()?;
     let server = MockServer::start().await;
     let index = format!("{}/simple", server.uri());
-    let (filename, wheel) = generate_wheel_with_files(
-        &"idna".parse()?,
-        &"3.3".parse()?,
-        &[],
-        &BTreeMap::new(),
-        None,
-        "py3-none-any",
-        &[],
-    );
+    let (filename, wheel) = WheelBuilder::new(&"idna".parse()?, &"3.3".parse()?).build();
     let hash = hex::encode(Sha256::digest(&wheel));
     let hash_sha512 = hex::encode(Sha512::digest(&wheel));
     let url = format!("{}/files/{filename}", server.uri());
@@ -1445,15 +1367,10 @@ async fn packaged_lock_configured_index_and_constraints() -> Result<()> {
         wheels = [{{ url = "{url}", hashes = {{ sha256 = "{hash}" }} }}]
     "#};
     tool(&context, "1.0.0", Some(&lock), None)?;
-    let (different_filename, different_wheel) = generate_wheel_with_files(
-        &"idna".parse()?,
-        &"3.3".parse()?,
-        &[],
-        &BTreeMap::new(),
-        None,
-        "py3-none-any",
-        &[("idna/private.py", "")],
-    );
+    let (different_filename, different_wheel) =
+        WheelBuilder::new(&"idna".parse()?, &"3.3".parse()?)
+            .files(&[("idna/private.py", "")])
+            .build();
     context
         .temp_dir
         .child("wheels")
@@ -2113,15 +2030,9 @@ async fn packaged_lock_index_cache() -> Result<()> {
     context.temp_dir.child("wheels").create_dir_all()?;
     let server = MockServer::start().await;
     let index = format!("{}/simple", server.uri());
-    let (filename, private_wheel) = generate_wheel_with_files(
-        &"idna".parse()?,
-        &"3.3".parse()?,
-        &[],
-        &BTreeMap::new(),
-        None,
-        "py3-none-any",
-        &[("idna/private.py", "")],
-    );
+    let (filename, private_wheel) = WheelBuilder::new(&"idna".parse()?, &"3.3".parse()?)
+        .files(&[("idna/private.py", "")])
+        .build();
     let simple = json!({
         "meta": { "api-version": "1.1" },
         "name": "idna",
@@ -2298,21 +2209,16 @@ fn packaged_lock_ignores_inactive_indexes() -> Result<()> {
         index = "https://unconfigured.example/simple"
         wheels = [{{ url = "https://unconfigured.example/idna-3.3-py3-none-any.whl", hashes = {{ sha256 = "{}" }} }}]
     "#, "0".repeat(64)};
-    let (filename, wheel) = generate_wheel_with_files(
-        &"locked-tool".parse()?,
-        &"1.0.0".parse()?,
-        &["idna==3.3 ; python_version < '3.12'".parse()?],
-        &BTreeMap::new(),
-        None,
-        "py3-none-any",
-        &[
+    let (filename, wheel) = WheelBuilder::new(&"locked-tool".parse()?, &"1.0.0".parse()?)
+        .requires(&["idna==3.3 ; python_version < '3.12'".parse()?])
+        .files(&[
             ("locked_tool-1.0.0.dist-info/pylock.toml", &lock),
             (
                 "locked_tool-1.0.0.dist-info/entry_points.txt",
                 "[console_scripts]\nlocked-tool = locked_tool.cli:main\n",
             ),
-        ],
-    );
+        ])
+        .build();
     context.temp_dir.child("wheels").create_dir_all()?;
     context
         .temp_dir
@@ -2346,15 +2252,7 @@ async fn packaged_lock_ignores_unrelated_index_hashes() -> Result<()> {
         .with_tool_dirs();
     let server = MockServer::start().await;
     let index = format!("{}/simple", server.uri());
-    let (filename, wheel) = generate_wheel_with_files(
-        &"idna".parse()?,
-        &"3.3".parse()?,
-        &[],
-        &BTreeMap::new(),
-        None,
-        "py3-none-any",
-        &[],
-    );
+    let (filename, wheel) = WheelBuilder::new(&"idna".parse()?, &"3.3".parse()?).build();
     let url = format!("{}/{filename}", server.uri());
     let hash = hex::encode(Sha256::digest(&wheel));
     Mock::given(method("GET"))
@@ -2580,15 +2478,10 @@ async fn packaged_lock_from_build_with_extras() -> Result<()> {
         ),
         ("leaf", vec![], BTreeMap::new()),
     ] {
-        let (filename, wheel) = generate_wheel_with_files(
-            &name.parse()?,
-            &"1.0.0".parse()?,
-            &dependencies,
-            &extras,
-            None,
-            "py3-none-any",
-            &[],
-        );
+        let (filename, wheel) = WheelBuilder::new(&name.parse()?, &"1.0.0".parse()?)
+            .requires(&dependencies)
+            .extras(&extras)
+            .build();
         let hash = hex::encode(Sha256::digest(&wheel));
         let url = format!("{}/files/{filename}", server.uri());
         Mock::given(method("GET"))
@@ -2749,15 +2642,7 @@ async fn packaged_lock_rejects_weak_hashes() -> Result<()> {
         .with_tool_dirs();
     context.temp_dir.child("wheels").create_dir_all()?;
     let server = MockServer::start().await;
-    let (filename, wheel) = generate_wheel_with_files(
-        &"idna".parse()?,
-        &"3.3".parse()?,
-        &[],
-        &BTreeMap::new(),
-        None,
-        "py3-none-any",
-        &[],
-    );
+    let (filename, wheel) = WheelBuilder::new(&"idna".parse()?, &"3.3".parse()?).build();
     let sha256 = hex::encode(Sha256::digest(&wheel));
     let mut hasher = Hasher::from(HashAlgorithm::Md5);
     hasher.update(&wheel);
@@ -2831,15 +2716,9 @@ async fn packaged_lock_checks_index_filename() -> Result<()> {
         .with_tool_dirs();
     context.temp_dir.child("wheels").create_dir_all()?;
     let server = MockServer::start().await;
-    let (filename, wheel) = generate_wheel_with_files(
-        &"idna".parse()?,
-        &"3.3".parse()?,
-        &[],
-        &BTreeMap::new(),
-        None,
-        "cp313-cp313-win_amd64",
-        &[],
-    );
+    let (filename, wheel) = WheelBuilder::new(&"idna".parse()?, &"3.3".parse()?)
+        .tag("cp313-cp313-win_amd64")
+        .build();
     let hash = hex::encode(Sha256::digest(&wheel));
     let (index, url) =
         mount_locked_artifact(&server, "filename", &filename, &wheel, &hash, None).await;
@@ -2908,15 +2787,9 @@ async fn packaged_lock_checks_dependency_python() -> Result<()> {
         .with_tool_dirs();
     context.temp_dir.child("wheels").create_dir_all()?;
     let server = MockServer::start().await;
-    let (filename, wheel) = generate_wheel_with_files(
-        &"idna".parse()?,
-        &"3.3".parse()?,
-        &[],
-        &BTreeMap::new(),
-        Some(&">=99".parse()?),
-        "py3-none-any",
-        &[],
-    );
+    let (filename, wheel) = WheelBuilder::new(&"idna".parse()?, &"3.3".parse()?)
+        .requires_python(Some(&">=99".parse()?))
+        .build();
     let hash = hex::encode(Sha256::digest(&wheel));
     let (indexed, indexed_url) =
         mount_locked_artifact(&server, "indexed", &filename, &wheel, &hash, Some(">=99")).await;
@@ -2967,15 +2840,7 @@ async fn packaged_lock_checks_index_hash() -> Result<()> {
         .with_tool_dirs();
     context.temp_dir.child("wheels").create_dir_all()?;
     let server = MockServer::start().await;
-    let (filename, wheel) = generate_wheel_with_files(
-        &"idna".parse()?,
-        &"3.3".parse()?,
-        &[],
-        &BTreeMap::new(),
-        None,
-        "py3-none-any",
-        &[],
-    );
+    let (filename, wheel) = WheelBuilder::new(&"idna".parse()?, &"3.3".parse()?).build();
     let hash = hex::encode(Sha256::digest(&wheel));
     let (index, url) = mount_locked_artifact(
         &server,
@@ -3014,15 +2879,9 @@ async fn packaged_lock_checks_override_wheel_before_reading_dependencies() -> Re
         Some("lock-version = \"1.0\"\ncreated-by = \"test\"\npackages = []\n"),
         None,
     )?;
-    let (filename, wheel) = generate_wheel_with_files(
-        &"idna".parse()?,
-        &"3.5".parse()?,
-        &["unexpected==1.0".parse()?],
-        &BTreeMap::new(),
-        None,
-        "py3-none-any",
-        &[],
-    );
+    let (filename, wheel) = WheelBuilder::new(&"idna".parse()?, &"3.5".parse()?)
+        .requires(&["unexpected==1.0".parse()?])
+        .build();
     let hash = hex::encode(Sha256::digest(&wheel));
     let context = context.with_filter((hash.clone(), "[WHEEL_HASH]"));
     let server = MockServer::start().await;
@@ -3160,7 +3019,7 @@ async fn packaged_lock_checks_override_hash_before_building() -> Result<()> {
     assert!(!marker.path().exists());
     let archive = context.temp_dir.child("idna-3.5.tar.gz");
     archive.write_binary(&sdist)?;
-    let archive_url = url::Url::from_file_path(archive.path())
+    let archive_url = SafeUrl::from_file_path(archive.path())
         .map_err(|()| anyhow::anyhow!("invalid archive path"))?;
     context
         .temp_dir
@@ -3366,29 +3225,14 @@ async fn packaged_lock_requires_build_dependency_hashes() -> Result<()> {
         .with_tool_dirs();
     context.temp_dir.child("wheels").create_dir_all()?;
     let marker = context.temp_dir.child("backend-executed");
-    let (build_filename, build_wheel) = generate_wheel_with_files(
-        &"build-dependency".parse()?,
-        &"1.0.0".parse()?,
-        &[],
-        &BTreeMap::new(),
-        None,
-        "py3-none-any",
-        &[],
-    );
+    let (build_filename, build_wheel) =
+        WheelBuilder::new(&"build-dependency".parse()?, &"1.0.0".parse()?).build();
     context
         .temp_dir
         .child("wheels")
         .child(build_filename)
         .write_binary(&build_wheel)?;
-    let (wheel_filename, wheel) = generate_wheel_with_files(
-        &"idna".parse()?,
-        &"3.3".parse()?,
-        &[],
-        &BTreeMap::new(),
-        None,
-        "py3-none-any",
-        &[],
-    );
+    let (wheel_filename, wheel) = WheelBuilder::new(&"idna".parse()?, &"3.3".parse()?).build();
     let backend = formatdoc! {r#"
         import shutil
         from pathlib import Path
@@ -3596,15 +3440,7 @@ async fn packaged_lock_checks_all_artifact_hashes() -> Result<()> {
     let source =
         generate_source_archive(&"idna".parse()?, &"3.3".parse()?, "", Some(marker.path()))?;
     let source_hash = hex::encode(Sha256::digest(&source));
-    let (wheel_filename, wheel) = generate_wheel_with_files(
-        &"idna".parse()?,
-        &"3.3".parse()?,
-        &[],
-        &BTreeMap::new(),
-        None,
-        "py3-none-any",
-        &[],
-    );
+    let (wheel_filename, wheel) = WheelBuilder::new(&"idna".parse()?, &"3.3".parse()?).build();
     let wheel_hash = hex::encode(Sha256::digest(&wheel));
     let server = MockServer::start().await;
     let (source_index, source_url) = mount_locked_artifact(
@@ -3748,22 +3584,16 @@ async fn packaged_lock_checks_orphaned_source_url_constraint_before_building() -
         &format!("sha256 = \"{hash}\""),
         "sdist",
     );
-    let (filename, bytes) = generate_wheel_with_files(
-        &"locked-tool".parse()?,
-        &"1.0.0".parse()?,
-        &[],
-        &BTreeMap::new(),
-        None,
-        "py3-none-any",
-        &[
+    let (filename, bytes) = WheelBuilder::new(&"locked-tool".parse()?, &"1.0.0".parse()?)
+        .files(&[
             ("locked_tool-1.0.0.dist-info/pylock.toml", &lock),
             (
                 "locked_tool-1.0.0.dist-info/entry_points.txt",
                 "[console_scripts]\nlocked-tool = locked_tool.cli:main\n",
             ),
             ("locked_tool/cli.py", "def main(): pass\n"),
-        ],
-    );
+        ])
+        .build();
     context
         .temp_dir
         .child("wheels")
@@ -3935,18 +3765,12 @@ async fn packaged_lock_checks_locked_source_reference_before_building() -> Resul
         "0".repeat(64)
     )?;
     tool(&context, "1.0.0", Some(&lock), None)?;
-    let (filename, bytes) = generate_wheel_with_files(
-        &"beta".parse()?,
-        &"2.0".parse()?,
-        &[format!("idna @ {source_url}#sha512={}", "0".repeat(128)).parse()?],
-        &BTreeMap::new(),
-        None,
-        "py3-none-any",
-        &[],
-    );
+    let (filename, bytes) = WheelBuilder::new(&"beta".parse()?, &"2.0".parse()?)
+        .requires(&[format!("idna @ {source_url}#sha512={}", "0".repeat(128)).parse()?])
+        .build();
     let wheel = context.temp_dir.child("wheels").child(filename);
     wheel.write_binary(&bytes)?;
-    let wheel_url = url::Url::from_file_path(wheel.path())
+    let wheel_url = SafeUrl::from_file_path(wheel.path())
         .map_err(|()| anyhow::anyhow!("Could not create a file URL"))?;
     context
         .temp_dir
@@ -4017,18 +3841,12 @@ async fn packaged_lock_checks_repeated_source_hashes_before_building() -> Result
             .into_iter()
             .map(|requirement| requirement.parse())
             .collect::<Result<Vec<_>, _>>()?;
-        let (filename, bytes) = generate_wheel_with_files(
-            &"idna".parse()?,
-            &version.parse()?,
-            &dependencies,
-            &BTreeMap::new(),
-            None,
-            "py3-none-any",
-            &[],
-        );
+        let (filename, bytes) = WheelBuilder::new(&"idna".parse()?, &version.parse()?)
+            .requires(&dependencies)
+            .build();
         let wheel = context.temp_dir.child("wheels").child(filename);
         wheel.write_binary(&bytes)?;
-        let wheel_url = url::Url::from_file_path(wheel.path())
+        let wheel_url = SafeUrl::from_file_path(wheel.path())
             .map_err(|()| anyhow::anyhow!("Could not create a file URL"))?;
         context
             .temp_dir
