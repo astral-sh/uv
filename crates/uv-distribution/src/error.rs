@@ -7,8 +7,10 @@ use tokio::task::JoinError;
 use crate::metadata::MetadataError;
 use uv_cache::Error as CacheError;
 use uv_client::WrappedReqwestError;
-use uv_distribution_filename::{WheelFilename, WheelFilenameError};
-use uv_distribution_types::{InstalledDist, InstalledDistError, IsBuildBackendError};
+use uv_distribution_filename::{VariantLabel, WheelFilename, WheelFilenameError};
+use uv_distribution_types::{
+    InstalledDist, InstalledDistError, IsBuildBackendError, UnsupportedVariantProperties,
+};
 use uv_fs::Simplified;
 use uv_git::GitError;
 use uv_macros::DebugNoInline;
@@ -37,8 +39,11 @@ impl fmt::Display for PythonVersion {
 pub enum Error {
     #[error("Wheel variants are not supported yet: `{0}`")]
     UnsupportedWheelVariant(Box<WheelFilename>),
-    #[error("Wheel variant has unsupported properties: `{0}`")]
-    IncompatibleWheelVariant(Box<WheelFilename>),
+    #[error("Wheel variant `{label}` requires unsupported properties: {properties}")]
+    IncompatibleWheelVariant {
+        label: VariantLabel,
+        properties: UnsupportedVariantProperties,
+    },
     #[error("Building source distributions is disabled")]
     NoBuild,
     #[error("Building source distributions for `{0}` is disabled")]
@@ -298,7 +303,7 @@ impl Error {
     pub fn is_user_failure(&self) -> bool {
         match self {
             Self::UnsupportedWheelVariant(_)
-            | Self::IncompatibleWheelVariant(_)
+            | Self::IncompatibleWheelVariant { .. }
             | Self::NoBuild
             | Self::NoBuildPackage(_)
             | Self::InvalidUrl(_)

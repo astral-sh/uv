@@ -35,7 +35,7 @@ fn rank_variants() -> Result<(), Box<dyn std::error::Error>> {
             "multiple_values": {"nvidia": {"cuda": ["12.0", "13.0", "14.0"]}},
             "older_cuda": {"nvidia": {"cuda": ["12.0"]}},
             "lower_feature": {"nvidia": {"arch": ["sm120"]}},
-            "unsupported_value": {"nvidia": {"cuda": ["14.0"]}},
+            "unsupported_value": {"nvidia": {"arch": ["sm80", "sm90"], "cuda": ["14.0"]}},
             "unsupported_feature": {"nvidia": {"other": ["on"]}},
             "optional_provider": {"debug": {"debug": ["on"]}},
             "unsupported_plugin": {"plugin": {"feature": ["value"]}},
@@ -89,6 +89,13 @@ fn rank_variants() -> Result<(), Box<dyn std::error::Error>> {
         let score = metadata.score_variant(&label.parse()?, &supported_properties);
         assert_eq!(score, None, "{label} should be incompatible");
     }
+    let unsupported = metadata
+        .unsupported_variant_properties(&"unsupported_value".parse()?, &supported_properties)
+        .ok_or("variant should be incompatible")?;
+    assert_snapshot!(
+        unsupported,
+        @"(`nvidia :: arch :: sm80` or `nvidia :: arch :: sm90`) and `nvidia :: cuda :: 14.0`"
+    );
     Ok(())
 }
 
