@@ -18,6 +18,85 @@ fn null_variant() -> Value {
     })
 }
 
+/// Installing a local wheel checks its properties, including when reusing a cached extraction.
+#[test]
+fn install_local_variant_wheel() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let variant = json!({
+        "$schema": PEP_850_SCHEMA,
+        "default-priorities": { "namespace": ["nvidia"] },
+        "providers": {
+            "nvidia": {
+                "requires": ["nvidia-variant-provider==0.0.1"],
+                "plugin-api": "nvidia_variant_provider.plugin:NvidiaVariantPlugin"
+            }
+        },
+        "variants": {
+            "gpu": {
+                "nvidia": {
+                    "cuda_version_lower_bound": ["12"],
+                    "sm_arch": ["89_real"]
+                }
+            }
+        }
+    })
+    .to_string();
+    let (_, wheel) = WheelBuilder::new(&"ok".parse()?, &"1.0.0".parse()?)
+        .files(&[("ok-1.0.0.dist-info/variant.json", &variant)])
+        .build();
+    let wheel_path = context.temp_dir.child("ok-1.0.0-py3-none-any-gpu.whl");
+    wheel_path.write_binary(&wheel)?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .env(EnvVars::NV_VARIANT_PROVIDER_FORCE_CUDA_DRIVER_VERSION, "12")
+        .env(EnvVars::NV_VARIANT_PROVIDER_FORCE_SM_ARCH, "8.9")
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg(wheel_path.path()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0 (from file://[TEMP_DIR]/ok-1.0.0-py3-none-any-gpu.whl)
+    ");
+
+    context.reset_venv();
+    uv_snapshot!(context.filters(), context.pip_install()
+        .env(EnvVars::NV_VARIANT_PROVIDER_FORCE_CUDA_DRIVER_VERSION, "11")
+        .env(EnvVars::NV_VARIANT_PROVIDER_FORCE_SM_ARCH, "8.8")
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg(wheel_path.path()), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Failed to determine installation plan
+      cause: Wheel variant `gpu` requires unsupported properties: `nvidia :: cuda_version_lower_bound :: 12` and `nvidia :: sm_arch :: 89_real`
+    ");
+    Ok(())
+}
+
+#[test]
+fn local_variant_wheel_requires_variant_metadata() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let (_, wheel) = WheelBuilder::new(&"ok".parse()?, &"1.0.0".parse()?).build();
+    let wheel_path = context.temp_dir.child("ok-1.0.0-py3-none-any-null.whl");
+    wheel_path.write_binary(&wheel)?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg(wheel_path.path()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to read `ok @ file://[TEMP_DIR]/ok-1.0.0-py3-none-any-null.whl`
+      cause: Failed to read metadata: [TEMP_DIR]/ok-1.0.0-py3-none-any-null.whl
+      cause: Missing `variant.json` in the wheel's .dist-info directory
+    ");
+    Ok(())
+}
+
 /// Sync keeps an installed variant even when wheel variants are no longer enabled.
 #[test]
 fn sync_keeps_installed_variant() -> Result<()> {

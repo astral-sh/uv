@@ -10,7 +10,7 @@ use uv_cache_info::Timestamp;
 use uv_configuration::{BuildOptions, Reinstall};
 use uv_distribution::{
     BuiltWheelIndex, HttpArchivePointer, PathArchivePointer, RegistryWheelIndex,
-    check_supported_wheel_variant,
+    check_supported_wheel_variant, check_wheel_variant_compatibility,
 };
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
@@ -519,7 +519,7 @@ impl<'a> Planner<'a> {
                         return Err(Error::NotFound(wheel.url.to_url()).into());
                     }
 
-                    if !wheel.filename.is_compatible(tags) {
+                    if !wheel.filename.tag_compatibility(tags).is_compatible() {
                         return Err(PlanError::IncompatibleWheel(Box::new(
                             IncompatibleWheelError {
                                 kind: IncompatibleWheelKind::Path(wheel.install_path.to_path_buf()),
@@ -563,6 +563,10 @@ impl<'a> Planner<'a> {
                                             build_info,
                                             path: cache.archive(&archive.id).into_boxed_path(),
                                         };
+                                        check_wheel_variant_compatibility(
+                                            &cached_dist.filename,
+                                            &cached_dist.path,
+                                        )?;
                                         debug!(
                                             "Path wheel requirement already cached: {cached_dist}"
                                         );
@@ -826,7 +830,7 @@ fn generate_wheel_compatibility_hint(
     filename: &WheelFilename,
     tags: &Tags,
 ) -> Option<IncompatibleWheelHint> {
-    let TagCompatibility::Incompatible(incompatible_tag) = filename.compatibility(tags) else {
+    let TagCompatibility::Incompatible(incompatible_tag) = filename.tag_compatibility(tags) else {
         return None;
     };
 
