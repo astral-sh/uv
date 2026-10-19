@@ -146,14 +146,14 @@ fn selectable_extras_and_groups() -> Result<(), Box<dyn std::error::Error>> {
     [[packages]]
     name = "helper"
     version = "1.0.0"
-    marker = "(sys_platform != 'linux' and sys_platform != 'win32' and 'dev' in dependency_groups) or (sys_platform == 'linux' and 'fast' in extras) or (sys_platform == 'win32' and 'slow' in extras) or (sys_platform == 'linux' and 'dev' in dependency_groups) or (sys_platform == 'win32' and 'dev' in dependency_groups)"
+    marker = "(sys_platform == 'linux' and 'fast' in extras) or (sys_platform == 'win32' and 'slow' in extras) or 'dev' in dependency_groups"
     index = "https://pypi.org/simple"
     wheels = [{ url = "https://files.pythonhosted.org/packages/helper-1.0.0-py3-none-any.whl", hashes = { sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" } }]
 
     [[packages]]
     name = "leaf"
     version = "1.0.0"
-    marker = "(sys_platform != 'linux' and sys_platform != 'win32' and 'dev' in dependency_groups) or (sys_platform == 'linux' and 'fast' in extras) or (sys_platform == 'win32' and 'slow' in extras) or (sys_platform == 'linux' and 'dev' in dependency_groups) or (sys_platform == 'win32' and 'dev' in dependency_groups)"
+    marker = "(sys_platform == 'linux' and 'fast' in extras) or (sys_platform == 'win32' and 'slow' in extras) or 'dev' in dependency_groups"
     index = "https://pypi.org/simple"
     wheels = [{ url = "https://files.pythonhosted.org/packages/leaf-1.0.0-py3-none-any.whl", hashes = { sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" } }]
     "#);
