@@ -6480,6 +6480,7 @@ dependencies = [
  "uv-git",
  "uv-git-types",
  "uv-install-wheel",
+ "uv-macros",
  "uv-metadata",
  "uv-normalize",
  "uv-pep440",
