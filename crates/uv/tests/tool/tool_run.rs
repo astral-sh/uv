@@ -1042,7 +1042,10 @@ fn tool_run_git_lfs() {
         .with_filter((r"exit_code: -?[1-9]\d*", "exit_code: [ERROR_CODE]"))
         .with_filter((
             "(?s)(----- stderr -----).*?The source distribution `[^`]+` is missing Git LFS artifacts.*",
-            "$1\n[PREFIX]The source distribution `[DISTRIBUTION]` is missing Git LFS artifacts",
+            indoc! {"
+                $1
+                [PREFIX]The source distribution `[DISTRIBUTION]` is missing Git LFS artifacts"
+            },
         ));
 
     uv_snapshot!(context.filters(), context.tool_run()

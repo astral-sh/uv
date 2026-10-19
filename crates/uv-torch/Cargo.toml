@@ -27,6 +27,9 @@ tracing = { workspace = true }
 [target.'cfg(all(target_os = "windows"))'.dependencies]
 windows = { workspace = true }
 
+[dev-dependencies]
+indoc = { workspace = true }
+
 [lints]
 workspace = true
 

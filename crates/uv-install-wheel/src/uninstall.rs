@@ -455,6 +455,7 @@ fn normalize_path(path: &Path) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use assert_fs::prelude::*;
+    use indoc::formatdoc;
 
     use uv_pypi_types::Scheme;
 
@@ -500,13 +501,14 @@ mod tests {
         assert!(site_packages.join(&target_path).exists());
 
         // Add the invalid path to the RECORD.
-        let record_content = format!(
-            "evilpkg/__init__.py,,0\n\
-             evilpkg-0.1.0.dist-info/METADATA,,0\n\
-             evilpkg-0.1.0.dist-info/RECORD,,\n\
-             {},,0\n",
+        let record_content = formatdoc! {"
+            evilpkg/__init__.py,,0
+            evilpkg-0.1.0.dist-info/METADATA,,0
+            evilpkg-0.1.0.dist-info/RECORD,,
+            {},,0
+        ",
             target_path.display()
-        );
+        };
         dist_info
             .child("RECORD")
             .write_str(&record_content)
@@ -561,7 +563,12 @@ mod tests {
         // Create a fake egg-info directory with a path traversal entry in `top_level.txt`.
         egg_info
             .child("top_level.txt")
-            .write_str(&format!("evilpkg\n{}\n", target_path.display()))
+            .write_str(&formatdoc! {"
+                evilpkg
+                {}
+            ",
+                target_path.display()
+            })
             .unwrap();
 
         // Also create the legitimate package directory so uninstall can remove it.

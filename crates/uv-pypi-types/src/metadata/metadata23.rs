@@ -406,9 +406,11 @@ impl ProjectUrls {
 mod tests {
     use std::assert_matches;
 
+    use indoc::indoc;
+    use insta::assert_snapshot;
+
     use super::*;
     use crate::MetadataError;
-    use insta::assert_snapshot;
 
     #[test]
     fn test_parse_from_str() {
@@ -416,25 +418,50 @@ mod tests {
         let meta: Result<Metadata23, MetadataError> = s.parse();
         assert_matches!(meta, Err(MetadataError::FieldNotFound("Name")));
 
-        let s = "Metadata-Version: 1.0\nName: asdf";
+        let s = indoc! {"
+            Metadata-Version: 1.0
+            Name: asdf
+        "};
         let meta = Metadata23::parse(s.as_bytes());
         assert_matches!(meta, Err(MetadataError::FieldNotFound("Version")));
 
-        let s = "Metadata-Version: 1.0\nName: asdf\nVersion: 1.0";
+        let s = indoc! {"
+            Metadata-Version: 1.0
+            Name: asdf
+            Version: 1.0
+        "};
         let meta = Metadata23::parse(s.as_bytes()).unwrap();
         assert_eq!(meta.metadata_version, "1.0");
         assert_eq!(meta.name, "asdf");
         assert_eq!(meta.version, "1.0");
 
-        let s = "Metadata-Version: 1.0\nName: asdf\nVersion: 1.0\nDescription: a Python package";
+        let s = indoc! {"
+            Metadata-Version: 1.0
+            Name: asdf
+            Version: 1.0
+            Description: a Python package"
+        };
         let meta: Metadata23 = s.parse().unwrap();
         assert_eq!(meta.description.as_deref(), Some("a Python package"));
 
-        let s = "Metadata-Version: 1.0\nName: asdf\nVersion: 1.0\n\na Python package";
+        let s = indoc! {"
+            Metadata-Version: 1.0
+            Name: asdf
+            Version: 1.0
+
+            a Python package"
+        };
         let meta: Metadata23 = s.parse().unwrap();
         assert_eq!(meta.description.as_deref(), Some("a Python package"));
 
-        let s = "Metadata-Version: 1.0\nName: asdf\nVersion: 1.0\nAuthor: 中文\n\n一个 Python 包";
+        let s = indoc! {"
+            Metadata-Version: 1.0
+            Name: asdf
+            Version: 1.0
+            Author: 中文
+
+            一个 Python 包"
+        };
         let meta: Metadata23 = s.parse().unwrap();
         assert_eq!(meta.author.as_deref(), Some("中文"));
         assert_eq!(meta.description.as_deref(), Some("一个 Python 包"));
@@ -454,7 +481,15 @@ mod tests {
         let formatted = metadata.core_metadata_format();
         assert_eq!(
             formatted,
-            "Metadata-Version: 2.5\nName: pkg\nVersion: 1.0\nImport-Name: spam.foo\nImport-Name: spam.eggs; private\nImport-Namespace: spam\nImport-Namespace: zope\n"
+            indoc! {"
+                Metadata-Version: 2.5
+                Name: pkg
+                Version: 1.0
+                Import-Name: spam.foo
+                Import-Name: spam.eggs; private
+                Import-Namespace: spam
+                Import-Namespace: zope
+            "}
         );
 
         let parsed: Metadata23 = formatted.parse().unwrap();
@@ -464,7 +499,13 @@ mod tests {
 
     #[test]
     fn import_name_overlap() {
-        let metadata = "Metadata-Version: 2.5\nName: pkg\nVersion: 1.0\nImport-Name: spam ; private\nImport-Namespace: spam\n";
+        let metadata = indoc! {"
+            Metadata-Version: 2.5
+            Name: pkg
+            Version: 1.0
+            Import-Name: spam ; private
+            Import-Namespace: spam
+        "};
         assert_snapshot!(
             Metadata23::parse(metadata.as_bytes()).unwrap_err(),
             @"`Import-Name` and `Import-Namespace` must not both contain `spam`"

@@ -390,7 +390,11 @@ fn build_sdist_missing_backend_path() -> Result<()> {
     project.child("src/project/__init__.py").touch()?;
     project
         .child("backend_dir/my_backend.py")
-        .write_str("from flit_core import buildapi\n\nbuilder = buildapi\n")?;
+        .write_str(indoc! {"
+            from flit_core import buildapi
+
+            builder = buildapi
+        "})?;
 
     uv_snapshot!(context.filters(), context.build().arg(project.path()), @r"
     exit_code: 2 (failure)
@@ -1362,11 +1366,11 @@ fn build_dependency_check_constraints_and_extra_build_dependencies() -> Result<(
     error: Failed to build `[TEMP_DIR]/project`
       cause: Build requirement is not satisfied: `idna>=3.6`
     ");
-    project.child("pyproject.toml").write_str(&format!(
-        "{}\n{}",
-        context.read("project/pyproject.toml"),
-        "[tool.uv.extra-build-dependencies]\nproject = ['extra-build-dependency>=1']\n",
-    ))?;
+    project.child("pyproject.toml").write_str(&formatdoc! {"
+        {}
+        [tool.uv.extra-build-dependencies]
+        project = ['extra-build-dependency>=1']
+    ", context.read("project/pyproject.toml")})?;
     uv_snapshot!(context.filters(), context.build().args([
         "--preview-features", "build-dependency-check", "--no-build-isolation",
     ]).arg("--offline").current_dir(&project), @"
@@ -4236,7 +4240,10 @@ fn build_workspace_constraint_hashes() -> Result<()> {
         .map_err(|()| anyhow!("invalid wheel path"))?;
     let backend = context.read("backend.py").replace(
         "shutil.copyfile(source,",
-        "import dynamic_dependency\n    shutil.copyfile(source,",
+        indoc! {"
+            import dynamic_dependency
+                shutil.copyfile(source,"
+        },
     );
     context
         .temp_dir

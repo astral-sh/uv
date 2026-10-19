@@ -827,6 +827,8 @@ mod tests {
 
     use anyhow::Result;
     #[cfg(unix)]
+    use indoc::{formatdoc, indoc};
+    #[cfg(unix)]
     use uv_cache::Cache;
     #[cfg(unix)]
     use uv_distribution_types::Name;
@@ -877,7 +879,11 @@ mod tests {
         fs_err::create_dir_all(&dist_info)?;
         fs_err::write(
             dist_info.join("METADATA"),
-            "Metadata-Version: 2.1\nName: demo\nVersion: 1.0\n",
+            indoc! {"
+                Metadata-Version: 2.1
+                Name: demo
+                Version: 1.0
+            "},
         )?;
 
         let executable = temp_dir.path().join("python");
@@ -928,7 +934,13 @@ mod tests {
         .replace("{EXECUTABLE}", &executable.to_string_lossy())
         .replace("{PLATLIB}", &platlib.to_string_lossy())
         .replace("{PURELIB}", &purelib.to_string_lossy());
-        fs_err::write(&executable, format!("#!/bin/sh\necho '{json}'\n"))?;
+        fs_err::write(
+            &executable,
+            formatdoc! {"
+                #!/bin/sh
+                echo '{json}'
+            "},
+        )?;
         fs_err::set_permissions(&executable, PermissionsExt::from_mode(0o770))?;
 
         let cache = Cache::temp()?.init().await?;

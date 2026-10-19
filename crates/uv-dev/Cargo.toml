@@ -70,6 +70,7 @@ walkdir = { workspace = true }
 yaml_serde = { version = "0.10.7", default-features = false, features = ["std"] }
 
 [dev-dependencies]
+indoc = { workspace = true }
 insta = { workspace = true }
 
 [lib]

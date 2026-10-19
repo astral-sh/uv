@@ -22,4 +22,5 @@ thiserror = { workspace = true }
 
 [dev-dependencies]
 fs-err = { workspace = true }
+indoc = { workspace = true }
 temp-env = { workspace = true }

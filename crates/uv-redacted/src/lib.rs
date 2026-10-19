@@ -717,6 +717,7 @@ fn display_with_redacted_credentials(
 
 #[cfg(test)]
 mod tests {
+    use indoc::{formatdoc, indoc};
     use insta::assert_debug_snapshot;
 
     use super::*;
@@ -850,15 +851,22 @@ mod tests {
     #[test]
     fn redact_url_in_message() {
         let url = SafeUrl::parse("https://user:pass@example.com/org/repo.git").unwrap();
-        let message = format!(
-            "process didn't exit successfully: `git fetch '{}'`\n--- stderr\nfatal: Authentication failed for '{}'",
+        let message = formatdoc! {"
+            process didn't exit successfully: `git fetch '{}'`
+            --- stderr
+            fatal: Authentication failed for '{}'
+        ",
             url.as_str(),
             url.as_str()
-        );
+        };
 
         assert_eq!(
             url.redact_in(&message),
-            "process didn't exit successfully: `git fetch 'https://user:****@example.com/org/repo.git'`\n--- stderr\nfatal: Authentication failed for 'https://user:****@example.com/org/repo.git'"
+            indoc! {"
+                process didn't exit successfully: `git fetch 'https://user:****@example.com/org/repo.git'`
+                --- stderr
+                fatal: Authentication failed for 'https://user:****@example.com/org/repo.git'
+            "}
         );
     }
 

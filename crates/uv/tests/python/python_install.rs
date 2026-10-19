@@ -225,7 +225,10 @@ fn python_install_pkgconfig() -> anyhow::Result<()> {
     let pkgconfigs = installation.child("lib").child("pkgconfig");
     pkgconfigs.create_dir_all()?;
     let pkgconfig = pkgconfigs.child("python.pc");
-    pkgconfig.write_str("prefix=/install\nlibdir=${prefix}/lib\n")?;
+    pkgconfig.write_str(indoc! {"
+        prefix=/install
+        libdir=${prefix}/lib
+    "})?;
     fs_err::set_permissions(pkgconfig.path(), std::fs::Permissions::from_mode(0o640))?;
     let original = fs_err::read_to_string(pkgconfig.path())?;
     let mut reader = fs_err::File::open(pkgconfig.path())?;
