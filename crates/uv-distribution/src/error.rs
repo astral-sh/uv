@@ -11,6 +11,7 @@ use uv_distribution_filename::{WheelFilename, WheelFilenameError};
 use uv_distribution_types::{InstalledDist, InstalledDistError, IsBuildBackendError};
 use uv_fs::Simplified;
 use uv_git::GitError;
+use uv_macros::DebugNoInline;
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_platform_tags::Platform;
@@ -32,7 +33,7 @@ impl fmt::Display for PythonVersion {
     }
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(DebugNoInline, thiserror::Error)]
 pub enum Error {
     #[error("Wheel variants are not supported yet: `{0}`")]
     UnsupportedWheelVariant(Box<WheelFilename>),
