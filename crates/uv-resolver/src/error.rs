@@ -13,6 +13,7 @@ use tracing::trace;
 use uv_distribution_types::{
     DerivationChain, DistErrorKind, IndexCapabilities, IndexLocations, IndexUrl, RequestedDist,
 };
+use uv_macros::DebugNoInline;
 use uv_normalize::PackageName;
 use uv_pep440::{LowerBound, Version};
 use uv_pep508::MarkerEnvironment;
@@ -37,7 +38,7 @@ use crate::resolver::{
 };
 use crate::{InMemoryIndex, Options};
 
-#[derive(Debug, thiserror::Error)]
+#[derive(DebugNoInline, thiserror::Error)]
 pub enum ResolveError {
     #[error("Failed to resolve dependencies for package `{1}=={2}`")]
     Dependencies(#[source] Box<Self>, PackageName, Version, DerivationChain),
