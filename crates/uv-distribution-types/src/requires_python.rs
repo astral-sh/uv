@@ -598,7 +598,7 @@ impl FromStr for SimplifiedMarkerTree {
 
 impl SimplifiedMarkerTree {
     /// Parses a serialized marker without restoring its lockfile's Python bounds.
-    pub fn parse(source: &str, reporter: &mut impl Reporter) -> Result<Self, Pep508Error> {
+    pub fn parse(source: &str, reporter: &mut dyn Reporter) -> Result<Self, Pep508Error> {
         MarkerTree::parse(source, reporter).map(Self)
     }
 
