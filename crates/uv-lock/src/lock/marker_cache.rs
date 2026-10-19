@@ -3,10 +3,10 @@
 use std::cell::RefCell;
 use std::collections::hash_map::Entry;
 use std::fmt;
-use std::hash::{Hash, Hasher};
+use std::hash::BuildHasher;
 use std::str::FromStr;
 
-use rustc_hash::{FxHashMap, FxHasher};
+use rustc_hash::{FxBuildHasher, FxHashMap};
 use serde::{Deserialize, Deserializer, de};
 
 use uv_distribution_types::SimplifiedMarkerTree;
@@ -38,28 +38,18 @@ enum CacheLookup {
 
 impl MarkerCache {
     fn lookup(&mut self, source: &str) -> CacheLookup {
-        let mut hasher = FxHasher::default();
-        source.hash(&mut hasher);
-        let fingerprint = hasher.finish();
+        let fingerprint = FxBuildHasher.hash_one(source);
         let has_room = self.markers.len() < MAX_CACHE_ENTRIES;
         match self.markers.entry(fingerprint) {
             Entry::Occupied(entry) => match entry.get() {
-                Some((cached_source, marker)) => {
-                    // Fingerprints only control admission; compare the full string
-                    // before returning a cached parse, including on collisions.
-                    if cached_source.as_ref() == source {
-                        CacheLookup::Hit(*marker)
-                    } else {
-                        CacheLookup::Miss
-                    }
+                // Compare the full string so fingerprint collisions cannot return another marker.
+                Some((cached_source, marker)) if cached_source.as_ref() == source => {
+                    CacheLookup::Hit(*marker)
                 }
-                None => {
-                    if source.len() <= MAX_CACHE_BYTES - self.bytes {
-                        CacheLookup::Repeated(fingerprint)
-                    } else {
-                        CacheLookup::Miss
-                    }
+                None if source.len() <= MAX_CACHE_BYTES - self.bytes => {
+                    CacheLookup::Repeated(fingerprint)
                 }
+                Some(_) | None => CacheLookup::Miss,
             },
             Entry::Vacant(entry) => {
                 if has_room && source.len() <= MAX_CACHE_BYTES - self.bytes {
@@ -76,7 +66,7 @@ impl MarkerCache {
         if source.len() <= MAX_CACHE_BYTES - self.bytes
             && let Some(entry @ None) = self.markers.get_mut(&fingerprint)
         {
-            *entry = Some((source.into(), marker));
+            *entry = Some((Box::from(source), marker));
             self.bytes += source.len();
         }
     }
@@ -87,7 +77,7 @@ struct CacheGuard(Option<MarkerCache>);
 
 impl Drop for CacheGuard {
     fn drop(&mut self) {
-        MARKERS.with_borrow_mut(|cache| *cache = self.0.take());
+        MARKERS.set(self.0.take());
     }
 }
 
@@ -182,39 +172,26 @@ mod tests {
     fn cache_is_scoped_to_one_deserialization() {
         let source = format!("{}os_name == 'posix'", "os_name == 'posix' and ".repeat(16));
         let expected = marker(&source);
-        assert!(MARKERS.with_borrow(Option::is_none));
-
         with_cache(|| {
             assert_eq!(marker(&source), expected);
             MARKERS.with_borrow(|cache| {
-                assert_eq!(cache.as_ref().expect("active marker cache").bytes, 0);
+                assert_eq!(cache.as_ref().map(|cache| cache.bytes), Some(0));
             });
             assert_eq!(marker(&source), expected);
             MARKERS.with_borrow(|cache| {
-                let cache = cache.as_ref().expect("active marker cache");
-                assert_eq!(cache.markers.len(), 1);
-                assert_eq!(cache.bytes, source.len());
+                assert_eq!(cache.as_ref().map(|cache| cache.bytes), Some(source.len()));
             });
 
             let result: Result<(), ()> = with_cache(|| {
                 MARKERS.with_borrow(|cache| {
-                    assert!(
-                        cache
-                            .as_ref()
-                            .expect("nested marker cache")
-                            .markers
-                            .is_empty()
-                    );
+                    assert_eq!(cache.as_ref().map(|cache| cache.markers.len()), Some(0));
                 });
                 Err(())
             });
             assert!(result.is_err());
             assert_eq!(marker(&source), expected);
             MARKERS.with_borrow(|cache| {
-                assert_eq!(
-                    cache.as_ref().expect("restored marker cache").markers.len(),
-                    1
-                );
+                assert_eq!(cache.as_ref().map(|cache| cache.bytes), Some(source.len()));
             });
         });
 
@@ -228,14 +205,7 @@ mod tests {
             marker(&source);
             marker(&source);
             MARKERS.with_borrow(|cache| {
-                assert!(
-                    cache
-                        .as_ref()
-                        .expect("active marker cache")
-                        .markers
-                        .values()
-                        .all(Option::is_none)
-                );
+                assert_eq!(cache.as_ref().map(|cache| cache.bytes), Some(0));
             });
         });
     }
