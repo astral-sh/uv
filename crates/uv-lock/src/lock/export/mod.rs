@@ -519,7 +519,7 @@ fn conflict_marker_reachability<'lock>(
                     // the dependency marker as redundant when the lockfile is written.
                     let active_marker = if let Node::Package(parent) = graph[parent_index] {
                         let item = ConflictItem::from((parent.name().clone(), (*extra).clone()));
-                        *parent_map.entry(item).or_insert(MarkerTree::FALSE)
+                        *parent_map.entry(item).or_insert(parent_marker)
                     } else {
                         parent_marker
                     };
@@ -550,15 +550,12 @@ fn conflict_marker_reachability<'lock>(
             parent_marker = parent_marker.and(marker);
 
             // Combine the inferred conflicts with the existing conflicts on the node.
-            let mut conflicts_changed = false;
             match conflict_maps.entry(child_edge.target()) {
                 Entry::Occupied(mut existing) => {
                     let child_map = existing.get_mut();
                     for (key, value) in parent_map {
                         let child_marker = child_map.entry(key).or_insert(MarkerTree::FALSE);
-                        let combined = child_marker.or(value);
-                        conflicts_changed |= combined != *child_marker;
-                        *child_marker = combined;
+                        *child_marker = child_marker.or(value);
                     }
                 }
                 Entry::Vacant(vacant) => {
@@ -572,8 +569,7 @@ fn conflict_marker_reachability<'lock>(
                     // If the marker is a subset of the existing marker (A ⊆ B exactly if
                     // A ∪ B = A), updating the child wouldn't change child's marker.
                     parent_marker = parent_marker.or(*existing.get());
-                    // Extra activation can change even when package reachability does not.
-                    if parent_marker != *existing.get() || conflicts_changed {
+                    if parent_marker != *existing.get() {
                         existing.insert(parent_marker);
                         queue.push(child_edge.target());
                     }
