@@ -133,7 +133,9 @@ impl Binary {
             }
             Self::Serc => {
                 let suffix = format!("{version}/serc-{platform}.{}", format.extension());
-                let mirror_base = astral_mirror_base_url(astral_mirror_url);
+                let mirror_base = astral_mirror_url
+                    .unwrap_or(SERC_MIRROR_BASE_URL)
+                    .trim_end_matches('/');
                 let mirror = format!("{mirror_base}{SERC_MIRROR_SUFFIX}{suffix}");
                 let mut urls = vec![parse_url(mirror)?];
                 // When using the default mirror, also fall back to GitHub.
@@ -216,7 +218,9 @@ impl Binary {
             }
             Self::Serc => {
                 if let Some(suffix) = canonical_url.as_str().strip_prefix(SERC_GITHUB_URL_PREFIX) {
-                    let mirror_base = astral_mirror_base_url(astral_mirror_url);
+                    let mirror_base = astral_mirror_url
+                        .unwrap_or(SERC_MIRROR_BASE_URL)
+                        .trim_end_matches('/');
                     let mirror = format!("{mirror_base}{SERC_MIRROR_SUFFIX}{suffix}");
                     let mirror_url = parse_url(mirror)?;
                     if astral_mirror_url.is_some() {
@@ -328,7 +332,10 @@ const UV_GITHUB_URL_PREFIX: &str = "https://github.com/astral-sh/uv/releases/dow
 const RUFF_MIRROR_SUFFIX: &str = "/github/ruff/releases/download/";
 
 /// The suffix appended to the Astral mirror base for serc releases.
-const SERC_MIRROR_SUFFIX: &str = "/github/serc/releases/download/";
+const SERC_MIRROR_SUFFIX: &str = "/serc/releases/";
+
+/// The base URL for the Astral Labs mirror used for serc releases.
+const SERC_MIRROR_BASE_URL: &str = "https://labs.astral.sh";
 
 /// The suffix appended to the Astral mirror base for ty releases.
 const TY_MIRROR_SUFFIX: &str = "/github/ty/releases/download/";
@@ -1450,9 +1457,9 @@ mod tests {
             urls,
             vec![
                 SafeUrl::parse(
-                    "https://releases.astral.sh/github/serc/releases/download/0.1.6/serc-aarch64-apple-darwin.tar.gz",
+                    "https://labs.astral.sh/serc/releases/0.1.6/serc-aarch64-apple-darwin.tar.gz",
                 )
-                .expect("default Astral mirror serc URL should be valid"),
+                .expect("default Astral Labs serc URL should be valid"),
                 SafeUrl::parse(
                     "https://github.com/astral-sh/serc/releases/download/0.1.6/serc-aarch64-apple-darwin.tar.gz",
                 )
@@ -1482,7 +1489,7 @@ mod tests {
             urls,
             vec![
                 SafeUrl::parse(
-                    "https://nexus.example.com/repository/releases.astral.sh/github/serc/releases/download/0.1.6/serc-aarch64-apple-darwin.tar.gz",
+                    "https://nexus.example.com/repository/releases.astral.sh/serc/releases/0.1.6/serc-aarch64-apple-darwin.tar.gz",
                 )
                 .expect("custom Astral mirror serc URL should be valid"),
             ]
@@ -1506,7 +1513,7 @@ mod tests {
             urls,
             vec![
                 SafeUrl::parse(
-                    "https://nexus.example.com/repository/releases.astral.sh/github/serc/releases/download/0.1.6/serc-aarch64-apple-darwin.tar.gz",
+                    "https://nexus.example.com/repository/releases.astral.sh/serc/releases/0.1.6/serc-aarch64-apple-darwin.tar.gz",
                 )
                 .expect("custom Astral mirror serc URL should be valid"),
             ]
@@ -1514,7 +1521,7 @@ mod tests {
     }
 
     #[test]
-    fn serc_mirror_urls_use_default_astral_mirror_then_github() {
+    fn serc_mirror_urls_use_default_labs_mirror_then_github() {
         let canonical_url = SafeUrl::parse(
             "https://github.com/astral-sh/serc/releases/download/0.1.6/serc-aarch64-apple-darwin.tar.gz",
         )
@@ -1531,9 +1538,9 @@ mod tests {
             default_urls,
             vec![
                 SafeUrl::parse(
-                    "https://releases.astral.sh/github/serc/releases/download/0.1.6/serc-aarch64-apple-darwin.tar.gz",
+                    "https://labs.astral.sh/serc/releases/0.1.6/serc-aarch64-apple-darwin.tar.gz",
                 )
-                .expect("default Astral mirror serc URL should be valid"),
+                .expect("default Astral Labs serc URL should be valid"),
                 canonical_url,
             ]
         );
