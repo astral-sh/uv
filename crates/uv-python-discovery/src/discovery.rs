@@ -13,6 +13,7 @@ use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_fs::Simplified;
 use uv_fs::which::is_executable;
+use uv_macros::DebugNoInline;
 use uv_platform::Platform;
 use uv_python_types::{
     EnvironmentPreference, PythonPreference, PythonRequest, PythonRequestError, PythonSource,
@@ -79,7 +80,7 @@ impl PythonExecutableGroup {
     }
 }
 
-#[derive(Error, Debug)]
+#[derive(Error, DebugNoInline)]
 pub enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),
