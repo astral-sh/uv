@@ -9,80 +9,58 @@ Released on 2026-10-19.
 
 ### Enhancements
 
-- Fix venv activation command for ksh ([#22538](https://github.com/astral-sh/uv/pull/22538))
-- Include installed packages in workspace metadata ([#22395](https://github.com/astral-sh/uv/pull/22395))
-- Include supported environments in `pylock.toml` exports ([#22596](https://github.com/astral-sh/uv/pull/22596))
-- Preserve wheel script encodings in shell launchers ([#22526](https://github.com/astral-sh/uv/pull/22526))
-- Retain diagnostics for script Python discovery failures ([#22549](https://github.com/astral-sh/uv/pull/22549))
-- Retry dropped HTTP dispatch tasks ([#22672](https://github.com/astral-sh/uv/pull/22672))
-- Skip script path lookup for non-relocatable environments ([#22572](https://github.com/astral-sh/uv/pull/22572))
-- Use PEP 508 URLs for build backend requirements ([#22577](https://github.com/astral-sh/uv/pull/22577))
+- Report all installed packages in `uv workspace metadata`, including packages outside the selected resolution ([#22395](https://github.com/astral-sh/uv/pull/22395))
+- Include supported environment restrictions when exporting `pylock.toml` ([#22596](https://github.com/astral-sh/uv/pull/22596))
+- Retry dropped GET and HEAD requests when fetching package and index data ([#22672](https://github.com/astral-sh/uv/pull/22672))
+- Preserve encoding declarations in wheel data scripts that require shell launchers ([#22526](https://github.com/astral-sh/uv/pull/22526))
+- Show causes and hints when `uv python find --script` cannot discover an interpreter, including with `-q` ([#22549](https://github.com/astral-sh/uv/pull/22549))
+- Print valid ksh activation instructions and support non-relocatable environments under OpenBSD-derived ksh ([#22538](https://github.com/astral-sh/uv/pull/22538), [#22572](https://github.com/astral-sh/uv/pull/22572))
+- Allow PEP 508 direct URLs, including Mercurial and extensionless archive URLs, in uv-build's `[build-system].requires` validation ([#22577](https://github.com/astral-sh/uv/pull/22577))
+
+### Python
+
+- Add PyPy 3.11.17 and 3.12.15 ([#22578](https://github.com/astral-sh/uv/pull/22578))
 
 ### Preview features
 
-- Fetch index-level variant metadata ([#22511](https://github.com/astral-sh/uv/pull/22511))
-- Recognize variant metadata in package indexes ([#22509](https://github.com/astral-sh/uv/pull/22509))
+- Fetch and parse PEP 825 index-level variant metadata with `wheel-variants` ([#22509](https://github.com/astral-sh/uv/pull/22509), [#22511](https://github.com/astral-sh/uv/pull/22511))
 
 ### Performance
 
-- Avoid cloning resolver metadata for virtual package nodes ([#22565](https://github.com/astral-sh/uv/pull/22565))
-- Avoid expanding environment-only conflict markers ([#22615](https://github.com/astral-sh/uv/pull/22615))
-- Balance Boolean marker chains during parsing ([#22675](https://github.com/astral-sh/uv/pull/22675))
-- Cache workspace member names by path ([#22635](https://github.com/astral-sh/uv/pull/22635))
-- Extract marker DNF covers from decision diagrams ([#22651](https://github.com/astral-sh/uv/pull/22651))
-- Index dependency endpoints within each resolver fork ([#22625](https://github.com/astral-sh/uv/pull/22625))
-- Memoize repeated marker traversals ([#22674](https://github.com/astral-sh/uv/pull/22674))
-- Resolve extras and check marker reachability without DNF ([#22608](https://github.com/astral-sh/uv/pull/22608))
-- Serialize only the CycloneDX fields emitted by uv ([#22431](https://github.com/astral-sh/uv/pull/22431))
-- Store marker range edges outside decision nodes ([#22681](https://github.com/astral-sh/uv/pull/22681))
-- Upgrade toml_parser to 1.1.5 ([#22679](https://github.com/astral-sh/uv/pull/22679))
-- uv-build: remove jiff dependency ([#22539](https://github.com/astral-sh/uv/pull/22539))
+- Avoid exponential work when simplifying, traversing, and exporting complex dependency markers ([#22608](https://github.com/astral-sh/uv/pull/22608), [#22615](https://github.com/astral-sh/uv/pull/22615), [#22651](https://github.com/astral-sh/uv/pull/22651), [#22674](https://github.com/astral-sh/uv/pull/22674))
+- Reduce the time and memory used to parse and store complex dependency markers ([#22675](https://github.com/astral-sh/uv/pull/22675), [#22676](https://github.com/astral-sh/uv/pull/22676), [#22681](https://github.com/astral-sh/uv/pull/22681))
+- Reduce resolver memory use for large dependency graphs, forks, extras, and dependency groups ([#22565](https://github.com/astral-sh/uv/pull/22565), [#22625](https://github.com/astral-sh/uv/pull/22625))
+- Speed up project discovery in large workspaces by caching member names ([#22635](https://github.com/astral-sh/uv/pull/22635))
+- Reduce uv's binary size and speed up CycloneDX exports ([#22431](https://github.com/astral-sh/uv/pull/22431))
+- Reduce `uv-build` binary size, including Linux x86_64 wheels ([#22539](https://github.com/astral-sh/uv/pull/22539), [#22573](https://github.com/astral-sh/uv/pull/22573))
+- Reduce allocations when parsing TOML ([#22679](https://github.com/astral-sh/uv/pull/22679))
 
 ### Bug fixes
 
-- Coalesce marker ranges after mapping their children ([#22680](https://github.com/astral-sh/uv/pull/22680))
-- Defer publish credential prompts until authentication lookup fails ([#22593](https://github.com/astral-sh/uv/pull/22593))
-- Do not panic on conflicts with fixed-priority packages ([#22589](https://github.com/astral-sh/uv/pull/22589))
-- Exclude nonmatching files from recursive build globs ([#22581](https://github.com/astral-sh/uv/pull/22581))
-- Handle invalid Python version requests without panicking ([#22727](https://github.com/astral-sh/uv/pull/22727))
-- Honor `pylock.toml` environment restrictions during installation ([#22594](https://github.com/astral-sh/uv/pull/22594))
-- Only reuse locally built wheels when the resolver selects a source distribution ([#22685](https://github.com/astral-sh/uv/pull/22685))
-- Prefer retention of `SafeUrl` across internal APIs ([#22601](https://github.com/astral-sh/uv/pull/22601))
-- Reject invalid pylock output paths ([#22725](https://github.com/astral-sh/uv/pull/22725))
-- Remove `SafeUrl` dereferencing to `url::Url` ([#22622](https://github.com/astral-sh/uv/pull/22622))
-- Resolve fresh managed Python installations to absolute paths ([#22547](https://github.com/astral-sh/uv/pull/22547))
-- Resolve license globs before packaging ([#22583](https://github.com/astral-sh/uv/pull/22583))
-- Retain `SafeUrl` policies when removing credentials ([#22617](https://github.com/astral-sh/uv/pull/22617))
-- Show `pip check` incompatibilities in quiet mode ([#22544](https://github.com/astral-sh/uv/pull/22544))
-- Store parsed URLs in direct-origin metadata ([#22646](https://github.com/astral-sh/uv/pull/22646))
-- Use full URLs for flat-index cache keys ([#22630](https://github.com/astral-sh/uv/pull/22630))
+- Respect `--exclude-newer` when a newer wheel for the selected source distribution is already cached ([#22685](https://github.com/astral-sh/uv/pull/22685))
+- Prevent URL credentials from leaking through diagnostics or persisted metadata ([#22600](https://github.com/astral-sh/uv/pull/22600), [#22601](https://github.com/astral-sh/uv/pull/22601), [#22617](https://github.com/astral-sh/uv/pull/22617), [#22622](https://github.com/astral-sh/uv/pull/22622), [#22646](https://github.com/astral-sh/uv/pull/22646))
+- Keep separate cache entries for signed `--find-links` URLs that differ only in sensitive query values ([#22630](https://github.com/astral-sh/uv/pull/22630))
+- Honor PEP 751 environment restrictions when installing or syncing from `pylock.toml` ([#22594](https://github.com/astral-sh/uv/pull/22594))
+- Use configured credentials before prompting during `uv publish`, and avoid prompting when no upload occurs ([#22593](https://github.com/astral-sh/uv/pull/22593))
+- Match recursive build globs against complete file paths and ignore invalid license symlinks ([#22581](https://github.com/astral-sh/uv/pull/22581), [#22583](https://github.com/astral-sh/uv/pull/22583))
+- Return an error for invalid `uv pip compile --python-version` values instead of panicking ([#22727](https://github.com/astral-sh/uv/pull/22727))
+- Reject invalid `pylock.toml` output filenames before resolution instead of panicking ([#22725](https://github.com/astral-sh/uv/pull/22725))
+- Avoid panicking during repeated resolution conflicts involving fixed-priority packages ([#22589](https://github.com/astral-sh/uv/pull/22589))
+- Create version aliases correctly when installing managed Python into a relative directory ([#22547](https://github.com/astral-sh/uv/pull/22547))
+- Show incompatibilities from failing `uv pip check` invocations with `-q` ([#22544](https://github.com/astral-sh/uv/pull/22544))
+- Treat logically equivalent dependency markers as equal regardless of construction order ([#22680](https://github.com/astral-sh/uv/pull/22680))
 
 ### Rust API
 
-- Gate raw `uv-pep508` URL APIs behind `unsafe-url` ([#22623](https://github.com/astral-sh/uv/pull/22623))
+- Require the opt-in `unsafe-url` feature to use raw `url::Url` APIs in `uv-pep508` ([#22623](https://github.com/astral-sh/uv/pull/22623))
 
 ### Documentation
 
-- Clarify documentation and correct stale guidance ([#22542](https://github.com/astral-sh/uv/pull/22542))
+- Clarify credential lookup, environment synchronization, managed Python, and integration guidance ([#22542](https://github.com/astral-sh/uv/pull/22542))
 
 ### Other changes
 
-- Adopt stable macOS signing identifiers ([#22648](https://github.com/astral-sh/uv/pull/22648))
-- Benchmark marker operations ([#22610](https://github.com/astral-sh/uv/pull/22610))
-- Build wall-time benchmarks on a larger runner ([#22659](https://github.com/astral-sh/uv/pull/22659))
-- Compress benchmark artifacts with zstd ([#22660](https://github.com/astral-sh/uv/pull/22660))
-- Encode URL serialization policies in the type system ([#22600](https://github.com/astral-sh/uv/pull/22600))
-- Fix overlapping promotion dispatch rules ([#22540](https://github.com/astral-sh/uv/pull/22540))
-- Fold identical functions in Linux uv-build wheels ([#22573](https://github.com/astral-sh/uv/pull/22573))
-- Increase the Windows ARM trampoline test timeout ([#22566](https://github.com/astral-sh/uv/pull/22566))
-- Reduce marker interner storage and share conjunction cache entries ([#22676](https://github.com/astral-sh/uv/pull/22676))
-- Restore merge-revision checkout for walltime benchmarks ([#22562](https://github.com/astral-sh/uv/pull/22562))
-- Reuse warm Git benchmark caches ([#22657](https://github.com/astral-sh/uv/pull/22657))
-- Seed Python builds used by managed discovery tests ([#22654](https://github.com/astral-sh/uv/pull/22654))
-- Seed Python variants used by Unix debug tests ([#22652](https://github.com/astral-sh/uv/pull/22652))
-- Sync latest Python releases ([#22578](https://github.com/astral-sh/uv/pull/22578))
-- Use a builder for Packse wheel fixtures ([#22689](https://github.com/astral-sh/uv/pull/22689))
-- Use one codegen unit for benchmark builds ([#22667](https://github.com/astral-sh/uv/pull/22667))
+- Use stable `sh.astral.*` signing identifiers for macOS binaries ([#22648](https://github.com/astral-sh/uv/pull/22648))
 
 ## 0.13.1
 
