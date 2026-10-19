@@ -40,6 +40,35 @@ pub enum VariantsJsonParseError {
 /// Variant properties, grouped by namespace and feature.
 type VariantProperties = BTreeMap<VariantNamespace, BTreeMap<VariantFeature, Vec<VariantValue>>>;
 
+/// Required variant properties unsupported by the target system.
+#[derive(Debug)]
+pub struct UnsupportedVariantProperties(VariantProperties);
+
+impl fmt::Display for UnsupportedVariantProperties {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut separator = "";
+        for (namespace, features) in &self.0 {
+            for (feature, values) in features {
+                let (open, close) = if values.len() > 1 {
+                    ("(", ")")
+                } else {
+                    ("", "")
+                };
+                write!(f, "{separator}{open}")?;
+                for (index, value) in values.iter().enumerate() {
+                    if index > 0 {
+                        f.write_str(" or ")?;
+                    }
+                    write!(f, "`{namespace} :: {} :: {}`", feature.0, value.0)?;
+                }
+                f.write_str(close)?;
+                separator = " and ";
+            }
+        }
+        Ok(())
+    }
+}
+
 /// Compatible features and values by namespace, ordered from most to least preferred.
 ///
 /// Namespaces are also ordered, but their ordering comes from the package instead of the provider
@@ -127,13 +156,8 @@ impl VariantsJsonContent {
                 .position(|name| name == namespace)?;
             let supported_features = supported_properties.properties.get(namespace)?;
             for (feature, values) in features {
-                let (feature_priority, (_name, supported_values)) = supported_features
-                    .iter()
-                    .enumerate()
-                    .find(|(_feature_priority, (name, _supported_values))| name == feature)?;
-                let value_priority = supported_values
-                    .iter()
-                    .position(|value| values.contains(value))?;
+                let (feature_priority, value_priority) =
+                    score_feature(supported_features, feature, values)?;
                 properties.insert((namespace_priority, feature_priority, value_priority));
             }
         }
@@ -142,6 +166,32 @@ impl VariantsJsonContent {
             properties: properties.into_iter().map(Reverse).collect(),
             label: Reverse(label.clone()),
         })
+    }
+
+    /// Return the unsupported properties for a variant present in this metadata, if any.
+    pub fn unsupported_variant_properties(
+        &self,
+        label: &VariantLabel,
+        supported_properties: &SupportedVariantProperties,
+    ) -> Option<UnsupportedVariantProperties> {
+        let properties = self.variants.get(label)?;
+        let mut unsupported = BTreeMap::new();
+        for (namespace, features) in properties {
+            let supported_features = supported_properties.properties.get(namespace);
+            let unsupported_features = features
+                .iter()
+                .filter(|(feature, values)| {
+                    supported_features
+                        .and_then(|supported| score_feature(supported, feature, values))
+                        .is_none()
+                })
+                .map(|(feature, values)| (feature.clone(), values.clone()))
+                .collect::<BTreeMap<_, _>>();
+            if !unsupported_features.is_empty() {
+                unsupported.insert(namespace.clone(), unsupported_features);
+            }
+        }
+        (!unsupported.is_empty()).then_some(UnsupportedVariantProperties(unsupported))
     }
 
     /// Collect ordered compatible features and values from enabled static providers.
@@ -235,6 +285,22 @@ impl VariantsJsonContent {
             }
         }
     }
+}
+
+/// Return the priority of the first supported value for a feature.
+fn score_feature(
+    supported_features: &[(VariantFeature, Vec<VariantValue>)],
+    feature: &VariantFeature,
+    values: &[VariantValue],
+) -> Option<(usize, usize)> {
+    let (feature_priority, (_, supported_values)) = supported_features
+        .iter()
+        .enumerate()
+        .find(|(_, (name, _))| name == feature)?;
+    let value_priority = supported_values
+        .iter()
+        .position(|value| values.contains(value))?;
+    Some((feature_priority, value_priority))
 }
 
 /// Default priorities for the namespaces used by a release's variants.
