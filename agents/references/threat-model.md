@@ -117,8 +117,8 @@ integrity, credentials, execution, and filesystem destinations while handling th
   single-purpose and its effective authority is read-only and limited to inert test infrastructure.
 - **Availability:** When using an existing lockfile, uv must not accept more than the recorded sizes
   for files. Remote denial of service in all other operations, including initial resolution and lock
-  updates, is outside the threat model. Resource exhaustion caused by trusted local input is a
-  performance bug. A one-shot parser panic is a correctness bug, not a security issue.
+  updates, is outside the threat model. Any resource exhaustion is a performance bug. A one-shot
+  parser panic is a correctness bug, not a security issue.
 
 ## Severity calibration
 
@@ -133,11 +133,10 @@ integrity, credentials, execution, and filesystem destinations while handling th
   instead of a documented full 40-hex immutable Git pin. A hash bypass that meets these criteria can
   qualify as High without a separate privileged consumer or credential.
 - **Medium:** A real but limited boundary crossing, an uncommon realistic setup, limited credential
-  or filesystem effect, reliable resource exhaustion that crosses the availability boundary, or
-  premature execution that violates an effective explicit policy. Examples: collision between an
-  abbreviated or undocumented legacy Git pin and a mutable ref; or shell injection that waits for
-  explicit activation-script sourcing. These become High only when a separate privileged consumer,
-  credential, or authoritative output materially increases impact.
+  or filesystem effect, or premature execution that violates an effective explicit policy. Examples:
+  collision between an abbreviated or undocumented legacy Git pin and a mutable ref; or shell
+  injection that waits for explicit activation-script sourcing. These become High only when a
+  separate privileged consumer, credential, or authoritative output materially increases impact.
 - **Low:** A narrow safety gap, rare reuse of one cache entry across independently authorized
   identities, limited disclosure, or a robustness problem across a real but weak boundary.
 - **Informational:** A genuine **security** concern with no or negligible current impact.
