@@ -4,6 +4,7 @@ use uv_audit::osv;
 use uv_auth::CredentialsFromUrlError;
 use uv_command_support::UvError;
 use uv_distribution_types::{IndexCredentialsError, IndexUrlError, RequiresPython};
+use uv_macros::DebugNoInline;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
 use uv_python_discovery::format_requires_python_sources;
@@ -14,7 +15,7 @@ use uv_workspace::dependency_groups::DependencyGroupError;
 use crate::ConflictError;
 
 /// A failure while resolving, creating, or updating a Python environment.
-#[derive(thiserror::Error, Debug)]
+#[derive(thiserror::Error, DebugNoInline)]
 pub enum EnvironmentError {
     #[error(transparent)]
     Conflict(#[from] ConflictError),
