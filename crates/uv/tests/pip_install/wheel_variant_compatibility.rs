@@ -19,11 +19,8 @@ fn null_variant() -> Value {
     })
 }
 
-/// Recheck a local wheel's hardware requirements when compiling after a driver change.
-#[test]
-fn install_local_variant_wheel() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-    let variant = json!({
+fn gpu_variant() -> Value {
+    json!({
         "$schema": PEP_850_SCHEMA,
         "default-priorities": { "namespace": ["nvidia"] },
         "providers": {
@@ -41,7 +38,13 @@ fn install_local_variant_wheel() -> Result<()> {
             }
         }
     })
-    .to_string();
+}
+
+/// Recheck a local wheel's hardware requirements when compiling after a driver change.
+#[test]
+fn install_local_variant_wheel() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let variant = gpu_variant().to_string();
     let (filename, wheel) = WheelBuilder::new(&"ok".parse()?, &"1.0.0".parse()?)
         .variant(&"gpu".parse()?, &variant)
         .build();
@@ -109,22 +112,78 @@ fn refresh_incompatible_variant_wheel() -> Result<()> {
     Ok(())
 }
 
-/// Sync keeps an installed variant even when wheel variants are no longer enabled.
+/// Installing a cached URL wheel checks the system's current supported variant properties.
+#[test]
+fn install_direct_url_variant_wheel() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::from_toml(indoc! {r#"
+        name = "direct-url-variant-wheel"
+        root = {}
+        expected.satisfiable = true
+
+        [packages.ok.versions."1.0.0"]
+        wheel = false
+        sdist = false
+
+        [packages.ok.versions."1.0.0".variants]
+        namespaces = ["nvidia"]
+        providers.nvidia.requires = ["nvidia-variant-provider==0.0.1"]
+        providers.nvidia.plugin-api = "nvidia_variant_provider.plugin:NvidiaVariantPlugin"
+        wheels.gpu.properties = [
+            "nvidia :: cuda_version_lower_bound :: 12",
+            "nvidia :: sm_arch :: 89_real",
+        ]
+    "#})?;
+    let url = server.file_url("ok-1.0.0-py3-none-any-gpu.whl");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .env(EnvVars::NV_VARIANT_PROVIDER_FORCE_CUDA_DRIVER_VERSION, "12")
+        .env(EnvVars::NV_VARIANT_PROVIDER_FORCE_SM_ARCH, "8.9")
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg(&url), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0 (from http://[LOCALHOST]/files/ok-1.0.0-py3-none-any-gpu.whl)
+    ");
+
+    context.reset_venv();
+    uv_snapshot!(context.filters(), context.pip_install()
+        .env(EnvVars::NV_VARIANT_PROVIDER_FORCE_CUDA_DRIVER_VERSION, "11")
+        .env(EnvVars::NV_VARIANT_PROVIDER_FORCE_SM_ARCH, "8.8")
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg(&url), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Failed to determine installation plan
+      cause: Wheel variant `gpu` requires unsupported properties: `nvidia :: cuda_version_lower_bound :: 12` and `nvidia :: sm_arch :: 89_real`
+    ");
+    Ok(())
+}
+
+/// Sync keeps an installed variant even when the system's supported properties change.
 #[test]
 fn sync_keeps_installed_variant() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let links = context.temp_dir.child("links");
     links.create_dir_all()?;
-    let variant = null_variant().to_string();
+    let variant = gpu_variant().to_string();
     let (_, wheel) = WheelBuilder::new(&"ok".parse()?, &"1.0.0".parse()?)
         .files(&[("ok-1.0.0.dist-info/variant.json", &variant)])
         .build();
     links
-        .child("ok-1.0.0-py3-none-any-null.whl")
+        .child("ok-1.0.0-py3-none-any-gpu.whl")
         .write_binary(&wheel)?;
     links.child("ok-1.0.0-variants.json").write_str(&variant)?;
 
     uv_snapshot!(context.filters(), context.pip_install()
+        .env(EnvVars::NV_VARIANT_PROVIDER_FORCE_CUDA_DRIVER_VERSION, "12")
+        .env(EnvVars::NV_VARIANT_PROVIDER_FORCE_SM_ARCH, "8.9")
         .arg("--no-index")
         .arg("--find-links")
         .arg(links.path())
@@ -144,10 +203,14 @@ fn sync_keeps_installed_variant() -> Result<()> {
         .child("requirements.txt")
         .write_str("ok==1.0.0")?;
     uv_snapshot!(context.filters(), context.pip_sync()
+        .env(EnvVars::NV_VARIANT_PROVIDER_FORCE_CUDA_DRIVER_VERSION, "11")
+        .env(EnvVars::NV_VARIANT_PROVIDER_FORCE_SM_ARCH, "8.8")
         .arg("requirements.txt")
         .arg("--no-index")
         .arg("--find-links")
-        .arg(links.path()), @"
+        .arg(links.path())
+        .arg("--preview-features")
+        .arg("wheel-variants"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]

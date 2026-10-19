@@ -1296,22 +1296,21 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             // TODO(konsti): Enforce source restrictions here before stabilizing wheel variants.
             // `pip compile --no-deps` skips lookahead and can emit variants from unsupported
             // sources. While wheel variants are in preview, it also bypasses the preview check.
-            let incompatible_tag = if filename.variant().is_some()
-                && env.marker_environment().is_none()
-            {
-                // Universal lockfiles cannot yet record wheel variants.
-                Some(IncompatibleTag::Variant)
-            } else if !python_requirement.target().matches_wheel_tag(filename) {
-                Some(IncompatibleTag::AbiPythonVersion)
-            } else if let BuiltDist::Path(wheel) = dist
-                && wheel.filename.variant().is_some()
-                && let Some(tags) = &self.tags
-                && let TagCompatibility::Incompatible(tag) = wheel.filename.tag_compatibility(tags)
-            {
-                Some(tag)
-            } else {
-                None
-            };
+            let incompatible_tag =
+                if filename.variant().is_some() && env.marker_environment().is_none() {
+                    // Universal lockfiles cannot yet record wheel variants.
+                    Some(IncompatibleTag::Variant)
+                } else if !python_requirement.target().matches_wheel_tag(filename) {
+                    Some(IncompatibleTag::AbiPythonVersion)
+                } else if let BuiltDist::Path(_) | BuiltDist::DirectUrl(_) = dist
+                    && filename.variant().is_some()
+                    && let Some(tags) = &self.tags
+                    && let TagCompatibility::Incompatible(tag) = filename.tag_compatibility(tags)
+                {
+                    Some(tag)
+                } else {
+                    None
+                };
             if let Some(tag) = incompatible_tag {
                 return Ok(Some(ResolverVersion::Unavailable(
                     filename.version.clone(),
