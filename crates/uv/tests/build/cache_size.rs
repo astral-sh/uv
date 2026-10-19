@@ -97,7 +97,7 @@ fn cache_size_human_aliases() {
 /// Legacy human-readable flags cannot be combined with an explicit output format.
 #[test]
 fn cache_size_output_format_conflicts_with_human() {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context_with_versions!(&[]);
 
     uv_snapshot!(context.filters(), context.cache_size().arg("--preview").arg("--human").arg("--output-format").arg("machine"), @"
     exit_code: 2 (failure)
