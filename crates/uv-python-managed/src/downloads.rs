@@ -1544,7 +1544,7 @@ mod tests {
     }
 
     /// Every [`PythonVersion`] in the embedded download metadata must be convertible
-    /// to a [`VersionRequest`] for interpreter discovery.
+    /// to a [`VersionRequest`].
     #[test]
     fn embedded_download_versions_convert_to_version_requests() {
         let downloads = ManagedPythonDownloadList::new_only_embedded()
