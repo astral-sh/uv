@@ -2,7 +2,10 @@ use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use serde::de::{IgnoredAny, MapAccess, Visitor, value::MapAccessDeserializer};
+use serde::de::{
+    IgnoredAny, MapAccess, SeqAccess, Visitor,
+    value::{MapAccessDeserializer, SeqAccessDeserializer},
+};
 use serde::{Deserialize, Deserializer};
 use tracing::{debug, info_span, warn};
 
@@ -464,6 +467,17 @@ impl<'de> Deserialize<'de> for GitPattern {
             {
                 GitSet::deserialize(MapAccessDeserializer::new(map)).map(GitPattern::Set)
             }
+
+            fn visit_seq<A>(self, mut sequence: A) -> Result<Self::Value, A::Error>
+            where
+                A: SeqAccess<'de>,
+            {
+                let git = GitSet::deserialize(SeqAccessDeserializer::new(&mut sequence))?;
+                if sequence.next_element::<IgnoredAny>()?.is_some() {
+                    return Err(serde::de::Error::custom("extra Git cache field"));
+                }
+                Ok(GitPattern::Set(git))
+            }
         }
 
         deserializer
@@ -566,6 +580,31 @@ mod tests {
         }
         "#);
         Ok(())
+    }
+
+    #[test]
+    fn cache_key_git_sequence() -> Result<(), toml::de::Error> {
+        let key: CacheKey = toml::from_str("git = [true, false]")?;
+        insta::assert_debug_snapshot!(key, @r#"
+        Git {
+            git: Set(
+                GitSet {
+                    commit: Some(
+                        true,
+                    ),
+                    tags: Some(
+                        false,
+                    ),
+                },
+            ),
+        }
+        "#);
+        Ok(())
+    }
+
+    #[test]
+    fn cache_key_git_sequence_extra_field() {
+        insta::assert_snapshot!(toml::from_str::<CacheKey>("git = [true, false, true]").unwrap_err(), @"data did not match any variant of untagged enum CacheKey");
     }
 
     #[test]
