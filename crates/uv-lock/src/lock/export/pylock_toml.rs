@@ -1444,10 +1444,13 @@ impl<'lock> PylockToml {
             {
                 let hashes = HashDigests::from(dist.hashes.clone());
                 let dist = dist.to_dist(install_path, &package.name, package.version.as_ref())?;
-                if let Dist::Built(BuiltDist::Path(wheel)) = &dist
-                    && wheel.filename.variant().is_some()
+                if let Dist::Built(wheel) = &dist
+                    && wheel.wheel_filename().variant().is_some()
                     && uv_preview::is_enabled(PreviewFeature::WheelVariants)
-                    && !wheel.filename.tag_compatibility(tags).is_compatible()
+                    && !wheel
+                        .wheel_filename()
+                        .tag_compatibility(tags)
+                        .is_compatible()
                 {
                     return Err(PylockTomlErrorKind::IncompatibleWheelOnly(package.name).into());
                 }
