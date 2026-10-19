@@ -261,7 +261,7 @@ jobs:
           merge-multiple: true
 
       - name: "Assemble signed release artifacts"
-        uses: astral-sh/github-actions/assemble-signed-release@b61c7106c7746375df8005eab240be92e4e450b2 # shared release signing actions
+        uses: astral-sh/github-actions/assemble-signed-release@d0e0baf29b792d71f9b61b7584351f2ce45ab8b8 # shared release signing actions
         with:
           targets: ${{ needs.prepare.outputs.artifacts }}
           # The complete release inputs retain the originals checked during preparation.
