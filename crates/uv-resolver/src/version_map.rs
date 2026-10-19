@@ -11,9 +11,8 @@ use uv_client::{FlatIndexEntry, OwnedArchive, SimpleDetailMetadata, VersionFiles
 use uv_configuration::BuildOptions;
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
-    HashComparison, IncompatibleSource, IncompatibleWheel, IndexUrl, PrioritizedDist,
-    RegistryBuiltWheel, RegistrySourceDist, RequiresPython, SourceDistCompatibility,
-    WheelCompatibility,
+    IndexEntryFilename, IndexUrl, MinimumLibcVersion, RegistryBuiltWheel, RegistrySourceDist,
+    RequiresPython,
 };
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -23,6 +22,10 @@ use uv_types::HashStrategy;
 use uv_warnings::warn_user_once;
 
 use crate::flat_index::FlatDistributions;
+use crate::prioritized_distribution::{
+    HashComparison, IncompatibleSource, IncompatibleWheel, PrioritizedDist, RegistryVariantsJson,
+    SourceDistCompatibility, WheelCompatibility,
+};
 use crate::yanks::AllowedYanks;
 
 /// A map from versions to distributions.
@@ -55,6 +58,7 @@ impl VersionMap {
         available_version_cutoff: Option<Timestamp>,
         flat_index: Option<FlatDistributions>,
         build_options: &BuildOptions,
+        minimum_libc_version: Option<MinimumLibcVersion>,
     ) -> Self {
         let mut local = false;
         let mut entries = Vec::with_capacity(simple_metadata.iter().size_hint().0);
@@ -62,6 +66,10 @@ impl VersionMap {
         // from a `VersionFiles` to a PrioritizedDist for each version
         // isn't done until that specific version is requested.
         for (datum_index, datum) in simple_metadata.iter().enumerate() {
+            // Index metadata alone does not provide an installable distribution.
+            if datum.files.wheels.is_empty() && datum.files.source_dists.is_empty() {
+                continue;
+            }
             let version = rkyv::deserialize::<Version, rkyv::rancor::Error>(&datum.version)
                 .expect("archived version always deserializes");
 
@@ -104,6 +112,7 @@ impl VersionMap {
                 requires_python,
                 included_version_cutoff,
                 available_version_cutoff,
+                minimum_libc_version,
             }),
         }
     }
@@ -114,20 +123,16 @@ impl VersionMap {
         tags: Option<&Tags>,
         hasher: &HashStrategy,
         build_options: &BuildOptions,
+        minimum_libc_version: Option<MinimumLibcVersion>,
     ) -> Self {
-        let mut local = false;
-        let mut map = BTreeMap::new();
-
-        for (version, prioritized_dist) in
-            FlatDistributions::from_entries(flat_metadata, tags, hasher, build_options)
-        {
-            local |= version.is_local();
-            map.insert(version, prioritized_dist);
-        }
-
-        Self {
-            inner: VersionMapInner::Eager(VersionMapEager { map, local }),
-        }
+        FlatDistributions::from_entries(
+            flat_metadata,
+            tags,
+            hasher,
+            build_options,
+            minimum_libc_version,
+        )
+        .into()
     }
 
     /// Return the [`ResolutionMetadata`] for the given version, if any.
@@ -503,6 +508,8 @@ struct VersionMapLazy {
     hasher: HashStrategy,
     /// The `requires-python` constraint for the resolution.
     requires_python: RequiresPython,
+    /// The libc baselines required during universal resolution.
+    minimum_libc_version: Option<MinimumLibcVersion>,
 }
 
 impl VersionMapLazy {
@@ -627,7 +634,24 @@ impl VersionMapLazy {
             )
             .expect("archived version files always deserializes");
             let mut priority_dist = init.cloned().unwrap_or_default();
-            for (filename, file) in files.all(&self.package_name) {
+            for (filename, file) in files.all_entries(&self.package_name) {
+                let filename = match filename {
+                    IndexEntryFilename::DistFilename(filename) => filename,
+                    IndexEntryFilename::VariantJson(filename) => {
+                        if !priority_dist
+                            .variants_json()
+                            .iter()
+                            .any(|variants_json| variants_json.index == self.index)
+                        {
+                            priority_dist.insert_variants_json(RegistryVariantsJson {
+                                filename,
+                                file,
+                                index: self.index.clone(),
+                            });
+                        }
+                        continue;
+                    }
+                };
                 // Support resolving as if it were an earlier timestamp, at least as long files have
                 // upload time information.
                 let (excluded, upload_time) = if let Some(included_version_cutoff) =
@@ -645,7 +669,7 @@ impl VersionMapLazy {
                         }
                         None => {
                             warn_user_once!(
-                                "{} is missing an upload date, but user provided: {included_version_cutoff}",
+                                "`{}` is missing an upload date, but user provided: {included_version_cutoff}",
                                 file.filename,
                             );
                             (true, None)
@@ -689,7 +713,12 @@ impl VersionMapLazy {
                             index: self.index.clone(),
                             size_is_authoritative: false,
                         };
-                        priority_dist.insert_built(dist, hashes, compatibility);
+                        priority_dist.insert_built(
+                            dist,
+                            hashes,
+                            compatibility,
+                            self.minimum_libc_version,
+                        );
                     }
                     DistFilename::SourceDistFilename(filename) => {
                         let compatibility = self.source_dist_compatibility(
@@ -729,16 +758,16 @@ impl VersionMapLazy {
         excluded: bool,
         upload_time: Option<i64>,
     ) -> SourceDistCompatibility {
-        // Check if builds are disabled
-        if self.no_build {
-            return SourceDistCompatibility::Incompatible(IncompatibleSource::NoBuild);
-        }
-
         // Check if after upload time cutoff
         if excluded {
             return SourceDistCompatibility::Incompatible(IncompatibleSource::ExcludeNewer(
                 upload_time,
             ));
+        }
+
+        // Check if builds are disabled
+        if self.no_build {
+            return SourceDistCompatibility::Incompatible(IncompatibleSource::NoBuild);
         }
 
         // Check if yanked
@@ -763,7 +792,9 @@ impl VersionMapLazy {
         }
 
         // Check if hashes line up. If hashes aren't required, they're considered matching.
-        let hash_policy = self.hasher.get_package(&filename.name, &filename.version);
+        let hash_policy = self
+            .hasher
+            .archive_policy_for_package(&filename.name, &filename.version);
         let required_hashes = hash_policy.digests();
         let hash = if required_hashes.is_empty() {
             HashComparison::Matched
@@ -790,14 +821,14 @@ impl VersionMapLazy {
         excluded: bool,
         upload_time: Option<i64>,
     ) -> WheelCompatibility {
-        // Check if binaries are disabled
-        if self.no_binary {
-            return WheelCompatibility::Incompatible(IncompatibleWheel::NoBinary);
-        }
-
         // Check if after upload time cutoff
         if excluded {
             return WheelCompatibility::Incompatible(IncompatibleWheel::ExcludeNewer(upload_time));
+        }
+
+        // Check if binaries are disabled
+        if self.no_binary {
+            return WheelCompatibility::Incompatible(IncompatibleWheel::NoBinary);
         }
 
         // Check if yanked
@@ -807,9 +838,17 @@ impl VersionMapLazy {
             }
         }
 
+        // Variant wheels cannot be selected, including during universal resolution.
+        // TODO(konsti): Support wheel variants during resolution.
+        if filename.variant().is_some() {
+            return WheelCompatibility::Incompatible(IncompatibleWheel::Tag(
+                IncompatibleTag::Variant,
+            ));
+        }
+
         // Determine a compatibility for the wheel based on tags.
         let priority = if let Some(tags) = &self.tags {
-            match filename.compatibility(tags) {
+            match filename.tag_compatibility(tags) {
                 TagCompatibility::Incompatible(tag) => {
                     return WheelCompatibility::Incompatible(IncompatibleWheel::Tag(tag));
                 }
@@ -827,7 +866,7 @@ impl VersionMapLazy {
         };
 
         // Check if hashes line up. If hashes aren't required, they're considered matching.
-        let hash_policy = self.hasher.get_package(name, version);
+        let hash_policy = self.hasher.archive_policy_for_package(name, version);
         let required_hashes = hash_policy.digests();
         let hash = if required_hashes.is_empty() {
             HashComparison::Matched

@@ -31,9 +31,9 @@ Set `failure_kind` to exactly one of:
 Before deciding to open an issue, follow the related-issue search guidance in
 `agents/prompts/triage-issue.md`. Apply that guidance to each independent failure and search the
 open and closed issues and the open, closed, and merged pull requests in both `astral-sh/uv` and
-`astral-sh/uv-dev`. In particular, search existing `ci-flake` issues for test and infrastructure
-flakes. Populate `related.items` with the closest results and summarize the searches performed and
-any plausible candidate that was ruled out in `related.search_scope`.
+`astral-sh/uv-dev`. In particular, search existing `internal:ci` and `internal:ci-flake` issues for
+test and infrastructure flakes. Populate `related.items` with the closest results and summarize the
+searches performed and any plausible candidate that was ruled out in `related.search_scope`.
 
 Set `decision` to exactly one of:
 
@@ -57,8 +57,9 @@ factor. Leave `comment_note` empty when there is no useful difference and for `c
 Do not include `@mentions` or sensitive values.
 
 For `create`, populate `issue` with a concise, test- or symptom-specific title, a clear body, and
-exactly one label: use `ci-flake` for flaky tests or CI infrastructure, and `bug` for a
-deterministic repository or workflow defect. The body must include the failed run or job URL, the
+exactly one label: use `internal:ci-flake` for intermittent test or CI infrastructure failures,
+`internal:ci` for deterministic CI, workflow, or infrastructure defects, and `bug` for deterministic
+defects in user-facing product behavior. The body must include the failed run or job URL, the
 decisive error excerpt, the affected workflow, job, platform, and attempt where relevant, why the
 failure appears unrelated or actionable, and any closely related issues. Avoid pasting large logs or
 exposing sensitive values, and do not include `@mentions`. The issue and any follow-up comments are

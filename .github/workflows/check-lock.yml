@@ -4,27 +4,23 @@ on:
 permissions:
   contents: read
 
+env:
+  UV_LOCKED: 1
+
 jobs:
   lock:
     timeout-minutes: 10
-    runs-on: ubuntu-slim
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-2' || 'ubuntu-slim' }}
     name: "uv lockfiles"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: "Install uv"
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
-          version: "0.12.5"
-      - name: "Check project lockfile"
-        run: uv lock --check
-      - name: "Check script lockfiles"
-        env:
-          UV_PREVIEW_FEATURES: workspace-list-scripts
-        run: |
-          set -e -o pipefail
-          uv workspace list --scripts |
-          while IFS= read -r script; do
-            uv lock --script "$script" --check
-          done
+          # renovate: datasource=github-release-attachments depName=astral-sh/uv
+          version: "0.13.1"
+          checksum: "eadd9d27c134ab5ac1ffd4473b97a741407f3ea238288f03121fc4deddf90220"
+      - name: "Check lockfiles"
+        run: ./scripts/workspace-lock.sh --check

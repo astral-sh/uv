@@ -118,7 +118,7 @@ if __name__ == "__main__":
         "--target",
         type=str,
         required=True,
-        choices=("pypi", "mkdocs"),
+        choices=("pypi",),
     )
     args = parser.parse_args()
 

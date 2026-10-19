@@ -2,13 +2,12 @@ on:
   workflow_call:
 
 env:
-  CARGO_DIST_VERSION: "0.31.0"
-  CARGO_DIST_CHECKSUM: "cd355dab0b4c02fb59038fef87655550021d07f45f1d82f947a34ef98560abb8"
+  UV_LOCKED: 1
 
 jobs:
   dist-plan:
     name: "dist plan"
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
@@ -17,16 +16,16 @@ jobs:
           persist-credentials: false
           submodules: recursive
 
-      - name: Install dist
-        shell: bash
-        run: |
-          curl --proto '=https' --tlsv1.2 -LsSf "https://github.com/axodotdev/cargo-dist/releases/download/v${CARGO_DIST_VERSION}/cargo-dist-x86_64-unknown-linux-gnu.tar.xz" -o /tmp/cargo-dist.tar.xz
-          echo "${CARGO_DIST_CHECKSUM}  /tmp/cargo-dist.tar.xz" | sha256sum -c -
-          tar -xf /tmp/cargo-dist.tar.xz -C /tmp
-          install /tmp/cargo-dist-x86_64-unknown-linux-gnu/dist ~/.cargo/bin/
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          # renovate: datasource=github-release-attachments depName=astral-sh/uv
+          version: "0.13.1"
+          checksum: "eadd9d27c134ab5ac1ffd4473b97a741407f3ea238288f03121fc4deddf90220"
+          enable-cache: true
 
       - name: Run dist plan
         run: |
-          dist plan --output-format=json > plan-dist-manifest.json
+          uv run --locked --only-dev dist plan --output-format=json > plan-dist-manifest.json
           echo "dist plan completed successfully"
           cat plan-dist-manifest.json

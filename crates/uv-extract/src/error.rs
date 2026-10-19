@@ -1,8 +1,10 @@
 use std::{ffi::OsString, path::PathBuf};
 
+use uv_macros::DebugNoInline;
+
 use crate::validate_archive_member_name;
 
-#[derive(Debug, thiserror::Error)]
+#[derive(DebugNoInline, thiserror::Error)]
 pub enum Error {
     #[error("I/O operation failed during extraction")]
     Io(#[source] std::io::Error),
@@ -20,6 +22,8 @@ pub enum Error {
         #[from]
         tar_codec::ExtractError<tar_codec::DecodeError>,
     ),
+    #[error(transparent)]
+    DirectoryHash(#[from] crate::dirhash::DirhashError),
     #[error(
         "The top-level of the archive must only contain a list directory, but it contains: {0:?}"
     )]
@@ -50,16 +54,20 @@ pub enum Error {
     },
     #[error("ZIP file contains multiple entries with different contents for: {}", path.display())]
     DuplicateLocalFileHeader { path: PathBuf },
+    #[error("ZIP file contains multiple entries for the same output path: {}", path.display())]
+    DuplicateOutputPath { path: PathBuf },
     #[error("ZIP file contains a local file header without a corresponding central-directory record entry for: {} ({offset})", path.display())]
     MissingCentralDirectoryEntry { path: PathBuf, offset: u64 },
     #[error("ZIP file contains an end-of-central-directory record entry, but no local file header for: {} ({offset}", path.display())]
     MissingLocalFileHeader { path: PathBuf, offset: u64 },
-    #[error("ZIP file uses conflicting paths for the local file header at {} (got {}, expected {})", offset, local_path.display(), central_directory_path.display())]
+    #[error("ZIP file uses conflicting paths for the local file header at {} (got `{}`, expected `{}`)", offset, local_path.display(), central_directory_path.display())]
     ConflictingPaths {
         offset: u64,
         local_path: PathBuf,
         central_directory_path: PathBuf,
     },
+    #[error("ZIP file uses conflicting entry types for the local file header and central-directory record for: {} ({offset})", path.display())]
+    ConflictingEntryTypes { path: PathBuf, offset: u64 },
     #[error("ZIP file uses conflicting checksums for the local file header and central-directory record (got {local_crc32}, expected {central_directory_crc32}) for: {} ({offset})", path.display())]
     ConflictingChecksums {
         path: PathBuf,
@@ -91,9 +99,7 @@ pub enum Error {
     MissingDataDescriptor { path: PathBuf },
     #[error("File contains an unexpected data descriptor: {}", path.display())]
     UnexpectedDataDescriptor { path: PathBuf },
-    #[error(
-        "ZIP file end-of-central-directory record contains a comment that appears to be an embedded ZIP file"
-    )]
+    #[error("ZIP file contains a comment that appears to be an embedded ZIP file")]
     ZipInZip,
     #[error("ZIP64 end-of-central-directory record contains unsupported extensible data")]
     ExtensibleData,
@@ -113,6 +119,8 @@ impl From<async_zip::error::ZipError> for Error {
     fn from(err: async_zip::error::ZipError) -> Self {
         match err {
             async_zip::error::ZipError::CompressionNotSupported(_) => Self::UnsupportedCompression,
+            async_zip::error::ZipError::TrailingContents => Self::TrailingContents,
+            async_zip::error::ZipError::ZipInZip => Self::ZipInZip,
             async_zip::error::ZipError::FileNameContainsNul { filename } => {
                 let filename = String::from_utf8_lossy(&filename);
                 validate_archive_member_name(&filename)

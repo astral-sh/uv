@@ -4,9 +4,12 @@ on:
 permissions:
   contents: read
 
+env:
+  UV_LOCKED: 1
+
 jobs:
   zizmor:
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     permissions:
       contents: read
       security-events: write
@@ -15,6 +18,6 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: zizmorcore/zizmor-action@3dc1ecc9bcb9e94e9b2c709687979e1298497054 # v0.6.2
+      - uses: zizmorcore/zizmor-action@cc914d7f3750a2d13d75c7f184a1060aa0e9d482 # v0.6.4
         with:
           advanced-security: ${{ github.repository == 'astral-sh/uv' }}

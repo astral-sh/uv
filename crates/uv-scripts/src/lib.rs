@@ -9,16 +9,19 @@ use memchr::memmem::Finder;
 use serde::Deserialize;
 use thiserror::Error;
 use tracing::instrument;
-use url::Url;
 
 use uv_configuration::NoSources;
 use uv_normalize::PackageName;
 use uv_pep440::VersionSpecifiers;
 use uv_pypi_types::VerbatimParsedUrl;
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 use uv_settings::{GlobalOptions, ResolverInstallerSchema};
 use uv_warnings::warn_user;
-use uv_workspace::pyproject::{ExtraBuildDependency, Sources};
+use uv_workspace::pyproject::{BuildConstraintDependency, ExtraBuildDependency, Sources};
+
+mod discovery;
+
+pub use discovery::{ScriptDiscoveryError, find_scripts};
 
 pub use uv_configuration::ExcludeDependency;
 pub use uv_workspace::pyproject::OverrideDependency;
@@ -33,7 +36,7 @@ pub enum Pep723Item {
     /// A PEP 723 script provided via `stdin`.
     Stdin(Pep723Metadata),
     /// A PEP 723 script provided via a remote URL.
-    Remote(Pep723Metadata, DisplaySafeUrl),
+    Remote(Pep723Metadata, SafeUrl),
 }
 
 impl Pep723Item {
@@ -63,7 +66,7 @@ pub enum Pep723ItemRef<'item> {
     /// A PEP 723 script provided via `stdin`.
     Stdin(&'item Pep723Metadata),
     /// A PEP 723 script provided via a remote URL.
-    Remote(&'item Pep723Metadata, &'item Url),
+    Remote(&'item Pep723Metadata, &'item SafeUrl),
 }
 
 impl Pep723ItemRef<'_> {
@@ -428,7 +431,7 @@ pub struct ToolUv {
     pub override_dependencies: Option<Vec<OverrideDependency>>,
     pub exclude_dependencies: Option<Vec<ExcludeDependency>>,
     pub constraint_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
-    pub build_constraint_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
+    pub build_constraint_dependencies: Option<Vec<BuildConstraintDependency>>,
     pub extra_build_dependencies: Option<BTreeMap<PackageName, Vec<ExtraBuildDependency>>>,
     pub sources: Option<BTreeMap<PackageName, Sources>>,
 }

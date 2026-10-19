@@ -55,7 +55,13 @@ impl<'a, Context: BuildContext> ExtrasResolver<'a, Context> {
         } = self;
         requirements
             .map(async |requirement| {
-                Self::resolve_requirement(requirement, hasher, index, &database).await
+                Box::pin(Self::resolve_requirement(
+                    requirement,
+                    hasher,
+                    index,
+                    &database,
+                ))
+                .await
             })
             .collect::<FuturesOrdered<_>>()
             .try_collect()
@@ -75,8 +81,10 @@ impl<'a, Context: BuildContext> ExtrasResolver<'a, Context> {
             return Ok(requirement);
         };
 
-        // Fetch the metadata for the distribution.
-        let metadata = {
+        database.record_metadata(&dist);
+
+        // Collect the available extras from the distribution metadata.
+        let mut extras = {
             let id = dist.distribution_id();
             if let Some(archive) = index
                 .distributions()
@@ -90,32 +98,27 @@ impl<'a, Context: BuildContext> ExtrasResolver<'a, Context> {
                     }
                 })
             {
-                // If the metadata is already in the index, return it.
-                archive.metadata.clone()
+                archive.metadata.provides_extra.to_vec()
             } else {
                 // Run the PEP 517 build process to extract metadata from the source distribution.
                 let archive = database
-                    .get_or_build_wheel_metadata(&dist, hasher.get(&dist))
+                    .get_or_build_wheel_metadata(&dist, hasher.metadata_policy(&dist))
                     .await
                     .map_err(|err| Error::from_dist(dist, err))?;
 
-                let metadata = archive.metadata.clone();
+                let extras = archive.metadata.provides_extra.to_vec();
 
                 // Insert the metadata into the index.
                 index
                     .distributions()
                     .done(id, Arc::new(MetadataResponse::Found(archive)));
 
-                metadata
+                extras
             }
         };
 
         // Sort extras for consistency.
-        let extras = {
-            let mut extras = metadata.provides_extra.to_vec();
-            extras.sort_unstable();
-            extras
-        };
+        extras.sort_unstable();
 
         Ok(Requirement {
             extras: extras.into_boxed_slice(),

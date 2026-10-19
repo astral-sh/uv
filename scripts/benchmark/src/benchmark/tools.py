@@ -87,10 +87,12 @@ class Pipx(Suite):
         return Command(
             name=f"{self.name} ({Benchmark.INSTALL_COLD.value})",
             prepare=f"rm -rf {venvs_dir} && rm -rf {bin_dir} && rm -rf {man_dir}",
+            env={
+                "PIPX_HOME": home_dir,
+                "PIPX_BIN_DIR": bin_dir,
+                "PIPX_MAN_DIR": man_dir,
+            },
             command=[
-                f"PIPX_HOME={home_dir}",
-                f"PIPX_BIN_DIR={bin_dir}",
-                f"PIPX_MAN_DIR={man_dir}",
                 self.path,
                 "install",
                 "--pip-args=--no-cache-dir",
@@ -113,10 +115,12 @@ class Pipx(Suite):
         return Command(
             name=f"{self.name} ({Benchmark.INSTALL_WARM.value})",
             prepare=f"rm -rf {venvs_dir} && rm -rf {bin_dir} && rm -rf {man_dir}",
+            env={
+                "PIPX_HOME": home_dir,
+                "PIPX_BIN_DIR": bin_dir,
+                "PIPX_MAN_DIR": man_dir,
+            },
             command=[
-                f"PIPX_HOME={home_dir}",
-                f"PIPX_BIN_DIR={bin_dir}",
-                f"PIPX_MAN_DIR={man_dir}",
                 self.path,
                 "install",
                 TOOL,
@@ -131,10 +135,12 @@ class Pipx(Suite):
         return Command(
             name=f"{self.name} ({Benchmark.RUN.value})",
             prepare="",
+            env={
+                "PIPX_HOME": home_dir,
+                "PIPX_BIN_DIR": bin_dir,
+                "PIPX_MAN_DIR": man_dir,
+            },
             command=[
-                f"PIPX_HOME={home_dir}",
-                f"PIPX_BIN_DIR={bin_dir}",
-                f"PIPX_MAN_DIR={man_dir}",
                 self.path,
                 "install",
                 TOOL,
@@ -167,9 +173,11 @@ class Uv(Suite):
         return Command(
             name=f"{self.name} ({Benchmark.INSTALL_COLD.value})",
             prepare=f"rm -rf {bin_dir} && rm -rf {tool_dir} && rm -rf {cache_dir}",
+            env={
+                "XDG_BIN_HOME": bin_dir,
+                "UV_TOOL_DIR": tool_dir,
+            },
             command=[
-                f"XDG_BIN_HOME={bin_dir}",
-                f"UV_TOOL_DIR={tool_dir}",
                 self.path,
                 "tool",
                 "install",
@@ -188,9 +196,11 @@ class Uv(Suite):
         return Command(
             name=f"{self.name} ({Benchmark.INSTALL_WARM.value})",
             prepare=f"rm -rf {bin_dir} && rm -rf {tool_dir}",
+            env={
+                "XDG_BIN_HOME": bin_dir,
+                "UV_TOOL_DIR": tool_dir,
+            },
             command=[
-                f"XDG_BIN_HOME={bin_dir}",
-                f"UV_TOOL_DIR={tool_dir}",
                 self.path,
                 "tool",
                 "install",
@@ -209,9 +219,11 @@ class Uv(Suite):
         return Command(
             name=f"{self.name} ({Benchmark.RUN.value})",
             prepare="",
+            env={
+                "XDG_BIN_HOME": bin_dir,
+                "UV_TOOL_DIR": tool_dir,
+            },
             command=[
-                f"XDG_BIN_HOME={bin_dir}",
-                f"UV_TOOL_DIR={tool_dir}",
                 self.path,
                 "tool",
                 "run",

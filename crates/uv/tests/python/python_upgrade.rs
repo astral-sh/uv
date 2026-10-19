@@ -1,16 +1,18 @@
+use std::path::PathBuf;
+use std::process::Command;
+
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::{FileTouch, FileWriteStr};
 use assert_fs::prelude::PathChild;
 use insta::assert_snapshot;
-use uv_python::managed::platform_key_from_env;
+use uv_python_managed::platform_key_from_env;
 use uv_static::EnvVars;
-use uv_test::{LATEST_PYTHON_3_12, uv_snapshot};
+use uv_test::{LATEST_PYTHON_3_12, TestContext, uv_snapshot};
 
 #[test]
 fn python_upgrade() {
     let context = uv_test::test_context_with_versions!(&[])
-        .with_python_download_cache()
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs()
@@ -74,7 +76,6 @@ fn python_upgrade() {
 #[test]
 fn python_upgrade_without_version() {
     let context = uv_test::test_context_with_versions!(&[])
-        .with_python_download_cache()
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs()
@@ -126,7 +127,6 @@ fn python_upgrade_without_version() {
 #[test]
 fn python_upgrade_transparent_from_venv() {
     let context = uv_test::test_context_with_versions!(&["3.13"])
-        .with_python_download_cache()
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs()
@@ -201,62 +201,9 @@ fn python_upgrade_transparent_from_venv() {
     );
 }
 
-// Installing Python should not prevent virtual environments from transparently
-// upgrading.
-#[test]
-fn python_upgrade_transparent_from_venv_preview() {
-    let context = uv_test::test_context_with_versions!(&["3.13"])
-        .with_python_download_cache()
-        .with_filtered_python_keys()
-        .with_filtered_exe_suffix()
-        .with_managed_python_dirs()
-        .with_filtered_latest_python_versions();
-
-    // Install an earlier patch version
-    uv_snapshot!(context.filters(), context.python_install().arg("3.10.17"), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Installed Python 3.10.17 in [TIME]
-     + cpython-3.10.17-[PLATFORM] (python3.10)
-    ");
-
-    // Create a virtual environment
-    uv_snapshot!(context.filters(), context.venv().arg("-p").arg("3.10"), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Using CPython 3.10.17
-    Creating virtual environment at: .venv
-    Activate with: source .venv/[BIN]/activate
-    ");
-
-    uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @"
-    exit_code: 0 (success)
-    ----- stdout -----
-    Python 3.10.17
-    "
-    );
-
-    // Upgrade patch version
-    uv_snapshot!(context.filters(), context.python_upgrade().arg("3.10"), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Installed Python 3.10.[LATEST] in [TIME]
-     + cpython-3.10.[LATEST]-[PLATFORM] (python3.10)
-    ");
-
-    // Virtual environment should reflect upgraded patch
-    uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @"
-    exit_code: 0 (success)
-    ----- stdout -----
-    Python 3.10.[LATEST]
-    "
-    );
-}
-
 #[test]
 fn python_upgrade_ignored_with_python_pin() {
     let context = uv_test::test_context_with_versions!(&["3.13"])
-        .with_python_download_cache()
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs()
@@ -308,7 +255,6 @@ fn python_upgrade_ignored_with_python_pin() {
 #[test]
 fn python_no_transparent_upgrade_with_venv_patch_specification() {
     let context = uv_test::test_context_with_versions!(&["3.13"])
-        .with_python_download_cache()
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs()
@@ -360,7 +306,6 @@ fn python_no_transparent_upgrade_with_venv_patch_specification() {
 #[test]
 fn python_transparent_upgrade_venv_venv() {
     let context = uv_test::test_context_with_versions!(&["3.13"])
-        .with_python_download_cache()
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_filtered_virtualenv_bin()
@@ -437,7 +382,6 @@ fn python_transparent_upgrade_venv_venv() {
 #[test]
 fn python_upgrade_transparent_from_venv_module() {
     let context = uv_test::test_context_with_versions!(&["3.13"])
-        .with_python_download_cache()
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs()
@@ -490,7 +434,6 @@ fn python_upgrade_transparent_from_venv_module() {
 #[test]
 fn python_upgrade_transparent_from_venv_module_in_venv() {
     let context = uv_test::test_context_with_versions!(&["3.13"])
-        .with_python_download_cache()
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs()
@@ -560,7 +503,6 @@ fn python_upgrade_transparent_from_venv_module_in_venv() {
 #[test]
 fn python_upgrade_force_install() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&["3.13"])
-        .with_python_download_cache()
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_empty_python_install_mirror()
@@ -595,7 +537,6 @@ fn python_upgrade_force_install() -> Result<()> {
 #[test]
 fn python_upgrade_implementation() {
     let context = uv_test::test_context_with_versions!(&[])
-        .with_python_download_cache()
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_empty_python_install_mirror()
@@ -615,7 +556,6 @@ fn python_upgrade_implementation() {
 #[test]
 fn python_upgrade_build_version() {
     let context = uv_test::test_context_with_versions!(&[])
-        .with_python_download_cache()
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs()
@@ -644,6 +584,21 @@ fn python_upgrade_build_version() {
     ));
     let build_file = installation_dir.join("BUILD");
     fs_err::write(&build_file, "19000101").unwrap();
+    // A build upgrade retains the Python version and installation key, so set the interpreter's
+    // modification time to a known value to detect whether the interpreter is replaced.
+    let python_executable = if cfg!(windows) {
+        installation_dir.join("python.exe")
+    } else {
+        installation_dir.join("bin").join("python3.12")
+    };
+    filetime::set_file_mtime(
+        &python_executable,
+        filetime::FileTime::from_unix_time(1_700_000_000, 0),
+    )
+    .unwrap();
+    let previous_mtime = filetime::FileTime::from_last_modification_time(
+        &fs_err::metadata(&python_executable).unwrap(),
+    );
 
     // Now upgrade should detect the outdated build version and reinstall
     uv_snapshot!(context.filters(), context.python_upgrade().arg("3.12"), @"
@@ -652,6 +607,13 @@ fn python_upgrade_build_version() {
     Installed Python 3.12.[LATEST] in [TIME]
      ~ cpython-3.12.[LATEST]-[PLATFORM]
     ");
+
+    assert_ne!(
+        filetime::FileTime::from_last_modification_time(
+            &fs_err::metadata(&python_executable).unwrap()
+        ),
+        previous_mtime
+    );
 
     // Should be a no-op again after upgrade
     uv_snapshot!(context.filters(), context.python_upgrade().arg("3.12"), @"
@@ -665,7 +627,6 @@ fn python_upgrade_build_version() {
 #[test]
 fn python_sync_transparent_patch_upgrade_reuses_environment() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&[])
-        .with_python_download_cache()
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs()
@@ -690,7 +651,7 @@ fn python_sync_transparent_patch_upgrade_reuses_environment() -> Result<()> {
         .success();
 
     // The minor-only `version_info` allows compatibility checks to accept a newer patch.
-    let pyvenv_cfg = fs_err::read_to_string(context.venv.child("pyvenv.cfg"))?;
+    let pyvenv_cfg = context.read(".venv/pyvenv.cfg");
     insta::with_settings!({ filters => context.filters() }, {
         assert_snapshot!(pyvenv_cfg, @r"
         home = [PYTHON_HOME]
@@ -731,7 +692,6 @@ fn python_sync_transparent_patch_upgrade_reuses_environment() -> Result<()> {
 #[test]
 fn python_sync_honors_pinned_patch_version() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&[])
-        .with_python_download_cache()
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs()
@@ -774,7 +734,7 @@ fn python_sync_honors_pinned_patch_version() -> Result<()> {
     ");
 
     // An exact-patch environment must retain the patch in `version_info`.
-    let pyvenv_cfg = fs_err::read_to_string(context.venv.child("pyvenv.cfg"))?;
+    let pyvenv_cfg = context.read(".venv/pyvenv.cfg");
     insta::with_settings!({ filters => context.filters() }, {
         assert_snapshot!(pyvenv_cfg, @r"
         home = [PYTHON_HOME]
@@ -807,4 +767,93 @@ fn python_sync_honors_pinned_patch_version() -> Result<()> {
     ");
 
     Ok(())
+}
+
+// A script environment must retain a patch pin discovered from a version file.
+#[test]
+fn python_script_honors_patch_version_file() -> Result<()> {
+    let (context, python) = script_interpreter_after_upgrade(Some("3.10.17"), ">=3.10")?;
+
+    uv_snapshot!(context.filters(), Command::new(python).arg("--version"), @r"
+    exit_code: 0 (success)
+    ----- stdout -----
+    Python 3.10.17
+    ");
+
+    Ok(())
+}
+
+// A script environment must retain an exact patch requirement from its inline metadata.
+#[test]
+fn python_script_honors_patch_requires_python() -> Result<()> {
+    let (context, python) = script_interpreter_after_upgrade(None, "==3.10.17")?;
+
+    uv_snapshot!(context.filters(), Command::new(python).arg("--version"), @r"
+    exit_code: 0 (success)
+    ----- stdout -----
+    Python 3.10.17
+    ");
+
+    Ok(())
+}
+
+// A minor-version request from a version file permits transparent patch upgrades.
+#[test]
+fn python_script_upgrades_minor_version_file() -> Result<()> {
+    let (context, python) = script_interpreter_after_upgrade(Some("3.10"), ">=3.10,<3.11")?;
+
+    uv_snapshot!(context.filters(), Command::new(python).arg("--version"), @r"
+    exit_code: 0 (success)
+    ----- stdout -----
+    Python 3.10.[LATEST]
+    ");
+
+    Ok(())
+}
+
+// A script's inline metadata can permit transparent patch upgrades without a version file.
+#[test]
+fn python_script_upgrades_requires_python() -> Result<()> {
+    let (context, python) = script_interpreter_after_upgrade(None, ">=3.10,<3.11")?;
+
+    uv_snapshot!(context.filters(), Command::new(python).arg("--version"), @r"
+    exit_code: 0 (success)
+    ----- stdout -----
+    Python 3.10.[LATEST]
+    ");
+
+    Ok(())
+}
+
+/// Create a script environment, then upgrade its managed Python installation.
+///
+/// Return the cached executable so assertions cannot rediscover Python or recreate the environment.
+fn script_interpreter_after_upgrade(
+    pin: Option<&str>,
+    requires_python: &str,
+) -> Result<(TestContext, PathBuf)> {
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs()
+        .with_filtered_latest_python_versions();
+    context.python_install().arg("3.10.17").assert().success();
+    if let Some(pin) = pin {
+        context.temp_dir.child(".python-version").write_str(pin)?;
+    }
+    context.temp_dir.child("script.py").write_str(&format!(
+        r#"# /// script
+# requires-python = "{requires_python}"
+# dependencies = []
+# ///
+import sys
+print(sys.executable)
+"#,
+    ))?;
+    let output = context.run().arg("script.py").assert().success();
+    let python = PathBuf::from(std::str::from_utf8(&output.get_output().stdout)?.trim());
+
+    context.python_upgrade().arg("3.10").assert().success();
+
+    Ok((context, python))
 }

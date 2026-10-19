@@ -29,11 +29,14 @@ concurrency:
   # Let an in-progress rebase finish; newer pushes replace the single pending run.
   cancel-in-progress: false
 
+env:
+  UV_LOCKED: 1
+
 jobs:
   identify:
     name: Identify conflicted pull requests
     if: github.repository == 'astral-sh/uv-dev' || github.repository == 'astral-sh/uv'
-    runs-on: ubuntu-slim
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-2' || 'ubuntu-slim' }}
     timeout-minutes: 5
     permissions:
       contents: read
@@ -161,7 +164,7 @@ jobs:
     name: "Remove rebase label from pull request #${{ inputs.pull_request }}"
     needs: rebase-and-push
     if: inputs.pull_request != ''
-    runs-on: ubuntu-slim
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-2' || 'ubuntu-slim' }}
     timeout-minutes: 5
     permissions:
       pull-requests: write

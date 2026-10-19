@@ -1,7 +1,9 @@
 use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
+use std::error::Error;
 use std::fmt::Write;
+use std::iter;
 use std::ops::Bound;
 
 use indexmap::IndexSet;
@@ -14,8 +16,7 @@ use rustc_hash::FxHashMap;
 
 use uv_configuration::{IndexStrategy, NoBinary, NoBuild};
 use uv_distribution_types::{
-    IncompatibleDist, IncompatibleSource, IncompatibleWheel, Index, IndexCapabilities,
-    IndexLocations, IndexMetadata, IndexUrl, RequiresPython,
+    Index, IndexCapabilities, IndexLocations, IndexMetadata, IndexUrl, RequiresPython,
 };
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
@@ -24,17 +25,17 @@ use uv_platform_tags::{AbiTag, IncompatibleTag, LanguageTag, PlatformTag, Tags};
 
 use crate::candidate_selector::CandidateSelector;
 use crate::error::{ErrorTree, PrefixMatch};
-use crate::exclude_newer::EffectiveExcludeNewerSource;
 use crate::fork_indexes::ForkIndexes;
 use crate::fork_urls::ForkUrls;
 use crate::prerelease::PrereleaseSelection;
+use crate::prioritized_distribution::{IncompatibleDist, IncompatibleSource, IncompatibleWheel};
 use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner, PubGrubPython, Range};
 use crate::python_requirement::{PythonRequirement, PythonRequirementSource};
 use crate::resolver::{
-    MetadataUnavailable, UnavailableErrorChain, UnavailablePackage, UnavailableReason,
-    UnavailableVersion,
+    MetadataUnavailable, UnavailablePackage, UnavailableReason, UnavailableVersion,
 };
 use crate::{Flexibility, InMemoryIndex, Options, ResolverEnvironment, VersionsResponse};
+use uv_configuration::EffectiveExcludeNewerSource;
 
 type ReportDerived = Derived<PubGrubPackage, Range<Version>, UnavailableReason>;
 
@@ -604,10 +605,10 @@ impl PubGrubReportFormatter<'_> {
     fn format_workspace_member(&self, package: &PubGrubPackage) -> Option<Cow<'static, str>> {
         match &**package {
             // TODO(zanieb): Improve handling of dev and extra for single-project workspaces
-            PubGrubPackageInner::Package {
-                name, extra, group, ..
-            } if self.workspace_members.contains(name) => {
-                if self.is_single_project_workspace() && extra.is_none() && group.is_none() {
+            PubGrubPackageInner::Package { name, kind, .. }
+                if self.workspace_members.contains(name) =>
+            {
+                if self.is_single_project_workspace() && kind.is_base() {
                     Some(Cow::Borrowed("your project"))
                 } else {
                     Some(Cow::Owned(format!("{package}")))
@@ -632,10 +633,10 @@ impl PubGrubReportFormatter<'_> {
     fn is_single_project_workspace_member(&self, package: &PubGrubPackage) -> bool {
         match &**package {
             // TODO(zanieb): Improve handling of dev and extra for single-project workspaces
-            PubGrubPackageInner::Package {
-                name, extra, group, ..
-            } if self.workspace_members.contains(name) => {
-                self.is_single_project_workspace() && extra.is_none() && group.is_none()
+            PubGrubPackageInner::Package { name, kind, .. }
+                if self.workspace_members.contains(name) =>
+            {
+                self.is_single_project_workspace() && kind.is_base()
             }
             _ => false,
         }
@@ -1123,7 +1124,7 @@ impl PubGrubReportFormatter<'_> {
         let prioritized = candidate.prioritized()?;
 
         match tag {
-            IncompatibleTag::Invalid => None,
+            IncompatibleTag::Invalid | IncompatibleTag::Variant => None,
             IncompatibleTag::Python => {
                 let best = tags.and_then(Tags::python_tag);
                 let tags = prioritized.python_tags().collect::<BTreeSet<_>>();
@@ -1216,13 +1217,16 @@ impl PubGrubReportFormatter<'_> {
             Some(UnavailablePackage::Offline) => {
                 hints.insert(PubGrubHint::Offline);
             }
-            Some(UnavailablePackage::InvalidMetadata(reason)) => {
+            Some(
+                reason @ (UnavailablePackage::InvalidMetadata(_)
+                | UnavailablePackage::InconsistentMetadata(_)),
+            ) => {
                 hints.insert(PubGrubHint::InvalidPackageMetadata {
                     package: name.clone(),
                     reason: reason.clone(),
                 });
             }
-            Some(UnavailablePackage::InvalidStructure(reason)) => {
+            Some(reason @ UnavailablePackage::InvalidStructure(_)) => {
                 hints.insert(PubGrubHint::InvalidPackageStructure {
                     package: name.clone(),
                     reason: reason.clone(),
@@ -1519,13 +1523,13 @@ pub enum PubGrubHint {
     InvalidPackageMetadata {
         package: PackageName,
         // excluded from `PartialEq` and `Hash`
-        reason: UnavailableErrorChain,
+        reason: UnavailablePackage,
     },
     /// The structure of a package was invalid (e.g., multiple `.dist-info` directories).
     InvalidPackageStructure {
         package: PackageName,
         // excluded from `PartialEq` and `Hash`
-        reason: UnavailableErrorChain,
+        reason: UnavailablePackage,
     },
     /// The package metadata could not be fetched due to a network error.
     InvalidPackageNetwork {
@@ -1940,20 +1944,20 @@ impl std::fmt::Display for PubGrubHint {
                 )
             }
             Self::InvalidPackageMetadata { package, reason } => {
-                write!(
-                    f,
-                    "Metadata for `{}` could not be parsed.\n{}",
-                    package.cyan(),
-                    textwrap::indent(reason.to_string().as_str(), "  ")
-                )
+                writeln!(f, "Metadata for `{}` could not be parsed.", package.cyan())?;
+                for source in iter::successors(reason.source(), |&error| error.source()) {
+                    let message = format!("Caused by: {}", source.to_string().trim());
+                    writeln!(f, "{}", textwrap::indent(&message, "  "))?;
+                }
+                Ok(())
             }
             Self::InvalidPackageStructure { package, reason } => {
-                write!(
-                    f,
-                    "The structure of `{}` was invalid\n{}",
-                    package.cyan(),
-                    textwrap::indent(reason.to_string().as_str(), "  ")
-                )
+                writeln!(f, "The structure of `{}` was invalid", package.cyan())?;
+                for source in iter::successors(reason.source(), |&error| error.source()) {
+                    let message = format!("Caused by: {}", source.to_string().trim());
+                    writeln!(f, "{}", textwrap::indent(&message, "  "))?;
+                }
+                Ok(())
             }
             Self::InvalidPackageNetwork { package, status } => {
                 write!(

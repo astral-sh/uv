@@ -4,6 +4,7 @@ use std::sync::Arc;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep508::MarkerTree;
 use uv_pypi_types::ConflictItemRef;
+use uv_resolver_types::PackageNodeKind;
 
 use crate::python_requirement::PythonRequirement;
 
@@ -47,13 +48,9 @@ pub enum PubGrubPackageInner {
     /// A system package, which is used to represent a non-Python package.
     System(PackageName),
     /// A Python package.
-    ///
-    /// Note that it is guaranteed that `extra` and `dev` are never both
-    /// `Some`. That is, if one is `Some` then the other must be `None`.
     Package {
         name: PackageName,
-        extra: Option<ExtraName>,
-        group: Option<GroupName>,
+        kind: PackageNodeKind,
         marker: MarkerTree,
     },
     /// A proxy package to represent a dependency with an extra (e.g., `black[colorama]`).
@@ -96,11 +93,10 @@ pub enum PubGrubPackageInner {
 }
 
 impl PubGrubPackage {
-    /// Create a [`PubGrubPackage`] from a package name and extra.
+    /// Create a [`PubGrubPackage`] from a package name and [`PackageNodeKind`].
     pub(crate) fn from_package(
         name: PackageName,
-        extra: Option<ExtraName>,
-        group: Option<GroupName>,
+        kind: PackageNodeKind,
         marker: MarkerTree,
     ) -> Self {
         // Remove all extra expressions from the marker, since we track extras
@@ -109,27 +105,25 @@ impl PubGrubPackage {
         // makes them two distinct packages. This results in PubGrub being
         // unable to unify version constraints across such packages.
         let marker = marker.simplify_extras_with(|_| true);
-        if let Some(extra) = extra {
-            Self(Arc::new(PubGrubPackageInner::Extra {
+        match kind {
+            PackageNodeKind::Extra(extra) => Self(Arc::new(PubGrubPackageInner::Extra {
                 name,
                 extra,
                 marker,
-            }))
-        } else if let Some(group) = group {
-            Self(Arc::new(PubGrubPackageInner::Group {
+            })),
+            PackageNodeKind::Group(group) => Self(Arc::new(PubGrubPackageInner::Group {
                 name,
                 group,
                 marker,
-            }))
-        } else if !marker.is_true() {
-            Self(Arc::new(PubGrubPackageInner::Marker { name, marker }))
-        } else {
-            Self(Arc::new(PubGrubPackageInner::Package {
+            })),
+            PackageNodeKind::Base if !marker.is_true() => {
+                Self(Arc::new(PubGrubPackageInner::Marker { name, marker }))
+            }
+            PackageNodeKind::Base => Self(Arc::new(PubGrubPackageInner::Package {
                 name,
-                extra,
-                group: None,
+                kind,
                 marker,
-            }))
+            })),
         }
     }
 
@@ -151,8 +145,7 @@ impl PubGrubPackage {
             PubGrubPackageInner::Extra { name, .. } | PubGrubPackageInner::Marker { name, .. } => {
                 Some(Self::from_package(
                     name.clone(),
-                    None,
-                    None,
+                    PackageNodeKind::Base,
                     MarkerTree::TRUE,
                 ))
             }
@@ -207,7 +200,7 @@ impl PubGrubPackage {
     /// Returns the extra name associated with this PubGrub package, if it has
     /// one.
     ///
-    /// Note that if this returns `Some`, then `dev` must return `None`.
+    /// Note that if this returns `Some`, then `group` must return `None`.
     pub(crate) fn extra(&self) -> Option<&ExtraName> {
         match &**self {
             // A root can never be a dependency of another package, and a `Python` pubgrub
@@ -215,11 +208,15 @@ impl PubGrubPackage {
             PubGrubPackageInner::Root(_)
             | PubGrubPackageInner::Python(_)
             | PubGrubPackageInner::System(_)
-            | PubGrubPackageInner::Package { extra: None, .. }
+            | PubGrubPackageInner::Package {
+                kind: PackageNodeKind::Base | PackageNodeKind::Group(_),
+                ..
+            }
             | PubGrubPackageInner::Group { .. }
             | PubGrubPackageInner::Marker { .. } => None,
             PubGrubPackageInner::Package {
-                extra: Some(extra), ..
+                kind: PackageNodeKind::Extra(extra),
+                ..
             }
             | PubGrubPackageInner::Extra { extra, .. } => Some(extra),
         }
@@ -236,11 +233,15 @@ impl PubGrubPackage {
             PubGrubPackageInner::Root(_)
             | PubGrubPackageInner::Python(_)
             | PubGrubPackageInner::System(_)
-            | PubGrubPackageInner::Package { group: None, .. }
+            | PubGrubPackageInner::Package {
+                kind: PackageNodeKind::Base | PackageNodeKind::Extra(_),
+                ..
+            }
             | PubGrubPackageInner::Extra { .. }
             | PubGrubPackageInner::Marker { .. } => None,
             PubGrubPackageInner::Package {
-                group: Some(group), ..
+                kind: PackageNodeKind::Group(group),
+                ..
             }
             | PubGrubPackageInner::Group { group, .. } => Some(group),
         }
@@ -251,17 +252,31 @@ impl PubGrubPackage {
     /// If this package can't possibly be classified as conflicting, then
     /// this returns `None`.
     pub(crate) fn conflicting_item(&self) -> Option<ConflictItemRef<'_>> {
-        let package = self.name_no_root()?;
-        match (self.extra(), self.group()) {
-            (None, None) => Some(ConflictItemRef::from(package)),
-            (Some(extra), None) => Some(ConflictItemRef::from((package, extra))),
-            (None, Some(group)) => Some(ConflictItemRef::from((package, group))),
-            (Some(extra), Some(group)) => {
-                unreachable!(
-                    "PubGrub package cannot have both an extra and a group, \
-                     but found extra=`{extra}` and group=`{group}` for \
-                     package `{package}`",
-                )
+        match &**self {
+            PubGrubPackageInner::Root(_)
+            | PubGrubPackageInner::Python(_)
+            | PubGrubPackageInner::System(_) => None,
+            PubGrubPackageInner::Package {
+                name,
+                kind: PackageNodeKind::Base,
+                ..
+            }
+            | PubGrubPackageInner::Marker { name, .. } => Some(ConflictItemRef::from(name)),
+            PubGrubPackageInner::Package {
+                name,
+                kind: PackageNodeKind::Extra(extra),
+                ..
+            }
+            | PubGrubPackageInner::Extra { name, extra, .. } => {
+                Some(ConflictItemRef::from((name, extra)))
+            }
+            PubGrubPackageInner::Package {
+                name,
+                kind: PackageNodeKind::Group(group),
+                ..
+            }
+            | PubGrubPackageInner::Group { name, group, .. } => {
+                Some(ConflictItemRef::from((name, group)))
             }
         }
     }
@@ -322,7 +337,7 @@ impl PubGrubPackage {
 
     /// Returns a new [`PubGrubPackage`] representing the base package with the given name.
     pub(crate) fn base(name: PackageName) -> Self {
-        Self::from_package(name, None, None, MarkerTree::TRUE)
+        Self::from_package(name, PackageNodeKind::Base, MarkerTree::TRUE)
     }
 }
 
@@ -348,9 +363,8 @@ impl std::fmt::Display for PubGrubPackageInner {
             Self::System(name) => write!(f, "system:{name}"),
             Self::Package {
                 name,
-                extra: None,
+                kind: PackageNodeKind::Base,
                 marker,
-                group: None,
             } => {
                 if let Some(marker) = marker.contents() {
                     write!(f, "{name}{{{marker}}}")
@@ -360,9 +374,8 @@ impl std::fmt::Display for PubGrubPackageInner {
             }
             Self::Package {
                 name,
-                extra: Some(extra),
+                kind: PackageNodeKind::Extra(extra),
                 marker,
-                group: None,
             } => {
                 if let Some(marker) = marker.contents() {
                     write!(f, "{name}[{extra}]{{{marker}}}")
@@ -372,9 +385,8 @@ impl std::fmt::Display for PubGrubPackageInner {
             }
             Self::Package {
                 name,
-                extra: None,
+                kind: PackageNodeKind::Group(dev),
                 marker,
-                group: Some(dev),
             } => {
                 if let Some(marker) = marker.contents() {
                     write!(f, "{name}:{dev}{{{marker}}}")
@@ -393,13 +405,6 @@ impl std::fmt::Display for PubGrubPackageInner {
             Self::Group {
                 name, group: dev, ..
             } => write!(f, "{name}:{dev}"),
-            // It is guaranteed that `extra` and `dev` are never set at the same time.
-            Self::Package {
-                name: _,
-                extra: Some(_),
-                marker: _,
-                group: Some(_),
-            } => unreachable!(),
         }
     }
 }

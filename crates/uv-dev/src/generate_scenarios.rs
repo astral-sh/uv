@@ -96,7 +96,7 @@ pub(crate) fn main(args: &Args) -> Result<()> {
             Mode::Write => {
                 println!("Updating: {}", template.test_file());
                 fs_err::write(&path, output.as_bytes())
-                    .with_context(|| format!("failed to write {}", path.display()))?;
+                    .with_context(|| format!("failed to write `{}`", path.display()))?;
 
                 if args.no_snapshot_update {
                     println!("Skipping snapshots for {}", template.test_name());
@@ -140,7 +140,7 @@ fn load_scenarios_from(scenarios_dir: &Path) -> Result<Vec<ScenarioCase>> {
         .map(|path| {
             let scenario = Scenario::from_path(&path)?;
             let relative = path.strip_prefix(scenarios_dir).with_context(|| {
-                format!("scenario path was outside {}", scenarios_dir.display())
+                format!("scenario path was outside `{}`", scenarios_dir.display())
             })?;
             Ok(ScenarioCase {
                 scenario,
@@ -193,7 +193,7 @@ fn format_rust_file(path: &Path) -> Result<()> {
         .status()
         .context("failed to run rustfmt")?;
     if !status.success() {
-        bail!("rustfmt failed for {}", path.display());
+        bail!("rustfmt failed for `{}`", path.display());
     }
     Ok(())
 }
@@ -205,9 +205,9 @@ fn format_rust_source(output: &str) -> Result<String> {
         .context("failed to create temporary directory for rustfmt")?;
     let path = temporary_directory.path().join("scenarios.rs");
     fs_err::write(&path, output.as_bytes())
-        .with_context(|| format!("failed to write {}", path.display()))?;
+        .with_context(|| format!("failed to write `{}`", path.display()))?;
     format_rust_file(&path)?;
-    fs_err::read_to_string(&path).with_context(|| format!("failed to read {}", path.display()))
+    fs_err::read_to_string(&path).with_context(|| format!("failed to read `{}`", path.display()))
 }
 
 fn check_generated_file(path: &Path, output: &str) -> Result<()> {
@@ -224,14 +224,14 @@ fn check_generated_file(path: &Path, output: &str) -> Result<()> {
                 Ok(())
             } else {
                 let comparison = StrComparison::new(&current, &output);
-                bail!("{filename} changed, please run `{GENERATED_WITH}`:\n{comparison}");
+                bail!("`{filename}` changed, please run `{GENERATED_WITH}`:\n{comparison}");
             }
         }
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            bail!("{filename} not found, please run `{GENERATED_WITH}`");
+            bail!("`{filename}` not found, please run `{GENERATED_WITH}`");
         }
         Err(error) => {
-            bail!("{filename} changed, please run `{GENERATED_WITH}`:\n{error}");
+            bail!("`{filename}` changed, please run `{GENERATED_WITH}`:\n{error}");
         }
     }
 }
@@ -1059,7 +1059,7 @@ kind = "compile"
                 .lines()
                 .next()
                 .expect("error should include a summary"),
-            "[TEMP_DIR]/scenario.rs changed, please run `cargo dev generate-scenario-tests`:"
+            "`[TEMP_DIR]/scenario.rs` changed, please run `cargo dev generate-scenario-tests`:"
         );
     }
 

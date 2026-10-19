@@ -7,6 +7,7 @@ use owo_colors::OwoColorize;
 use thiserror::Error;
 
 use uv_fs::Simplified;
+use uv_macros::DebugNoInline;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pypi_types::Scheme;
@@ -15,7 +16,9 @@ pub use install::{install_wheel, installed_dist_info_path};
 pub use linker::{InstallState, LinkMode};
 pub use record::RecordEntry;
 pub use uninstall::{Uninstall, uninstall_egg, uninstall_legacy_editable, uninstall_wheel};
-pub use wheel::{WheelFile, read_record, read_record_into_iter, validate_and_heal_record};
+pub use wheel::{
+    WheelFile, read_record, read_record_into_iter, reserved_script_name, validate_and_heal_record,
+};
 
 mod install;
 mod linker;
@@ -38,7 +41,7 @@ pub struct Layout {
 }
 
 /// Note: The caller is responsible for adding the path of the wheel we're installing.
-#[derive(Error, Debug)]
+#[derive(Error, DebugNoInline)]
 pub enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),
@@ -50,7 +53,7 @@ pub enum Error {
     WalkDir(#[from] walkdir::Error),
     // This shouldn't be possible anymore, we keep it for better error reporting.
     #[error(
-        "RECORD file doesn't match wheel contents, could not find entry for: {} ({})",
+        "`RECORD` file doesn't match wheel contents, could not find entry for `{}` (`{}`)",
         relative.simplified_display(),
         absolute.simplified_display()
     )]
@@ -58,7 +61,7 @@ pub enum Error {
         relative: PathBuf,
         absolute: PathBuf,
     },
-    #[error("RECORD file is invalid")]
+    #[error("`RECORD` file is invalid")]
     RecordCsv(#[from] csv::Error),
     #[error("Non-UTF8 path in {0}: {1:?}")]
     NonUtf8WheelPath(String, PathBuf),
@@ -90,4 +93,31 @@ pub enum Error {
     ReservedScriptName { reserved: String, declared: String },
     #[error(transparent)]
     Copy(#[from] uv_fs::link::LinkError),
+}
+
+impl Error {
+    /// Return whether this is an expected user-facing failure.
+    pub fn is_user_failure(&self) -> bool {
+        match self {
+            Self::InvalidWheel(_)
+            | Self::RecordFile { .. }
+            | Self::RecordCsv(_)
+            | Self::NonUtf8WheelPath(..)
+            | Self::UnsupportedWindowsArch(_)
+            | Self::DirectUrlJson(_)
+            | Self::MissingRecord(_)
+            | Self::MissingTopLevel(_)
+            | Self::InvalidVersion(_)
+            | Self::MismatchedName(..)
+            | Self::MismatchedVersion(..)
+            | Self::InvalidEggLink(_)
+            | Self::ReservedScriptName { .. } => true,
+            Self::Io(_)
+            | Self::WalkDir(_)
+            | Self::BrokenVenv(_)
+            | Self::NotWindows
+            | Self::LauncherError(_)
+            | Self::Copy(_) => false,
+        }
+    }
 }

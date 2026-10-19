@@ -61,7 +61,7 @@ RUN cargo install \
 RUN case "${TARGETPLATFORM}" in \
   "linux/arm64") export JEMALLOC_SYS_WITH_LG_PAGE=16;; \
   esac && \
-  cargo auditable zigbuild --bin uv --bin uvx --target $(cat rust_target.txt) --release
+  cargo auditable zigbuild --locked --bin uv --bin uvx --target $(cat rust_target.txt) --release
 RUN cp target/$(cat rust_target.txt)/release/uv /uv \
   && cp target/$(cat rust_target.txt)/release/uvx /uvx
 # TODO(konsti): Optimize binary size, with a version that also works when cross compiling

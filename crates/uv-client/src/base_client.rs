@@ -10,19 +10,17 @@ use http::header::{
     PROXY_AUTHORIZATION, REFERER, TRANSFER_ENCODING, WWW_AUTHENTICATE,
 };
 use http::{HeaderMap, HeaderName, HeaderValue, Method, StatusCode};
-use reqwest::{
-    Certificate, Client, ClientBuilder, IntoUrl, NoProxy, Proxy, Request, Response, multipart,
-};
+use reqwest::{Certificate, Client, ClientBuilder, NoProxy, Proxy, Request, Response, multipart};
 use reqwest_middleware::{ClientWithMiddleware, Middleware};
+use reqwest_retry::Jitter;
 use reqwest_retry::policies::ExponentialBackoff;
-use reqwest_retry::{Jitter, RetryTransientMiddleware};
 use thiserror::Error;
 use tracing::{debug, warn};
 use url::ParseError;
-use url::Url;
 
 use uv_auth::{
-    AuthMiddleware, Credentials, CredentialsCache, CredentialsFromUrlError, Indexes, PyxTokenStore,
+    AuthMiddleware, Credentials, CredentialsCache, CredentialsFromUrlError, CredentialsPrompt,
+    Indexes, RealmRef,
 };
 use uv_configuration::ProxyUrlKind;
 use uv_configuration::{Concurrency, KeyringProviderType, ProxyUrl, TrustedHost};
@@ -31,16 +29,18 @@ use uv_git::GitHttpSettings;
 use uv_pep508::MarkerEnvironment;
 use uv_platform_tags::Platform;
 use uv_preview::Preview;
-use uv_redacted::DisplaySafeUrl;
-use uv_redacted::DisplaySafeUrlError;
+use uv_redacted::SafeUrl;
+use uv_redacted::SafeUrlError;
+use uv_redacted::policy::SerializationPolicy;
 use uv_static::EnvVars;
+use uv_threads::min_stack_size;
 use uv_version::version;
-use uv_warnings::warn_user_once;
+use uv_warnings::warn_user_once_with_chain;
 
 use crate::linehaul::LineHaul;
-use crate::middleware::OfflineMiddleware;
+use crate::middleware::{AzureStorageMiddleware, OfflineMiddleware};
 use crate::tls::{Certificates, read_identity};
-use crate::{Connectivity, RetriableError, RetryState, UvRetryableStrategy};
+use crate::{Connectivity, MetadataRangeRequest, RetriableError, RetryState, UvRetryMiddleware};
 
 pub const DEFAULT_RETRIES: u32 = 3;
 
@@ -73,6 +73,16 @@ pub enum ClientBuildError {
     IndexCredentials(#[from] IndexCredentialsError),
 }
 
+impl ClientBuildError {
+    /// Return whether this is an expected user-facing failure.
+    pub fn is_user_failure(&self) -> bool {
+        match self {
+            Self::Credentials(_) | Self::IndexCredentials(_) => true,
+            Self::Reqwest(_) => false,
+        }
+    }
+}
+
 /// Selectively skip parts or the entire auth middleware.
 #[derive(Debug, Clone, Copy, Default)]
 pub enum AuthIntegration {
@@ -95,15 +105,17 @@ pub struct BaseClientBuilder<'a> {
     system_certs: bool,
     custom_certificates: Option<Certificates>,
     retries: u32,
-    pub connectivity: Connectivity,
+    connectivity: Connectivity,
     markers: Option<&'a MarkerEnvironment>,
     platform: Option<&'a Platform>,
     auth_integration: AuthIntegration,
+    credentials_prompt: Option<CredentialsPrompt>,
     /// Global authentication cache for a uv invocation to share credentials across uv clients.
     credentials_cache: Arc<CredentialsCache>,
     indexes: Indexes,
     read_timeout: Duration,
     connect_timeout: Duration,
+    metadata_range_request: MetadataRangeRequest,
     extra_middleware: Option<ExtraMiddleware>,
     proxies: Vec<Proxy>,
     http_proxy: Option<ProxyUrl>,
@@ -144,7 +156,7 @@ impl CacheReadRuntime {
         self.runtime.get_or_init(|| {
             tokio::runtime::Builder::new_current_thread()
                 .thread_name("uv-cache-read")
-                .thread_stack_size(uv_configuration::min_stack_size())
+                .thread_stack_size(min_stack_size())
                 .max_blocking_threads(self.workers)
                 .build()
                 .expect("Failed building the cache-read Runtime")
@@ -210,10 +222,12 @@ impl Default for BaseClientBuilder<'_> {
             markers: None,
             platform: None,
             auth_integration: AuthIntegration::default(),
+            credentials_prompt: None,
             credentials_cache: Arc::new(CredentialsCache::default()),
             indexes: Indexes::new(),
             read_timeout: DEFAULT_READ_TIMEOUT,
             connect_timeout: DEFAULT_CONNECT_TIMEOUT,
+            metadata_range_request: MetadataRangeRequest::default(),
             extra_middleware: None,
             proxies: vec![],
             http_proxy: None,
@@ -224,7 +238,7 @@ impl Default for BaseClientBuilder<'_> {
             custom_client: None,
             subcommand: None,
             client_name: None,
-            no_retry_delay: env::var_os(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY).is_some(),
+            no_retry_delay: env::var_os(EnvVars::UV_INTERNAL__TEST_NO_HTTP_RETRY_DELAY).is_some(),
             cache_read_runtime: Arc::new(CacheReadRuntime::new(Concurrency::DEFAULT_CACHE_READS)),
         }
     }
@@ -293,6 +307,18 @@ impl<'a> BaseClientBuilder<'a> {
         self
     }
 
+    /// Require wheel metadata to be fetched with HTTP range requests when separate metadata is
+    /// unavailable.
+    #[must_use]
+    pub fn metadata_range_request(mut self, request: MetadataRangeRequest) -> Self {
+        self.metadata_range_request = request;
+        self
+    }
+
+    pub(crate) fn configured_metadata_range_request(&self) -> MetadataRangeRequest {
+        self.metadata_range_request
+    }
+
     /// Set the number of workers available for reading cached HTTP responses.
     #[must_use]
     pub fn cache_read_concurrency(mut self, workers: usize) -> Self {
@@ -328,6 +354,13 @@ impl<'a> BaseClientBuilder<'a> {
     #[must_use]
     pub fn auth_integration(mut self, auth_integration: AuthIntegration) -> Self {
         self.auth_integration = auth_integration;
+        self
+    }
+
+    /// Configure a fallback prompt for requests that require authentication.
+    #[must_use]
+    pub fn credentials_prompt(mut self, prompt: CredentialsPrompt) -> Self {
+        self.credentials_prompt = Some(prompt);
         self
     }
 
@@ -416,13 +449,13 @@ impl<'a> BaseClientBuilder<'a> {
     /// See [`CredentialsCache::store_credentials_from_url`].
     pub fn store_credentials_from_url(
         &self,
-        url: &DisplaySafeUrl,
+        url: &SafeUrl,
     ) -> Result<bool, CredentialsFromUrlError> {
         self.credentials_cache.store_credentials_from_url(url)
     }
 
     /// See [`CredentialsCache::store_credentials`].
-    pub fn store_credentials(&self, url: &DisplaySafeUrl, credentials: Credentials) {
+    pub fn store_credentials(&self, url: &SafeUrl, credentials: Credentials) {
         self.credentials_cache.store_credentials(url, credentials);
     }
 
@@ -611,7 +644,11 @@ impl<'a> BaseClientBuilder<'a> {
             match read_identity(&ssl_client_cert) {
                 Ok(identity) => client_builder.identity(identity),
                 Err(err) => {
-                    warn_user_once!("Ignoring invalid `SSL_CLIENT_CERT`: {err}");
+                    warn_user_once_with_chain!(
+                        anyhow::Error::from(err)
+                            .context("Ignoring invalid `SSL_CLIENT_CERT`")
+                            .as_ref()
+                    );
                     client_builder
                 }
             }
@@ -632,13 +669,15 @@ impl<'a> BaseClientBuilder<'a> {
 
         if let Some(http_proxy) = &self.http_proxy {
             let proxy = http_proxy
-                .as_proxy(ProxyUrlKind::Http)
+                .as_proxy(ProxyUrlKind::Http)?
                 .no_proxy(no_proxy.clone());
             client_builder = client_builder.proxy(proxy);
         }
 
         if let Some(https_proxy) = &self.https_proxy {
-            let proxy = https_proxy.as_proxy(ProxyUrlKind::Https).no_proxy(no_proxy);
+            let proxy = https_proxy
+                .as_proxy(ProxyUrlKind::Https)?
+                .no_proxy(no_proxy);
             client_builder = client_builder.proxy(proxy);
         }
 
@@ -648,40 +687,11 @@ impl<'a> BaseClientBuilder<'a> {
     fn apply_middleware(&self, client: Client) -> ClientWithMiddleware {
         match self.connectivity {
             Connectivity::Online => {
-                // Create a base client to using in the authentication middleware.
-                let base_client = {
-                    let mut client = reqwest_middleware::ClientBuilder::new(client.clone());
-
-                    // Avoid uncloneable errors with a streaming body during publish.
-                    if self.retries > 0 {
-                        // Initialize the retry strategy.
-                        let retry_strategy = RetryTransientMiddleware::new_with_policy_and_strategy(
-                            self.retry_policy(),
-                            UvRetryableStrategy,
-                        );
-                        client = client.with(retry_strategy);
-                    }
-
-                    // When supplied, add the extra middleware.
-                    if let Some(extra_middleware) = &self.extra_middleware {
-                        for middleware in &extra_middleware.0 {
-                            client = client.with_arc(middleware.clone());
-                        }
-                    }
-
-                    client.build()
-                };
-
                 let mut client = reqwest_middleware::ClientBuilder::new(client);
 
                 // Avoid uncloneable errors with a streaming body during publish.
                 if self.retries > 0 {
-                    // Initialize the retry strategy.
-                    let retry_strategy = RetryTransientMiddleware::new_with_policy_and_strategy(
-                        self.retry_policy(),
-                        UvRetryableStrategy,
-                    );
-                    client = client.with(retry_strategy);
+                    client = client.with(UvRetryMiddleware(self.retry_policy()));
                 }
 
                 // When supplied, add the extra middleware.
@@ -691,31 +701,29 @@ impl<'a> BaseClientBuilder<'a> {
                     }
                 }
 
+                client = client.with(AzureStorageMiddleware {
+                    preview: self.preview,
+                });
+
                 // Initialize the authentication middleware to set headers.
                 match self.auth_integration {
                     AuthIntegration::Default => {
-                        let mut auth_middleware = AuthMiddleware::new()
+                        let auth_middleware = AuthMiddleware::new()
                             .with_cache_arc(self.credentials_cache.clone())
-                            .with_base_client(base_client)
                             .with_indexes(self.indexes.clone())
                             .with_keyring(self.keyring.to_provider())
+                            .with_credentials_prompt(self.credentials_prompt.clone())
                             .with_preview(self.preview);
-                        if let Ok(token_store) = PyxTokenStore::from_settings() {
-                            auth_middleware = auth_middleware.with_pyx_token_store(token_store);
-                        }
                         client = client.with(auth_middleware);
                     }
                     AuthIntegration::OnlyAuthenticated => {
-                        let mut auth_middleware = AuthMiddleware::new()
+                        let auth_middleware = AuthMiddleware::new()
                             .with_cache_arc(self.credentials_cache.clone())
-                            .with_base_client(base_client)
                             .with_indexes(self.indexes.clone())
                             .with_keyring(self.keyring.to_provider())
+                            .with_credentials_prompt(self.credentials_prompt.clone())
                             .with_preview(self.preview)
                             .with_only_authenticated(true);
-                        if let Ok(token_store) = PyxTokenStore::from_settings() {
-                            auth_middleware = auth_middleware.with_pyx_token_store(token_store);
-                        }
                         client = client.with(auth_middleware);
                     }
                     AuthIntegration::NoAuthMiddleware => {
@@ -790,7 +798,7 @@ impl BaseClient {
     }
 
     /// Selects the appropriate client based on the host's trustworthiness.
-    pub fn for_host(&self, url: &DisplaySafeUrl) -> &RedirectClientWithMiddleware {
+    pub fn for_host(&self, url: &SafeUrl) -> &RedirectClientWithMiddleware {
         if self.disable_ssl(url) {
             &self.dangerous_client
         } else {
@@ -799,20 +807,20 @@ impl BaseClient {
     }
 
     /// Executes a request, applying redirect policy.
-    pub async fn execute(&self, req: Request) -> reqwest_middleware::Result<Response> {
-        let client = self.for_host(&DisplaySafeUrl::from_url(req.url().clone()));
+    pub(crate) async fn execute(&self, req: Request) -> reqwest_middleware::Result<Response> {
+        let client = self.for_host(&SafeUrl::from_url(req.url().clone()));
         client.execute(req).await
     }
 
     /// Returns `true` if the host is trusted to use the insecure client.
-    fn disable_ssl(&self, url: &DisplaySafeUrl) -> bool {
+    fn disable_ssl(&self, url: &SafeUrl) -> bool {
         self.allow_insecure_host
             .iter()
             .any(|allow_insecure_host| allow_insecure_host.matches(url))
     }
 
     /// Return the [`GitHttpSettings`] for fetching from the given URL.
-    pub fn git_http_settings(&self, url: &DisplaySafeUrl) -> GitHttpSettings {
+    pub fn git_http_settings(&self, url: &SafeUrl) -> GitHttpSettings {
         GitHttpSettings::default()
             .with_disabled_ssl(self.disable_ssl(url))
             .with_offline(self.connectivity().is_offline())
@@ -865,18 +873,18 @@ pub struct RedirectClientWithMiddleware {
 
 impl RedirectClientWithMiddleware {
     /// Convenience method to make a `GET` request to a URL.
-    pub fn get<U: IntoUrl>(&self, url: U) -> RequestBuilder<'_> {
-        RequestBuilder::new(self.client.get(url), self)
+    pub fn get<P: SerializationPolicy>(&self, url: SafeUrl<P>) -> RequestBuilder<'_> {
+        RequestBuilder::new(self.client.get(url.into_unsafe_url()), self)
     }
 
     /// Convenience method to make a `POST` request to a URL.
-    pub fn post<U: IntoUrl>(&self, url: U) -> RequestBuilder<'_> {
-        RequestBuilder::new(self.client.post(url), self)
+    pub fn post<P: SerializationPolicy>(&self, url: SafeUrl<P>) -> RequestBuilder<'_> {
+        RequestBuilder::new(self.client.post(url.into_unsafe_url()), self)
     }
 
     /// Convenience method to make a `HEAD` request to a URL.
-    pub(crate) fn head<U: IntoUrl>(&self, url: U) -> RequestBuilder<'_> {
-        RequestBuilder::new(self.client.head(url), self)
+    pub(crate) fn head<P: SerializationPolicy>(&self, url: SafeUrl<P>) -> RequestBuilder<'_> {
+        RequestBuilder::new(self.client.head(url.into_unsafe_url()), self)
     }
 
     /// Executes a request, applying the redirect policy.
@@ -950,7 +958,7 @@ fn request_into_redirect(
     res: &Response,
     cross_origin_credentials_policy: CrossOriginCredentialsPolicy,
 ) -> reqwest_middleware::Result<Option<Request>> {
-    let original_req_url = DisplaySafeUrl::from_url(req.url().clone());
+    let original_req_url = SafeUrl::from_url(req.url().clone());
     let status = res.status();
     let should_redirect = match status {
         StatusCode::MOVED_PERMANENTLY
@@ -1000,10 +1008,10 @@ fn request_into_redirect(
             ))
         })?;
 
-    let mut redirect_url = match DisplaySafeUrl::parse(location) {
+    let mut redirect_url = match SafeUrl::parse(location) {
         Ok(url) => url,
         // Per RFC 7231, URLs should be resolved against the request URL.
-        Err(DisplaySafeUrlError::Url(ParseError::RelativeUrlWithoutBase)) => original_req_url.join(location).map_err(|err| {
+        Err(SafeUrlError::Url(ParseError::RelativeUrlWithoutBase)) => original_req_url.join(location).map_err(|err| {
             reqwest_middleware::Error::Middleware(anyhow!(
                 "Invalid HTTP {status} 'Location' value `{location}` relative to `{original_req_url}`: {err}"
             ))
@@ -1035,9 +1043,8 @@ fn request_into_redirect(
     let mut headers = HeaderMap::new();
     std::mem::swap(req.headers_mut(), &mut headers);
 
-    let cross_host = redirect_url.host_str() != original_req_url.host_str()
-        || redirect_url.port_or_known_default() != original_req_url.port_or_known_default();
-    if cross_host {
+    let cross_realm = RealmRef::from(&redirect_url) != RealmRef::from(&original_req_url);
+    if cross_realm {
         if cross_origin_credentials_policy == CrossOriginCredentialsPolicy::Secure {
             debug!("Received a cross-origin redirect. Removing sensitive headers.");
             headers.remove(AUTHORIZATION);
@@ -1071,10 +1078,10 @@ fn request_into_redirect(
     }
 
     std::mem::swap(req.headers_mut(), &mut headers);
-    *req.url_mut() = Url::from(redirect_url);
+    *req.url_mut() = redirect_url.into_unsafe_url();
     debug!(
-        "Received HTTP {status}. Redirecting to {}",
-        DisplaySafeUrl::ref_cast(req.url())
+        "Received HTTP {status}. Redirecting to `{}`",
+        SafeUrl::ref_cast(req.url())
     );
     Ok(Some(req))
 }
@@ -1082,10 +1089,7 @@ fn request_into_redirect(
 /// Return a Referer [`HeaderValue`] according to RFC 7231.
 ///
 /// Return [`None`] if https has been downgraded in the redirect location.
-fn make_referer(
-    redirect_url: &DisplaySafeUrl,
-    original_url: &DisplaySafeUrl,
-) -> Option<HeaderValue> {
+fn make_referer(redirect_url: &SafeUrl, original_url: &SafeUrl) -> Option<HeaderValue> {
     if redirect_url.scheme() == "http" && original_url.scheme() == "https" {
         return None;
     }
@@ -1184,13 +1188,13 @@ fn retry_policy(retries: u32, no_retry_delay: bool) -> ExponentialBackoff {
 /// URLs have been exhausted. On the next retry attempt the full URL list is tried again from the
 /// beginning.
 pub async fn fetch_with_url_fallback<T, E, F>(
-    urls: &[DisplaySafeUrl],
+    urls: &[SafeUrl],
     retry_policy: ExponentialBackoff,
     subject: &str,
     mut attempt: F,
 ) -> Result<T, E>
 where
-    F: AsyncFnMut(DisplaySafeUrl) -> Result<T, E>,
+    F: AsyncFnMut(SafeUrl) -> Result<T, E>,
     E: RetriableError + From<SystemTimeError>,
 {
     let mut retry_state = RetryState::start(
@@ -1207,7 +1211,7 @@ where
                 Err(err) => {
                     if !is_last && err.should_try_next_url() {
                         warn!(
-                            "Failed to fetch {subject} from {url} ({err}); falling back to {}",
+                            "Failed to fetch {subject} from `{url}` ({err}); falling back to `{}`",
                             urls[i + 1]
                         );
                         continue;
@@ -1241,7 +1245,7 @@ pub enum RetryParsingError {
 mod tests {
     use super::*;
 
-    use anyhow::Result;
+    use anyhow::{Context, Result};
     use reqwest::{Client, Method};
     use wiremock::matchers::method;
     use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -1287,6 +1291,46 @@ mod tests {
             assert!(redirect_request.headers().contains_key(AUTHORIZATION));
         }
 
+        Ok(())
+    }
+
+    /// A scheme change crosses an authentication realm even when the effective port is unchanged.
+    #[test]
+    fn test_redirect_removes_sensitive_headers_on_scheme_change() -> Result<()> {
+        for (source, target) in [
+            (
+                "https://example.com:8080/wheel",
+                "http://example.com:8080/wheel",
+            ),
+            (
+                "http://example.com:8080/wheel",
+                "https://example.com:8080/wheel",
+            ),
+            ("https://example.com/wheel", "http://example.com:443/wheel"),
+        ] {
+            let request = Client::new()
+                .get(source)
+                .header(AUTHORIZATION, "Bearer source-token")
+                .header(COOKIE, "session=source-session")
+                .header(PROXY_AUTHORIZATION, "Basic source-proxy")
+                .header(WWW_AUTHENTICATE, "Basic realm=source")
+                .build()?;
+            let response = Response::from(
+                http::Response::builder()
+                    .status(303)
+                    .header(LOCATION, target)
+                    .body("")?,
+            );
+            let redirected =
+                request_into_redirect(request, &response, CrossOriginCredentialsPolicy::Secure)?
+                    .context("expected a redirect request")?;
+            for header in [AUTHORIZATION, COOKIE, PROXY_AUTHORIZATION, WWW_AUTHENTICATE] {
+                assert!(
+                    !redirected.headers().contains_key(&header),
+                    "retained {header} on redirect from {source} to {target}"
+                );
+            }
+        }
         Ok(())
     }
 

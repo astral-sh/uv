@@ -50,7 +50,7 @@
         "body": { "type": "string" },
         "label": {
           "type": "string",
-          "enum": ["bug", "ci-flake"]
+          "enum": ["bug", "internal:ci", "internal:ci-flake"]
         }
       },
       "required": ["title", "body", "label"]
