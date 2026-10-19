@@ -377,9 +377,9 @@ pub struct ToolUv {
     /// Whether `uv build` includes the project lock in built distributions.
     ///
     /// With the `locked-tools` preview feature, uv automatically includes an existing, valid lock
-    /// when using the bundled `uv_build` backend and all dependencies come from PyPI. If automatic export
+    /// for projects using `uv_build` when all dependencies come from PyPI. If automatic export
     /// cannot be completed, the build continues without the lock. Set this to `true` to require
-    /// export, including for other indexes, or to `false` to disable export.
+    /// export, including for other build backends or indexes, or to `false` to disable export.
     export_lock: Option<bool>,
 
     /// The sources to use when resolving dependencies.

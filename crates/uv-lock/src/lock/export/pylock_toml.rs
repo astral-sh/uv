@@ -1108,6 +1108,13 @@ impl<'lock> PylockToml {
         })
     }
 
+    /// Returns `true` if any dependency cannot be installed as a registry distribution.
+    pub(crate) fn has_non_registry_sources(&self) -> bool {
+        self.packages
+            .iter()
+            .any(|package| package.index.is_none() || !package.has_registry_artifact_urls())
+    }
+
     /// Returns `true` if any distribution file is missing the hashes required by PEP 751.
     pub fn has_missing_hashes(&self) -> bool {
         self.packages.iter().any(|package| {
@@ -1573,6 +1580,31 @@ impl PylockTomlPackage {
             }
             _ => Ok(()),
         }
+    }
+
+    /// Return whether the package uses a non-registry source.
+    pub fn has_non_registry_source(&self) -> bool {
+        self.archive.is_some() || self.directory.is_some() || self.vcs.is_some()
+    }
+
+    /// Return whether a registry package has artifact URLs and no local paths.
+    fn has_registry_artifact_urls(&self) -> bool {
+        if self.has_non_registry_source() {
+            return false;
+        }
+
+        let mut artifacts = self
+            .sdist
+            .iter()
+            .map(|sdist| (&sdist.path, &sdist.url))
+            .chain(
+                self.wheels
+                    .iter()
+                    .flatten()
+                    .map(|wheel| (&wheel.path, &wheel.url)),
+            )
+            .peekable();
+        artifacts.peek().is_some() && artifacts.all(|(path, url)| path.is_none() && url.is_some())
     }
 
     /// Convert the [`PylockTomlPackage`] to a TOML [`Table`].
