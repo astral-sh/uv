@@ -16,19 +16,21 @@ use smallvec::SmallVec;
 use toml_parser::decoder::{Encoding, IntegerRadix, ScalarKind};
 use toml_parser::{Raw, Span};
 
-use super::Lock;
+use super::marker_cache::UnparsedMarker;
+use super::{Lock, LockWire};
 
 /// Parses a canonical lock directly into its existing, validated wire format.
 pub(super) fn from_str(input: &str) -> Result<Lock, Error> {
     let mut cursor = Cursor::new(input);
-    let lock = Lock::deserialize(DocumentDeserializer {
+    let wire = LockWire::<UnparsedMarker<'_>>::deserialize(DocumentDeserializer {
         cursor: &mut cursor,
     })?;
     cursor.skip_whitespace();
     if cursor.peek().is_some() {
         return Err(cursor.unsupported("unexpected trailing input"));
     }
-    Ok(lock)
+    let wire = wire.parse_markers().map_err(de::Error::custom)?;
+    Lock::try_from(wire).map_err(de::Error::custom)
 }
 
 /// An error returned when parsing a lockfile without the general TOML fallback.

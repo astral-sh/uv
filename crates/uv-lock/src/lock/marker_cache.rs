@@ -1,25 +1,90 @@
-//! Reuses large marker strings while deserializing one lockfile.
+//! Reuses large marker strings while reading one lockfile.
 
-use std::cell::RefCell;
+use std::borrow::Cow;
 use std::collections::hash_map::Entry;
-use std::fmt;
 use std::hash::BuildHasher;
 use std::str::FromStr;
 
 use rustc_hash::{FxBuildHasher, FxHashMap};
-use serde::{Deserialize, Deserializer, de};
+use serde::Deserialize;
 
 use uv_distribution_types::SimplifiedMarkerTree;
-use uv_pep508::{Reporter, TracingReporter};
+use uv_pep508::{Pep508Error, Reporter, TracingReporter};
+
+use super::{DependencyWire, LockWire, PackageWire};
 
 const MIN_MARKER_BYTES: usize = 256;
 const MAX_CACHE_BYTES: usize = 16 * 1024 * 1024;
 const MAX_CACHE_ENTRIES: usize = 4_096;
 
-thread_local! {
-    // Serde does not pass state between sibling fields. Keep the cache scoped to the
-    // synchronous lock deserializer, including its general TOML fallback.
-    static MARKERS: RefCell<Option<MarkerCache>> = const { RefCell::new(None) };
+/// Marker text borrowed from the lockfile until its wire representation is decoded.
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(transparent)]
+pub(super) struct UnparsedMarker<'a>(#[serde(borrow)] Cow<'a, str>);
+
+impl LockWire<UnparsedMarker<'_>> {
+    /// Parse marker text before restoring Python bounds and validating the lock.
+    pub(super) fn parse_markers(self) -> Result<LockWire, Pep508Error> {
+        let mut cache = MarkerCache::default();
+        Ok(LockWire {
+            version: self.version,
+            revision: self.revision,
+            requires_python: self.requires_python,
+            fork_markers: cache.parse_all(self.fork_markers)?,
+            supported_environments: cache.parse_all(self.supported_environments)?,
+            required_environments: cache.parse_all(self.required_environments)?,
+            conflicts: self.conflicts,
+            options: self.options,
+            manifest: self.manifest,
+            packages: self
+                .packages
+                .into_iter()
+                .map(|package| package.parse_markers(&mut cache))
+                .collect::<Result<_, _>>()?,
+        })
+    }
+}
+
+impl PackageWire<UnparsedMarker<'_>> {
+    fn parse_markers(self, cache: &mut MarkerCache) -> Result<PackageWire, Pep508Error> {
+        let fork_markers = cache.parse_all(self.fork_markers)?;
+        let mut parse_dependencies = |dependencies: Vec<DependencyWire<UnparsedMarker<'_>>>| {
+            dependencies
+                .into_iter()
+                .map(|dependency| dependency.parse_marker(cache))
+                .collect::<Result<Vec<_>, _>>()
+        };
+        Ok(PackageWire {
+            id: self.id,
+            metadata: self.metadata,
+            sdist: self.sdist,
+            wheels: self.wheels,
+            fork_markers,
+            dependencies: parse_dependencies(self.dependencies)?,
+            optional_dependencies: self
+                .optional_dependencies
+                .into_iter()
+                .map(|(extra, dependencies)| Ok((extra, parse_dependencies(dependencies)?)))
+                .collect::<Result<_, Pep508Error>>()?,
+            default_groups: self.default_groups,
+            dependency_groups: self
+                .dependency_groups
+                .into_iter()
+                .map(|(group, dependencies)| Ok((group, parse_dependencies(dependencies)?)))
+                .collect::<Result<_, Pep508Error>>()?,
+            group_requires_python: self.group_requires_python,
+        })
+    }
+}
+
+impl DependencyWire<UnparsedMarker<'_>> {
+    fn parse_marker(self, cache: &mut MarkerCache) -> Result<DependencyWire, Pep508Error> {
+        Ok(DependencyWire {
+            package_id: self.package_id,
+            extra: self.extra,
+            marker: cache.parse(&self.marker.0)?,
+        })
+    }
 }
 
 #[derive(Default)]
@@ -37,6 +102,41 @@ enum CacheLookup {
 }
 
 impl MarkerCache {
+    /// Parse marker text, reusing repeated long expressions that produce no warnings.
+    fn parse(&mut self, source: &str) -> Result<SimplifiedMarkerTree, Pep508Error> {
+        if source.is_empty() {
+            return Ok(SimplifiedMarkerTree::default());
+        }
+        if source.len() < MIN_MARKER_BYTES {
+            return SimplifiedMarkerTree::from_str(source);
+        }
+        let fingerprint = match self.lookup(source) {
+            CacheLookup::Hit(marker) => return Ok(marker),
+            CacheLookup::Repeated(fingerprint) => fingerprint,
+            CacheLookup::Miss => return SimplifiedMarkerTree::from_str(source),
+        };
+        let mut warned = false;
+        let marker = SimplifiedMarkerTree::parse(source, &mut |kind, warning| {
+            warned = true;
+            TracingReporter.report(kind, warning);
+        })?;
+        if !warned {
+            self.insert(fingerprint, source, marker);
+        }
+        Ok(marker)
+    }
+
+    /// Parse a list of markers with the same cache as dependency edges.
+    fn parse_all(
+        &mut self,
+        markers: Vec<UnparsedMarker<'_>>,
+    ) -> Result<Vec<SimplifiedMarkerTree>, Pep508Error> {
+        markers
+            .into_iter()
+            .map(|marker| self.parse(&marker.0))
+            .collect()
+    }
+
     fn lookup(&mut self, source: &str) -> CacheLookup {
         let fingerprint = FxBuildHasher.hash_one(source);
         let has_room = self.markers.len() < MAX_CACHE_ENTRIES;
@@ -72,142 +172,30 @@ impl MarkerCache {
     }
 }
 
-/// Restores an enclosing deserializer's cache, including when deserialization fails.
-struct CacheGuard(Option<MarkerCache>);
-
-impl Drop for CacheGuard {
-    fn drop(&mut self) {
-        MARKERS.set(self.0.take());
-    }
-}
-
-/// Scope marker reuse to one deserialization and restore any enclosing cache.
-pub(super) fn with_cache<T>(deserialize: impl FnOnce() -> T) -> T {
-    let _guard = CacheGuard(MARKERS.replace(Some(MarkerCache::default())));
-    deserialize()
-}
-
-/// Parse a marker, reusing long expressions that produce no warnings.
-pub(super) fn deserialize_marker<'de, D>(deserializer: D) -> Result<SimplifiedMarkerTree, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    struct MarkerVisitor;
-
-    impl de::Visitor<'_> for MarkerVisitor {
-        type Value = SimplifiedMarkerTree;
-
-        fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-            formatter.write_str("a string")
-        }
-
-        fn visit_str<E: de::Error>(self, source: &str) -> Result<Self::Value, E> {
-            if source.len() < MIN_MARKER_BYTES {
-                return SimplifiedMarkerTree::from_str(source).map_err(de::Error::custom);
-            }
-
-            let lookup = MARKERS.with_borrow_mut(|cache| {
-                cache
-                    .as_mut()
-                    .map_or(CacheLookup::Miss, |cache| cache.lookup(source))
-            });
-            let fingerprint = match lookup {
-                CacheLookup::Hit(marker) => return Ok(marker),
-                CacheLookup::Repeated(fingerprint) => fingerprint,
-                CacheLookup::Miss => {
-                    return SimplifiedMarkerTree::from_str(source).map_err(de::Error::custom);
-                }
-            };
-
-            // Parsing can emit tracing events. Release the cache borrow first so a
-            // reentrant deserializer can establish its own cache.
-            let mut warned = false;
-            let marker = SimplifiedMarkerTree::parse(source, &mut |kind, warning| {
-                warned = true;
-                TracingReporter.report(kind, warning);
-            })
-            .map_err(de::Error::custom)?;
-            MARKERS.with_borrow_mut(|cache| {
-                if !warned && let Some(cache) = cache {
-                    cache.insert(fingerprint, source, marker);
-                }
-            });
-            Ok(marker)
-        }
-    }
-
-    deserializer.deserialize_str(MarkerVisitor)
-}
-
-#[derive(Deserialize)]
-struct CachedMarker(#[serde(deserialize_with = "deserialize_marker")] SimplifiedMarkerTree);
-
-/// Deserialize marker lists through the same cache as dependency edges.
-pub(super) fn deserialize_markers<'de, D>(
-    deserializer: D,
-) -> Result<Vec<SimplifiedMarkerTree>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    Vec::<CachedMarker>::deserialize(deserializer)
-        .map(|markers| markers.into_iter().map(|marker| marker.0).collect())
-}
-
 #[cfg(test)]
 mod tests {
-    use serde::de::value::{Error, StrDeserializer};
-
     use uv_distribution_types::SimplifiedMarkerTree;
 
-    use super::{
-        CacheLookup, MARKERS, MAX_CACHE_BYTES, MAX_CACHE_ENTRIES, MarkerCache, deserialize_marker,
-        with_cache,
-    };
-
-    fn marker(source: &str) -> SimplifiedMarkerTree {
-        deserialize_marker(StrDeserializer::<Error>::new(source)).expect("valid marker")
-    }
+    use super::{CacheLookup, MAX_CACHE_BYTES, MAX_CACHE_ENTRIES, MarkerCache};
 
     #[test]
-    fn cache_is_scoped_to_one_deserialization() {
+    fn repeated_markers_are_cached() {
         let source = format!("{}os_name == 'posix'", "os_name == 'posix' and ".repeat(16));
-        let expected = marker(&source);
-        with_cache(|| {
-            assert_eq!(marker(&source), expected);
-            MARKERS.with_borrow(|cache| {
-                assert_eq!(cache.as_ref().map(|cache| cache.bytes), Some(0));
-            });
-            assert_eq!(marker(&source), expected);
-            MARKERS.with_borrow(|cache| {
-                assert_eq!(cache.as_ref().map(|cache| cache.bytes), Some(source.len()));
-            });
-
-            let result: Result<(), ()> = with_cache(|| {
-                MARKERS.with_borrow(|cache| {
-                    assert_eq!(cache.as_ref().map(|cache| cache.markers.len()), Some(0));
-                });
-                Err(())
-            });
-            assert!(result.is_err());
-            assert_eq!(marker(&source), expected);
-            MARKERS.with_borrow(|cache| {
-                assert_eq!(cache.as_ref().map(|cache| cache.bytes), Some(source.len()));
-            });
-        });
-
-        assert!(MARKERS.with_borrow(Option::is_none));
+        let mut cache = MarkerCache::default();
+        let expected = cache.parse(&source).expect("valid marker");
+        assert_eq!(cache.bytes, 0);
+        assert_eq!(cache.parse(&source).expect("valid marker"), expected);
+        assert_eq!(cache.bytes, source.len());
+        assert_eq!(cache.lookup(&source), CacheLookup::Hit(expected));
     }
 
     #[test]
     fn markers_with_warnings_are_not_cached() {
         let source = format!("{}os.name == 'posix'", "os_name == 'posix' and ".repeat(16));
-        with_cache(|| {
-            marker(&source);
-            marker(&source);
-            MARKERS.with_borrow(|cache| {
-                assert_eq!(cache.as_ref().map(|cache| cache.bytes), Some(0));
-            });
-        });
+        let mut cache = MarkerCache::default();
+        cache.parse(&source).expect("valid marker");
+        cache.parse(&source).expect("valid marker");
+        assert_eq!(cache.bytes, 0);
     }
 
     #[test]
