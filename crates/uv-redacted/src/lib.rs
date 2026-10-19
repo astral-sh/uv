@@ -404,6 +404,11 @@ impl<P: SerializationPolicy> SafeUrl<P> {
         self.0.path_segments()
     }
 
+    /// Return the query, without the leading question mark, if present.
+    pub fn query(&self) -> Option<&str> {
+        self.0.query()
+    }
+
     /// Return the decoded query name/value pairs.
     pub fn query_pairs(&self) -> url::form_urlencoded::Parse<'_> {
         self.0.query_pairs()
