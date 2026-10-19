@@ -1,11 +1,17 @@
 use std::collections::BTreeMap;
+#[cfg(feature = "test-git")]
+use std::process::Command;
 
 use anyhow::Result;
+#[cfg(feature = "test-git")]
+use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use indoc::indoc;
 use insta::{assert_json_snapshot, assert_snapshot};
 use serde_json::{Map, Value, json};
 use uv_distribution_types::PEP_850_SCHEMA;
+#[cfg(feature = "test-git")]
+use uv_redacted::SafeUrl;
 use uv_static::EnvVars;
 use uv_test::find_links::FindLinksServer;
 use uv_test::packse::{PackseServer, WheelBuilder};
@@ -210,6 +216,96 @@ fn direct_url_wheel_with_invalid_variant_metadata() -> Result<()> {
 
     hint: Metadata for `ok` (v1.0.0) could not be parsed:
       Failed to parse variant metadata `variant.json`: EOF while parsing an object at line 1 column 1
+    ");
+    Ok(())
+}
+
+/// Dry runs reject an incompatible Git wheel whether or not the wheel is cached.
+#[test]
+#[cfg(feature = "test-git")]
+fn install_git_path_variant_wheel() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filter((r"@[0-9a-f]{40}", "@[COMMIT]"));
+    let repository = context.temp_dir.child("repository");
+    repository.create_dir_all()?;
+    let variant = gpu_variant().to_string();
+    let (filename, wheel) = WheelBuilder::new(&"ok".parse()?, &"1.0.0".parse()?)
+        .variant(&"gpu".parse()?, &variant)
+        .build();
+    repository.child(&filename).write_binary(&wheel)?;
+    Command::new("git")
+        .arg("init")
+        .arg(repository.path())
+        .assert()
+        .success();
+    Command::new("git")
+        .current_dir(repository.path())
+        .args(["add", &filename])
+        .assert()
+        .success();
+    Command::new("git")
+        .current_dir(repository.path())
+        .args([
+            "-c",
+            "user.name=ferris",
+            "-c",
+            "user.email=ferris@example.com",
+            "commit",
+            "-m",
+            "Add wheel",
+        ])
+        .assert()
+        .success();
+    let output = Command::new("git")
+        .current_dir(repository.path())
+        .args(["rev-parse", "HEAD"])
+        .output()?;
+    assert!(output.status.success());
+    let commit = String::from_utf8(output.stdout)?;
+    let commit = commit.trim();
+    let repository_url = SafeUrl::from_directory_path(repository.path()).unwrap();
+    let requirement = format!("ok @ git+{repository_url}@{commit}#path={filename}");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .env(EnvVars::NV_VARIANT_PROVIDER_FORCE_CUDA_DRIVER_VERSION, "11")
+        .env(EnvVars::NV_VARIANT_PROVIDER_FORCE_SM_ARCH, "8.8")
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("--dry-run")
+        .arg(&requirement), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies
+      cause: Because only ok==1.0.0 is available and ok==1.0.0 has only unsupported wheel variants, we can conclude that all versions of ok cannot be used.
+             And because you require ok, we can conclude that your requirements are unsatisfiable.
+    ");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .env(EnvVars::NV_VARIANT_PROVIDER_FORCE_CUDA_DRIVER_VERSION, "12")
+        .env(EnvVars::NV_VARIANT_PROVIDER_FORCE_SM_ARCH, "8.9")
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg(&requirement), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0 (from git+file://[TEMP_DIR]/repository/@[COMMIT]#path=ok-1.0.0-py3-none-any-gpu.whl)
+    ");
+
+    context.reset_venv();
+    uv_snapshot!(context.filters(), context.pip_install()
+        .env(EnvVars::NV_VARIANT_PROVIDER_FORCE_CUDA_DRIVER_VERSION, "11")
+        .env(EnvVars::NV_VARIANT_PROVIDER_FORCE_SM_ARCH, "8.8")
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("--dry-run")
+        .arg(&requirement), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies
+      cause: Because only ok==1.0.0 is available and ok==1.0.0 has only unsupported wheel variants, we can conclude that all versions of ok cannot be used.
+             And because you require ok, we can conclude that your requirements are unsatisfiable.
     ");
     Ok(())
 }

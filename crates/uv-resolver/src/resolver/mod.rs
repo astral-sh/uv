@@ -1292,8 +1292,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 }
             }
 
-            // TODO(konsti): Enforce source restrictions here before stabilizing wheel variants.
-            // `pip compile --no-deps` skips the lookahead that enforces them.
             let incompatible_tag = if filename.variant().is_some()
                 && (!uv_preview::is_enabled(PreviewFeature::WheelVariants)
                     || env.marker_environment().is_none())
@@ -1302,8 +1300,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 Some(IncompatibleTag::Variant)
             } else if !python_requirement.target().matches_wheel_tag(filename) {
                 Some(IncompatibleTag::AbiPythonVersion)
-            } else if let BuiltDist::Path(_) | BuiltDist::DirectUrl(_) = dist
-                && filename.variant().is_some()
+            } else if filename.variant().is_some()
                 && let Some(tags) = &self.tags
                 && let TagCompatibility::Incompatible(tag) = filename.tag_compatibility(tags)
             {

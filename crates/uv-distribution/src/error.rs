@@ -39,11 +39,6 @@ impl fmt::Display for PythonVersion {
 pub enum Error {
     #[error("Wheel variant `{0}` requires `--preview-features wheel-variants`")]
     WheelVariantsDisabled(Box<WheelFilename>),
-    #[error("Installing wheel variants from {source_kind} is not supported: `{filename}`")]
-    UnsupportedWheelVariantSource {
-        filename: Box<WheelFilename>,
-        source_kind: &'static str,
-    },
     #[error("Wheel variant `{label}` requires unsupported properties: {properties}")]
     IncompatibleWheelVariant {
         label: VariantLabel,
@@ -308,7 +303,6 @@ impl Error {
     pub fn is_user_failure(&self) -> bool {
         match self {
             Self::WheelVariantsDisabled(_)
-            | Self::UnsupportedWheelVariantSource { .. }
             | Self::IncompatibleWheelVariant { .. }
             | Self::NoBuild
             | Self::NoBuildPackage(_)
