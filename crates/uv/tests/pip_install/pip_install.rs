@@ -6419,6 +6419,7 @@ fn invalidate_editable_on_change() -> Result<()> {
     // Create an editable package.
     let editable_dir = context.temp_dir.child("editable");
     editable_dir.create_dir_all()?;
+    editable_dir.child("src/example/__init__.py").touch()?;
     let pyproject_toml = editable_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"[project]
@@ -6428,6 +6429,10 @@ dependencies = [
   "anyio==4.0.0"
 ]
 requires-python = ">=3.8"
+
+[build-system]
+requires = ["uv_build>=0.7,<10000"]
+build-backend = "uv_build"
 "#,
     )?;
 
@@ -6465,6 +6470,10 @@ dependencies = [
   "anyio==3.7.1"
 ]
 requires-python = ">=3.8"
+
+[build-system]
+requires = ["uv_build>=0.7,<10000"]
+build-backend = "uv_build"
 "#,
     )?;
 
@@ -6552,6 +6561,7 @@ fn invalidate_path_on_change() -> Result<()> {
     // Create a local package.
     let editable_dir = context.temp_dir.child("editable");
     editable_dir.create_dir_all()?;
+    editable_dir.child("src/example/__init__.py").touch()?;
     let pyproject_toml = editable_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"[project]
@@ -6561,6 +6571,10 @@ dependencies = [
   "anyio==4.0.0"
 ]
 requires-python = ">=3.8"
+
+[build-system]
+requires = ["uv_build>=0.7,<10000"]
+build-backend = "uv_build"
 "#,
     )?;
 
@@ -6598,6 +6612,10 @@ dependencies = [
   "anyio==3.7.1"
 ]
 requires-python = ">=3.8"
+
+[build-system]
+requires = ["uv_build>=0.7,<10000"]
+build-backend = "uv_build"
 "#,
     )?;
 
@@ -6894,12 +6912,17 @@ fn invalidate_path_on_env_var() -> Result<()> {
     requirements_txt.write_str(".")?;
 
     // Create a local package.
+    context.temp_dir.child("src/example/__init__.py").touch()?;
     context.temp_dir.child("pyproject.toml").write_str(
         r#"[project]
         name = "example"
         version = "0.0.0"
         dependencies = ["anyio==4.0.0"]
         requires-python = ">=3.8"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [tool.uv]
         cache-keys = [{ env = "FOO" }]
