@@ -559,16 +559,19 @@ impl EnvVars {
     #[attr_added_in("0.12.24")]
     pub const UV_PYODIDE_INSTALL_MIRROR: &'static str = "UV_PYODIDE_INSTALL_MIRROR";
 
-    /// Replaces the `https://releases.astral.sh` base URL for all Astral-mirrored
-    /// metadata and artifact downloads.
+    /// Replaces the `https://releases.astral.sh` and `https://labs.astral.sh` base
+    /// URLs for Astral-hosted metadata and artifact downloads. Serc binaries use
+    /// Astral Labs; other downloads use `releases.astral.sh`.
     ///
     /// When set, uv uses only the configured mirror URL and does not fall back to
     /// GitHub or raw GitHub. Path components in the URL are preserved: only
     /// trailing slashes are trimmed before appending the normal path suffix
-    /// (e.g., `/github/versions/main/v1/uv.ndjson`).
+    /// (e.g., `/github/versions/main/v1/uv.ndjson` for version metadata or
+    /// `/serc/releases/0.1.6/serc-aarch64-apple-darwin.tar.gz` for Serc).
+    /// An empty value uses the default sources.
     ///
     /// This is useful for proxy repositories (e.g., Artifactory, Nexus) that
-    /// mirror `releases.astral.sh`.
+    /// mirror Astral's download services.
     ///
     /// More-specific sources take precedence:
     /// [`UV_PYTHON_INSTALL_MIRROR`](Self::UV_PYTHON_INSTALL_MIRROR) and
