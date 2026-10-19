@@ -204,21 +204,26 @@ pub async fn install(
     printer: Printer,
 ) -> Result<ExitStatus> {
     let (sender, mut receiver) = mpsc::unbounded_channel();
+    let compiler_client_builder = client_builder.clone();
     let compiler = async {
         let mut total_files = 0;
         let mut total_elapsed = std::time::Duration::default();
         let mut total_skipped = 0;
         while let Some(installation) = receiver.recv().await {
-            if let Some((files, elapsed)) =
-                compile_stdlib_bytecode(&installation, concurrency, cache)
-                    .await
-                    .with_context(|| {
-                        format!(
-                            "Failed to bytecode-compile Python standard library for: {}",
-                            installation.key()
-                        )
-                    })?
-            {
+            if let Some((files, elapsed)) = compile_stdlib_bytecode(
+                &installation,
+                concurrency,
+                cache,
+                &compiler_client_builder,
+                preview,
+            )
+            .await
+            .with_context(|| {
+                format!(
+                    "Failed to bytecode-compile Python standard library for: {}",
+                    installation.key()
+                )
+            })? {
                 total_files += files;
                 total_elapsed += elapsed;
             } else {
@@ -1234,6 +1239,8 @@ async fn compile_stdlib_bytecode(
     installation: &ManagedPythonInstallation,
     concurrency: &Concurrency,
     cache: &Cache,
+    client_builder: &BaseClientBuilder<'_>,
+    preview: Preview,
 ) -> Result<Option<(usize, std::time::Duration)>> {
     let start = std::time::Instant::now();
 
@@ -1262,13 +1269,19 @@ async fn compile_stdlib_bytecode(
         }
     };
 
-    let files = uv_installer::compile_tree(
-        &stdlib_path,
-        &installation.executable(false),
-        concurrency,
-        cache.root(),
-    )
-    .await
+    let files = if preview.is_enabled(PreviewFeature::NativeBytecode) {
+        let client = client_builder.build()?;
+        uv_installer::compile_serc_tree(&stdlib_path, &interpreter, concurrency, cache, &client)
+            .await
+    } else {
+        uv_installer::compile_tree(
+            &stdlib_path,
+            &installation.executable(false),
+            concurrency,
+            cache.root(),
+        )
+        .await
+    }
     .with_context(|| format!("Error compiling bytecode in: {}", stdlib_path.display()))?;
     if files == 0 {
         return Ok(None);
