@@ -30,11 +30,10 @@ fn main() -> Result<()> {
         .init();
 
     // Handrolled to avoid the large clap dependency
-    let mut args = env::args_os();
+    let mut args = env::args();
     // Skip the name of the binary
     args.next();
     let command = args.next().context("Missing command")?;
-    let command = command.to_str().context("Invalid non-UTF8 command")?;
 
     // Ad-hoc preview features parsing due to a lack of clap CLI in uv-build.
     let preview = if parse_boolish_environment_variable(EnvVars::UV_PREVIEW)?.unwrap_or(false) {
@@ -62,7 +61,7 @@ fn main() -> Result<()> {
     // Errors returned by finalize are self-describing, but should also be impossible.
     uv_preview::finalize().unwrap();
 
-    match command {
+    match command.as_str() {
         "build-sdist" => {
             let sdist_directory = PathBuf::from(args.next().context("Missing sdist directory")?);
             let filename = uv_build_backend::build_source_dist(
