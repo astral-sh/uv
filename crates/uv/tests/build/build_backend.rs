@@ -1604,7 +1604,7 @@ fn wheel_data_symlink_containment() -> Result<()> {
 
 /// Show an explicit error when there is a venv in source tree.
 #[test]
-fn venv_in_source_tree() -> Result<()> {
+fn venv_in_source_tree() {
     let context = uv_test::test_context!("3.12");
 
     context
@@ -1620,7 +1620,9 @@ fn venv_in_source_tree() -> Result<()> {
 
     // Reject the virtual environment before attempting to read its files.
     #[cfg(unix)]
-    venv.child("broken").symlink_to_file("missing")?;
+    venv.child("broken")
+        .symlink_to_file("missing")
+        .expect("create a dangling symlink");
 
     uv_snapshot!(context.filters(), context.build(), @"
     exit_code: 2 (failure)
@@ -1637,8 +1639,6 @@ fn venv_in_source_tree() -> Result<()> {
     error: Failed to build `[TEMP_DIR]/`
       cause: Virtual environments must not be added to source distributions or wheels, remove the directory or exclude it from the build: src/foo/.venv
     ");
-
-    Ok(())
 }
 
 /// Show a warning when the build backend is passed redundant module names
