@@ -7499,6 +7499,7 @@ dependencies = [
  "uv-distribution-types",
  "uv-errors",
  "uv-fs",
+ "uv-macros",
  "uv-pep440",
  "uv-platform",
  "uv-preview",
