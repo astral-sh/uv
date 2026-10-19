@@ -9,10 +9,13 @@ use std::path::Path;
 use std::str::FromStr;
 
 use anyhow::{Context, Result};
-use serde::Deserialize;
+use indexmap::IndexMap;
+use itertools::Itertools;
+use serde::{Deserialize, de::Error as _};
 
 use uv_configuration::TargetTriple;
-use uv_distribution_filename::WheelFilename;
+use uv_distribution_filename::{VariantLabel, WheelFilename};
+use uv_distribution_types::{VariantNamespace, VariantProperties, VariantProvider};
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::{MarkerTree, Requirement};
@@ -117,7 +120,7 @@ pub struct PackageMetadata {
     )]
     pub sdist: Option<ArtifactMetadata>,
 
-    /// Whether to produce wheels, and optionally their shared metadata.
+    /// Whether to produce wheels without a variant label, and optionally their shared metadata.
     #[serde(
         default = "default_artifact",
         deserialize_with = "deserialize_artifact"
@@ -132,6 +135,63 @@ pub struct PackageMetadata {
     /// An empty list means produce only the default `py3-none-any` wheel.
     #[serde(default)]
     pub wheel_tags: Vec<WheelTag>,
+
+    /// Variant wheels and their shared metadata.
+    pub variants: Option<Variants>,
+}
+
+/// Variant metadata and wheels for a package version.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Variants {
+    /// Namespaces in priority order.
+    pub namespaces: Vec<VariantNamespace>,
+    /// PEP 850 provider definitions, keyed by namespace.
+    pub providers: Option<BTreeMap<VariantNamespace, VariantProvider>>,
+    /// Wheels keyed by variant label, in fixture order.
+    ///
+    /// TOML does not guarantee table order, but the `toml` crate's `preserve_order` feature lets
+    /// scenarios control the order of wheels listed by the index.
+    pub wheels: IndexMap<VariantLabel, VariantWheel>,
+}
+
+/// A variant wheel and its optional overrides of the package version's metadata.
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct VariantWheel {
+    /// Variant properties, each written as `namespace :: feature :: value`.
+    #[serde(default, deserialize_with = "deserialize_variant_properties")]
+    pub properties: VariantProperties,
+    /// Dependency requirements, defaulting to the package version's requirements.
+    pub requires: Option<Vec<Requirement>>,
+    /// Wheel tags, defaulting to the package version's wheel tags.
+    #[serde(default)]
+    pub wheel_tags: Vec<WheelTag>,
+}
+
+fn deserialize_variant_properties<'de, D>(deserializer: D) -> Result<VariantProperties, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let mut properties = VariantProperties::new();
+    for property in Vec::<String>::deserialize(deserializer)? {
+        let Some((namespace, feature, value)) = property.split("::").map(str::trim).collect_tuple()
+        else {
+            return Err(D::Error::custom(format!(
+                "invalid variant property `{property}`: expected `namespace :: feature :: value`"
+            )));
+        };
+        let namespace = namespace.to_owned().try_into().map_err(D::Error::custom)?;
+        let feature = feature.to_owned().try_into().map_err(D::Error::custom)?;
+        let value = value.to_owned().try_into().map_err(D::Error::custom)?;
+        properties
+            .entry(namespace)
+            .or_default()
+            .entry(feature)
+            .or_default()
+            .push(value);
+    }
+    Ok(properties)
 }
 
 fn deserialize_artifact<'de, D>(

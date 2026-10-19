@@ -8,6 +8,7 @@ use anyhow::anyhow;
 #[cfg(feature = "test-git")]
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
+use indoc::indoc;
 use insta::assert_snapshot;
 use serde_json::{Map, Value, json};
 use uv_distribution_types::PEP_850_SCHEMA;
@@ -15,7 +16,7 @@ use uv_distribution_types::PEP_850_SCHEMA;
 use uv_redacted::SafeUrl;
 use uv_static::EnvVars;
 use uv_test::find_links::FindLinksServer;
-use uv_test::packse::WheelBuilder;
+use uv_test::packse::{PackseServer, WheelBuilder, scenario::Scenario};
 use uv_test::uv_snapshot;
 
 fn null_variant() -> Value {
@@ -355,47 +356,39 @@ fn pylock_rejects_selected_wheel_variant() -> Result<()> {
     Ok(())
 }
 
-/// Install the BLAS variant preferred by the static provider, even though its label sorts last.
+/// Install the BLAS variant preferred by the static provider, even though its label sorts last
+/// and the preferred library is listed second.
 #[test]
 fn select_variant_by_static_provider_order() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let links = context.temp_dir.child("links");
-    links.create_dir_all()?;
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "static-provider-order"
+        root = {}
+        expected.satisfiable = true
 
-    let mut metadata = json!({
-        "$schema": PEP_850_SCHEMA,
-        "default-priorities": { "namespace": ["blas_lapack"] },
-        "providers": {
-            "blas_lapack": {
-                "static-properties": { "library": ["openblas", "mkl", "accelerate"] }
-            }
-        },
-    });
-    let mut variants = Map::new();
-    for library in ["accelerate", "mkl", "openblas"] {
-        let properties = json!({ "blas_lapack": { "library": [library] } });
-        metadata["variants"] = json!({ library: &properties });
-        variants.insert(library.to_string(), properties);
+        [packages.ok.versions."1.0.0"]
+        wheel = false
+        sdist = false
 
-        let (_, wheel) = WheelBuilder::new(&"ok".parse()?, &"1.0.0".parse()?)
-            .files(&[
-                ("ok/variant.txt", library),
-                ("ok-1.0.0.dist-info/variant.json", &metadata.to_string()),
-            ])
-            .build();
-        links
-            .child(format!("ok-1.0.0-py3-none-any-{library}.whl"))
-            .write_binary(&wheel)?;
-    }
-    metadata["variants"] = variants.into();
-    links
-        .child("ok-1.0.0-variants.json")
-        .write_str(&metadata.to_string())?;
+        [packages.ok.versions."1.0.0".variants]
+        namespaces = ["blas_lapack"]
+
+        [packages.ok.versions."1.0.0".variants.providers.blas_lapack]
+        static-properties.library = ["openblas", "mkl", "accelerate"]
+
+        [packages.ok.versions."1.0.0".variants.wheels]
+        accelerate.properties = ["blas_lapack :: library :: accelerate"]
+        mkl.properties = ["blas_lapack :: library :: mkl"]
+        openblas_or_accelerate.properties = [
+            "blas_lapack :: library :: accelerate",
+            "blas_lapack :: library :: openblas",
+        ]
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
 
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg("--no-index")
-        .arg("--find-links")
-        .arg(links.path())
+        .arg("--index-url")
+        .arg(server.index_url())
         .arg("--preview-features")
         .arg("wheel-variants")
         .arg("ok==1.0.0"), @"
@@ -406,7 +399,15 @@ fn select_variant_by_static_provider_order() -> Result<()> {
     Installed 1 package in [TIME]
      + ok==1.0.0
     ");
-    assert_snapshot!(context.read(context.site_packages().join("ok/variant.txt")), @"openblas");
+    let installed = context.read(
+        context
+            .site_packages()
+            .join("ok-1.0.0.dist-info/variant.json"),
+    );
+    assert_eq!(
+        serde_json::from_str::<Value>(&installed)?["variants"],
+        json!({"openblas_or_accelerate": {"blas_lapack": {"library": ["accelerate", "openblas"]}}})
+    );
     Ok(())
 }
 
