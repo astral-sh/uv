@@ -6,6 +6,7 @@ use uv_cache_key::{CacheKey, CacheKeyHasher};
 
 use uv_distribution_filename::{DistExtension, ExtensionError};
 use uv_git_types::{GitUrl, GitUrlParseError};
+use uv_macros::DebugNoInline;
 use uv_pep508::{
     Pep508Url, UnnamedRequirementUrl, VerbatimUrl, VerbatimUrlError, looks_like_git_repository,
 };
@@ -14,7 +15,7 @@ use uv_redacted::{SafeUrl, SafeUrlError};
 
 use crate::{ArchiveInfo, DirInfo, DirectUrl, VcsUrl};
 
-#[derive(Debug, Error)]
+#[derive(DebugNoInline, Error)]
 pub enum ParsedUrlError {
     #[error("Unsupported URL prefix `{prefix}` in URL `{url}` ({message})")]
     UnsupportedUrlPrefix {
