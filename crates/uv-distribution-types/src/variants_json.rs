@@ -5,7 +5,8 @@ use tracing::debug;
 
 use uv_distribution_filename::VariantLabel;
 
-/// The schema for the PEP 825 draft. TODO(konsti): Update when we have the final path.
+// TODO(konsti): Update the schema URL once PEP 825 is finalized.
+/// The schema for the PEP 825 draft.
 const VARIANT_SCHEMA: &str = "https://variants-schema.wheelnext.dev/peps/825/v0.1.1.json";
 
 /// An error parsing a variant metadata file.

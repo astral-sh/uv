@@ -56,7 +56,8 @@ fn reject_empty_namespace_priorities() {
         "default-priorities": {"namespace": []},
         "variants": {"fast": {"cpu": {"level": ["v2", "v3"]}}, "null": {}}
     });
-    let error = serde_json::from_value::<VariantsJsonContent>(invalid).unwrap_err();
+    let error = serde_json::from_value::<VariantsJsonContent>(invalid)
+        .expect_err("namespace priorities must not be empty");
     assert_snapshot!(error, @"Variant namespace priorities must be non-empty and unique");
 }
 
@@ -67,7 +68,8 @@ fn reject_duplicate_namespace_priorities() {
         "default-priorities": {"namespace": ["cpu", "cpu"]},
         "variants": {"fast": {"cpu": {"level": ["v2", "v3"]}}, "null": {}}
     });
-    let error = serde_json::from_value::<VariantsJsonContent>(invalid).unwrap_err();
+    let error = serde_json::from_value::<VariantsJsonContent>(invalid)
+        .expect_err("namespace priorities must be unique");
     assert_snapshot!(error, @"Variant namespace priorities must be non-empty and unique");
 }
 
@@ -78,7 +80,8 @@ fn reject_invalid_namespace_in_priorities() {
         "default-priorities": {"namespace": ["CPU"]},
         "variants": {"fast": {"cpu": {"level": ["v2", "v3"]}}, "null": {}}
     });
-    let error = serde_json::from_value::<VariantsJsonContent>(invalid).unwrap_err();
+    let error = serde_json::from_value::<VariantsJsonContent>(invalid)
+        .expect_err("namespace priorities must be valid");
     assert_snapshot!(error, @"Invalid variant namespace: `CPU`");
 }
 
@@ -89,7 +92,8 @@ fn reject_namespace_missing_from_priorities() {
         "default-priorities": {"namespace": ["gpu"]},
         "variants": {"fast": {"cpu": {"level": ["v2", "v3"]}}, "null": {}}
     });
-    let error = serde_json::from_value::<VariantsJsonContent>(invalid).unwrap_err();
+    let error = serde_json::from_value::<VariantsJsonContent>(invalid)
+        .expect_err("variant namespaces must appear in the priorities");
     assert_snapshot!(
         error,
         @"Variant namespace `cpu` is missing from default-priorities.namespace"
@@ -103,7 +107,8 @@ fn reject_invalid_variant_label() {
         "default-priorities": {"namespace": ["cpu"]},
         "variants": {"Bad": {}}
     });
-    let error = serde_json::from_value::<VariantsJsonContent>(invalid).unwrap_err();
+    let error = serde_json::from_value::<VariantsJsonContent>(invalid)
+        .expect_err("variant labels must be valid");
     assert_snapshot!(
         error,
         @"Variant label must contain only lowercase ASCII letters, digits, underscores, and periods, not `B`"
@@ -117,7 +122,8 @@ fn reject_invalid_variant_namespace() {
         "default-priorities": {"namespace": ["cpu"]},
         "variants": {"fast": {"CPU": {"level": ["v3"]}}, "null": {}}
     });
-    let error = serde_json::from_value::<VariantsJsonContent>(invalid).unwrap_err();
+    let error = serde_json::from_value::<VariantsJsonContent>(invalid)
+        .expect_err("variant namespaces must be valid");
     assert_snapshot!(error, @"Invalid variant namespace: `CPU`");
 }
 
@@ -128,7 +134,8 @@ fn reject_invalid_variant_feature() {
         "default-priorities": {"namespace": ["cpu"]},
         "variants": {"fast": {"cpu": {"bad.feature": ["v3"]}}, "null": {}}
     });
-    let error = serde_json::from_value::<VariantsJsonContent>(invalid).unwrap_err();
+    let error = serde_json::from_value::<VariantsJsonContent>(invalid)
+        .expect_err("variant features must be valid");
     assert_snapshot!(error, @"Invalid variant feature: `bad.feature`");
 }
 
@@ -139,7 +146,8 @@ fn reject_invalid_variant_value() {
         "default-priorities": {"namespace": ["cpu"]},
         "variants": {"fast": {"cpu": {"level": ["v 3"]}}, "null": {}}
     });
-    let error = serde_json::from_value::<VariantsJsonContent>(invalid).unwrap_err();
+    let error = serde_json::from_value::<VariantsJsonContent>(invalid)
+        .expect_err("variant values must be valid");
     assert_snapshot!(error, @"Invalid variant value: `v 3`");
 }
 
@@ -150,7 +158,8 @@ fn reject_empty_feature_values() {
         "default-priorities": {"namespace": ["cpu"]},
         "variants": {"fast": {"cpu": {"level": []}}, "null": {}}
     });
-    let error = serde_json::from_value::<VariantsJsonContent>(invalid).unwrap_err();
+    let error = serde_json::from_value::<VariantsJsonContent>(invalid)
+        .expect_err("variant features must have values");
     assert_snapshot!(error, @"Variant feature `cpu :: level` must have at least one value");
 }
 
@@ -161,7 +170,8 @@ fn reject_duplicate_feature_values() {
         "default-priorities": {"namespace": ["cpu"]},
         "variants": {"fast": {"cpu": {"level": ["v3", "v2", "v3"]}}, "null": {}}
     });
-    let error = serde_json::from_value::<VariantsJsonContent>(invalid).unwrap_err();
+    let error = serde_json::from_value::<VariantsJsonContent>(invalid)
+        .expect_err("variant values must be unique");
     assert_snapshot!(error, @"Variant feature `cpu :: level` must not contain duplicate values");
 }
 
@@ -172,7 +182,8 @@ fn reject_null_variant_with_properties() {
         "default-priorities": {"namespace": ["cpu"]},
         "variants": {"fast": {"cpu": {"level": ["v2", "v3"]}}, "null": {"cpu": {"level": ["v3"]}}}
     });
-    let error = serde_json::from_value::<VariantsJsonContent>(invalid).unwrap_err();
+    let error = serde_json::from_value::<VariantsJsonContent>(invalid)
+        .expect_err("the null variant must not have properties");
     assert_snapshot!(error, @"The null variant must not have properties");
 }
 
@@ -183,6 +194,7 @@ fn reject_unknown_field_in_default_priorities() {
         "default-priorities": {"namespace": ["cpu"], "unknown": []},
         "variants": {"fast": {"cpu": {"level": ["v2", "v3"]}}, "null": {}}
     });
-    let error = serde_json::from_value::<VariantsJsonContent>(invalid).unwrap_err();
+    let error = serde_json::from_value::<VariantsJsonContent>(invalid)
+        .expect_err("default priorities must not contain unknown fields");
     assert_snapshot!(error, @"unknown field `unknown`, expected `namespace`");
 }
