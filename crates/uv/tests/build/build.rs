@@ -11,11 +11,14 @@ use predicates::prelude::predicate;
 use sha2::{Digest, Sha256};
 use std::env::current_dir;
 use std::path::Path;
+use std::process::Command;
 use uv_redacted::SafeUrl;
 use uv_static::EnvVars;
 use uv_test::package_server::PackageServer;
 use uv_test::packse::generate_wheel;
-use uv_test::{DEFAULT_PYTHON_VERSION, apply_filters, get_bin, uv_snapshot};
+use uv_test::{
+    DEFAULT_PYTHON_VERSION, TestContext, apply_filters, capture_uv_snapshot, get_bin, uv_snapshot,
+};
 
 fn zip_file_names(path: &Path) -> Result<Vec<String>> {
     block_on(async {
@@ -29,6 +32,17 @@ fn zip_file_names(path: &Path) -> Result<Vec<String>> {
         files.sort();
         Ok(files)
     })
+}
+
+/// Sort concurrent workspace build progress for deterministic snapshots.
+fn workspace_build_snapshot(context: &TestContext, command: &mut Command) -> String {
+    let snapshot = capture_uv_snapshot!(context.filters(), command);
+    let mut lines: Vec<_> = snapshot.lines().collect();
+    let is_progress = |line: &&str| line.starts_with('[') && line.contains("] Building ");
+    for progress in lines.split_mut(|line| !is_progress(line)) {
+        progress.sort_unstable();
+    }
+    lines.join("\n")
 }
 
 #[test]
@@ -799,10 +813,7 @@ fn build_fail() -> Result<()> {
 
 #[test]
 fn build_workspace() -> Result<()> {
-    let context = uv_test::test_context!("3.12")
-        .with_filter((r"\\\.", ""))
-        .with_filter((r"\[project\]", "[PKG]"))
-        .with_filter((r"\[member\]", "[PKG]"));
+    let context = uv_test::test_context!("3.12").with_filter((r"\\\.", ""));
 
     let project = context.temp_dir.child("project");
 
@@ -895,13 +906,19 @@ fn build_workspace() -> Result<()> {
         .assert(predicate::path::is_file());
 
     // Build all packages.
-    uv_snapshot!(context.filters(), context.build().arg("--all").arg("--no-build-logs").current_dir(&project), @"
+    assert_snapshot!(workspace_build_snapshot(
+        &context,
+        context
+            .build()
+            .args(["--all", "--no-build-logs"])
+            .current_dir(&project),
+    ), @"
     exit_code: 0 (success)
     ----- stderr -----
-    [PKG] Building source distribution...
-    [PKG] Building source distribution...
-    [PKG] Building wheel from source distribution...
-    [PKG] Building wheel from source distribution...
+    [member] Building source distribution...
+    [member] Building wheel from source distribution...
+    [project] Building source distribution...
+    [project] Building wheel from source distribution...
     Successfully built dist/member-0.1.0.tar.gz
     Successfully built dist/member-0.1.0-py3-none-any.whl
     Successfully built dist/project-0.1.0.tar.gz
@@ -936,13 +953,18 @@ fn build_workspace() -> Result<()> {
     ");
 
     // If a source is provided, discover the workspace from the source.
-    uv_snapshot!(context.filters(), context.build().arg("./project").arg("--all").arg("--no-build-logs"), @"
+    assert_snapshot!(workspace_build_snapshot(
+        &context,
+        context
+            .build()
+            .args(["./project", "--all", "--no-build-logs"]),
+    ), @"
     exit_code: 0 (success)
     ----- stderr -----
-    [PKG] Building source distribution...
-    [PKG] Building source distribution...
-    [PKG] Building wheel from source distribution...
-    [PKG] Building wheel from source distribution...
+    [member] Building source distribution...
+    [member] Building wheel from source distribution...
+    [project] Building source distribution...
+    [project] Building wheel from source distribution...
     Successfully built project/dist/member-0.1.0.tar.gz
     Successfully built project/dist/member-0.1.0-py3-none-any.whl
     Successfully built project/dist/project-0.1.0.tar.gz
@@ -977,10 +999,7 @@ fn build_workspace() -> Result<()> {
 
 #[test]
 fn build_all_with_failure() -> Result<()> {
-    let context = uv_test::test_context!("3.12")
-        .with_filter((r"\\\.", ""))
-        .with_filter((r"\[project\]", "[PKG]"))
-        .with_filter((r"\[member-\w+\]", "[PKG]"));
+    let context = uv_test::test_context!("3.12").with_filter((r"\\\.", ""));
 
     let project = context.temp_dir.child("project");
 
@@ -1072,14 +1091,20 @@ fn build_all_with_failure() -> Result<()> {
     )?;
 
     // Build all the packages
-    uv_snapshot!(context.filters(), context.build().arg("--all").arg("--no-build-logs").current_dir(&project), @"
+    assert_snapshot!(workspace_build_snapshot(
+        &context,
+        context
+            .build()
+            .args(["--all", "--no-build-logs"])
+            .current_dir(&project),
+    ), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    [PKG] Building source distribution...
-    [PKG] Building source distribution...
-    [PKG] Building source distribution...
-    [PKG] Building wheel from source distribution...
-    [PKG] Building wheel from source distribution...
+    [member-a] Building source distribution...
+    [member-a] Building wheel from source distribution...
+    [member-b] Building source distribution...
+    [project] Building source distribution...
+    [project] Building wheel from source distribution...
     Successfully built dist/member_a-0.1.0.tar.gz
     Successfully built dist/member_a-0.1.0-py3-none-any.whl
     error: Failed to build `member-b @ [TEMP_DIR]/project/packages/member_b`
