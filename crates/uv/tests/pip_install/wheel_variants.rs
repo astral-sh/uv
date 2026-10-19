@@ -77,19 +77,11 @@ async fn selected_variant_metadata_is_cached() -> Result<()> {
         )
         .mount(&server)
         .await;
-    Mock::given(method("GET"))
+    let no_variant_metadata = Mock::given(method("GET"))
         .and(path("/files/ok-1.0.0-variants.json"))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .set_body_json(json!({
-                    "$schema": "https://variants-schema.wheelnext.dev/peps/825/v0.1.1.json",
-                    "default-priorities": { "namespace": ["x86_64"] },
-                    "variants": { "null": {} },
-                }))
-                .insert_header("cache-control", "no-store"),
-        )
-        .expect(1)
-        .mount(&server)
+        .respond_with(ResponseTemplate::new(500))
+        .expect(0)
+        .mount_as_scoped(&server)
         .await;
     Mock::given(method("GET"))
         .and(path("/files/ok-2.0.0-variants.json"))
@@ -110,15 +102,22 @@ async fn selected_variant_metadata_is_cached() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     ");
-    let requests = server
-        .received_requests()
-        .await
-        .ok_or_else(|| anyhow::anyhow!("Request recording is disabled"))?;
-    assert!(
-        requests
-            .iter()
-            .all(|request| request.url.path() != "/files/ok-1.0.0-variants.json")
-    );
+    drop(no_variant_metadata);
+
+    Mock::given(method("GET"))
+        .and(path("/files/ok-1.0.0-variants.json"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(json!({
+                    "$schema": "https://variants-schema.wheelnext.dev/peps/825/v0.1.1.json",
+                    "default-priorities": { "namespace": ["x86_64"] },
+                    "variants": { "null": {} },
+                }))
+                .insert_header("cache-control", "no-store"),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
 
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.in")

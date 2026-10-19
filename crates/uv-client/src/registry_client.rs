@@ -958,7 +958,7 @@ impl RegistryClient {
             WheelCache::Index(index).wheel_dir(package_name.as_ref()),
             format!("{cache_key}.msgpack"),
         );
-        // TODO: Can variant metadata change after publication? It's still a bit fuzzy, be conservative for now.
+        // TODO(konsti): Revisit cache freshness once variant metadata mutability is specified.
         let cache_control = match self.connectivity {
             Connectivity::Online
                 if let Some(header) = self.indexes.configured_files_cache_control_for(index) =>
