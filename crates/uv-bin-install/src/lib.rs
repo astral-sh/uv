@@ -744,7 +744,6 @@ pub async fn install_serc(cache: &Cache, client: &BaseClient) -> Result<PathBuf,
             | "aarch64-unknown-linux-musl"
             | "armv7-unknown-linux-musleabihf"
             | "arm-unknown-linux-musleabihf"
-            | "riscv64gc-unknown-linux-musl"
     ) {
         return Err(Error::SercUnsupportedPlatform(platform));
     }
