@@ -1544,7 +1544,7 @@ mod tests {
     }
 
     /// Every [`PythonVersion`] in the embedded download metadata must be convertible
-    /// to a [`VersionRequest`] to avoid runtime panics.
+    /// to a [`VersionRequest`] for interpreter discovery.
     #[test]
     fn embedded_download_versions_convert_to_version_requests() {
         let downloads = ManagedPythonDownloadList::new_only_embedded()
@@ -1556,7 +1556,10 @@ mod tests {
             .collect();
 
         for version in &unique_versions {
-            let _ = VersionRequest::from(version);
+            assert!(
+                VersionRequest::try_from(version).is_ok(),
+                "invalid embedded download version: {version}"
+            );
         }
     }
 }
