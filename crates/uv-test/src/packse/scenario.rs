@@ -9,6 +9,7 @@ use std::path::Path;
 use std::str::FromStr;
 
 use anyhow::{Context, Result};
+use indexmap::IndexMap;
 use itertools::Itertools;
 use serde::{Deserialize, de::Error};
 
@@ -101,7 +102,7 @@ pub struct PackageMetadata {
     #[serde(default = "default_requires_python")]
     pub requires_python: Option<VersionSpecifiers>,
 
-    /// Dependency requirements.
+    /// Dependency requirements shared by the source distribution and all wheels.
     #[serde(default)]
     pub requires: Vec<Requirement>,
 
@@ -149,8 +150,8 @@ pub struct Variants {
     /// PEP 850 provider definitions, keyed by namespace.
     // TODO(konsti): Require providers once the variant metadata schemas are unified.
     pub providers: Option<BTreeMap<VariantNamespace, VariantProvider>>,
-    /// Wheels keyed by variant label.
-    pub wheels: BTreeMap<VariantLabel, VariantWheel>,
+    /// Wheels keyed by variant label, in the order the index should list them.
+    pub wheels: IndexMap<VariantLabel, VariantWheel>,
 }
 
 /// Properties and wheel tags for a variant wheel.

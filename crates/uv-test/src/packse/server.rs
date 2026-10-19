@@ -627,6 +627,46 @@ wheel = false
     }
 
     #[tokio::test]
+    async fn serves_variant_wheels_in_fixture_order() -> Result<()> {
+        let server = PackseServer::from_toml(
+            r#"
+name = "variant-wheel-order"
+
+[root]
+requires = ["a"]
+
+[expected]
+satisfiable = true
+
+[packages.a.versions."1.0.0"]
+sdist = false
+wheel = false
+
+[packages.a.versions."1.0.0".variants]
+namespaces = ["cpu"]
+
+[packages.a.versions."1.0.0".variants.wheels]
+second.properties = ["cpu :: level :: 2"]
+first.properties = ["cpu :: level :: 1"]
+"#,
+        )?;
+
+        let page: serde_json::Value = reqwest::get(format!("{}a/", server.index_url()))
+            .await?
+            .json()
+            .await?;
+        assert_eq!(
+            page["files"][0]["filename"],
+            "a-1.0.0-py3-none-any-second.whl"
+        );
+        assert_eq!(
+            page["files"][1]["filename"],
+            "a-1.0.0-py3-none-any-first.whl"
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn file_requests_support_byte_ranges() -> Result<()> {
         let server = PackseServer::from_toml(
             r#"

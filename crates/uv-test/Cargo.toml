@@ -51,6 +51,7 @@ futures = { workspace = true }
 hex = { workspace = true }
 http = { workspace = true }
 ignore = { workspace = true }
+indexmap = { workspace = true, features = ["serde"] }
 indoc = { workspace = true }
 insta = { workspace = true, features = ["filters"] }
 itertools = { workspace = true }
