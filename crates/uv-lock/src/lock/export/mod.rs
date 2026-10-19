@@ -15,7 +15,7 @@ use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep508::MarkerTree;
 use uv_pypi_types::ConflictItem;
 
-use uv_resolver_types::graph_ops::Reachable;
+use uv_resolver_types::graph_ops::{Reachable, marker_reachability};
 use uv_resolver_types::universal_marker::resolve_activated_extras;
 
 pub use crate::lock::export::metadata::{Metadata, PythonReport};
@@ -430,6 +430,18 @@ fn conflict_marker_reachability<'lock>(
     fork_markers: &[Edge<'lock>],
     known_conflicts: &FxHashMap<ConflictItem, MarkerTree>,
 ) -> FxHashMap<NodeIndex, MarkerTree> {
+    // Without explicit extra markers, activation only affects the optional edges of the package
+    // being requested. Represent each extra as a separate reachability node instead of carrying
+    // every activated extra through all of its transitive dependencies.
+    let has_extra_markers = graph.edge_weights().chain(fork_markers).any(|edge| {
+        let mut has_extras = false;
+        edge.marker().visit_extras(|_, _| has_extras = true);
+        has_extras
+    });
+    if !has_extra_markers {
+        return extra_marker_reachability(graph, fork_markers, known_conflicts);
+    }
+
     // For each node, track the conditions under which each conflict item is enabled.
     let mut conflict_maps =
         FxHashMap::<NodeIndex, FxHashMap<ConflictItem, MarkerTree>>::with_capacity_and_hasher(
@@ -587,4 +599,73 @@ fn conflict_marker_reachability<'lock>(
     }
 
     reachability
+}
+
+/// Determine package and extra reachability when edge markers contain no extra expressions.
+///
+/// An extra has its own node so that requesting it can expose optional dependencies even when the
+/// package itself was already reachable. Edges into an extra carry the same conditions as the
+/// dependency that requested it, including through cycles and across disjoint package versions.
+fn extra_marker_reachability<'lock>(
+    graph: &Graph<Node<'lock>, Edge<'lock>>,
+    fork_markers: &[Edge<'lock>],
+    known_conflicts: &FxHashMap<ConflictItem, MarkerTree>,
+) -> FxHashMap<NodeIndex, MarkerTree> {
+    let mut expanded =
+        Graph::<(), MarkerTree>::with_capacity(graph.node_count(), graph.edge_count());
+    let packages = graph
+        .node_indices()
+        .map(|_| expanded.add_node(()))
+        .collect::<Vec<_>>();
+    let mut extras = FxHashMap::default();
+
+    for edge in graph.edge_references() {
+        let source = match edge.weight() {
+            Edge::Optional { extra, .. } => *extras
+                .entry((edge.source(), *extra))
+                .or_insert_with(|| expanded.add_node(())),
+            Edge::Prod { .. } | Edge::Dev { .. } => packages[edge.source().index()],
+        };
+        expanded.add_edge(
+            source,
+            packages[edge.target().index()],
+            *edge.weight().marker(),
+        );
+        for extra in edge.weight().dep_extras() {
+            let target = *extras
+                .entry((edge.target(), *extra))
+                .or_insert_with(|| expanded.add_node(()));
+            expanded.add_edge(source, target, *edge.weight().marker());
+        }
+    }
+
+    for ((package_index, extra), extra_index) in extras {
+        let marker = match graph[package_index] {
+            Node::Package(package) => known_conflicts
+                .get(&ConflictItem::from((package.name().clone(), extra.clone())))
+                .copied()
+                .unwrap_or(MarkerTree::FALSE),
+            Node::Root => MarkerTree::FALSE,
+        };
+        // Seed root-selected extras. A false edge also ensures that an unrequested extra is not
+        // treated as a root merely because it has no incoming dependency edges.
+        expanded.add_edge(packages[package_index.index()], extra_index, marker);
+    }
+
+    let fork_markers = fork_markers
+        .iter()
+        .map(|edge| *edge.marker())
+        .collect::<Vec<_>>();
+    let mut reachability = marker_reachability(&expanded, &fork_markers);
+    graph
+        .node_indices()
+        .map(|index| {
+            (
+                index,
+                reachability
+                    .remove(&packages[index.index()])
+                    .unwrap_or(MarkerTree::FALSE),
+            )
+        })
+        .collect()
 }

@@ -466,6 +466,101 @@ fn requirements_txt_does_not_activate_extra_through_incompatible_path() -> Resul
     Ok(())
 }
 
+/// Extra activation must propagate through a dependency cycle even when the base package is
+/// already unconditionally reachable. Compatible paths contribute distinct activation markers.
+#[cfg(feature = "test-universal")]
+#[test]
+fn requirements_txt_transitive_extra_activation_cycle() -> Result<()> {
+    let context = uv_test::test_context!("3.13");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = [
+            "shared==1.0.0",
+            "bridge-linux==1.0.0 ; sys_platform == 'linux'",
+            "bridge-macos==1.0.0 ; sys_platform == 'darwin'",
+        ]
+        "#,
+    )?;
+
+    context.temp_dir.child("uv.lock").write_str(
+        r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.9"
+
+        [manifest]
+        members = ["root"]
+
+        [[package]]
+        name = "root"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "shared" },
+            { name = "bridge-linux", marker = "sys_platform == 'linux'" },
+            { name = "bridge-macos", marker = "sys_platform == 'darwin'" },
+        ]
+
+        [[package]]
+        name = "bridge-linux"
+        version = "1.0.0"
+        source = { registry = "https://example.com/simple" }
+        dependencies = [{ name = "shared", extra = ["a"] }]
+
+        [[package]]
+        name = "bridge-macos"
+        version = "1.0.0"
+        source = { registry = "https://example.com/simple" }
+        dependencies = [{ name = "shared", extra = ["a"] }]
+
+        [[package]]
+        name = "shared"
+        version = "1.0.0"
+        source = { registry = "https://example.com/simple" }
+
+        [package.optional-dependencies]
+        a = [{ name = "relay" }]
+        # The self-cycle must not activate b outside the paths that requested it.
+        b = [{ name = "leaf" }, { name = "shared", extra = ["b"] }]
+
+        [package.metadata]
+        provides-extras = ["a", "b"]
+
+        [[package]]
+        name = "relay"
+        version = "1.0.0"
+        source = { registry = "https://example.com/simple" }
+        dependencies = [{ name = "shared", extra = ["b"] }]
+
+        [[package]]
+        name = "leaf"
+        version = "1.0.0"
+        source = { registry = "https://example.com/simple" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--frozen")
+        .arg("--no-header")
+        .arg("--no-annotate")
+        .arg("--no-hashes"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    bridge-linux==1.0.0 ; sys_platform == 'linux'
+    bridge-macos==1.0.0 ; sys_platform == 'darwin'
+    leaf==1.0.0 ; sys_platform == 'darwin' or sys_platform == 'linux'
+    relay==1.0.0 ; sys_platform == 'darwin' or sys_platform == 'linux'
+    shared==1.0.0
+    ");
+
+    Ok(())
+}
+
 #[cfg(feature = "test-universal")]
 #[test]
 fn requirements_txt_project_extra() -> Result<()> {

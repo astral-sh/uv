@@ -5898,6 +5898,7 @@ dependencies = [
  "uv-git",
  "uv-git-types",
  "uv-install-wheel",
+ "uv-lock",
  "uv-normalize",
  "uv-pep440",
  "uv-pep508",
