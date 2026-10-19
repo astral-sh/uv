@@ -3,9 +3,10 @@
 use std::cell::RefCell;
 use std::collections::hash_map::Entry;
 use std::fmt;
+use std::hash::{Hash, Hasher};
 use std::str::FromStr;
 
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHasher};
 use serde::{Deserialize, Deserializer, de};
 
 use uv_distribution_types::SimplifiedMarkerTree;
@@ -23,17 +24,59 @@ thread_local! {
 
 #[derive(Default)]
 struct MarkerCache {
-    markers: FxHashMap<Box<str>, SimplifiedMarkerTree>,
+    // A fingerprint without a value records the first occurrence without retaining its text.
+    markers: FxHashMap<u64, Option<(Box<str>, SimplifiedMarkerTree)>>,
     bytes: usize,
 }
 
+#[derive(Debug, PartialEq, Eq)]
+enum CacheLookup {
+    Hit(SimplifiedMarkerTree),
+    Repeated(u64),
+    Miss,
+}
+
 impl MarkerCache {
-    fn insert(&mut self, source: &str, marker: SimplifiedMarkerTree) {
+    fn lookup(&mut self, source: &str) -> CacheLookup {
+        let mut hasher = FxHasher::default();
+        source.hash(&mut hasher);
+        let fingerprint = hasher.finish();
+        let has_room = self.markers.len() < MAX_CACHE_ENTRIES;
+        match self.markers.entry(fingerprint) {
+            Entry::Occupied(entry) => match entry.get() {
+                Some((cached_source, marker)) => {
+                    // Fingerprints only control admission; compare the full string
+                    // before returning a cached parse, including on collisions.
+                    if cached_source.as_ref() == source {
+                        CacheLookup::Hit(*marker)
+                    } else {
+                        CacheLookup::Miss
+                    }
+                }
+                None => {
+                    if source.len() <= MAX_CACHE_BYTES - self.bytes {
+                        CacheLookup::Repeated(fingerprint)
+                    } else {
+                        CacheLookup::Miss
+                    }
+                }
+            },
+            Entry::Vacant(entry) => {
+                if has_room && source.len() <= MAX_CACHE_BYTES - self.bytes {
+                    // Avoid copying large strings that occur only once. The first
+                    // occurrence also uses the ordinary parser without tracking warnings.
+                    entry.insert(None);
+                }
+                CacheLookup::Miss
+            }
+        }
+    }
+
+    fn insert(&mut self, fingerprint: u64, source: &str, marker: SimplifiedMarkerTree) {
         if source.len() <= MAX_CACHE_BYTES - self.bytes
-            && self.markers.len() < MAX_CACHE_ENTRIES
-            && let Entry::Vacant(entry) = self.markers.entry(source.into())
+            && let Some(entry @ None) = self.markers.get_mut(&fingerprint)
         {
-            entry.insert(marker);
+            *entry = Some((source.into(), marker));
             self.bytes += source.len();
         }
     }
@@ -73,13 +116,18 @@ where
                 return SimplifiedMarkerTree::from_str(source).map_err(de::Error::custom);
             }
 
-            if let Some(marker) = MARKERS.with_borrow(|cache| {
+            let lookup = MARKERS.with_borrow_mut(|cache| {
                 cache
-                    .as_ref()
-                    .and_then(|cache| cache.markers.get(source).copied())
-            }) {
-                return Ok(marker);
-            }
+                    .as_mut()
+                    .map_or(CacheLookup::Miss, |cache| cache.lookup(source))
+            });
+            let fingerprint = match lookup {
+                CacheLookup::Hit(marker) => return Ok(marker),
+                CacheLookup::Repeated(fingerprint) => fingerprint,
+                CacheLookup::Miss => {
+                    return SimplifiedMarkerTree::from_str(source).map_err(de::Error::custom);
+                }
+            };
 
             // Parsing can emit tracing events. Release the cache borrow first so a
             // reentrant deserializer can establish its own cache.
@@ -91,7 +139,7 @@ where
             .map_err(de::Error::custom)?;
             MARKERS.with_borrow_mut(|cache| {
                 if !warned && let Some(cache) = cache {
-                    cache.insert(source, marker);
+                    cache.insert(fingerprint, source, marker);
                 }
             });
             Ok(marker)
@@ -122,7 +170,8 @@ mod tests {
     use uv_distribution_types::SimplifiedMarkerTree;
 
     use super::{
-        MARKERS, MAX_CACHE_BYTES, MAX_CACHE_ENTRIES, MarkerCache, deserialize_marker, with_cache,
+        CacheLookup, MARKERS, MAX_CACHE_BYTES, MAX_CACHE_ENTRIES, MarkerCache, deserialize_marker,
+        with_cache,
     };
 
     fn marker(source: &str) -> SimplifiedMarkerTree {
@@ -137,6 +186,9 @@ mod tests {
 
         with_cache(|| {
             assert_eq!(marker(&source), expected);
+            MARKERS.with_borrow(|cache| {
+                assert_eq!(cache.as_ref().expect("active marker cache").bytes, 0);
+            });
             assert_eq!(marker(&source), expected);
             MARKERS.with_borrow(|cache| {
                 let cache = cache.as_ref().expect("active marker cache");
@@ -174,13 +226,15 @@ mod tests {
         let source = format!("{}os.name == 'posix'", "os_name == 'posix' and ".repeat(16));
         with_cache(|| {
             marker(&source);
+            marker(&source);
             MARKERS.with_borrow(|cache| {
                 assert!(
                     cache
                         .as_ref()
                         .expect("active marker cache")
                         .markers
-                        .is_empty()
+                        .values()
+                        .all(Option::is_none)
                 );
             });
         });
@@ -191,16 +245,35 @@ mod tests {
         let mut cache = MarkerCache::default();
         let marker = SimplifiedMarkerTree::default();
         let source = "x".repeat(MAX_CACHE_BYTES);
-        cache.insert(&source, marker);
-        cache.insert(&source, marker);
-        cache.insert("overflow", marker);
+        assert_eq!(cache.lookup(&source), CacheLookup::Miss);
+        let fingerprint = *cache.markers.keys().next().expect("observed marker");
+        assert_eq!(cache.lookup(&source), CacheLookup::Repeated(fingerprint));
+        cache.insert(fingerprint, &source, marker);
+        cache.insert(fingerprint, &source, marker);
+        cache.lookup("overflow");
         assert_eq!(cache.markers.len(), 1);
         assert_eq!(cache.bytes, MAX_CACHE_BYTES);
 
         let mut cache = MarkerCache::default();
         for index in 0..=MAX_CACHE_ENTRIES {
-            cache.insert(&format!("marker-{index}"), marker);
+            cache.lookup(&format!("marker-{index}"));
         }
         assert_eq!(cache.markers.len(), MAX_CACHE_ENTRIES);
+        assert_eq!(cache.bytes, 0);
+    }
+
+    #[test]
+    fn fingerprint_collisions_do_not_reuse_a_different_marker() {
+        let mut cache = MarkerCache::default();
+        let source = "os_name == 'posix'";
+        assert_eq!(cache.lookup(source), CacheLookup::Miss);
+        let fingerprint = *cache.markers.keys().next().expect("observed marker");
+        assert_eq!(cache.lookup(source), CacheLookup::Repeated(fingerprint));
+        cache.insert(
+            fingerprint,
+            "sys_platform == 'win32'",
+            SimplifiedMarkerTree::default(),
+        );
+        assert_eq!(cache.lookup(source), CacheLookup::Miss);
     }
 }
