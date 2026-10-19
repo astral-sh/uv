@@ -13,6 +13,7 @@ use uv_warnings::warn_user_once;
 pub use wheel::{build_editable, build_wheel, list_wheel, metadata};
 
 use rustc_hash::FxHashSet;
+use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::ffi::OsStr;
 use std::io;
@@ -20,6 +21,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use thiserror::Error;
 use tracing::debug;
+use walkdir::DirEntry;
 
 use uv_fs::{Simplified, normalize_path};
 use uv_globfilter::PortableGlobError;
@@ -455,11 +457,22 @@ fn module_path_from_module_name(src_root: &Path, module_name: &str) -> Result<Pa
     Ok(module_relative)
 }
 
+/// Visit virtual environment markers before archiving their contents, then sort by file name.
+pub(crate) fn compare_build_entries(left: &DirEntry, right: &DirEntry) -> Ordering {
+    is_venv_marker(right.file_name())
+        .cmp(&is_venv_marker(left.file_name()))
+        .then_with(|| left.file_name().cmp(right.file_name()))
+}
+
+fn is_venv_marker(file_name: &OsStr) -> bool {
+    file_name == "pyvenv.cfg" || file_name == "lib64"
+}
+
 /// Error if we're adding a venv to a distribution.
 pub(crate) fn error_on_venv(file_name: &OsStr, path: &Path) -> Result<(), Error> {
     // On 64-bit Unix, `lib64` is a (compatibility) symlink to lib. If we traverse `lib64` before
     // `pyvenv.cfg`, we show a generic error for symlink directories instead.
-    if !(file_name == "pyvenv.cfg" || file_name == "lib64") {
+    if !is_venv_marker(file_name) {
         return Ok(());
     }
 

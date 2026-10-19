@@ -29,7 +29,8 @@ use uv_warnings::warn_user_once;
 use crate::metadata::DEFAULT_EXCLUDES;
 use crate::{
     BuildBackendSettings, DirectoryWriter, Error, FileList, ListWriter, PyProjectToml,
-    error_on_venv, find_roots, write_directory_once, write_file_with_directories,
+    compare_build_entries, error_on_venv, find_roots, write_directory_once,
+    write_file_with_directories,
 };
 
 // Files at or below this size are buffered and written with `write_entry_whole`,
@@ -150,7 +151,7 @@ fn write_wheel(
     let mut written_directories = FxHashSet::<PathBuf>::default();
     for module_relative in module_relative {
         for entry in WalkDir::new(src_root.join(module_relative))
-            .sort_by_file_name()
+            .sort_by(compare_build_entries)
             .into_iter()
             .filter_entry(|entry| !exclude_matcher.is_match(entry.path()))
         {
@@ -594,7 +595,7 @@ fn wheel_subdir_from_globs(
     };
 
     for entry in WalkDir::new(src)
-        .sort_by_file_name()
+        .sort_by(compare_build_entries)
         .into_iter()
         .filter_entry(|entry| {
             // TODO(konsti): This should be prettier.

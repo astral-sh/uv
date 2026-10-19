@@ -1,5 +1,7 @@
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
+#[cfg(unix)]
+use assert_fs::fixture::SymlinkToFile;
 use assert_fs::fixture::{FileTouch, FileWriteBin, FileWriteStr, PathChild, PathCreateDir};
 use flate2::bufread::GzDecoder;
 use fs_err::File;
@@ -1613,11 +1615,14 @@ fn venv_in_source_tree() {
         .assert()
         .success();
 
-    context
-        .venv()
-        .arg(context.temp_dir.join("src").join("foo").join(".venv"))
-        .assert()
-        .success();
+    let venv = context.temp_dir.child("src/foo/.venv");
+    context.venv().arg(venv.path()).assert().success();
+
+    // Reject the virtual environment before attempting to read its files.
+    #[cfg(unix)]
+    venv.child("broken")
+        .symlink_to_file("missing")
+        .expect("create a dangling symlink");
 
     uv_snapshot!(context.filters(), context.build(), @"
     exit_code: 2 (failure)
