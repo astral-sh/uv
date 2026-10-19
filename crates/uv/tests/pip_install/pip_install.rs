@@ -3168,8 +3168,8 @@ fn install_git_checkout_marker_symlink() -> Result<()> {
         requires-python = ">=3.12"
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
     "#})?;
     repository
         .child("src/example/__init__.py")
@@ -3240,8 +3240,8 @@ fn install_git_full_commit_ignores_same_named_branch() -> Result<()> {
         requires-python = ">=3.12"
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
     "#})?;
     repository
         .child("src/example/__init__.py")
@@ -3291,8 +3291,8 @@ fn install_git_full_commit_ignores_same_named_branch() -> Result<()> {
         requires-python = ">=3.12"
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
     "#})?;
     repository
         .child("src/example/__init__.py")
@@ -3514,8 +3514,11 @@ fn install_git_percent_encoded_ref() -> Result<()> {
         requires-python = ">=3.12"
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+
+        [tool.uv.build-backend]
+        module-root = ""
     "#})?;
 
     Command::new("git")
@@ -6835,10 +6838,15 @@ fn invalidate_path_on_worktree_packed_commit() -> Result<()> {
         dependencies = ["anyio==4.0.0"]
         requires-python = ">=3.8"
 
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+
         [tool.uv]
         cache-keys = [{ git = true }]
         "#,
     )?;
+    editable_dir.child("src/example/__init__.py").touch()?;
 
     // Create a linked worktree with the branch reference in the common Git directory's
     // `packed-refs` file.
@@ -7108,8 +7116,13 @@ dependencies = [
   "anyio @ https://files.pythonhosted.org/packages/2d/b8/7333d87d5f03247215d86a86362fd3e324111788c6cdd8d2e6196a6ba833/anyio-4.2.0.tar.gz ; python_version < '3.11'"
 ]
 requires-python = ">=3.11,<3.13"
+
+[build-system]
+requires = ["uv_build>=0.7,<10000"]
+build-backend = "uv_build"
 "#,
     )?;
+    editable_dir.child("src/example/__init__.py").touch()?;
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--editable")
@@ -7181,8 +7194,8 @@ dependencies = []
 requires-python = ">=3.13"
 
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["uv_build>=0.7,<10000"]
+build-backend = "uv_build"
 "#,
     )?;
     child_dir.child("src").child("example").create_dir_all()?;
@@ -11185,7 +11198,12 @@ fn recursive_extra_transitive_url() -> Result<()> {
         docs = [
             "iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl",
         ]
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
     "#})?;
+    context.temp_dir.child("src/project/__init__.py").touch()?;
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg(".[all]"), @"
@@ -13823,8 +13841,8 @@ fn no_sources_workspace_discovery() -> Result<()> {
         dependencies = ["anyio"]
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [tool.uv.sources]
         anyio = { workspace = true }
@@ -13848,8 +13866,8 @@ fn no_sources_workspace_discovery() -> Result<()> {
         version = "2.0.0"
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#
     })?;
     anyio
@@ -13972,8 +13990,8 @@ fn pip_install_no_sources_package() -> Result<()> {
         dependencies = ["anyio", "iniconfig"]
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [tool.uv.sources]
         anyio = { git = "https://github.com/agronholm/anyio", tag = "3.7.0" }
@@ -14352,8 +14370,8 @@ fn change_layout_custom_directory() -> Result<()> {
         dependencies = ["iniconfig"]
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [tool.uv]
         cache-keys = [{ dir = "build" }]
@@ -14645,8 +14663,8 @@ fn pep_751_install_directory() -> Result<()> {
         dependencies = ["anyio"]
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
     context
@@ -16212,8 +16230,8 @@ fn reserved_script_name() -> Result<()> {
         "activate.bash" = "project:activate"
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
     "#,
     )?;
 
@@ -16246,8 +16264,8 @@ fn reserved_script_name() -> Result<()> {
         "python" = "project:python"
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
     "#,
     )?;
 
@@ -17309,8 +17327,8 @@ fn already_installed_url_dependency_no_sources() -> Result<()> {
         dependencies = ["iniconfig"]
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
     "#})?;
     context
         .temp_dir
@@ -17332,8 +17350,8 @@ fn already_installed_url_dependency_no_sources() -> Result<()> {
         dependencies = ["foo"]
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
     "#})?;
     context
         .temp_dir
@@ -18052,8 +18070,8 @@ fn pip_install_no_sources_editable_to_registry_switch() -> Result<()> {
         requires-python = ">=3.7"
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
 

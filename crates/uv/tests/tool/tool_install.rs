@@ -2242,8 +2242,8 @@ fn tool_install_remove_on_empty() -> Result<()> {
         requires-python = ">=3.11,<3.13"
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#
     })?;
 

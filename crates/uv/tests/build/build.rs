@@ -510,8 +510,8 @@ fn build_sdist() -> Result<()> {
         dependencies = ["anyio==3.7.0"]
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
 
@@ -606,8 +606,8 @@ fn build_sdist_wheel() -> Result<()> {
         dependencies = ["anyio==3.7.0"]
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
 
@@ -819,8 +819,8 @@ fn build_workspace() -> Result<()> {
         members = ["packages/*"]
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
 
@@ -843,8 +843,8 @@ fn build_workspace() -> Result<()> {
         dependencies = ["iniconfig"]
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
 
@@ -997,8 +997,8 @@ fn build_all_with_failure() -> Result<()> {
         members = ["packages/*"]
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
 
@@ -1024,8 +1024,8 @@ fn build_all_with_failure() -> Result<()> {
         dependencies = ["iniconfig"]
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
 
@@ -2198,8 +2198,8 @@ fn build_quiet() -> Result<()> {
         dependencies = ["anyio==3.7.0"]
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
 
@@ -3396,8 +3396,8 @@ fn build_with_symlink() -> Result<()> {
             requires-python = ">=3.12"
 
             [build-system]
-            requires = ["hatchling"]
-            build-backend = "hatchling.build"
+            requires = ["uv_build>=0.7,<10000"]
+            build-backend = "uv_build"
     "#})?;
     fs_err::os::unix::fs::symlink(
         "pyproject.toml.real",
@@ -3863,8 +3863,8 @@ fn build_clear_preserves_workspace_member() -> Result<()> {
         version = "0.1.0"
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
     "#})?;
     first.child("src/first/__init__.py").touch()?;
 
@@ -3875,8 +3875,8 @@ fn build_clear_preserves_workspace_member() -> Result<()> {
         version = "0.1.0"
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
     "#})?;
     second.child("src/second/__init__.py").touch()?;
     second.child("marker.txt").write_str("marker")?;
