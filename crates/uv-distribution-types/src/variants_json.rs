@@ -46,15 +46,20 @@ pub struct UnsupportedVariantProperties(VariantProperties);
 
 impl fmt::Display for UnsupportedVariantProperties {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut separator = "";
+        let mut first_feature = true;
         for (namespace, features) in &self.0 {
             for (feature, values) in features {
+                if first_feature {
+                    first_feature = false;
+                } else {
+                    f.write_str(" and ")?;
+                }
                 let (open, close) = if values.len() > 1 {
                     ("(", ")")
                 } else {
                     ("", "")
                 };
-                write!(f, "{separator}{open}")?;
+                f.write_str(open)?;
                 for (index, value) in values.iter().enumerate() {
                     if index > 0 {
                         f.write_str(" or ")?;
@@ -62,7 +67,6 @@ impl fmt::Display for UnsupportedVariantProperties {
                     write!(f, "`{namespace} :: {} :: {}`", feature.0, value.0)?;
                 }
                 f.write_str(close)?;
-                separator = " and ";
             }
         }
         Ok(())
