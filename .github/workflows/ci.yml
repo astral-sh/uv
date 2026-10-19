@@ -34,8 +34,8 @@ jobs:
       runner: depot-ubuntu-24.04-16
       helper-runner: github-ubuntu-24.04-x86_64-4
       # renovate: datasource=github-release-attachments depName=astral-sh/uv
-      uv-version: "0.13.0"
-      uv-checksum: "1468ebd5a5541121837c5a2817b9972ba6090fa6caa3d142620850a47fb75154"
+      uv-version: "0.13.1"
+      uv-checksum: "eadd9d27c134ab5ac1ffd4473b97a741407f3ea238288f03121fc4deddf90220"
       # Install Rust tools such as cargo-nextest so the reviewer can test PR code.
       # Keep the environment outside the checkout when switching to the PR head.
       setup-command: |
