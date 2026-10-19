@@ -535,6 +535,7 @@ jobs:
 
             # Keep package/version/file information in diagnostics without embedding
             # the build machine's Cargo home and registry index directory in every path.
+            # TODO: Use Cargo's profile-level `trim-paths` once it is stable.
             cargo fetch --locked --target "${{ matrix.target }}"
             for registry in "${CARGO_HOME:-$HOME/.cargo}"/registry/src/*; do
                 [[ -d "$registry" ]] || continue
@@ -599,6 +600,7 @@ jobs:
           before-script-linux: |
             scripts/install-cargo-extensions.sh
 
+            # TODO: Use Cargo's profile-level `trim-paths` once it is stable.
             cargo fetch --locked --target "${{ matrix.target }}"
             for registry in "${CARGO_HOME:-$HOME/.cargo}"/registry/src/*; do
                 [[ -d "$registry" ]] || continue
