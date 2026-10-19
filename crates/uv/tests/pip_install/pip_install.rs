@@ -10754,6 +10754,8 @@ async fn registry_wheel_name_mismatch() -> Result<()> {
     ----- stderr -----
     error: No solution found when resolving dependencies
       cause: Because there is no version of validation==1.0.0 and you require validation==1.0.0, we can conclude that your requirements are unsatisfiable.
+
+    hint: The index at `http://[LOCALHOST]/simple` listed a wheel for `ok` when queried for `validation`; the wheel was ignored
     ");
 
     Ok(())
@@ -10813,6 +10815,7 @@ async fn registry_wheel_name_mismatch_other_index() -> Result<()> {
 }
 
 /// The default strategy does not fall through to another index after filtering a mismatched wheel.
+/// The rejection remains available for the diagnostic when the cached response is used offline.
 #[tokio::test]
 async fn registry_wheel_name_mismatch_first_index() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -10820,10 +10823,14 @@ async fn registry_wheel_name_mismatch_first_index() -> Result<()> {
 
     Mock::given(method("GET"))
         .and(path("/bad/simple/validation/"))
-        .respond_with(ResponseTemplate::new(200).set_body_raw(
-            r#"<a href="/files/ok-1.0.0-py3-none-any.whl">ok-1.0.0-py3-none-any.whl</a>"#,
-            "text/html",
-        ))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("Cache-Control", "public, max-age=3600")
+                .set_body_raw(
+                    r#"<a href="/files/ok-1.0.0-py3-none-any.whl">ok-1.0.0-py3-none-any.whl</a>"#,
+                    "text/html",
+                ),
+        )
         .expect(1)
         .mount(&server)
         .await;
@@ -10850,6 +10857,26 @@ async fn registry_wheel_name_mismatch_first_index() -> Result<()> {
     ----- stderr -----
     error: No solution found when resolving dependencies
       cause: Because there is no version of validation==1.0.0 and you require validation==1.0.0, we can conclude that your requirements are unsatisfiable.
+
+    hint: The index at `http://[LOCALHOST]/bad/simple` listed a wheel for `ok` when queried for `validation`; the wheel was ignored
+    ");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--no-deps")
+        .arg("--dry-run")
+        .arg("--offline")
+        .arg("validation==1.0.0")
+        .arg("--index-url")
+        .arg(format!("{}/good/simple", server.uri()))
+        .arg("--extra-index-url")
+        .arg(format!("{}/bad/simple", server.uri())), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies
+      cause: Because there is no version of validation==1.0.0 and you require validation==1.0.0, we can conclude that your requirements are unsatisfiable.
+
+    hint: The index at `http://[LOCALHOST]/bad/simple` listed a wheel for `ok` when queried for `validation`; the wheel was ignored
     ");
 
     Ok(())
@@ -16483,6 +16510,7 @@ async fn bogus_redirect() -> Result<()> {
         .await;
 
     uv_snapshot!(
+        context.filters(),
         context
             .pip_install()
             .arg("--default-index")
@@ -16493,6 +16521,8 @@ async fn bogus_redirect() -> Result<()> {
     ----- stderr -----
     error: No solution found when resolving dependencies
       cause: Because there are no versions of sniffio and you require sniffio, we can conclude that your requirements are unsatisfiable.
+
+    hint: The index at `http://[LOCALHOST]/` listed a wheel for `anyio` when queried for `sniffio`; the wheel was ignored
     "
     );
 

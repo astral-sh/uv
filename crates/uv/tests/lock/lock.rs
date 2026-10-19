@@ -4679,6 +4679,52 @@ fn lock_project_with_scoped_override_index() -> Result<()> {
     Ok(())
 }
 
+/// Report a mismatched wheel from an explicitly configured index without exposing credentials.
+#[cfg(feature = "test-universal")]
+#[tokio::test]
+async fn lock_mismatched_wheel_name_explicit_index() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/simple/validation/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            r#"<a href="/files/ok-1.0.0-py3-none-any.whl">ok-1.0.0-py3-none-any.whl</a>"#,
+            "text/html",
+        ))
+        .mount(&server)
+        .await;
+
+    let index_url = server.uri().replacen("://", "://user:password@", 1);
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["validation==1.0.0"]
+
+        [tool.uv.sources]
+        validation = {{ index = "private" }}
+
+        [[tool.uv.index]]
+        name = "private"
+        url = "{index_url}/simple"
+        explicit = true
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies
+      cause: Because there is no version of validation==1.0.0 and your project depends on validation==1.0.0, we can conclude that your project's requirements are unsatisfiable.
+
+    hint: The index at `http://[LOCALHOST]/simple` listed a wheel for `ok` when queried for `validation`; the wheel was ignored
+    ");
+    Ok(())
+}
+
 /// Lock a project with `uv.tool.exclude-dependencies`.
 #[cfg(feature = "test-universal")]
 #[test]

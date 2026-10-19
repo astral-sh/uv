@@ -75,6 +75,8 @@ async fn registry_wheel_name_mismatch() -> Result<()> {
     ----- stderr -----
     error: No solution found when resolving dependencies
       cause: Because there is no version of validation==1.0.0 and you require validation==1.0.0, we can conclude that your requirements are unsatisfiable.
+
+    hint: The index at `http://[LOCALHOST]/simple` listed a wheel for `ok` when queried for `validation`; the wheel was ignored
     ");
 
     Ok(())
