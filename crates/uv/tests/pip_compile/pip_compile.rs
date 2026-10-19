@@ -18195,6 +18195,27 @@ fn compile_invalid_output_file() -> Result<()> {
     Ok(())
 }
 
+#[cfg(unix)]
+#[test]
+fn pep_751_root_output_path() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("requirements.in").touch()?;
+
+    uv_snapshot!(context
+        .pip_compile()
+        .arg("requirements.in")
+        .arg("--format")
+        .arg("pylock.toml")
+        .arg("-o")
+        .arg("/"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Expected the output filename to be `pylock.toml` or `pylock.<name>.toml`, where `<name>` is non-empty and contains no dots; found `/`
+    ");
+
+    Ok(())
+}
+
 #[cfg(feature = "test-universal")]
 #[test]
 fn pep_751_filename() -> Result<()> {
