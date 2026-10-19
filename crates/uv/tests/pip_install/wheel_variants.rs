@@ -604,7 +604,7 @@ fn invalid_variant_metadata_unknown_schema() -> Result<()> {
 }
 
 #[test]
-fn variant_wheels_cannot_be_installed() -> Result<()> {
+fn variant_wheels_without_preview_or_index_metadata_are_rejected() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let links = context.temp_dir.child("links");
     links.create_dir_all()?;
@@ -657,20 +657,6 @@ fn variant_wheels_cannot_be_installed() -> Result<()> {
       cause: Wheel variants are not supported yet: `ok-1.0.0-9-py3-none-any-null.whl`
     ");
 
-    uv_snapshot!(
-        context.filters(),
-        context
-            .pip_install()
-            .arg("--preview-features")
-            .arg("wheel-variants")
-            .arg(wheel.path()),
-        @"
-    exit_code: 1 (failure)
-    ----- stderr -----
-    error: Failed to read `ok @ file://[TEMP_DIR]/links/ok-1.0.0-9-py3-none-any-null.whl`
-      cause: Wheel variants are not supported yet: `ok-1.0.0-9-py3-none-any-null.whl`
-    "
-    );
     Ok(())
 }
 
