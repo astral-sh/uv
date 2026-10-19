@@ -9,6 +9,7 @@ use std::path::Path;
 use std::str::FromStr;
 
 use anyhow::{Context, Result};
+use indexmap::IndexMap;
 use itertools::Itertools;
 use serde::{Deserialize, de::Error};
 
@@ -149,17 +150,22 @@ pub struct Variants {
     /// PEP 850 provider definitions, keyed by namespace.
     // TODO(konsti): Require providers once the variant metadata schemas are unified.
     pub providers: Option<BTreeMap<VariantNamespace, VariantProvider>>,
-    /// Wheels keyed by variant label.
-    pub wheels: BTreeMap<VariantLabel, VariantWheel>,
+    /// Wheels keyed by variant label, in fixture order.
+    ///
+    /// TOML does not guarantee table order, but the `toml` crate's `preserve_order` feature lets
+    /// scenarios control the order of wheels listed by the index.
+    pub wheels: IndexMap<VariantLabel, VariantWheel>,
 }
 
-/// Properties and wheel tags for a variant wheel.
+/// A variant wheel and its optional overrides of the package version's metadata.
 #[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct VariantWheel {
     /// Variant properties, each written as `namespace :: feature :: value`.
     #[serde(default, deserialize_with = "deserialize_variant_properties")]
     pub properties: VariantProperties,
+    /// Dependency requirements, defaulting to the package version's requirements.
+    pub requires: Option<Vec<Requirement>>,
     /// Wheel tags, defaulting to the package version's wheel tags.
     #[serde(default)]
     pub wheel_tags: Vec<WheelTag>,
