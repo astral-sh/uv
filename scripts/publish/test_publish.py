@@ -203,8 +203,8 @@ TARGETS: dict[str, Target] = {
     ),
     "cloudsmith": Target(
         "astral-test-token",
-        "https://python.cloudsmith.io/astral-test/astral-test-1/",
-        "https://dl.cloudsmith.io/public/astral-test/astral-test-1/python/simple/",
+        "https://python.cloudsmith.io/astral-test/astral-test-2/",
+        "https://dl.cloudsmith.io/public/astral-test/astral-test-2/python/simple/",
         secrets=(("UV_PUBLISH_TOKEN", "UV_TEST_PUBLISH_CLOUDSMITH_TOKEN"),),
     ),
     "pypi-trusted-publishing-github": Target(
