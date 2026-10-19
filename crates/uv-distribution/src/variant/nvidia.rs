@@ -18,7 +18,7 @@ const MIN_COMPUTE_CAPABILITY: (u8, u8) = (5, 0);
 /// Bound memory use when an override exceeds the automatic detection range.
 const MAX_CUDA_VERSION_VALUES: usize = 1_024;
 
-// TODO: Move the NVIDIA variant provider into its own crate.
+// TODO(konsti): Move the NVIDIA variant provider into its own crate.
 /// The vendored implementation of `nvidia-variant-provider` 0.0.1.
 pub(super) struct NvidiaVariantProvider {
     /// Cache capabilities so every package and installation stage uses the same result.
