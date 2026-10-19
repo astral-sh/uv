@@ -432,7 +432,8 @@ impl<'a> Planner<'a> {
             // Check direct wheels even when refreshing skips the cache lookup.
             match dist.as_ref() {
                 Dist::Built(BuiltDist::DirectUrl(wheel)) => {
-                    if let TagCompatibility::Incompatible(tag) = wheel.filename.compatibility(tags)
+                    if let TagCompatibility::Incompatible(tag) =
+                        wheel.filename.tag_compatibility(tags)
                     {
                         return Err(incompatible_wheel(
                             IncompatibleWheelKind::Url(wheel.url.to_url()),
@@ -520,7 +521,10 @@ impl<'a> Planner<'a> {
                                     build_info,
                                     path: cache.archive(&archive.id).into_boxed_path(),
                                 };
-
+                                check_wheel_variant_compatibility(
+                                    &cached_dist.filename,
+                                    &cached_dist.path,
+                                )?;
                                 debug!("URL wheel requirement already cached: {cached_dist}");
                                 cached.push(CachedDist::Url(cached_dist));
                                 continue;

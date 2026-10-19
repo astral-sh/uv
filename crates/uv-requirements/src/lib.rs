@@ -129,7 +129,6 @@ pub(crate) fn required_dist(requirement: &Requirement) -> Result<Option<Dist>, E
         )?,
     };
 
-    // TODO: Support variant wheels from direct URLs and Git paths.
     if let Dist::Built(built) = &dist
         && let Err(err) = check_supported_wheel_variant(built)
     {
