@@ -3,7 +3,7 @@ use async_http_range_reader::AsyncHttpRangeReader;
 use futures::io::BufReader;
 use tokio_util::compat::TokioAsyncReadCompatExt;
 use uv_distribution_filename::WheelFilename;
-use uv_metadata::{find_archive_dist_info, validate_archive_variant};
+use uv_metadata::{find_archive_dist_info, read_archive_variant_entry};
 use uv_redacted::SafeUrl;
 
 /// Read `METADATA` and, for a variant wheel, validate `variant.json` using HTTP range requests.
@@ -114,7 +114,7 @@ pub(crate) async fn wheel_metadata_from_remote_zip(
     // Check that `variant.json` describes the variant named in the filename, so the resolver
     // can mark the version unavailable if the wheel is malformed.
     if let Some((label, path)) = variant {
-        validate_archive_variant(&mut reader, &path, label)
+        read_archive_variant_entry(&mut reader, &path, label)
             .await
             .map_err(|err| ErrorKind::Metadata(debug_name.to_string(), err))?;
     }
