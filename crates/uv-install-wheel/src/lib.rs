@@ -7,6 +7,7 @@ use owo_colors::OwoColorize;
 use thiserror::Error;
 
 use uv_fs::Simplified;
+use uv_macros::DebugNoInline;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pypi_types::Scheme;
@@ -40,7 +41,7 @@ pub struct Layout {
 }
 
 /// Note: The caller is responsible for adding the path of the wheel we're installing.
-#[derive(Error, Debug)]
+#[derive(Error, DebugNoInline)]
 pub enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),
