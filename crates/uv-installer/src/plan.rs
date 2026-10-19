@@ -631,7 +631,7 @@ impl<'a> Planner<'a> {
                     }
                 }
                 Dist::Source(SourceDist::Registry(sdist)) => {
-                    if let Some(distribution) = registry_index.source(sdist, no_build, no_binary) {
+                    if let Some(distribution) = registry_index.source(sdist, no_build) {
                         debug!("Registry requirement already cached: {distribution}");
                         cached.push(CachedDist::Registry(distribution.clone()));
                         continue;
