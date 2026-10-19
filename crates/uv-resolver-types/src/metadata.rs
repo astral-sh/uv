@@ -49,11 +49,15 @@ pub enum MetadataUnavailable {
 
 /// An error parsing variant metadata.
 #[derive(Debug, thiserror::Error)]
-#[error("Failed to parse variant metadata `{filename}`: {source}")]
-pub struct VariantsJsonMetadataError {
-    pub filename: VariantsJsonFilename,
-    #[source]
-    pub source: VariantsJsonParseError,
+pub enum VariantsJsonMetadataError {
+    #[error("Failed to parse variant metadata `{filename}`: {source}")]
+    Index {
+        filename: VariantsJsonFilename,
+        #[source]
+        source: VariantsJsonParseError,
+    },
+    #[error("Failed to parse variant metadata `variant.json`: {0}")]
+    Wheel(#[source] VariantsJsonParseError),
 }
 
 impl MetadataUnavailable {

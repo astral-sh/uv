@@ -597,6 +597,10 @@ package's metadata is incorrect or incomplete, or when a package is not availabl
 index. While dependency overrides allow overriding the allowed versions of a package globally,
 metadata overrides allow overriding the declared metadata of a _specific package_.
 
+For a variant wheel at a direct URL, the wheel's `METADATA` must still be parseable even when
+`tool.uv.dependency-metadata` supplies its dependencies. For example, an override can replace an
+incorrect version constraint, but the original `Requires-Dist` entry must use valid syntax.
+
 !!! note
 
     The `version` field in `tool.uv.dependency-metadata` is optional for registry-based

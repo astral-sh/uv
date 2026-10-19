@@ -2,13 +2,15 @@ use std::future::Future;
 use std::sync::Arc;
 pub use uv_resolver_types::MetadataResponse;
 pub(crate) use uv_resolver_types::MetadataUnavailable;
+use uv_resolver_types::VariantsJsonMetadataError;
 
 use uv_client::MetadataFormat;
 use uv_configuration::BuildOptions;
 use uv_distribution::{DistributionDatabase, Reporter};
 use uv_distribution_types::{
-    Dist, File, IndexCapabilities, IndexLocations, IndexMetadata, IndexMetadataRef, IndexUrl,
-    InstalledDist, MinimumLibcVersion, RequestedDist, RequiresPython,
+    BuiltDist, Dist, File, IndexCapabilities, IndexLocations, IndexMetadata, IndexMetadataRef,
+    IndexUrl, InstalledDist, MinimumLibcVersion, RequestedDist, RequiresPython,
+    VariantsJsonContent,
 };
 use uv_normalize::PackageName;
 use uv_platform_tags::Tags;
@@ -66,6 +68,12 @@ pub trait ResolverProvider {
         &'io self,
         dist: &'io Dist,
     ) -> impl Future<Output = WheelMetadataResult> + 'io;
+
+    /// Get embedded variant metadata for a wheel being considered by the solver.
+    fn get_wheel_variant_metadata<'io>(
+        &'io self,
+        wheel: &'io BuiltDist,
+    ) -> impl Future<Output = Result<Option<VariantsJsonContent>, uv_distribution::Error>> + 'io;
 
     /// Get the metadata for an installed distribution.
     fn get_installed_metadata<'io>(
@@ -151,35 +159,47 @@ impl<'a, Context: BuildContext> DefaultResolverProvider<'a, Context> {
         )
     }
 
-    /// Classify a client error as recoverable metadata unavailability or a fatal client error.
+    /// Honor index-specific status codes when classifying metadata failures.
     fn classify_metadata_error(
         &self,
         error: uv_client::Error,
         index: Option<&IndexUrl>,
     ) -> Result<MetadataUnavailable, uv_client::Error> {
-        let retries = error.retries();
-        let duration = error.duration();
-        match error.into_kind() {
-            uv_client::ErrorKind::Offline(_) => Ok(MetadataUnavailable::Offline),
-            uv_client::ErrorKind::MetadataParseError(_, _, error) => {
-                Ok(MetadataUnavailable::InvalidMetadata(Arc::new(*error)))
-            }
-            uv_client::ErrorKind::Metadata(_, error) => {
-                Ok(MetadataUnavailable::InvalidStructure(Arc::new(error)))
-            }
-            kind => {
-                if let uv_client::ErrorKind::WrappedReqwestError(_, error) = &kind
-                    && let Some(status) = error.status()
-                    && index.is_some_and(|index| {
-                        self.index_locations.ignores_error_code_for(index, status)
-                    })
-                {
-                    Ok(MetadataUnavailable::Network(status))
-                } else {
-                    Err(uv_client::Error::new(kind, retries, duration))
-                }
-            }
+        if let uv_client::ErrorKind::WrappedReqwestError(_, http) = error.kind()
+            && let Some(status) = http.status()
+            && index.is_some_and(|index| self.index_locations.ignores_error_code_for(index, status))
+        {
+            return Ok(MetadataUnavailable::Network(status));
         }
+        classify_metadata_error(error)
+    }
+}
+
+/// Classify a metadata failure shared by index and direct URL requests.
+pub(super) fn classify_metadata_error(
+    error: uv_client::Error,
+) -> Result<MetadataUnavailable, uv_client::Error> {
+    let retries = error.retries();
+    let duration = error.duration();
+    match error.into_kind() {
+        uv_client::ErrorKind::Offline(_) => Ok(MetadataUnavailable::Offline),
+        uv_client::ErrorKind::MetadataParseError(_, _, error) => {
+            Ok(MetadataUnavailable::InvalidMetadata(Arc::new(*error)))
+        }
+        uv_client::ErrorKind::Metadata(_, error) => Ok(classify_wheel_metadata_error(error)),
+        kind => Err(uv_client::Error::new(kind, retries, duration)),
+    }
+}
+
+/// Classify errors reading metadata from a wheel archive.
+pub(super) fn classify_wheel_metadata_error(error: uv_metadata::Error) -> MetadataUnavailable {
+    match error {
+        uv_metadata::Error::InvalidVariantMetadata(source) => {
+            MetadataUnavailable::InvalidVariantMetadata(Arc::new(VariantsJsonMetadataError::Wheel(
+                source,
+            )))
+        }
+        error => MetadataUnavailable::InvalidStructure(Arc::new(error)),
     }
 }
 
@@ -315,7 +335,7 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
                     MetadataUnavailable::InvalidMetadata(Arc::new(err)),
                 )),
                 uv_distribution::Error::WheelMetadata(_, err) => Ok(MetadataResponse::Unavailable(
-                    MetadataUnavailable::InvalidStructure(Arc::new(*err)),
+                    classify_wheel_metadata_error(*err),
                 )),
                 uv_distribution::Error::RequiresPython(requires_python, version) => {
                     Ok(MetadataResponse::Unavailable(
@@ -328,6 +348,15 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
                 )),
             },
         }
+    }
+
+    async fn get_wheel_variant_metadata(
+        &self,
+        wheel: &BuiltDist,
+    ) -> Result<Option<VariantsJsonContent>, uv_distribution::Error> {
+        self.fetcher
+            .get_wheel_variant_metadata(wheel, self.hasher.archive_policy(wheel))
+            .await
     }
 
     /// Return the metadata for an installed distribution.

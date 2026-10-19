@@ -6910,6 +6910,7 @@ fn pep_751_direct_url_tags() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("--preview")
         .arg("pylock.toml")
+        .arg("--refresh")
         .arg("--python-platform")
         .arg("linux"), @"
     exit_code: 2 (failure)

@@ -429,6 +429,21 @@ impl<'a> Planner<'a> {
                 unreachable!("Installed distribution could not be found in site-packages: {dist}");
             };
 
+            // Validate direct URL wheel tags even when refreshing the cache.
+            if let Dist::Built(BuiltDist::DirectUrl(wheel)) = dist.as_ref()
+                && !wheel.filename.tag_compatibility(tags).is_compatible()
+            {
+                return Err(PlanError::IncompatibleWheel(Box::new(
+                    IncompatibleWheelError {
+                        kind: IncompatibleWheelKind::Url(wheel.url.to_url()),
+                        compatibility_hint: generate_wheel_compatibility_hint(
+                            &wheel.filename,
+                            tags,
+                        ),
+                    },
+                )));
+            }
+
             if cache.must_revalidate_package(dist.name())
                 || dist
                     .source_tree()
@@ -449,18 +464,6 @@ impl<'a> Planner<'a> {
                     }
                 }
                 Dist::Built(BuiltDist::DirectUrl(wheel)) => {
-                    if !wheel.filename.is_compatible(tags) {
-                        return Err(PlanError::IncompatibleWheel(Box::new(
-                            IncompatibleWheelError {
-                                kind: IncompatibleWheelKind::Url(wheel.url.to_url()),
-                                compatibility_hint: generate_wheel_compatibility_hint(
-                                    &wheel.filename,
-                                    tags,
-                                ),
-                            },
-                        )));
-                    }
-
                     if no_binary {
                         return Err(PlanError::NoBinaryUrl(wheel.url.clone()));
                     }
@@ -496,7 +499,11 @@ impl<'a> Planner<'a> {
                                     build_info,
                                     path: cache.archive(&archive.id).into_boxed_path(),
                                 };
-
+                                check_wheel_variant_compatibility(
+                                    &cached_dist.filename,
+                                    &cached_dist.path,
+                                    tags.python_platform(),
+                                )?;
                                 debug!("URL wheel requirement already cached: {cached_dist}");
                                 cached.push(CachedDist::Url(cached_dist));
                                 continue;
