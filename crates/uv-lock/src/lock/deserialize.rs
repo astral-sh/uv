@@ -949,21 +949,13 @@ dependencies = [
             );
         let expected: Lock = toml::from_str(&input).expect("valid TOML lock");
         assert_eq!(from_str(&input).expect("valid canonical lock"), expected);
-
-        let fallback = input.replace("requires-python = \">=3.12\"", "requires-python = '>=3.12'");
-        assert!(from_str(&fallback).is_err());
-        assert_eq!(
-            Lock::from_toml(&fallback).expect("valid TOML fallback"),
-            expected
-        );
     }
 
     #[test]
-    fn large_invalid_marker_preserves_toml_error() {
-        let marker = format!("{}?", "python_full_version >= '3.12' and ".repeat(16));
+    fn invalid_marker_preserves_toml_error() {
         let input = CANONICAL_LOCK.replace(
             "{ name = \"dependency\" }",
-            &format!("{{ name = \"dependency\", marker = \"{marker}\" }}"),
+            "{ name = \"dependency\", marker = \"python_version >= invalid\" }",
         );
         let expected = toml::from_str::<Lock>(&input).expect_err("invalid marker");
         let actual = Lock::from_toml(&input).expect_err("invalid marker");

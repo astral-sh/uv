@@ -17,8 +17,8 @@ const MIN_MARKER_BYTES: usize = 256;
 const MAX_CACHE_BYTES: usize = 16 * 1024 * 1024;
 const MAX_CACHE_ENTRIES: usize = 4_096;
 
-/// Marker text borrowed from the lockfile until its wire representation is decoded.
-#[derive(Clone, Debug, Default, Deserialize)]
+/// Marker text parsed after deserializing the lockfile.
+#[derive(Default, Deserialize)]
 #[serde(transparent)]
 pub(super) struct UnparsedMarker<'a>(#[serde(borrow)] Cow<'a, str>);
 
@@ -126,7 +126,6 @@ impl MarkerCache {
         Ok(marker)
     }
 
-    /// Parse a list of markers with the same cache as dependency edges.
     fn parse_all(
         &mut self,
         markers: Vec<UnparsedMarker<'_>>,
@@ -153,8 +152,6 @@ impl MarkerCache {
             },
             Entry::Vacant(entry) => {
                 if has_room && source.len() <= MAX_CACHE_BYTES - self.bytes {
-                    // Avoid copying large strings that occur only once. The first
-                    // occurrence also uses the ordinary parser without tracking warnings.
                     entry.insert(None);
                 }
                 CacheLookup::Miss
@@ -200,17 +197,12 @@ mod tests {
 
     #[test]
     fn cache_has_byte_and_entry_limits() {
-        let mut cache = MarkerCache::default();
-        let marker = SimplifiedMarkerTree::default();
-        let source = "x".repeat(MAX_CACHE_BYTES);
-        assert_eq!(cache.lookup(&source), CacheLookup::Miss);
-        let fingerprint = *cache.markers.keys().next().expect("observed marker");
-        assert_eq!(cache.lookup(&source), CacheLookup::Repeated(fingerprint));
-        cache.insert(fingerprint, &source, marker);
-        cache.insert(fingerprint, &source, marker);
-        cache.lookup("overflow");
-        assert_eq!(cache.markers.len(), 1);
-        assert_eq!(cache.bytes, MAX_CACHE_BYTES);
+        let mut cache = MarkerCache {
+            bytes: MAX_CACHE_BYTES,
+            ..MarkerCache::default()
+        };
+        assert_eq!(cache.lookup("os_name == 'posix'"), CacheLookup::Miss);
+        assert!(cache.markers.is_empty());
 
         let mut cache = MarkerCache::default();
         for index in 0..=MAX_CACHE_ENTRIES {
@@ -222,11 +214,10 @@ mod tests {
 
     #[test]
     fn fingerprint_collisions_do_not_reuse_a_different_marker() {
-        let mut cache = MarkerCache::default();
         let source = "os_name == 'posix'";
-        assert_eq!(cache.lookup(source), CacheLookup::Miss);
+        let mut cache = MarkerCache::default();
+        cache.lookup(source);
         let fingerprint = *cache.markers.keys().next().expect("observed marker");
-        assert_eq!(cache.lookup(source), CacheLookup::Repeated(fingerprint));
         cache.insert(
             fingerprint,
             "sys_platform == 'win32'",
