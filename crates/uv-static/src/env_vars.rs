@@ -1443,11 +1443,10 @@ impl EnvVars {
     #[attr_added_in("0.6.9")]
     pub const UV_CUDA_DRIVER_VERSION: &'static str = "UV_CUDA_DRIVER_VERSION";
 
-    // TODO: Unhide these NVIDIA provider overrides when wheel variants leave preview.
+    // TODO(konsti): Unhide these NVIDIA provider overrides when wheel variants leave preview.
+    // TODO(konsti): Adopt clearer override names if the NVIDIA provider defines them upstream.
     /// Override the CUDA user-mode driver version for the NVIDIA wheel variant provider
     /// (e.g., `12.7`).
-    ///
-    /// TODO(konsti): Switch to clearer env vars upstream
     #[attr_hidden]
     #[attr_added_in("0.13.1")]
     pub const NV_VARIANT_PROVIDER_FORCE_CUDA_DRIVER_VERSION: &'static str =

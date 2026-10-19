@@ -30,7 +30,7 @@ pub fn supported_variant_properties(metadata: &VariantsJsonContent) -> Supported
         .provider_requests()
         .filter_map(|(namespace, request)| {
             let Some(provider) = find_vendored_provider(namespace, request) else {
-                // TODO: Support installing and running variant provider plugins.
+                // TODO(konsti): Support installing and running variant provider plugins.
                 let provider_name = match request {
                     VariantProviderRequest::Plugin { plugin_api, .. } => plugin_api,
                     VariantProviderRequest::Builtin(name) => Some(name),
