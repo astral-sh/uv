@@ -39,4 +39,5 @@ tokio = { workspace = true }
 tokio-util = { workspace = true }
 
 [dev-dependencies]
+async_zip = { workspace = true }
 wiremock = { workspace = true }

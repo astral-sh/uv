@@ -18,6 +18,10 @@ use uv_fs::Simplified;
 use uv_static::EnvVars;
 use uv_warnings::warn_user;
 
+mod serc;
+
+pub use serc::{compile_serc_files, compile_serc_tree};
+
 const COMPILEALL_SCRIPT: &str = include_str!("pip_compileall.py");
 /// This is longer than any compilation should ever take.
 const DEFAULT_COMPILE_TIMEOUT: Duration = Duration::from_mins(1);
@@ -39,6 +43,40 @@ pub enum CompileError {
     PythonSubcommand(#[source] io::Error),
     #[error("Failed to create temporary script file")]
     TempFile(#[source] io::Error),
+    #[error("serc does not support {0}; expected CPython")]
+    NativeImplementation(String),
+    #[error("unsupported Python version \"{0}\"; expected 3.12, 3.13, 3.14, or 3.15")]
+    NativeVersion(String),
+    #[error("serc does not support this interpreter's bytecode magic number")]
+    NativeMagicNumber,
+    #[error("serc does not support this interpreter's bytecode cache tag")]
+    NativeCacheTag,
+    #[error("serc does not support {setting} ({variable})")]
+    NativeSetting {
+        setting: &'static str,
+        variable: &'static str,
+    },
+    #[error("Failed to install serc")]
+    SercInstall(#[source] anyhow::Error),
+    #[error("Failed to start serc")]
+    SercSubcommand(#[source] io::Error),
+    #[error("serc timed out after {}s", .0.as_secs_f32())]
+    SercTimeout(Duration),
+    #[error("serc exited with {status}:\n{stderr}")]
+    SercFailure {
+        status: std::process::ExitStatus,
+        stderr: String,
+    },
+    #[error("Bytecode destination is not a regular file: {}", .0.user_display())]
+    SercDestination(PathBuf),
+    #[error("Failed to inspect bytecode destination: {}", destination.user_display())]
+    SercDestinationIo {
+        destination: PathBuf,
+        #[source]
+        err: io::Error,
+    },
+    #[error("Source path is too long to pass to serc: {}", .0.user_display())]
+    SercArgumentTooLong(PathBuf),
     #[error(r#"Bytecode compilation failed, expected "{0}", received: "{1}""#)]
     WrongPath(String, String),
     #[error("Failed to write to Python {device}")]

@@ -451,6 +451,11 @@ pub enum PreviewFeature {
     /// backend-reported, and transitive build requirements. This reports missing or incompatible
     /// build dependencies before building; use `--skip-dependency-check` to skip the check.
     BuildDependencyCheck,
+    /// Downloads and uses the Rust-based [serc](https://github.com/astral-sh/serc) compiler for
+    /// bytecode compilation on CPython 3.12–3.15, including optimized and hash-based bytecode.
+    /// Unsupported interpreter settings, invalid source, and unsupported encodings cause an error.
+    /// Serc recompiles all selected files, even when their bytecode caches are current.
+    NativeBytecode,
     /// uv enables lazy imports when invoking build backends on CPython 3.15 and later. This can
     /// reduce the work performed by imports during a build, but can also change import-time side
     /// effects in third-party build backends.

@@ -306,6 +306,13 @@ mod tests {
         macOS, Credential Manager on Windows, or the Secret Service API on Linux. uv only retrieves
         credentials that it has stored itself, rather than credentials saved by other applications.
 
+        ### `native-bytecode` {#native-bytecode}
+
+        Downloads and uses the Rust-based [serc](https://github.com/astral-sh/serc) compiler for
+        bytecode compilation on CPython 3.12–3.15, including optimized and hash-based bytecode.
+        Unsupported interpreter settings, invalid source, and unsupported encodings cause an error.
+        Serc recompiles all selected files, even when their bytecode caches are current.
+
         ### `package-conflicts` {#package-conflicts}
 
         Workspace members can declare [conflicting

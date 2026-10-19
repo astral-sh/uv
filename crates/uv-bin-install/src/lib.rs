@@ -37,6 +37,7 @@ use uv_redacted::SafeUrl;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Binary {
     Ruff,
+    Serc,
     Ty,
     Uv,
 }
@@ -44,8 +45,8 @@ pub enum Binary {
 impl Binary {
     /// Get the default version constraints for this binary.
     ///
-    /// Returns a version range constraint (e.g., `>=0.15,<0.16`) rather than a pinned version,
-    /// allowing patch version updates without requiring a uv release.
+    /// Ruff and ty use a version range that allows patch updates without a uv release; serc uses
+    /// a pinned version to keep bytecode compilation behavior tied to the uv release.
     pub fn default_constraints(&self) -> VersionSpecifiers {
         match self {
             // TODO(zanieb): Figure out a nice way to automate updating this
@@ -55,6 +56,9 @@ impl Binary {
             ]
             .into_iter()
             .collect(),
+            Self::Serc => [VersionSpecifier::equals_version(Version::new(SERC_VERSION))]
+                .into_iter()
+                .collect(),
             Self::Ty => [
                 VersionSpecifier::greater_than_equal_version(Version::new([0, 0])),
                 VersionSpecifier::less_than_version(Version::new([0, 1])),
@@ -71,6 +75,7 @@ impl Binary {
     fn name(self) -> &'static str {
         match self {
             Self::Ruff => "ruff",
+            Self::Serc => "serc",
             Self::Ty => "ty",
             Self::Uv => "uv",
         }
@@ -124,6 +129,13 @@ impl Binary {
                     urls.push(parse_url(canonical)?);
                 }
                 Ok(urls)
+            }
+            Self::Serc => {
+                let canonical = format!(
+                    "{SERC_GITHUB_URL_PREFIX}{version}/serc-{platform}.{}",
+                    format.extension()
+                );
+                Ok(vec![parse_url(canonical)?])
             }
             Self::Uv => {
                 let canonical = format!(
@@ -196,7 +208,7 @@ impl Binary {
                 }
                 Ok(vec![canonical_url])
             }
-            Self::Uv => Ok(vec![canonical_url]),
+            Self::Serc | Self::Uv => Ok(vec![canonical_url]),
         }
     }
 
@@ -281,6 +293,12 @@ impl fmt::Display for BinVersion {
 
 /// The canonical GitHub URL prefix for Ruff releases.
 const RUFF_GITHUB_URL_PREFIX: &str = "https://github.com/astral-sh/ruff/releases/download/";
+
+/// The pinned serc version used for bytecode compilation.
+const SERC_VERSION: [u64; 3] = [0, 1, 6];
+
+/// The canonical GitHub URL prefix for serc releases.
+const SERC_GITHUB_URL_PREFIX: &str = "https://github.com/astral-sh/serc/releases/download/";
 
 /// The canonical GitHub URL prefix for ty releases.
 const TY_GITHUB_URL_PREFIX: &str = "https://github.com/astral-sh/ty/releases/download/";
@@ -443,6 +461,9 @@ pub enum Error {
         version: String,
         platform: String,
     },
+
+    #[error("Serc does not provide a binary for platform `{0}`")]
+    SercUnsupportedPlatform(String),
 
     #[error("Unsupported archive format: {0}")]
     UnsupportedArchiveFormat(String),
@@ -678,6 +699,57 @@ fn check_version_match(
     }
 
     Ok(None)
+}
+
+/// Install the pinned serc release for the current platform.
+pub async fn install_serc(cache: &Cache, client: &BaseClient) -> Result<PathBuf, Error> {
+    let platform = Platform::from_env()?.as_cargo_dist_triple();
+    if !matches!(
+        platform.as_str(),
+        "x86_64-apple-darwin"
+            | "aarch64-apple-darwin"
+            | "x86_64-pc-windows-msvc"
+            | "i686-pc-windows-msvc"
+            | "aarch64-pc-windows-msvc"
+            | "x86_64-unknown-linux-gnu"
+            | "i686-unknown-linux-gnu"
+            | "aarch64-unknown-linux-gnu"
+            | "armv7-unknown-linux-gnueabihf"
+            | "powerpc64le-unknown-linux-gnu"
+            | "s390x-unknown-linux-gnu"
+            | "riscv64gc-unknown-linux-gnu"
+            | "x86_64-unknown-linux-musl"
+            | "i686-unknown-linux-musl"
+            | "aarch64-unknown-linux-musl"
+            | "armv7-unknown-linux-musleabihf"
+            | "arm-unknown-linux-musleabihf"
+            | "riscv64gc-unknown-linux-musl"
+    ) {
+        return Err(Error::SercUnsupportedPlatform(platform));
+    }
+
+    let version = ResolvedVersion::from_version(Binary::Serc, Version::new(SERC_VERSION))?;
+    bin_install(
+        Binary::Serc,
+        &version,
+        client,
+        &client.retry_policy(),
+        cache,
+        &SilentReporter,
+    )
+    .await
+}
+
+struct SilentReporter;
+
+impl Reporter for SilentReporter {
+    fn on_download_start(&self, _name: &str, _version: &Version, _size: Option<u64>) -> usize {
+        0
+    }
+
+    fn on_download_progress(&self, _id: usize, _inc: u64) {}
+
+    fn on_download_complete(&self, _id: usize) {}
 }
 
 /// Install the given binary from a [`ResolvedVersion`].
@@ -929,9 +1001,13 @@ where
 mod tests {
     use std::assert_matches;
 
+    use async_zip::base::write::ZipFileWriter;
+    use async_zip::{Compression, ZipEntryBuilder};
     use serde_json::json;
     use std::io::Write;
-    use uv_client::{BaseClientBuilder, fetch_with_url_fallback, retryable_on_request_failure};
+    use uv_client::{
+        BaseClientBuilder, Connectivity, fetch_with_url_fallback, retryable_on_request_failure,
+    };
     use uv_redacted::SafeUrl;
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -1326,6 +1402,91 @@ mod tests {
         assert_matches!(err, Error::NoMatchingVersion { .. });
         assert_eq!(mirror_server.received_requests().await.unwrap().len(), 1);
         assert_eq!(canonical_server.received_requests().await.unwrap().len(), 0);
+    }
+
+    #[test]
+    fn serc_release_url_and_default_version() {
+        let version = Version::new(SERC_VERSION);
+        let urls = Binary::Serc
+            .download_urls_with_astral_mirror(
+                &version,
+                "aarch64-apple-darwin",
+                ArchiveFormat::TarGz,
+                None,
+            )
+            .expect("valid URL");
+        assert_eq!(
+            urls[0].as_str(),
+            "https://github.com/astral-sh/serc/releases/download/0.1.6/serc-aarch64-apple-darwin.tar.gz"
+        );
+        assert_eq!(urls.len(), 1);
+        assert!(Binary::Serc.default_constraints().contains(&version));
+        assert!(
+            !Binary::Serc
+                .default_constraints()
+                .contains(&Version::new([0, 1, 7]))
+        );
+    }
+
+    #[tokio::test]
+    async fn serc_download_is_cached_for_offline_use() {
+        let mut archive = ZipFileWriter::new(Vec::new());
+        let entry = ZipEntryBuilder::new(Binary::Serc.executable().into(), Compression::Stored);
+        archive
+            .write_entry_whole(entry, b"serc binary")
+            .await
+            .expect("write binary to archive");
+        let archive = archive.close().await.expect("finish archive");
+
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/serc.zip"))
+            .respond_with(ResponseTemplate::new(200).set_body_raw(archive, "application/zip"))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let urls = [SafeUrl::parse(&format!("{}/serc.zip", server.uri())).expect("valid URL")];
+        let cache = Cache::temp().expect("temporary cache");
+        let client = BaseClientBuilder::default().build().expect("online client");
+        let version = Version::new(SERC_VERSION);
+        let path = bin_install_from_urls(
+            Binary::Serc,
+            &version,
+            &urls,
+            ArchiveFormat::Zip,
+            "test-platform",
+            &client,
+            &client.retry_policy(),
+            &cache,
+            &SilentReporter,
+            TarBackend::from_env(),
+        )
+        .await
+        .expect("download serc");
+        assert_eq!(
+            fs_err::read(&path).expect("read installed binary"),
+            b"serc binary"
+        );
+
+        let offline = BaseClientBuilder::default()
+            .connectivity(Connectivity::Offline)
+            .build()
+            .expect("offline client");
+        let cached = bin_install_from_urls(
+            Binary::Serc,
+            &version,
+            &urls,
+            ArchiveFormat::Zip,
+            "test-platform",
+            &offline,
+            &offline.retry_policy(),
+            &cache,
+            &SilentReporter,
+            TarBackend::from_env(),
+        )
+        .await
+        .expect("reuse cached serc offline");
+        assert_eq!(cached, path);
     }
 
     /// Verify that `should_try_next_url` returns `true` even for streaming errors
