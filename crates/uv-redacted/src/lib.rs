@@ -589,6 +589,7 @@ impl<P: SerializationPolicy> Display for SafeUrl<P> {
 }
 
 impl<P: SerializationPolicy> Debug for SafeUrl<P> {
+    #[inline(never)]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let url = &self.0;
         let (username, password) = redacted_credentials(url);
