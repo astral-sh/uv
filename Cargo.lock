@@ -6128,6 +6128,7 @@ dependencies = [
  "anyhow",
  "fs-err",
  "globwalk",
+ "insta",
  "schemars",
  "serde",
  "tempfile",
