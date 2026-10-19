@@ -6584,6 +6584,7 @@ dependencies = [
  "uv-install-operations",
  "uv-installer",
  "uv-lock",
+ "uv-macros",
  "uv-normalize",
  "uv-pep440",
  "uv-pep508",
