@@ -1,6 +1,8 @@
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::{FileTouch, FileWriteBin, FileWriteStr, PathChild, PathCreateDir};
+#[cfg(unix)]
+use assert_fs::fixture::{SymlinkToDir, SymlinkToFile};
 use flate2::bufread::GzDecoder;
 use fs_err::File;
 use futures::io::AllowStdIo;
@@ -1602,7 +1604,7 @@ fn wheel_data_symlink_containment() -> Result<()> {
 
 /// Show an explicit error when there is a venv in source tree.
 #[test]
-fn venv_in_source_tree() {
+fn venv_in_source_tree() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     context
@@ -1613,11 +1615,19 @@ fn venv_in_source_tree() {
         .assert()
         .success();
 
-    context
-        .venv()
-        .arg(context.temp_dir.join("src").join("foo").join(".venv"))
-        .assert()
-        .success();
+    // An empty interpreter keeps the fixture small when the builder traverses it before
+    // finding `pyvenv.cfg` or the `lib64` symlink.
+    let venv = context.temp_dir.child("src/foo/.venv");
+    venv.child("pyvenv.cfg").touch()?;
+    #[cfg(unix)]
+    {
+        venv.child("bin/python3").touch()?;
+        venv.child("bin/python").symlink_to_file("python3")?;
+        venv.child("lib").create_dir_all()?;
+        venv.child("lib64").symlink_to_dir("lib")?;
+    }
+    #[cfg(windows)]
+    venv.child("Scripts/python.exe").touch()?;
 
     uv_snapshot!(context.filters(), context.build(), @"
     exit_code: 2 (failure)
@@ -1634,6 +1644,8 @@ fn venv_in_source_tree() {
     error: Failed to build `[TEMP_DIR]/`
       cause: Virtual environments must not be added to source distributions or wheels, remove the directory or exclude it from the build: src/foo/.venv
     ");
+
+    Ok(())
 }
 
 /// Show a warning when the build backend is passed redundant module names
