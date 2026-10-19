@@ -39,6 +39,8 @@ use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{HashAlgorithm, HashDigest, HashDigests, Hashes, ResolutionMetadata};
 use uv_python_interpreter::{Interpreter, PythonEnvironment};
 use uv_python_types::{PythonArchitecture, PythonDownloads, PythonPreference, PythonRequest};
+use uv_redacted::SafeUrl;
+use uv_redacted::policy::Stripped;
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_resolver::{FlatIndex, ResolutionGraphNode};
 use uv_settings::PythonInstallMirrors;
@@ -778,9 +780,13 @@ pub(super) async fn resolve(
     // Use the user's configured index, not the publisher-supplied URL, for cache identity.
     for package in &mut lock.packages {
         package.index = Some(
-            configured_index(package.index.as_ref(), &settings.index_locations)?
-                .without_credentials()
-                .into_owned(),
+            configured_index(
+                package.index.as_ref().map(SafeUrl::as_url),
+                &settings.index_locations,
+            )?
+            .without_credentials()
+            .into_owned()
+            .with_policy(Stripped),
         );
     }
     let (dependencies, _) = resolve_pylock_toml(
@@ -1641,7 +1647,7 @@ fn hash_rank(hash: &HashDigest) -> u8 {
 }
 
 fn configured_index<'a>(
-    locked: Option<&uv_redacted::DisplaySafeUrl>,
+    locked: Option<&SafeUrl>,
     indexes: &'a IndexLocations,
 ) -> anyhow::Result<&'a IndexUrl> {
     let locked = locked.unwrap_or(&PYPI_URL);
@@ -1685,7 +1691,7 @@ async fn validate_artifact_urls(
                 )
             })?;
 
-            let index = configured_index(package.index.as_ref(), indexes)?;
+            let index = configured_index(package.index.as_ref().map(SafeUrl::as_url), indexes)?;
             // A cache miss for a higher-priority index is not evidence that it lacks the package.
             let first_index = indexes.fetch_indexes().next().is_some_and(|first| same_index(first.url(), index));
             if (client.connectivity().is_offline()
@@ -1745,9 +1751,9 @@ async fn validate_artifact_urls(
 }
 
 struct IndexedArtifact {
-    index: uv_redacted::DisplaySafeUrl,
+    index: SafeUrl,
     filename: DistFilename,
-    url: uv_redacted::DisplaySafeUrl,
+    url: SafeUrl,
     requires_python: Option<Arc<VersionSpecifiers>>,
     hashes: HashDigests,
 }

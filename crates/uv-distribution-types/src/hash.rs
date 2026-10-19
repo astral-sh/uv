@@ -253,7 +253,7 @@ pub fn parse_url_hashes(url: &SafeUrl) -> Option<HashDigests> {
 }
 
 /// Read every supported hash declared in a URL fragment.
-pub fn parse_all_url_hashes(url: &DisplaySafeUrl) -> Result<Vec<HashDigest>, HashError> {
+pub fn parse_all_url_hashes(url: &SafeUrl) -> Result<Vec<HashDigest>, HashError> {
     let mut digests = Vec::new();
     if let Some(fragment) = url.fragment() {
         for part in fragment.split('&') {

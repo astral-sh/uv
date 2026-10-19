@@ -23,6 +23,7 @@ use wiremock::{
 use uv_extract::hash::Hasher;
 use uv_fs::PythonExt;
 use uv_pypi_types::{HashAlgorithm, HashDigest};
+use uv_redacted::SafeUrl;
 use uv_static::EnvVars;
 use uv_test::archive::{generate_source_archive, write_tar_gz};
 use uv_test::packse::generate_wheel_with_files;
@@ -554,7 +555,7 @@ async fn packaged_lock_removed_packages_do_not_require_old_indexes() -> Result<(
         );
         let path = context.temp_dir.child("wheels").child(filename);
         path.write_binary(&wheel)?;
-        let url = url::Url::from_file_path(path.path())
+        let url = SafeUrl::from_file_path(path.path())
             .map_err(|()| anyhow::anyhow!("Could not create a file URL"))?;
         let hash = hex::encode(Sha256::digest(&wheel));
         writeln!(overrides, "{name} @ {url}#sha256={hash}")?;
@@ -655,7 +656,7 @@ async fn packaged_lock_preserves_tool_url_hash_on_upgrade() -> Result<()> {
         .temp_dir
         .child("wheels/locked_tool-1.0.0-py3-none-any.whl");
     let hash = hex::encode(Sha256::digest(fs_err::read(wheel.path())?));
-    let wheel_url = url::Url::from_file_path(wheel.path())
+    let wheel_url = SafeUrl::from_file_path(wheel.path())
         .map_err(|()| anyhow::anyhow!("Could not create a file URL"))?;
     let requirement = format!("locked-tool @ {wheel_url}#sha256={hash}&egg=locked-tool");
     context
@@ -780,7 +781,7 @@ async fn packaged_lock_override_cannot_activate_tool_extra() -> Result<()> {
     );
     let override_wheel = context.temp_dir.child("wheels").child(filename);
     override_wheel.write_binary(&bytes)?;
-    let override_url = url::Url::from_file_path(override_wheel.path())
+    let override_url = SafeUrl::from_file_path(override_wheel.path())
         .map_err(|()| anyhow::anyhow!("Could not create a file URL"))?;
     context
         .temp_dir
@@ -1023,7 +1024,7 @@ async fn packaged_lock_root_direct_hashes() -> Result<()> {
     );
     let wheel = context.temp_dir.child("wheels").child(filename);
     wheel.write_binary(&bytes)?;
-    let url = url::Url::from_file_path(wheel.path())
+    let url = SafeUrl::from_file_path(wheel.path())
         .map_err(|()| anyhow::anyhow!("Could not create a file URL"))?;
     let hash = hex::encode(Sha256::digest(&bytes));
     let requirement = format!(
@@ -3160,7 +3161,7 @@ async fn packaged_lock_checks_override_hash_before_building() -> Result<()> {
     assert!(!marker.path().exists());
     let archive = context.temp_dir.child("idna-3.5.tar.gz");
     archive.write_binary(&sdist)?;
-    let archive_url = url::Url::from_file_path(archive.path())
+    let archive_url = SafeUrl::from_file_path(archive.path())
         .map_err(|()| anyhow::anyhow!("invalid archive path"))?;
     context
         .temp_dir
@@ -3946,7 +3947,7 @@ async fn packaged_lock_checks_locked_source_reference_before_building() -> Resul
     );
     let wheel = context.temp_dir.child("wheels").child(filename);
     wheel.write_binary(&bytes)?;
-    let wheel_url = url::Url::from_file_path(wheel.path())
+    let wheel_url = SafeUrl::from_file_path(wheel.path())
         .map_err(|()| anyhow::anyhow!("Could not create a file URL"))?;
     context
         .temp_dir
@@ -4028,7 +4029,7 @@ async fn packaged_lock_checks_repeated_source_hashes_before_building() -> Result
         );
         let wheel = context.temp_dir.child("wheels").child(filename);
         wheel.write_binary(&bytes)?;
-        let wheel_url = url::Url::from_file_path(wheel.path())
+        let wheel_url = SafeUrl::from_file_path(wheel.path())
             .map_err(|()| anyhow::anyhow!("Could not create a file URL"))?;
         context
             .temp_dir

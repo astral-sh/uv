@@ -1611,7 +1611,7 @@ impl PylockTomlPackage {
     /// Return registry artifact URLs and their parsed filenames.
     ///
     /// The URLs and filenames must still be checked against the registry's metadata.
-    pub fn registry_artifacts(&self) -> Option<Vec<(&DisplaySafeUrl, DistFilename)>> {
+    pub fn registry_artifacts(&self) -> Option<Vec<(&SafeUrl, DistFilename)>> {
         if self.archive.is_some() || self.directory.is_some() || self.vcs.is_some() {
             return None;
         }
@@ -1620,7 +1620,7 @@ impl PylockTomlPackage {
             if sdist.path.is_some() {
                 return None;
             }
-            let url = sdist.url.as_ref()?;
+            let url = sdist.url.as_ref()?.as_url();
             let filename = sdist.filename(&self.name).ok()?;
             let DistFilename::SourceDistFilename(filename) =
                 DistFilename::try_from_filename(&filename, &self.name)?
@@ -1633,7 +1633,7 @@ impl PylockTomlPackage {
             if wheel.path.is_some() {
                 return None;
             }
-            let url = wheel.url.as_ref()?;
+            let url = wheel.url.as_ref()?.as_url();
             let filename = wheel.filename(&self.name).ok()?.into_owned();
             artifacts.push((url, DistFilename::WheelFilename(filename)));
         }
