@@ -31,7 +31,7 @@ use uv_pep508::{MarkerTree, Requirement, VerbatimUrl};
 use uv_preview::{MaybePreviewFeature, PreviewFeature};
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_python_types::{PythonDownloads, PythonPreference, PythonVersion};
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
 use uv_torch::TorchMode;
@@ -1290,7 +1290,7 @@ fn parse_insecure_host(input: &str) -> Result<Maybe<TrustedHost>, String> {
 /// `file://` URL.
 fn parse_file_path(input: &str) -> Result<PathBuf, String> {
     if input.starts_with("file://") {
-        let url = match url::Url::from_str(input) {
+        let url = match SafeUrl::parse_relaxed(input) {
             Ok(url) => url,
             Err(err) => return Err(err.to_string()),
         };
@@ -5049,7 +5049,7 @@ pub struct AuditCommonArgs {
     /// The service needs to use the OSV protocol, unless a different
     /// format was requested by `--service-format`.
     #[arg(long, value_hint = ValueHint::Url)]
-    service_url: Option<DisplaySafeUrl>,
+    service_url: Option<SafeUrl>,
 }
 
 #[derive(Args)]
@@ -7526,7 +7526,7 @@ pub struct PublishArgs {
     ///
     /// Defaults to PyPI's publish URL (<https://upload.pypi.org/legacy/>).
     #[arg(long, env = EnvVars::UV_PUBLISH_URL, hide_env_values = true)]
-    pub publish_url: Option<DisplaySafeUrl>,
+    pub publish_url: Option<SafeUrl>,
 
     /// Check an index URL for existing files to skip duplicate uploads.
     ///

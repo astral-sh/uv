@@ -39,7 +39,7 @@ RequirementsTxt {
                                 parsed_url: GitDirectory(
                                     ParsedGitDirectoryUrl {
                                         url: GitUrl {
-                                            url: DisplaySafeUrl {
+                                            url: SafeUrl {
                                                 scheme: "https",
                                                 cannot_be_a_base: false,
                                                 username: "",
@@ -55,7 +55,7 @@ RequirementsTxt {
                                                 fragment: None,
                                             },
                                             repository: RepositoryUrl {
-                                                repo_url: DisplaySafeUrl {
+                                                repo_url: SafeUrl {
                                                     scheme: "https",
                                                     cannot_be_a_base: false,
                                                     username: "",
@@ -73,14 +73,14 @@ RequirementsTxt {
                                                 with_lfs: None,
                                             },
                                             reference: DefaultBranch,
-                                            precise: None,
+                                            resolved: None,
                                             lfs: Disabled,
                                         },
                                         subdirectory: None,
                                     },
                                 ),
                                 verbatim: VerbatimUrl {
-                                    url: DisplaySafeUrl {
+                                    url: SafeUrl {
                                         scheme: "git+https",
                                         cannot_be_a_base: false,
                                         username: "",

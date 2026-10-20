@@ -1,6 +1,6 @@
 [package]
 name = "uv-installer"
-version = "0.0.92"
+version = "0.0.95"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -52,7 +52,6 @@ tempfile = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
-url = { workspace = true }
 walkdir = { workspace = true }
 
 [dev-dependencies]
@@ -61,4 +60,5 @@ uv-python-discovery = { workspace = true }
 uv-preview = { workspace = true, features = ["testing"] }
 
 anstream = { workspace = true }
+indoc = { workspace = true }
 insta = { workspace = true }

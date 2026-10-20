@@ -5,19 +5,20 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
-use std::collections::BTreeMap;
+#[cfg(all(unix, feature = "test-universal"))]
+use std::os::unix::fs::FileTypeExt;
 #[cfg(all(feature = "test-universal", feature = "test-git"))]
 use std::path::Path;
 use std::process::{Command, Stdio};
+#[cfg(all(unix, feature = "test-universal"))]
+use std::thread;
 #[cfg(feature = "test-universal")]
 use uv_fs::Simplified;
 use uv_static::EnvVars;
 use uv_test::archive::generate_source_archive;
 #[cfg(feature = "test-universal")]
 use uv_test::copy_dir_ignore;
-use uv_test::packse::PackseServer;
-use uv_test::packse::generate_wheel;
-use uv_test::packse::scenario::Scenario;
+use uv_test::packse::{PackseServer, WheelBuilder, scenario::Scenario};
 #[cfg(all(feature = "test-universal", feature = "test-git"))]
 use uv_test::{READ_ONLY_GITHUB_SSH_DEPLOY_KEY, READ_ONLY_GITHUB_TOKEN, decode_token};
 use uv_test::{TestContext, apply_filters, uv_snapshot};
@@ -40,9 +41,11 @@ fn export_reuses_settings_workspace_discovery() -> Result<()> {
         "#})?;
     let member = context.temp_dir.child("member");
     member.create_dir_all()?;
-    member
-        .child("pyproject.toml")
-        .write_str("[project]\nname = \"member\"\nversion = \"0.1.0\"\n")?;
+    member.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "member"
+        version = "0.1.0"
+    "#})?;
 
     context.lock().assert().success();
 
@@ -352,114 +355,6 @@ fn requirements_txt_conditional_transitive_extra() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    ");
-
-    Ok(())
-}
-
-#[cfg(feature = "test-universal")]
-#[test]
-fn requirements_txt_does_not_activate_extra_through_incompatible_path() -> Result<()> {
-    let context = uv_test::test_context!("3.13");
-
-    context.temp_dir.child("pyproject.toml").write_str(
-        r#"
-        [project]
-        name = "root"
-        version = "0.1.0"
-        requires-python = ">=3.9"
-        dependencies = [
-            "shared==1.0.0 ; sys_platform == 'linux'",
-            "shared==2.0.0 ; sys_platform != 'linux'",
-        ]
-
-        [project.optional-dependencies]
-        feature = ["bridge==1.0.0 ; sys_platform == 'linux'"]
-        "#,
-    )?;
-
-    context.temp_dir.child("uv.lock").write_str(
-        r#"
-        version = 1
-        revision = 3
-        requires-python = ">=3.9"
-
-        [manifest]
-        members = ["root"]
-
-        [[package]]
-        name = "root"
-        version = "0.1.0"
-        source = { virtual = "." }
-        dependencies = [
-            { name = "shared", version = "1.0.0", source = { registry = "https://example.com/simple" }, marker = "sys_platform == 'linux'" },
-            { name = "shared", version = "2.0.0", source = { registry = "https://other.example/simple" }, marker = "sys_platform != 'linux'" },
-        ]
-
-        [package.optional-dependencies]
-        feature = [{ name = "bridge", version = "1.0.0", source = { registry = "https://example.com/simple" }, marker = "sys_platform == 'linux'" }]
-
-        [package.metadata]
-        provides-extras = ["feature"]
-
-        [[package]]
-        name = "bridge"
-        version = "1.0.0"
-        source = { registry = "https://example.com/simple" }
-        dependencies = [
-            { name = "shared", version = "1.0.0", source = { registry = "https://example.com/simple" }, marker = "sys_platform == 'linux'", extra = ["a"] },
-            { name = "shared", version = "2.0.0", source = { registry = "https://other.example/simple" }, marker = "sys_platform != 'linux'", extra = ["a"] },
-        ]
-
-        [[package]]
-        name = "shared"
-        version = "1.0.0"
-        source = { registry = "https://example.com/simple" }
-        resolution-markers = ["sys_platform == 'linux'"]
-
-        [package.optional-dependencies]
-        a = [{ name = "leaf-b", version = "1.0.0", source = { registry = "https://example.com/simple" } }]
-
-        [package.metadata]
-        provides-extras = ["a"]
-
-        [[package]]
-        name = "shared"
-        version = "2.0.0"
-        source = { registry = "https://other.example/simple" }
-        resolution-markers = ["sys_platform != 'linux'"]
-        dependencies = [{ name = "leaf-b", version = "1.0.0", source = { registry = "https://example.com/simple" } }]
-
-        [package.optional-dependencies]
-        a = [{ name = "leaf-c", version = "1.0.0", source = { registry = "https://example.com/simple" } }]
-
-        [package.metadata]
-        provides-extras = ["a"]
-
-        [[package]]
-        name = "leaf-b"
-        version = "1.0.0"
-        source = { registry = "https://example.com/simple" }
-
-        [[package]]
-        name = "leaf-c"
-        version = "1.0.0"
-        source = { registry = "https://example.com/simple" }
-        "#,
-    )?;
-
-    uv_snapshot!(context.filters(), context.export()
-        .arg("--extra").arg("feature")
-        .arg("--frozen")
-        .arg("--no-header")
-        .arg("--no-annotate")
-        .arg("--no-hashes"), @"
-    exit_code: 0 (success)
-    ----- stdout -----
-    bridge==1.0.0 ; sys_platform == 'linux'
-    leaf-b==1.0.0
-    shared==1.0.0 ; sys_platform == 'linux'
-    shared==2.0.0 ; sys_platform != 'linux'
     ");
 
     Ok(())
@@ -2662,6 +2557,59 @@ fn requirements_txt_output_file() -> Result<()> {
     Ok(())
 }
 
+/// Exported requirements are written into a FIFO without replacing it.
+#[cfg(all(unix, feature = "test-universal"))]
+#[test]
+fn output_file_fifo() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+        "#,
+    )?;
+    context.lock().assert().success();
+
+    let output_file = context.temp_dir.child("requirements.txt");
+    context
+        .assert_command("import os; os.mkfifo('requirements.txt')")
+        .success();
+    let fifo = output_file.to_path_buf();
+    let reader = thread::spawn(move || fs_err::read_to_string(fifo));
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--no-hashes")
+        .arg("--output-file")
+        .arg("requirements.txt"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv export --cache-dir [CACHE_DIR] --no-hashes --output-file requirements.txt
+    iniconfig==2.0.0
+        # via project
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    assert!(fs_err::metadata(output_file.path())?.file_type().is_fifo());
+    let contents = apply_filters(
+        reader.join().expect("FIFO reader panicked")?,
+        context.filters(),
+    );
+    insta::assert_snapshot!(contents, @"
+    # This file was autogenerated by uv via the following command:
+    #    uv export --cache-dir [CACHE_DIR] --no-hashes --output-file requirements.txt
+    iniconfig==2.0.0
+        # via project
+    ");
+
+    Ok(())
+}
+
 #[cfg(feature = "test-universal")]
 #[test]
 fn requirements_txt_no_emit() -> Result<()> {
@@ -4506,6 +4454,42 @@ fn pep_751_no_packages() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
+#[test]
+fn pep_751_supported_environments() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+
+            [tool.uv]
+            environments = [
+                "sys_platform == 'linux' and python_full_version >= '3.12'",
+                "sys_platform == 'darwin'",
+            ]
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.export().args(["--format", "pylock.toml", "--no-header"]), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    lock-version = "1.0"
+    created-by = "uv"
+    environments = ["sys_platform == 'linux'", "sys_platform == 'darwin'"]
+    requires-python = ">=3.12"
+    packages = []
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    "#);
+
+    Ok(())
+}
+
 /// Indexes such as HTML-only indexes don't always provide hashes, but pylock.toml requires at
 /// least one hash per package file, so uv downloads the files and computes the hashes.
 #[test]
@@ -5569,6 +5553,56 @@ async fn pep_751_https_credentials() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
+#[test]
+fn pep_751_index_strips_userinfo_and_preserves_query() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["example"]
+    "#})?;
+    context.temp_dir.child("uv.lock").write_str(indoc! {r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [[package]]
+        name = "example"
+        version = "1.0.0"
+        source = { registry = "https://user:password@example.com/simple?st=2026-09-15T16:34:14Z&sig=abc%2Bdef%3D" }
+        wheels = [{ url = "https://example.com/example-1.0.0-py3-none-any.whl", hash = "sha256:0000000000000000000000000000000000000000000000000000000000000000" }]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [{ name = "example" }]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.export()
+        .args(["--frozen", "--offline", "--no-header", "--format", "pylock.toml"]), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    lock-version = "1.0"
+    created-by = "uv"
+    requires-python = ">=3.12"
+
+    [[packages]]
+    name = "example"
+    version = "1.0.0"
+    index = "https://example.com/simple?st=2026-09-15T16:34:14Z&sig=abc%2Bdef%3D"
+    wheels = [{ url = "https://example.com/example-1.0.0-py3-none-any.whl", hashes = { sha256 = "0000000000000000000000000000000000000000000000000000000000000000" } }]
+    "#);
+
+    Ok(())
+}
+
 /// Check that relative and absolute paths are preserved in pylock.toml export.
 ///
 /// See: <https://github.com/astral-sh/uv/issues/16514>
@@ -5721,15 +5755,7 @@ fn pep_751_output_file_relative_paths() -> Result<()> {
         .temp_dir
         .child("child/src/child/__init__.py")
         .touch()?;
-    let (filename, wheel) = generate_wheel(
-        &"helper".parse()?,
-        &"1.0.0".parse()?,
-        &[],
-        &BTreeMap::new(),
-        None,
-        "py3-none-any",
-        &[],
-    );
+    let (filename, wheel) = WheelBuilder::new(&"helper".parse()?, &"1.0.0".parse()?).build();
     context.temp_dir.child(filename).write_binary(&wheel)?;
     let sdist = generate_source_archive(&"sdist".parse()?, &"1.0.0".parse()?, "", None)?;
     context
@@ -12869,7 +12895,8 @@ fn frozen_lockfile_non_project_workspace() -> Result<()> {
           "path": "[VENV]/[BIN]/[PYTHON]",
           "version": "3.12.[X]",
           "implementation": "cpython"
-        }
+        },
+        "packages": {}
       },
       "workspace": {
         "path": "[TEMP_DIR]/",

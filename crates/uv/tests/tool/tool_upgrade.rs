@@ -598,6 +598,54 @@ fn tool_upgrade_recomputes_relative_exclude_newer() {
     });
 }
 
+/// An explicit settings override must be saved even when no packages need upgrading.
+#[test]
+fn tool_upgrade_noop_updates_options() {
+    let index = old_tool_index();
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
+    let bin_dir = context.temp_dir.child("bin");
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("python-dotenv")
+        .arg("--index-url")
+        .arg(index.index_url())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + python-dotenv==0.10.2.post2
+    Installed 1 executable: dotenv
+    ");
+
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("python-dotenv")
+        .arg("--exclude-newer")
+        .arg("false")
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Nothing to upgrade
+    ");
+
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(context.read("tools/python-dotenv/uv-receipt.toml"), @r#"
+        [tool]
+        requirements = [{ name = "python-dotenv" }]
+        entrypoints = [
+            { name = "dotenv", install-path = "[TEMP_DIR]/bin/dotenv", from = "python-dotenv" },
+        ]
+
+        [tool.options]
+        index-url = "http://[LOCALHOST]/simple/"
+        exclude-newer = false
+        "#);
+    });
+}
+
 #[test]
 fn tool_upgrade_multiple_names() {
     let old_index = old_tool_index();
@@ -815,6 +863,53 @@ fn tool_upgrade_all() -> Result<()> {
     ");
 
     Ok(())
+}
+
+/// With `tool-install-locks`, the installed versions are used as resolver preferences, which must
+/// not prevent the upgrade from selecting newer versions.
+#[test]
+fn tool_upgrade_all_tool_install_locks() {
+    let old_index = old_tool_index();
+    let new_index = new_tool_index();
+
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Install `babel` from the old index.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("babel")
+        .arg("--index-url")
+        .arg(old_index.index_url())
+        .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + babel==2.6.0
+     + pytz==2018.5
+    Installed 1 executable: pybabel
+    ");
+
+    // Upgrade all from the new index.
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("--all")
+        .arg("--index-url")
+        .arg(new_index.index_url())
+        .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Updated babel v2.6.0 -> v2.14.0
+     - babel==2.6.0
+     + babel==2.14.0
+     - pytz==2018.5
+    Installed 1 executable: pybabel
+    ");
 }
 
 #[test]

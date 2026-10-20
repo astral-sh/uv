@@ -12,6 +12,7 @@ use fs_err as fs;
 use indexmap::IndexMap;
 use itertools::Itertools;
 use thiserror::Error;
+use tokio::task::{JoinError, spawn_blocking};
 use tracing::{debug, warn};
 #[cfg(windows)]
 use windows::Win32::Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT;
@@ -41,6 +42,8 @@ use uv_python_types::{
 pub enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),
+    #[error(transparent)]
+    Join(#[from] JoinError),
     #[error(transparent)]
     LockedFile(#[from] LockedFileError),
     #[error(transparent)]
@@ -257,13 +260,15 @@ impl ManagedPythonInstallations {
     ///
     /// ## Errors
     ///
+    /// - The version is not a valid interpreter request
     /// - The platform metadata cannot be read
     /// - A directory for the installation cannot be read
     pub fn find_version<'a>(
         &'a self,
         version: &'a PythonVersion,
     ) -> Result<impl DoubleEndedIterator<Item = ManagedPythonInstallation> + 'a, Error> {
-        let request = VersionRequest::from(version);
+        let request = VersionRequest::try_from(version)
+            .map_err(|_| Error::InvalidPythonVersion(version.to_string()))?;
         Ok(Self::find_matching_current_platform()?
             .filter(move |installation| request.matches_installation_key(installation.key())))
     }
@@ -341,6 +346,7 @@ pub struct ManagedPythonInstallation {
 impl ManagedPythonInstallation {
     pub fn new(path: PathBuf, download: &ManagedPythonDownload) -> Result<Self, Error> {
         let implementation = ImplementationName::try_from(&download.key().implementation)?;
+        let path = std::path::absolute(&path).map_err(|err| Error::AbsolutePath(path, err))?;
         Ok(Self {
             path,
             key: download.key().clone(),
@@ -511,19 +517,17 @@ impl ManagedPythonInstallation {
     }
 
     /// Ensure the environment contains the canonical Python executable names.
-    pub fn ensure_canonical_executables(&self) -> Result<(), Error> {
-        let python = self.executable(false);
-
-        let canonical_names = &["python"];
-
-        for name in canonical_names {
+    pub async fn ensure_canonical_executables(&self) -> Result<(), Error> {
+        let installation = self.clone();
+        spawn_blocking(move || {
+            let python = installation.executable(false);
             let executable =
-                python.with_file_name(format!("{name}{exe}", exe = std::env::consts::EXE_SUFFIX));
+                python.with_file_name(format!("python{exe}", exe = std::env::consts::EXE_SUFFIX));
 
             // Do not attempt to perform same-file copies — this is fine on Unix but fails on
             // Windows with a permission error instead of 'already exists'
             if executable == python {
-                continue;
+                return Ok(());
             }
 
             match symlink_or_copy_file(&python, &executable) {
@@ -533,40 +537,46 @@ impl ManagedPythonInstallation {
                         executable.user_display(),
                         python.user_display(),
                     );
+                    Ok(())
                 }
                 Err(err) if err.kind() == io::ErrorKind::NotFound => {
-                    return Err(Error::MissingExecutable(python.clone()));
+                    Err(Error::MissingExecutable(python))
                 }
-                Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {}
-                Err(err) => {
-                    return Err(Error::CanonicalizeExecutable(err));
-                }
+                Err(err) if err.kind() == io::ErrorKind::AlreadyExists => Ok(()),
+                Err(err) => Err(Error::CanonicalizeExecutable(err)),
             }
-        }
-
-        Ok(())
+        })
+        .await?
     }
 
     /// Ensure the environment contains the symlink directory (or junction on Windows)
     /// pointing to the patch directory for this minor version.
-    pub fn ensure_minor_version_link(&self) -> Result<(), Error> {
-        if let Some(minor_version_link) = PythonMinorVersionLink::from_installation(self) {
-            minor_version_link.create_directory()?;
-        }
-        Ok(())
+    pub async fn ensure_minor_version_link(&self) -> Result<(), Error> {
+        let installation = self.clone();
+        spawn_blocking(move || {
+            if let Some(minor_version_link) =
+                PythonMinorVersionLink::from_installation(&installation)
+            {
+                minor_version_link.create_directory()?;
+            }
+            Ok(())
+        })
+        .await?
     }
 
     /// Ensure the environment is marked as externally managed with the
     /// standard `EXTERNALLY-MANAGED` file.
-    pub fn ensure_externally_managed(&self) -> Result<(), Error> {
+    pub async fn ensure_externally_managed(&self) -> Result<(), Error> {
         if self.key.os().is_emscripten() {
             // Emscripten's stdlib is a zip file so we can't put an
             // EXTERNALLY-MANAGED inside.
             return Ok(());
         }
+        let installation = self.clone();
+        let python_dir = spawn_blocking(move || installation.python_dir()).await?;
         // Construct the path to the `stdlib` directory.
         let stdlib = if self.key.os().is_windows() {
-            self.python_dir().join("Lib")
+            python_dir.join("Lib")
         } else {
             let lib_suffix = self.key.variant.lib_suffix();
             let python = if matches!(
@@ -577,17 +587,17 @@ impl ManagedPythonInstallation {
             } else {
                 format!("python{}{lib_suffix}", self.key.version().python_version())
             };
-            self.python_dir().join("lib").join(python)
+            python_dir.join("lib").join(python)
         };
 
         let file = stdlib.join("EXTERNALLY-MANAGED");
-        fs_err::write(file, EXTERNALLY_MANAGED)?;
+        fs::tokio::write(file, EXTERNALLY_MANAGED).await?;
 
         Ok(())
     }
 
     /// Ensure that the `sysconfig` data is patched to match the installation path.
-    pub fn ensure_sysconfig_patched(&self) -> Result<(), Error> {
+    pub async fn ensure_sysconfig_patched(&self) -> Result<(), Error> {
         if cfg!(unix) && !self.key.os().is_windows() {
             if self.key.os().is_emscripten() {
                 // Emscripten's stdlib is a zip file so we can't update the
@@ -600,7 +610,8 @@ impl ManagedPythonInstallation {
                     self.key.major,
                     self.key.minor,
                     self.key.variant.lib_suffix(),
-                )?;
+                )
+                .await?;
             }
         }
         Ok(())
@@ -631,10 +642,10 @@ impl ManagedPythonInstallation {
     }
 
     /// Ensure the build version is written to a BUILD file in the installation directory.
-    pub fn ensure_build_file(&self) -> Result<(), Error> {
+    pub async fn ensure_build_file(&self) -> Result<(), Error> {
         if let Some(ref build) = self.build {
             let build_file = self.path.join("BUILD");
-            fs::write(&build_file, build.as_ref())?;
+            fs::tokio::write(&build_file, build.as_ref()).await?;
         }
         Ok(())
     }
@@ -1079,7 +1090,13 @@ impl From<&ManagedPythonInstallation> for PythonDownloadRequest {
     fn from(installation: &ManagedPythonInstallation) -> Self {
         let key = installation.key();
         Self::new(
-            Some(VersionRequest::from(&key.version())),
+            Some(VersionRequest::from_components(
+                key.major,
+                key.minor,
+                key.patch,
+                key.prerelease,
+                PythonVariant::Default,
+            )),
             Some(installation.key_implementation()),
             Some(ArchRequest::Explicit(*key.arch())),
             Some(*key.os()),

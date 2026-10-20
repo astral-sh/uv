@@ -124,7 +124,7 @@ present, uv will install all the Python versions listed in the file.
 !!! important
 
     The available Python versions are frozen for each uv release. To install new Python versions,
-    you may need upgrade uv.
+    you may need to upgrade uv.
 
 See the [storage documentation](../reference/storage.md#python-versions) for details about where
 installed Python versions are stored.
@@ -343,8 +343,8 @@ selection. The GIL-enabled build of Python will still be preferred, e.g., when p
 installation with `uv python install 3.14`. However, e.g., if a free-threaded interpreter comes
 before a GIL-enabled build on the `PATH`, it will be used.
 
-If both free-threaded and GIL-enabled Python versions are available on the system, and want to
-require the use of the GIL-enabled variant in a project, you can use the `+gil` variant specifier.
+If both free-threaded and GIL-enabled Python versions are available on the system, you can use the
+`+gil` variant specifier to require the GIL-enabled variant in a project.
 
 ## Debug Python variants
 
@@ -445,14 +445,14 @@ supported formats.
 
 ## Managed Python distributions
 
-uv supports downloading and installing CPython, PyPy, and Pyodide distributions.
+uv supports downloading and installing CPython, PyPy, GraalPy, and Pyodide distributions.
 
 ### CPython distributions
 
 As Python does not publish official distributable CPython binaries, uv instead uses pre-built
 distributions from the Astral
 [`python-build-standalone`](https://github.com/astral-sh/python-build-standalone) project.
-`python-build-standalone` is also is used in many other Python projects, like
+`python-build-standalone` is also used in many other Python projects, like
 [Mise](https://mise.jdx.dev/lang/python.html) and
 [bazelbuild/rules_python](https://github.com/bazelbuild/rules_python).
 
@@ -468,7 +468,7 @@ documentation for details.
 
 !!! note
 
-    PyPy versions lag behind CPython and currently only supports Python versions up to 3.11
+    PyPy versions lag behind CPython and currently only support Python versions up to 3.11.
 
 PyPy distributions are provided by the [PyPy project](https://pypy.org).
 

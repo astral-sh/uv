@@ -47,14 +47,18 @@
 
 use std::cmp::Ordering;
 use std::fmt;
+use std::hash::BuildHasher;
 use std::ops::Bound;
 use std::sync::{LazyLock, Mutex, MutexGuard};
 
 use arcstr::ArcStr;
+use hashbrown::HashTable;
+use hashbrown::hash_table::Entry;
 use itertools::{Either, Itertools};
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use version_ranges::Ranges;
 
+use uv_normalize::ExtraName;
 use uv_pep440::{Operator, Version, VersionPattern, VersionSpecifier, release_specifier_to_range};
 
 use crate::marker::MarkerValueExtra;
@@ -66,6 +70,8 @@ use crate::marker::tree::ContainerOperator;
 use crate::{
     ExtraOperator, MarkerExpression, MarkerOperator, MarkerValueString, MarkerValueVersion,
 };
+
+pub(super) mod isop;
 
 /// The global node interner.
 pub(crate) static INTERNER: LazyLock<Interner> = LazyLock::new(Interner::default);
@@ -90,9 +96,9 @@ pub(crate) struct InternerShared {
 /// The mutable [`Interner`] state, stored behind a lock.
 #[derive(Default)]
 struct InternerState {
-    /// A map from a [`Node`] to a unique [`NodeId`], representing an index
-    /// into [`InternerShared`].
-    unique: FxHashMap<Node, NodeId>,
+    /// Unique node IDs and their cached hashes. Equality compares the immutable
+    /// nodes in [`InternerShared`].
+    unique: HashTable<(u64, NodeId)>,
 
     /// A cache for `AND` operations between two nodes.
     /// Note that `OR` is implemented in terms of `AND`.
@@ -106,6 +112,37 @@ impl InternerShared {
     /// Returns the node for the given [`NodeId`].
     pub(crate) fn node(&self, id: NodeId) -> &Node {
         &self.nodes[id.index()]
+    }
+
+    /// Returns whether a reachable node tests the singular `extra` variable.
+    ///
+    /// Complemented references have the same variables, so shared nodes are visited once
+    /// regardless of their polarity. List-valued `extras` and `dependency_groups` are distinct.
+    pub(crate) fn contains_extras(&self, marker: NodeId) -> bool {
+        let mut pending = SmallVec::from_slice(&[marker]);
+        let mut visited = FxHashSet::default();
+        while let Some(marker) = pending.pop() {
+            if marker.is_true() || marker.is_false() {
+                continue;
+            }
+            let node = self.node(marker);
+            match &node.var {
+                Variable::Extra(_) => return true,
+                Variable::String(_)
+                | Variable::VersionString(_)
+                | Variable::Version(_)
+                | Variable::In { .. }
+                | Variable::Contains { .. }
+                | Variable::List(_) => {
+                    for child in node.children.nodes() {
+                        if !child.is_true() && !child.is_false() && visited.insert(child.index()) {
+                            pending.push(child);
+                        }
+                    }
+                }
+            }
+        }
+        false
     }
 }
 
@@ -128,35 +165,49 @@ pub(crate) struct InternerGuard<'a> {
 
 impl InternerGuard<'_> {
     /// Creates a decision node with the given variable and children.
-    fn create_node(&mut self, var: Variable, children: Edges) -> NodeId {
-        let mut node = Node { var, children };
-        let mut first = node.children.nodes().next().unwrap();
+    fn create_node(&mut self, var: Variable, mut children: EdgeBuilder) -> NodeId {
+        let mut first = children.nodes().next().unwrap();
 
         // With a complemented edge representation, there are two ways to represent the same node:
         // complementing the root and all children edges results in the same node. To ensure markers
         // are canonical, the first child edge is never complemented.
         let mut flipped = false;
         if first.is_complement() {
-            node = node.not();
+            children = children.not();
             first = first.not();
             flipped = true;
         }
 
         // Reduction: If all children refer to the same node, we eliminate the parent node
         // and just return the child.
-        if node.children.nodes().all(|node| node == first) {
+        if children.nodes().all(|node| node == first) {
             return if flipped { first.not() } else { first };
         }
 
-        // Insert the node.
-        // Probing before inserting keeps the clone off the common path where an isomorphic node
-        // has already been interned. Cloning a [`Node`] copies every outgoing edge range.
-        let id = if let Some(&id) = self.state.unique.get(&node) {
-            id
-        } else {
-            let id = NodeId::new(self.shared.nodes.push(node.clone()), false);
-            self.state.unique.insert(node, id);
-            id
+        // Temporary and stored nodes use the same borrowed key, regardless of their
+        // range containers. Only newly interned nodes need boxed range payloads.
+        let key = (&var, children.as_ref());
+        let hash = FxBuildHasher.hash_one(&key);
+        let id = match self.state.unique.entry(
+            hash,
+            |(stored_hash, id)| {
+                *stored_hash == hash && {
+                    let node = self.shared.node(*id);
+                    (&node.var, node.children.as_ref()) == key
+                }
+            },
+            |(hash, _)| *hash,
+        ) {
+            Entry::Occupied(entry) => entry.get().1,
+            Entry::Vacant(entry) => {
+                let node = Node {
+                    var,
+                    children: children.into_boxed(),
+                };
+                let id = NodeId::new(self.shared.nodes.push(node), false);
+                entry.insert((hash, id));
+                id
+            }
         };
 
         if flipped { id.not() } else { id }
@@ -402,8 +453,9 @@ impl InternerGuard<'_> {
             "`and_nontrivial` requires a non-trivial conjunction"
         );
 
-        // The operation was memoized.
-        if let Some(result) = self.state.cache.get(&(xi, yi)) {
+        // Conjunction is commutative, so either operand order shares one entry.
+        let key = if xi < yi { (xi, yi) } else { (yi, xi) };
+        if let Some(result) = self.state.cache.get(&key) {
             return *result;
         }
 
@@ -455,7 +507,7 @@ impl InternerGuard<'_> {
         //
         // ADDs often contain duplicated subgraphs in distinct branches due to the restricted
         // variable ordering. Memoizing allows ADD operations to remain polynomial time.
-        self.state.cache.insert((xi, yi), node);
+        self.state.cache.insert(key, node);
 
         node
     }
@@ -551,23 +603,45 @@ impl InternerGuard<'_> {
         i: NodeId,
         f: &impl Fn(&Variable) -> Option<bool>,
     ) -> NodeId {
+        self.restrict_by_cached(i, f, &mut None)
+    }
+
+    /// Restrict each signed node once, including unchanged shared subgraphs.
+    fn restrict_by_cached(
+        &mut self,
+        i: NodeId,
+        f: &impl Fn(&Variable) -> Option<bool>,
+        cache: &mut Option<FxHashMap<NodeId, NodeId>>,
+    ) -> NodeId {
         if matches!(i, NodeId::TRUE | NodeId::FALSE) {
             return i;
         }
-
-        let node = self.shared.node(i);
-        if let Edges::Boolean { high, low } = node.children {
-            if let Some(value) = f(&node.var) {
-                // Restrict this variable to the given output by merging it
-                // with the relevant child.
-                let node = if value { high } else { low };
-                return self.restrict_by(node.negate(i), f);
-            }
+        // Nodes reached before caching begins lie on a unique prefix.
+        let cache_result = cache.is_some();
+        if let Some(&result) = cache.as_ref().and_then(|cache| cache.get(&i)) {
+            return result;
         }
 
-        // Restrict all nodes recursively.
-        let children = node.children.map(i, |node| self.restrict_by(node, f));
-        self.create_node(node.var.clone(), children)
+        let node = self.shared.node(i);
+        let result = if let Edges::Boolean { high, low } = node.children
+            && let Some(value) = f(&node.var)
+        {
+            let node = if value { high } else { low };
+            self.restrict_by_cached(node.negate(i), f, cache)
+        } else {
+            // A single path cannot revisit a node. Start caching when traversal first branches.
+            if cache.is_none() && node.children.has_multiple_nonterminal_children() {
+                *cache = Some(FxHashMap::default());
+            }
+            let children = node
+                .children
+                .map(i, |node| self.restrict_by_cached(node, f, cache));
+            self.create_node(node.var.clone(), children)
+        };
+        if cache_result && let Some(cache) = cache {
+            cache.insert(i, result);
+        }
+        result
     }
 
     /// Restrict a marker by assuming that another marker is true.
@@ -717,6 +791,112 @@ impl InternerGuard<'_> {
         result
     }
 
+    /// Substitute the activation condition for each extra without enumerating DNF paths.
+    pub(crate) fn resolve_extras(
+        &mut self,
+        marker: NodeId,
+        known_extras: &FxHashMap<ExtraName, NodeId>,
+    ) -> NodeId {
+        self.resolve_extras_cached(marker, known_extras, &mut FxHashMap::default())
+    }
+
+    /// Transform each signed node once, retaining the sharing between decision paths.
+    fn resolve_extras_cached(
+        &mut self,
+        marker: NodeId,
+        known_extras: &FxHashMap<ExtraName, NodeId>,
+        cache: &mut FxHashMap<NodeId, NodeId>,
+    ) -> NodeId {
+        if marker.is_true() || marker.is_false() {
+            return marker;
+        }
+        if let Some(&result) = cache.get(&marker) {
+            return result;
+        }
+
+        let node = self.shared.node(marker);
+        let result = if let (Variable::Extra(name), Edges::Boolean { high, low }) =
+            (&node.var, &node.children)
+        {
+            let condition = known_extras
+                .get(name.extra())
+                .copied()
+                .unwrap_or(NodeId::FALSE);
+            if condition.is_true() {
+                self.resolve_extras_cached(high.negate(marker), known_extras, cache)
+            } else if condition.is_false() {
+                self.resolve_extras_cached(low.negate(marker), known_extras, cache)
+            } else {
+                let high = self.resolve_extras_cached(high.negate(marker), known_extras, cache);
+                let low = self.resolve_extras_cached(low.negate(marker), known_extras, cache);
+                let high = self.and(condition, high);
+                let low = self.and(condition.not(), low);
+                self.or(high, low)
+            }
+        } else {
+            let mut changed = false;
+            let children = node.children.map(marker, |child| {
+                let result = self.resolve_extras_cached(child, known_extras, cache);
+                changed |= result != child;
+                result
+            });
+            if changed {
+                self.rebuild_node(&node.var, children)
+            } else {
+                marker
+            }
+        };
+        cache.insert(marker, result);
+        result
+    }
+
+    /// Rebuild a decision after substitution, allowing children to introduce earlier variables.
+    /// Calling `create_node` directly would violate the diagram's variable ordering.
+    fn rebuild_node(&mut self, variable: &Variable, children: EdgeBuilder) -> NodeId {
+        match children {
+            Edges::Boolean { high, low } => {
+                let condition = self.create_node(variable.clone(), Edges::from_bool(true));
+                let high = self.and(condition, high);
+                let low = self.and(condition.not(), low);
+                self.or(high, low)
+            }
+            Edges::Version { edges } => {
+                let mut result = NodeId::FALSE;
+                for (range, child) in edges {
+                    if child.is_false() {
+                        continue;
+                    }
+                    let condition = self.create_node(
+                        variable.clone(),
+                        Edges::Version {
+                            edges: Edges::from_range(&range),
+                        },
+                    );
+                    let branch = self.and(condition, child);
+                    result = self.or(result, branch);
+                }
+                result
+            }
+            Edges::String { edges } => {
+                let mut result = NodeId::FALSE;
+                for (range, child) in edges {
+                    if child.is_false() {
+                        continue;
+                    }
+                    let condition = self.create_node(
+                        variable.clone(),
+                        Edges::String {
+                            edges: Edges::from_range(&range),
+                        },
+                    );
+                    let branch = self.and(condition, child);
+                    result = self.or(result, branch);
+                }
+                result
+            }
+        }
+    }
+
     /// Returns a new tree where the only nodes remaining are `extra` nodes.
     ///
     /// If there are no extra nodes, then this returns a tree that is always
@@ -835,98 +1015,20 @@ impl InternerGuard<'_> {
         }
 
         let py_range = Ranges::from_range_bounds((py_lower.cloned(), py_upper.cloned()));
-        if py_range.is_empty() {
-            // Oops, the bounds imply there is nothing that can match,
-            // so we always evaluate to false.
-            return NodeId::FALSE;
-        }
-        if matches!(i, NodeId::TRUE) {
-            let var = Variable::Version(CanonicalMarkerValueVersion::PythonFullVersion);
-            let edges = Edges::Version {
+        let versions = self.create_node(
+            Variable::Version(CanonicalMarkerValueVersion::PythonFullVersion),
+            Edges::Version {
                 edges: Edges::from_range(&py_range),
-            };
-            return self.create_node(var, edges).negate(i);
-        }
-
-        let node = self.shared.node(i);
-        let Node {
-            var: Variable::Version(CanonicalMarkerValueVersion::PythonFullVersion),
-            children: Edges::Version { edges },
-        } = node
-        else {
-            // Complexify all nodes recursively.
-            let children = node.children.map(i, |node_id| {
-                self.complexify_python_versions(node_id, py_lower, py_upper)
-            });
-            return self.create_node(node.var.clone(), children);
-        };
-        // The approach we take here is to filter out any range that
-        // has no intersection with our Python lower/upper bounds.
-        // These ranges will now always be false, so we can dismiss
-        // them entirely.
-        //
-        // Then, depending on whether we have finite lower/upper bound,
-        // we "fix up" the edges by clipping the existing ranges and
-        // adding an additional range that covers the Python versions
-        // outside of our bounds by always mapping them to false.
-        let mut new: SmallVec<_> = edges
-            .iter()
-            .filter(|(range, _)| !py_range.intersection(range).is_empty())
-            .cloned()
-            .collect();
-        // Below, we assume `new` has at least one element. It's
-        // subtle, but since 1) edges is a disjoint covering of the
-        // universe and 2) our `py_range` is non-empty at this point,
-        // it must intersect with at least one range.
-        assert!(
-            !new.is_empty(),
-            "expected at least one non-empty intersection"
+            },
         );
-        // This is the NodeId we map to anything that should
-        // always be false. We have to "negate" it in case the
-        // parent is negated.
-        let exclude_node_id = NodeId::FALSE.negate(i);
-        if !matches!(py_lower, Bound::Unbounded) {
-            let &(ref first_range, first_node_id) = new.first().unwrap();
-            let first_upper = first_range.bounding_range().unwrap().1;
-            // When the first range is always false, then we can just
-            // "expand" it out to negative infinity to reflect that
-            // anything less than our lower bound should evaluate to
-            // false. If we don't do this, then we could have two
-            // adjacent ranges map to the same node, which would not be
-            // a canonical representation.
-            if exclude_node_id == first_node_id {
-                let clipped = Ranges::from_range_bounds((Bound::Unbounded, first_upper.cloned()));
-                *new.first_mut().unwrap() = (clipped, first_node_id);
-            } else {
-                let clipped = Ranges::from_range_bounds((py_lower.cloned(), first_upper.cloned()));
-                *new.first_mut().unwrap() = (clipped, first_node_id);
+        // Conjunction inserts the version decision before extras and other later variables.
+        self.and(i, versions)
+    }
 
-                let py_range_lower =
-                    Ranges::from_range_bounds((py_lower.cloned(), Bound::Unbounded));
-                new.insert(0, (py_range_lower.complement(), NodeId::FALSE.negate(i)));
-            }
-        }
-        if !matches!(py_upper, Bound::Unbounded) {
-            let &(ref last_range, last_node_id) = new.last().unwrap();
-            let last_lower = last_range.bounding_range().unwrap().0;
-            // See lower bound case above for why we do this. The
-            // same reasoning applies here: to maintain a canonical
-            // representation.
-            if exclude_node_id == last_node_id {
-                let clipped = Ranges::from_range_bounds((last_lower.cloned(), Bound::Unbounded));
-                *new.last_mut().unwrap() = (clipped, last_node_id);
-            } else {
-                let clipped = Ranges::from_range_bounds((last_lower.cloned(), py_upper.cloned()));
-                *new.last_mut().unwrap() = (clipped, last_node_id);
-
-                let py_range_upper =
-                    Ranges::from_range_bounds((Bound::Unbounded, py_upper.cloned()));
-                new.push((py_range_upper.complement(), exclude_node_id));
-            }
-        }
-        self.create_node(node.var.clone(), Edges::Version { edges: new })
-            .negate(i)
+    /// Check satisfiability without expanding paths, including known cross-variable exclusions.
+    pub(crate) fn is_unreachable(&mut self, marker: NodeId) -> bool {
+        let exclusions = self.exclusions();
+        self.and(marker, exclusions.not()).is_false()
     }
 
     /// The disjunction of known incompatible conditions.
@@ -1346,33 +1448,50 @@ impl NodeId {
 type SmallVec<T> = smallvec::SmallVec<[T; 5]>;
 
 /// The edges of a decision node.
+///
+/// Stored nodes use boxed ranges, while [`EdgeBuilder`] keeps short ranges inline until insertion.
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
-pub(crate) enum Edges {
+pub(crate) enum Edges<
+    VersionEdges = Box<[(Ranges<Version>, NodeId)]>,
+    StringEdges = Box<[(Ranges<ArcStr>, NodeId)]>,
+> {
     // The edges of a version variable, representing a disjoint set of ranges that cover
     // the output space.
     //
     // Invariant: All ranges are simple, meaning they can be represented by a bounded
     // interval without gaps. Additionally, there are at least two edges in the set.
-    Version {
-        edges: SmallVec<(Ranges<Version>, NodeId)>,
-    },
+    Version { edges: VersionEdges },
     // The edges of a string variable, representing a disjoint set of ranges that cover
     // the output space.
     //
     // Invariant: All ranges are simple, meaning they can be represented by a bounded
     // interval without gaps. Additionally, there are at least two edges in the set.
-    String {
-        edges: SmallVec<(Ranges<ArcStr>, NodeId)>,
-    },
+    String { edges: StringEdges },
     // The edges of a boolean variable, representing the values `true` (the `high` child)
     // and `false` (the `low` child).
-    Boolean {
-        high: NodeId,
-        low: NodeId,
-    },
+    Boolean { high: NodeId, low: NodeId },
 }
 
-impl Edges {
+/// Temporary edges whose range buffers are boxed only when the interner inserts a new node.
+type EdgeBuilder = Edges<SmallVec<(Ranges<Version>, NodeId)>, SmallVec<(Ranges<ArcStr>, NodeId)>>;
+
+/// The common borrowed representation used for hashing and comparing edge containers.
+type EdgesRef<'a> = Edges<&'a [(Ranges<Version>, NodeId)], &'a [(Ranges<ArcStr>, NodeId)]>;
+
+impl EdgeBuilder {
+    /// Box the range buffers for a newly interned node.
+    fn into_boxed(self) -> Edges {
+        match self {
+            Self::Version { edges } => Edges::Version {
+                edges: edges.into_boxed_slice(),
+            },
+            Self::String { edges } => Edges::String {
+                edges: edges.into_boxed_slice(),
+            },
+            Self::Boolean { high, low } => Edges::Boolean { high, low },
+        }
+    }
+
     /// Returns the [`Edges`] for a boolean variable.
     fn from_bool(complemented: bool) -> Self {
         if complemented {
@@ -1516,7 +1635,9 @@ impl Edges {
         edges.sort_by(|(range1, _), (range2, _)| compare_disjoint_range_start(range1, range2));
         edges
     }
+}
 
+impl Edges {
     /// Merge two [`Edges`], applying the given operation (e.g., `AND` or `OR`) to all intersecting edges.
     ///
     /// For example, given two nodes corresponding to the same boolean variable:
@@ -1538,13 +1659,13 @@ impl Edges {
         right_edges: &Self,
         right_parent: NodeId,
         mut apply: impl FnMut(NodeId, NodeId) -> NodeId,
-    ) -> Self {
+    ) -> EdgeBuilder {
         match (self, right_edges) {
             // For version or string variables, we have to split and merge the overlapping ranges.
-            (Self::Version { edges }, Self::Version { edges: right_edges }) => Self::Version {
+            (Self::Version { edges }, Self::Version { edges: right_edges }) => Edges::Version {
                 edges: Self::apply_ranges(edges, parent, right_edges, right_parent, apply),
             },
-            (Self::String { edges }, Self::String { edges: right_edges }) => Self::String {
+            (Self::String { edges }, Self::String { edges: right_edges }) => Edges::String {
                 edges: Self::apply_ranges(edges, parent, right_edges, right_parent, apply),
             },
             // For boolean variables, we simply merge the low and high edges.
@@ -1554,7 +1675,7 @@ impl Edges {
                     high: right_high,
                     low: right_low,
                 },
-            ) => Self::Boolean {
+            ) => Edges::Boolean {
                 high: apply(high.negate(parent), right_high.negate(right_parent)),
                 low: apply(low.negate(parent), right_low.negate(right_parent)),
             },
@@ -1586,9 +1707,9 @@ impl Edges {
     /// In that case, we drop any ranges that do not exist in the domain of both edges. Note that
     /// this should not occur in practice because `requires-python` bounds are global.
     fn apply_ranges<T>(
-        left_edges: &SmallVec<(Ranges<T>, NodeId)>,
+        left_edges: &[(Ranges<T>, NodeId)],
         left_parent: NodeId,
-        right_edges: &SmallVec<(Ranges<T>, NodeId)>,
+        right_edges: &[(Ranges<T>, NodeId)],
         right_parent: NodeId,
         mut apply: impl FnMut(NodeId, NodeId) -> NodeId,
     ) -> SmallVec<(Ranges<T>, NodeId)>
@@ -1663,9 +1784,9 @@ impl Edges {
 
     // Returns `true` if all intersecting ranges in two range maps are disjoint.
     fn is_disjoint_ranges<T>(
-        left_edges: &SmallVec<(Ranges<T>, NodeId)>,
+        left_edges: &[(Ranges<T>, NodeId)],
         left_parent: NodeId,
-        right_edges: &SmallVec<(Ranges<T>, NodeId)>,
+        right_edges: &[(Ranges<T>, NodeId)],
         right_parent: NodeId,
         interner: &mut InternerGuard<'_>,
     ) -> bool
@@ -1694,62 +1815,114 @@ impl Edges {
     }
 
     // Apply the given function to all direct children of this node.
-    fn map(&self, parent: NodeId, mut f: impl FnMut(NodeId) -> NodeId) -> Self {
+    fn map(&self, parent: NodeId, mut f: impl FnMut(NodeId) -> NodeId) -> EdgeBuilder {
         match self {
-            Self::Version { edges: map } => Self::Version {
-                edges: map
-                    .iter()
-                    .cloned()
-                    .map(|(range, node)| (range, f(node.negate(parent))))
-                    .collect(),
+            Self::Version { edges: map } => Edges::Version {
+                edges: Self::map_ranges(map, parent, f),
             },
-            Self::String { edges: map } => Self::String {
-                edges: map
-                    .iter()
-                    .cloned()
-                    .map(|(range, node)| (range, f(node.negate(parent))))
-                    .collect(),
+            Self::String { edges: map } => Edges::String {
+                edges: Self::map_ranges(map, parent, f),
             },
-            Self::Boolean { high, low } => Self::Boolean {
+            Self::Boolean { high, low } => Edges::Boolean {
                 low: f(low.negate(parent)),
                 high: f(high.negate(parent)),
             },
         }
     }
 
-    // Returns an iterator over all direct children of this node.
-    fn nodes(&self) -> impl Iterator<Item = NodeId> + '_ {
+    /// Maps the children and coalesces adjacent ranges that now share a child.
+    /// This keeps equivalent decisions identical when we intern the resulting node.
+    fn map_ranges<T>(
+        edges: &[(Ranges<T>, NodeId)],
+        parent: NodeId,
+        mut map: impl FnMut(NodeId) -> NodeId,
+    ) -> SmallVec<(Ranges<T>, NodeId)>
+    where
+        T: Clone + Ord,
+    {
+        let mut mapped = SmallVec::new();
+        for (range, child) in edges {
+            let child = map(child.negate(parent));
+            if let Some((previous_range, previous)) = mapped.last_mut()
+                && *previous == child
+                && can_conjoin(previous_range, range)
+            {
+                *previous_range = previous_range.union(range);
+            } else {
+                mapped.push((range.clone(), child));
+            }
+        }
+        mapped
+    }
+}
+
+impl<VersionEdges, StringEdges> Edges<VersionEdges, StringEdges>
+where
+    VersionEdges: AsRef<[(Ranges<Version>, NodeId)]>,
+    StringEdges: AsRef<[(Ranges<ArcStr>, NodeId)]>,
+{
+    /// Borrow a common key for temporary and stored edge containers.
+    fn as_ref(&self) -> EdgesRef<'_> {
+        match self {
+            Self::Version { edges } => Edges::Version {
+                edges: edges.as_ref(),
+            },
+            Self::String { edges } => Edges::String {
+                edges: edges.as_ref(),
+            },
+            Self::Boolean { high, low } => Edges::Boolean {
+                high: *high,
+                low: *low,
+            },
+        }
+    }
+
+    /// Returns an iterator over all direct children of this node.
+    pub(crate) fn nodes(&self) -> impl Iterator<Item = NodeId> + '_ {
         match self {
             Self::Version { edges: map } => {
-                Either::Left(Either::Left(map.iter().map(|(_, node)| *node)))
+                Either::Left(Either::Left(map.as_ref().iter().map(|(_, node)| *node)))
             }
             Self::String { edges: map } => {
-                Either::Left(Either::Right(map.iter().map(|(_, node)| *node)))
+                Either::Left(Either::Right(map.as_ref().iter().map(|(_, node)| *node)))
             }
             Self::Boolean { high, low } => Either::Right([*high, *low].into_iter()),
         }
     }
 
-    // Returns the complement of this [`Edges`].
-    fn not(self) -> Self {
-        match self {
-            Self::Version { edges: map } => Self::Version {
-                edges: map
-                    .into_iter()
-                    .map(|(range, node)| (range, node.not()))
-                    .collect(),
-            },
-            Self::String { edges: map } => Self::String {
-                edges: map
-                    .into_iter()
-                    .map(|(range, node)| (range, node.not()))
-                    .collect(),
-            },
-            Self::Boolean { high, low } => Self::Boolean {
-                high: high.not(),
-                low: low.not(),
-            },
+    /// Returns whether more than one edge leads to a nonterminal node.
+    pub(crate) fn has_multiple_nonterminal_children(&self) -> bool {
+        self.nodes()
+            .filter(|node| !node.is_true() && !node.is_false())
+            .nth(1)
+            .is_some()
+    }
+}
+
+impl<VersionEdges, StringEdges> Edges<VersionEdges, StringEdges>
+where
+    VersionEdges: AsMut<[(Ranges<Version>, NodeId)]>,
+    StringEdges: AsMut<[(Ranges<ArcStr>, NodeId)]>,
+{
+    // Returns the complement of this [`Edges`], reusing its range buffers.
+    fn not(mut self) -> Self {
+        match &mut self {
+            Self::Version { edges } => {
+                for (_, node) in edges.as_mut() {
+                    *node = node.not();
+                }
+            }
+            Self::String { edges } => {
+                for (_, node) in edges.as_mut() {
+                    *node = node.not();
+                }
+            }
+            Self::Boolean { high, low } => {
+                *high = high.not();
+                *low = low.not();
+            }
         }
+        self
     }
 }
 
@@ -1948,13 +2121,64 @@ impl fmt::Debug for NodeId {
 
 #[cfg(test)]
 mod tests {
-    use super::{INTERNER, NodeId};
-    use crate::MarkerExpression;
+    use uv_pep440::{Version, VersionSpecifier};
+
+    use super::{INTERNER, Interner, NodeId};
+    use crate::{MarkerExpression, MarkerValueVersion};
 
     fn expr(s: &str) -> NodeId {
         INTERNER
             .lock()
             .expression(MarkerExpression::from_str(s).unwrap().unwrap())
+    }
+
+    #[test]
+    fn interned_nodes_survive_index_growth() {
+        let interner = Interner::default();
+        let mut guard = interner.lock();
+        let nodes: Vec<_> = (0..128)
+            .map(|minor| {
+                guard.expression(MarkerExpression::Version {
+                    key: MarkerValueVersion::PythonFullVersion,
+                    specifier: VersionSpecifier::equals_version(Version::new([3, minor])),
+                })
+            })
+            .collect();
+        let count = interner.shared.nodes.count();
+        for (minor, node) in nodes.into_iter().enumerate() {
+            let version = Version::new([3, minor as u64]);
+            let duplicate = guard.expression(MarkerExpression::Version {
+                key: MarkerValueVersion::PythonFullVersion,
+                specifier: VersionSpecifier::equals_version(version.clone()),
+            });
+            let complement = guard.expression(MarkerExpression::Version {
+                key: MarkerValueVersion::PythonFullVersion,
+                specifier: VersionSpecifier::not_equals_version(version),
+            });
+            assert_eq!(duplicate.0, node.0);
+            assert_eq!(complement.0, node.not().0);
+        }
+        assert_eq!(interner.shared.nodes.count(), count);
+    }
+
+    #[test]
+    fn conjunction_cache_is_commutative() {
+        let interner = Interner::default();
+        let mut guard = interner.lock();
+        let left = guard.expression(
+            MarkerExpression::from_str("python_version >= '3.10'")
+                .expect("valid marker expression")
+                .expect("valid marker expression"),
+        );
+        let right = guard.expression(
+            MarkerExpression::from_str("extra == 'test'")
+                .expect("valid marker expression")
+                .expect("valid marker expression"),
+        );
+        let result = guard.and(left, right);
+        let entries = guard.state.cache.len();
+        assert_eq!(guard.and(right, left).0, result.0);
+        assert_eq!(guard.state.cache.len(), entries);
     }
 
     #[test]

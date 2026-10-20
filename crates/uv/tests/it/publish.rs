@@ -172,33 +172,268 @@ fn missing_trusted_publishing_permission() {
 
 /// Check the error when there are no credentials provided on GitHub Actions. Is it an incorrect
 /// trusted publishing configuration?
-#[test]
-fn no_credentials() {
-    let context = uv_test::test_context!("3.12")
-        .with_filtered_sizes()
-        .with_filtered_http_retries();
+#[tokio::test]
+async fn no_credentials() {
+    let context = uv_test::test_context_with_versions!(&[]).with_filtered_sizes();
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/_/oidc/audience"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "audience": "pypi" })))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/upload"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(0)
+        .mount(&server)
+        .await;
 
     uv_snapshot!(context.filters(), context.publish()
         .arg("--publish-url")
-        .arg("https://test.pypi.org/legacy/")
+        .arg(format!("{}/upload", server.uri()))
         .arg(dummy_wheel())
         // Emulate CI
-        .env(EnvVars::GITHUB_ACTIONS, "true"), @"
+        .env(EnvVars::GITHUB_ACTIONS, "true")
+        .env_remove("ACTIONS_ID_TOKEN_REQUEST_URL")
+        .env_remove("ACTIONS_ID_TOKEN_REQUEST_TOKEN"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    Publishing 1 file to https://test.pypi.org/legacy/
-    Note: Neither credentials nor keyring are configured, and there was an error fetching the trusted publishing token. If you don't want to use trusted publishing, you can ignore this error, but you need to provide credentials.
+    Publishing 1 file to http://[LOCALHOST]/upload
+    Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
+    Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
+    Note: Trusted publishing also failed. To use it, check the error below.
     error: Trusted publishing failed
       cause: Failed to obtain OIDC token: is the `id-token: write` permission missing?
       cause: GitHub Actions detection error
       cause: insufficient permissions: missing ACTIONS_ID_TOKEN_REQUEST_URL
-    Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
-    Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
-    error: Failed to publish `[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl` to `https://test.pypi.org/legacy/`
+    error: Failed to publish `[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl` to `http://[LOCALHOST]/upload`
       cause: Failed to send POST request
-      cause: Missing credentials for: https://test.pypi.org/legacy/
+      cause: Missing credentials for: http://[LOCALHOST]/upload
     "
     );
+}
+
+/// An unsuccessful trusted publishing attempt should not report an error if `.netrc` authenticates
+/// the upload.
+#[tokio::test]
+async fn trusted_publishing_falls_back_to_netrc() {
+    let context = uv_test::test_context_with_versions!(&[]).with_filtered_sizes();
+    let server = MockServer::start().await;
+    let netrc = context.temp_dir.child(".netrc");
+    netrc
+        .write_str("machine 127.0.0.1 login user password secret")
+        .unwrap();
+
+    Mock::given(method("GET"))
+        .and(path("/_/oidc/audience"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "audience": "pypi" })))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/upload"))
+        .and(basic_auth("user", "secret"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.publish()
+        .arg("--publish-url")
+        .arg(format!("{}/upload", server.uri()))
+        .arg(dummy_wheel())
+        .env(EnvVars::GITHUB_ACTIONS, "true")
+        .env_remove("ACTIONS_ID_TOKEN_REQUEST_URL")
+        .env_remove("ACTIONS_ID_TOKEN_REQUEST_TOKEN")
+        .env(EnvVars::NETRC, netrc.path()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Publishing 1 file to http://[LOCALHOST]/upload
+    Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
+    Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
+    ");
+}
+
+/// A stored credential can also authenticate the upload after trusted publishing fails.
+#[tokio::test]
+async fn trusted_publishing_falls_back_to_credential_store() {
+    let context = uv_test::test_context_with_versions!(&[]).with_filtered_sizes();
+    let server = MockServer::start().await;
+    context
+        .temp_dir
+        .child("credentials.toml")
+        .write_str(&formatdoc! {r#"
+            [[credential]]
+            service = "{}"
+            username = "user"
+            password = "secret"
+        "#, server.uri()})
+        .unwrap();
+
+    Mock::given(method("GET"))
+        .and(path("/_/oidc/audience"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "audience": "pypi" })))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/upload"))
+        .and(basic_auth("user", "secret"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.publish()
+        .arg("--publish-url")
+        .arg(format!("{}/upload", server.uri()))
+        .arg(dummy_wheel())
+        .env(EnvVars::GITHUB_ACTIONS, "true")
+        .env_remove("ACTIONS_ID_TOKEN_REQUEST_URL")
+        .env_remove("ACTIONS_ID_TOKEN_REQUEST_TOKEN")
+        .env(EnvVars::UV_CREDENTIALS_DIR, context.temp_dir.path()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Publishing 1 file to http://[LOCALHOST]/upload
+    Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
+    Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
+    ");
+}
+
+/// Report the trusted publishing error if discovered credentials are rejected and no prompt is
+/// available.
+#[tokio::test]
+async fn trusted_publishing_fallback_credentials_rejected() {
+    let context = uv_test::test_context_with_versions!(&[]).with_filtered_sizes();
+    let server = MockServer::start().await;
+    let netrc = context.temp_dir.child(".netrc");
+    netrc
+        .write_str("machine 127.0.0.1 login user password secret")
+        .unwrap();
+
+    Mock::given(method("GET"))
+        .and(path("/_/oidc/audience"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "audience": "pypi" })))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/upload"))
+        .and(basic_auth("user", "secret"))
+        .respond_with(ResponseTemplate::new(403).set_body_string("Invalid credentials"))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.publish()
+        .arg("--publish-url")
+        .arg(format!("{}/upload", server.uri()))
+        .arg(dummy_wheel())
+        .env(EnvVars::GITHUB_ACTIONS, "true")
+        .env_remove("ACTIONS_ID_TOKEN_REQUEST_URL")
+        .env_remove("ACTIONS_ID_TOKEN_REQUEST_TOKEN")
+        .env(EnvVars::NETRC, netrc.path()), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Publishing 1 file to http://[LOCALHOST]/upload
+    Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
+    Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
+    Note: Trusted publishing also failed. To use it, check the error below.
+    error: Trusted publishing failed
+      cause: Failed to obtain OIDC token: is the `id-token: write` permission missing?
+      cause: GitHub Actions detection error
+      cause: insufficient permissions: missing ACTIONS_ID_TOKEN_REQUEST_URL
+    error: Failed to publish `[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl` to `http://[LOCALHOST]/upload`
+      cause: Server returned status code 403 Forbidden. Server says: Invalid credentials
+    ");
+}
+
+/// A dry run does not need upload credentials, even if trusted publishing fails.
+#[tokio::test]
+async fn trusted_publishing_failure_during_dry_run() {
+    let context = uv_test::test_context_with_versions!(&[]).with_filtered_sizes();
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/_/oidc/audience"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "audience": "pypi" })))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/upload"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(0)
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.publish()
+        .arg("--dry-run")
+        .arg("--publish-url")
+        .arg(format!("{}/upload", server.uri()))
+        .arg(dummy_wheel())
+        .env(EnvVars::GITHUB_ACTIONS, "true")
+        .env_remove("ACTIONS_ID_TOKEN_REQUEST_URL")
+        .env_remove("ACTIONS_ID_TOKEN_REQUEST_TOKEN"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Checking 1 file against http://[LOCALHOST]/upload
+    Checking ok-1.0.0-py3-none-any.whl ([SIZE]B)
+    ");
+}
+
+/// A later metadata error should not report a trusted publishing failure after an earlier upload
+/// succeeds with a username-only credential.
+#[tokio::test]
+async fn trusted_publishing_failure_after_successful_upload() {
+    let context = uv_test::test_context_with_versions!(&[]).with_filtered_sizes();
+    let server = MockServer::start().await;
+    context
+        .temp_dir
+        .child("credentials.toml")
+        .write_str(&formatdoc! {r#"
+            [[credential]]
+            service = "{}"
+            username = "user"
+        "#, server.uri()})
+        .unwrap();
+    let invalid_wheel = context.temp_dir.child("z-1.0.0-py3-none-any.whl");
+    invalid_wheel.touch().unwrap();
+
+    Mock::given(method("GET"))
+        .and(path("/_/oidc/audience"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "audience": "pypi" })))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/upload"))
+        .and(basic_auth("user", ""))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.publish()
+        .arg("--publish-url")
+        .arg(format!("{}/upload", server.uri()))
+        .arg(dummy_wheel())
+        .arg(invalid_wheel.path())
+        .env(EnvVars::GITHUB_ACTIONS, "true")
+        .env_remove("ACTIONS_ID_TOKEN_REQUEST_URL")
+        .env_remove("ACTIONS_ID_TOKEN_REQUEST_TOKEN")
+        .env(EnvVars::UV_CREDENTIALS_DIR, context.temp_dir.path()), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Publishing 2 files to http://[LOCALHOST]/upload
+    Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
+    Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
+    Hashing z-1.0.0-py3-none-any.whl ([SIZE]B)
+    error: Failed to publish: z-1.0.0-py3-none-any.whl
+      cause: Failed to read metadata
+      cause: Failed to read from zip file
+      cause: unable to locate the end of central directory record
+    ");
 }
 
 /// Hint people that it's not `--skip-existing` but `--check-url`.
@@ -565,6 +800,76 @@ async fn read_index_credential_env_vars_for_check_url() {
     File astral_test_private-0.1.0-py3-none-any.whl already exists, skipping
     "
     );
+}
+
+/// The index check supplies the username needed by keyring for the upload.
+#[cfg(feature = "test-python")]
+#[tokio::test]
+async fn index_username_used_for_keyring() {
+    let context = uv_test::test_context!("3.12").with_filtered_sizes();
+    let server = MockServer::start().await;
+
+    context
+        .pip_install()
+        .arg(
+            context
+                .workspace_root
+                .join("test/packages/keyring_test_plugin"),
+        )
+        .assert()
+        .success();
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {
+            r#"
+        [[tool.uv.index]]
+        name = "private-index"
+        url = "{index_uri}/simple/"
+        publish-url = "{index_uri}/upload"
+        "#,
+            index_uri = server.uri()
+        })
+        .unwrap();
+
+    Mock::given(method("GET"))
+        .and(path("/simple/ok/"))
+        .and(basic_auth("VssSessionToken", "secret"))
+        .respond_with(ResponseTemplate::new(404))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/upload"))
+        .and(basic_auth("VssSessionToken", "secret"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.publish()
+        .arg("--index")
+        .arg("private-index")
+        .arg("--trusted-publishing")
+        .arg("never")
+        .arg("--keyring-provider")
+        .arg("subprocess")
+        .arg(dummy_wheel())
+        .env(EnvVars::PATH, venv_bin_path(&context.venv))
+        .env(EnvVars::index_username("PRIVATE_INDEX"), "VssSessionToken")
+        .env(EnvVars::KEYRING_TEST_CREDENTIALS, json!({
+            format!("{}/simple/", server.uri()): {"VssSessionToken": "secret"},
+            format!("{}/upload", server.uri()): {"VssSessionToken": "secret"},
+        }).to_string()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Publishing 1 file to http://[LOCALHOST]/upload
+    Keyring request for VssSessionToken@http://[LOCALHOST]/simple/
+    Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
+    Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
+    Keyring request for VssSessionToken@http://[LOCALHOST]/upload
+    ");
 }
 
 #[tokio::test]

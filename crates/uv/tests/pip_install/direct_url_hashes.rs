@@ -1,17 +1,15 @@
 //! Tests for direct URL hashes discovered from package metadata.
 
-use std::collections::BTreeMap;
-
 use anyhow::Result;
 use assert_fs::fixture::ChildPath;
 use assert_fs::prelude::*;
 use predicates::prelude::predicate;
 use sha2::{Digest, Sha256};
-use url::Url;
 use wiremock::MockServer;
 
+use uv_redacted::SafeUrl;
 use uv_test::archive::generate_source_archive;
-use uv_test::packse::{generate_wheel, mount_mismatched_distribution};
+use uv_test::packse::{WheelBuilder, mount_mismatched_distribution};
 use uv_test::{TestContext as UvTestContext, uv_snapshot};
 
 /// A test context for exercising hashes discovered from forged wheel metadata.
@@ -27,7 +25,7 @@ struct DirectUrlHashTestContext {
     /// The SHA-256 digest of the direct URL source distribution.
     source_hash: String,
     /// The file URL of the direct URL source distribution.
-    source_url: Url,
+    source_url: SafeUrl,
     /// The URL of the authentic parent wheel.
     wheel_url: String,
     /// The SHA-256 digest of the authentic parent wheel.
@@ -53,29 +51,14 @@ impl DirectUrlHashTestContext {
         let source_hash = hex::encode(Sha256::digest(&archive));
         let inner = inner.with_filter((source_hash.clone(), "[SOURCE_HASH]"));
         let source_url =
-            Url::from_file_path(source.path()).expect("source path is an absolute path");
+            SafeUrl::from_file_path(source.path()).expect("source path is an absolute path");
         let dependency = format!("ok @ {source_url}#sha256={source_hash}").parse()?;
 
         let name = "metadata-parent".parse()?;
         let version = "1.0.0".parse()?;
-        let (wheel_filename, authentic_wheel) = generate_wheel(
-            &name,
-            &version,
-            &[],
-            &BTreeMap::new(),
-            None,
-            "py3-none-any",
-            &[],
-        );
-        let (_, forged_wheel) = generate_wheel(
-            &name,
-            &version,
-            &[dependency],
-            &BTreeMap::new(),
-            None,
-            "py3-none-any",
-            &[],
-        );
+        let wheel = WheelBuilder::new(&name, &version);
+        let (wheel_filename, authentic_wheel) = wheel.build();
+        let (_, forged_wheel) = wheel.requires(&[dependency]).build();
         let wheel_hash = hex::encode(Sha256::digest(&authentic_wheel));
         let server = MockServer::start().await;
         let wheel_path = format!("/files/{wheel_filename}");

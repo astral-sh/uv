@@ -24,6 +24,26 @@
   },
   "rules": [
     {
+      "caller": "uv",
+      "environment": "automations",
+      "caller_ref": "refs/pull/*/merge",
+      "caller_workflow": "ci.yml",
+      "reusable_workflow": "binary-size.yml",
+      "on": ["pull_request"],
+      "permissions": { "pull_requests": "write" },
+      "target": "uv"
+    },
+    {
+      "caller": "uv-dev",
+      "environment": "automations",
+      "caller_ref": "refs/pull/*/merge",
+      "caller_workflow": "ci.yml",
+      "reusable_workflow": "binary-size.yml",
+      "on": ["pull_request"],
+      "permissions": { "pull_requests": "write" },
+      "target": "uv-dev"
+    },
+    {
       "caller": "uv-dev",
       "environment": "automations",
       "caller_workflow": "import-codspeed-profiles.yml",
@@ -137,7 +157,7 @@
       "environment": "automations",
       "caller_ref": "refs/pull/*/merge",
       "caller_workflow": "ci.yml",
-      "reusable_workflow": "astral-sh/github-actions/.github/workflows/pull-request-security-review.yml@3c57a5dba8ad854a97e8b9fbf454286a7574e677",
+      "reusable_workflow": "astral-sh/github-actions/.github/workflows/pull-request-security-review.yml@7eddba65d699c0288e55f721b76ee59d969d5ceb",
       "on": ["pull_request"],
       "permissions": { "pull_requests": "write" },
       "target": "uv"

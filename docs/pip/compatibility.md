@@ -264,8 +264,9 @@ too loose, and that the user should consider tightening them. For example, in th
 At present, `uv pip check` will surface the following diagnostics:
 
 - A package has no `METADATA` file, or the `METADATA` file can't be parsed.
-- A package has a `Requires-Python` that doesn't match the Python version of the running
-  interpreter.
+- A package has a `Requires-Python` lower bound that excludes the Python version of the running
+  interpreter. Upper bounds are [ignored](#requires-python-upper-bounds), as they are during
+  resolution.
 - A package has a dependency on a package that isn't installed.
 - A package has a dependency on a package that's installed, but at an incompatible version.
 - Multiple versions of a package are installed in the virtual environment.
@@ -299,7 +300,7 @@ uv, meanwhile, _does_ enforce `--only-binary` for direct URL dependencies, with 
 given URL if it cannot infer the package name ahead of time, since uv can't determine whether the
 package is "allowed" in such cases without building its metadata.
 
-Both pip and uv allow editables requirements to be built and installed even when `--only-binary` is
+Both pip and uv allow editable requirements to be built and installed even when `--only-binary` is
 provided. For example, `uv pip install -e . --only-binary :all:` is allowed.
 
 ## `--no-binary` enforcement
@@ -352,7 +353,7 @@ bytecode compilation in [Docker builds](../guides/integration/docker.md) to impr
 (at the cost of increased build times).
 
 As bytecode compilation suppresses various warnings issued by the Python interpreter, in rare cases
-you may seen `SyntaxWarning` or `DeprecationWarning` messages when running Python code that was
+you may see `SyntaxWarning` or `DeprecationWarning` messages when running Python code that was
 installed with uv that do not appear when using `pip`. These are valid warnings, but are typically
 hidden by the bytecode compilation process, and can either be ignored, fixed upstream, or similarly
 suppressed by enabling bytecode compilation in uv.
@@ -392,8 +393,9 @@ the `subprocess` option is supported.
 
 Unlike `pip`, uv does not enable keyring authentication by default.
 
-Unlike `pip`, uv does not wait until a request returns an HTTP 401 before searching for
-authentication. uv attaches authentication to all requests for hosts with credentials available.
+uv can use credentials supplied with a request or cached for its URL before the server returns an
+HTTP 401. For the rules governing credential lookup, see
+[credential providers](../concepts/indexes.md#using-credential-providers).
 
 ## `egg` support
 

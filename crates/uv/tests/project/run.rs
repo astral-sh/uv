@@ -7,15 +7,15 @@ use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 use predicates::{prelude::predicate, str::contains};
 use serde_json::json;
+use std::io;
 use std::path::Path;
-use uv_fs::copy_dir_all;
 use uv_lock::Lock;
 use uv_python_discovery::PYTHON_VERSION_FILENAME;
 use uv_static::EnvVars;
 use wiremock::matchers::{method, path};
-use wiremock::{Mock, MockServer, ResponseTemplate};
+use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
-use uv_test::{TestContext, packse::PackseServer, uv_snapshot};
+use uv_test::{TestContext, copy_dir_ignore, packse::PackseServer, uv_snapshot};
 
 #[test]
 fn run_with_python_version() -> Result<()> {
@@ -1891,13 +1891,11 @@ fn run_with_overlay_interpreter() -> Result<()> {
     Resolved 4 packages in [TIME]
     ");
 
-    // Switch to a relocatable virtual environment using the same interpreter.
+    // Switch to a relocatable virtual environment.
     context
         .venv()
         .arg("--allow-existing")
         .arg("--relocatable")
-        .arg("--python")
-        .arg(context.venv.path())
         .assert()
         .success();
 
@@ -2070,8 +2068,8 @@ fn run_in_workspace() -> Result<()> {
         dependencies = ["anyio>3"]
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [tool.uv.workspace]
         members = ["child1", "child2"]
@@ -2098,8 +2096,8 @@ fn run_in_workspace() -> Result<()> {
         dependencies = ["iniconfig>1"]
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
     child1
@@ -2118,8 +2116,8 @@ fn run_in_workspace() -> Result<()> {
         dependencies = ["typing-extensions>4"]
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
     child2
@@ -2208,13 +2206,13 @@ fn run_with_editable() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let anyio_local = context.temp_dir.child("src").child("anyio_local");
-    copy_dir_all(
+    copy_dir_ignore(
         context.workspace_root.join("test/packages/anyio_local"),
         &anyio_local,
     )?;
 
     let black_editable = context.temp_dir.child("src").child("black_editable");
-    copy_dir_all(
+    copy_dir_ignore(
         context.workspace_root.join("test/packages/black_editable"),
         &black_editable,
     )?;
@@ -2228,8 +2226,8 @@ fn run_with_editable() -> Result<()> {
         dependencies = ["anyio", "sniffio==1.3.1"]
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#
     })?;
 
@@ -2292,8 +2290,8 @@ fn run_with_editable() -> Result<()> {
         dependencies = ["anyio", "sniffio==1.3.1"]
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [tool.uv.sources]
         anyio = { path = "./src/anyio_local", editable = true }
@@ -3469,8 +3467,8 @@ fn run_isolated_python_version() -> Result<()> {
         dependencies = ["anyio"]
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#
     })?;
 
@@ -3563,8 +3561,8 @@ fn run_no_project() -> Result<()> {
         dependencies = ["anyio"]
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#
     })?;
 
@@ -4221,8 +4219,8 @@ fn run_script_module_conflict() -> Result<()> {
         foo = "foo:app"
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#
     })?;
 
@@ -4877,20 +4875,28 @@ fn run_remote_requirements_offline_redacts_credentials() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn run_remote_pep723_requirements_fetch_error_does_not_leak_credentials() -> Result<()> {
-    let context = uv_test::test_context!("3.12").with_filter((
-        r"(?m)^  cause: .*(Connection refused|No connection could be made).*$",
-        "  cause: [CONNECTION_REFUSED]",
-    ));
+/// A retried transport error must not expose credentials from a remote requirements URL.
+#[tokio::test]
+async fn run_remote_pep723_requirements_fetch_error_does_not_leak_credentials() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/requirements.py"))
+        .respond_with_err(|_: &Request| {
+            io::Error::new(io::ErrorKind::ConnectionReset, "Connection reset by peer")
+        })
+        .expect(4)
+        .mount(&server)
+        .await;
 
     let script = context.temp_dir.child("main.py");
     script.write_str("print('hello')")?;
 
-    let listener = std::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))?;
-    let port = listener.local_addr()?.port();
-    drop(listener);
-    let url = format!("http://username:password@127.0.0.1:{port}/requirements.py");
+    let url = format!(
+        "http://username:password@{}/requirements.py",
+        server.address()
+    );
 
     uv_snapshot!(context.filters(), context.run()
         .arg("--with-requirements")
@@ -4901,9 +4907,8 @@ fn run_remote_pep723_requirements_fetch_error_does_not_leak_credentials() -> Res
     ----- stderr -----
     error: Request failed after 3 retries
       cause: error sending request for url (http://[LOCALHOST]/requirements.py)
-      cause: client error (Connect)
-      cause: tcp connect error
-      cause: [CONNECTION_REFUSED]
+      cause: client error (SendRequest)
+      cause: connection closed before message completed
     ");
 
     Ok(())

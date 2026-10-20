@@ -1,8 +1,11 @@
 use std::borrow::Cow;
+use std::fmt;
+use std::marker::PhantomData;
 
 use either::Either;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
-use serde::de::IntoDeserializer;
+use serde::de::{Error, IntoDeserializer, MapAccess, Visitor, value::MapAccessDeserializer};
+use serde::{Deserialize, Deserializer};
 
 use uv_distribution_types::{Requirement, RequirementSource, ResolutionRecorder};
 use uv_normalize::PackageName;
@@ -59,31 +62,52 @@ pub enum Override<T> {
 
 // A derived `#[serde(untagged)]` implementation collapses detailed requirement parse errors into
 // "data did not match any variant", so use a type-directed visitor for string requirements.
-impl<'de, T> serde::Deserialize<'de> for Override<T>
+struct OverrideVisitor<T>(PhantomData<T>);
+
+impl<'de, T> Visitor<'de> for OverrideVisitor<T>
 where
-    T: serde::Deserialize<'de>,
+    T: Deserialize<'de>,
 {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    type Value = Override<T>;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("a string or map")
+    }
+
+    fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
     where
-        D: serde::Deserializer<'de>,
+        E: Error,
     {
-        #[derive(serde::Deserialize)]
+        T::deserialize(value.into_deserializer()).map(Override::Requirement)
+    }
+
+    fn visit_map<M>(self, map: M) -> Result<Self::Value, M::Error>
+    where
+        M: MapAccess<'de>,
+    {
+        #[derive(Deserialize)]
         #[serde(untagged)]
         enum MapOverride<T> {
             Package(PackageOverride<T>),
             Requirement(T),
         }
 
-        serde_untagged::UntaggedEnumVisitor::new()
-            .string(|string| T::deserialize(string.into_deserializer()).map(Self::Requirement))
-            .map(|map| {
-                map.deserialize::<MapOverride<T>>()
-                    .map(|entry| match entry {
-                        MapOverride::Package(package) => Self::Package(package),
-                        MapOverride::Requirement(requirement) => Self::Requirement(requirement),
-                    })
-            })
-            .deserialize(deserializer)
+        MapOverride::deserialize(MapAccessDeserializer::new(map)).map(|entry| match entry {
+            MapOverride::Package(package) => Override::Package(package),
+            MapOverride::Requirement(requirement) => Override::Requirement(requirement),
+        })
+    }
+}
+
+impl<'de, T> Deserialize<'de> for Override<T>
+where
+    T: Deserialize<'de>,
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_any(OverrideVisitor(PhantomData))
     }
 }
 

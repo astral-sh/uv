@@ -15,7 +15,6 @@ use tokio::io::{AsyncRead, AsyncSeekExt, AsyncWriteExt, ReadBuf};
 use tokio::sync::Semaphore;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::{Instrument, debug, info_span, instrument, warn};
-use url::Url;
 
 use uv_cache::{ArchiveFileId, ArchiveId, Cache, CacheBucket, CacheEntry, WheelCache};
 use uv_cache_info::{CacheInfo, Timestamp};
@@ -39,7 +38,7 @@ use uv_platform_tags::Tags;
 use uv_preview::PreviewFeature;
 use uv_pypi_types::{HashDigest, HashDigests, PyProjectToml, ResolutionMetadata};
 use uv_python_types::PythonVariant;
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 use uv_threads::initialize_rayon_once;
 use uv_types::{BuildContext, BuildStack};
 
@@ -221,6 +220,14 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         tags: &Tags,
         hashes: ArchiveHashPolicy<'_>,
     ) -> Result<LocalWheel, Error> {
+        // TODO(konsti): Support fetching wheel variants.
+        if let Dist::Built(built) = dist
+            && built.wheel_filename().variant().is_some()
+        {
+            return Err(Error::UnsupportedWheelVariant(Box::new(
+                built.wheel_filename().clone(),
+            )));
+        }
         match dist {
             Dist::Built(built) => self.get_wheel(built, hashes).await,
             Dist::Source(source) => self.build_wheel(source, tags, hashes).await,
@@ -259,6 +266,14 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         dist: &Dist,
         hashes: MetadataHashPolicy<'_>,
     ) -> Result<ArchiveMetadata, Error> {
+        // TODO(konsti): Support reading metadata from wheel variants.
+        if let Dist::Built(built) = dist
+            && built.wheel_filename().variant().is_some()
+        {
+            return Err(Error::UnsupportedWheelVariant(Box::new(
+                built.wheel_filename().clone(),
+            )));
+        }
         match dist {
             Dist::Built(built) => self.get_wheel_metadata(built, hashes).await,
             Dist::Source(source) => {
@@ -766,7 +781,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     /// origin.
     async fn stream_wheel(
         &self,
-        url: DisplaySafeUrl,
+        url: SafeUrl,
         index: Option<&IndexUrl>,
         filename: &WheelFilename,
         progress_size_hint: Option<u64>,
@@ -961,7 +976,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     /// of the wheel if/when fetched from the origin.
     async fn download_wheel(
         &self,
-        url: DisplaySafeUrl,
+        url: SafeUrl,
         index: Option<&IndexUrl>,
         filename: &WheelFilename,
         progress_size_hint: Option<u64>,
@@ -1092,7 +1107,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     async fn download_wheel_response(
         &self,
         mut response: reqwest::Response,
-        url: &DisplaySafeUrl,
+        url: &SafeUrl,
         retry_state: &mut RetryState,
         filename: &WheelFilename,
         progress_size_hint: Option<u64>,
@@ -1587,11 +1602,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     }
 
     /// Returns a GET [`reqwest::Request`] for the given URL.
-    fn request(&self, url: DisplaySafeUrl) -> Result<reqwest::Request, reqwest::Error> {
+    fn request(&self, url: SafeUrl) -> Result<reqwest::Request, reqwest::Error> {
         self.client
             .unmanaged
             .uncached_client(&url)
-            .get(Url::from(url))
+            .get(url)
             .header(
                 // `reqwest` defaults to accepting compressed responses.
                 // Specify identity encoding to get consistent .whl downloading
@@ -1605,11 +1620,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     /// Build a GET request with a `Range: bytes=<offset>-` header.
     ///
     /// Used to resume an interrupted download from `offset` bytes into the file.
-    fn request_with_offset(&self, url: DisplaySafeUrl, offset: u64) -> RequestBuilder<'_> {
+    fn request_with_offset(&self, url: SafeUrl, offset: u64) -> RequestBuilder<'_> {
         self.client
             .unmanaged
             .uncached_client(&url)
-            .get(Url::from(url))
+            .get(url)
             .header(
                 "accept-encoding",
                 reqwest::header::HeaderValue::from_static("identity"),
@@ -1695,7 +1710,7 @@ fn persist_archive_file(src: &Path, dst: &Path) -> io::Result<()> {
 
 /// A wrapper around `RegistryClient` that manages a concurrency limit.
 pub struct ManagedClient<'a> {
-    pub unmanaged: &'a RegistryClient,
+    pub(super) unmanaged: &'a RegistryClient,
     control: Arc<Semaphore>,
 }
 
@@ -1706,6 +1721,11 @@ impl<'a> ManagedClient<'a> {
             unmanaged: client,
             control,
         }
+    }
+
+    /// Return whether the client is configured for offline use.
+    pub fn is_offline(&self) -> bool {
+        self.unmanaged.connectivity().is_offline()
     }
 
     /// Perform a request using the client, respecting the concurrency limit.

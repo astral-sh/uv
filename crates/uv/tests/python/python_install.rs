@@ -1,5 +1,10 @@
 #[cfg(windows)]
 use std::path::PathBuf;
+#[cfg(unix)]
+use std::{
+    io::Read,
+    os::unix::fs::{MetadataExt, PermissionsExt},
+};
 
 use std::{env, path::Path, process::Command};
 
@@ -152,6 +157,9 @@ fn python_install_sysconfig_prefix() -> anyhow::Result<()> {
             "OTHER_PREFIX": "/installation"
         }
     "#})?;
+    fs_err::set_permissions(sysconfig.path(), std::fs::Permissions::from_mode(0o640))?;
+    let original = fs_err::read_to_string(sysconfig.path())?;
+    let mut reader = fs_err::File::open(sysconfig.path())?;
 
     context
         .python_install()
@@ -174,6 +182,84 @@ fn python_install_sysconfig_prefix() -> anyhow::Result<()> {
         }
         "#);
     });
+
+    // A Python process which already opened the module must see the complete original.
+    let mut previous_contents = String::new();
+    reader.read_to_string(&mut previous_contents)?;
+    assert_eq!(previous_contents, original);
+    let metadata = fs_err::metadata(sysconfig.path())?;
+    assert_eq!(metadata.permissions().mode() & 0o777, 0o640);
+
+    context
+        .python_install()
+        .arg("3.12.9")
+        .arg("--no-bin")
+        .arg("--offline")
+        .assert()
+        .success();
+    // Already-patched sysconfig data does not need a new file.
+    assert_eq!(fs_err::metadata(sysconfig.path())?.ino(), metadata.ino());
+
+    Ok(())
+}
+
+/// Pkgconfig repairs must leave existing readers on the complete original file.
+#[cfg(unix)]
+#[test]
+fn python_install_pkgconfig() -> anyhow::Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]).with_managed_python_dirs();
+    let installation = context
+        .temp_dir
+        .child("managed")
+        .child(format!("cpython-3.12.9-{}", platform_key_from_env()?));
+    let lib = installation.child("lib").child("python3.12");
+    lib.create_dir_all()?;
+    let bin = installation.child("bin");
+    bin.create_dir_all()?;
+    bin.child("python3.12").touch()?;
+    lib.child("_sysconfigdata__test.py").write_str(indoc! {r"
+        # system configuration generated and used by the sysconfig module
+        build_time_vars = {}
+    "})?;
+
+    let pkgconfigs = installation.child("lib").child("pkgconfig");
+    pkgconfigs.create_dir_all()?;
+    let pkgconfig = pkgconfigs.child("python.pc");
+    pkgconfig.write_str(indoc! {"
+        prefix=/install
+        libdir=${prefix}/lib
+    "})?;
+    fs_err::set_permissions(pkgconfig.path(), std::fs::Permissions::from_mode(0o640))?;
+    let original = fs_err::read_to_string(pkgconfig.path())?;
+    let mut reader = fs_err::File::open(pkgconfig.path())?;
+    let ignored = pkgconfigs.child("ignored.txt");
+    ignored.write_str("prefix=/install\n")?;
+    pkgconfigs.child("directory.pc").create_dir_all()?;
+    let linked = installation.child("linked.pc");
+    linked.write_str("prefix=/install\n")?;
+    fs_err::os::unix::fs::symlink(linked.path(), pkgconfigs.child("linked.pc").path())?;
+
+    context
+        .python_install()
+        .arg("3.12.9")
+        .arg("--no-bin")
+        .arg("--offline")
+        .assert()
+        .success();
+
+    insta::assert_snapshot!(context.read(pkgconfig.path()), @r"
+    prefix=${pcfiledir}/../..
+    libdir=${prefix}/lib
+    ");
+    let mut previous_contents = String::new();
+    reader.read_to_string(&mut previous_contents)?;
+    assert_eq!(previous_contents, original);
+    assert_eq!(
+        fs_err::metadata(pkgconfig.path())?.permissions().mode() & 0o777,
+        0o640
+    );
+    assert_eq!(context.read(ignored.path()), "prefix=/install\n");
+    assert_eq!(context.read(linked.path()), "prefix=/install\n");
 
     Ok(())
 }
@@ -2295,9 +2381,7 @@ fn python_install_relative_broken_link() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Test that --default works with pre-release versions (e.g., 3.15.0a1).
-/// This test verifies the fix for issue #16696 where --default didn't create
-/// python.exe and python3.exe links for pre-release versions.
+/// A minor-version request that resolves to a prerelease creates the default executable links.
 #[test]
 fn python_install_default_prerelease() {
     let context = uv_test::test_context_with_versions!(&[])
@@ -2305,19 +2389,19 @@ fn python_install_default_prerelease() {
         .with_filtered_exe_suffix()
         .with_managed_python_dirs();
 
-    // Request a prerelease explicitly so stable releases do not change the test coverage.
+    // Python 3.16 is only available as a prerelease.
     context
         .python_install()
         .arg("--default")
         .arg("--preview-features")
         .arg("python-install-default")
-        .arg("3.15.0a1")
+        .arg("3.16")
         .assert()
         .success();
 
-    let bin_python_minor_15 = context
+    let bin_python_minor_16 = context
         .bin_dir
-        .child(format!("python3.15{}", std::env::consts::EXE_SUFFIX));
+        .child(format!("python3.16{}", std::env::consts::EXE_SUFFIX));
 
     let bin_python_major = context
         .bin_dir
@@ -2328,7 +2412,7 @@ fn python_install_default_prerelease() {
         .child(format!("python{}", std::env::consts::EXE_SUFFIX));
 
     // Verify that all three executables are created when --default is used with a pre-release version
-    bin_python_minor_15.assert(predicate::path::exists());
+    bin_python_minor_16.assert(predicate::path::exists());
     bin_python_major.assert(predicate::path::exists());
     bin_python_default.assert(predicate::path::exists());
 }
@@ -2447,7 +2531,6 @@ fn python_install_patch_dylib() {
 }
 
 #[test]
-#[ignore = "Update when 3.16a1 comes out"]
 fn python_install_prerelease() {
     let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
@@ -2457,34 +2540,33 @@ fn python_install_prerelease() {
         .with_filtered_python_names()
         .with_filtered_exe_suffix();
 
-    // Install 3.15
-    // For now, this provides test coverage of pre-release handling
-    uv_snapshot!(context.filters(), context.python_install().arg("3.15"), @"
+    // Python 3.16 is only available as a prerelease.
+    uv_snapshot!(context.filters(), context.python_install().arg("3.16"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Installed Python 3.15.[LATEST] in [TIME]
-     + cpython-3.15.[LATEST]-[PLATFORM] (python3.15)
+    Installed Python 3.16.[LATEST] in [TIME]
+     + cpython-3.16.[LATEST]-[PLATFORM] (python3.16)
     ");
 
     // We should be able to find this version without opt-in, because there is no stable release
     // installed
-    uv_snapshot!(context.filters(), context.python_find().arg("3.15"), @"
+    uv_snapshot!(context.filters(), context.python_find().arg("3.16"), @"
     exit_code: 0 (success)
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.15-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+    [TEMP_DIR]/managed/cpython-3.16-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
     ");
 
     // This also applies to `>=` requests, even though pre-releases aren't technically in the range
-    uv_snapshot!(context.filters(), context.python_find().arg(">=3.15"), @"
+    uv_snapshot!(context.filters(), context.python_find().arg(">=3.16"), @"
     exit_code: 0 (success)
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.15-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+    [TEMP_DIR]/managed/cpython-3.16-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
     ");
 
     uv_snapshot!(context.filters(), context.python_find().arg("3"), @"
     exit_code: 0 (success)
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.15-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+    [TEMP_DIR]/managed/cpython-3.16-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
     ");
 
     // If we install a stable version, that should be preferred though
@@ -2507,15 +2589,36 @@ fn python_install_prerelease_specific() {
     let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_managed_python_dirs()
+        .with_filtered_python_install_bin()
+        .with_filtered_python_names()
         .with_filtered_exe_suffix();
 
     // Install a specific pre-release
+    uv_snapshot!(context.filters(), context.python_install().arg("3.15.0rc3"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Installed Python 3.15.0rc3 in [TIME]
+     + cpython-3.15.0rc3-[PLATFORM] (python3.15)
+    ");
+
+    // Installing an older prerelease must not replace the newer prerelease executable.
     uv_snapshot!(context.filters(), context.python_install().arg("3.15.0a2"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.15.0a2 in [TIME]
-     + cpython-3.15.0a2-[PLATFORM] (python3.15)
+     + cpython-3.15.0a2-[PLATFORM]
     ");
+
+    let bin_python = context
+        .bin_dir
+        .child(format!("python3.15{}", std::env::consts::EXE_SUFFIX));
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        insta::assert_snapshot!(
+            canonicalize_link_path(&bin_python), @"[TEMP_DIR]/managed/cpython-3.15.0rc3-[PLATFORM]/[INSTALL-BIN]/[PYTHON]"
+        );
+    });
 
     // Install a release candidate for a non-zero patch version
     uv_snapshot!(context.filters(), context.python_install().arg("3.14.5rc1"), @"
@@ -4006,18 +4109,18 @@ fn python_install_compile_bytecode_upgrade() {
         .with_filtered_latest_python_versions();
 
     // An upgrade should also compile bytecode
-    uv_snapshot!(context.filters(), context.python_install().arg("3.14.0"), @"
+    uv_snapshot!(context.filters(), context.python_install().arg("3.13.0"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Installed Python 3.14.0 in [TIME]
-     + cpython-3.14.0-[PLATFORM] (python3.14)
+    Installed Python 3.13.0 in [TIME]
+     + cpython-3.13.0-[PLATFORM] (python3.13)
     ");
 
-    uv_snapshot!(context.filters(), context.python_install().arg("--upgrade").arg("--compile-bytecode").arg("3.14"), @"
+    uv_snapshot!(context.filters(), context.python_install().arg("--upgrade").arg("--compile-bytecode").arg("3.13"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Installed Python 3.14.[LATEST] in [TIME]
-     + cpython-3.14.[LATEST]-[PLATFORM] (python3.14)
+    Installed Python 3.13.[LATEST] in [TIME]
+     + cpython-3.13.[LATEST]-[PLATFORM] (python3.13)
     Bytecode compiled [COUNT] files in [TIME]
     ");
 }
@@ -4167,8 +4270,8 @@ fn python_install_compile_bytecode_pypy() {
     uv_snapshot!(context.filters(), context.python_install().arg("--compile-bytecode").arg("pypy-3.11"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Installed Python 3.11.16 in [TIME]
-     + pypy-3.11.16-[PLATFORM] (pypy3.11)
+    Installed Python 3.11.17 in [TIME]
+     + pypy-3.11.17-[PLATFORM] (pypy3.11)
     Bytecode compiled [COUNT] files in [TIME]
     ");
 }

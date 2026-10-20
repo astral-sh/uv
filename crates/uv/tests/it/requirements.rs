@@ -2,11 +2,10 @@ use anyhow::Result;
 use assert_fs::prelude::*;
 use indoc::indoc;
 use std::path::Path;
-use url::Url;
 
 use uv_client::BaseClientBuilder;
 use uv_configuration::RequirementsInput;
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 
 #[test]
@@ -34,8 +33,8 @@ fn parse_requirements_input() -> Result<()> {
     }
 
     let absolute_path = std::env::current_dir()?.join("requirements.txt");
-    let file_url =
-        Url::from_file_path(&absolute_path).expect("an absolute path should convert to a file URL");
+    let file_url = SafeUrl::from_file_path(&absolute_path)
+        .expect("an absolute path should convert to a file URL");
     assert_eq!(
         file_url.as_str().parse::<RequirementsInput>()?,
         RequirementsInput::Local(absolute_path.clone())
@@ -47,20 +46,18 @@ fn parse_requirements_input() -> Result<()> {
     ] {
         assert_eq!(
             remote.parse::<RequirementsInput>()?,
-            RequirementsInput::Remote(DisplaySafeUrl::parse(remote)?)
+            RequirementsInput::Remote(SafeUrl::parse(remote)?)
         );
     }
 
     let remote = "https://example.com/nested/requirements.txt".parse::<RequirementsInput>()?;
     assert_eq!(
         remote.resolve("child.txt", Path::new("unused"))?,
-        RequirementsInput::Remote(DisplaySafeUrl::parse(
-            "https://example.com/nested/child.txt"
-        )?)
+        RequirementsInput::Remote(SafeUrl::parse("https://example.com/nested/child.txt")?)
     );
     assert_eq!(
         remote.resolve("/child.txt", Path::new("unused"))?,
-        RequirementsInput::Remote(DisplaySafeUrl::parse("https://example.com/child.txt")?)
+        RequirementsInput::Remote(SafeUrl::parse("https://example.com/child.txt")?)
     );
     assert_eq!(
         RequirementsInput::Local("requirements.txt".into())

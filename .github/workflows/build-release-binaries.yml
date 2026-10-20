@@ -52,6 +52,9 @@ jobs:
       # uv
       - name: "Prep README.md"
         run: python scripts/transform_readme.py --target pypi
+      - name: "Check Cargo.lock"
+        # `maturin sdist` resolves the workspace without --locked.
+        run: cargo metadata --locked --format-version 1 > /dev/null
       - name: "Build sdist"
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
@@ -59,6 +62,11 @@ jobs:
           maturin-version: v1.15.0
           command: sdist
           args: --out dist
+      - name: "Fix Cargo.lock in sdist"
+        run: |
+          # Ensure maturin did not update the workspace Cargo.lock.
+          git diff --exit-code -- Cargo.lock
+          python scripts/repair-sdist-cargo-lock.py dist/${PACKAGE_NAME}-*.tar.gz
       - name: "Test sdist"
         uses: astral-sh/github-actions/release-smoke-test@76d2758fc5c4394ada46510f46605deb7cec477e
         with:
@@ -70,7 +78,7 @@ jobs:
             apt-get install -y --no-install-recommends cmake
             # We can't use `--find-links` here, since we need maturin, which means no `--no-index`, and without that option
             # we run the risk that pip pull uv from PyPI instead.
-            pip install /dist/${PACKAGE_NAME}-*.tar.gz --force-reinstall
+            pip install /dist/${PACKAGE_NAME}-*.tar.gz --force-reinstall --config-settings=maturin.build-args=--locked
             ${MODULE_NAME} --help
             python -m ${MODULE_NAME} --help
             uvx --help
@@ -89,7 +97,10 @@ jobs:
           command: sdist
           args: --out crates/uv-build/dist -m crates/uv-build/Cargo.toml
       - name: "Fix Cargo.lock in sdist uv-build"
-        run: python scripts/repair-sdist-cargo-lock.py crates/uv-build/dist/${PACKAGE_NAME}_build-*.tar.gz
+        run: |
+          # Ensure maturin did not update the workspace Cargo.lock.
+          git diff --exit-code -- Cargo.lock
+          python scripts/repair-sdist-cargo-lock.py crates/uv-build/dist/${PACKAGE_NAME}_build-*.tar.gz
       - name: "Test sdist uv-build"
         uses: astral-sh/github-actions/release-smoke-test@76d2758fc5c4394ada46510f46605deb7cec477e
         with:
@@ -99,7 +110,7 @@ jobs:
           run: |
             apt-get update
             apt-get install -y --no-install-recommends cmake
-            pip install /dist/${PACKAGE_NAME}_build-*.tar.gz --force-reinstall
+            pip install /dist/${PACKAGE_NAME}_build-*.tar.gz --force-reinstall --config-settings=maturin.build-args=--locked
             ${MODULE_NAME}-build --help
             python -m ${MODULE_NAME}_build --help
       - name: "Upload sdist uv-build"
@@ -522,6 +533,15 @@ jobs:
             # Install cargo extensions as a static musl binary so it runs in any container.
             scripts/install-cargo-extensions.sh
 
+            # Keep package/version/file information in diagnostics without embedding
+            # the build machine's Cargo home and registry index directory in every path.
+            # TODO: Use Cargo's profile-level `trim-paths` once it is stable.
+            cargo fetch --locked --target "${{ matrix.target }}"
+            for registry in "${CARGO_HOME:-$HOME/.cargo}"/registry/src/*; do
+                [[ -d "$registry" ]] || continue
+                export RUSTFLAGS="${RUSTFLAGS:+${RUSTFLAGS} }--remap-path-prefix=$registry/=registry/"
+            done
+
             if [[ "${{ matrix.target }}" == "x86_64-unknown-linux-gnu" ]]; then
                 rustup component add llvm-tools-preview
                 python${{ env.PYTHON_VERSION }} scripts/build_uv_pgo.py \
@@ -579,6 +599,20 @@ jobs:
           args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml --compatibility pypi
           before-script-linux: |
             scripts/install-cargo-extensions.sh
+
+            # TODO: Use Cargo's profile-level `trim-paths` once it is stable.
+            cargo fetch --locked --target "${{ matrix.target }}"
+            for registry in "${CARGO_HOME:-$HOME/.cargo}"/registry/src/*; do
+                [[ -d "$registry" ]] || continue
+                export RUSTFLAGS="${RUSTFLAGS:+${RUSTFLAGS} }--remap-path-prefix=$registry/=registry/"
+            done
+
+            if [[ "${{ matrix.target }}" == "x86_64-unknown-linux-gnu" ]]; then
+                # Fold identical functions with Rust's bundled LLD.
+                bundled_lld_dir="$(rustc --print sysroot)/lib/rustlib/${{ matrix.target }}/bin/gcc-ld"
+                test -x "${bundled_lld_dir}/ld.lld"
+                export RUSTFLAGS="${RUSTFLAGS:+${RUSTFLAGS} }-C link-arg=-B${bundled_lld_dir} -C link-arg=-fuse-ld=lld -C link-arg=-Wl,--icf=all"
+            fi
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
       - name: "Test wheel uv-build"
@@ -1378,11 +1412,11 @@ jobs:
         with:
           persist-credentials: false
       - name: "Install uv"
-        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           # renovate: datasource=github-release-attachments depName=astral-sh/uv
-          version: "0.12.13"
-          checksum: "745765a3b6e360ad76743599ae5c42e9278c7edf8bbff9fc76d05bf2623a04dd"
+          version: "0.13.1"
+          checksum: "eadd9d27c134ab5ac1ffd4473b97a741407f3ea238288f03121fc4deddf90220"
           enable-cache: false
       - name: "Download built wheels"
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1

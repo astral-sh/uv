@@ -1,6 +1,6 @@
 [package]
 name = "uv-extract"
-version = "0.0.92"
+version = "0.0.95"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -17,13 +17,14 @@ workspace = true
 
 [dependencies]
 uv-distribution-filename = { workspace = true }
+uv-macros = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-static = { workspace = true }
 uv-threads = { workspace = true }
 
 astral-tokio-tar = { workspace = true }
 async-compression = { workspace = true, features = ["gzip", "zstd"] }
-async_zip = { workspace = true, features = ["zstd"] }
+async_zip = { workspace = true, features = ["zstd-read"] }
 blake2 = { workspace = true }
 blake3 = { workspace = true, features = ["mmap", "rayon"] }
 flate2 = { workspace = true }
@@ -31,7 +32,7 @@ fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
 md-5 = { workspace = true }
 rayon = { workspace = true }
-regex = { workspace = true }
+regex = { workspace = true, features = ["perf", "unicode"] }
 reqwest = { workspace = true }
 rustc-hash = { workspace = true }
 sha2 = { workspace = true }

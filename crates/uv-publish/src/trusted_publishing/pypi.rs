@@ -2,9 +2,8 @@
 
 use reqwest_middleware::ClientWithMiddleware;
 use tracing::{debug, trace};
-use url::Url;
 use uv_client::BaseClient;
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 
 use crate::trusted_publishing::{
     Audience, BurnTokenRequest, MintTokenRequest, PublishToken, TrustedPublishingError,
@@ -13,11 +12,11 @@ use crate::trusted_publishing::{
 
 pub(crate) struct PyPIPublishingService<'a> {
     client: &'a ClientWithMiddleware,
-    registry: &'a DisplaySafeUrl,
+    registry: &'a SafeUrl,
 }
 
 impl<'a> PyPIPublishingService<'a> {
-    pub(crate) fn new(registry: &'a DisplaySafeUrl, client: &'a BaseClient) -> Self {
+    pub(crate) fn new(registry: &'a SafeUrl, client: &'a BaseClient) -> Self {
         Self {
             client: client.for_host(registry).raw_client(),
             registry,
@@ -40,7 +39,7 @@ impl TrustedPublishingService for PyPIPublishingService<'_> {
         } else {
             "https"
         };
-        let burn_token_url = DisplaySafeUrl::parse(&format!(
+        let burn_token_url = SafeUrl::parse(&format!(
             "{}://{}/_/oidc/burn-token",
             scheme,
             self.registry.authority()
@@ -49,7 +48,7 @@ impl TrustedPublishingService for PyPIPublishingService<'_> {
             "Requesting revocation of the trusted publishing upload token at `{burn_token_url}`"
         );
         self.client
-            .post(Url::from(burn_token_url.clone()))
+            .post(burn_token_url.clone().into_unsafe_url())
             .json(&BurnTokenRequest { token })
             .send()
             .await
@@ -70,7 +69,7 @@ impl TrustedPublishingService for PyPIPublishingService<'_> {
         } else {
             "https"
         };
-        let audience_url = DisplaySafeUrl::parse(&format!(
+        let audience_url = SafeUrl::parse(&format!(
             "{}://{}/_/oidc/audience",
             scheme,
             self.registry.authority()
@@ -78,7 +77,7 @@ impl TrustedPublishingService for PyPIPublishingService<'_> {
         debug!("Querying the trusted publishing audience from `{audience_url}`");
         let response = self
             .client
-            .get(Url::from(audience_url.clone()))
+            .get(audience_url.clone().into_unsafe_url())
             .send()
             .await
             .map_err(|err| TrustedPublishingError::ReqwestMiddleware(audience_url.clone(), err))?;
@@ -102,7 +101,7 @@ impl TrustedPublishingService for PyPIPublishingService<'_> {
         } else {
             "https"
         };
-        let mint_token_url = DisplaySafeUrl::parse(&format!(
+        let mint_token_url = SafeUrl::parse(&format!(
             "{}://{}/_/oidc/mint-token",
             scheme,
             self.registry.authority()
@@ -113,7 +112,7 @@ impl TrustedPublishingService for PyPIPublishingService<'_> {
         };
         let response = self
             .client
-            .post(Url::from(mint_token_url.clone()))
+            .post(mint_token_url.clone().into_unsafe_url())
             .json(&mint_token_payload)
             .send()
             .await

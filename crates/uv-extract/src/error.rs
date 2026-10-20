@@ -1,8 +1,10 @@
 use std::{ffi::OsString, path::PathBuf};
 
+use uv_macros::DebugNoInline;
+
 use crate::validate_archive_member_name;
 
-#[derive(Debug, thiserror::Error)]
+#[derive(DebugNoInline, thiserror::Error)]
 pub enum Error {
     #[error("I/O operation failed during extraction")]
     Io(#[source] std::io::Error),
@@ -97,9 +99,7 @@ pub enum Error {
     MissingDataDescriptor { path: PathBuf },
     #[error("File contains an unexpected data descriptor: {}", path.display())]
     UnexpectedDataDescriptor { path: PathBuf },
-    #[error(
-        "ZIP file end-of-central-directory record contains a comment that appears to be an embedded ZIP file"
-    )]
+    #[error("ZIP file contains a comment that appears to be an embedded ZIP file")]
     ZipInZip,
     #[error("ZIP64 end-of-central-directory record contains unsupported extensible data")]
     ExtensibleData,
@@ -119,6 +119,8 @@ impl From<async_zip::error::ZipError> for Error {
     fn from(err: async_zip::error::ZipError) -> Self {
         match err {
             async_zip::error::ZipError::CompressionNotSupported(_) => Self::UnsupportedCompression,
+            async_zip::error::ZipError::TrailingContents => Self::TrailingContents,
+            async_zip::error::ZipError::ZipInZip => Self::ZipInZip,
             async_zip::error::ZipError::FileNameContainsNul { filename } => {
                 let filename = String::from_utf8_lossy(&filename);
                 validate_archive_member_name(&filename)

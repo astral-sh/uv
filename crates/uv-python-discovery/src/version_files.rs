@@ -291,7 +291,7 @@ impl PythonVersionFile {
         if let Some(parent) = self.path.parent() {
             fs_err::tokio::create_dir_all(parent).await?;
         }
-        fs::tokio::write(
+        uv_fs::write_atomic_preserve(
             &self.path,
             self.versions
                 .iter()

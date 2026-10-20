@@ -105,7 +105,7 @@ pub(crate) fn setup_logging(
             .with(durations_layer)
             .with(
                 tracing_subscriber::fmt::layer()
-                    .event_format(UvFormat::default())
+                    .event_format(UvFormat)
                     .fmt_fields(uv_fields())
                     .with_writer(writer)
                     .with_ansi(ansi)

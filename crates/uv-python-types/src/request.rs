@@ -991,6 +991,25 @@ impl fmt::Display for ExecutableName {
 }
 
 impl VersionRequest {
+    /// Create a [`VersionRequest`] from a concrete Python version.
+    pub fn from_components(
+        major: u8,
+        minor: u8,
+        patch: u8,
+        prerelease: Option<Prerelease>,
+        variant: PythonVariant,
+    ) -> Self {
+        match prerelease {
+            Some(prerelease) if patch == 0 => {
+                Self::MajorMinorPrerelease(major, minor, prerelease, variant)
+            }
+            Some(prerelease) => {
+                Self::MajorMinorPatchPrerelease(major, minor, patch, prerelease, variant)
+            }
+            None => Self::MajorMinorPatch(major, minor, patch, variant),
+        }
+    }
+
     /// Create a [`VersionRequest`] from [`VersionSpecifiers`].
     ///
     /// If the specifiers consist of a single `==` constraint, the version is parsed as a
@@ -1632,19 +1651,9 @@ impl FromStr for VersionRequest {
                 Ok(Self::MajorMinor(*major, *minor, variant))
             }
             // e.g. `3.12.1`, `3.13.0rc1`, or `3.14.5rc1`
-            [major, minor, patch] => {
-                if let Some(prerelease) = prerelease {
-                    if *patch == 0 {
-                        return Ok(Self::MajorMinorPrerelease(
-                            *major, *minor, prerelease, variant,
-                        ));
-                    }
-                    return Ok(Self::MajorMinorPatchPrerelease(
-                        *major, *minor, *patch, prerelease, variant,
-                    ));
-                }
-                Ok(Self::MajorMinorPatch(*major, *minor, *patch, variant))
-            }
+            [major, minor, patch] => Ok(Self::from_components(
+                *major, *minor, *patch, prerelease, variant,
+            )),
             _ => Err(PythonRequestError::InvalidVersionRequest(s.to_string())),
         }
     }
@@ -1692,10 +1701,11 @@ fn parse_version_specifiers_request(
     Ok(VersionRequest::from_specifiers(specifiers, variant))
 }
 
-impl From<&PythonVersion> for VersionRequest {
-    fn from(version: &PythonVersion) -> Self {
+impl TryFrom<&PythonVersion> for VersionRequest {
+    type Error = PythonRequestError;
+
+    fn try_from(version: &PythonVersion) -> Result<Self, Self::Error> {
         Self::from_str(&version.string)
-            .expect("Valid `PythonVersion`s should be valid `VersionRequest`s")
     }
 }
 

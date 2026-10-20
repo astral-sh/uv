@@ -63,6 +63,7 @@ fn render(feature: PreviewFeature, description: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    use indoc::indoc;
     use insta::assert_snapshot;
     use uv_preview::PreviewFeature;
 
@@ -73,7 +74,19 @@ mod tests {
         assert_snapshot!(
             render(
                 PreviewFeature::Pylock,
-                "A first paragraph,\ncontinued on the next line.\n\nA second paragraph:\n\n- A nested list item.\n- Another nested list item.\n\n```toml\nkey = \"value\"\n```",
+                indoc! {r#"
+                    A first paragraph,
+                    continued on the next line.
+
+                    A second paragraph:
+
+                    - A nested list item.
+                    - Another nested list item.
+
+                    ```toml
+                    key = "value"
+                    ```"#
+                },
             ),
             @r##"
             ### `pylock` {#pylock}
@@ -404,6 +417,11 @@ mod tests {
         The `uv venv --clear` option refuses to clear a directory that does not contain a
         `pyvenv.cfg` file. This helps avoid removing unrelated files when the target is not a
         virtual environment; use `--force` to explicitly allow clearing such a directory.
+
+        ### `wheel-variants` {#wheel-variants}
+
+        Enables experimental support for [wheel variants](https://peps.python.org/pep-0825/).
+        Variant wheels are not yet selectable.
 
         ### `workspace-dir` {#workspace-dir}
 

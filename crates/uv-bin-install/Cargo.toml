@@ -1,6 +1,6 @@
 [package]
 name = "uv-bin-install"
-version = "0.0.92"
+version = "0.0.95"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -37,7 +37,6 @@ tempfile = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
-url = { workspace = true }
 
 [dev-dependencies]
 wiremock = { workspace = true }

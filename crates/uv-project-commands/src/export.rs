@@ -722,7 +722,8 @@ async fn render_export<'output>(
                 all_packages,
             )?;
 
-            export.output_as_json_v1_5(&mut writer)?;
+            serde_json::to_writer_pretty(&mut writer, &export)
+                .context("Failed to serialize JSON")?;
         }
     }
 

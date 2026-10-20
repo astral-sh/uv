@@ -5,9 +5,10 @@ mod metadata_resolver;
 mod pyproject_toml;
 mod requires_dist;
 
+use std::borrow::Cow;
 use std::str::Utf8Error;
 
-use mailparse::{MailHeaderMap, MailParseError};
+use astral_mail_headers::{DecodeError, Message};
 use thiserror::Error;
 
 use uv_normalize::InvalidNameError;
@@ -29,7 +30,7 @@ pub use requires_dist::RequiresDist;
 #[derive(Error, Debug)]
 pub enum MetadataError {
     #[error(transparent)]
-    MailParse(#[from] MailParseError),
+    Decode(#[from] DecodeError),
     #[error("Invalid `pyproject.toml`")]
     InvalidPyprojectTomlSyntax(#[source] toml_edit::TomlError),
     #[error(transparent)]
@@ -75,38 +76,34 @@ impl From<Pep508Error<VerbatimParsedUrl>> for MetadataError {
 /// The headers of a distribution metadata file.
 #[derive(Debug)]
 struct Headers<'a> {
-    headers: Vec<mailparse::MailHeader<'a>>,
-    body_start: usize,
+    message: Message<'a>,
 }
 
 impl<'a> Headers<'a> {
     /// Parse the headers from the given metadata file content.
-    fn parse(content: &'a [u8]) -> Result<Self, MailParseError> {
-        let (headers, body_start) = mailparse::parse_headers(content)?;
-        Ok(Self {
-            headers,
-            body_start,
-        })
+    fn parse(content: &'a [u8]) -> Self {
+        Self {
+            message: Message::parse(content),
+        }
     }
 
     /// Return the first value associated with the header with the given name.
-    fn get_first_value(&self, name: &str) -> Option<String> {
-        self.headers.get_first_header(name).and_then(|header| {
-            let value = header.get_value();
-            if value == "UNKNOWN" {
-                None
-            } else {
-                Some(value)
-            }
-        })
+    fn get_first_value(&self, name: &str) -> Result<Option<String>, DecodeError> {
+        self.message
+            .first(name)
+            .map(|header| header.decoded_value().map(Cow::into_owned))
+            .transpose()
+            .map(|value| value.filter(|value| value != "UNKNOWN"))
     }
 
     /// Return all values associated with the header with the given name.
-    fn get_all_values(&self, name: &str) -> impl Iterator<Item = String> {
-        self.headers
-            .get_all_values(name)
-            .into_iter()
-            .filter(|value| value != "UNKNOWN")
+    fn get_all_values(&self, name: &str) -> Result<impl Iterator<Item = String>, DecodeError> {
+        let values = self
+            .message
+            .all(name)
+            .map(|header| header.decoded_value().map(Cow::into_owned))
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(values.into_iter().filter(|value| value != "UNKNOWN"))
     }
 }
 

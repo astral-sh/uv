@@ -90,11 +90,14 @@
         "pull_request": ["labeled"]
       },
       "conditions": {
-        "/label/name": "bot:promote",
+        "/label/name": { "one_of": ["bot:promote", "bot:automerge"] },
         "/sender/type": "User"
       },
       "allow_draft": true,
-      "workflow": "promote-pull-request.yml"
+      "workflow": "promote-pull-request.yml",
+      "inputs": {
+        "promotion_label": "/label/name"
+      }
     },
     {
       "repository": "uv-security",

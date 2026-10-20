@@ -4,11 +4,11 @@ use std::str::FromStr;
 use http::{HeaderValue, StatusCode};
 use serde::{Deserialize, Serialize, Serializer};
 use thiserror::Error;
-use url::Url;
 
 use uv_auth::{AuthPolicy, Credentials, CredentialsFromUrlError};
 use uv_pypi_types::HashAlgorithm;
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
+use uv_redacted::policy::Stripped;
 use uv_small_str::SmallString;
 
 use crate::exclude_newer::ExcludeNewerOverride;
@@ -30,12 +30,12 @@ pub struct IndexCacheControl {
 
 impl IndexCacheControl {
     /// Return the default Simple API cache control headers for the given index URL, if applicable.
-    fn simple_api_cache_control(_url: &Url) -> Option<HeaderValue> {
+    fn simple_api_cache_control(_url: &SafeUrl) -> Option<HeaderValue> {
         None
     }
 
     /// Return the default files cache control headers for the given index URL, if applicable.
-    fn artifact_cache_control(url: &Url) -> Option<HeaderValue> {
+    fn artifact_cache_control(url: &SafeUrl) -> Option<HeaderValue> {
         let dominated_by_pytorch_or_nvidia = url.host_str().is_some_and(|host| {
             host.eq_ignore_ascii_case("download.pytorch.org")
                 || host.eq_ignore_ascii_case("pypi.nvidia.com")
@@ -196,7 +196,7 @@ pub struct Index {
     /// url = "https://pypi.org/simple"
     /// publish-url = "https://upload.pypi.org/legacy/"
     /// ```
-    pub publish_url: Option<DisplaySafeUrl>,
+    pub publish_url: Option<SafeUrl<Stripped>>,
     /// When uv should use authentication for requests to the index.
     ///
     /// ```toml
@@ -274,7 +274,7 @@ pub struct Index {
 #[derive(Debug, Error)]
 #[error("Failed to parse credentials in index URL: {url}")]
 pub struct IndexCredentialsError {
-    url: DisplaySafeUrl,
+    url: SafeUrl,
     #[source]
     source: CredentialsFromUrlError,
 }
@@ -493,16 +493,16 @@ impl Index {
         &self.url
     }
 
-    /// Return the raw [`Url`] of the index.
-    pub fn raw_url(&self) -> &DisplaySafeUrl {
+    /// Return the underlying [`SafeUrl`] of the index.
+    pub fn raw_url(&self) -> &SafeUrl {
         self.url.url()
     }
 
-    /// Return the root [`Url`] of the index, if applicable.
+    /// Return the root [`SafeUrl`] of the index, if applicable.
     ///
     /// For indexes with a `/simple` endpoint, this is simply the URL with the final segment
     /// removed. This is useful, e.g., for credential propagation to other endpoints on the index.
-    pub fn root_url(&self) -> Option<DisplaySafeUrl> {
+    pub fn root_url(&self) -> Option<SafeUrl> {
         self.url.root()
     }
 
@@ -746,7 +746,7 @@ struct IndexWire {
     default: bool,
     #[serde(default)]
     format: IndexFormat,
-    publish_url: Option<DisplaySafeUrl>,
+    publish_url: Option<SafeUrl>,
     #[serde(default)]
     authenticate: AuthPolicy,
     #[serde(default)]
@@ -780,7 +780,7 @@ impl<'de> Deserialize<'de> for Index {
             default: wire.default,
             origin: None,
             format: wire.format,
-            publish_url: wire.publish_url,
+            publish_url: wire.publish_url.map(|url| url.with_policy(Stripped)),
             authenticate: wire.authenticate,
             ignore_error_codes: wire.ignore_error_codes,
             cache_control: wire.cache_control,

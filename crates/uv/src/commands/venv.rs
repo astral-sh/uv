@@ -278,7 +278,6 @@ pub(crate) async fn venv(
         upgrade_policy,
     )
     .map_err(VenvError::Creation)?;
-    venv.cache_virtualenv(system_site_packages, cache)?;
 
     // Install seed packages.
     if let Seed::Enabled = seed {
@@ -390,9 +389,10 @@ pub(crate) async fn venv(
     // Determine the appropriate activation command.
     let activation = match Shell::from_env() {
         None => None,
-        Some(Shell::Bash | Shell::Zsh | Shell::Ksh) => {
+        Some(Shell::Bash | Shell::Zsh) => {
             Some(format!("source {}", shlex_posix(scripts.join("activate"))))
         }
+        Some(Shell::Ksh) => Some(format!(". {}", shlex_posix(scripts.join("activate")))),
         Some(Shell::Fish) => Some(format!(
             "source {}",
             shlex_posix(scripts.join("activate.fish"))

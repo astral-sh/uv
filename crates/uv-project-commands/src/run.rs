@@ -1,11 +1,13 @@
 use std::borrow::Cow;
 use std::env::VarError;
+#[cfg(unix)]
+use std::ffi::OsStr;
 use std::ffi::OsString;
 use std::fmt::Write;
 use std::io;
 use std::io::Read;
 #[cfg(unix)]
-use std::os::unix::ffi::OsStringExt;
+use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, anyhow, bail};
@@ -15,7 +17,6 @@ use owo_colors::OwoColorize;
 use thiserror::Error;
 use tokio::process::Command;
 use tracing::{debug, trace, warn};
-use url::Url;
 
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
@@ -56,7 +57,7 @@ use uv_python_interpreter::{Interpreter, PyVenvConfiguration, PythonEnvironment}
 use uv_python_types::{
     EnvironmentPreference, PythonArchitecture, PythonDownloads, PythonPreference, PythonRequest,
 };
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 use uv_requirements::{
     RequirementsSource, RequirementsSpecification, script_extra_build_requires,
     script_specification,
@@ -1443,7 +1444,7 @@ pub enum ParsedRunCommand {
 #[derive(Debug)]
 pub struct PendingRemoteRunCommand {
     /// The remote URL to download.
-    url: DisplaySafeUrl,
+    url: SafeUrl,
     /// The arguments to forward after the downloaded script path.
     args: Vec<OsString>,
 }
@@ -1453,7 +1454,7 @@ impl PendingRemoteRunCommand {
     async fn download(
         self,
         client_builder: &BaseClientBuilder<'_>,
-    ) -> anyhow::Result<(DisplaySafeUrl, tempfile::NamedTempFile, Vec<OsString>)> {
+    ) -> anyhow::Result<(SafeUrl, tempfile::NamedTempFile, Vec<OsString>)> {
         let url = self.url.clone();
         let downloaded_script =
             ParsedRunCommand::download_remote_script(&self.url, client_builder).await?;
@@ -1533,7 +1534,7 @@ impl ParsedRunCommand {
             // We don't do this check on Windows since the file path would
             // be invalid anyway, and thus couldn't refer to a local file.
             if !cfg!(unix) || matches!(target_path.try_exists(), Ok(false)) {
-                let url = DisplaySafeUrl::parse(&target.to_string_lossy())?;
+                let url = SafeUrl::parse(&target.to_string_lossy())?;
                 return Ok(Self::PendingRemote(PendingRemoteRunCommand {
                     url,
                     args: args.to_vec(),
@@ -1603,28 +1604,19 @@ impl ParsedRunCommand {
 
     /// Download a remote script target into a temporary file ready for execution.
     async fn download_remote_script(
-        mut url: &DisplaySafeUrl,
+        mut url: &SafeUrl,
         client_builder: &BaseClientBuilder<'_>,
     ) -> anyhow::Result<tempfile::NamedTempFile> {
         let client = client_builder.build()?;
-        let mut response = client
-            .for_host(url)
-            .get(Url::from(url.clone()))
-            .send()
-            .await?;
+        let mut response = client.for_host(url).get(url.clone()).send().await?;
 
         let gist_url;
         // If it's a Gist URL, use the GitHub API to get the raw URL.
         if response.url().host_str() == Some("gist.github.com") {
-            gist_url =
-                resolve_gist_url(DisplaySafeUrl::ref_cast(response.url()), client_builder).await?;
+            gist_url = resolve_gist_url(SafeUrl::ref_cast(response.url()), client_builder).await?;
             url = &gist_url;
 
-            response = client
-                .for_host(url)
-                .get(Url::from(url.clone()))
-                .send()
-                .await?;
+            response = client.for_host(url).get(url.clone()).send().await?;
         }
 
         let file_stem = url
@@ -1776,7 +1768,7 @@ impl RunCommand {
 
                 cfg_select! {
                     unix => {
-                        process.arg(OsString::from_vec(script.clone()));
+                        process.arg(OsStr::from_bytes(script));
                     },
                     _ => {
                         let script =
@@ -1807,7 +1799,7 @@ impl RunCommand {
 
                 cfg_select! {
                     unix => {
-                        process.arg(OsString::from_vec(script.clone()));
+                        process.arg(OsStr::from_bytes(script));
                     },
                     _ => {
                         let script =
@@ -1916,9 +1908,9 @@ impl std::fmt::Display for RunCommand {
 
 /// Resolve a GitHub Gist URL to its raw file URL using the GitHub API.
 async fn resolve_gist_url(
-    url: &DisplaySafeUrl,
+    url: &SafeUrl,
     client_builder: &BaseClientBuilder<'_>,
-) -> anyhow::Result<DisplaySafeUrl> {
+) -> anyhow::Result<SafeUrl> {
     // Extract the Gist ID from the URL.
     let gist_id = url
         .path_segments()
@@ -1931,10 +1923,8 @@ async fn resolve_gist_url(
     let client = client_builder.build()?;
 
     // Build the request with appropriate headers.
-    let api_url_parsed = DisplaySafeUrl::parse(&api_url)?;
-    let mut request = client
-        .for_host(&api_url_parsed)
-        .get(Url::from(api_url_parsed));
+    let api_url_parsed = SafeUrl::parse(&api_url)?;
+    let mut request = client.for_host(&api_url_parsed).get(api_url_parsed);
     request = request.header("Accept", "application/vnd.github.v3+json");
 
     // Add GitHub token, if available.
@@ -1964,7 +1954,7 @@ async fn resolve_gist_url(
         .or_else(|| gist_data.files.values().next().map(|file| &file.raw_url))
         .ok_or_else(|| anyhow!("No files found in the Gist"))?;
 
-    let url = DisplaySafeUrl::parse(raw_url)?;
+    let url = SafeUrl::parse(raw_url)?;
 
     Ok(url)
 }

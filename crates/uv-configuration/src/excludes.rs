@@ -1,7 +1,9 @@
+use std::fmt;
 use std::str::FromStr;
 
 use rustc_hash::{FxHashMap, FxHashSet};
-use serde::de::Error;
+use serde::de::{Error, MapAccess, Visitor, value::MapAccessDeserializer};
+use serde::{Deserialize, Deserializer};
 
 use uv_distribution_types::ResolutionRecorder;
 use uv_normalize::PackageName;
@@ -50,19 +52,39 @@ pub enum ExcludeDependency {
     Dependency(PackageName),
 }
 
-impl<'de> serde::Deserialize<'de> for ExcludeDependency {
+struct ExcludeDependencyVisitor;
+
+impl<'de> Visitor<'de> for ExcludeDependencyVisitor {
+    type Value = ExcludeDependency;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("a string or map")
+    }
+
+    fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+    where
+        E: Error,
+    {
+        PackageName::from_str(value)
+            .map(ExcludeDependency::Dependency)
+            .map_err(E::custom)
+    }
+
+    fn visit_map<M>(self, map: M) -> Result<Self::Value, M::Error>
+    where
+        M: MapAccess<'de>,
+    {
+        PackageExclusion::deserialize(MapAccessDeserializer::new(map))
+            .map(ExcludeDependency::Package)
+    }
+}
+
+impl<'de> Deserialize<'de> for ExcludeDependency {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: serde::Deserializer<'de>,
+        D: Deserializer<'de>,
     {
-        serde_untagged::UntaggedEnumVisitor::new()
-            .string(|string| {
-                PackageName::from_str(string)
-                    .map(Self::Dependency)
-                    .map_err(Error::custom)
-            })
-            .map(|map| map.deserialize().map(Self::Package))
-            .deserialize(deserializer)
+        deserializer.deserialize_any(ExcludeDependencyVisitor)
     }
 }
 

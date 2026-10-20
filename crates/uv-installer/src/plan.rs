@@ -23,7 +23,7 @@ use uv_pep508::VerbatimUrl;
 use uv_platform_tags::{AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagCompatibility, Tags};
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_python_interpreter::PythonEnvironment;
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 use uv_types::HashStrategy;
 
 use crate::satisfies::{BuildSettings, RequirementSatisfaction};
@@ -73,7 +73,7 @@ pub struct IncompatibleWheelError {
 
 #[derive(Debug)]
 enum IncompatibleWheelKind {
-    Url(DisplaySafeUrl),
+    Url(SafeUrl),
     Path(PathBuf),
 }
 
@@ -341,6 +341,15 @@ impl<'a> Planner<'a> {
         //    So, e.g., if a package is marked as `--reinstall`, we _expect_ that it's not passed in
         //    as [`ResolvedDist::Installed`] here.
         for dist in self.resolution.distributions() {
+            // TODO(konsti): Support installing wheel variants.
+            if let Some(filename) = dist.wheel_filename()
+                && filename.variant().is_some()
+            {
+                return Err(uv_distribution::Error::UnsupportedWheelVariant(Box::new(
+                    filename.clone(),
+                ))
+                .into());
+            }
             // Check if the package should be reinstalled.
             let reinstall = reinstall.contains_package(dist.name())
                 || dist
@@ -622,7 +631,7 @@ impl<'a> Planner<'a> {
                     }
                 }
                 Dist::Source(SourceDist::Registry(sdist)) => {
-                    if let Some(distribution) = registry_index.source(sdist, no_build, no_binary) {
+                    if let Some(distribution) = registry_index.source(sdist, no_build) {
                         debug!("Registry requirement already cached: {distribution}");
                         cached.push(CachedDist::Registry(distribution.clone()));
                         continue;

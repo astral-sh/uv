@@ -17,7 +17,6 @@ use petgraph::graph::NodeIndex;
 use petgraph::visit::EdgeRef;
 use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::{debug, instrument, trace};
-use url::Url;
 
 use uv_cache_key::RepositoryUrl;
 use uv_configuration::{
@@ -47,6 +46,7 @@ use uv_distribution_types::{
 use uv_fs::{PortablePath, PortablePathBuf, Simplified, normalize_path, try_relative_to_if};
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
 use uv_git_types::{GitLfs, GitOid, GitReference, GitUrl, GitUrlParseError};
+use uv_macros::DebugNoInline;
 use uv_normalize::{DEV_DEPENDENCIES, DefaultGroups, ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::{
@@ -60,9 +60,9 @@ use uv_pypi_types::{
     ConflictItem, ConflictKindRef, ConflictSet, Conflicts, HashAlgorithm, HashDigest, HashDigests,
     ParsedArchiveUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl, PyProjectToml,
 };
-use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
+use uv_redacted::{SafeUrl, SafeUrlError};
 use uv_resolver_types::{
-    AnnotatedDist, ConflictMarker, DistributionMetadataIndex, MetadataResponse,
+    AnnotatedDist, ConflictMarker, DistributionMetadataIndex, MetadataResponse, PackageRole,
     ResolutionGraphNode, ResolverOutput, UniversalMarker,
 };
 use uv_small_str::SmallString;
@@ -2533,9 +2533,9 @@ impl Lock {
             // Git declarations can introduce direct sources needed by offline freshness checks.
             if metadata_free
                 && matches!(package.id.source, Source::Git(..))
-                && let Some(metadata) = dist.metadata.as_ref()
+                && let Some(metadata) = dist.metadata()
             {
-                package.metadata = PackageMetadata::from_distribution(metadata, root)?;
+                package.metadata = PackageMetadata::from_distribution(metadata, root, dist.role)?;
             }
             let mut wheel_marker = dist.marker;
             if let Some(supported_environments_marker) = supported_environments_marker {
@@ -4710,9 +4710,7 @@ impl Lock {
             // Validating a direct URL package requires retrieving metadata from the remote
             // artifact. In offline mode, preserve the metadata captured in the lockfile rather
             // than requiring that artifact to already be present in the cache.
-            if matches!(&package.id.source, Source::Direct(..))
-                && database.client().unmanaged.connectivity().is_offline()
-            {
+            if matches!(&package.id.source, Source::Direct(..)) && database.client().is_offline() {
                 trace!(
                     "Skipping metadata validation for `{}` because its direct URL cannot be refreshed while offline",
                     package.id
@@ -6654,13 +6652,8 @@ impl Package {
         let metadata = if id.source.is_immutable() {
             PackageMetadata::default()
         } else {
-            PackageMetadata::from_distribution(
-                annotated_dist
-                    .metadata
-                    .as_ref()
-                    .expect("metadata is present"),
-                root,
-            )?
+            let metadata = annotated_dist.metadata().expect("metadata is present");
+            PackageMetadata::from_distribution(metadata, root, annotated_dist.role)?
         };
         Ok(Self {
             id,
@@ -6762,7 +6755,7 @@ impl Package {
                     Source::Direct(url, direct) => {
                         let filename: WheelFilename =
                             self.wheels[best_wheel_index].filename.clone();
-                        let url = DisplaySafeUrl::from(ParsedArchiveUrl {
+                        let url = SafeUrl::from(ParsedArchiveUrl {
                             url: url.to_url().map_err(LockErrorKind::InvalidUrl)?,
                             subdirectory: direct.subdirectory.clone(),
                             ext: DistExtension::Wheel,
@@ -6800,7 +6793,7 @@ impl Package {
                         )?;
 
                         // Reconstruct the PEP 508-compatible URL from the `GitSource`.
-                        let url = DisplaySafeUrl::from(ParsedGitPathUrl {
+                        let url = SafeUrl::from(ParsedGitPathUrl {
                             url: git_url.clone(),
                             install_path: install_path.clone(),
                             ext: DistExtension::Wheel,
@@ -7018,7 +7011,7 @@ impl Package {
                     };
 
                     // Reconstruct the PEP 508-compatible URL from the `GitSource`.
-                    let url = DisplaySafeUrl::from(ParsedGitPathUrl {
+                    let url = SafeUrl::from(ParsedGitPathUrl {
                         url: git_url.clone(),
                         install_path: install_path.clone(),
                         ext: DistExtension::Source(ext),
@@ -7034,7 +7027,7 @@ impl Package {
                     uv_distribution_types::SourceDist::GitPath(git_dist)
                 } else {
                     // Reconstruct the PEP 508-compatible URL from the `GitSource`.
-                    let url = DisplaySafeUrl::from(ParsedGitDirectoryUrl {
+                    let url = SafeUrl::from(ParsedGitDirectoryUrl {
                         url: git_url.clone(),
                         subdirectory: git.subdirectory.clone(),
                     });
@@ -7067,7 +7060,7 @@ impl Package {
                     .into());
                 }
                 let location = url.to_url().map_err(LockErrorKind::InvalidUrl)?;
-                let url = DisplaySafeUrl::from(ParsedArchiveUrl {
+                let url = SafeUrl::from(ParsedArchiveUrl {
                     url: location.clone(),
                     subdirectory: direct.subdirectory.clone(),
                     ext: DistExtension::Source(ext),
@@ -7157,12 +7150,11 @@ impl Package {
                         path: file_path, ..
                     } => {
                         let file_path = workspace_root.join(path).join(file_path);
-                        let file_url =
-                            DisplaySafeUrl::from_file_path(&file_path).map_err(|()| {
-                                LockErrorKind::PathToUrl {
-                                    path: file_path.into_boxed_path(),
-                                }
-                            })?;
+                        let file_url = SafeUrl::from_file_path(&file_path).map_err(|()| {
+                            LockErrorKind::PathToUrl {
+                                path: file_path.into_boxed_path(),
+                            }
+                        })?;
                         FileLocation::AbsoluteUrl(UrlString::from(file_url))
                     }
                     SourceDist::Metadata { .. } => {
@@ -7449,13 +7441,30 @@ struct PackageMetadata {
 }
 
 impl PackageMetadata {
-    fn from_distribution(metadata: &DistributionMetadata, root: &Path) -> Result<Self, LockError> {
+    fn from_distribution(
+        metadata: &DistributionMetadata,
+        root: &Path,
+        package_role: PackageRole,
+    ) -> Result<Self, LockError> {
         let normalize = uv_preview::is_enabled(PreviewFeature::LockfileNormalization);
+        // We normally write dependency paths relative to the lockfile. For the current project and
+        // workspace members, preserve the user's choice of relative or absolute paths instead.
+        // Metadata from `tool.uv.dependency-metadata` already preserves that choice.
+        // Apply the path policy to the cloned requirements so shared metadata remains unchanged.
+        let relative_requirement = |requirement: &Requirement| {
+            let mut requirement = requirement.clone();
+            match package_role {
+                PackageRole::Project | PackageRole::WorkspaceMember => {
+                    requirement.set_force_relative(false);
+                }
+                PackageRole::Dependency => {}
+            }
+            requirement.relative_to(root)
+        };
         let requires_dist = metadata
             .requires_dist
             .iter()
-            .cloned()
-            .map(|requirement| requirement.relative_to(root))
+            .map(&relative_requirement)
             .collect::<Result<Vec<_>, _>>()
             .map(|requirements| {
                 normalize_collection::<_, NormalizedRequirements>(requirements, normalize)
@@ -7467,8 +7476,7 @@ impl PackageMetadata {
             .map(|(group, requirements)| {
                 let requirements = requirements
                     .iter()
-                    .cloned()
-                    .map(|requirement| requirement.relative_to(root))
+                    .map(&relative_requirement)
                     .collect::<Result<Vec<_>, _>>()
                     .map(|requirements| {
                         normalize_collection::<_, NormalizedRequirements>(requirements, normalize)
@@ -7591,8 +7599,7 @@ impl PackageId {
         // Omit versions for dynamic source trees.
         let version = if source.is_source_tree()
             && annotated_dist
-                .metadata
-                .as_ref()
+                .metadata()
                 .is_some_and(|metadata| metadata.dynamic)
         {
             None
@@ -7832,9 +7839,9 @@ impl Source {
                 Ok(Self::Registry(source))
             }
             IndexUrl::Path(url) => {
-                let path = url
-                    .to_file_path()
-                    .map_err(|()| LockErrorKind::UrlToPath { url: url.to_url() })?;
+                let path = url.to_file_path().map_err(|()| LockErrorKind::UrlToPath {
+                    url: url.to_url().into_url(),
+                })?;
                 let path = try_relative_to_if(&path, root, url.prefers_relative())
                     .map_err(LockErrorKind::IndexRelativePath)?;
                 let source = RegistrySource::Path(path.into_boxed_path());
@@ -7924,7 +7931,7 @@ impl Source {
                 let expected = expected
                     .to_file_path()
                     .map_err(|()| LockErrorKind::UrlToPath {
-                        url: expected.to_url(),
+                        url: expected.to_url().into_url(),
                     })?;
                 normalize_path(root.join(actual)).as_ref() == normalize_path(expected).as_ref()
             }
@@ -7946,7 +7953,7 @@ impl Source {
                 actual.remove_credentials();
                 let mut expected = location.clone();
                 expected.remove_credentials();
-                normalize_url(actual) == normalize_url(expected)
+                normalize_url(actual) == normalize_url(expected.into_url())
                     && source.subdirectory == *subdirectory
             }
             (Self::Path(path), RequirementSource::Path { install_path, .. }) => {
@@ -8162,7 +8169,7 @@ impl TryFrom<SourceWire> for Source {
         match wire {
             Registry { registry } => Ok(Self::Registry(registry.into())),
             Git { git } => {
-                let url = DisplaySafeUrl::parse(&git)
+                let url = SafeUrl::parse(&git)
                     .map_err(|err| SourceParseError::InvalidUrl {
                         given: git.clone(),
                         err,
@@ -8324,7 +8331,7 @@ enum GitSourceError {
 impl GitSource {
     /// Extracts a Git source reference from the query pairs and the hash
     /// fragment in the given URL.
-    fn from_url(url: &Url) -> Result<Self, GitSourceError> {
+    fn from_url(url: &SafeUrl) -> Result<Self, GitSourceError> {
         let mut kind = GitSourceKind::DefaultBranch;
         let mut subdirectory = None;
         let mut lfs = GitLfs::Disabled;
@@ -8351,8 +8358,8 @@ impl GitSource {
         // A full commit requested as `rev` is already precise and must not resolve to another
         // commit through the lockfile fragment.
         if let GitSourceKind::Rev(revision) = &kind
-            && GitOid::from_str(revision).is_ok()
-            && !revision.eq_ignore_ascii_case(precise.as_str())
+            && let Some(commit) = GitReference::from_rev(revision.clone()).as_commit()
+            && commit != precise
         {
             return Err(GitSourceError::RevisionMismatch {
                 revision: revision.clone(),
@@ -8600,9 +8607,9 @@ impl SourceDist {
                 }))
             }
             IndexUrl::Path(path) => {
-                let index_path = path
-                    .to_file_path()
-                    .map_err(|()| LockErrorKind::UrlToPath { url: path.to_url() })?;
+                let index_path = path.to_file_path().map_err(|()| LockErrorKind::UrlToPath {
+                    url: path.to_url().into_url(),
+                })?;
                 let url = reg_dist
                     .file
                     .url
@@ -8714,6 +8721,7 @@ impl SourceDist {
 impl From<GitReference> for GitSourceKind {
     fn from(value: GitReference) -> Self {
         match value {
+            GitReference::Commit(commit) => Self::Rev(commit.to_string()),
             GitReference::Branch(branch) => Self::Branch(branch),
             GitReference::Tag(tag) => Self::Tag(tag),
             GitReference::BranchOrTag(rev) => Self::Rev(rev),
@@ -8735,12 +8743,8 @@ impl From<GitSourceKind> for GitReference {
     }
 }
 
-/// Construct the lockfile-compatible [`DisplaySafeUrl`] for a [`GitUrl`].
-fn locked_git_url(
-    git: &GitUrl,
-    subdirectory: Option<&Path>,
-    path: Option<&Path>,
-) -> DisplaySafeUrl {
+/// Construct the lockfile-compatible [`SafeUrl`] for a [`GitUrl`].
+fn locked_git_url(git: &GitUrl, subdirectory: Option<&Path>, path: Option<&Path>) -> SafeUrl {
     let mut url = git.url().clone();
 
     // Remove the credentials.
@@ -8776,6 +8780,9 @@ fn locked_git_url(
 
     // Put the requested reference in the query.
     match git.reference() {
+        GitReference::Commit(commit) => {
+            url.query_pairs_mut().append_pair("rev", commit.as_str());
+        }
         GitReference::Branch(branch) => {
             url.query_pairs_mut().append_pair("branch", branch.as_str());
         }
@@ -8920,9 +8927,9 @@ impl Wheel {
                 WheelWireSource::Url { url }
             }
             IndexUrl::Path(path) => {
-                let index_path = path
-                    .to_file_path()
-                    .map_err(|()| LockErrorKind::UrlToPath { url: path.to_url() })?;
+                let index_path = path.to_file_path().map_err(|()| LockErrorKind::UrlToPath {
+                    url: path.to_url().into_url(),
+                })?;
                 let wheel_url = wheel.file.url.to_url().map_err(LockErrorKind::InvalidUrl)?;
 
                 if wheel_url.scheme() == "file" {
@@ -9048,12 +9055,11 @@ impl Wheel {
                     }
                     WheelWireSource::Path { path: file_path } => {
                         let file_path = root.join(index_path).join(file_path);
-                        let file_url =
-                            DisplaySafeUrl::from_file_path(&file_path).map_err(|()| {
-                                LockErrorKind::PathToUrl {
-                                    path: file_path.into_boxed_path(),
-                                }
-                            })?;
+                        let file_url = SafeUrl::from_file_path(&file_path).map_err(|()| {
+                            LockErrorKind::PathToUrl {
+                                path: file_path.into_boxed_path(),
+                            }
+                        })?;
                         FileLocation::AbsoluteUrl(UrlString::from(file_url))
                     }
                     WheelWireSource::Filename { .. } => {
@@ -9405,8 +9411,8 @@ fn normalize_file_location(location: &FileLocation) -> Result<UrlString, ToUrlEr
     }
 }
 
-/// Convert a [`DisplaySafeUrl`] into a normalized [`UrlString`] by removing the fragment.
-fn normalize_url(mut url: DisplaySafeUrl) -> UrlString {
+/// Convert a [`SafeUrl`] into a normalized [`UrlString`] by removing the fragment.
+fn normalize_url(mut url: SafeUrl) -> UrlString {
     url.set_fragment(None);
     UrlString::from(url)
 }
@@ -9807,7 +9813,7 @@ impl std::fmt::Display for WheelTagHint {
 /// For example, if there are two or more duplicative distributions given
 /// to `Lock::new`, then an error is returned. It's likely that the fault
 /// is with the caller somewhere in such cases.
-#[derive(Debug, thiserror::Error)]
+#[derive(DebugNoInline, thiserror::Error)]
 enum LockErrorKind {
     /// An error that occurs when collecting dependency-group settings.
     #[error(transparent)]
@@ -10115,7 +10121,7 @@ enum LockErrorKind {
     PathToUrl { path: Box<Path> },
     /// An error that occurs when converting a URL to a path
     #[error("Failed to convert URL to path: {url}", url = url.cyan())]
-    UrlToPath { url: DisplaySafeUrl },
+    UrlToPath { url: SafeUrl },
     /// An error that occurs when multiple packages with the same
     /// name were found when identifying the root packages.
     #[error("Found multiple packages matching `{name}`", name = name.cyan())]
@@ -10209,7 +10215,7 @@ enum SourceParseError {
         given: String,
         /// The URL parse error.
         #[source]
-        err: DisplaySafeUrlError,
+        err: SafeUrlError,
     },
     /// An error that occurs when a Git URL is missing a precise commit SHA.
     #[error("Missing SHA in source `{given}`")]
@@ -10257,14 +10263,7 @@ fn marker_is_unreachable(requires_python: &RequiresPython, marker: MarkerTree) -
         return false;
     }
 
-    environment.to_dnf().into_iter().all(|conjunction| {
-        let marker = conjunction
-            .into_iter()
-            .fold(MarkerTree::TRUE, |marker, expression| {
-                marker.and(MarkerTree::expression(expression))
-            });
-        requires_python.simplify_markers(marker).is_false()
-    })
+    environment.is_unreachable()
 }
 
 /// Simplify an edge marker using the PEP 508 conditions that must already hold to reach its parent
@@ -10370,6 +10369,10 @@ fn is_wheel_unreachable_for_marker(
     marker: &UniversalMarker,
     tags: Option<&Tags>,
 ) -> bool {
+    // TODO(konsti): Include wheel variants in lockfiles when supported.
+    if filename.variant().is_some() {
+        return true;
+    }
     if let Some(tags) = tags
         && !filename.compatibility(tags).is_compatible()
     {
@@ -10587,6 +10590,41 @@ mod tests {
 
     use super::*;
 
+    /// The disjunctions retain an impossible platform combination across decision branches.
+    /// Removing the extra must still leave that combination unreachable.
+    #[test]
+    fn marker_reachability_checks_platform_exclusions() {
+        let requires_python =
+            RequiresPython::from_specifiers(">=3.8".parse().expect("valid bounds"));
+        let extra: MarkerTree = "extra == 'a'".parse().expect("valid marker");
+        let posix: MarkerTree = "os_name == 'posix'".parse().expect("valid marker");
+        let windows: MarkerTree = "sys_platform == 'win32'".parse().expect("valid marker");
+        let marker = posix.or(extra).and(windows.or(extra)).and(extra.negate());
+
+        assert!(marker_is_unreachable(&requires_python, marker));
+        assert!(!marker_is_unreachable(&requires_python, marker.or(windows)));
+    }
+
+    /// A reachable Python branch can mask incompatible platforms until the project's
+    /// Python bounds eliminate it.
+    #[test]
+    fn marker_reachability_checks_python_bounds() {
+        let python: MarkerTree = "python_full_version < '3.10'"
+            .parse()
+            .expect("valid marker");
+        let posix: MarkerTree = "os_name == 'posix'".parse().expect("valid marker");
+        let windows: MarkerTree = "sys_platform == 'win32'".parse().expect("valid marker");
+        let marker = posix.or(python).and(windows.or(python));
+
+        let requires_python =
+            RequiresPython::from_specifiers(">=3.8".parse().expect("valid bounds"));
+        assert!(!marker_is_unreachable(&requires_python, marker));
+
+        let requires_python =
+            RequiresPython::from_specifiers(">=3.10".parse().expect("valid bounds"));
+        assert!(marker_is_unreachable(&requires_python, marker));
+    }
+
     /// Assert a given display snapshot, stripping ANSI color codes.
     macro_rules! assert_stripped_snapshot {
         ($expr:expr, @$snapshot:literal) => {{
@@ -10615,7 +10653,7 @@ mod tests {
 
     #[test]
     fn git_source_rejects_mismatched_exact_revision() -> Result<(), Box<dyn Error>> {
-        let url = Url::parse(
+        let url = SafeUrl::parse(
             "https://example.com/repository?rev=0dacfd662c64cb4ceb16e6cf65a157a8b715b979#b270df1a2fb5d012294e9aaf05e7e0bab1e6a389",
         )?;
         assert_eq!(
@@ -10626,17 +10664,17 @@ mod tests {
             })
         );
 
-        let url = Url::parse(
+        let url = SafeUrl::parse(
             "https://example.com/repository?rev=0DACFD662C64CB4CEB16E6CF65A157A8B715B979#0dacfd662c64cb4ceb16e6cf65a157a8b715b979",
         )?;
         assert!(GitSource::from_url(&url).is_ok());
 
-        let url = Url::parse(
+        let url = SafeUrl::parse(
             "https://example.com/repository?rev=0dacfd6#b270df1a2fb5d012294e9aaf05e7e0bab1e6a389",
         )?;
         assert!(GitSource::from_url(&url).is_ok());
 
-        let url = Url::parse(
+        let url = SafeUrl::parse(
             "https://example.com/repository?branch=0dacfd662c64cb4ceb16e6cf65a157a8b715b979#b270df1a2fb5d012294e9aaf05e7e0bab1e6a389",
         )?;
         assert!(GitSource::from_url(&url).is_ok());
@@ -10677,7 +10715,7 @@ wheels = [{ filename = "local-1.0.0-py3-none-any.whl", hash = "sha256:53a42340ae
         let remote = "https://example.com/remote-1.0.0-py3-none-any.whl"
             .parse()
             .expect("valid URL");
-        let local = DisplaySafeUrl::from_file_path(root.join("local-1.0.0-py3-none-any.whl"))
+        let local = SafeUrl::from_file_path(root.join("local-1.0.0-py3-none-any.whl"))
             .expect("valid file URL");
         let unknown = "https://example.com/unknown-1.0.0-py3-none-any.whl"
             .parse()

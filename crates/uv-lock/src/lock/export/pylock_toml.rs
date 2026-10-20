@@ -13,7 +13,6 @@ use petgraph::graph::NodeIndex;
 use serde::Deserialize;
 use toml::Table as TomlTable;
 use toml_edit::{Array, ArrayOfTables, Item, Table, Value, value};
-use url::Url;
 
 use uv_client::{FileHashError, RegistryClient};
 use uv_configuration::{
@@ -38,7 +37,8 @@ use uv_pep440::Version;
 use uv_pep508::{MarkerEnvironment, MarkerTree, VerbatimUrl};
 use uv_platform_tags::{TagCompatibility, TagPriority, Tags};
 use uv_pypi_types::{HashDigests, Hashes, ParsedGitDirectoryUrl, VcsKind};
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
+use uv_redacted::policy::{Raw, Stripped};
 use uv_small_str::SmallString;
 use uv_warnings::warn_user_once;
 
@@ -64,6 +64,8 @@ fn each_element_on_its_line_array(elements: impl Iterator<Item = impl Into<Value
 
 #[derive(Debug, thiserror::Error)]
 pub enum PylockTomlErrorKind {
+    #[error("The target environment is not supported by the lockfile")]
+    IncompatibleEnvironment,
     #[error("Multiple active package entries found for `{0}`")]
     DuplicateActivePackage(PackageName),
     #[error(
@@ -134,7 +136,7 @@ pub enum PylockTomlErrorKind {
     #[error(transparent)]
     FileHash(#[from] FileHashError),
     #[error("URL must end in a valid wheel filename: {0}")]
-    UrlMissingFilename(DisplaySafeUrl),
+    UrlMissingFilename(SafeUrl),
     #[error("Invalid artifact URL: {0}")]
     InvalidArtifactUrl(UrlString),
     #[error("Path must end in a valid wheel filename: {0}")]
@@ -250,6 +252,8 @@ pub struct PylockToml {
     #[serde(deserialize_with = "deserialize_lock_version")]
     lock_version: Version,
     created_by: String,
+    #[serde(skip_serializing)]
+    environments: Option<Vec<MarkerTree>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub requires_python: Option<RequiresPython>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
@@ -296,14 +300,14 @@ where
 fn hash_source(
     name: &PackageName,
     field: &'static str,
-    url: Option<&DisplaySafeUrl>,
+    url: Option<&SafeUrl>,
     path: Option<&PortablePathBuf>,
     install_path: &Path,
-) -> Result<DisplaySafeUrl, PylockTomlErrorKind> {
+) -> Result<SafeUrl, PylockTomlErrorKind> {
     if let Some(url) = url {
         Ok(url.clone())
     } else if let Some(path) = path {
-        DisplaySafeUrl::from_file_path(absolute(install_path.join(path))?)
+        SafeUrl::from_file_path(absolute(install_path.join(path))?)
             .map_err(|()| PylockTomlErrorKind::PathToUrl)
     } else {
         Err(PylockTomlErrorKind::MissingHashes(name.clone(), field))
@@ -317,7 +321,7 @@ pub struct PylockTomlPackage {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub version: Option<Version>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub index: Option<DisplaySafeUrl>,
+    pub index: Option<SafeUrl<Stripped>>,
     #[serde(
         skip_serializing_if = "uv_pep508::marker::ser::is_empty",
         serialize_with = "uv_pep508::marker::ser::serialize",
@@ -360,7 +364,7 @@ struct PylockTomlDirectory {
 struct PylockTomlVcs {
     r#type: VcsKind,
     #[serde(skip_serializing_if = "Option::is_none")]
-    url: Option<DisplaySafeUrl>,
+    url: Option<SafeUrl<Raw>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     path: Option<PortablePathBuf>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -374,7 +378,7 @@ struct PylockTomlVcs {
 #[serde(rename_all = "kebab-case")]
 struct PylockTomlArchive {
     #[serde(skip_serializing_if = "Option::is_none")]
-    url: Option<DisplaySafeUrl>,
+    url: Option<SafeUrl<Raw>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     path: Option<PortablePathBuf>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -398,7 +402,7 @@ struct PylockTomlSdist {
     #[serde(skip_serializing_if = "Option::is_none")]
     name: Option<SmallString>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    url: Option<DisplaySafeUrl>,
+    url: Option<SafeUrl<Raw>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     path: Option<PortablePathBuf>,
     #[serde(
@@ -420,7 +424,7 @@ struct PylockTomlWheel {
     #[serde(skip_serializing_if = "Option::is_none")]
     name: Option<WheelFilename>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    url: Option<DisplaySafeUrl>,
+    url: Option<SafeUrl<Raw>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     path: Option<PortablePathBuf>,
     #[serde(
@@ -509,7 +513,7 @@ impl<'lock> PylockToml {
             match &**dist {
                 Dist::Built(BuiltDist::DirectUrl(dist)) => {
                     package.archive = Some(PylockTomlArchive {
-                        url: Some((*dist.location).clone()),
+                        url: Some((*dist.location).clone().with_policy(Raw)),
                         path: None,
                         size: dist.size(),
                         upload_time: None,
@@ -572,7 +576,7 @@ impl<'lock> PylockToml {
                                     .upload_time_utc_ms
                                     .map(Timestamp::from_millisecond)
                                     .transpose()?,
-                                url: Some(url),
+                                url: Some(url.with_policy(Raw)),
                                 path: None,
                                 size: sdist.file.size,
                                 hashes: Hashes::from(sdist.file.hashes.clone()),
@@ -582,7 +586,7 @@ impl<'lock> PylockToml {
                 }
                 Dist::Source(SourceDist::DirectUrl(dist)) => {
                     package.archive = Some(PylockTomlArchive {
-                        url: Some((*dist.location).clone()),
+                        url: Some((*dist.location).clone().with_policy(Raw)),
                         path: None,
                         size: dist.size(),
                         upload_time: None,
@@ -607,7 +611,7 @@ impl<'lock> PylockToml {
                 Dist::Source(SourceDist::GitDirectory(dist)) => {
                     package.vcs = Some(PylockTomlVcs {
                         r#type: VcsKind::Git,
-                        url: Some(dist.git.url().clone()),
+                        url: Some(dist.git.url().clone().with_policy(Raw)),
                         path: None,
                         requested_revision: dist.git.reference().as_str().map(ToString::to_string),
                         commit_id: dist.git.precise().unwrap_or_else(|| {
@@ -666,7 +670,7 @@ impl<'lock> PylockToml {
                                 .upload_time_utc_ms
                                 .map(Timestamp::from_millisecond)
                                 .transpose()?,
-                            url: Some(url),
+                            url: Some(url.with_policy(Raw)),
                             path: None,
                             size: dist.file.size,
                             hashes: Hashes::from(dist.file.hashes.clone()),
@@ -686,6 +690,7 @@ impl<'lock> PylockToml {
         Ok(Self {
             lock_version,
             created_by,
+            environments: None,
             requires_python: Some(requires_python),
             extras,
             dependency_groups,
@@ -757,7 +762,8 @@ impl<'lock> PylockToml {
                             .file
                             .url
                             .to_url()
-                            .map_err(PylockTomlErrorKind::ToUrl)?,
+                            .map_err(PylockTomlErrorKind::ToUrl)?
+                            .with_policy(Raw),
                     ),
                     path: None,
                     size: wheel.file.size,
@@ -853,7 +859,7 @@ impl<'lock> PylockToml {
                                         .upload_time_utc_ms
                                         .map(Timestamp::from_millisecond)
                                         .transpose()?,
-                                    url: Some(url),
+                                    url: Some(url.with_policy(Raw)),
                                     path: None,
                                     size: wheel.file.size,
                                     hashes: Hashes::from(wheel.file.hashes),
@@ -911,7 +917,7 @@ impl<'lock> PylockToml {
             let vcs = match &sdist {
                 Some(SourceDist::GitDirectory(sdist)) => Some(PylockTomlVcs {
                     r#type: VcsKind::Git,
-                    url: Some(sdist.git.url().clone()),
+                    url: Some(sdist.git.url().clone().with_policy(Raw)),
                     path: None,
                     requested_revision: sdist.git.reference().as_str().map(ToString::to_string),
                     commit_id: sdist.git.precise().unwrap_or_else(|| {
@@ -926,7 +932,7 @@ impl<'lock> PylockToml {
             // path, pointing to either a source distribution or a wheel.
             let archive = match &sdist {
                 Some(SourceDist::DirectUrl(sdist)) => Some(PylockTomlArchive {
-                    url: Some(sdist.url.to_url()),
+                    url: Some(sdist.url.to_url().with_policy(Raw)),
                     path: None,
                     size,
                     upload_time: None,
@@ -968,7 +974,7 @@ impl<'lock> PylockToml {
                     Source::Direct(source, ..) => {
                         if let Some(wheel) = package.wheels.first() {
                             Some(PylockTomlArchive {
-                                url: Some(source.to_url()?),
+                                url: Some(source.to_url()?.with_policy(Raw)),
                                 path: None,
                                 size: wheel.size,
                                 upload_time: None,
@@ -1008,7 +1014,7 @@ impl<'lock> PylockToml {
                             .upload_time_utc_ms
                             .map(Timestamp::from_millisecond)
                             .transpose()?,
-                        url: Some(url),
+                        url: Some(url.with_policy(Raw)),
                         path: None,
                         size,
                         hashes: hash.cloned().map(Hashes::from).unwrap_or_default(),
@@ -1054,6 +1060,11 @@ impl<'lock> PylockToml {
         Ok(Self {
             lock_version,
             created_by,
+            environments: if target.lock().supported_environments().is_empty() {
+                None
+            } else {
+                Some(target.lock().simplified_supported_environments())
+            },
             requires_python: Some(requires_python),
             extras,
             dependency_groups,
@@ -1103,7 +1114,7 @@ impl<'lock> PylockToml {
                 let source = hash_source(
                     &package.name,
                     "packages.archive",
-                    archive.url.as_ref(),
+                    archive.url.as_ref().map(SafeUrl::as_url),
                     archive.path.as_ref(),
                     install_path,
                 )?;
@@ -1115,7 +1126,7 @@ impl<'lock> PylockToml {
                 let source = hash_source(
                     &package.name,
                     "packages.sdist",
-                    sdist.url.as_ref(),
+                    sdist.url.as_ref().map(SafeUrl::as_url),
                     sdist.path.as_ref(),
                     install_path,
                 )?;
@@ -1126,7 +1137,7 @@ impl<'lock> PylockToml {
                     let source = hash_source(
                         &package.name,
                         "packages.wheels",
-                        wheel.url.as_ref(),
+                        wheel.url.as_ref().map(SafeUrl::as_url),
                         wheel.path.as_ref(),
                         install_path,
                     )?;
@@ -1160,6 +1171,21 @@ impl<'lock> PylockToml {
 
         doc.insert("lock-version", value(self.lock_version.to_string()));
         doc.insert("created-by", value(self.created_by.as_str()));
+        // An unconditional marker makes the lock valid in every environment.
+        if let Some(environments) = self.environments.as_ref().and_then(|environments| {
+            environments
+                .iter()
+                .copied()
+                .map(MarkerTree::contents)
+                .collect::<Option<Vec<_>>>()
+        }) {
+            doc.insert(
+                "environments",
+                value(Array::from_iter(
+                    environments.iter().map(ToString::to_string),
+                )),
+            );
+        }
         if let Some(ref requires_python) = self.requires_python {
             doc.insert("requires-python", value(requires_python.to_string()));
         }
@@ -1231,6 +1257,14 @@ impl<'lock> PylockToml {
         tags: &Tags,
         build_options: &BuildOptions,
     ) -> Result<Resolution, PylockTomlError> {
+        if let Some(environments) = &self.environments
+            && !environments
+                .iter()
+                .any(|marker| marker.evaluate(markers, &[]))
+        {
+            return Err(PylockTomlErrorKind::IncompatibleEnvironment.into());
+        }
+
         // Convert the extras and dependency groups specifications to a concrete environment.
         let mut graph =
             petgraph::graph::DiGraph::with_capacity(self.packages.len(), self.packages.len());
@@ -1337,7 +1371,7 @@ impl<'lock> PylockToml {
                         install_path,
                         &package.name,
                         package.version.as_ref(),
-                        package.index.as_ref(),
+                        package.index.as_ref().map(SafeUrl::as_url),
                     )?],
                     best_wheel_index: 0,
                     sdist: None,
@@ -1357,7 +1391,7 @@ impl<'lock> PylockToml {
                     install_path,
                     &package.name,
                     package.version.as_ref(),
-                    package.index.as_ref(),
+                    package.index.as_ref().map(SafeUrl::as_url),
                 )?));
                 let dist = ResolvedDist::Installable {
                     dist: Arc::new(sdist),
@@ -1477,7 +1511,13 @@ impl PylockTomlPackage {
             table.insert("dependencies", value(dependencies));
         }
         if let Some(ref index) = self.index {
-            table.insert("index", value(index.to_string()));
+            table.insert(
+                "index",
+                value(serde::Serialize::serialize(
+                    index,
+                    toml_edit::ser::ValueSerializer::new(),
+                )?),
+            );
         }
         if let Some(ref vcs) = self.vcs {
             table.insert(
@@ -1579,7 +1619,7 @@ impl PylockTomlPackage {
         let Some(vcs) = self.vcs.as_ref() else {
             return Ok(None);
         };
-        let Some(url) = vcs.url.as_ref() else {
+        let Some(url) = vcs.url.as_ref().map(SafeUrl::as_url) else {
             return Ok(None);
         };
         let reference = match vcs.requested_revision.as_ref() {
@@ -1607,7 +1647,7 @@ impl PylockTomlWheel {
             };
             let filename = WheelFilename::from_str(filename).map(Cow::Owned)?;
             Ok(filename)
-        } else if let Some(url) = self.url.as_ref() {
+        } else if let Some(url) = self.url.as_ref().map(SafeUrl::as_url) {
             let Some(filename) = url.filename().ok() else {
                 return Err(PylockTomlErrorKind::UrlMissingFilename(url.clone()));
             };
@@ -1624,7 +1664,7 @@ impl PylockTomlWheel {
         install_path: &Path,
         name: &PackageName,
         version: Option<&Version>,
-        index: Option<&DisplaySafeUrl>,
+        index: Option<&SafeUrl>,
     ) -> Result<RegistryBuiltWheel, PylockTomlErrorKind> {
         let filename = self.filename(name)?.into_owned();
         validate_wheel_filename(&filename, name, version)?;
@@ -1632,10 +1672,9 @@ impl PylockTomlWheel {
         let file_url = if let Some(path) = self.path.as_ref() {
             let path = install_path.join(path);
             validate_path_size(&path, self.size)?;
-            let url = DisplaySafeUrl::from_file_path(path)
-                .map_err(|()| PylockTomlErrorKind::PathToUrl)?;
+            let url = SafeUrl::from_file_path(path).map_err(|()| PylockTomlErrorKind::PathToUrl)?;
             UrlString::from(url)
-        } else if let Some(url) = self.url.as_ref() {
+        } else if let Some(url) = self.url.as_ref().map(SafeUrl::as_url) {
             UrlString::from(url)
         } else {
             return Err(PylockTomlErrorKind::WheelMissingPathUrl(name.clone()));
@@ -1713,13 +1752,11 @@ impl PylockTomlVcs {
 
         // Reconstruct the `GitUrl` from the individual fields.
         let git_url = {
-            let mut url = if let Some(url) = self.url.as_ref() {
+            let mut url = if let Some(url) = self.url.as_ref().map(SafeUrl::as_url) {
                 url.clone()
             } else if let Some(path) = self.path.as_ref() {
-                DisplaySafeUrl::from_url(
-                    Url::from_directory_path(install_path.join(path))
-                        .map_err(|()| PylockTomlErrorKind::PathToUrl)?,
-                )
+                SafeUrl::from_directory_path(install_path.join(path))
+                    .map_err(|()| PylockTomlErrorKind::PathToUrl)?
             } else {
                 return Err(PylockTomlErrorKind::VcsMissingPathUrl(name.clone()));
             };
@@ -1730,7 +1767,7 @@ impl PylockTomlVcs {
                 .requested_revision
                 .clone()
                 .map(GitReference::from_rev)
-                .unwrap_or_else(|| GitReference::BranchOrTagOrCommit(self.commit_id.to_string()));
+                .unwrap_or(GitReference::Commit(self.commit_id));
             let precise = self.commit_id;
 
             // TODO(samypr100): GitLfs::from_env() as pylock.toml spec doesn't specify how to label LFS support
@@ -1738,7 +1775,7 @@ impl PylockTomlVcs {
         };
 
         // Reconstruct the PEP 508-compatible URL from the `GitSource`.
-        let url = DisplaySafeUrl::from(ParsedGitDirectoryUrl {
+        let url = SafeUrl::from(ParsedGitDirectoryUrl {
             url: git_url.clone(),
             subdirectory: subdirectory.clone(),
         });
@@ -1764,7 +1801,7 @@ impl PylockTomlSdist {
                 )));
             };
             Ok(Cow::Owned(SmallString::from(filename)))
-        } else if let Some(url) = self.url.as_ref() {
+        } else if let Some(url) = self.url.as_ref().map(SafeUrl::as_url) {
             let Some(filename) = url.filename().ok() else {
                 return Err(PylockTomlErrorKind::UrlMissingFilename(url.clone()));
             };
@@ -1780,7 +1817,7 @@ impl PylockTomlSdist {
         install_path: &Path,
         name: &PackageName,
         version: Option<&Version>,
-        index: Option<&DisplaySafeUrl>,
+        index: Option<&SafeUrl>,
     ) -> Result<RegistrySourceDist, PylockTomlErrorKind> {
         let filename = self.filename(name)?.into_owned();
         let ext = SourceDistExtension::from_path(filename.as_ref())?;
@@ -1795,10 +1832,9 @@ impl PylockTomlSdist {
         let file_url = if let Some(path) = self.path.as_ref() {
             let path = install_path.join(path);
             validate_path_size(&path, self.size)?;
-            let url = DisplaySafeUrl::from_file_path(path)
-                .map_err(|()| PylockTomlErrorKind::PathToUrl)?;
+            let url = SafeUrl::from_file_path(path).map_err(|()| PylockTomlErrorKind::PathToUrl)?;
             UrlString::from(url)
-        } else if let Some(url) = self.url.as_ref() {
+        } else if let Some(url) = self.url.as_ref().map(SafeUrl::as_url) {
             UrlString::from(url)
         } else {
             return Err(PylockTomlErrorKind::SdistMissingPathUrl(name.clone()));
@@ -1887,7 +1923,7 @@ impl PylockTomlArchive {
                     })))
                 }
             }
-        } else if let Some(url) = self.url.as_ref() {
+        } else if let Some(url) = self.url.as_ref().map(SafeUrl::as_url) {
             let filename = url
                 .filename()
                 .map_err(|_| PylockTomlErrorKind::UrlMissingFilename(url.clone()))?;
@@ -1933,7 +1969,7 @@ impl PylockTomlArchive {
 
             let ext = DistExtension::from_path(filename)?;
             Ok(matches!(ext, DistExtension::Wheel))
-        } else if let Some(url) = self.url.as_ref() {
+        } else if let Some(url) = self.url.as_ref().map(SafeUrl::as_url) {
             let filename = url
                 .filename()
                 .map_err(|_| PylockTomlErrorKind::UrlMissingFilename(url.clone()))?;

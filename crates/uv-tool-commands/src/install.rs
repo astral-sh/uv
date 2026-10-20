@@ -1028,7 +1028,7 @@ pub async fn install(
         } else {
             HashStrategy::default()
         };
-        let environment = installed_tools.create_environment(package_name, interpreter, &cache)?;
+        let environment = installed_tools.create_environment(package_name, interpreter)?;
 
         // At this point, we removed any existing environment, so we should remove any of its
         // executables.

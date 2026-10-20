@@ -17,11 +17,11 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           # renovate: datasource=github-release-attachments depName=astral-sh/uv
-          version: "0.12.13"
-          checksum: "745765a3b6e360ad76743599ae5c42e9278c7edf8bbff9fc76d05bf2623a04dd"
+          version: "0.13.1"
+          checksum: "eadd9d27c134ab5ac1ffd4473b97a741407f3ea238288f03121fc4deddf90220"
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
@@ -31,10 +31,10 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: "Generate reference documentation"
         run: |
-          cargo dev generate-options-reference
-          cargo dev generate-cli-reference
-          cargo dev generate-env-vars-reference
-          cargo dev generate-preview-features-reference
+          cargo --locked dev generate-options-reference
+          cargo --locked dev generate-cli-reference
+          cargo --locked dev generate-env-vars-reference
+          cargo --locked dev generate-preview-features-reference
 
       - name: "Build docs"
         run: uv run --only-group docs mkdocs build --strict -f mkdocs.yml

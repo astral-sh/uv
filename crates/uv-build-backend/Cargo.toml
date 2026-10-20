@@ -1,6 +1,6 @@
 [package]
 name = "uv-build-backend"
-version = "0.0.92"
+version = "0.0.95"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -72,4 +72,4 @@ anstream = { workspace = true }
 hex = { workspace = true }
 indoc = { workspace = true }
 insta = { workspace = true }
-regex = { workspace = true }
+regex = { workspace = true, features = ["perf", "unicode"] }

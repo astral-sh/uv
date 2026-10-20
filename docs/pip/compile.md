@@ -1,9 +1,9 @@
 # Locking environments
 
-Locking is to take a dependency, e.g., `ruff`, and write an exact version to use to a file. When
-working with many dependencies, it is useful to lock the exact versions so the environment can be
-reproduced. Without locking, the versions of dependencies could change over time, when using a
-different tool, or across platforms.
+Locking a dependency, e.g., `ruff`, means writing the exact version to use to a file. When working
+with many dependencies, locking exact versions makes it possible to reproduce the environment.
+Without locking, the versions of dependencies could change over time, when using a different tool,
+or across platforms.
 
 ## Locking requirements
 
@@ -18,8 +18,8 @@ To lock dependencies declared in a `pyproject.toml`:
 $ uv pip compile pyproject.toml -o requirements.txt
 ```
 
-Note by default the `uv pip compile` output is just displayed and `--output-file` / `-o` argument is
-needed to write to a file.
+By default, `uv pip compile` displays its output. Use the `--output-file` / `-o` argument to write
+it to a file.
 
 To lock dependencies declared in a `requirements.in`:
 

@@ -1,4 +1,3 @@
-use std::collections::BTreeMap;
 #[cfg(any(feature = "test-git", feature = "test-git-lfs"))]
 use std::collections::BTreeSet;
 #[cfg(feature = "test-git")]
@@ -19,13 +18,10 @@ use predicates::prelude::predicate;
 use sha2::{Digest, Sha256};
 #[cfg(windows)]
 use uv_fs::Simplified;
-use uv_fs::copy_dir_all;
 use uv_static::EnvVars;
 
-use uv_test::packse::{
-    PackseServer, generate_wheel, generate_wheel_with_files, scenario::Scenario,
-};
-use uv_test::uv_snapshot;
+use uv_test::packse::{PackseServer, WheelBuilder, scenario::Scenario};
+use uv_test::{copy_dir_ignore, uv_snapshot};
 
 #[cfg(feature = "test-git")]
 fn tool_install_git_path(bin_dir: &ChildPath) -> OsString {
@@ -715,7 +711,7 @@ fn tool_install_with_editable() -> Result<()> {
         .with_tool_dirs();
     let bin_dir = context.temp_dir.child("bin");
     let anyio_local = context.temp_dir.child("src").child("anyio_local");
-    copy_dir_all(
+    copy_dir_ignore(
         context.workspace_root.join("test/packages/anyio_local"),
         &anyio_local,
     )?;
@@ -1942,7 +1938,10 @@ fn tool_install_editable_rebuilds_explicit_local_directory() -> Result<()> {
     ");
 
     project.child("VERSION").write_str("0.2.0")?;
-    project.child("commands.txt").write_str("alpha\nbeta")?;
+    project.child("commands.txt").write_str(indoc! {"
+        alpha
+        beta
+    "})?;
     project
         .child("src")
         .child("dynamic_tool")
@@ -2243,8 +2242,8 @@ fn tool_install_remove_on_empty() -> Result<()> {
         requires-python = ">=3.11,<3.13"
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#
     })?;
 
@@ -3250,29 +3249,29 @@ fn tool_install_git() {
 
     // Unnamed Git Install
     uv_snapshot!(context.filters(), context.tool_install()
-        .arg("git+https://github.com/psf/black@24.2.0")
+        .arg("git+https://github.com/astral-sh/uv-dynamic-requires-python-test@75a612dc87fc215e999a25a0efc376cbf9831afa#subdirectory=static")
         .env(EnvVars::PATH, path.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved 6 packages in [TIME]
-    Prepared 4 packages in [TIME]
-    Installed 6 packages in [TIME]
-     + black==24.2.0 (from git+https://github.com/psf/black@6fdf8a4af28071ed1d079c01122b34c5d587207a)
-     + click==8.1.7
-     + mypy-extensions==1.0.0
-     + packaging==24.0
-     + pathspec==0.12.1
-     + platformdirs==4.2.0
-    Installed 2 executables: black, blackd
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + static-requires-python-tool==0.1.0 (from git+https://github.com/astral-sh/uv-dynamic-requires-python-test@75a612dc87fc215e999a25a0efc376cbf9831afa#subdirectory=static)
+    Installed 1 executable: static-requires-python-tool
     ");
 
-    tool_dir.child("black").assert(predicate::path::is_dir());
     tool_dir
-        .child("black")
+        .child("static-requires-python-tool")
+        .assert(predicate::path::is_dir());
+    tool_dir
+        .child("static-requires-python-tool")
         .child("uv-receipt.toml")
         .assert(predicate::path::exists());
 
-    let executable = bin_dir.child(format!("black{}", std::env::consts::EXE_SUFFIX));
+    let executable = bin_dir.child(format!(
+        "static-requires-python-tool{}",
+        std::env::consts::EXE_SUFFIX
+    ));
     assert!(executable.exists());
 
     fs_err::remove_dir_all(&bin_dir).expect("Failed to remove bin dir.");
@@ -3280,28 +3279,28 @@ fn tool_install_git() {
 
     // Named Git Install
     uv_snapshot!(context.filters(), context.tool_install()
-        .arg("black @ git+https://github.com/psf/black@24.2.0")
+        .arg("static-requires-python-tool @ git+https://github.com/astral-sh/uv-dynamic-requires-python-test@75a612dc87fc215e999a25a0efc376cbf9831afa#subdirectory=static")
         .env(EnvVars::PATH, path.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved 6 packages in [TIME]
-    Installed 6 packages in [TIME]
-     + black==24.2.0 (from git+https://github.com/psf/black@6fdf8a4af28071ed1d079c01122b34c5d587207a)
-     + click==8.1.7
-     + mypy-extensions==1.0.0
-     + packaging==24.0
-     + pathspec==0.12.1
-     + platformdirs==4.2.0
-    Installed 2 executables: black, blackd
+    Resolved 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + static-requires-python-tool==0.1.0 (from git+https://github.com/astral-sh/uv-dynamic-requires-python-test@75a612dc87fc215e999a25a0efc376cbf9831afa#subdirectory=static)
+    Installed 1 executable: static-requires-python-tool
     ");
 
-    tool_dir.child("black").assert(predicate::path::is_dir());
     tool_dir
-        .child("black")
+        .child("static-requires-python-tool")
+        .assert(predicate::path::is_dir());
+    tool_dir
+        .child("static-requires-python-tool")
         .child("uv-receipt.toml")
         .assert(predicate::path::exists());
 
-    let executable = bin_dir.child(format!("black{}", std::env::consts::EXE_SUFFIX));
+    let executable = bin_dir.child(format!(
+        "static-requires-python-tool{}",
+        std::env::consts::EXE_SUFFIX
+    ));
     assert!(executable.exists());
 }
 
@@ -3479,7 +3478,10 @@ fn tool_install_git_lfs() {
         .with_filter((r"exit_code: -?[1-9]\d*", "exit_code: [ERROR_CODE]"))
         .with_filter((
             "(?s)(----- stderr -----).*?The source distribution `[^`]+` is missing Git LFS artifacts.*",
-            "$1\n[PREFIX]The source distribution `[DISTRIBUTION]` is missing Git LFS artifacts",
+            indoc! {"
+                $1
+                [PREFIX]The source distribution `[DISTRIBUTION]` is missing Git LFS artifacts"
+            },
         ));
 
     uv_snapshot!(context.filters(), context.tool_install()
@@ -5426,6 +5428,72 @@ async fn tool_install_default_credentials() -> Result<()> {
     Ok(())
 }
 
+/// A tool receipt must accept a publish URL with `:` and `@` in its path after stripping userinfo.
+#[test]
+fn tool_install_publish_url_receipt() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
+    let bin_dir = context.temp_dir.child("bin");
+    let wheel = context
+        .workspace_root
+        .join("test/links/simple_launcher-0.1.0-py3-none-any.whl");
+    let uv_toml = context.temp_dir.child("uv.toml");
+    uv_toml.write_str(indoc! {r#"
+        [[index]]
+        name = "private"
+        url = "https://example.com/simple"
+        publish-url = "https://user:password@example.com/api:upload@v1?sig=abc%2Bdef%3D"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg(&wheel)
+        .arg("--offline")
+        .arg("--config-file")
+        .arg(uv_toml.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + simple-launcher==0.1.0 (from file://[WORKSPACE]/test/links/simple_launcher-0.1.0-py3-none-any.whl)
+    Installed 1 executable: simple_launcher
+    ");
+
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(context.read("tools/simple-launcher/uv-receipt.toml"), @r#"
+        [tool]
+        requirements = [{ name = "simple-launcher", path = "[WORKSPACE]/test/links/simple_launcher-0.1.0-py3-none-any.whl" }]
+        entrypoints = [
+            { name = "simple_launcher", install-path = "[TEMP_DIR]/bin/simple_launcher", from = "simple-launcher" },
+        ]
+
+        [tool.options]
+        index = [{ name = "private", url = "https://example.com/simple", explicit = false, default = false, format = "simple", publish-url = "https://example.com/api:upload@v1?sig=abc%2Bdef%3D", authenticate = "auto" }]
+        exclude-newer = "2024-03-25T00:00:00Z"
+        "#);
+    });
+
+    uv_snapshot!(context.filters(), context.tool_list().arg("--no-config"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    simple-launcher v0.1.0
+    - simple_launcher
+    ");
+
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("simple-launcher")
+        .arg("--no-config")
+        .arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Nothing to upgrade
+    ");
+
+    Ok(())
+}
+
 /// Test installing a tool with `--with-executables-from`.
 #[test]
 fn tool_install_with_executables_from() -> Result<()> {
@@ -6294,36 +6362,32 @@ fn tool_install_with_build_hashes() -> Result<()> {
             .with_filtered_exe_suffix()
             .with_tool_dirs();
         let bin_dir = context.temp_dir.child("bin");
-        let (filename, wheel) = generate_wheel(
-            &"build-dependency".parse()?,
-            &"1.0.0".parse()?,
-            &[],
-            &BTreeMap::new(),
-            None,
-            "py3-none-any",
-            &[],
-        );
+        let (filename, wheel) =
+            WheelBuilder::new(&"build-dependency".parse()?, &"1.0.0".parse()?).build();
         let hash = hex::encode(Sha256::digest(&wheel));
         context
             .temp_dir
             .child("wheels")
             .child(filename)
             .write_binary(&wheel)?;
-        let (filename, wheel) = generate_wheel_with_files(
-            &"hash-tool".parse()?,
-            &"1.0.0".parse()?,
-            &[],
-            &BTreeMap::new(),
-            None,
-            "py3-none-any",
-            &[
-                ("hash_tool/cli.py", "def main():\n    print('tool-ok')\n"),
+        let (filename, wheel) = WheelBuilder::new(&"hash-tool".parse()?, &"1.0.0".parse()?)
+            .files(&[
+                (
+                    "hash_tool/cli.py",
+                    indoc! {"
+                        def main():
+                            print('tool-ok')
+                    "},
+                ),
                 (
                     "hash_tool-1.0.0.dist-info/entry_points.txt",
-                    "[console_scripts]\nhash-tool = hash_tool.cli:main\n",
+                    indoc! {"
+                        [console_scripts]
+                        hash-tool = hash_tool.cli:main
+                    "},
                 ),
-            ],
-        );
+            ])
+            .build();
         context
             .temp_dir
             .child("wheels")
@@ -6404,7 +6468,7 @@ fn tool_install_with_build_hashes() -> Result<()> {
             error: Failed to build `hash-tool @ file://[TEMP_DIR]/project`
               cause: Failed to resolve requirements from `build-system.requires`
               cause: No solution found when resolving: `build-dependency==1.0.0`
-              cause: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `build-dependency`
+              cause: Hash-checking is required, but no trusted hash was provided for: `build-dependency`
             ");
             project
                 .child("backend-executed")

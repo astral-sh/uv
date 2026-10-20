@@ -1,6 +1,7 @@
 //! Output and process primitives shared by uv command implementations.
 
 use std::borrow::Cow;
+use std::fs::Metadata;
 use std::io::stdout;
 use std::path::Path;
 use std::process::ExitCode;
@@ -122,15 +123,36 @@ impl<'a> OutputWriter<'a> {
     /// Commit the buffer to the output file.
     pub async fn commit(self) -> std::io::Result<()> {
         if let Some(output_file) = self.output_file {
+            let stream = anstream::adapter::strip_bytes(&self.buffer).into_vec();
+
+            // Devices and pipes must be opened directly: an atomic rename would replace them
+            // with a regular file. Follow symlinks when checking the destination's file type.
+            let metadata = fs_err::symlink_metadata(output_file);
+            let is_symlink = metadata.as_ref().is_ok_and(Metadata::is_symlink);
+            let metadata = if is_symlink {
+                fs_err::metadata(output_file)
+            } else {
+                metadata
+            };
+            match metadata {
+                Ok(metadata) if !metadata.is_file() => {
+                    return fs_err::tokio::write(output_file, &stream).await;
+                }
+                Ok(_) => {}
+                Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+                Err(err) => return Err(err),
+            }
+
             if let Some(parent_dir) = output_file.parent() {
                 fs_err::create_dir_all(parent_dir)?;
             }
 
             // If the output file is an existing symlink, write to the destination instead.
-            let output_file = fs_err::read_link(output_file)
-                .map(Cow::Owned)
-                .unwrap_or(Cow::Borrowed(output_file));
-            let stream = anstream::adapter::strip_bytes(&self.buffer).into_vec();
+            let output_file = if is_symlink {
+                Cow::Owned(output_file.with_file_name(fs_err::read_link(output_file)?))
+            } else {
+                Cow::Borrowed(output_file)
+            };
             uv_fs::write_atomic(output_file, &stream).await?;
         }
         Ok(())

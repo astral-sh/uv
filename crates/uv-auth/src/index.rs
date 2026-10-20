@@ -1,8 +1,7 @@
 use std::fmt::{self, Display, Formatter};
 
 use rustc_hash::FxHashSet;
-use url::Url;
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 
 /// When to use authentication.
 #[derive(
@@ -54,15 +53,15 @@ impl Display for AuthPolicy {
 // could potentially make sense for a future refactor.
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub struct Index {
-    pub url: DisplaySafeUrl,
+    pub url: SafeUrl,
     /// The root endpoint where authentication is applied.
     /// For PEP 503 endpoints, this excludes `/simple`.
-    pub root_url: DisplaySafeUrl,
+    pub root_url: SafeUrl,
     pub auth_policy: AuthPolicy,
 }
 
 impl Index {
-    fn is_prefix_for(&self, url: &Url) -> bool {
+    fn is_prefix_for(&self, url: &SafeUrl) -> bool {
         if self.root_url.scheme() != url.scheme()
             || self.root_url.host_str() != url.host_str()
             || self.root_url.port_or_known_default() != url.port_or_known_default()
@@ -112,18 +111,18 @@ impl Indexes {
     }
 
     /// Get the index for a URL if one exists.
-    pub(crate) fn index_for(&self, url: &Url) -> Option<&Index> {
+    pub(crate) fn index_for(&self, url: &SafeUrl) -> Option<&Index> {
         self.find_prefix_index(url)
     }
 
     /// Get the [`AuthPolicy`] for a URL.
-    pub(crate) fn auth_policy_for(&self, url: &Url) -> AuthPolicy {
+    pub(crate) fn auth_policy_for(&self, url: &SafeUrl) -> AuthPolicy {
         self.find_prefix_index(url)
             .map(|index| index.auth_policy)
             .unwrap_or(AuthPolicy::Auto)
     }
 
-    fn find_prefix_index(&self, url: &Url) -> Option<&Index> {
+    fn find_prefix_index(&self, url: &SafeUrl) -> Option<&Index> {
         self.0.iter().find(|&index| index.is_prefix_for(url))
     }
 }
@@ -133,7 +132,7 @@ mod tests {
     use super::*;
 
     fn index(root_url: &str, auth_policy: AuthPolicy) -> Index {
-        let root_url = DisplaySafeUrl::parse(root_url).unwrap();
+        let root_url = SafeUrl::parse(root_url).unwrap();
         Index {
             url: root_url.clone(),
             root_url,
@@ -151,7 +150,7 @@ mod tests {
             "https://example.com/simple/anyio",
         ] {
             assert!(
-                index.is_prefix_for(&Url::parse(url).unwrap()),
+                index.is_prefix_for(&SafeUrl::parse(url).unwrap()),
                 "Failed to match URL with prefix: {url}"
             );
         }
@@ -162,7 +161,7 @@ mod tests {
             "https://example.com/simpl",
         ] {
             assert!(
-                !index.is_prefix_for(&Url::parse(url).unwrap()),
+                !index.is_prefix_for(&SafeUrl::parse(url).unwrap()),
                 "Should not match URL with partial path segment: {url}"
             );
         }

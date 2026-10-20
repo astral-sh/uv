@@ -11,13 +11,21 @@ on:
         description: "The source pull request head SHA approved for promotion"
         required: true
         type: string
+      promotion_label:
+        description: "The label approving promotion"
+        required: false
+        default: "bot:promote"
+        type: choice
+        options:
+          - "bot:promote"
+          - "bot:automerge"
 
 permissions: {}
 
 env:
   UV_REPOSITORY_ID: "699532645"
   AUTOMATIONS_BOT_ID: "305554984"
-  PROMOTION_LABEL: "bot:promote"
+  PROMOTION_LABEL: ${{ inputs.promotion_label || 'bot:promote' }}
   UV_LOCKED: 1
 
 concurrency:
@@ -60,6 +68,14 @@ jobs:
             echo "An approved pull request head SHA is required; refusing to promote it." >&2
             exit 1
           fi
+
+          case "$GITHUB_REPOSITORY:$PROMOTION_LABEL" in
+            astral-sh/uv-dev:bot:promote|astral-sh/uv-dev:bot:automerge|astral-sh/uv-security:bot:promote) ;;
+            *)
+              echo "The promotion label is not supported for this repository." >&2
+              exit 1
+              ;;
+          esac
 
           gh pr view "$PULL_REQUEST_NUMBER" \
             --repo "$GITHUB_REPOSITORY" \
@@ -115,7 +131,7 @@ jobs:
           }
 
           source_pull_request=$(gh api --method GET "repos/$GITHUB_REPOSITORY/pulls/$PULL_REQUEST_NUMBER")
-          # Removing or reapplying `bot:promote` supersedes any earlier label approval.
+          # Removing or reapplying the promotion label supersedes its earlier approval.
           approval=$(
             gh api \
               --method GET \
@@ -126,7 +142,7 @@ jobs:
                 [.[][]] as $events |
                 ($events | map(select((.event == "labeled" or .event == "unlabeled") and .label.name == $label)) | last | .id // 0) as $label_id |
                 [$events[] | select(.actor.type == "User" and
-                  ((.event == "ready_for_review" and $repository == "astral-sh/uv-dev") or
+                  ((.event == "ready_for_review" and $repository == "astral-sh/uv-dev" and $label == "bot:promote") or
                    (.event == "labeled" and .label.name == $label and .id == $label_id)))] | last // null'
           )
           promoter=$(jq --raw-output '.actor.login // empty' <<< "$approval")
@@ -138,6 +154,15 @@ jobs:
           echo "approval_id=$(jq --raw-output '.id' <<< "$approval")" >> "$GITHUB_OUTPUT"
           approval_event=$(jq --raw-output '.event' <<< "$approval")
           echo "approval_event=$approval_event" >> "$GITHUB_OUTPUT"
+
+          if [ "$PROMOTION_LABEL" = "bot:automerge" ]; then
+            promoter_permission=$(gh api --method GET "repos/astral-sh/uv/collaborators/$promoter/permission")
+            if ! jq --exit-status \
+              '.permission == "admin" or .permission == "maintain" or .permission == "write"' \
+              <<< "$promoter_permission" > /dev/null; then
+              reject "Auto-merge requires approval from an upstream repository writer."
+            fi
+          fi
 
           if [ "$GITHUB_REPOSITORY" = "astral-sh/uv-security" ]; then
             if ! jq --exit-status --arg label "$PROMOTION_LABEL" \
@@ -475,7 +500,7 @@ jobs:
                 [.[][]] as $events |
                 ($events | map(select((.event == "labeled" or .event == "unlabeled") and .label.name == $label)) | last | .id // 0) as $label_id |
                 [$events[] | select(.actor.type == "User" and
-                  ((.event == "ready_for_review" and $repository == "astral-sh/uv-dev") or
+                  ((.event == "ready_for_review" and $repository == "astral-sh/uv-dev" and $label == "bot:promote") or
                    (.event == "labeled" and .label.name == $label and .id == $label_id))) | .id] | last // empty'
           )
           if [ "$current_approval" != "$APPROVAL_ID" ] || ! jq --exit-status \
@@ -592,7 +617,7 @@ jobs:
                       [.[][]] as $events |
                       ($events | map(select((.event == "labeled" or .event == "unlabeled") and .label.name == $label)) | last | .id // 0) as $label_id |
                       [$events[] | select(.actor.type == "User" and
-                        ((.event == "ready_for_review" and $repository == "astral-sh/uv-dev") or
+                        ((.event == "ready_for_review" and $repository == "astral-sh/uv-dev" and $label == "bot:promote") or
                          (.event == "labeled" and .label.name == $label and .id == $label_id))) | .id] | last // empty'
                 )
                 if [ "$current_approval" != "$APPROVAL_ID" ] || ! jq --exit-status \
@@ -669,11 +694,13 @@ jobs:
 
           echo "number=$upstream_number" >> "$GITHUB_OUTPUT"
 
-      - name: Close source pull request
+      - name: Enable auto-merge and close source pull request
         id: close
         if: steps.promote.outputs.number != ''
         env:
+          APPROVAL_ID: ${{ needs.prepare.outputs.approval_id }}
           APPROVAL_EVENT: ${{ needs.prepare.outputs.approval_event }}
+          PROMOTER: ${{ needs.prepare.outputs.promoter }}
           EXPECTED_HEAD_SHA: ${{ inputs.head_sha }}
           GH_TOKEN: ${{ steps.token.outputs.token }}
           PROMOTED_HEAD: ${{ steps.verify.outputs.head_sha }}
@@ -699,6 +726,31 @@ jobs:
           if [ "$promoted_head" != "$PROMOTED_HEAD" ]; then
             echo "rejection_reason=The upstream promotion moved from $PROMOTED_HEAD to $promoted_head." >> "$GITHUB_OUTPUT"
             exit 0
+          fi
+
+          if [ "$PROMOTION_LABEL" = "bot:automerge" ]; then
+            current_approval=$(
+              gh api --method GET "repos/$GITHUB_REPOSITORY/issues/$PULL_REQUEST_NUMBER/events" --paginate --slurp |
+                jq --raw-output --arg label "$PROMOTION_LABEL" '
+                  [.[][] | select((.event == "labeled" or .event == "unlabeled") and .label.name == $label)] |
+                  last | select(.event == "labeled" and .actor.type == "User") | .id // empty'
+            )
+            if [ "$current_approval" != "$APPROVAL_ID" ]; then
+              echo "The auto-merge approval changed; refusing to enable auto-merge." >&2
+              exit 1
+            fi
+            promoter_permission=$(gh api --method GET "repos/astral-sh/uv/collaborators/$PROMOTER/permission")
+            if ! jq --exit-status \
+              '.permission == "admin" or .permission == "maintain" or .permission == "write"' \
+              <<< "$promoter_permission" > /dev/null; then
+              echo "Auto-merge is no longer approved by an upstream repository writer." >&2
+              exit 1
+            fi
+
+            gh pr merge "$UPSTREAM_NUMBER" \
+              --repo astral-sh/uv \
+              --auto --squash \
+              --match-head-commit "$PROMOTED_HEAD"
           fi
 
           gh pr close "$PULL_REQUEST_NUMBER" \
@@ -755,7 +807,7 @@ jobs:
                 [.[][]] as $events |
                 ($events | map(select((.event == "labeled" or .event == "unlabeled") and .label.name == $label)) | last | .id // 0) as $label_id |
                 [$events[] | select(.actor.type == "User" and
-                  ((.event == "ready_for_review" and $repository == "astral-sh/uv-dev") or
+                  ((.event == "ready_for_review" and $repository == "astral-sh/uv-dev" and $label == "bot:promote") or
                    (.event == "labeled" and .label.name == $label and .id == $label_id))) | .id] | last // empty'
           }
           current_approval=$(get_current_approval)
@@ -811,13 +863,13 @@ jobs:
             if [ "$GITHUB_REPOSITORY" = "astral-sh/uv-security" ]; then
               comment="$comment Retargeted it to $REBASE_REF. Rebase the commits after $BASE_PREVIOUS_SHA."
             else
-              comment="$comment Retargeted it to $REBASE_REF so the existing rebase automation can resolve conflicts in the commits after $BASE_PREVIOUS_SHA. Review the result and mark this pull request ready again."
+              comment="$comment Retargeted it to $REBASE_REF so the existing rebase automation can resolve conflicts in the commits after $BASE_PREVIOUS_SHA. Review the result before retrying promotion."
             fi
-          elif [ "$GITHUB_REPOSITORY" != "astral-sh/uv-security" ]; then
+          elif [ "$GITHUB_REPOSITORY" != "astral-sh/uv-security" ] && [ "$PROMOTION_LABEL" != "bot:automerge" ]; then
             comment="$comment Please review the updated changes and mark it ready for review again."
           fi
-          if [ "$GITHUB_REPOSITORY" = "astral-sh/uv-security" ]; then
-            comment+=" Review the changes, then add \`bot:promote\` to retry."
+          if [ "$GITHUB_REPOSITORY" = "astral-sh/uv-security" ] || [ "$PROMOTION_LABEL" = "bot:automerge" ]; then
+            comment+=" Review the changes, then add \`$PROMOTION_LABEL\` to retry."
           fi
           if [ -n "$UPSTREAM_NUMBER" ]; then
             comment="$comment An upstream pull request was already created at [#$UPSTREAM_NUMBER](https://github.com/astral-sh/uv/pull/$UPSTREAM_NUMBER)."
@@ -834,7 +886,7 @@ jobs:
             gh pr comment "$PULL_REQUEST_NUMBER" --repo "$GITHUB_REPOSITORY" --body "$comment"
           fi
 
-          # Removing `bot:promote` invalidates the approval, so finish recovery first.
+          # Removing the promotion label invalidates its approval, so finish recovery first.
           current_approval=$(get_current_approval)
           pull_request=$(gh api --method GET "repos/$GITHUB_REPOSITORY/pulls/$PULL_REQUEST_NUMBER")
           if [ "$current_approval" != "$APPROVAL_ID" ] || ! jq --exit-status \

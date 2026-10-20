@@ -7,9 +7,8 @@ use assert_fs::prelude::*;
 #[cfg(unix)]
 use fs_err::{metadata, set_permissions};
 use indoc::indoc;
-use uv_fs::copy_dir_all;
 use uv_static::EnvVars;
-use uv_test::{uv_snapshot, venv_bin_path};
+use uv_test::{copy_dir_ignore, uv_snapshot, venv_bin_path};
 
 #[test]
 fn tool_run_args() {
@@ -847,40 +846,29 @@ fn tool_run_url() {
 #[test]
 #[cfg(feature = "test-git")]
 fn tool_run_git() {
-    let context = uv_test::test_context!("3.12")
-        .with_filtered_counts()
-        .with_tool_dirs();
+    let context = uv_test::test_context!("3.12").with_tool_dirs();
 
     uv_snapshot!(context.filters(), context.tool_run()
-        .arg("git+https://github.com/psf/black@24.2.0")
-        .arg("--version"), @"
+        .arg("git+https://github.com/astral-sh/uv-dynamic-requires-python-test@75a612dc87fc215e999a25a0efc376cbf9831afa#subdirectory=static"), @"
     exit_code: 0 (success)
     ----- stdout -----
-    black, 24.2.0 (compiled: no)
-    Python (CPython) 3.12.[X]
+    3.12
 
     ----- stderr -----
-    Resolved [N] packages in [TIME]
-    Prepared [N] packages in [TIME]
-    Installed [N] packages in [TIME]
-     + black==24.2.0 (from git+https://github.com/psf/black@6fdf8a4af28071ed1d079c01122b34c5d587207a)
-     + click==8.1.7
-     + mypy-extensions==1.0.0
-     + packaging==24.0
-     + pathspec==0.12.1
-     + platformdirs==4.2.0
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + static-requires-python-tool==0.1.0 (from git+https://github.com/astral-sh/uv-dynamic-requires-python-test@75a612dc87fc215e999a25a0efc376cbf9831afa#subdirectory=static)
     ");
 
     uv_snapshot!(context.filters(), context.tool_run()
-        .arg("black @ git+https://github.com/psf/black@24.2.0")
-        .arg("--version"), @"
+        .arg("static-requires-python-tool @ git+https://github.com/astral-sh/uv-dynamic-requires-python-test@75a612dc87fc215e999a25a0efc376cbf9831afa#subdirectory=static"), @"
     exit_code: 0 (success)
     ----- stdout -----
-    black, 24.2.0 (compiled: no)
-    Python (CPython) 3.12.[X]
+    3.12
 
     ----- stderr -----
-    Resolved [N] packages in [TIME]
+    Resolved 1 package in [TIME]
     ");
 
     // Clear the cache.
@@ -888,38 +876,29 @@ fn tool_run_git() {
 
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("--from")
-        .arg("git+https://github.com/psf/black@24.2.0")
-        .arg("black")
-        .arg("--version"), @"
+        .arg("git+https://github.com/astral-sh/uv-dynamic-requires-python-test@75a612dc87fc215e999a25a0efc376cbf9831afa#subdirectory=static")
+        .arg("static-requires-python-tool"), @"
     exit_code: 0 (success)
     ----- stdout -----
-    black, 24.2.0 (compiled: no)
-    Python (CPython) 3.12.[X]
+    3.12
 
     ----- stderr -----
-    Resolved [N] packages in [TIME]
-    Prepared [N] packages in [TIME]
-    Installed [N] packages in [TIME]
-     + black==24.2.0 (from git+https://github.com/psf/black@6fdf8a4af28071ed1d079c01122b34c5d587207a)
-     + click==8.1.7
-     + mypy-extensions==1.0.0
-     + packaging==24.0
-     + pathspec==0.12.1
-     + platformdirs==4.2.0
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + static-requires-python-tool==0.1.0 (from git+https://github.com/astral-sh/uv-dynamic-requires-python-test@75a612dc87fc215e999a25a0efc376cbf9831afa#subdirectory=static)
     ");
 
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("--from")
-        .arg("black @ git+https://github.com/psf/black@24.2.0")
-        .arg("black")
-        .arg("--version"), @"
+        .arg("static-requires-python-tool @ git+https://github.com/astral-sh/uv-dynamic-requires-python-test@75a612dc87fc215e999a25a0efc376cbf9831afa#subdirectory=static")
+        .arg("static-requires-python-tool"), @"
     exit_code: 0 (success)
     ----- stdout -----
-    black, 24.2.0 (compiled: no)
-    Python (CPython) 3.12.[X]
+    3.12
 
     ----- stderr -----
-    Resolved [N] packages in [TIME]
+    Resolved 1 package in [TIME]
     ");
 }
 
@@ -1063,7 +1042,10 @@ fn tool_run_git_lfs() {
         .with_filter((r"exit_code: -?[1-9]\d*", "exit_code: [ERROR_CODE]"))
         .with_filter((
             "(?s)(----- stderr -----).*?The source distribution `[^`]+` is missing Git LFS artifacts.*",
-            "$1\n[PREFIX]The source distribution `[DISTRIBUTION]` is missing Git LFS artifacts",
+            indoc! {"
+                $1
+                [PREFIX]The source distribution `[DISTRIBUTION]` is missing Git LFS artifacts"
+            },
         ));
 
     uv_snapshot!(context.filters(), context.tool_run()
@@ -1285,13 +1267,13 @@ fn tool_run_csv_with_shorthand() -> anyhow::Result<()> {
         .with_tool_dirs();
 
     let anyio_local = context.temp_dir.child("src").child("anyio_local");
-    copy_dir_all(
+    copy_dir_ignore(
         context.workspace_root.join("test/packages/anyio_local"),
         &anyio_local,
     )?;
 
     let black_editable = context.temp_dir.child("src").child("black_editable");
-    copy_dir_all(
+    copy_dir_ignore(
         context.workspace_root.join("test/packages/black_editable"),
         &black_editable,
     )?;
@@ -1344,13 +1326,13 @@ fn tool_run_csv_with() -> anyhow::Result<()> {
         .with_tool_dirs();
 
     let anyio_local = context.temp_dir.child("src").child("anyio_local");
-    copy_dir_all(
+    copy_dir_ignore(
         context.workspace_root.join("test/packages/anyio_local"),
         &anyio_local,
     )?;
 
     let black_editable = context.temp_dir.child("src").child("black_editable");
-    copy_dir_all(
+    copy_dir_ignore(
         context.workspace_root.join("test/packages/black_editable"),
         &black_editable,
     )?;
@@ -1403,13 +1385,13 @@ fn tool_run_csv_with() -> anyhow::Result<()> {
         .with_tool_dirs();
 
     let anyio_local = context.temp_dir.child("src").child("anyio_local");
-    copy_dir_all(
+    copy_dir_ignore(
         context.workspace_root.join("test/packages/anyio_local"),
         &anyio_local,
     )?;
 
     let black_editable = context.temp_dir.child("src").child("black_editable");
-    copy_dir_all(
+    copy_dir_ignore(
         context.workspace_root.join("test/packages/black_editable"),
         &black_editable,
     )?;
@@ -1462,13 +1444,13 @@ fn tool_run_repeated_with() -> anyhow::Result<()> {
         .with_tool_dirs();
 
     let anyio_local = context.temp_dir.child("src").child("anyio_local");
-    copy_dir_all(
+    copy_dir_ignore(
         context.workspace_root.join("test/packages/anyio_local"),
         &anyio_local,
     )?;
 
     let black_editable = context.temp_dir.child("src").child("black_editable");
-    copy_dir_all(
+    copy_dir_ignore(
         context.workspace_root.join("test/packages/black_editable"),
         &black_editable,
     )?;
@@ -1523,13 +1505,13 @@ fn tool_run_repeated_with() -> anyhow::Result<()> {
         .with_tool_dirs();
 
     let anyio_local = context.temp_dir.child("src").child("anyio_local");
-    copy_dir_all(
+    copy_dir_ignore(
         context.workspace_root.join("test/packages/anyio_local"),
         &anyio_local,
     )?;
 
     let black_editable = context.temp_dir.child("src").child("black_editable");
-    copy_dir_all(
+    copy_dir_ignore(
         context.workspace_root.join("test/packages/black_editable"),
         &black_editable,
     )?;
@@ -1583,13 +1565,13 @@ fn tool_run_with_editable() -> anyhow::Result<()> {
         .with_tool_dirs();
 
     let anyio_local = context.temp_dir.child("src").child("anyio_local");
-    copy_dir_all(
+    copy_dir_ignore(
         context.workspace_root.join("test/packages/anyio_local"),
         &anyio_local,
     )?;
 
     let black_editable = context.temp_dir.child("src").child("black_editable");
-    copy_dir_all(
+    copy_dir_ignore(
         context.workspace_root.join("test/packages/black_editable"),
         &black_editable,
     )?;
@@ -3569,7 +3551,7 @@ fn tool_run_windows_dotted_package_name() -> anyhow::Result<()> {
     let test_package_source = workspace_packages.join("package.name.with.dots");
     let test_package_dest = context.temp_dir.child("package.name.with.dots");
 
-    copy_dir_all(&test_package_source, &test_package_dest)?;
+    copy_dir_ignore(&test_package_source, &test_package_dest)?;
 
     // Test that uv tool run can find and execute the dotted package name
     uv_snapshot!(context.filters(), context.tool_run()

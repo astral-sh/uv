@@ -1,8 +1,11 @@
 use anyhow::{Result, anyhow};
 use assert_fs::prelude::*;
+#[cfg(feature = "test-pypi")]
+use indoc::indoc;
 use insta::allow_duplicates;
-use url::Url;
 
+#[cfg(feature = "test-pypi")]
+use uv_redacted::SafeUrl;
 use uv_static::EnvVars;
 use uv_test::packse::PackseServer;
 use uv_test::{TestContext, uv_snapshot};
@@ -516,7 +519,10 @@ fn upgrade_updates_requirement_without_updating_lockfile_or_environment() -> Res
     assert_eq!(context.read_bytes("uv.lock"), lock);
     let lock_contents = context.read("uv.lock");
     assert!(
-        lock_contents.contains("name = \"idna\"\nversion = \"2.10\""),
+        lock_contents.contains(indoc! {r#"
+            name = "idna"
+            version = "2.10"
+        "#}),
         "{lock_contents}"
     );
     assert!(environment_sentinel.exists());
@@ -1669,7 +1675,7 @@ fn upgrade_allows_registry_source() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let empty_index = context.temp_dir.child("empty-index");
     empty_index.create_dir_all()?;
-    let empty_index = Url::from_directory_path(empty_index.path())
+    let empty_index = SafeUrl::from_directory_path(empty_index.path())
         .map_err(|()| anyhow!("Failed to create empty index URL"))?;
     let pyproject_toml = format!(
         r#"

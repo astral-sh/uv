@@ -13,7 +13,8 @@ use uv_pep440::VersionSpecifiers;
 use uv_pep508::{
     MarkerEnvironment, MarkerTree, RequirementOrigin, VerbatimUrl, VersionOrUrl, marker,
 };
-use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
+use uv_redacted::policy::{Raw, Stripped};
+use uv_redacted::{SafeUrl, SafeUrlError};
 
 use crate::{IndexMetadata, IndexUrl};
 
@@ -29,7 +30,7 @@ enum RequirementError {
     #[error(transparent)]
     ParsedUrlError(#[from] ParsedUrlError),
     #[error(transparent)]
-    UrlParseError(#[from] DisplaySafeUrlError),
+    UrlParseError(#[from] SafeUrlError),
     #[error(transparent)]
     OidParseError(#[from] OidParseError),
     #[error(transparent)]
@@ -277,7 +278,7 @@ impl From<Requirement> for uv_pep508::Requirement<VerbatimParsedUrl> {
                     url,
                 } => Some(VersionOrUrl::Url(VerbatimParsedUrl {
                     parsed_url: ParsedUrl::Archive(ParsedArchiveUrl {
-                        url: location,
+                        url: location.into_url(),
                         subdirectory,
                         ext,
                     }),
@@ -592,7 +593,7 @@ pub enum RequirementSource {
     /// e.g.`foo @ https://example.org/foo-1.0.zip`.
     Url {
         /// The remote location of the archive file, without subdirectory fragment.
-        location: DisplaySafeUrl,
+        location: SafeUrl<Raw>,
         /// For source distributions, the path to the distribution if it is not in the archive
         /// root.
         subdirectory: Option<Box<Path>>,
@@ -680,7 +681,7 @@ impl RequirementSource {
             },
             ParsedUrl::Archive(archive) => Self::Url {
                 url,
-                location: archive.url,
+                location: archive.url.with_policy(Raw),
                 subdirectory: archive.subdirectory,
                 ext: archive.ext,
             },
@@ -698,7 +699,7 @@ impl RequirementSource {
                 url,
             } => Some(VerbatimParsedUrl {
                 parsed_url: ParsedUrl::Archive(ParsedArchiveUrl::from_source(
-                    location.clone(),
+                    location.as_url().clone(),
                     subdirectory.clone(),
                     *ext,
                 )),
@@ -921,7 +922,7 @@ enum RequirementSourceWire {
     Git { git: String },
     /// Ex) `source = { url = "<https://example.org/foo-1.0.zip>" }`
     Direct {
-        url: DisplaySafeUrl,
+        url: SafeUrl<Raw>,
         subdirectory: Option<PortablePathBuf>,
     },
     /// Ex) `source = { path = "/home/ferris/iniconfig-2.0.0-py3-none-any.whl" }`
@@ -936,7 +937,7 @@ enum RequirementSourceWire {
     Registry {
         #[serde(skip_serializing_if = "VersionSpecifiers::is_empty", default)]
         specifier: VersionSpecifiers,
-        index: Option<DisplaySafeUrl>,
+        index: Option<SafeUrl<Stripped>>,
         conflict: Option<ConflictItem>,
     },
 }
@@ -949,10 +950,7 @@ impl From<RequirementSource> for RequirementSourceWire {
                 index,
                 conflict,
             } => {
-                let index = index.map(|index| index.url.into_url()).map(|mut index| {
-                    index.remove_credentials();
-                    index
-                });
+                let index = index.map(|index| index.url.into_url());
                 Self::Registry {
                     specifier,
                     index,
@@ -1000,6 +998,9 @@ impl From<RequirementSource> for RequirementSourceWire {
 
                 // Put the requested reference in the query.
                 match git.reference() {
+                    GitReference::Commit(commit) => {
+                        url.query_pairs_mut().append_pair("rev", commit.as_str());
+                    }
                     GitReference::Branch(branch) => {
                         url.query_pairs_mut().append_pair("branch", branch.as_str());
                     }
@@ -1014,9 +1015,9 @@ impl From<RequirementSource> for RequirementSourceWire {
                     GitReference::DefaultBranch => {}
                 }
 
-                // Put the precise commit in the fragment.
-                if let Some(precise) = git.precise() {
-                    url.set_fragment(Some(&precise.to_string()));
+                // Put the resolved commit in the fragment.
+                if let Some(commit) = git.resolved_commit() {
+                    url.set_fragment(Some(commit.as_str()));
                 }
 
                 Self::Git {
@@ -1045,6 +1046,9 @@ impl From<RequirementSource> for RequirementSourceWire {
 
                 // Put the requested reference in the query.
                 match git.reference() {
+                    GitReference::Commit(commit) => {
+                        url.query_pairs_mut().append_pair("rev", commit.as_str());
+                    }
                     GitReference::Branch(branch) => {
                         url.query_pairs_mut().append_pair("branch", branch.as_str());
                     }
@@ -1064,9 +1068,9 @@ impl From<RequirementSource> for RequirementSourceWire {
                     url.query_pairs_mut().append_pair("lfs", "true");
                 }
 
-                // Put the precise commit in the fragment.
-                if let Some(precise) = git.precise() {
-                    url.set_fragment(Some(&precise.to_string()));
+                // Put the resolved commit in the fragment.
+                if let Some(commit) = git.resolved_commit() {
+                    url.set_fragment(Some(commit.as_str()));
                 }
 
                 Self::Git {
@@ -1120,7 +1124,7 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
                 conflict,
             }),
             RequirementSourceWire::Git { git } => {
-                let mut repository = DisplaySafeUrl::parse(&git)?;
+                let mut repository = SafeUrl::parse(&git)?;
 
                 let mut reference = GitReference::DefaultBranch;
                 let mut subdirectory: Option<PortablePathBuf> = None;
@@ -1152,7 +1156,7 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
                 repository.remove_credentials();
 
                 // Create a PEP 508-compatible URL.
-                let mut url = DisplaySafeUrl::parse(&format!("git+{repository}"))?;
+                let mut url = SafeUrl::parse(&format!("git+{repository}"))?;
                 if let Some(rev) = reference.as_url_rev() {
                     let path = format!("{}@{}", url.path(), rev);
                     url.set_path(&path);
@@ -1195,7 +1199,7 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
                 let location = url.clone();
 
                 // Create a PEP 508-compatible URL.
-                let mut url = url;
+                let mut url = url.into_url();
                 if let Some(subdirectory) = &subdirectory {
                     url.set_fragment(Some(&format!("subdirectory={subdirectory}")));
                 }
@@ -1259,6 +1263,7 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
 
 #[cfg(test)]
 mod tests {
+    use std::error::Error;
     use std::path::PathBuf;
 
     use uv_pep508::{MarkerTree, VerbatimUrl};
@@ -1308,6 +1313,21 @@ mod tests {
         let raw = toml::to_string(&requirement).unwrap();
         let deserialized: Requirement = toml::from_str(&raw).unwrap();
         assert_eq!(requirement, deserialized);
+    }
+
+    #[test]
+    fn roundtrip_git_commit() -> Result<(), Box<dyn Error>> {
+        let raw = "git = \"https://example.com/repository?rev=0dacfd662c64cb4ceb16e6cf65a157a8b715b979\"\n";
+        let source: RequirementSource = toml::from_str(raw)?;
+        assert_eq!(toml::to_string(&source)?, raw);
+
+        // A redundant precise fragment denotes the same requirement as the full commit revision.
+        let resolved: RequirementSource = toml::from_str(
+            "git = \"https://example.com/repository?rev=0dacfd662c64cb4ceb16e6cf65a157a8b715b979#0dacfd662c64cb4ceb16e6cf65a157a8b715b979\"",
+        )?;
+        assert_eq!(source, resolved);
+
+        Ok(())
     }
 
     #[test]

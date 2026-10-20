@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::env;
 use std::fmt::Display;
 use thiserror::Error;
-use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
+use uv_redacted::{SafeUrl, SafeUrlError};
 use uv_static::EnvVars;
 
 pub(crate) mod pypi;
@@ -16,7 +16,7 @@ pub(crate) mod pypi;
 #[derive(Debug, Error)]
 pub enum TrustedPublishingError {
     #[error(transparent)]
-    Url(#[from] DisplaySafeUrlError),
+    Url(#[from] SafeUrlError),
     #[error("Failed to obtain OIDC token: is the `id-token: write` permission missing?")]
     GitHubPermissions(#[source] ambient_id::Error),
     /// A hard failure during OIDC token discovery.
@@ -29,9 +29,9 @@ pub enum TrustedPublishingError {
     #[error("No OIDC token discovered: are you in a supported trusted publishing environment?")]
     NoToken,
     #[error("Failed to fetch: {0}")]
-    Reqwest(DisplaySafeUrl, #[source] reqwest::Error),
+    Reqwest(SafeUrl, #[source] reqwest::Error),
     #[error("Failed to fetch: {0}")]
-    ReqwestMiddleware(DisplaySafeUrl, #[source] reqwest_middleware::Error),
+    ReqwestMiddleware(SafeUrl, #[source] reqwest_middleware::Error),
     #[error(transparent)]
     SerdeJson(#[from] serde_json::error::Error),
     #[error(

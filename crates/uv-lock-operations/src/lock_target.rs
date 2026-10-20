@@ -399,10 +399,10 @@ impl<'lock> LockTarget<'lock> {
         }
     }
 
-    /// Write the lockfile to disk.
+    /// Atomically write the lockfile so readers cannot observe a partial lock.
     pub(crate) async fn commit(self, lock: &Lock) -> Result<(), LockError> {
         let encoded = lock.to_toml()?;
-        fs_err::tokio::write(self.lock_path(), encoded).await?;
+        uv_fs::write_atomic_preserve(self.lock_path(), encoded).await?;
         Ok(())
     }
 

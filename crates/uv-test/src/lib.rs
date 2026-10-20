@@ -26,9 +26,7 @@ use uv_python_managed::downloads::ManagedPythonDownloadList;
 
 use assert_cmd::assert::{Assert, OutputAssertExt};
 use assert_fs::assert::PathAssert;
-use assert_fs::fixture::{
-    ChildPath, FileWriteStr, PathChild, PathCopy, PathCreateDir, SymlinkToFile,
-};
+use assert_fs::fixture::{ChildPath, FileWriteStr, PathChild, PathCreateDir, SymlinkToFile};
 use base64::{Engine, prelude::BASE64_STANDARD as base64};
 use futures::StreamExt;
 use indoc::{formatdoc, indoc};
@@ -51,6 +49,7 @@ static TEST_TIMESTAMP: &str = "2024-03-25T00:00:00Z";
 pub const DEFAULT_PYTHON_VERSION: &str = "3.12";
 
 // The expected latest patch version for each Python minor version.
+const LATEST_PYTHON_3_16: &str = "3.16.0a1";
 const LATEST_PYTHON_3_15: &str = "3.15.0";
 const LATEST_PYTHON_3_14: &str = "3.14.8";
 const LATEST_PYTHON_3_13: &str = "3.13.16";
@@ -642,6 +641,7 @@ impl TestContext {
         // Filter the latest patch versions with [LATEST] placeholder
         // The order matters - we want to match the full version first
         for (minor, patch) in [
+            ("3.16", LATEST_PYTHON_3_16.strip_prefix("3.16.").unwrap()),
             ("3.15", LATEST_PYTHON_3_15.strip_prefix("3.15.").unwrap()),
             ("3.14", LATEST_PYTHON_3_14.strip_prefix("3.14.").unwrap()),
             ("3.13", LATEST_PYTHON_3_13.strip_prefix("3.13.").unwrap()),
@@ -2046,7 +2046,7 @@ impl TestContext {
     /// This panics (fails the current test) for any failure.
     pub fn copy_ecosystem_project(&self, name: &str) {
         let project_dir = PathBuf::from(format!("../../test/ecosystem/{name}"));
-        self.temp_dir.copy_from(project_dir, &["**/*"]).unwrap();
+        copy_dir_ignore(project_dir, &self.temp_dir).expect("Failed to copy ecosystem project");
         // If there is a (gitignore) lockfile, remove it.
         if let Err(err) = fs_err::remove_file(self.temp_dir.join("uv.lock")) {
             assert_eq!(
@@ -2555,7 +2555,7 @@ pub fn copy_dir_ignore(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> anyhow::
         let relative = entry.path().strip_prefix(&src)?;
         let ty = entry.file_type().unwrap();
         if ty.is_dir() {
-            fs_err::create_dir(dst.as_ref().join(relative))?;
+            fs_err::create_dir_all(dst.as_ref().join(relative))?;
         } else {
             fs_err::copy(entry.path(), dst.as_ref().join(relative))?;
         }
@@ -2631,12 +2631,7 @@ pub async fn download_to_disk(url: &str, path: &Path) {
         .build()
         .expect("failed to build base client");
     let url = url.parse().unwrap();
-    let response = client
-        .for_host(&url)
-        .get(reqwest::Url::from(url))
-        .send()
-        .await
-        .unwrap();
+    let response = client.for_host(&url).get(url).send().await.unwrap();
 
     let mut file = fs_err::tokio::File::create(path).await.unwrap();
     let mut stream = response.bytes_stream();
@@ -2861,5 +2856,52 @@ mod file_read_tests {
         let context = TestContext::new_with_versions_and_bin(&[], PathBuf::from("uv"));
 
         context.read_bytes("missing.bin");
+    }
+}
+
+#[cfg(test)]
+mod copy_dir_ignore_tests {
+    use anyhow::Result;
+    use assert_fs::prelude::*;
+    use predicates::prelude::predicate;
+
+    use super::copy_dir_ignore;
+
+    #[test]
+    fn copy_fixture_into_nested_destination() -> Result<()> {
+        let root = assert_fs::TempDir::new()?;
+        let source = root.child("source");
+        source.child(".git").create_dir_all()?;
+        source.child(".gitignore").write_str("ignored.txt\n")?;
+        source.child("module.py").write_str("VALUE = 1\n")?;
+        source
+            .child("ignored.txt")
+            .write_str("local build output")?;
+
+        let destination = root.child("nested/destination");
+        copy_dir_ignore(&source, &destination)?;
+
+        destination.child("module.py").assert("VALUE = 1\n");
+        destination
+            .child("ignored.txt")
+            .assert(predicate::path::missing());
+        Ok(())
+    }
+
+    #[test]
+    fn copy_fixture_into_existing_destination() -> Result<()> {
+        let root = assert_fs::TempDir::new()?;
+        let source = root.child("source");
+        source.child("module.py").write_str("VALUE = 1\n")?;
+
+        let destination = root.child("destination");
+        destination
+            .child("existing.txt")
+            .write_str("existing file")?;
+        copy_dir_ignore(&source, &destination)?;
+
+        destination.child("module.py").assert("VALUE = 1\n");
+        destination.child("existing.txt").assert("existing file");
+        Ok(())
     }
 }

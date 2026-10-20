@@ -1,7 +1,7 @@
 """Update the Python version constants in the test common module.
 
 This script reads the download-metadata.json file and extracts the latest
-patch version for each minor version (3.15, 3.14, 3.13, 3.12, 3.11, 3.10).
+patch version for each minor version (3.16, 3.15, 3.14, 3.13, 3.12, 3.11, 3.10).
 It then updates the LATEST_PYTHON_X_Y constants in crates/uv-test/src/lib.rs.
 
 For minor versions with stable releases, it uses the latest stable version.
@@ -29,7 +29,7 @@ from packaging.version import Version
 
 SELF_DIR = Path(__file__).parent
 ROOT = SELF_DIR.parent
-PYTHON_MINOR_VERSIONS = ("3.15", "3.14", "3.13", "3.12", "3.11", "3.10")
+PYTHON_MINOR_VERSIONS = ("3.16", "3.15", "3.14", "3.13", "3.12", "3.11", "3.10")
 
 
 def main() -> None:

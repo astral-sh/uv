@@ -33,6 +33,7 @@ use uv_pep508::{
     MarkerEnvironment, MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString,
 };
 use uv_platform_tags::{IncompatibleTag, Tags};
+use uv_preview::PreviewFeature;
 use uv_pypi_types::{ConflictItem, ConflictItemRef, ConflictKindRef, Conflicts, VerbatimParsedUrl};
 use uv_resolver_types::PackageNodeKind;
 use uv_static::EnvVars;
@@ -50,7 +51,7 @@ use crate::pins::FilePins;
 use crate::preferences::{PreferenceSource, Preferences};
 use crate::prioritized_distribution::{
     CompatibleDist, IncompatibleDist, IncompatibleSource, IncompatibleWheel, PythonRequirementKind,
-    implied_markers,
+    RegistryVariantsJson, implied_markers,
 };
 use crate::pubgrub::{
     DependencySource, PubGrubDependency, PubGrubPackage, PubGrubPackageInner, PubGrubPriorities,
@@ -61,8 +62,8 @@ use crate::resolution::ResolverOutput;
 use crate::resolution_mode::ResolutionStrategy;
 use crate::resolved::ResolvedDistRef;
 pub(crate) use crate::resolver::availability::{
-    ResolverVersion, UnavailableErrorChain, UnavailablePackage, UnavailableReason,
-    UnavailableVersion, UnsatisfiableRequirement,
+    ResolverVersion, UnavailablePackage, UnavailableReason, UnavailableVersion,
+    UnsatisfiableRequirement,
 };
 use crate::resolver::batch_prefetch::BatchPrefetcher;
 use crate::resolver::derivation::DerivationChainBuilder;
@@ -76,11 +77,11 @@ use crate::resolver::indexes::Indexes;
 use crate::resolver::package_source::PackageSource;
 pub use crate::resolver::provider::{
     DefaultResolverProvider, MetadataResponse, PackageVersionsResult, ResolverProvider,
-    VersionsResponse, WheelMetadataResult,
+    VariantsJsonResponse, VersionsResponse, WheelMetadataResult,
 };
 pub use crate::resolver::reporter::Reporter;
-pub(crate) use crate::resolver::requests::RegisteredMetadata;
 use crate::resolver::requests::{MetadataRequest, MetadataRequests};
+pub(crate) use crate::resolver::requests::{RegisteredMetadata, RegisteredVariantsJson};
 use crate::resolver::requirements::{RequirementContext, RequirementExpander};
 use crate::resolver::system::SystemDependency;
 pub(crate) use crate::resolver::urls::Urls;
@@ -89,8 +90,8 @@ use crate::yanks::AllowedYanks;
 use crate::{DependencyMode, Exclusions, FlatIndex, Options, ResolutionMode, VersionMap, marker};
 pub(crate) use provider::MetadataUnavailable;
 pub(crate) use resolution::{
-    Resolution, ResolutionDependencyEdge, ResolutionNode, ResolutionPackage, ResolvedFork,
-    SelectedDistribution,
+    Resolution, ResolutionDependencyEdge, ResolutionNode, ResolutionNodeId, ResolutionPackage,
+    ResolvedFork, SelectedDistribution,
 };
 use uv_configuration::ForkStrategy;
 
@@ -845,8 +846,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 if let Some(env) = resolution.env.end_user_fork_display() {
                     let packages: FxHashSet<_> = resolution
                         .nodes
-                        .keys()
-                        .map(|package| &package.name)
+                        .iter()
+                        .map(|(package, _)| &package.name)
                         .collect();
                     debug!(
                         "Distinct solution for {env} with {} package(s)",
@@ -1699,6 +1700,25 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         pins: &mut FilePins<'index>,
         requests: &'index MetadataRequests,
     ) -> Result<(), ResolveError> {
+        let index = match dist {
+            CompatibleDist::InstalledDist(_) => None,
+            CompatibleDist::SourceDist { sdist, .. }
+            | CompatibleDist::IncompatibleWheel { sdist, .. } => Some(&sdist.index),
+            CompatibleDist::CompatibleWheel { wheel, .. } => Some(&wheel.index),
+        };
+        let variants_json = if uv_preview::is_enabled(PreviewFeature::WheelVariants)
+            && let Some(index) = index
+            && let Some(variants_json) = candidate.prioritized().and_then(|prioritized| {
+                prioritized
+                    .variants_json()
+                    .iter()
+                    .find(|variants_json| &variants_json.index == index)
+            }) {
+            Some(requests.request_variants_json(variants_json)?)
+        } else {
+            None
+        };
+
         let request = if matches!(&**package, PubGrubPackageInner::Package { .. })
             && self.dependency_mode.is_transitive()
         {
@@ -1727,7 +1747,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         } else {
             None
         };
-        pins.insert(candidate, dist, request)
+        pins.insert(candidate, dist, variants_json, request)
     }
 
     /// Check if the distribution is incompatible with the Python requirement, and if so, return
@@ -1821,6 +1841,15 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 kind,
                 marker: _,
             } => {
+                if uv_preview::is_enabled(PreviewFeature::WheelVariants)
+                    && let Some(variants_json) = pins.variants_json(name, version)
+                    && let VariantsJsonResponse::Unavailable(reason) = &*variants_json.wait()
+                {
+                    return Ok(Dependencies::Unavailable(
+                        self.record_unavailable_metadata(name, version, reason),
+                    ));
+                }
+
                 // If we're excluding transitive dependencies, short-circuit.
                 if self.dependency_mode.is_direct() {
                     return Ok(Dependencies::Unforkable(Vec::default()));
@@ -1848,21 +1877,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 let metadata = match &*response {
                     MetadataResponse::Found(archive) => &archive.metadata,
                     MetadataResponse::Unavailable(reason) => {
-                        let unavailable_version = UnavailableVersion::from(reason);
-                        let message = unavailable_version.singular_message();
-                        if let Some(err) = reason.source() {
-                            // Show the detailed error for metadata parse errors.
-                            warn!("{name} {message}: {err}");
-                        } else {
-                            warn!("{name} {message}");
-                        }
-                        let incomplete_packages = self.incomplete_packages.pin();
-                        let versions = incomplete_packages.get_or_insert(
-                            name.clone(),
-                            HashMap::builder().resize_mode(ResizeMode::Blocking).build(),
-                        );
-                        versions.pin().insert(version.clone(), reason.clone());
-                        return Ok(Dependencies::Unavailable(unavailable_version));
+                        return Ok(Dependencies::Unavailable(
+                            self.record_unavailable_metadata(name, version, reason),
+                        ));
                     }
                     MetadataResponse::Error(dist, err) => {
                         let chain = DerivationChainBuilder::from_state(id, version, pubgrub)
@@ -2023,6 +2040,28 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         })
     }
 
+    fn record_unavailable_metadata(
+        &self,
+        name: &PackageName,
+        version: &Version,
+        reason: &MetadataUnavailable,
+    ) -> UnavailableVersion {
+        let unavailable_version = UnavailableVersion::from(reason);
+        let message = unavailable_version.singular_message();
+        if let Some(error) = reason.source() {
+            warn!("{name} {message}: {error}");
+        } else {
+            warn!("{name} {message}");
+        }
+        let incomplete_packages = self.incomplete_packages.pin();
+        let versions = incomplete_packages.get_or_insert(
+            name.clone(),
+            HashMap::builder().resize_mode(ResizeMode::Blocking).build(),
+        );
+        versions.pin().insert(version.clone(), reason.clone());
+        unavailable_version
+    }
+
     /// Fetch the metadata for a stream of packages and versions.
     async fn fetch<Provider: ResolverProvider>(
         self: Arc<Self>,
@@ -2073,6 +2112,15 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         .distributions()
                         .done(dist.distribution_id(), Arc::new(metadata));
                 }
+                Some(Response::VariantsJson {
+                    variants_json,
+                    response,
+                }) => {
+                    trace!("Received variant metadata for: {}", variants_json.filename);
+                    self.index
+                        .variants_json()
+                        .done(variants_json, Arc::new(response));
+                }
                 None => {}
             }
         }
@@ -2087,6 +2135,21 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         provider: &Provider,
     ) -> Result<Option<Response>, ResolveError> {
         match request {
+            Request::VariantsJson(variants_json) => {
+                let response = provider
+                    .fetch_variants_json(
+                        &variants_json.filename.name,
+                        &variants_json.file,
+                        &variants_json.index,
+                    )
+                    .boxed_local()
+                    .await
+                    .map_err(ResolveError::Client)?;
+                Ok(Some(Response::VariantsJson {
+                    variants_json,
+                    response,
+                }))
+            }
             // Fetch package metadata from the registry.
             Request::Package(package_name, index) => {
                 let package_versions = provider
@@ -3108,12 +3171,69 @@ impl<'index> ForkState<'index> {
 
     fn into_resolution(self) -> Resolution<'index> {
         let solution: FxHashMap<_, _> = self.pubgrub.partial_solution.extract_solution().collect();
+        // Node order can affect diagnostic order and which artifact hashes `requirements.txt`
+        // emits when it merges the same package version from different sources.
+        let nodes: FxHashMap<_, _> = solution
+            .iter()
+            .filter_map(|(&package, version)| {
+                if let PubGrubPackageInner::Package {
+                    name,
+                    kind,
+                    marker: MarkerTree::TRUE,
+                } = &*self.pubgrub.package_store[package]
+                {
+                    let (url, index) = self.source(name, version);
+                    Some((
+                        ResolutionPackage {
+                            name: name.clone(),
+                            kind: kind.clone(),
+                            url: url.cloned(),
+                            index: index.cloned(),
+                        },
+                        version.clone(),
+                    ))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        let nodes: Vec<_> = nodes.into_iter().collect();
+        let node_indices: FxHashMap<_, _> = nodes
+            .iter()
+            .enumerate()
+            .map(|(index, (package, version))| {
+                (
+                    (
+                        &package.name,
+                        &package.kind,
+                        package.url.as_ref(),
+                        package.index.as_ref(),
+                        version,
+                    ),
+                    ResolutionNodeId(index),
+                )
+            })
+            .collect();
+
         let edge_count: usize = solution
             .keys()
             .map(|package| self.pubgrub.incompatibilities[package].len())
             .sum();
         let mut edges: Vec<ResolutionDependencyEdge> = Vec::with_capacity(edge_count);
         for (package, self_version) in &solution {
+            let (self_name, self_kind) = match &*self.pubgrub.package_store[*package] {
+                PubGrubPackageInner::Package { name, kind, .. } => (Some(name), kind),
+                PubGrubPackageInner::Root(_) => (None, &PackageNodeKind::Base),
+                PubGrubPackageInner::Python(_)
+                | PubGrubPackageInner::System(_)
+                | PubGrubPackageInner::Marker { .. }
+                | PubGrubPackageInner::Extra { .. }
+                | PubGrubPackageInner::Group { .. } => continue,
+            };
+            let from = self_name.map(|name| {
+                let (url, index) = self.source(name, self_version);
+                node_indices[&(name, self_kind, url, index, self_version)]
+            });
             for id in &self.pubgrub.incompatibilities[package] {
                 let incompatibility = &self.pubgrub.incompatibility_store[*id];
                 let pubgrub::Kind::FromDependencyOf(self_package, dependency_package) =
@@ -3142,20 +3262,7 @@ impl<'index> ForkState<'index> {
                     continue;
                 }
 
-                let self_package = &self.pubgrub.package_store[self_package];
                 let dependency_package = &self.pubgrub.package_store[dependency_package];
-
-                let (self_name, self_kind) = match &**self_package {
-                    PubGrubPackageInner::Package {
-                        name: self_name,
-                        kind: self_kind,
-                        marker: _,
-                    } => (Some(self_name), self_kind),
-
-                    PubGrubPackageInner::Root(_) => (None, &PackageNodeKind::Base),
-
-                    _ => continue,
-                };
 
                 let (name, kind, marker) = match &**dependency_package {
                     PubGrubPackageInner::Package { name, kind, marker } => {
@@ -3196,68 +3303,25 @@ impl<'index> ForkState<'index> {
                     | PubGrubPackageInner::Python(_)
                     | PubGrubPackageInner::System(_) => continue,
                 };
-                let from = self_name.map(|name| {
-                    let (url, index) = self.source(name, self_version);
-                    ResolutionNode {
-                        package: ResolutionPackage {
-                            name: name.clone(),
-                            kind: self_kind.clone(),
-                            url: url.cloned(),
-                            index: index.cloned(),
-                        },
-                        version: self_version.clone(),
-                    }
-                });
-
                 let (url, index) = self.source(name, dependency_version);
-                let to = ResolutionNode {
-                    package: ResolutionPackage {
-                        name: name.clone(),
-                        kind,
-                        url: url.cloned(),
-                        index: index.cloned(),
-                    },
-                    version: dependency_version.clone(),
-                };
-                let edge = ResolutionDependencyEdge { from, to, marker };
+                edges.push(ResolutionDependencyEdge {
+                    from,
+                    to: node_indices[&(name, &kind, url, index, dependency_version)],
+                    marker,
+                });
 
                 // An extra proxy requires both the extra and its base package. A group proxy
                 // only requires the group itself.
                 if let PubGrubPackageInner::Extra { .. } = &**dependency_package {
-                    let mut base_edge = edge.clone();
-                    base_edge.to.package.kind = PackageNodeKind::Base;
-                    edges.push(edge);
-                    edges.push(base_edge);
-                } else {
-                    edges.push(edge);
+                    edges.push(ResolutionDependencyEdge {
+                        from,
+                        to: node_indices
+                            [&(name, &PackageNodeKind::Base, url, index, dependency_version)],
+                        marker,
+                    });
                 }
             }
         }
-
-        let nodes = solution
-            .into_iter()
-            .filter_map(|(package, version)| {
-                if let PubGrubPackageInner::Package {
-                    name,
-                    kind,
-                    marker: MarkerTree::TRUE,
-                } = &*self.pubgrub.package_store[package]
-                {
-                    let (url, index) = self.source(name, &version);
-                    Some((
-                        ResolutionPackage {
-                            name: name.clone(),
-                            kind: kind.clone(),
-                            url: url.cloned(),
-                            index: index.cloned(),
-                        },
-                        version,
-                    ))
-                } else {
-                    None
-                }
-            })
-            .collect();
 
         Resolution {
             nodes,
@@ -3296,6 +3360,8 @@ pub(crate) enum Request {
     Dist(Dist),
     /// A request to fetch the metadata from an already-installed distribution.
     Installed(InstalledDist),
+    /// A request to fetch variant metadata for a selected version.
+    VariantsJson(RegistryVariantsJson),
     /// A request to pre-fetch the metadata for a package and the best-guess distribution.
     Prefetch(PackageName, Range<Version>, PythonRequirement),
 }
@@ -3349,6 +3415,9 @@ impl Display for Request {
             Self::Installed(dist) => {
                 write!(f, "Installed metadata `{dist}`")
             }
+            Self::VariantsJson(variants_json) => {
+                write!(f, "Variant metadata `{}`", variants_json.filename)
+            }
             Self::Prefetch(package_name, range, _) => {
                 write!(f, "Prefetch {package_name} {range}")
             }
@@ -3370,6 +3439,11 @@ enum Response {
     Installed {
         dist: InstalledDist,
         metadata: MetadataResponse,
+    },
+    /// The response to a variant metadata request.
+    VariantsJson {
+        variants_json: RegistryVariantsJson,
+        response: VariantsJsonResponse,
     },
 }
 

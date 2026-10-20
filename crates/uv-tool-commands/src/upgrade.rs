@@ -424,7 +424,7 @@ async fn upgrade_tool(
 
         if requested_interpreter.is_some() {
             let environment =
-                installed_tools.create_environment(name, target_interpreter.clone(), cache)?;
+                installed_tools.create_environment(name, target_interpreter.clone())?;
             let environment = sync_environment(
                 environment,
                 &resolution,
@@ -537,7 +537,7 @@ async fn upgrade_tool(
             preview,
         )
         .await?;
-        let environment = installed_tools.create_environment(name, interpreter.clone(), cache)?;
+        let environment = installed_tools.create_environment(name, interpreter.clone())?;
         let environment = sync_environment(
             environment,
             &resolution.into(),
@@ -626,8 +626,10 @@ async fn upgrade_tool(
             tool_lock.as_ref(),
             printer,
         )?;
-    } else if tool_locks {
-        ToolLock::write(&tool_dir, tool_lock.as_ref())?;
+    } else {
+        if tool_locks {
+            ToolLock::write(&tool_dir, tool_lock.as_ref())?;
+        }
         installed_tools.add_tool_receipt(
             name,
             existing_tool_receipt

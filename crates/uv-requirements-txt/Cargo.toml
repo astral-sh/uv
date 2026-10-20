@@ -1,6 +1,6 @@
 [package]
 name = "uv-requirements-txt"
-version = "0.0.92"
+version = "0.0.95"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -35,7 +35,6 @@ rustc-hash = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 unscanny = { workspace = true }
-url = { workspace = true }
 
 [features]
 http = ["reqwest", "reqwest-middleware"]
@@ -46,7 +45,7 @@ assert_fs = { workspace = true }
 indoc = { workspace = true }
 insta = { workspace = true }
 itertools = { workspace = true }
-regex = { workspace = true }
+regex = { workspace = true, features = ["perf", "unicode"] }
 tempfile = { workspace = true }
 test-case = { workspace = true }
 tokio = { workspace = true }

@@ -916,7 +916,10 @@ fn init_script_shebang() -> Result<()> {
 
     let script_path = context.temp_dir.child("script.py");
 
-    let contents = "#! /usr/bin/env python3\nprint(\"Hello, world!\")";
+    let contents = indoc! {r#"
+        #! /usr/bin/env python3
+        print("Hello, world!")
+    "#};
     fs_err::write(&script_path, contents)?;
     uv_snapshot!(context.filters(), context.init().arg("--script").arg("script.py"), @"
     exit_code: 0 (success)
@@ -939,7 +942,10 @@ fn init_script_shebang() -> Result<()> {
     );
 
     // If the shebang already contains `uv`, the result is the same, but we suppress the warning.
-    let contents = "#!/usr/bin/env -S uv run --script\nprint(\"Hello, world!\")";
+    let contents = indoc! {r#"
+        #!/usr/bin/env -S uv run --script
+        print("Hello, world!")
+    "#};
     fs_err::write(&script_path, contents)?;
     uv_snapshot!(context.filters(), context.init().arg("--script").arg("script.py"), @"
     exit_code: 0 (success)
@@ -967,7 +973,7 @@ fn init_script_shebang() -> Result<()> {
 #[cfg(feature = "test-python-patch")]
 #[test]
 fn init_script_picks_latest_stable_version() {
-    let managed_versions = &["3.14.0rc2", "3.13", "3.12"];
+    let managed_versions = &["3.16.0a1", "3.15", "3.14"];
     // If we do not mark these versions as managed, they would have `PythonSource::SearchPath(First)`, which
     // would mean that pre-releases would be preferred without opt-in (see `PythonSource::allows_prereleases`).
     let context = uv_test::test_context_with_versions!(managed_versions)
@@ -983,7 +989,7 @@ fn init_script_picks_latest_stable_version() {
     assert_snapshot!(
         resulting_script, @r#"
         # /// script
-        # requires-python = ">=3.13"
+        # requires-python = ">=3.15"
         # dependencies = []
         # ///
 

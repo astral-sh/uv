@@ -398,15 +398,23 @@ impl std::fmt::Display for AmdGpuArchitecture {
 
 #[cfg(test)]
 mod tests {
+    use indoc::indoc;
+
     use super::*;
 
     #[test]
     fn proc_driver_nvidia_version() {
-        let content = "NVRM version: NVIDIA UNIX Open Kernel Module for x86_64  550.144.03  Release Build  (dvs-builder@U16-I3-D08-1-2)  Mon Dec 30 17:26:13 UTC 2024\nGCC version:  gcc version 12.3.0 (Ubuntu 12.3.0-1ubuntu1~22.04)";
+        let content = indoc! {"
+            NVRM version: NVIDIA UNIX Open Kernel Module for x86_64  550.144.03  Release Build  (dvs-builder@U16-I3-D08-1-2)  Mon Dec 30 17:26:13 UTC 2024
+            GCC version:  gcc version 12.3.0 (Ubuntu 12.3.0-1ubuntu1~22.04)
+        "};
         let result = parse_proc_driver_nvidia_version(content).unwrap();
         assert_eq!(result, Some(Version::from_str("550.144.03").unwrap()));
 
-        let content = "NVRM version: NVIDIA UNIX x86_64 Kernel Module  375.74  Wed Jun 14 01:39:39 PDT 2017\nGCC version:  gcc version 5.4.0 20160609 (Ubuntu 5.4.0-6ubuntu1~16.04.4)";
+        let content = indoc! {"
+            NVRM version: NVIDIA UNIX x86_64 Kernel Module  375.74  Wed Jun 14 01:39:39 PDT 2017
+            GCC version:  gcc version 5.4.0 20160609 (Ubuntu 5.4.0-6ubuntu1~16.04.4)
+        "};
         let result = parse_proc_driver_nvidia_version(content).unwrap();
         assert_eq!(result, Some(Version::from_str("375.74").unwrap()));
     }
@@ -420,7 +428,10 @@ mod tests {
             assert_eq!(version, Version::from_str("572.60").unwrap());
         }
 
-        let multi_gpu = "572.60\n572.60\n";
+        let multi_gpu = indoc! {"
+            572.60
+            572.60
+        "};
         if let Some(first_line) = multi_gpu.lines().next() {
             let version = Version::from_str(first_line.trim()).unwrap();
             assert_eq!(version, Version::from_str("572.60").unwrap());

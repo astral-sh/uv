@@ -6,7 +6,7 @@ use std::process::{Command, ExitStatus};
 use std::sync::OnceLock;
 use std::{env, io};
 
-use configparser::ini::Ini;
+use astral_ini::Options;
 use fs_err as fs;
 use owo_colors::OwoColorize;
 use same_file::is_same_file;
@@ -42,8 +42,8 @@ use which::which;
 use windows::Win32::Foundation::{APPMODEL_ERROR_NO_PACKAGE, ERROR_CANT_ACCESS_FILE, WIN32_ERROR};
 
 /// A Python executable and its associated platform markers.
-#[expect(clippy::struct_excessive_bools)]
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[cfg_attr(unix, expect(clippy::struct_excessive_bools))]
+#[derive(Debug, Clone)]
 pub struct Interpreter {
     platform: Platform,
     markers: Box<MarkerEnvironment>,
@@ -57,6 +57,7 @@ pub struct Interpreter {
     site_packages: Vec<PathBuf>,
     stdlib: PathBuf,
     extension_suffixes: Vec<Box<str>>,
+    #[cfg(unix)]
     standalone: bool,
     tags: OnceLock<Tags>,
     target: Option<Target>,
@@ -95,6 +96,7 @@ impl Interpreter {
             site_packages: info.site_packages,
             stdlib: info.stdlib,
             extension_suffixes: info.extension_suffixes,
+            #[cfg(unix)]
             standalone: info.standalone,
             tags: OnceLock::new(),
             target: None,
@@ -119,33 +121,6 @@ impl Interpreter {
     /// Return a new [`Interpreter`] with the given virtual environment root.
     #[must_use]
     pub fn with_virtualenv(self, virtualenv: VirtualEnvironment) -> Self {
-        // Match `site.getsitepackages()` for the new environment instead of retaining the
-        // parent interpreter's site-packages paths.
-        // Note: This is not `sys.path`, but a distinct list.
-        let mut site_packages = Vec::new();
-        if self.markers.os_name() == "nt" {
-            site_packages.push(virtualenv.root.clone());
-            site_packages.push(virtualenv.scheme.purelib.clone());
-        } else {
-            if virtualenv.scheme.platlib == virtualenv.scheme.purelib {
-                site_packages.push(virtualenv.scheme.purelib.clone());
-            } else {
-                site_packages.push(virtualenv.scheme.platlib.clone());
-                site_packages.push(virtualenv.scheme.purelib.clone());
-            }
-            // Some distributions add import paths that are not part of the installation scheme,
-            // e.g., Debian's `dist-packages`. Build those paths as relative to the new environment,
-            // excluding paths outside the parent's prefix (such as an existing venv's system site
-            // packages).
-            for path in &self.site_packages {
-                if let Ok(relative) = path.strip_prefix(&self.sys_prefix) {
-                    let path = virtualenv.root.join(relative);
-                    if !site_packages.contains(&path) {
-                        site_packages.push(path);
-                    }
-                }
-            }
-        }
         Self {
             scheme: virtualenv.scheme,
             sys_base_executable: Some(virtualenv.base_executable),
@@ -153,7 +128,7 @@ impl Interpreter {
             sys_prefix: virtualenv.root,
             target: None,
             prefix: None,
-            site_packages,
+            site_packages: vec![],
             ..self
         }
     }
@@ -343,28 +318,15 @@ impl Interpreter {
             return None;
         };
 
-        let mut ini = Ini::new_cs();
-        ini.set_multiline(true);
-
-        let Ok(mut sections) = ini.read(contents) else {
+        let Ok(ini) = Options::default().case_sensitive(true).parse(&contents) else {
             // If a file exists but is not a valid INI file, we assume the environment is
             // externally managed.
             return Some(ExternallyManaged::default());
         };
 
-        let Some(section) = sections.get_mut("externally-managed") else {
-            // If the file exists but does not contain an "externally-managed" section, we assume
-            // the environment is externally managed.
-            return Some(ExternallyManaged::default());
-        };
-
-        let Some(error) = section.remove("Error") else {
-            // If the file exists but does not contain an "Error" key, we assume the environment is
-            // externally managed.
-            return Some(ExternallyManaged::default());
-        };
-
-        Some(ExternallyManaged { error })
+        Some(ExternallyManaged {
+            error: ini.get("externally-managed", "Error").map(str::to_owned),
+        })
     }
 
     /// Returns the `python_full_version` marker corresponding to this Python version.
@@ -1158,7 +1120,7 @@ pub enum InterpreterInfoError {
 
 #[expect(clippy::struct_excessive_bools)]
 #[derive(Debug, Deserialize, Serialize, Clone)]
-pub(crate) struct InterpreterInfo {
+struct InterpreterInfo {
     platform: Platform,
     markers: MarkerEnvironment,
     scheme: Scheme,
@@ -1180,69 +1142,6 @@ pub(crate) struct InterpreterInfo {
 }
 
 impl InterpreterInfo {
-    /// Build metadata for virtual environment discovery without querying Python or using the cache.
-    pub(crate) fn from_virtualenv(interpreter: &Interpreter) -> Result<Self, Error> {
-        // Python reports ordinary Windows paths even when the venv was created with a verbatim path.
-        let scheme = Scheme {
-            purelib: interpreter.scheme.purelib.simplified().to_path_buf(),
-            platlib: interpreter.scheme.platlib.simplified().to_path_buf(),
-            scripts: interpreter.scheme.scripts.simplified().to_path_buf(),
-            // Joining the empty relative data path adds a trailing separator that sysconfig omits.
-            data: interpreter.scheme.data.simplified().components().collect(),
-            include: interpreter.scheme.include.simplified().to_path_buf(),
-        };
-        Ok(Self {
-            platform: interpreter.platform.clone(),
-            markers: (*interpreter.markers).clone(),
-            scheme,
-            virtualenv: interpreter.virtualenv.clone(),
-            manylinux_compatible: interpreter.manylinux_compatible,
-            sys_prefix: interpreter.sys_prefix.simplified().to_path_buf(),
-            // These fields are unused by `Interpreter`, but retained in the cache format.
-            sys_base_exec_prefix: PathBuf::new(),
-            sys_path: Vec::new(),
-            sys_base_prefix: interpreter.sys_base_prefix.clone(),
-            sys_base_executable: interpreter.sys_base_executable.clone(),
-            sys_executable: std::path::absolute(interpreter.sys_executable())?
-                .simplified()
-                .to_path_buf(),
-            site_packages: interpreter
-                .site_packages
-                .iter()
-                .map(|path| path.simplified().to_path_buf())
-                .collect(),
-            stdlib: interpreter.stdlib.clone(),
-            extension_suffixes: interpreter.extension_suffixes.clone(),
-            standalone: interpreter.standalone,
-            pointer_size: interpreter.pointer_size,
-            gil_disabled: interpreter.gil_disabled,
-            debug_enabled: interpreter.debug_enabled,
-        })
-    }
-
-    /// Cache already prepared metadata for this executable.
-    pub(crate) fn cache(&self, executable: &Path, cache: &Cache) -> Result<(), Error> {
-        // The lookup must use the original path, which may differ from Python's `sys.executable`.
-        let absolute = std::path::absolute(executable)?;
-        let canonical = canonicalize_executable(&absolute)?;
-        let cache_entry = Self::cache_entry(&absolute, &canonical, cache);
-        let modified = Timestamp::from_path(&canonical)?;
-        self.write_cache(&cache_entry, modified)
-    }
-
-    /// Write interpreter metadata using the same format for queried and inferred interpreters.
-    fn write_cache(&self, cache_entry: &CacheEntry, modified: Timestamp) -> Result<(), Error> {
-        fs::create_dir_all(cache_entry.dir())?;
-        write_atomic_sync(
-            cache_entry.path(),
-            rmp_serde::to_vec(&CachedByTimestamp {
-                timestamp: modified,
-                data: self,
-            })?,
-        )?;
-        Ok(())
-    }
-
     /// Return the resolved [`InterpreterInfo`] for the given Python executable.
     fn query(interpreter: &Path, cache: &Cache) -> Result<Self, Error> {
         let tempdir = tempfile::tempdir_in(cache.root())?;
@@ -1406,17 +1305,7 @@ impl InterpreterInfo {
     fn cache_entry(absolute: &Path, canonical: &Path, cache: &Cache) -> CacheEntry {
         let python_executable = env::var_os(EnvVars::PYTHONEXECUTABLE).map(PathBuf::from);
         let pyvenv_launcher = env::var_os(EnvVars::PYVENV_LAUNCHER).map(PathBuf::from);
-        // We use the absolute path for the cache entry to avoid cache collisions for relative
-        // paths. But we don't want to query the executable with symbolic links resolved because
-        // that can change reported values, e.g., `sys.executable`. We include the canonical
-        // path in the cache entry as well, otherwise we can have cache collisions if an
-        // absolute path refers to different interpreters with matching ctimes, e.g., if you
-        // have a `.venv/bin/python` pointing to both Python 3.12 and Python 3.13 that were
-        // modified at the same time.
-        //
-        // Launcher overrides can also change the reported executable and virtual environment
-        // without changing either executable path.
-        let file_stem = cache_digest(&(absolute, canonical, &python_executable, &pyvenv_launcher));
+
         cache.entry(
             CacheBucket::Interpreter,
             // Shard interpreter metadata by host architecture, operating system, and version, to
@@ -1430,7 +1319,20 @@ impl InterpreterInfo {
                     .map(|os_release| os_release.to_string())
                     .unwrap_or_default(),
             )),
-            format!("{file_stem}.msgpack"),
+            // We use the absolute path for the cache entry to avoid cache collisions for relative
+            // paths. But we don't want to query the executable with symbolic links resolved because
+            // that can change reported values, e.g., `sys.executable`. We include the canonical
+            // path in the cache entry as well, otherwise we can have cache collisions if an
+            // absolute path refers to different interpreters with matching ctimes, e.g., if you
+            // have a `.venv/bin/python` pointing to both Python 3.12 and Python 3.13 that were
+            // modified at the same time.
+            //
+            // Launcher overrides can also change the reported executable and virtual environment
+            // without changing either executable path.
+            format!(
+                "{}.msgpack",
+                cache_digest(&(absolute, canonical, &python_executable, &pyvenv_launcher))
+            ),
         )
     }
 
@@ -1516,7 +1418,14 @@ impl InterpreterInfo {
         // If `executable` is a pyenv shim, a bash script that redirects to the activated
         // python executable at another path, we're not allowed to cache the interpreter info.
         if is_same_file(executable, &info.sys_executable).unwrap_or(false) {
-            info.write_cache(&cache_entry, modified)?;
+            fs::create_dir_all(cache_entry.dir())?;
+            write_atomic_sync(
+                cache_entry.path(),
+                rmp_serde::to_vec(&CachedByTimestamp {
+                    timestamp: modified,
+                    data: &info,
+                })?,
+            )?;
         }
 
         Ok(info)
@@ -1773,7 +1682,13 @@ mod tests {
             interpreter.markers.python_version().version,
             Version::from_str("3.13")?
         );
-        assert_eq!(fs::read_to_string(&query_log)?, "queried\nqueried\n");
+        assert_eq!(
+            fs::read_to_string(&query_log)?,
+            indoc! {"
+                queried
+                queried
+            "}
+        );
 
         let refreshed: CachedByTimestamp<InterpreterInfo> =
             rmp_serde::from_slice(&fs::read(cache_entry.path())?)?;
@@ -1788,7 +1703,13 @@ mod tests {
             interpreter.markers.python_version().version,
             Version::from_str("3.13")?
         );
-        assert_eq!(fs::read_to_string(&query_log)?, "queried\nqueried\n");
+        assert_eq!(
+            fs::read_to_string(&query_log)?,
+            indoc! {"
+                queried
+                queried
+            "}
+        );
         Ok(())
     }
 

@@ -1,3 +1,4 @@
+use std::fmt;
 use std::mem::size_of;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -5,7 +6,9 @@ use std::sync::Arc;
 use jiff::Timestamp;
 use rkyv::rancor::{Fallible, Source};
 use rustc_hash::FxHashMap;
-use serde::de::{DeserializeSeed, MapAccess, SeqAccess, Visitor};
+use serde::de::{
+    DeserializeSeed, Error, MapAccess, SeqAccess, Visitor, value::MapAccessDeserializer,
+};
 use serde::{Deserialize, Deserializer, Serialize};
 
 use uv_normalize::PackageName;
@@ -271,15 +274,36 @@ pub enum CoreMetadata {
     Hashes(Hashes),
 }
 
+struct CoreMetadataVisitor;
+
+impl<'de> Visitor<'de> for CoreMetadataVisitor {
+    type Value = CoreMetadata;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("a boolean or map")
+    }
+
+    fn visit_bool<E>(self, value: bool) -> Result<Self::Value, E>
+    where
+        E: Error,
+    {
+        Ok(CoreMetadata::Bool(value))
+    }
+
+    fn visit_map<M>(self, map: M) -> Result<Self::Value, M::Error>
+    where
+        M: MapAccess<'de>,
+    {
+        Hashes::deserialize(MapAccessDeserializer::new(map)).map(CoreMetadata::Hashes)
+    }
+}
+
 impl<'de> Deserialize<'de> for CoreMetadata {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
-        serde_untagged::UntaggedEnumVisitor::new()
-            .bool(|bool| Ok(Self::Bool(bool)))
-            .map(|map| map.deserialize().map(CoreMetadata::Hashes))
-            .deserialize(deserializer)
+        deserializer.deserialize_any(CoreMetadataVisitor)
     }
 }
 
@@ -302,15 +326,36 @@ pub enum Yanked {
     Reason(SmallString),
 }
 
+struct YankedVisitor;
+
+impl Visitor<'_> for YankedVisitor {
+    type Value = Yanked;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("a boolean or string")
+    }
+
+    fn visit_bool<E>(self, value: bool) -> Result<Self::Value, E>
+    where
+        E: Error,
+    {
+        Ok(Yanked::Bool(value))
+    }
+
+    fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+    where
+        E: Error,
+    {
+        Ok(Yanked::Reason(SmallString::from(value)))
+    }
+}
+
 impl<'de> Deserialize<'de> for Yanked {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
-        serde_untagged::UntaggedEnumVisitor::new()
-            .bool(|bool| Ok(Self::Bool(bool)))
-            .string(|string| Ok(Self::Reason(SmallString::from(string))))
-            .deserialize(deserializer)
+        deserializer.deserialize_any(YankedVisitor)
     }
 }
 

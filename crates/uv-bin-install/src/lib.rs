@@ -19,7 +19,6 @@ use serde::Deserialize;
 use thiserror::Error;
 use tokio::io::{AsyncRead, ReadBuf};
 use tokio_util::compat::FuturesAsyncReadCompatExt;
-use url::Url;
 use uv_client::retryable_on_request_failure;
 use uv_distribution_filename::LegacySourceDistExtension;
 use uv_distribution_filename::SourceDistExtension;
@@ -32,7 +31,7 @@ use uv_client::{BaseClient, RetriableError, fetch_with_url_fallback};
 use uv_extract::{Error as ExtractError, stream};
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
 use uv_platform::Platform;
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 
 /// Binary tools that can be installed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -83,7 +82,7 @@ impl Binary {
         version: &Version,
         platform: &str,
         format: ArchiveFormat,
-    ) -> Result<Vec<DisplaySafeUrl>, Error> {
+    ) -> Result<Vec<SafeUrl>, Error> {
         let custom_astral_mirror = astral_mirror_url_from_env();
         self.download_urls_with_astral_mirror(
             version,
@@ -99,7 +98,7 @@ impl Binary {
         platform: &str,
         format: ArchiveFormat,
         astral_mirror_url: Option<&str>,
-    ) -> Result<Vec<DisplaySafeUrl>, Error> {
+    ) -> Result<Vec<SafeUrl>, Error> {
         let astral_mirror_url = custom_astral_mirror_url(astral_mirror_url);
         match self {
             Self::Ruff => {
@@ -137,7 +136,7 @@ impl Binary {
     }
 
     /// Return the ordered list of manifest URLs to try for this binary.
-    fn manifest_urls(self) -> Result<Vec<DisplaySafeUrl>, Error> {
+    fn manifest_urls(self) -> Result<Vec<SafeUrl>, Error> {
         let custom_astral_mirror = astral_mirror_url_from_env();
         self.manifest_urls_with_astral_mirror(custom_astral_mirror.as_deref())
     }
@@ -145,7 +144,7 @@ impl Binary {
     fn manifest_urls_with_astral_mirror(
         self,
         astral_mirror_url: Option<&str>,
-    ) -> Result<Vec<DisplaySafeUrl>, Error> {
+    ) -> Result<Vec<SafeUrl>, Error> {
         let astral_mirror_url = custom_astral_mirror_url(astral_mirror_url);
         let name = self.name();
         let mirror_base = astral_mirror_base_url(astral_mirror_url);
@@ -161,16 +160,16 @@ impl Binary {
 
     /// Given a canonical artifact URL (e.g., from the versions manifest), return the ordered list
     /// of URLs to try for this binary.
-    fn mirror_urls(self, canonical_url: DisplaySafeUrl) -> Result<Vec<DisplaySafeUrl>, Error> {
+    fn mirror_urls(self, canonical_url: SafeUrl) -> Result<Vec<SafeUrl>, Error> {
         let custom_astral_mirror = astral_mirror_url_from_env();
         self.mirror_urls_with_astral_mirror(canonical_url, custom_astral_mirror.as_deref())
     }
 
     fn mirror_urls_with_astral_mirror(
         self,
-        canonical_url: DisplaySafeUrl,
+        canonical_url: SafeUrl,
         astral_mirror_url: Option<&str>,
-    ) -> Result<Vec<DisplaySafeUrl>, Error> {
+    ) -> Result<Vec<SafeUrl>, Error> {
         let astral_mirror_url = custom_astral_mirror_url(astral_mirror_url);
         match self {
             Self::Ruff => {
@@ -301,8 +300,8 @@ const VERSIONS_MANIFEST_MIRROR_SUFFIX: &str = "/github/versions/main/v1";
 /// The canonical base URL for the versions manifest.
 const VERSIONS_MANIFEST_URL: &str = "https://raw.githubusercontent.com/astral-sh/versions/main/v1";
 
-fn parse_url(url: String) -> Result<DisplaySafeUrl, Error> {
-    DisplaySafeUrl::parse(&url).map_err(|source| Error::UrlParse { url, source })
+fn parse_url(url: String) -> Result<SafeUrl, Error> {
+    SafeUrl::parse(&url).map_err(|source| Error::UrlParse { url, source })
 }
 
 /// Binary version information from the versions manifest.
@@ -336,7 +335,7 @@ pub struct ResolvedVersion {
     /// The version number.
     pub version: Version,
     /// The ordered list of download URLs to try for this version and current platform.
-    artifact_urls: Vec<DisplaySafeUrl>,
+    artifact_urls: Vec<SafeUrl>,
     /// The archive format.
     archive_format: ArchiveFormat,
 }
@@ -366,14 +365,14 @@ impl ResolvedVersion {
 pub enum Error {
     #[error("Failed to download from: {url}")]
     Download {
-        url: DisplaySafeUrl,
+        url: SafeUrl,
         #[source]
         source: reqwest_middleware::Error,
     },
 
     #[error("Failed to read from: {url}")]
     Stream {
-        url: DisplaySafeUrl,
+        url: SafeUrl,
         #[source]
         source: reqwest::Error,
     },
@@ -382,7 +381,7 @@ pub enum Error {
     UrlParse {
         url: String,
         #[source]
-        source: uv_redacted::DisplaySafeUrlError,
+        source: uv_redacted::SafeUrlError,
     },
 
     #[error("Failed to extract archive")]
@@ -551,12 +550,12 @@ async fn fetch_and_find_matching_version(
     constraints: Option<&uv_pep440::VersionSpecifiers>,
     exclude_newer: Option<jiff::Timestamp>,
     platform_name: &str,
-    manifest_url: DisplaySafeUrl,
+    manifest_url: SafeUrl,
     client: &BaseClient,
 ) -> Result<ResolvedVersion, Error> {
     let response = client
         .for_host(&manifest_url)
-        .get(Url::from(manifest_url.clone()))
+        .get(manifest_url.clone())
         .send()
         .await
         .map_err(|source| Error::ManifestFetch {
@@ -661,7 +660,7 @@ fn check_version_match(
             continue;
         }
 
-        let Ok(canonical_url) = DisplaySafeUrl::parse(&artifact.url) else {
+        let Ok(canonical_url) = SafeUrl::parse(&artifact.url) else {
             continue;
         };
 
@@ -712,7 +711,7 @@ pub async fn bin_install(
 async fn bin_install_from_urls(
     binary: Binary,
     version: &Version,
-    download_urls: &[DisplaySafeUrl],
+    download_urls: &[SafeUrl],
     format: ArchiveFormat,
     platform_name: &str,
     client: &BaseClient,
@@ -789,7 +788,7 @@ async fn download_and_unpack(
     reporter: &dyn Reporter,
     platform_name: &str,
     format: ArchiveFormat,
-    download_url: DisplaySafeUrl,
+    download_url: SafeUrl,
     cache_entry: &CacheEntry,
     tar_backend: TarBackend,
 ) -> Result<PathBuf, Error> {
@@ -798,7 +797,7 @@ async fn download_and_unpack(
 
     let response = client
         .for_host(&download_url)
-        .get(Url::from(download_url.clone()))
+        .get(download_url.clone())
         .send()
         .await
         .map_err(|err| Error::Download {
@@ -933,13 +932,13 @@ mod tests {
     use serde_json::json;
     use std::io::Write;
     use uv_client::{BaseClientBuilder, fetch_with_url_fallback, retryable_on_request_failure};
-    use uv_redacted::DisplaySafeUrl;
+    use uv_redacted::SafeUrl;
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use super::*;
 
-    async fn spawn_manifest_server(response: ResponseTemplate) -> (DisplaySafeUrl, MockServer) {
+    async fn spawn_manifest_server(response: ResponseTemplate) -> (SafeUrl, MockServer) {
         let server = MockServer::start().await;
         Mock::given(method("GET"))
             .and(path("/uv.ndjson"))
@@ -948,7 +947,7 @@ mod tests {
             .await;
 
         (
-            DisplaySafeUrl::parse(&format!("{}/uv.ndjson", server.uri())).unwrap(),
+            SafeUrl::parse(&format!("{}/uv.ndjson", server.uri())).unwrap(),
             server,
         )
     }
@@ -982,7 +981,7 @@ mod tests {
     }
 
     async fn resolve_version_from_manifest_urls(
-        urls: &[DisplaySafeUrl],
+        urls: &[SafeUrl],
         constraints: Option<&VersionSpecifiers>,
     ) -> Result<ResolvedVersion, Error> {
         let platform = Platform::from_env().unwrap();
@@ -1120,11 +1119,11 @@ mod tests {
         assert_eq!(
             default_urls,
             vec![
-                DisplaySafeUrl::parse(
+                SafeUrl::parse(
                     "https://releases.astral.sh/github/ty/releases/download/0.0.1/ty-x86_64-unknown-linux-gnu.tar.gz",
                 )
                 .expect("default Astral mirror ty URL should be valid"),
-                DisplaySafeUrl::parse(
+                SafeUrl::parse(
                     "https://github.com/astral-sh/ty/releases/download/0.0.1/ty-x86_64-unknown-linux-gnu.tar.gz",
                 )
                 .expect("canonical ty URL should be valid"),
@@ -1160,7 +1159,7 @@ mod tests {
 
     #[test]
     fn test_ruff_mirror_urls_custom_astral_mirror() {
-        let canonical_url = DisplaySafeUrl::parse(
+        let canonical_url = SafeUrl::parse(
             "https://github.com/astral-sh/ruff/releases/download/0.15.1/ruff-x86_64-unknown-linux-gnu.tar.gz",
         )
         .unwrap();
@@ -1186,7 +1185,7 @@ mod tests {
 
     #[test]
     fn test_ty_mirror_urls_custom_astral_mirror() {
-        let canonical_url = DisplaySafeUrl::parse(
+        let canonical_url = SafeUrl::parse(
             "https://github.com/astral-sh/ty/releases/download/0.0.1/ty-x86_64-unknown-linux-gnu.tar.gz",
         )
         .expect("canonical ty URL should be valid");
@@ -1212,7 +1211,7 @@ mod tests {
 
     #[test]
     fn test_ty_mirror_urls_use_default_astral_mirror_then_github() {
-        let canonical_url = DisplaySafeUrl::parse(
+        let canonical_url = SafeUrl::parse(
             "https://github.com/astral-sh/ty/releases/download/0.0.1/ty-x86_64-unknown-linux-gnu.tar.gz",
         )
         .expect("canonical ty URL should be valid");
@@ -1227,7 +1226,7 @@ mod tests {
         assert_eq!(
             default_urls,
             vec![
-                DisplaySafeUrl::parse(
+                SafeUrl::parse(
                     "https://releases.astral.sh/github/ty/releases/download/0.0.1/ty-x86_64-unknown-linux-gnu.tar.gz",
                 )
                 .expect("default Astral mirror ty URL should be valid"),
@@ -1251,7 +1250,7 @@ mod tests {
 
     #[test]
     fn test_ruff_mirror_urls_empty_astral_mirror_uses_default() {
-        let canonical_url = DisplaySafeUrl::parse(
+        let canonical_url = SafeUrl::parse(
             "https://github.com/astral-sh/ruff/releases/download/0.15.1/ruff-x86_64-unknown-linux-gnu.tar.gz",
         )
         .unwrap();
@@ -1352,16 +1351,11 @@ mod tests {
                 .unwrap();
         });
 
-        let url = DisplaySafeUrl::parse(&format!("http://{addr}/ruff.tar.gz")).unwrap();
+        let url = SafeUrl::parse(&format!("http://{addr}/ruff.tar.gz")).unwrap();
         let client = BaseClientBuilder::default()
             .build()
             .expect("failed to build base client");
-        let response = client
-            .for_host(&url)
-            .get(Url::from(url.clone()))
-            .send()
-            .await
-            .unwrap();
+        let response = client.for_host(&url).get(url.clone()).send().await.unwrap();
 
         let reqwest_err = response.bytes_stream().try_next().await.unwrap_err();
         assert!(reqwest_err.is_body() || reqwest_err.is_decode());

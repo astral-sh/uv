@@ -54,14 +54,23 @@ jobs:
         if: ${{ inputs.save-rust-cache == 'true' && steps.rust-cache.outputs.cache-hit != 'true' }}
         run: touch "$RUNNER_TEMP/uv-cargo-cache-marker"
 
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - name: "Configure Python archive cache"
+        # Share archives downloaded during setup with the tests.
+        run: echo "UV_PYTHON_CACHE_DIR=$RUNNER_TEMP/uv-python-cache" >> "$GITHUB_ENV"
+
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           # renovate: datasource=github-release-attachments depName=astral-sh/uv
-          version: "0.12.13"
-          checksum: "745765a3b6e360ad76743599ae5c42e9278c7edf8bbff9fc76d05bf2623a04dd"
+          version: "0.13.1"
+          checksum: "eadd9d27c134ab5ac1ffd4473b97a741407f3ea238288f03121fc4deddf90220"
 
       - name: "Install required Python versions"
-        run: uv python install
+        env:
+          UV_PYTHON_DOWNLOADS_JSON_URL: crates/uv-python-managed/download-metadata.json
+        run: |
+          uv python install
+          # Warm the cache for Unix-only tests
+          uv python install 3.12d 3.13d 3.13t 3.13td
 
       - name: "Install secret service"
         run: |
@@ -117,7 +126,7 @@ jobs:
           INSTA_UPDATE: new
           INSTA_PENDING_DIR: ${{ github.workspace }}/pending-snapshots
         run: |
-          uv run --only-dev cargo nextest run \
+          uv run --only-group test cargo nextest run --locked \
             --cargo-profile fast-build-nightly \
             -Z panic-abort-tests \
             -Z checksum-freshness \
@@ -190,14 +199,22 @@ jobs:
           security list-keychains -d user -s "$RUNNER_TEMP/uv-ci.keychain-db"
           security default-keychain -d user -s "$RUNNER_TEMP/uv-ci.keychain-db"
 
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - name: "Configure Python archive cache"
+        run: echo "UV_PYTHON_CACHE_DIR=$RUNNER_TEMP/uv-python-cache" >> "$GITHUB_ENV"
+
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           # renovate: datasource=github-release-attachments depName=astral-sh/uv
-          version: "0.12.13"
-          checksum: "7e6ddb9316acc00f2296c82ff4d99977870ee34b2f0ddcae9444d714db9364ed"
+          version: "0.13.1"
+          checksum: "cfe454573412ff7380d15fc7dae5997ab53ffce72fce0a78e91ddbc84001acd2"
 
       - name: "Install required Python versions"
-        run: uv python install
+        env:
+          UV_PYTHON_DOWNLOADS_JSON_URL: crates/uv-python-managed/download-metadata.json
+        run: |
+          uv python install
+          # Warm the cache for Unix-only tests
+          uv python install 3.12d 3.13d 3.13t 3.13td
 
       - name: "Cargo test"
         env:
@@ -214,7 +231,7 @@ jobs:
           INSTA_UPDATE: new
           INSTA_PENDING_DIR: ${{ github.workspace }}/pending-snapshots
         run: |
-          uv run --only-dev cargo nextest run \
+          uv run --only-group test cargo nextest run --locked \
             --cargo-profile fast-build-nightly \
             -Z panic-abort-tests \
             -Z checksum-freshness \
@@ -267,13 +284,15 @@ jobs:
         run: |
           Copy-Item -Path "${{ github.workspace }}" -Destination "$Env:UV_WORKSPACE" -Recurse
 
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           # renovate: datasource=github-release-attachments depName=astral-sh/uv
-          version: "0.12.13"
-          checksum: "a86c9dc7bad9b03f388583b7187c05fe9951c2e0d392217e8fd43d97787f6ec2"
+          version: "0.13.1"
+          checksum: "3b2661a463a5baea7f5076ea2b25ab71d77f36a6c0d809e5350651792f80a672"
 
       - name: "Install required Python versions"
+        env:
+          UV_PYTHON_DOWNLOADS_JSON_URL: crates/uv-python-managed/download-metadata.json
         run: uv python install
 
       - name: "Install Rust toolchain"
@@ -321,7 +340,7 @@ jobs:
           INSTA_PENDING_DIR: ${{ github.workspace }}/pending-snapshots
         shell: bash
         run: |
-          uv run --only-dev cargo nextest run \
+          uv run --only-group test cargo nextest run --locked \
             --cargo-profile fast-build-nightly \
             -Z panic-abort-tests \
             -Z checksum-freshness \

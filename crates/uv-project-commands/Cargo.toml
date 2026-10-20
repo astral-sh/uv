@@ -1,6 +1,6 @@
 [package]
 name = "uv-project-commands"
-version = "0.0.92"
+version = "0.0.95"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -66,7 +66,7 @@ uv-workspace = { workspace = true }
 
 anstream = { workspace = true }
 anyhow = { workspace = true }
-async_zip = { workspace = true, features = ["zstd"] }
+async_zip = { workspace = true, features = ["zstd-read"] }
 clap = { workspace = true }
 ctrlc = { workspace = true }
 fs-err = { workspace = true }
@@ -85,4 +85,3 @@ tokio = { workspace = true }
 toml = { workspace = true }
 toml_edit = { workspace = true }
 tracing = { workspace = true }
-url = { workspace = true }

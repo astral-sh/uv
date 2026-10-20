@@ -23,13 +23,14 @@ use uv_fs::{Simplified, normalize_path};
 use uv_globfilter::{GlobDirFilter, PortableGlobParser};
 use uv_platform_tags::{AbiTag, LanguageTag, PlatformTag};
 use uv_preview::PreviewFeature;
-use uv_pypi_types::BuildKind;
+use uv_pypi_types::{BuildKind, Metadata23};
 use uv_warnings::warn_user_once;
 
 use crate::metadata::DEFAULT_EXCLUDES;
 use crate::{
     BuildBackendSettings, DirectoryWriter, Error, FileList, ListWriter, PyProjectToml,
-    error_on_venv, find_roots, write_directory_once, write_file_with_directories,
+    compare_build_entries, error_on_venv, find_roots, write_directory_once,
+    write_file_with_directories,
 };
 
 // Files at or below this size are buffered and written with `write_entry_whole`,
@@ -51,9 +52,7 @@ pub fn build_wheel(
     show_warnings: bool,
 ) -> Result<WheelFilename, Error> {
     let pyproject_toml = PyProjectToml::parse(&source_tree.join("pyproject.toml"))?;
-    for warning in pyproject_toml.check_build_system(uv_version, BuildKind::Wheel) {
-        warn_user_once!("{warning}");
-    }
+    pyproject_toml.warn_build_system(uv_version, BuildKind::Wheel);
     crate::check_metadata_directory(source_tree, metadata_directory, &pyproject_toml)?;
 
     let filename = WheelFilename::new(
@@ -100,9 +99,7 @@ pub fn list_wheel(
     show_warnings: bool,
 ) -> Result<(WheelFilename, FileList), Error> {
     let pyproject_toml = PyProjectToml::parse(&source_tree.join("pyproject.toml"))?;
-    for warning in pyproject_toml.check_build_system(uv_version, BuildKind::Wheel) {
-        warn_user_once!("{warning}");
-    }
+    pyproject_toml.warn_build_system(uv_version, BuildKind::Wheel);
 
     let filename = WheelFilename::new(
         pyproject_toml.name().clone(),
@@ -136,10 +133,7 @@ fn write_wheel(
     mut wheel_writer: impl DirectoryWriter,
     show_warnings: bool,
 ) -> Result<(), Error> {
-    let settings = pyproject_toml
-        .settings()
-        .cloned()
-        .unwrap_or_else(BuildBackendSettings::default);
+    let settings = pyproject_toml.settings();
 
     let exclude_matcher = build_wheel_exclude_matcher(&settings)?;
 
@@ -157,7 +151,7 @@ fn write_wheel(
     let mut written_directories = FxHashSet::<PathBuf>::default();
     for module_relative in module_relative {
         for entry in WalkDir::new(src_root.join(module_relative))
-            .sort_by_file_name()
+            .sort_by(compare_build_entries)
             .into_iter()
             .filter_entry(|entry| !exclude_matcher.is_match(entry.path()))
         {
@@ -207,8 +201,10 @@ fn write_wheel(
     }
     debug!("Visited {files_visited} files for wheel build");
 
-    // Add the license files
-    if pyproject_toml.license_files_wheel().next().is_some() {
+    let metadata = pyproject_toml.to_metadata(source_tree)?;
+
+    // Add the license files validated for the metadata.
+    if !metadata.license_files.is_empty() {
         debug!("Adding license files");
         let license_dir = format!(
             "{}-{}.dist-info/licenses/",
@@ -216,14 +212,17 @@ fn write_wheel(
             pyproject_toml.version()
         );
 
-        wheel_subdir_from_globs(
-            source_tree,
-            &license_dir,
-            pyproject_toml.license_files_wheel(),
-            &mut wheel_writer,
-            "project.license-files",
-            None,
-        )?;
+        let license_dir = Path::new(&license_dir);
+        write_directory_once(&mut wheel_writer, &mut written_directories, license_dir)?;
+        for license_file in &metadata.license_files {
+            write_file_with_directories(
+                &mut wheel_writer,
+                &mut written_directories,
+                license_dir,
+                Path::new(license_file),
+                &source_tree.join(license_file),
+            )?;
+        }
     }
 
     write_data_files(
@@ -239,7 +238,7 @@ fn write_wheel(
         &mut wheel_writer,
         pyproject_toml,
         filename,
-        source_tree,
+        &metadata,
         uv_version,
     )?;
     wheel_writer.close(&dist_info_dir)?;
@@ -256,13 +255,8 @@ pub fn build_editable(
     show_warnings: bool,
 ) -> Result<WheelFilename, Error> {
     let pyproject_toml = PyProjectToml::parse(&source_tree.join("pyproject.toml"))?;
-    for warning in pyproject_toml.check_build_system(uv_version, BuildKind::Editable) {
-        warn_user_once!("{warning}");
-    }
-    let settings = pyproject_toml
-        .settings()
-        .cloned()
-        .unwrap_or_else(BuildBackendSettings::default);
+    pyproject_toml.warn_build_system(uv_version, BuildKind::Editable);
+    let settings = pyproject_toml.settings();
     let exclude_matcher = build_wheel_exclude_matcher(&settings)?;
 
     crate::check_metadata_directory(source_tree, metadata_directory, &pyproject_toml)?;
@@ -313,11 +307,12 @@ pub fn build_editable(
     )?;
 
     debug!("Adding metadata files to: {}", wheel_path.user_display());
+    let metadata = pyproject_toml.to_metadata(source_tree)?;
     let dist_info_dir = write_dist_info(
         &mut wheel_writer,
         &pyproject_toml,
         &filename,
-        source_tree,
+        &metadata,
         uv_version,
     )?;
     wheel_writer.close(&dist_info_dir)?;
@@ -413,9 +408,7 @@ pub fn metadata(
     uv_version: &str,
 ) -> Result<String, Error> {
     let pyproject_toml = PyProjectToml::parse(&source_tree.join("pyproject.toml"))?;
-    for warning in pyproject_toml.check_build_system(uv_version, BuildKind::Wheel) {
-        warn_user_once!("{warning}");
-    }
+    pyproject_toml.warn_build_system(uv_version, BuildKind::Wheel);
 
     let filename = WheelFilename::new(
         pyproject_toml.name().clone(),
@@ -433,11 +426,12 @@ pub fn metadata(
         metadata_directory.user_display()
     );
     let mut wheel_writer = FilesystemWriter::new(metadata_directory);
+    let metadata = pyproject_toml.to_metadata(source_tree)?;
     let dist_info_dir = write_dist_info(
         &mut wheel_writer,
         &pyproject_toml,
         &filename,
-        source_tree,
+        &metadata,
         uv_version,
     )?;
     wheel_writer.close(&dist_info_dir)?;
@@ -601,7 +595,7 @@ fn wheel_subdir_from_globs(
     };
 
     for entry in WalkDir::new(src)
-        .sort_by_file_name()
+        .sort_by(compare_build_entries)
         .into_iter()
         .filter_entry(|entry| {
             // TODO(konsti): This should be prettier.
@@ -632,7 +626,7 @@ fn wheel_subdir_from_globs(
             .strip_prefix(src)
             .expect("walkdir starts with root");
 
-        if !matcher.match_path(relative) || is_excluded(entry.path()) {
+        if !matcher.match_path(relative, &entry) || is_excluded(entry.path()) {
             trace!("Excluding {}: {}", globs_field, relative.user_display());
             continue;
         }
@@ -663,7 +657,7 @@ fn write_dist_info(
     writer: &mut dyn DirectoryWriter,
     pyproject_toml: &PyProjectToml,
     filename: &WheelFilename,
-    root: &Path,
+    metadata: &Metadata23,
     uv_version: &str,
 ) -> Result<String, Error> {
     let dist_info_dir = format!(
@@ -696,7 +690,6 @@ fn write_dist_info(
     }
 
     // Add `METADATA` and `METADATA.json`.
-    let metadata = pyproject_toml.to_metadata(root)?;
     writer.write_bytes(
         &format!("{dist_info_dir}/METADATA"),
         metadata.core_metadata_format().as_bytes(),
@@ -704,7 +697,7 @@ fn write_dist_info(
     if uv_preview::is_enabled(PreviewFeature::MetadataJson) {
         writer.write_bytes(
             &format!("{dist_info_dir}/METADATA.json"),
-            &serde_json::to_vec(&metadata).map_err(Error::Json)?,
+            &serde_json::to_vec(metadata).map_err(Error::Json)?,
         )?;
     }
 

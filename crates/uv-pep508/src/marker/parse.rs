@@ -1,4 +1,5 @@
 use arcstr::ArcStr;
+use smallvec::SmallVec;
 use std::str::FromStr;
 use uv_normalize::{ExtraName, GroupName};
 use uv_pep440::{Version, VersionPattern, VersionSpecifier};
@@ -626,37 +627,44 @@ fn parse_marker_op<T: Pep508Url, R: Reporter>(
     parse_inner: fn(&mut Cursor, &mut R) -> Result<Option<MarkerTree>, Pep508Error<T>>,
     reporter: &mut R,
 ) -> Result<Option<MarkerTree>, Pep508Error<T>> {
-    let mut tree = None;
-
-    // marker_and or marker_expr
-    let first_element = parse_inner(cursor, reporter)?;
-
-    if let Some(expression) = first_element {
-        tree = Some(match tree {
-            Some(tree) => apply(tree, expression),
-            None => expression,
-        });
+    let first = parse_inner(cursor, reporter)?;
+    cursor.eat_whitespace();
+    let (start, len) = cursor.peek_while(|c| !c.is_whitespace() && c != '(');
+    if cursor.slice(start, len) != op {
+        return Ok(first);
     }
 
+    let mut expressions = SmallVec::<[MarkerTree; 4]>::new();
+    expressions.extend(first);
     loop {
-        // wsp*
+        cursor.take_while(|c| !c.is_whitespace() && c != '(');
+        expressions.extend(parse_inner(cursor, reporter)?);
         cursor.eat_whitespace();
-        // ('or' marker_and) or ('and' marker_or)
         let (start, len) = cursor.peek_while(|c| !c.is_whitespace() && c != '(');
-        match cursor.slice(start, len) {
-            value if value == op => {
-                cursor.take_while(|c| !c.is_whitespace() && c != '(');
-
-                if let Some(expression) = parse_inner(cursor, reporter)? {
-                    tree = Some(match tree {
-                        Some(tree) => apply(tree, expression),
-                        None => expression,
-                    });
-                }
-            }
-            _ => return Ok(tree),
+        if cursor.slice(start, len) != op {
+            break;
         }
     }
+
+    // Combining adjacent pairs avoids constructing every prefix of a growing diagram.
+    while expressions.len() > 1 {
+        let length = expressions.len();
+        for (output, index) in (0..length).step_by(2).enumerate() {
+            expressions[output] = if index + 1 < length {
+                apply(expressions[index], expressions[index + 1])
+            } else {
+                expressions[index]
+            };
+            // All terms have been parsed, so constant results cannot hide errors or warnings.
+            if (expressions[output].is_true() && op == "or")
+                || (expressions[output].is_false() && op == "and")
+            {
+                return Ok(Some(expressions[output]));
+            }
+        }
+        expressions.truncate(length.div_ceil(2));
+    }
+    Ok(expressions.first().copied())
 }
 
 /// ```text

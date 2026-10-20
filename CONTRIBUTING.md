@@ -266,6 +266,12 @@ uv run resolver \
     ../test/requirements/trio.in
 ```
 
+### CI benchmarks
+
+In `astral-sh/uv-dev`, add `test:benchmarks` to a pull request to enable the simulated and walltime
+benchmarks on subsequent pushes. The label also applies to draft pull requests. `test:skip` takes
+precedence. Remove `test:benchmarks` to disable benchmarks on future pushes.
+
 ### Analyzing concurrency
 
 You can use [tracing-durations-export](https://github.com/konstin/tracing-durations-export) to

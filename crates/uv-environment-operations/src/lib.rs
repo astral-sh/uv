@@ -762,8 +762,11 @@ pub async fn lock_project_environment(
     target: ProjectEnvironmentTarget<'_>,
 ) -> Result<LockedFile, LockedFileError> {
     let install_path = target.install_path();
+    // The workspace exists even when its environment does not. Resolve aliases before choosing
+    // the lock so two paths to the same workspace cannot initialize it concurrently.
+    let workspace_path = install_path.simple_canonicalize()?;
     LockedFile::acquire(
-        std::env::temp_dir().join(format!("uv-{}.lock", cache_digest(&install_path))),
+        std::env::temp_dir().join(format!("uv-{}.lock", cache_digest(&workspace_path))),
         LockedFileMode::Exclusive,
         install_path.simplified_display(),
     )
@@ -1062,7 +1065,6 @@ impl ProjectEnvironment {
                     uv_virtualenv::Seed::Disabled,
                     upgrade_policy,
                 )?;
-                environment.cache_virtualenv(false, cache)?;
 
                 if centralized {
                     update_project_environment_link(&environment, target, link_error_reporting);
@@ -1254,7 +1256,6 @@ impl ScriptEnvironment {
                     uv_virtualenv::Seed::Disabled,
                     upgrade_policy,
                 )?;
-                environment.cache_virtualenv(false, cache)?;
 
                 Ok(if replaced {
                     Self::Replaced(environment)
@@ -1516,7 +1517,19 @@ pub async fn resolve_environment(
 
             preferences
         }
-        Some(PreferenceLocation::Entries(entries)) => entries,
+        Some(PreferenceLocation::Entries(entries)) => {
+            // Drop preferences for any packages that are included in the upgrade strategy.
+            if upgrade.is_all() {
+                vec![]
+            } else if let Some(packages) = upgrade.packages() {
+                entries
+                    .into_iter()
+                    .filter(|preference| !packages.contains(preference.name()))
+                    .collect()
+            } else {
+                entries
+            }
+        }
         None => vec![],
     };
 

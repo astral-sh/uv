@@ -89,8 +89,8 @@ cache-keys = [{ file = "**/*.toml" }]
 
 !!! note
 
-    The use of globs can be expensive, as uv may need to walk the filesystem to determine whether any files have changed.
-    This may, in turn, requiring traversal of large or deeply nested directories.
+    Globs can be expensive because uv may need to traverse large or deeply nested directories to
+    determine whether any files have changed.
 
 Similarly, if a project relies on an environment variable, you can add the following to the
 project's `pyproject.toml` to invalidate the cache whenever the environment variable changes:
@@ -140,6 +140,7 @@ Note that it's _never_ safe to modify the cache directly (e.g., by removing a fi
 uv provides a few different mechanisms for removing entries from the cache:
 
 - `uv cache clean` removes _all_ cache entries from the cache directory, clearing it out entirely.
+  The directory and its lock file remain so that other uv processes can safely share the cache.
 - `uv cache clean ruff` removes all cache entries for the `ruff` package, useful for invalidating
   the cache for a single or finite set of packages.
 - `uv cache prune` removes all _unused_ cache entries and all centralized project environments. For
@@ -188,7 +189,7 @@ integration job to ensure maximum cache efficiency. For an example, see the
 
 ## Cache directory
 
-uv determines the cache directory according to, in order:
+uv determines the cache directory in the following order:
 
 1. A temporary cache directory, if `--no-cache` was requested.
 2. The specific cache directory specified via `--cache-dir`, `UV_CACHE_DIR`, or
@@ -204,9 +205,9 @@ uv determines the cache directory according to, in order:
     In most cases, `--refresh` should be used instead of `--no-cache` — as it will update the cache
     for subsequent operations but not read from the cache.
 
-It is important for performance for the cache directory to be located on the same file system as the
-Python environment uv is operating on. Otherwise, uv will not be able to link files from the cache
-into the environment and will instead need to fallback to slow copy operations.
+For best performance, locate the cache directory on the same file system as the Python environment
+uv is operating on. Otherwise, uv cannot link files from the cache into the environment and must
+fall back to slower copy operations.
 
 ## Cache versioning
 

@@ -15,7 +15,7 @@ use uv_distribution_filename::EggInfoFilename;
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, Diagnostic, ExtraBuildRequires, ExtraBuildVariables,
     InstalledDist, InstalledDistKind, Name, NameRequirementSpecification, PackageConfigSettings,
-    Requirement, UnresolvedRequirement, UnresolvedRequirementSpecification,
+    Requirement, RequiresPython, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
@@ -24,7 +24,7 @@ use uv_pep508::VersionOrUrl;
 use uv_platform_tags::Tags;
 use uv_pypi_types::{ResolverMarkerEnvironment, VerbatimParsedUrl};
 use uv_python_interpreter::{Interpreter, PythonEnvironment};
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 use uv_types::InstalledPackagesProvider;
 use uv_warnings::warn_user;
 
@@ -45,7 +45,7 @@ pub struct SitePackages {
     /// virtual environment, which we handle gracefully.
     by_name: FxHashMap<PackageName, Vec<usize>>,
     /// The installed editable distributions, keyed by URL.
-    by_url: FxHashMap<DisplaySafeUrl, Vec<usize>>,
+    by_url: FxHashMap<SafeUrl, Vec<usize>>,
 }
 
 impl SitePackages {
@@ -75,7 +75,7 @@ impl SitePackages {
     ) -> Result<Self> {
         let mut distributions: Vec<Option<InstalledDist>> = Vec::new();
         let mut by_name: FxHashMap<PackageName, Vec<usize>> = FxHashMap::default();
-        let mut by_url: FxHashMap<DisplaySafeUrl, Vec<usize>> = FxHashMap::default();
+        let mut by_url: FxHashMap<SafeUrl, Vec<usize>> = FxHashMap::default();
 
         for site_packages in interpreter.site_packages() {
             // Read the site-packages directory.
@@ -188,7 +188,7 @@ impl SitePackages {
     }
 
     /// Returns the distributions installed from the given URL, if any.
-    pub fn get_urls(&self, url: &DisplaySafeUrl) -> Vec<&InstalledDist> {
+    pub fn get_urls(&self, url: &SafeUrl) -> Vec<&InstalledDist> {
         let Some(indexes) = self.by_url.get(url) else {
             return Vec::new();
         };
@@ -211,6 +211,8 @@ impl SitePackages {
         dependency_metadata: &DependencyMetadata,
     ) -> Result<Vec<SitePackagesDiagnostic>> {
         let mut diagnostics = Vec::new();
+        let python_requirement =
+            RequiresPython::greater_than_equal_version(markers.python_full_version());
 
         for (package, indexes) in &self.by_name {
             let mut distributions = indexes.iter().flat_map(|index| &self.distributions[*index]);
@@ -253,15 +255,15 @@ impl SitePackages {
                     Cow::Borrowed(metadata)
                 };
 
-                // Verify that the package is compatible with the current Python version.
-                if let Some(requires_python) = metadata.requires_python.as_ref() {
-                    if !requires_python.contains(markers.python_full_version()) {
-                        diagnostics.push(SitePackagesDiagnostic::IncompatiblePythonVersion {
-                            package: package.clone(),
-                            version: self.interpreter.python_version().clone(),
-                            requires_python: requires_python.clone(),
-                        });
-                    }
+                // Ignore Python upper bounds, as we do during resolution.
+                if let Some(requires_python) = metadata.requires_python.as_ref()
+                    && !python_requirement.is_contained_by(requires_python)
+                {
+                    diagnostics.push(SitePackagesDiagnostic::IncompatiblePythonVersion {
+                        package: package.clone(),
+                        version: self.interpreter.python_version().clone(),
+                        requires_python: requires_python.clone(),
+                    });
                 }
 
                 // Verify that the package is compatible with the current tags.
@@ -825,6 +827,8 @@ mod tests {
 
     use anyhow::Result;
     #[cfg(unix)]
+    use indoc::{formatdoc, indoc};
+    #[cfg(unix)]
     use uv_cache::Cache;
     #[cfg(unix)]
     use uv_distribution_types::Name;
@@ -875,7 +879,11 @@ mod tests {
         fs_err::create_dir_all(&dist_info)?;
         fs_err::write(
             dist_info.join("METADATA"),
-            "Metadata-Version: 2.1\nName: demo\nVersion: 1.0\n",
+            indoc! {"
+                Metadata-Version: 2.1
+                Name: demo
+                Version: 1.0
+            "},
         )?;
 
         let executable = temp_dir.path().join("python");
@@ -926,7 +934,13 @@ mod tests {
         .replace("{EXECUTABLE}", &executable.to_string_lossy())
         .replace("{PLATLIB}", &platlib.to_string_lossy())
         .replace("{PURELIB}", &purelib.to_string_lossy());
-        fs_err::write(&executable, format!("#!/bin/sh\necho '{json}'\n"))?;
+        fs_err::write(
+            &executable,
+            formatdoc! {"
+                #!/bin/sh
+                echo '{json}'
+            "},
+        )?;
         fs_err::set_permissions(&executable, PermissionsExt::from_mode(0o770))?;
 
         let cache = Cache::temp()?.init().await?;
