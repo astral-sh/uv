@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::{env, io};
 
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use serde::Deserialize;
 use tokio::io::{AsyncWriteExt, BufWriter};
 use tokio::process::Command;
@@ -15,6 +16,7 @@ use uv_client::BaseClient;
 use uv_configuration::Concurrency;
 use uv_python_interpreter::Interpreter;
 use uv_static::EnvVars;
+use uv_threads::initialize_rayon_once;
 
 use super::{CompileError, compile_timeout};
 
@@ -73,12 +75,24 @@ pub async fn compile_serc_files(
     }
     let compiler = SercCompiler::new(interpreter)?;
     let timeout = compile_timeout()?;
-    for file in &files {
-        compiler.validate_destination(file)?;
+    let validate = |file: &PathBuf| {
+        if let Err(error) = compiler.validate_destination(file) {
+            return Some(error);
+        }
         #[cfg(windows)]
         if file.to_str().is_none() {
-            return Err(CompileError::SercPathEncoding(file.clone()));
+            return Some(CompileError::SercPathEncoding(file.clone()));
         }
+        None
+    };
+    let error = if files.len() <= 1 {
+        files.iter().find_map(validate)
+    } else {
+        initialize_rayon_once();
+        files.par_iter().find_map_first(validate)
+    };
+    if let Some(error) = error {
+        return Err(error);
     }
     let executable = Box::pin(install_serc(cache, client))
         .await
