@@ -15,6 +15,7 @@ use walkdir::WalkDir;
 
 use uv_configuration::Concurrency;
 use uv_fs::Simplified;
+use uv_macros::DebugNoInline;
 use uv_static::EnvVars;
 use uv_warnings::warn_user;
 
@@ -25,7 +26,7 @@ const DEFAULT_COMPILE_TIMEOUT: Duration = Duration::from_mins(1);
 type WorkerOutcome = std::thread::Result<Result<(), CompileError>>;
 type WorkerHandle = oneshot::Receiver<WorkerOutcome>;
 
-#[derive(Debug, Error)]
+#[derive(DebugNoInline, Error)]
 pub enum CompileError {
     #[error("Failed to list files in `site-packages`")]
     Walkdir(#[from] walkdir::Error),

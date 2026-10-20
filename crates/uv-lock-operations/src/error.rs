@@ -10,6 +10,7 @@ use uv_distribution::{LoweringError, MetadataError};
 use uv_distribution_types::{ExtraBuildRequiresError, IndexCredentialsError, IndexUrlError};
 use uv_errors::{Hinted, Hints};
 use uv_lock::{Lock, LockError as LockDataError, LockParseError};
+use uv_macros::DebugNoInline;
 use uv_normalize::{GroupName, PackageName};
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::MarkerTreeContents;
@@ -53,7 +54,7 @@ impl From<FrozenSource> for MissingLockfileSource {
 }
 
 /// A failure while reading, validating, or resolving a lockfile.
-#[derive(thiserror::Error, Debug)]
+#[derive(thiserror::Error, DebugNoInline)]
 pub enum LockError {
     #[error("The lockfile at `uv.lock` needs to be updated, but `{2}` was provided.")]
     LockMismatch(Option<Box<Lock>>, Box<Lock>, LockedSource),

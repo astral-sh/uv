@@ -21,6 +21,7 @@ use uv_fs::{
     LockedFile, LockedFileError, LockedFileMode, Simplified, normalize_absolute_path,
     replace_symlink, symlink_or_copy_file, verbatim_path,
 };
+use uv_macros::DebugNoInline;
 use uv_platform::{Error as PlatformError, Os};
 use uv_platform::{LibcDetectionError, Platform};
 use uv_pypi_types::Digest;
@@ -38,7 +39,7 @@ use uv_python_types::{
     PythonVariant, PythonVersion, VersionRequest,
 };
 
-#[derive(Error, Debug)]
+#[derive(Error, DebugNoInline)]
 pub enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),
