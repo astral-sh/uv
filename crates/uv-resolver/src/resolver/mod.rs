@@ -58,7 +58,7 @@ use crate::pubgrub::{
     PubGrubPython, Range,
 };
 use crate::python_requirement::PythonRequirement;
-use crate::resolution::ResolverOutput;
+use crate::resolution::{ResolutionGraphBuilder, ResolverOutput};
 use crate::resolution_mode::ResolutionStrategy;
 use crate::resolved::ResolvedDistRef;
 pub(crate) use crate::resolver::availability::{
@@ -92,7 +92,7 @@ use crate::{DependencyMode, Exclusions, FlatIndex, Options, ResolutionMode, Vers
 pub(crate) use provider::MetadataUnavailable;
 pub(crate) use resolution::{
     Resolution, ResolutionDependencyEdge, ResolutionNode, ResolutionNodeId, ResolutionPackage,
-    ResolvedFork, SelectedDistribution,
+    SelectedDistribution,
 };
 use uv_configuration::ForkStrategy;
 
@@ -375,7 +375,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 forked_states.sort_by(|a, b| cmp_requires_python(&a.env, &b.env));
             }
         }
-        let mut resolutions = vec![];
+        let mut resolutions = ResolutionGraphBuilder::new(
+            self.project.as_ref(),
+            &self.workspace_members,
+            &self.preferences,
+            &self.hasher,
+            &self.index,
+            &self.git,
+        );
 
         'FORK: while let Some(mut state) = forked_states.pop() {
             if let Some(split) = state.env.end_user_fork_display() {
@@ -486,7 +493,21 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 }
                             }
 
-                            resolutions.push(resolution);
+                            if tracing::enabled!(Level::DEBUG)
+                                && let Some(env) = resolution.env.end_user_fork_display()
+                            {
+                                let packages: FxHashSet<_> = resolution
+                                    .nodes
+                                    .iter()
+                                    .map(|(package, _)| &package.name)
+                                    .collect();
+                                debug!(
+                                    "Distinct solution for {env} with {} package(s)",
+                                    packages.len()
+                                );
+                            }
+                            resolution.trace_resolution();
+                            resolutions.push(resolution)?;
                             continue 'FORK;
                         };
                         trace!(
@@ -836,44 +857,16 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 }
             }
         }
-        if resolutions.len() > 1 {
+        if resolutions.num_forks() > 1 {
             info!(
                 "Solved your requirements for {} environments",
-                resolutions.len()
+                resolutions.num_forks()
             );
         }
-        if tracing::enabled!(Level::DEBUG) {
-            for resolution in &resolutions {
-                if let Some(env) = resolution.env.end_user_fork_display() {
-                    let packages: FxHashSet<_> = resolution
-                        .nodes
-                        .iter()
-                        .map(|(package, _)| &package.name)
-                        .collect();
-                    debug!(
-                        "Distinct solution for {env} with {} package(s)",
-                        packages.len()
-                    );
-                }
-            }
-        }
-        for resolution in &resolutions {
-            resolution.trace_resolution();
-        }
-        let resolutions = resolutions
-            .into_iter()
-            .map(|resolution| resolution.finalize(&self.index, &self.git))
-            .collect::<Result<Vec<_>, _>>()?;
-        crate::resolution::from_state(
-            resolutions,
-            self.project.as_ref(),
-            &self.workspace_members,
+        resolutions.finish(
             self.requirements.clone(),
             self.constraints.clone(),
             self.modifiers.clone(),
-            &self.preferences,
-            &self.hasher,
-            &self.index,
             self.python_requirement.target().clone(),
             &self.conflicts,
             self.selector.resolution_strategy(),
