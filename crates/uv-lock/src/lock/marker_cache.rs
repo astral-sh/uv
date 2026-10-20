@@ -20,7 +20,7 @@ const MAX_CACHE_ENTRIES: usize = 4_096;
 #[serde(transparent)]
 pub(super) struct UnparsedMarker<'a>(#[serde(borrow)] Cow<'a, str>);
 
-impl<'a> LockWire<UnparsedMarker<'a>> {
+impl LockWire<UnparsedMarker<'_>> {
     /// Parse marker text before restoring Python bounds and validating the lock.
     pub(super) fn parse_markers(self) -> Result<LockWire, Pep508Error> {
         let mut cache = MarkerCache::default();
