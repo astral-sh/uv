@@ -3,6 +3,18 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.13.4
+
+Released on 2026-10-20.
+
+### Preview features
+
+- Validate PEP 825 variant metadata and treat package versions with invalid metadata as unavailable under `wheel-variants` ([#22512](https://github.com/astral-sh/uv/pull/22512))
+
+### Other changes
+
+- Update the bundled Mozilla root certificates via `webpki-root-certs` 1.0.10 ([#22760](https://github.com/astral-sh/uv/pull/22760))
+
 ## 0.13.3
 
 Released on 2026-10-20.
