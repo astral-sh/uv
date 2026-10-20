@@ -61,7 +61,7 @@ level = "expect"
 reason = "retained for downstream uv-client consumers"
 
 [[override]]
-lint = "hawk::unnecessary_public"
+lint = "hawk::dead_public"
 crate = "uv_distribution"
 item = "index::registry_wheel_index::RegistryWheelIndex::<'a>::get"
 kind = "inherent_method"
