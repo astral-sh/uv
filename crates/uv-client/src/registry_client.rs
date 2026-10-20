@@ -22,9 +22,9 @@ use uv_configuration::IndexStrategy;
 use uv_configuration::KeyringProviderType;
 use uv_distribution_filename::{DistFilename, WheelFilename};
 use uv_distribution_types::{
-    BuiltDist, File, FileLocation, IndexCapabilities, IndexEntryFilename, IndexFormat,
-    IndexLocations, IndexMetadataRef, IndexStatusCodeDecision, IndexStatusCodeStrategy, IndexUrl,
-    Name, RegistryBuiltWheel,
+    BuiltDist, FileLocation, IndexCapabilities, IndexEntryFilename, IndexFormat, IndexLocations,
+    IndexMetadataRef, IndexStatusCodeDecision, IndexStatusCodeStrategy, IndexUrl, Name,
+    RegistryBuiltWheel, VerbatimFile,
 };
 use uv_extract::hash::Hasher;
 use uv_git::{GIT_LFS, GitError, GitHttpSettings, GitResolver, Reporter};
@@ -929,7 +929,7 @@ impl RegistryClient {
     pub async fn fetch_variants_json(
         &self,
         package_name: &PackageName,
-        file: &File,
+        file: &VerbatimFile,
         index: &IndexUrl,
     ) -> Result<Vec<u8>, Error> {
         let url = file.url.to_url().map_err(ErrorKind::InvalidUrl)?;
@@ -1478,7 +1478,7 @@ pub struct VersionFiles {
 }
 
 impl VersionFiles {
-    fn push(&mut self, filename: &IndexEntryFilename, file: File) {
+    fn push(&mut self, filename: &IndexEntryFilename, file: VerbatimFile) {
         let file = CachedFile::from(file);
         match filename {
             IndexEntryFilename::DistFilename(DistFilename::WheelFilename(_)) => {
@@ -1491,12 +1491,15 @@ impl VersionFiles {
         }
     }
 
-    pub fn all(self, package_name: &PackageName) -> impl Iterator<Item = (DistFilename, File)> {
+    pub fn all(
+        self,
+        package_name: &PackageName,
+    ) -> impl Iterator<Item = (DistFilename, VerbatimFile)> {
         self.source_dists
             .into_iter()
             .chain(self.wheels)
             .filter_map(|file| {
-                let file = File::from(file);
+                let file = VerbatimFile::from(file);
                 let filename = DistFilename::try_from_filename(&file.filename, package_name)?;
                 Some((filename, file))
             })
@@ -1505,13 +1508,13 @@ impl VersionFiles {
     pub fn all_entries(
         self,
         package_name: &PackageName,
-    ) -> impl Iterator<Item = (IndexEntryFilename, File)> {
+    ) -> impl Iterator<Item = (IndexEntryFilename, VerbatimFile)> {
         self.source_dists
             .into_iter()
             .chain(self.wheels)
             .chain(self.variant_jsons)
             .filter_map(|file| {
-                let file = File::from(file);
+                let file = VerbatimFile::from(file);
                 let filename = IndexEntryFilename::try_from_filename(&file.filename, package_name)?;
                 Some((filename, file))
             })
@@ -1521,7 +1524,7 @@ impl VersionFiles {
 /// A compact, cache-local representation of a registry file from the Simple API.
 ///
 /// Filenames recoverable from the URL and false `yanked` markers are omitted, while optional
-/// scalar values use presence bits. Converting back to [`File`] restores equivalent Simple API
+/// scalar values use presence bits. Converting back to [`VerbatimFile`] restores equivalent Simple API
 /// metadata.
 #[derive(Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
 #[rkyv(derive(Debug))]
@@ -1564,8 +1567,8 @@ impl CachedFile {
     }
 }
 
-impl From<File> for CachedFile {
-    fn from(file: File) -> Self {
+impl From<VerbatimFile> for CachedFile {
+    fn from(file: VerbatimFile) -> Self {
         let filename =
             (file.url.raw_filename() != file.filename.as_ref()).then(|| Box::new(file.filename));
         let has_size = file.size.is_some();
@@ -1592,7 +1595,7 @@ impl From<File> for CachedFile {
     }
 }
 
-impl From<CachedFile> for File {
+impl From<CachedFile> for VerbatimFile {
     fn from(file: CachedFile) -> Self {
         let filename = SmallString::from(file.filename());
         let dist_info_metadata = file.dist_info_metadata.then(|| {
@@ -1773,7 +1776,7 @@ impl SimpleDetailMetadata {
                     continue;
                 }
             };
-            let file = match File::try_from_pypi(file, &base) {
+            let file = match VerbatimFile::try_from_pypi(file, &base) {
                 Ok(file) => file,
                 Err(err) => {
                     // Ignore files with unparsable version specifiers.
@@ -2498,6 +2501,7 @@ mod tests {
                                     UrlString(
                                         "https://files.pythonhosted.org/packages/78/7e/123d89ce0e999e957e53f0b985f734565c93b9a698af53586fc2a1be0dbf/pepy-2.1.1.tar.gz",
                                     ),
+                                    PhantomData<uv_distribution_types::file::provenance::Verbatim>,
                                 ),
                                 requires_python: Some(
                                     VersionSpecifiers(
@@ -2571,6 +2575,7 @@ mod tests {
                                     UrlString(
                                         "https://files.pythonhosted.org/packages/78/7e/123d89ce0e999e957e53f0b985f734565c93b9a698af53586fc2a1be0dbf/pepy-2.1.1.tar.gz",
                                     ),
+                                    PhantomData<uv_distribution_types::file::provenance::Verbatim>,
                                 ),
                                 requires_python: Some(
                                     VersionSpecifiers(

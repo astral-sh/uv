@@ -10,8 +10,8 @@ use uv_client::{
 use uv_configuration::BuildOptions;
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
-    File, Index, IndexEntryFilename, IndexLocations, IndexUrl, MinimumLibcVersion,
-    RegistryBuiltWheel, RegistrySourceDist,
+    CanonicalFileLocation, Index, IndexEntryFilename, IndexLocations, IndexUrl, MinimumLibcVersion,
+    RegistryBuiltWheel, RegistrySourceDist, VerbatimFile,
 };
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -127,10 +127,10 @@ impl FlatDistributions {
         self.0.iter()
     }
 
-    /// Add the given [`File`] to the [`FlatDistributions`] for the given package.
+    /// Add the given [`VerbatimFile`] to the [`FlatDistributions`] for the given package.
     fn add_file(
         &mut self,
-        file: File,
+        file: VerbatimFile,
         filename: DistFilename,
         tags: Option<&Tags>,
         hasher: &HashStrategy,
@@ -138,6 +138,8 @@ impl FlatDistributions {
         index: IndexUrl,
         minimum_libc_version: Option<MinimumLibcVersion>,
     ) {
+        let file = file.map_url(CanonicalFileLocation::from_location);
+
         // No `requires-python` here: for source distributions, we don't have that information;
         // for wheels, we read it lazily only when selected.
         match filename {
