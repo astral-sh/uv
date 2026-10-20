@@ -265,10 +265,10 @@ import py_compile
 import sys
 
 args = sys.argv[1:]
-assert args[:12] == ["compile", "--files-from", "-", "--null", "--skip-current",
+assert args[:11] == ["compile", "--files-from", "-", "--null",
                     "--output-format", "json", "--python-version", "3.12",
                     "--invalidation-mode", "timestamp", "--jobs"]
-assert len(args) == 13 and int(args[12]) > 0
+assert len(args) == 12 and int(args[11]) > 0
 with open(os.environ["UV_TEST_SERC_MARKER"], "x"):
     pass
 paths = sys.stdin.buffer.read().split(b"\0")
