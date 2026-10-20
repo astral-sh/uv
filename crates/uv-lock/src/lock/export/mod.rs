@@ -427,59 +427,7 @@ fn conflict_marker_reachability<'lock>(
     conflicts: &Conflicts,
     include_package: impl Fn(&Package) -> bool,
 ) -> Result<FxHashMap<NodeIndex, MarkerTree>, LockError> {
-    let mut referenced_names = FxHashSet::default();
-    let mut referenced_scoped = FxHashSet::default();
-    for edge in graph.edge_references() {
-        edge.weight().marker().visit_extras(|_, extra| {
-            referenced_names.insert(extra.clone());
-            if let Node::Package(package) = graph[edge.source()] {
-                referenced_scoped
-                    .insert(ConflictItem::from((package.name().clone(), extra.clone())));
-            }
-        });
-    }
-
-    // Intern the global facts used by marker inputs. Include declared conflicts as well: their
-    // encoded names can shadow literal extra names even when no path activates them.
-    let conflict_items = conflicts
-        .iter()
-        .flat_map(ConflictSet::iter)
-        .collect::<FxHashSet<_>>();
-    let mut facts = FxHashMap::default();
-    let mut encoded = FxHashMap::default();
-    let mut fact_names = Vec::new();
-    let mut add_fact = |item: ConflictItem| {
-        let name = encode_conflict_item(&item);
-        if referenced_names.contains(&name)
-            || referenced_scoped.contains(&item)
-            || conflict_items.contains(&item)
-        {
-            let index = *facts.entry(item).or_insert_with(|| {
-                let index = fact_names.len();
-                fact_names.push(name.clone());
-                index
-            });
-            encoded.insert(name, index);
-        }
-    };
-
-    for item in &conflict_items {
-        add_fact((*item).clone());
-    }
-    for item in known_conflicts {
-        add_fact(item.clone());
-    }
-
-    for edge in graph.edge_references() {
-        if let Node::Package(package) = graph[edge.target()] {
-            for extra in edge.weight().dep_extras() {
-                add_fact(ConflictItem::from((
-                    package.name().clone(),
-                    (*extra).clone(),
-                )));
-            }
-        }
-    }
+    let variables = ConflictVariables::from_graph(graph, known_conflicts, conflicts);
 
     // Give each requested package extra its own reachability node. For `a -> foo[ssl]`, the
     // edge reaches both `foo` and `foo[ssl]`; the optional dependencies of `foo[ssl]` leave
@@ -487,7 +435,7 @@ fn conflict_marker_reachability<'lock>(
     let mut solver = SymbolicExportReachability {
         edges: Vec::with_capacity(graph.edge_count()),
         reachability: vec![MarkerTree::FALSE; graph.node_count()],
-        activations: vec![MarkerTree::FALSE; facts.len()],
+        activations: vec![MarkerTree::FALSE; variables.len()],
         dependents: vec![Vec::new(); graph.node_count()],
         extra_facts: vec![None; graph.node_count()],
         queue: VecDeque::new(),
@@ -520,7 +468,7 @@ fn conflict_marker_reachability<'lock>(
     for ((package_index, extra), extra_index) in extra_nodes {
         if let Node::Package(package) = graph[package_index] {
             let item = ConflictItem::from((package.name().clone(), extra.clone()));
-            solver.extra_facts[extra_index] = facts.get(&item).copied();
+            solver.extra_facts[extra_index] = variables.by_item.get(&item).copied();
             if known_conflicts.contains(&item) {
                 // Selected extras belong to unique, unconditionally reached production roots.
                 solver.add_reachability(extra_index, MarkerTree::TRUE);
@@ -528,28 +476,29 @@ fn conflict_marker_reachability<'lock>(
         }
     }
     for item in known_conflicts {
-        if let Some(&fact) = facts.get(item) {
+        if let Some(&fact) = variables.by_item.get(item) {
             solver.activations[fact] = MarkerTree::TRUE;
         }
     }
     solver.add_reachability(root.index(), MarkerTree::TRUE);
 
-    resolve_marker_bindings(graph, root, &mut solver, &facts, &encoded, &fact_names);
-    solver.simplify_unconditional_activations(&encoded);
+    resolve_marker_bindings(graph, root, &mut solver, &variables);
+    solver.simplify_unconditional_activations(&variables);
     solver.solve();
 
     // Recursive activations may remain uncertain, but only emitted packages need
     // determined reachability. Omitted packages still participate in the analysis.
-    let bounds = ExportActivationBounds::new(&solver.activations, &fact_names, &encoded).solve();
+    let bounds = ExportActivationBounds::new(&solver.activations, &variables).solve();
     let mut resolved = FxHashMap::default();
     let mut reachability = FxHashMap::default();
     for index in graph.node_indices() {
         let marker = solver.reachability[index.index()];
         let (lower, upper) = *resolved.entry(marker).or_insert_with(|| {
             marker.resolve_extras_with_bounds(
-                marker_inputs(marker, &encoded)
+                variables
+                    .inputs(marker)
                     .into_iter()
-                    .map(|fact| (fact_names[fact].clone(), bounds[fact])),
+                    .map(|fact| (variables.names[fact].clone(), bounds[fact])),
             )
         });
 
@@ -569,6 +518,93 @@ fn conflict_marker_reachability<'lock>(
     Ok(reachability)
 }
 
+/// Global conflict variables, indexed by both their conflict item and encoded marker name.
+#[derive(Default)]
+struct ConflictVariables {
+    by_item: FxHashMap<ConflictItem, usize>,
+    by_encoded_name: FxHashMap<ExtraName, usize>,
+    names: Vec<ExtraName>,
+}
+
+impl ConflictVariables {
+    fn from_graph(
+        graph: &Graph<Node<'_>, Edge<'_>>,
+        known_conflicts: &FxHashSet<ConflictItem>,
+        conflicts: &Conflicts,
+    ) -> Self {
+        let mut referenced_names = FxHashSet::default();
+        let mut referenced_scoped = FxHashSet::default();
+        for edge in graph.edge_references() {
+            edge.weight().marker().visit_extras(|_, extra| {
+                referenced_names.insert(extra.clone());
+                if let Node::Package(package) = graph[edge.source()] {
+                    referenced_scoped
+                        .insert(ConflictItem::from((package.name().clone(), extra.clone())));
+                }
+            });
+        }
+
+        // Intern the global facts used by marker inputs. Include declared conflicts as well: their
+        // encoded names can shadow literal extra names even when no path activates them.
+        let conflict_items = conflicts
+            .iter()
+            .flat_map(ConflictSet::iter)
+            .collect::<FxHashSet<_>>();
+        let mut variables = Self::default();
+        let mut add_fact = |item: ConflictItem| {
+            let name = encode_conflict_item(&item);
+            if referenced_names.contains(&name)
+                || referenced_scoped.contains(&item)
+                || conflict_items.contains(&item)
+            {
+                variables.intern(item, name);
+            }
+        };
+
+        for item in &conflict_items {
+            add_fact((*item).clone());
+        }
+        for item in known_conflicts {
+            add_fact(item.clone());
+        }
+
+        for edge in graph.edge_references() {
+            if let Node::Package(package) = graph[edge.target()] {
+                for extra in edge.weight().dep_extras() {
+                    add_fact(ConflictItem::from((
+                        package.name().clone(),
+                        (*extra).clone(),
+                    )));
+                }
+            }
+        }
+
+        variables
+    }
+
+    fn intern(&mut self, item: ConflictItem, name: ExtraName) {
+        let index = *self.by_item.entry(item).or_insert_with(|| {
+            let index = self.names.len();
+            self.names.push(name.clone());
+            index
+        });
+        self.by_encoded_name.insert(name, index);
+    }
+
+    fn len(&self) -> usize {
+        self.names.len()
+    }
+
+    /// Return the distinct canonical conflict variables read by a marker.
+    fn inputs(&self, marker: MarkerTree) -> Vec<usize> {
+        let mut inputs = Vec::new();
+        marker.visit_extras(|_, name| inputs.push(self.by_encoded_name[name]));
+        inputs.sort_unstable();
+        inputs.dedup();
+        inputs
+    }
+}
+
 /// A dependency's package/extra targets and its canonical marker.
 #[derive(Debug)]
 struct ExportEdge {
@@ -586,12 +622,10 @@ fn resolve_marker_bindings(
     graph: &Graph<Node<'_>, Edge<'_>>,
     root: NodeIndex,
     solver: &mut SymbolicExportReachability,
-    facts: &FxHashMap<ConflictItem, usize>,
-    encoded: &FxHashMap<ExtraName, usize>,
-    fact_names: &[ExtraName],
+    variables: &ConflictVariables,
 ) {
     // Request lists follow edge order, so membership checks can use binary search.
-    let mut requests = vec![Vec::new(); fact_names.len()];
+    let mut requests = vec![Vec::new(); variables.len()];
     for (index, edge) in solver.edges.iter().enumerate() {
         for &target in &edge.targets {
             if let Some(fact) = solver.extra_facts[target] {
@@ -601,7 +635,8 @@ fn resolve_marker_bindings(
     }
 
     let scoped_fact = |source: NodeIndex, name: &ExtraName| match graph[source] {
-        Node::Package(package) => facts
+        Node::Package(package) => variables
+            .by_item
             .get(&ConflictItem::from((package.name().clone(), name.clone())))
             .copied(),
         Node::Root => None,
@@ -612,7 +647,7 @@ fn resolve_marker_bindings(
     for edge in graph.edge_references() {
         edge.weight().marker().visit_extras(|_, name| {
             if let Some(scoped) = scoped_fact(edge.source(), name)
-                && let Some(&encoded) = encoded.get(name)
+                && let Some(&encoded) = variables.by_encoded_name.get(name)
             {
                 aliases
                     .entry(encoded)
@@ -661,7 +696,8 @@ fn resolve_marker_bindings(
     for edge in graph.edge_references() {
         let mut replacements = Vec::new();
         edge.weight().marker().visit_extras(|_, name| {
-            let fact = encoded
+            let fact = variables
+                .by_encoded_name
                 .get(name)
                 .map(|&fact| overrides.get(&(edge.id(), fact)).copied().unwrap_or(fact))
                 .or_else(|| scoped_fact(edge.source(), name));
@@ -669,7 +705,7 @@ fn resolve_marker_bindings(
                 if requests[fact].binary_search(&edge.id()).is_ok() {
                     MarkerTree::TRUE
                 } else {
-                    conflict_variable(&fact_names[fact])
+                    conflict_variable(&variables.names[fact])
                 }
             });
             replacements.push((name.clone(), marker));
@@ -719,7 +755,7 @@ impl SymbolicExportReachability {
     ///
     /// Only constant-true guards and seeds establish these facts, independently of any
     /// assumed activation. All unproved activations remain symbolic.
-    fn simplify_unconditional_activations(&mut self, encoded: &FxHashMap<ExtraName, usize>) {
+    fn simplify_unconditional_activations(&mut self, variables: &ConflictVariables) {
         if self.activations.is_empty() {
             return;
         }
@@ -752,7 +788,7 @@ impl SymbolicExportReachability {
             for edge in &mut self.edges {
                 edge.marker = edge
                     .marker
-                    .simplify_extras_with(|name| active[encoded[name]]);
+                    .simplify_extras_with(|name| active[variables.by_encoded_name[name]]);
             }
         }
     }
@@ -787,15 +823,6 @@ fn conflict_variable(name: &ExtraName) -> MarkerTree {
     })
 }
 
-/// Return the distinct canonical conflict variables read by a marker.
-fn marker_inputs(marker: MarkerTree, encoded: &FxHashMap<ExtraName, usize>) -> Vec<usize> {
-    let mut inputs = Vec::new();
-    marker.visit_extras(|_, name| inputs.push(encoded[name]));
-    inputs.sort_unstable();
-    inputs.dedup();
-    inputs
-}
-
 /// Which side of an activation interval is being computed with the other side fixed.
 #[derive(Clone, Copy)]
 enum ExportBound {
@@ -812,7 +839,7 @@ enum ExportBound {
 struct ExportActivationBounds<'a> {
     /// Activation condition for each global fact; it may refer to itself or other facts.
     conditions: &'a [MarkerTree],
-    names: &'a [ExtraName],
+    variables: &'a ConflictVariables,
     inputs: Vec<Vec<usize>>,
     dependents: Vec<Vec<usize>>,
     component_by_fact: Vec<usize>,
@@ -822,14 +849,10 @@ struct ExportActivationBounds<'a> {
 
 impl<'a> ExportActivationBounds<'a> {
     /// Index each equation by the conflict facts whose values can change it.
-    fn new(
-        conditions: &'a [MarkerTree],
-        names: &'a [ExtraName],
-        encoded: &FxHashMap<ExtraName, usize>,
-    ) -> Self {
+    fn new(conditions: &'a [MarkerTree], variables: &'a ConflictVariables) -> Self {
         let inputs = conditions
             .iter()
-            .map(|&marker| marker_inputs(marker, encoded))
+            .map(|&marker| variables.inputs(marker))
             .collect::<Vec<_>>();
         let mut dependents = vec![Vec::new(); conditions.len()];
         for (fact, inputs) in inputs.iter().enumerate() {
@@ -840,7 +863,7 @@ impl<'a> ExportActivationBounds<'a> {
 
         Self {
             conditions,
-            names,
+            variables,
             inputs,
             dependents,
             component_by_fact: vec![0; conditions.len()],
@@ -922,7 +945,7 @@ impl<'a> ExportActivationBounds<'a> {
         self.conditions[fact].resolve_extras_with_bounds(
             self.inputs[fact]
                 .iter()
-                .map(|&input| (self.names[input].clone(), self.bounds[input])),
+                .map(|&input| (self.variables.names[input].clone(), self.bounds[input])),
         )
     }
 
