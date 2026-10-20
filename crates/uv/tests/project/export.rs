@@ -468,6 +468,7 @@ fn requirements_txt_does_not_activate_extra_through_incompatible_path() -> Resul
 
 /// Extra activation must propagate through a dependency cycle even when the base package is
 /// already unconditionally reachable. Compatible paths contribute distinct activation markers.
+/// Scoped and encoded extras from a separate path must also constrain optional dependencies.
 #[cfg(feature = "test-universal")]
 #[test]
 fn requirements_txt_transitive_extra_activation_cycle() -> Result<()> {
@@ -483,6 +484,7 @@ fn requirements_txt_transitive_extra_activation_cycle() -> Result<()> {
             "shared==1.0.0",
             "bridge-linux==1.0.0 ; sys_platform == 'linux'",
             "bridge-macos==1.0.0 ; sys_platform == 'darwin'",
+            "context[enabled]==1.0.0 ; python_version >= '3.11'",
         ]
         "#,
     )?;
@@ -504,6 +506,7 @@ fn requirements_txt_transitive_extra_activation_cycle() -> Result<()> {
             { name = "shared" },
             { name = "bridge-linux", marker = "sys_platform == 'linux'" },
             { name = "bridge-macos", marker = "sys_platform == 'darwin'" },
+            { name = "context", extra = ["enabled"], marker = "python_full_version >= '3.11'" },
         ]
 
         [[package]]
@@ -519,6 +522,18 @@ fn requirements_txt_transitive_extra_activation_cycle() -> Result<()> {
         dependencies = [{ name = "shared", extra = ["a"] }]
 
         [[package]]
+        name = "context"
+        version = "1.0.0"
+        source = { registry = "https://example.com/simple" }
+        dependencies = [{ name = "shared", extra = ["c"] }]
+
+        [package.optional-dependencies]
+        enabled = []
+
+        [package.metadata]
+        provides-extras = ["enabled"]
+
+        [[package]]
         name = "shared"
         version = "1.0.0"
         source = { registry = "https://example.com/simple" }
@@ -526,10 +541,14 @@ fn requirements_txt_transitive_extra_activation_cycle() -> Result<()> {
         [package.optional-dependencies]
         a = [{ name = "relay" }]
         # The self-cycle must not activate b outside the paths that requested it.
-        b = [{ name = "leaf" }, { name = "shared", extra = ["b"] }]
+        b = [
+            { name = "leaf", marker = "extra == 'c' and extra == 'extra-7-context-enabled'" },
+            { name = "shared", extra = ["b"] },
+        ]
+        c = []
 
         [package.metadata]
-        provides-extras = ["a", "b"]
+        provides-extras = ["a", "b", "c"]
 
         [[package]]
         name = "relay"
@@ -553,8 +572,103 @@ fn requirements_txt_transitive_extra_activation_cycle() -> Result<()> {
     ----- stdout -----
     bridge-linux==1.0.0 ; sys_platform == 'linux'
     bridge-macos==1.0.0 ; sys_platform == 'darwin'
-    leaf==1.0.0 ; sys_platform == 'darwin' or sys_platform == 'linux'
+    context==1.0.0 ; python_full_version >= '3.11'
+    leaf==1.0.0 ; (python_full_version >= '3.11' and sys_platform == 'darwin') or (python_full_version >= '3.11' and sys_platform == 'linux')
     relay==1.0.0 ; sys_platform == 'darwin' or sys_platform == 'linux'
+    shared==1.0.0
+    ");
+
+    Ok(())
+}
+
+/// An encoded conflict takes precedence over a literal extra with the same name, even when the
+/// encoded extra is only requested through an incompatible path.
+#[cfg(feature = "test-universal")]
+#[test]
+fn requirements_txt_encoded_extra_name_precedence() -> Result<()> {
+    let context = uv_test::test_context!("3.13");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["shared[extra-6-shared-a]==1.0.0"]
+
+        [project.optional-dependencies]
+        feature = ["aaa-bridge==1.0.0 ; sys_platform == 'linux'"]
+        "#,
+    )?;
+
+    context.temp_dir.child("uv.lock").write_str(
+        r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.9"
+
+        [manifest]
+        members = ["root"]
+
+        [[package]]
+        name = "root"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [{ name = "shared", extra = ["extra-6-shared-a"] }]
+
+        [package.optional-dependencies]
+        feature = [{ name = "aaa-bridge", marker = "sys_platform == 'linux'" }]
+
+        [package.metadata]
+        provides-extras = ["feature"]
+
+        [[package]]
+        name = "aaa-bridge"
+        version = "1.0.0"
+        source = { registry = "https://example.com/simple" }
+        dependencies = [{ name = "shared", extra = ["a"], marker = "sys_platform != 'linux'" }]
+
+        [[package]]
+        name = "shared"
+        version = "1.0.0"
+        source = { registry = "https://example.com/simple" }
+
+        [package.optional-dependencies]
+        a = []
+        extra-6-shared-a = [{ name = "leaf", marker = "extra == 'extra-6-shared-a'" }]
+
+        [package.metadata]
+        provides-extras = ["a", "extra-6-shared-a"]
+
+        [[package]]
+        name = "leaf"
+        version = "1.0.0"
+        source = { registry = "https://example.com/simple" }
+        "#,
+    )?;
+
+    // No dependency requests shared[a], so the marker refers to the literal extra.
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--frozen")
+        .arg("--no-header")
+        .arg("--no-annotate")
+        .arg("--no-hashes"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    leaf==1.0.0
+    shared==1.0.0
+    ");
+
+    // The encoded shared[a] fact is present but false, and takes precedence over the literal extra.
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--extra").arg("feature")
+        .arg("--frozen")
+        .arg("--no-header")
+        .arg("--no-annotate")
+        .arg("--no-hashes"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    aaa-bridge==1.0.0 ; sys_platform == 'linux'
     shared==1.0.0
     ");
 

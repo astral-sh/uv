@@ -14,49 +14,83 @@ use uv_lock::{Installable, Lock, RequirementsTxtExport};
 use uv_normalize::{DefaultExtras, PackageName};
 
 /// Export independent extras whose optional dependencies share a dependency cycle.
+///
+/// Explicit marker variants consume a small subset of those extras after traversing the cycle.
 fn export_shared_transitive_extras(criterion: &mut Criterion<WallTime>) {
     let extras = ExtrasSpecification::default().with_defaults(DefaultExtras::default());
     let groups = DependencyGroupsWithDefaults::none();
     let install_options = InstallOptions::default();
     let root = PackageName::from_str("root").expect("Valid package name");
-    let mut group = criterion.benchmark_group("export/shared_transitive_extras");
-
-    for size in [100, 300] {
-        let lock = shared_transitive_extras_lock(size);
-        let target = ExportBenchmarkTarget {
-            lock: &lock,
-            root: &root,
+    for marker_variables in [0, 1, 32] {
+        let name = if marker_variables == 0 {
+            "export/shared_transitive_extras".to_owned()
+        } else {
+            format!("export/explicit_transitive_extras/{marker_variables}")
         };
-        let export = || {
-            RequirementsTxtExport::from_lock(
-                black_box(&target),
-                &[],
-                &extras,
-                &groups,
-                false,
-                None,
-                false,
-                &install_options,
-            )
-            .expect("Valid export fixture")
-        };
+        let mut group = criterion.benchmark_group(name);
 
-        let expected = ["chain", "feature"]
-            .into_iter()
-            .flat_map(|prefix| (0..size).map(move |index| format!("{prefix}-{index:04}==1.0.0\n")))
-            .collect::<String>();
-        assert_eq!(export().to_string(), expected);
+        for size in [100, 300] {
+            let lock = shared_transitive_extras_lock(size, marker_variables);
+            let target = ExportBenchmarkTarget {
+                lock: &lock,
+                root: &root,
+            };
+            let export = || {
+                RequirementsTxtExport::from_lock(
+                    black_box(&target),
+                    &[],
+                    &extras,
+                    &groups,
+                    false,
+                    None,
+                    false,
+                    &install_options,
+                )
+                .expect("Valid export fixture")
+            };
 
-        group.bench_function(BenchmarkId::from_parameter(size), |benchmark| {
-            benchmark.iter(|| black_box(export()));
-        });
+            let mut expected = String::new();
+            for prefix in ["chain", "feature"] {
+                for index in 0..size {
+                    write!(expected, "{prefix}-{index:04}==1.0.0")
+                        .expect("Writing to a string cannot fail");
+                    if prefix == "feature" && index < marker_variables {
+                        write!(expected, " ; {}", feature_marker(index))
+                            .expect("Writing to a string cannot fail");
+                    }
+                    expected.push('\n');
+                }
+            }
+            if marker_variables > 0 {
+                expected.push_str(
+                    "marker-negative==1.0.0 ; sys_platform != 'linux'\n\
+                     marker-positive==1.0.0 ; sys_platform == 'linux'\n",
+                );
+            }
+            assert_eq!(export().to_string(), expected);
+
+            group.bench_function(BenchmarkId::from_parameter(size), |benchmark| {
+                benchmark.iter(|| black_box(export()));
+            });
+        }
+
+        group.finish();
     }
+}
 
-    group.finish();
+/// Give referenced extras overlapping but distinct activation conditions.
+fn feature_marker(index: usize) -> &'static str {
+    if index.is_multiple_of(2) {
+        "sys_platform == 'linux'"
+    } else {
+        "sys_platform == 'darwin' or sys_platform == 'linux'"
+    }
 }
 
 /// Generate a frozen lock whose independent extras all activate the same dependency cycle.
-fn shared_transitive_extras_lock(size: usize) -> Lock {
+fn shared_transitive_extras_lock(size: usize, marker_variables: usize) -> Lock {
+    // At least one unconditional extra makes the cycle reachable in every environment.
+    assert!(marker_variables < size);
     let mut contents = String::from(
         r#"version = 1
 revision = 3
@@ -73,13 +107,31 @@ dependencies = [
 "#,
     );
     for index in 0..size {
+        let marker = if index < marker_variables {
+            format!(", marker = \"{}\"", feature_marker(index))
+        } else {
+            String::new()
+        };
         writeln!(
             contents,
-            "{{ name = \"feature-{index:04}\", extra = [\"enabled\"] }},"
+            "{{ name = \"feature-{index:04}\", extra = [\"enabled\"]{marker} }},"
         )
         .expect("Writing to a string cannot fail");
     }
     contents.push_str("]\n");
+
+    let marker_dependencies = if marker_variables > 0 {
+        let positive = (0..marker_variables)
+            .map(|index| format!("extra == 'extra-12-feature-{index:04}-enabled'"))
+            .collect::<Vec<_>>()
+            .join(" and ");
+        format!(
+            ", {{ name = \"marker-positive\", marker = \"{positive}\" }}, \
+             {{ name = \"marker-negative\", marker = \"extra != 'extra-12-feature-0000-enabled'\" }}"
+        )
+    } else {
+        String::new()
+    };
 
     for index in 0..size {
         writeln!(
@@ -100,11 +152,31 @@ provides-extras = ["enabled"]
 name = "chain-{index:04}"
 version = "1.0.0"
 source = {{ registry = "https://example.com/simple" }}
-dependencies = [{{ name = "chain-{next:04}" }}]
+dependencies = [{{ name = "chain-{next:04}" }}{markers}]
 "#,
             next = (index + 1) % size,
+            markers = if index + 1 == size {
+                marker_dependencies.as_str()
+            } else {
+                ""
+            },
         )
         .expect("Writing to a string cannot fail");
+    }
+
+    if marker_variables > 0 {
+        for name in ["marker-negative", "marker-positive"] {
+            writeln!(
+                contents,
+                r#"
+[[package]]
+name = "{name}"
+version = "1.0.0"
+source = {{ registry = "https://example.com/simple" }}
+"#,
+            )
+            .expect("Writing to a string cannot fail");
+        }
     }
 
     Lock::from_toml(&contents).expect("Valid generated lockfile")

@@ -668,7 +668,7 @@ impl std::fmt::Debug for ConflictMarker {
 }
 
 /// Encodes the given conflict into a valid `extra` value in a PEP 508 marker.
-fn encode_conflict_item(conflict: &ConflictItem) -> ExtraName {
+pub fn encode_conflict_item(conflict: &ConflictItem) -> ExtraName {
     match conflict.kind() {
         ConflictKind::Extra(extra) => encode_package_extra(conflict.package(), extra),
         ConflictKind::Group(group) => encode_package_group(conflict.package(), group),
