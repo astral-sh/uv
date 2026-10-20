@@ -18,7 +18,8 @@ use uv_pypi_types::{DirectUrl, DirectUrlError, MetadataError, read_direct_url_js
 use uv_redacted::SafeUrl;
 
 use crate::{
-    BuildInfo, DistributionMetadata, InstalledMetadata, InstalledVersion, Name, VersionOrUrlRef,
+    BuildInfo, DistributionMetadata, InstalledMetadata, InstalledVersion, Name,
+    VariantsJsonContent, VariantsJsonParseError, VersionOrUrlRef,
 };
 
 #[derive(Error, Debug)]
@@ -46,6 +47,9 @@ pub enum InstalledDistError {
 
     #[error(transparent)]
     ExpandedTagParse(#[from] uv_distribution_filename::ExpandedTagError),
+
+    #[error(transparent)]
+    VariantParse(#[from] VariantsJsonParseError),
 
     #[error("Invalid `.egg-link` path: {}", _0.user_display())]
     InvalidEggLinkPath(PathBuf),
@@ -340,6 +344,23 @@ impl InstalledDist {
             InstalledDistKind::EggInfoFile(dist) => &dist.path,
             InstalledDistKind::LegacyEditable(dist) => &dist.egg_info,
         }
+    }
+
+    /// Read the installed wheel's `variant.json`, if present.
+    pub fn read_variant(&self) -> Result<Option<VariantsJsonContent>, InstalledDistError> {
+        let path = match &self.kind {
+            InstalledDistKind::Registry(dist) => &dist.path,
+            InstalledDistKind::Url(dist) => &dist.path,
+            InstalledDistKind::EggInfoFile(_)
+            | InstalledDistKind::EggInfoDirectory(_)
+            | InstalledDistKind::LegacyEditable(_) => return Ok(None),
+        };
+        let contents = match fs::read(path.join("variant.json")) {
+            Ok(contents) => contents,
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(err) => return Err(err.into()),
+        };
+        Ok(Some(VariantsJsonContent::from_slice(&contents)?))
     }
 
     /// Return the [`Version`] of the distribution.
