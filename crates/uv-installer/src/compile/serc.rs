@@ -103,7 +103,6 @@ pub async fn compile_serc_files(
         .arg("--files-from")
         .arg("-")
         .arg("--null")
-        .arg("--skip-current")
         .arg("--output-format")
         .arg("json")
         .arg("--python-version")
