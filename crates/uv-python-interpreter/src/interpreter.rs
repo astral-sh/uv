@@ -57,7 +57,7 @@ pub struct Interpreter {
     site_packages: Vec<PathBuf>,
     stdlib: PathBuf,
     extension_suffixes: Vec<Box<str>>,
-    cache_tag: Option<String>,
+    cache_tag: Option<Box<str>>,
     bytecode_magic_number: [u8; 4],
     #[cfg(unix)]
     standalone: bool,
@@ -1149,7 +1149,7 @@ struct InterpreterInfo {
     site_packages: Vec<PathBuf>,
     stdlib: PathBuf,
     extension_suffixes: Vec<Box<str>>,
-    cache_tag: Option<String>,
+    cache_tag: Option<Box<str>>,
     bytecode_magic_number: [u8; 4],
     standalone: bool,
     pointer_size: PointerSize,
