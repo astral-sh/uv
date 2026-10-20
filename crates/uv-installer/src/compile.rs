@@ -80,14 +80,6 @@ pub enum CompileError {
         status: std::process::ExitStatus,
         stderr: String,
     },
-    #[error("Bytecode destination is not a regular file: {}", .0.user_display())]
-    SercDestination(PathBuf),
-    #[error("Failed to inspect bytecode destination: {}", destination.user_display())]
-    SercDestinationIo {
-        destination: PathBuf,
-        #[source]
-        err: io::Error,
-    },
     #[cfg(windows)]
     #[error("Source path cannot be encoded as UTF-8 for serc: {}", .0.user_display())]
     SercPathEncoding(PathBuf),
