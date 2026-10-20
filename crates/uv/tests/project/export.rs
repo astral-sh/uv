@@ -1313,8 +1313,8 @@ fn requirements_txt_only_group_conflict_selection() -> Result<()> {
     Ok(())
 }
 
-/// An encoded conflict takes precedence over a literal extra with the same name, even when the
-/// encoded extra is only requested through an incompatible path.
+/// An encoded conflict takes precedence over a literal extra only when its request can reach
+/// the marker's context, including through an incompatible path.
 #[cfg(feature = "test-universal")]
 #[test]
 fn requirements_txt_encoded_extra_name_precedence() -> Result<()> {
@@ -1326,7 +1326,11 @@ fn requirements_txt_encoded_extra_name_precedence() -> Result<()> {
         name = "root"
         version = "0.1.0"
         requires-python = ">=3.9"
-        dependencies = ["shared[extra-6-shared-a]==1.0.0"]
+        dependencies = [
+            "other[a]==1.0.0",
+            "shared[extra-6-shared-a]==1.0.0",
+            "shared[extra-5-other-a]==1.0.0 ; sys_platform == 'linux'",
+        ]
 
         [project.optional-dependencies]
         feature = ["aaa-bridge==1.0.0 ; sys_platform == 'linux'"]
@@ -1346,7 +1350,11 @@ fn requirements_txt_encoded_extra_name_precedence() -> Result<()> {
         name = "root"
         version = "0.1.0"
         source = { virtual = "." }
-        dependencies = [{ name = "shared", extra = ["extra-6-shared-a"] }]
+        dependencies = [
+            { name = "other", extra = ["a"] },
+            { name = "shared", extra = ["extra-6-shared-a"] },
+            { name = "shared", extra = ["extra-5-other-a"], marker = "sys_platform == 'linux'" },
+        ]
 
         [package.optional-dependencies]
         feature = [{ name = "aaa-bridge", marker = "sys_platform == 'linux'" }]
@@ -1361,25 +1369,41 @@ fn requirements_txt_encoded_extra_name_precedence() -> Result<()> {
         dependencies = [{ name = "shared", extra = ["a"], marker = "sys_platform != 'linux'" }]
 
         [[package]]
-        name = "shared"
+        name = "other"
         version = "1.0.0"
         source = { registry = "https://example.com/simple" }
 
         [package.optional-dependencies]
         a = []
+
+        [[package]]
+        name = "shared"
+        version = "1.0.0"
+        source = { registry = "https://example.com/simple" }
+        dependencies = [{ name = "leaf-other", marker = "extra == 'extra-5-other-a'" }]
+
+        [package.optional-dependencies]
+        a = []
+        extra-5-other-a = []
         extra-6-shared-a = [{ name = "leaf", marker = "extra == 'extra-6-shared-a'" }]
 
         [package.metadata]
-        provides-extras = ["a", "extra-6-shared-a"]
+        provides-extras = ["a", "extra-5-other-a", "extra-6-shared-a"]
 
         [[package]]
         name = "leaf"
+        version = "1.0.0"
+        source = { registry = "https://example.com/simple" }
+
+        [[package]]
+        name = "leaf-other"
         version = "1.0.0"
         source = { registry = "https://example.com/simple" }
         "#,
     )?;
 
     // No dependency requests shared[a], so the marker refers to the literal extra.
+    // The unrelated other[a] request cannot widen the Linux-only literal extra.
     uv_snapshot!(context.filters(), context.export()
         .arg("--frozen")
         .arg("--no-header")
@@ -1388,6 +1412,8 @@ fn requirements_txt_encoded_extra_name_precedence() -> Result<()> {
     exit_code: 0 (success)
     ----- stdout -----
     leaf==1.0.0
+    leaf-other==1.0.0 ; sys_platform == 'linux'
+    other==1.0.0
     shared==1.0.0
     ");
 
@@ -1401,6 +1427,8 @@ fn requirements_txt_encoded_extra_name_precedence() -> Result<()> {
     exit_code: 0 (success)
     ----- stdout -----
     aaa-bridge==1.0.0 ; sys_platform == 'linux'
+    leaf-other==1.0.0 ; sys_platform == 'linux'
+    other==1.0.0
     shared==1.0.0
     ");
 
