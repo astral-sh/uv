@@ -12,7 +12,7 @@ use uv_configuration::{
     DependencyGroupsWithDefaults, ExtrasSpecificationWithDefaults, InstallOptions,
 };
 use uv_normalize::{ExtraName, GroupName, PackageName};
-use uv_pep508::MarkerTree;
+use uv_pep508::{ExtraOperator, MarkerExpression, MarkerTree};
 use uv_pypi_types::ConflictItem;
 
 use uv_resolver_types::graph_ops::Reachable;
@@ -26,7 +26,7 @@ pub(crate) use crate::lock::export::metadata::{
 pub use crate::lock::export::pylock_toml::{PylockToml, PylockTomlError, PylockTomlErrorKind};
 pub use crate::lock::export::requirements_txt::RequirementsTxtExport;
 use crate::lock::{LockErrorKind, PackageIndex};
-use crate::{Installable, InstallableRootKind, LockError, Package};
+use crate::{Installable, InstallableRootKind, Lock, LockError, Package};
 
 pub mod cyclonedx_json;
 mod metadata;
@@ -48,6 +48,48 @@ struct ExportableRequirement<'lock> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct ExportableRequirements<'lock>(Vec<ExportableRequirement<'lock>>);
 
+/// How to represent selected extras and dependency groups in exported requirements.
+#[derive(Clone, Copy)]
+enum ExportSelection<'a> {
+    /// Resolve selections at export time.
+    Activated,
+    /// Retain selections as PEP 751 markers for installation.
+    MarkSelections {
+        default_groups: &'a DependencyGroupsWithDefaults,
+        synthetic_default: Option<&'a GroupName>,
+    },
+}
+
+impl ExportSelection<'_> {
+    fn marks_selections(self) -> bool {
+        match self {
+            Self::Activated => false,
+            Self::MarkSelections { .. } => true,
+        }
+    }
+
+    fn group_marker(self, group: &GroupName) -> MarkerTree {
+        match self {
+            Self::Activated => MarkerTree::TRUE,
+            Self::MarkSelections {
+                default_groups,
+                synthetic_default,
+            } => {
+                let marker = MarkerTree::dependency_group_in_pep751(group.clone());
+                if default_groups.contains(group)
+                    && let Some(synthetic_default) = synthetic_default
+                {
+                    marker.or(MarkerTree::dependency_group_in_pep751(
+                        synthetic_default.clone(),
+                    ))
+                } else {
+                    marker
+                }
+            }
+        }
+    }
+}
+
 impl<'lock> ExportableRequirements<'lock> {
     /// Generate the set of exportable [`ExportableRequirement`] entries from the given lockfile.
     fn from_lock(
@@ -57,6 +99,26 @@ impl<'lock> ExportableRequirements<'lock> {
         groups: &DependencyGroupsWithDefaults,
         annotate: bool,
         install_options: &'lock InstallOptions,
+    ) -> Result<Self, LockError> {
+        Self::from_lock_impl(
+            target,
+            prune,
+            extras,
+            groups,
+            annotate,
+            install_options,
+            ExportSelection::Activated,
+        )
+    }
+
+    fn from_lock_impl(
+        target: &impl Installable<'lock>,
+        prune: &[PackageName],
+        extras: &ExtrasSpecificationWithDefaults,
+        groups: &DependencyGroupsWithDefaults,
+        annotate: bool,
+        install_options: &'lock InstallOptions,
+        selection: ExportSelection<'_>,
     ) -> Result<Self, LockError> {
         let size_guess = target.lock().packages.len();
         let mut graph = Graph::<Node<'lock>, Edge<'lock>>::with_capacity(size_guess, size_guess);
@@ -82,15 +144,7 @@ impl<'lock> ExportableRequirements<'lock> {
                 continue;
             }
 
-            let dist = target
-                .lock()
-                .find_by_name(root_name)
-                .map_err(|_| LockErrorKind::MultipleRootPackages {
-                    name: root_name.clone(),
-                })?
-                .ok_or_else(|| LockErrorKind::MissingRootPackage {
-                    name: root_name.clone(),
-                })?;
+            let dist = find_root_package(target.lock(), root_name)?;
 
             if root_kind == InstallableRootKind::Production {
                 // Track the activated package in the list of known conflicts.
@@ -114,11 +168,22 @@ impl<'lock> ExportableRequirements<'lock> {
 
                 // Push its dependencies on the queue.
                 queue.push_back((package_index, None));
-                for extra in extras.extra_names(dist.optional_dependencies.keys()) {
+                let available_extras =
+                    dist.optional_dependencies
+                        .keys()
+                        .chain(dist.provides_extras().iter().filter(|extra| {
+                            selection.marks_selections()
+                                && !dist.optional_dependencies.contains_key(*extra)
+                        }));
+                for extra in extras.extra_names(available_extras) {
                     queue.push_back((package_index, Some(extra)));
                     activated_items.insert(
                         ConflictItem::from((dist.id.name.clone(), extra.clone())),
-                        MarkerTree::TRUE,
+                        if selection.marks_selections() {
+                            MarkerTree::extra_in_pep751(extra.clone())
+                        } else {
+                            MarkerTree::TRUE
+                        },
                     );
                 }
             }
@@ -136,10 +201,11 @@ impl<'lock> ExportableRequirements<'lock> {
                 })
                 .flatten()
             {
+                let group_marker = selection.group_marker(group);
                 // Track the activated group in the list of known conflicts.
                 activated_items.insert(
                     ConflictItem::from((dist.id.name.clone(), group.clone())),
-                    MarkerTree::TRUE,
+                    group_marker,
                 );
 
                 if prune.contains(&dep.package_id.name) {
@@ -160,7 +226,10 @@ impl<'lock> ExportableRequirements<'lock> {
                     dep_index,
                     Edge::Dev {
                         group,
-                        marker: dep.simplified_marker.as_simplified_marker_tree(),
+                        marker: dep
+                            .simplified_marker
+                            .as_simplified_marker_tree()
+                            .and(group_marker),
                         dep_extras: dep.extra.iter().collect(),
                     },
                 );
@@ -314,8 +383,33 @@ impl<'lock> ExportableRequirements<'lock> {
             }
         }
 
+        // A negative extra marker can become false as transitive extras are activated, so its
+        // reachability cannot be accumulated by the graph traversal. Only selected edges matter.
+        if selection.marks_selections()
+            && graph.edge_weights().any(|edge| {
+                edge.marker()
+                    .to_dnf()
+                    .into_iter()
+                    .flatten()
+                    .any(|expression| {
+                        if let MarkerExpression::Extra { operator, .. } = expression {
+                            operator == ExtraOperator::NotEqual
+                        } else {
+                            false
+                        }
+                    })
+            })
+        {
+            return Err(LockErrorKind::MultiUseNegativeExtraMarker.into());
+        }
+
         // Determine the reachability of each node in the graph.
-        let mut reachability = conflict_marker_reachability(&graph, &[], &activated_items);
+        let mut reachability = conflict_marker_reachability(
+            &graph,
+            &[],
+            &activated_items,
+            selection.marks_selections(),
+        );
 
         // Collect all packages.
         let nodes = graph
@@ -355,6 +449,17 @@ impl<'lock> ExportableRequirements<'lock> {
 
         Ok(Self(nodes))
     }
+}
+
+/// Find the unique locked package for an export root.
+fn find_root_package<'lock>(
+    lock: &'lock Lock,
+    name: &PackageName,
+) -> Result<&'lock Package, LockError> {
+    Ok(lock
+        .find_by_name(name)
+        .map_err(|_| LockErrorKind::MultipleRootPackages { name: name.clone() })?
+        .ok_or_else(|| LockErrorKind::MissingRootPackage { name: name.clone() })?)
 }
 
 /// A node in the graph.
@@ -429,6 +534,7 @@ fn conflict_marker_reachability<'lock>(
     graph: &Graph<Node<'lock>, Edge<'lock>>,
     fork_markers: &[Edge<'lock>],
     known_conflicts: &FxHashMap<ConflictItem, MarkerTree>,
+    mark_selections: bool,
 ) -> FxHashMap<NodeIndex, MarkerTree> {
     // For each node, track the conditions under which each conflict item is enabled.
     let mut conflict_maps =
@@ -496,7 +602,7 @@ fn conflict_marker_reachability<'lock>(
                 .cloned()
                 .unwrap_or_else(|| known_conflicts.clone());
 
-            if let Node::Package(child) = graph[child_edge.target()] {
+            if !mark_selections && let Node::Package(child) = graph[child_edge.target()] {
                 for extra in child_edge.weight().dep_extras() {
                     let item = ConflictItem::from((child.name().clone(), (*extra).clone()));
                     parent_map.insert(item, parent_marker);
@@ -541,6 +647,15 @@ fn conflict_marker_reachability<'lock>(
                 }
             };
 
+            // The edge marker refers to the parent's extras; the child's extras become active
+            // only after the edge has been traversed.
+            if mark_selections && let Node::Package(child) = graph[child_edge.target()] {
+                for extra in child_edge.weight().dep_extras() {
+                    let item = ConflictItem::from((child.name().clone(), (*extra).clone()));
+                    parent_map.insert(item, parent_marker);
+                }
+            }
+
             // Propagate the edge to the known conflicts.
             for value in parent_map.values_mut() {
                 *value = value.and(marker);
@@ -559,6 +674,7 @@ fn conflict_marker_reachability<'lock>(
                     }
                 }
                 Entry::Vacant(vacant) => {
+                    conflicts_changed = !parent_map.is_empty();
                     vacant.insert(parent_map);
                 }
             }
