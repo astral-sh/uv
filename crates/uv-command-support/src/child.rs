@@ -194,10 +194,17 @@ pub async fn run_to_completion(mut handle: Child) -> anyhow::Result<ExitStatus> 
         let mut sigalrm_handle = handle_signal(SignalKind::alarm())?;
         let mut sigquit_handle = handle_signal(SignalKind::quit())?;
 
-        // The following signals are ignored by default, but can be have user defined handlers.
+        // The following signals are ignored by default, but can have user defined handlers.
         // Forward them to the child process for handling.
         let mut sigwinch_handle = handle_signal(SignalKind::window_change())?;
-        let mut sigpipe_handle = handle_signal(SignalKind::pipe())?;
+
+        // Notably, `SIGPIPE` is _not_ forwarded to the child. A `SIGPIPE` delivered to uv
+        // originates from a failed write on one of uv's own file descriptors, which says
+        // nothing about the state of the child's descriptors. Forwarding it can kill a child
+        // that has not yet installed its own `SIGPIPE` handler (e.g., Python during startup),
+        // surfacing as a spurious `128 + SIGPIPE` exit. The child still receives `SIGPIPE`
+        // for writes on its _own_ descriptors, so pipelines like `uv run ... | head` keep
+        // working as expected.
 
         // This signal is only available on some platforms, copied from `tokio::signal::unix`
         #[cfg(any(
@@ -329,16 +336,6 @@ pub async fn run_to_completion(mut handle: Child) -> anyhow::Result<ExitStatus> 
                     // We unconditionally forward SIGWINCH to the child process.
                     debug!("Received SIGWINCH, forwarding to child at {child_pid}");
                     let _ = signal::kill(child_pid, signal::Signal::SIGWINCH);
-                }
-                _ = sigpipe_handle.recv() => {
-                    let Some(child_pid) = *ChildPid::from(&handle) else {
-                        debug!("Received SIGPIPE, but the child has already exited");
-                        continue;
-                    };
-
-                    // We unconditionally forward SIGPIPE to the child process.
-                    debug!("Received SIGPIPE, forwarding to child at {child_pid}");
-                    let _ = signal::kill(child_pid, signal::Signal::SIGPIPE);
                 }
                 _ = siginfo_handle.recv() => {
                     let Some(child_pid) = *ChildPid::from(&handle) else {

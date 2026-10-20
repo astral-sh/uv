@@ -9,6 +9,11 @@ use predicates::{prelude::predicate, str::contains};
 use serde_json::json;
 use std::io;
 use std::path::Path;
+#[cfg(unix)]
+use std::{
+    os::{fd::OwnedFd, unix::net::UnixStream},
+    process::Stdio,
+};
 use uv_python_discovery::PYTHON_VERSION_FILENAME;
 use uv_static::EnvVars;
 use wiremock::matchers::{method, path};
@@ -5739,6 +5744,45 @@ fn exit_status_signal() -> Result<()> {
     "})?;
     let status = context.run().arg(script.path()).status()?;
     assert_eq!(status.code().expect("a status code"), 139);
+    Ok(())
+}
+
+/// Test that `SIGPIPE` received by uv is not forwarded to the child process.
+///
+/// A `SIGPIPE` delivered to uv originates from a failed write on one of uv's own file
+/// descriptors, which says nothing about the state of the child's descriptors. Forwarding
+/// it could kill a child that had not yet installed its own `SIGPIPE` handler, surfacing
+/// as a spurious `128 + SIGPIPE` exit.
+///
+/// See: <https://github.com/astral-sh/uv/issues/21935>
+#[cfg(unix)]
+#[test]
+fn sigpipe_not_forwarded_to_child() -> Result<()> {
+    let context = uv_test::test_context!("3.11");
+
+    // Point uv's stderr at a socket with no reader, so that any write uv performs while the
+    // child is running fails and raises `SIGPIPE` in uv itself.
+    let (stderr, peer) = UnixStream::pair()?;
+    drop(peer);
+
+    // `SIGWINCH` prompts uv to log (via `-vv`) while the child is running; the failed write
+    // then raises `SIGPIPE`. If uv forwarded the signal, the child would die before printing.
+    let mut command = context.command();
+    command
+        .arg("-vv")
+        .arg("run")
+        .arg("--no-project")
+        .arg("--")
+        .arg("sh")
+        .arg("-c")
+        .arg("trap - PIPE; kill -WINCH \"$PPID\"; sleep 1; echo survived")
+        .stderr(Stdio::from(OwnedFd::from(stderr)));
+
+    uv_snapshot!(context.filters(), command, @r"
+    exit_code: 0 (success)
+    ----- stdout -----
+    survived
+    ");
     Ok(())
 }
 
