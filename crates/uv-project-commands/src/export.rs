@@ -679,6 +679,7 @@ async fn render_export<'output>(
                 .unwrap_or(&CWD);
             let mut export = PylockToml::from_lock(
                 &target,
+                &settings.index_locations,
                 output_dir,
                 prune,
                 extras,

@@ -39,9 +39,9 @@ use uv_distribution_types::{
     ExcludeNewerValue, FirstParty, GitDirectorySourceDist, GitPathBuiltDist, GitPathSourceDist,
     HashValidation, Identifier, IndexLocations, IndexMetadata, IndexUrl, MetadataHashPolicy,
     MinimumLibcVersion, Name, NameRequirementSpecification, PYPI_URL, PathBuiltDist,
-    PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, RemoteSource,
-    Requirement, RequirementSource, RequiresPython, ResolvedDist, SimplifiedMarkerTree,
-    StaticMetadata, ToUrlError, UrlString, VersionId,
+    PathSourceDist, ProxyIndexError, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist,
+    RemoteSource, Requirement, RequirementSource, RequiresPython, ResolvedDist,
+    SimplifiedMarkerTree, StaticMetadata, ToUrlError, UrlString, VersionId,
 };
 use uv_fs::{PortablePath, PortablePathBuf, Simplified, normalize_path, try_relative_to_if};
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
@@ -2471,7 +2471,8 @@ impl Lock {
     /// retain their incoming edges even if they resolve to no dependencies, and Git packages
     /// retain their declaration metadata for offline source discovery.
     ///
-    /// Returns an error if an artifact does not advertise its index's required algorithm.
+    /// Returns an error if a proxied artifact has no hash or an artifact does not
+    /// advertise its index's required algorithm.
     pub fn from_resolution(
         resolution: &ResolverOutput,
         manifest: ResolverManifest,
@@ -2550,6 +2551,29 @@ impl Lock {
                     None,
                 )
             });
+
+            if let Some(index) = dist.index()
+                && let Some(route) = index_locations.proxy_route_for(index)
+                && let Some(filename) = package
+                    .wheels
+                    .iter()
+                    .find_map(|wheel| wheel.hash.is_none().then(|| wheel.filename.to_string()))
+                    .or_else(|| {
+                        package
+                            .sdist
+                            .as_ref()
+                            .filter(|sdist| sdist.hash().is_none())
+                            .and_then(SourceDist::filename)
+                            .map(Cow::into_owned)
+                    })
+            {
+                return Err(ProxyIndexError::MissingHash {
+                    package: package.id.name.clone(),
+                    filename,
+                    physical: Box::new(route.effective_url().without_credentials().into_owned()),
+                }
+                .into());
+            }
 
             package.add_dependencies(
                 DependencyContext::Production,
@@ -9850,6 +9874,9 @@ enum LockErrorKind {
     /// metadata-free lockfile cannot be scoped to their packages.
     #[error(transparent)]
     InvalidScopedOverride(#[from] ScopedOverrideSourceError),
+    /// An error that occurs when a proxy route or its selected lock artifacts are invalid.
+    #[error(transparent)]
+    ProxyIndex(#[from] ProxyIndexError),
     /// An error that occurs when multiple packages with the same
     /// ID were found.
     #[error("Found duplicate package `{id}`", id = id.cyan())]

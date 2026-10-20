@@ -9,7 +9,7 @@ use uv_cache_info::CacheInfo;
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
     BuildInfo, BuildVariables, CachedRegistryDist, ConfigSettings, ExtraBuildRequirement,
-    ExtraBuildRequires, ExtraBuildVariables, Hashed, Index, IndexLocations, IndexUrl,
+    ExtraBuildRequires, ExtraBuildVariables, Hashed, Index, IndexFormat, IndexLocations, IndexUrl,
     PackageConfigSettings, RegistryBuiltDist, RegistrySourceDist,
 };
 use uv_fs::{directories, files};
@@ -121,6 +121,7 @@ impl<'a> RegistryWheelIndex<'a> {
         no_binary: bool,
     ) -> Option<&CachedRegistryDist> {
         let wheel = distribution.best_wheel();
+        let is_proxy = self.index_locations.proxy_route_for(&wheel.index).is_some();
         let required = self
             .hasher
             .archive_policy_for_package(&wheel.filename.name, &wheel.filename.version);
@@ -141,11 +142,11 @@ impl<'a> RegistryWheelIndex<'a> {
             let index_hashes = if entry.built {
                 // Built wheels record the source archive's hashes. A hashed wheel can only be
                 // replaced by a source whose bytes we can verify.
-                let source_hashes = distribution
-                    .sdist
-                    .as_ref()
-                    .filter(|source| entry.matches_source(source))
-                    .map_or(&[][..], |source| source.file.hashes.as_slice());
+                let source = distribution.sdist.as_ref().filter(|source| entry.matches_source(source));
+                if is_proxy && source.is_none() {
+                    return false;
+                }
+                let source_hashes = source.map_or(&[][..], |source| source.file.hashes.as_slice());
                 if source_hashes.is_empty()
                     && !wheel.file.hashes.is_empty()
                     && !required.requires_validation()
@@ -156,7 +157,7 @@ impl<'a> RegistryWheelIndex<'a> {
             } else {
                 wheel.file.hashes.as_slice()
             };
-            ArtifactHashPolicy::from(required).can_reuse(&entry.dist, index_hashes)
+            ArtifactHashPolicy::for_registry(required, is_proxy, index_hashes).can_reuse(&entry.dist, index_hashes)
         })
         .next()
         .map(IndexEntry::dist)
@@ -174,9 +175,15 @@ impl<'a> RegistryWheelIndex<'a> {
         if no_build {
             return None;
         }
+        let index_hashes = source.file.hashes.as_slice();
+        let is_proxy = self
+            .index_locations
+            .proxy_route_for(&source.index)
+            .is_some();
         let required = self
             .hasher
             .archive_policy_for_package(&source.name, &source.version);
+        let hashes = ArtifactHashPolicy::for_registry(required, is_proxy, index_hashes);
         self.matching(&source.name, |entry| {
             if !entry.matches_source(source) {
                 return false;
@@ -191,7 +198,7 @@ impl<'a> RegistryWheelIndex<'a> {
                 );
                 return false;
             }
-            ArtifactHashPolicy::from(required).can_reuse(&entry.dist, source.file.hashes.as_slice())
+            hashes.can_reuse(&entry.dist, index_hashes)
         })
         .next()
         .map(IndexEntry::dist)
@@ -258,16 +265,21 @@ impl<'a> RegistryWheelIndex<'a> {
                 continue;
             }
 
+            let index_url = match index.format {
+                IndexFormat::Simple => index_locations.effective_url(index.url()),
+                IndexFormat::Flat => index.url(),
+            };
+
             // Index all the wheels that were downloaded directly from the registry.
             let wheel_dir = cache.shard(
                 CacheBucket::Wheels,
-                WheelCache::Index(index.url()).wheel_dir(package.as_ref()),
+                WheelCache::Index(index_url).wheel_dir(package.as_ref()),
             );
 
             // For registry wheels, the cache structure is: `<index>/<package-name>/<wheel>.http`
             // or `<index>/<package-name>/<version>/<wheel>.rev`.
             for file in files(&wheel_dir).ok().into_iter().flatten() {
-                match index.url() {
+                match index_url {
                     // Add files from remote registries.
                     IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
                         if file
@@ -327,7 +339,7 @@ impl<'a> RegistryWheelIndex<'a> {
             // from the registry.
             let cache_shard = cache.shard(
                 CacheBucket::SourceDistributions,
-                WheelCache::Index(index.url()).wheel_dir(package.as_ref()),
+                WheelCache::Index(index_url).wheel_dir(package.as_ref()),
             );
 
             // For registry source distributions, the cache structure is: `<index>/<package-name>/<version>/`.
@@ -335,7 +347,7 @@ impl<'a> RegistryWheelIndex<'a> {
                 let cache_shard = cache_shard.shard(shard);
 
                 // Read the revision from the cache.
-                let revision = match index.url() {
+                let revision = match index_url {
                     // Add files from remote registries.
                     IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
                         let revision_entry = cache_shard.entry(HTTP_REVISION);

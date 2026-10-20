@@ -25,6 +25,24 @@ impl<'a> ArtifactHashPolicy<'a> {
         }
     }
 
+    /// Proxy downloads must match the selected index file as well as the caller's hashes.
+    pub(crate) fn for_registry(
+        required: ArchiveHashPolicy<'a>,
+        is_proxy: bool,
+        index_hashes: &'a [HashDigest],
+    ) -> Self {
+        let cache_verification = if is_proxy {
+            if index_hashes.is_empty() {
+                required
+            } else {
+                ArchiveHashPolicy::None.with_index_hashes(index_hashes)
+            }
+        } else {
+            ArchiveHashPolicy::None
+        };
+        Self::new(required, cache_verification)
+    }
+
     /// A cache hit must match the applicable index and cache hashes and record the caller's algorithms.
     pub(crate) fn can_reuse(self, artifact: &impl Hashed, index_hashes: &'a [HashDigest]) -> bool {
         artifact.satisfies(self.index_fallback(index_hashes))
@@ -139,6 +157,29 @@ mod tests {
         let cache =
             ArtifactHashPolicy::new(ArchiveHashPolicy::None, ArchiveHashPolicy::Any(&advertised));
         assert!(!cache.can_reuse(&cached_hashes, &cached_hashes));
+    }
+
+    #[test]
+    fn proxy_file_hashes_are_checked_even_when_the_caller_supplies_a_hash() {
+        let sha256 = HashDigest::Sha256(Digest::from_bytes([0xaa; 32]));
+        let sha512 = HashDigest::Sha512(Digest::from_bytes([0xbb; 64]));
+        let file_hashes = [sha256.clone(), sha512];
+        let caller = ArchiveHashPolicy::Any(std::slice::from_ref(&sha256));
+        let proxy = ArtifactHashPolicy::for_registry(caller, true, &file_hashes);
+        let incomplete = vec![sha256.clone()];
+        assert!(!proxy.can_reuse(&incomplete, &file_hashes));
+        assert!(
+            proxy
+                .for_download(&file_hashes)
+                .verify("archive", &incomplete)
+                .is_err()
+        );
+        assert!(
+            proxy
+                .for_download(&file_hashes)
+                .verify("archive", &file_hashes)
+                .is_ok()
+        );
     }
 
     #[test]
