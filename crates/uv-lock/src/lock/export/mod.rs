@@ -1,8 +1,8 @@
 use std::collections::VecDeque;
-use std::collections::hash_map::Entry;
 use std::mem;
 
 use either::Either;
+use petgraph::algo::kosaraju_scc;
 use petgraph::graph::{EdgeIndex, NodeIndex};
 use petgraph::prelude::EdgeRef;
 use petgraph::visit::IntoNodeReferences;
@@ -406,12 +406,12 @@ impl Edge<'_> {
     }
 }
 
-/// Determine package reachability while retaining only the activation facts read by markers.
+/// Compute package reachability before resolving global conflict activations.
 ///
-/// Optional dependencies read a package-local extra node. Explicit marker expressions read the
-/// package's conflict context, which can also receive facts along paths that did not request that
-/// optional dependency. Keeping these inputs separate avoids carrying unrelated extras through
-/// every transitive dependency while preserving the conditions under which each extra was requested.
+/// Package and optional-extra reachability form a monotone graph problem while conflict
+/// variables remain symbolic. Combining complete paths first preserves correlations between
+/// alternative forks. Each referenced conflict item then has one activation equation, shared
+/// by every branch of the dependency graph.
 fn conflict_marker_reachability<'lock>(
     graph: &Graph<Node<'lock>, Edge<'lock>>,
     known_conflicts: &FxHashMap<ConflictItem, MarkerTree>,
@@ -429,8 +429,8 @@ fn conflict_marker_reachability<'lock>(
         });
     }
 
-    // Intern only facts that an explicit marker can observe. An ordinary extra affects its own
-    // optional dependencies, but does not need a fact in every descendant's conflict context.
+    // Ordinary extras only need package-local reachability nodes. Introduce a global
+    // variable only when an explicit marker can observe its activation.
     let mut facts = FxHashMap::default();
     let mut encoded = FxHashMap::default();
     let mut fact_names = Vec::new();
@@ -467,18 +467,14 @@ fn conflict_marker_reachability<'lock>(
         }
     }
 
-    let mut solver = ExportReachability {
-        graph,
+    let mut solver = SymbolicExportReachability {
         edges: Vec::with_capacity(graph.edge_count()),
-        fact_names,
-        reachability: vec![None; graph.node_count()],
-        contexts: vec![FxHashMap::default(); graph.node_count()],
-        live_facts: vec![Vec::new(); graph.node_count()],
+        reachability: vec![MarkerTree::FALSE; graph.node_count()],
+        activations: vec![MarkerTree::FALSE; facts.len()],
         dependents: vec![Vec::new(); graph.node_count()],
         seeds: vec![Vec::new(); graph.node_count()],
-        outgoing: vec![Vec::new(); graph.node_count()],
         queue: VecDeque::new(),
-        queued: FxHashSet::default(),
+        queued: vec![false; graph.node_count()],
     };
     let mut extras = FxHashMap::default();
     for edge in graph.edge_references() {
@@ -534,16 +530,12 @@ fn conflict_marker_reachability<'lock>(
             );
         });
         solver.edges.push(ExportEdge {
-            source,
             targets,
             activated,
             bindings,
             marker: *edge.weight().marker(),
-            inputs: Vec::new(),
-            condition: None,
         });
         solver.dependents[source].push(edge.id());
-        solver.outgoing[edge.source().index()].push(edge.id());
     }
 
     for ((package_index, extra), extra_index) in extras {
@@ -554,31 +546,52 @@ fn conflict_marker_reachability<'lock>(
             solver.seeds[package_index.index()].push((extra_index, marker));
         }
     }
-    for root in graph.node_indices().filter(|&index| {
-        graph
-            .edges_directed(index, Direction::Incoming)
-            .next()
-            .is_none()
-    }) {
-        for (item, &marker) in known_conflicts {
-            if let Some(&fact) = facts.get(item) {
-                solver.contexts[root.index()].insert(fact, marker);
-            }
+    let roots = graph
+        .node_indices()
+        .filter(|&index| {
+            graph
+                .edges_directed(index, Direction::Incoming)
+                .next()
+                .is_none()
+        })
+        .collect::<Vec<_>>();
+    let mut known_facts = FxHashSet::default();
+    for (item, &marker) in known_conflicts {
+        if let Some(&fact) = facts.get(item) {
+            solver.activations[fact] = marker;
+            known_facts.insert(fact);
         }
+    }
+    for &root in &roots {
         solver.add_reachability(root.index(), MarkerTree::TRUE);
     }
-    solver.resolve_marker_bindings(&encoded);
-    solver.retain_live_conflicts(facts.len());
-    solver.solve_well_founded(include_package)?;
-    Ok(graph
-        .node_indices()
-        .map(|index| {
-            (
-                index,
-                solver.reachability[index.index()].unwrap_or(MarkerTree::FALSE),
+    resolve_marker_bindings(graph, &mut solver.edges, &fact_names, &known_facts, &roots);
+    solver.solve();
+
+    let bounds = ExportActivationBounds::new(&solver.activations, &fact_names, &encoded).solve();
+    let mut resolved = FxHashMap::default();
+    let mut reachability = FxHashMap::default();
+    for index in graph.node_indices() {
+        let marker = solver.reachability[index.index()];
+        let (lower, upper) = *resolved.entry(marker).or_insert_with(|| {
+            marker.resolve_extras_with_bounds(
+                marker_inputs(marker, &encoded)
+                    .into_iter()
+                    .map(|fact| (fact_names[fact].clone(), bounds[fact])),
             )
-        })
-        .collect())
+        });
+        if lower != upper
+            && let Node::Package(package) = graph[index]
+            && include_package(package)
+        {
+            return Err(LockErrorKind::UnresolvedExportConflict {
+                package: package.id.clone(),
+            }
+            .into());
+        }
+        reachability.insert(index, lower);
+    }
+    Ok(reachability)
 }
 
 /// The conflict facts that can supply an extra expression's value.
@@ -588,467 +601,303 @@ struct MarkerBinding {
     encoded: Option<usize>,
 }
 
-/// A dependency's reachability inputs and the facts it activates on its target.
+/// A dependency's package/extra targets and the conflict facts that it requests.
 #[derive(Debug)]
 struct ExportEdge {
-    source: usize,
     targets: Vec<usize>,
     activated: Vec<usize>,
     bindings: FxHashMap<ExtraName, MarkerBinding>,
     marker: MarkerTree,
-    inputs: Vec<usize>,
-    condition: Option<MarkerTree>,
 }
 
-/// One approximation to package reachability, local extras, and marker contexts.
-#[derive(Clone, PartialEq, Eq)]
-struct ExportState {
-    reachability: Vec<Option<MarkerTree>>,
-    contexts: Vec<FxHashMap<usize, MarkerTree>>,
-}
-
-/// The opposite approximation is fixed while a monotone worklist computes this bound.
-#[derive(Clone, Copy)]
-enum ExportBound<'a> {
-    Exact,
-    Lower(&'a [FxHashMap<usize, MarkerTree>]),
-    Upper(&'a [FxHashMap<usize, MarkerTree>]),
-}
-
-/// An input whose consumers need to be revisited.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-enum ExportChange {
-    Reachability(usize),
-    Conflict(NodeIndex, usize),
-    Edge(EdgeIndex),
-}
-
-/// A sparse worklist over package reachability, local extras, and observable conflict facts.
-struct ExportReachability<'graph, 'lock> {
-    graph: &'graph Graph<Node<'lock>, Edge<'lock>>,
-    edges: Vec<ExportEdge>,
-    fact_names: Vec<ExtraName>,
-    // An unvisited node differs from a false path: the latter can still introduce a false-valued
-    // encoded fact that takes precedence over a scoped extra with the same spelling.
-    reachability: Vec<Option<MarkerTree>>,
-    contexts: Vec<FxHashMap<usize, MarkerTree>>,
-    live_facts: Vec<Vec<usize>>,
-    dependents: Vec<Vec<EdgeIndex>>,
-    seeds: Vec<Vec<(usize, MarkerTree)>>,
-    outgoing: Vec<Vec<EdgeIndex>>,
-    queue: VecDeque<ExportChange>,
-    queued: FxHashSet<ExportChange>,
-}
-
-impl ExportReachability<'_, '_> {
-    /// Compute founded lower and upper bounds until the exported packages are determined.
-    ///
-    /// Each inner worklist is monotone: negative inputs use a fixed opposite bound. Lower
-    /// passes start at the roots; upper passes start at the newly established lower bound.
-    /// Reusing an earlier upper bound would retain support from dependencies that have closed.
-    fn solve_well_founded(
-        &mut self,
-        include_package: impl Fn(&Package) -> bool,
-    ) -> Result<(), LockError> {
-        if self
-            .edges
-            .iter()
-            .all(|edge| edge.marker.is_monotonic_in_extras())
-        {
-            self.solve(ExportBound::Exact);
-            return Ok(());
-        }
-
-        let initial = self.state();
-        self.solve(ExportBound::Upper(&initial.contexts));
-        let mut upper = self.state();
-        loop {
-            self.reset(&initial);
-            self.solve(ExportBound::Lower(&upper.contexts));
-            let lower = self.state();
-
-            self.reset(&lower);
-            self.solve(ExportBound::Upper(&lower.contexts));
-            let next_upper = self.state();
-            if lower == next_upper {
-                return Ok(());
-            }
-            if upper == next_upper {
-                // Internal facts may remain undefined without affecting any exported package.
-                // Reject only when a package's inclusion still depends on recursive negation.
-                for index in self.graph.node_indices() {
-                    let lower_marker =
-                        lower.reachability[index.index()].unwrap_or(MarkerTree::FALSE);
-                    let upper_marker =
-                        next_upper.reachability[index.index()].unwrap_or(MarkerTree::FALSE);
-                    if lower_marker != upper_marker
-                        && let Node::Package(package) = self.graph[index]
-                        && include_package(package)
-                    {
-                        return Err(LockErrorKind::UnresolvedExportConflict {
-                            package: package.id.clone(),
-                        }
-                        .into());
-                    }
-                }
-                return Ok(());
-            }
-            upper = next_upper;
-        }
-    }
-
-    /// Save the values of one completed approximation, excluding worklist caches.
-    fn state(&self) -> ExportState {
-        ExportState {
-            reachability: self.reachability.clone(),
-            contexts: self.contexts.clone(),
-        }
-    }
-
-    /// Start a fresh least-fixed-point computation from roots or a founded lower bound.
-    fn reset(&mut self, state: &ExportState) {
-        self.reachability.clone_from(&state.reachability);
-        self.contexts.clone_from(&state.contexts);
-        self.queue.clear();
-        self.queued.clear();
-        for edge in &mut self.edges {
-            edge.condition = None;
-        }
-        for index in 0..self.reachability.len() {
-            if self.reachability[index].is_some() {
-                self.enqueue(ExportChange::Reachability(index));
+/// Bind raw and encoded extra names before evaluating their activation conditions.
+///
+/// An encoded fact takes precedence over a scoped literal of the same spelling when
+/// that fact can reach the marker's context. Presence is structural, including false
+/// paths; its value is subsequently resolved from the global activation equation.
+fn resolve_marker_bindings(
+    graph: &Graph<Node<'_>, Edge<'_>>,
+    edges: &mut [ExportEdge],
+    fact_names: &[ExtraName],
+    known_facts: &FxHashSet<usize>,
+    roots: &[NodeIndex],
+) {
+    let mut aliases: FxHashMap<usize, Vec<(EdgeIndex, ExtraName)>> = FxHashMap::default();
+    for (index, edge) in edges.iter().enumerate() {
+        for (name, binding) in &edge.bindings {
+            if binding.scoped.is_some()
+                && let Some(encoded) = binding.encoded
+            {
+                aliases
+                    .entry(encoded)
+                    .or_default()
+                    .push((EdgeIndex::new(index), name.clone()));
             }
         }
     }
-
-    /// Resolve encoded-name precedence before evaluating marker conditions.
-    ///
-    /// A scoped extra can have the same spelling as an encoded conflict item. Encoded facts take
-    /// precedence even when false, so their eventual presence must be known before a scoped
-    /// fallback can make a dependency reachable. Fact presence is structural: false paths still
-    /// carry keys, and each optional node in the graph has a syntactic request or root selection.
-    fn resolve_marker_bindings(&mut self, encoded: &FxHashMap<ExtraName, usize>) {
-        let mut aliases: FxHashMap<usize, Vec<(EdgeIndex, ExtraName)>> = FxHashMap::default();
-        for (index, edge) in self.edges.iter().enumerate() {
-            for (name, binding) in &edge.bindings {
-                if binding.scoped.is_some()
-                    && let Some(encoded) = binding.encoded
-                {
-                    aliases
-                        .entry(encoded)
-                        .or_default()
-                        .push((EdgeIndex::new(index), name.clone()));
+    for (fact, bindings) in aliases {
+        let mut pending = if known_facts.contains(&fact) {
+            roots.to_vec()
+        } else {
+            Vec::new()
+        };
+        pending.extend(graph.edge_references().filter_map(|edge| {
+            edges[edge.id().index()]
+                .activated
+                .binary_search(&fact)
+                .is_ok()
+                .then_some(edge.target())
+        }));
+        let mut present = vec![false; graph.node_count()];
+        while let Some(index) = pending.pop() {
+            if present[index.index()] {
+                continue;
+            }
+            present[index.index()] = true;
+            pending.extend(graph.neighbors_directed(index, Direction::Outgoing));
+        }
+        for (index, name) in bindings {
+            let (parent, _) = graph
+                .edge_endpoints(index)
+                .expect("binding belongs to an export edge");
+            let edge = &mut edges[index.index()];
+            if let Some(binding) = edge.bindings.get_mut(&name) {
+                if present[parent.index()] || edge.activated.binary_search(&fact).is_ok() {
+                    binding.scoped = None;
+                } else {
+                    binding.encoded = None;
                 }
             }
         }
-        for (fact, bindings) in aliases {
-            let mut pending = self
-                .contexts
-                .iter()
-                .enumerate()
-                .filter(|(_, context)| context.contains_key(&fact))
-                .map(|(index, _)| NodeIndex::new(index))
-                .collect::<Vec<_>>();
-            pending.extend(self.graph.edge_references().filter_map(|edge| {
-                self.edges[edge.id().index()]
-                    .activated
-                    .binary_search(&fact)
-                    .is_ok()
-                    .then_some(edge.target())
-            }));
-            let mut present = vec![false; self.graph.node_count()];
-            while let Some(index) = pending.pop() {
-                if present[index.index()] {
-                    continue;
-                }
-                present[index.index()] = true;
-                pending.extend(self.graph.neighbors_directed(index, Direction::Outgoing));
-            }
-            for (index, name) in bindings {
-                let (parent, _) = self
-                    .graph
-                    .edge_endpoints(index)
-                    .expect("binding belongs to an export edge");
-                let edge = &mut self.edges[index.index()];
-                if let Some(binding) = edge.bindings.get_mut(&name) {
-                    if present[parent.index()] || edge.activated.binary_search(&fact).is_ok() {
-                        binding.scoped = None;
-                    } else {
-                        binding.encoded = None;
-                    }
-                }
-            }
-        }
-        for edge in &mut self.edges {
-            // Raw and encoded names for one fact must share a decision variable. In particular,
-            // `raw || !encoded` is a tautology even before that fact's value is known.
-            edge.marker =
-                edge.marker
-                    .resolve_extras(mem::take(&mut edge.bindings).into_iter().map(
-                        |(name, binding)| {
-                            let marker = binding.encoded.or(binding.scoped).map_or(
-                                MarkerTree::FALSE,
-                                |fact| {
+    }
+    for edge in edges {
+        edge.marker =
+            edge.marker
+                .resolve_extras(mem::take(&mut edge.bindings).into_iter().map(
+                    |(name, binding)| {
+                        let marker =
+                            binding
+                                .encoded
+                                .or(binding.scoped)
+                                .map_or(MarkerTree::FALSE, |fact| {
                                     if edge.activated.binary_search(&fact).is_ok() {
                                         MarkerTree::TRUE
                                     } else {
                                         MarkerTree::expression(MarkerExpression::Extra {
                                             operator: ExtraOperator::Equal,
-                                            name: MarkerValueExtra::Extra(
-                                                self.fact_names[fact].clone(),
-                                            ),
+                                            name: MarkerValueExtra::Extra(fact_names[fact].clone()),
                                         })
                                     }
-                                },
-                            );
-                            (name, marker)
-                        },
-                    ));
-            edge.marker
-                .visit_extras(|_, name| edge.inputs.push(encoded[name]));
-            edge.inputs.sort_unstable();
-            edge.inputs.dedup();
-        }
+                                });
+                        (name, marker)
+                    },
+                ));
     }
+}
 
-    /// Retain conflict facts only where they can reach a marker that reads them.
-    fn retain_live_conflicts(&mut self, fact_count: usize) {
-        let mut readers = vec![Vec::new(); fact_count];
-        for edge in self.graph.edge_references() {
-            for &fact in &self.edges[edge.id().index()].inputs {
-                readers[fact].push(edge.source());
-            }
-        }
+/// Least package and optional-extra reachability with conflict variables held symbolic.
+struct SymbolicExportReachability {
+    edges: Vec<ExportEdge>,
+    reachability: Vec<MarkerTree>,
+    activations: Vec<MarkerTree>,
+    dependents: Vec<Vec<EdgeIndex>>,
+    seeds: Vec<Vec<(usize, MarkerTree)>>,
+    queue: VecDeque<usize>,
+    queued: Vec<bool>,
+}
 
-        // Reuse one visited array across facts. Visiting facts in order also leaves each node's
-        // live fact IDs sorted for membership checks during propagation.
-        let mut seen = vec![usize::MAX; self.graph.node_count()];
-        for (fact, mut pending) in readers.into_iter().enumerate() {
-            while let Some(index) = pending.pop() {
-                if seen[index.index()] == fact {
-                    continue;
-                }
-                seen[index.index()] = fact;
-                self.live_facts[index.index()].push(fact);
-                for edge in self.graph.edges_directed(index, Direction::Incoming) {
-                    // An edge that activates this fact replaces the inherited value, so its
-                    // parent's context cannot affect the value read downstream.
-                    if self.edges[edge.id().index()]
-                        .activated
-                        .binary_search(&fact)
-                        .is_err()
-                    {
-                        pending.push(edge.source());
-                    }
-                }
-            }
-        }
-        for (context, live) in self.contexts.iter_mut().zip(&self.live_facts) {
-            context.retain(|fact, _| live.binary_search(fact).is_ok());
-        }
-    }
-
-    /// Add a package-local extra node, initially unreachable.
+impl SymbolicExportReachability {
+    /// Add an optional-extra node that can be reached only by an actual request.
     fn add_node(&mut self) -> usize {
         let index = self.reachability.len();
-        self.reachability.push(None);
+        self.reachability.push(MarkerTree::FALSE);
         self.dependents.push(Vec::new());
         self.seeds.push(Vec::new());
+        self.queued.push(false);
         index
     }
 
-    /// Schedule each changed input at most once until its consumers have been visited.
-    fn enqueue(&mut self, change: ExportChange) {
-        if self.queued.insert(change) {
-            self.queue.push_back(change);
-        }
-    }
-
-    /// Merge a path's conditions into package or extra reachability.
+    /// Merge complete symbolic paths and schedule only changed sources.
     fn add_reachability(&mut self, index: usize, marker: MarkerTree) {
-        let combined = self.reachability[index].map_or(marker, |existing| existing.or(marker));
-        if self.reachability[index] != Some(combined) {
-            self.reachability[index] = Some(combined);
-            self.enqueue(ExportChange::Reachability(index));
+        let combined = self.reachability[index].or(marker);
+        if combined != self.reachability[index] {
+            self.reachability[index] = combined;
+            if !mem::replace(&mut self.queued[index], true) {
+                self.queue.push_back(index);
+            }
         }
     }
 
-    /// Merge a path's conditions into an explicitly referenced conflict fact.
-    fn add_conflict(&mut self, index: NodeIndex, fact: usize, marker: MarkerTree) {
-        if self.live_facts[index.index()].binary_search(&fact).is_err() {
-            return;
-        }
-        let changed = match self.contexts[index.index()].entry(fact) {
-            Entry::Occupied(mut existing) => {
-                let combined = existing.get().or(marker);
-                if combined == *existing.get() {
-                    false
-                } else {
-                    existing.insert(combined);
-                    true
+    /// Close the positive reachability graph and collect each global activation equation.
+    fn solve(&mut self) {
+        while let Some(source) = self.queue.pop_front() {
+            self.queued[source] = false;
+            let marker = self.reachability[source];
+            for seed in 0..self.seeds[source].len() {
+                let (extra, condition) = self.seeds[source][seed];
+                self.add_reachability(extra, marker.and(condition));
+            }
+            for dependent in 0..self.dependents[source].len() {
+                let edge = self.dependents[source][dependent].index();
+                let condition = marker.and(self.edges[edge].marker);
+                for target in 0..self.edges[edge].targets.len() {
+                    self.add_reachability(self.edges[edge].targets[target], condition);
+                }
+                for &fact in &self.edges[edge].activated {
+                    self.activations[fact] = self.activations[fact].or(condition);
                 }
             }
-            Entry::Vacant(entry) => {
-                entry.insert(marker);
-                true
-            }
-        };
-        if changed {
-            // Invalidate guards immediately, before another fact can be transported using their
-            // cached conditions. The edge event combines changes to all of a guard's inputs.
-            for outgoing in 0..self.outgoing[index.index()].len() {
-                let edge = self.outgoing[index.index()][outgoing];
-                if self.edges[edge.index()].inputs.binary_search(&fact).is_ok() {
-                    self.enqueue(ExportChange::Edge(edge));
-                }
-            }
-            self.enqueue(ExportChange::Conflict(index, fact));
         }
     }
+}
 
-    /// Resolve a guard against exact values or one side of an activation interval.
-    ///
-    /// When transporting a fact, condition the guard on that same fact being true. This
-    /// preserves correlations such as `fact AND NOT fact`, including during an upper pass.
-    fn resolve_marker(
-        &self,
-        index: EdgeIndex,
-        bound: ExportBound<'_>,
-        transported: Option<usize>,
-    ) -> MarkerTree {
-        let (parent, _) = self
-            .graph
-            .edge_endpoints(index)
-            .expect("queued edge belongs to the export graph");
-        let edge = &self.edges[index.index()];
-        let marker = if let Some(fact) = transported {
-            edge.marker
-                .simplify_extras_with(|name| name == &self.fact_names[fact])
-        } else {
-            edge.marker
-        };
-        let context = &self.contexts[parent.index()];
-        let current = |fact| context.get(&fact).copied().unwrap_or(MarkerTree::FALSE);
-        let resolve_bounds = |lower: &FxHashMap<usize, MarkerTree>,
-                              upper: &FxHashMap<usize, MarkerTree>| {
-            marker.resolve_extras_with_bounds(edge.inputs.iter().map(|&fact| {
-                (
-                    self.fact_names[fact].clone(),
-                    (
-                        lower.get(&fact).copied().unwrap_or(MarkerTree::FALSE),
-                        upper.get(&fact).copied().unwrap_or(MarkerTree::FALSE),
-                    ),
-                )
-            }))
-        };
-        match bound {
-            ExportBound::Exact => marker.resolve_extras(
-                edge.inputs
-                    .iter()
-                    .map(|&fact| (self.fact_names[fact].clone(), current(fact))),
-            ),
-            ExportBound::Lower(upper) => resolve_bounds(context, &upper[parent.index()]).0,
-            ExportBound::Upper(lower) => resolve_bounds(&lower[parent.index()], context).1,
-        }
-    }
+/// Return the distinct canonical conflict variables read by a marker.
+fn marker_inputs(marker: MarkerTree, encoded: &FxHashMap<ExtraName, usize>) -> Vec<usize> {
+    let mut inputs = Vec::new();
+    marker.visit_extras(|_, name| inputs.push(encoded[name]));
+    inputs.sort_unstable();
+    inputs.dedup();
+    inputs
+}
 
-    /// Reevaluate a dependency when its source or an explicit marker input changes.
-    fn evaluate_edge(&mut self, index: EdgeIndex, bound: ExportBound<'_>) {
-        let (parent, child) = self
-            .graph
-            .edge_endpoints(index)
-            .expect("queued edge belongs to the export graph");
-        let edge = &self.edges[index.index()];
-        let Some(source) = self.reachability[edge.source] else {
-            return;
-        };
-        let context = &self.contexts[parent.index()];
-        let marker = self.resolve_marker(index, bound, None);
-        let condition = source.and(marker);
+/// Which side of an activation interval is being computed with the other side fixed.
+#[derive(Clone, Copy)]
+enum ExportBound {
+    Lower,
+    Upper,
+}
 
-        // Facts are also deferred while this edge is queued, so replay them even if its condition
-        // is unchanged after combining all input updates.
-        let conflicts = context
-            .keys()
-            .filter(|fact| {
-                edge.activated.binary_search(fact).is_err()
-                    && self.live_facts[child.index()].binary_search(fact).is_ok()
-            })
-            .copied()
+/// Solve global activation equations in dependency order, iterating only recursive components.
+struct ExportActivationBounds<'a> {
+    conditions: &'a [MarkerTree],
+    names: &'a [ExtraName],
+    inputs: Vec<Vec<usize>>,
+    dependents: Vec<Vec<usize>>,
+    owners: Vec<usize>,
+    queued: Vec<bool>,
+    bounds: Vec<(MarkerTree, MarkerTree)>,
+}
+
+impl<'a> ExportActivationBounds<'a> {
+    /// Index each equation by the conflict facts whose values can change it.
+    fn new(
+        conditions: &'a [MarkerTree],
+        names: &'a [ExtraName],
+        encoded: &FxHashMap<ExtraName, usize>,
+    ) -> Self {
+        let inputs = conditions
+            .iter()
+            .map(|&marker| marker_inputs(marker, encoded))
             .collect::<Vec<_>>();
-        self.edges[index.index()].condition = Some(condition);
-        for target in 0..self.edges[index.index()].targets.len() {
-            self.add_reachability(self.edges[index.index()].targets[target], condition);
+        let mut dependents = vec![Vec::new(); conditions.len()];
+        for (fact, inputs) in inputs.iter().enumerate() {
+            for &input in inputs {
+                dependents[input].push(fact);
+            }
         }
-        for fact in conflicts {
-            self.propagate_conflict(index, fact, bound);
-        }
-        for activated in 0..self.edges[index.index()].activated.len() {
-            self.add_conflict(
-                child,
-                self.edges[index.index()].activated[activated],
-                condition,
-            );
+        Self {
+            conditions,
+            names,
+            inputs,
+            dependents,
+            owners: vec![0; conditions.len()],
+            queued: vec![false; conditions.len()],
+            bounds: vec![(MarkerTree::FALSE, MarkerTree::FALSE); conditions.len()],
         }
     }
 
-    /// Carry one changed fact through an edge without copying the rest of its parent's context.
-    fn propagate_conflict(&mut self, index: EdgeIndex, fact: usize, bound: ExportBound<'_>) {
-        let edge = &self.edges[index.index()];
-        if edge.activated.binary_search(&fact).is_ok() {
-            return;
+    /// Compute founded bounds while retaining uncertainty from predecessor components.
+    fn solve(mut self) -> Vec<(MarkerTree, MarkerTree)> {
+        let mut graph = Graph::<(), ()>::with_capacity(self.conditions.len(), 0);
+        for _ in self.conditions {
+            graph.add_node(());
         }
-        let Some(condition) = edge.condition else {
-            return;
-        };
-        let (parent, child) = self
-            .graph
-            .edge_endpoints(index)
-            .expect("queued edge belongs to the export graph");
-        if self.live_facts[child.index()].binary_search(&fact).is_err() {
-            return;
+        for (fact, inputs) in self.inputs.iter().enumerate() {
+            for &input in inputs {
+                // SCC postorder then visits an equation's dependencies before its readers.
+                graph.add_edge(NodeIndex::new(fact), NodeIndex::new(input), ());
+            }
         }
-        let condition = match bound {
-            ExportBound::Exact => condition,
-            ExportBound::Lower(_) | ExportBound::Upper(_) => {
-                if edge.inputs.binary_search(&fact).is_ok() {
-                    let source = self.reachability[edge.source]
-                        .expect("an evaluated edge has a source condition");
-                    source.and(self.resolve_marker(index, bound, Some(fact)))
-                } else {
-                    condition
+        let components = kosaraju_scc(&graph);
+        for (owner, component) in components.iter().enumerate() {
+            for fact in component {
+                self.owners[fact.index()] = owner;
+            }
+        }
+        for (owner, component) in components.iter().enumerate() {
+            let component = component
+                .iter()
+                .map(|fact| fact.index())
+                .collect::<Vec<_>>();
+            if let [fact] = component.as_slice()
+                && self.inputs[*fact].binary_search(fact).is_err()
+            {
+                self.bounds[*fact] = self.evaluate(*fact);
+                continue;
+            }
+
+            // Negative inputs use the fixed opposite bound, so each inner worklist grows
+            // monotonically. Restart upper passes from the new lower bound to discard
+            // support from paths whose negative conditions have closed.
+            self.solve_bound(&component, owner, ExportBound::Upper);
+            loop {
+                let previous_upper = component
+                    .iter()
+                    .map(|&fact| self.bounds[fact].1)
+                    .collect::<Vec<_>>();
+                for &fact in &component {
+                    self.bounds[fact].0 = MarkerTree::FALSE;
+                }
+                self.solve_bound(&component, owner, ExportBound::Lower);
+                for &fact in &component {
+                    self.bounds[fact].1 = self.bounds[fact].0;
+                }
+                self.solve_bound(&component, owner, ExportBound::Upper);
+                if component
+                    .iter()
+                    .zip(previous_upper)
+                    .all(|(&fact, previous)| self.bounds[fact].1 == previous)
+                {
+                    break;
                 }
             }
-        };
-        let marker = self.contexts[parent.index()][&fact].and(condition);
-        self.add_conflict(child, fact, marker);
+        }
+        self.bounds
     }
 
-    /// Propagate changed inputs until all dependency contributions are unchanged.
-    fn solve(&mut self, bound: ExportBound<'_>) {
-        while let Some(change) = self.queue.pop_front() {
-            self.queued.remove(&change);
-            match change {
-                ExportChange::Reachability(index) => {
-                    let marker =
-                        self.reachability[index].expect("queued reachability has a marker");
-                    for seed in 0..self.seeds[index].len() {
-                        let (extra, condition) = self.seeds[index][seed];
-                        self.add_reachability(extra, marker.and(condition));
-                    }
-                    for dependent in 0..self.dependents[index].len() {
-                        self.enqueue(ExportChange::Edge(self.dependents[index][dependent]));
-                    }
+    /// Evaluate a complete activation equation over the current global intervals.
+    fn evaluate(&self, fact: usize) -> (MarkerTree, MarkerTree) {
+        self.conditions[fact].resolve_extras_with_bounds(
+            self.inputs[fact]
+                .iter()
+                .map(|&input| (self.names[input].clone(), self.bounds[input])),
+        )
+    }
+
+    /// Compute one least fixed point without revisiting unrelated components.
+    fn solve_bound(&mut self, component: &[usize], owner: usize, bound: ExportBound) {
+        let mut queue = component.iter().copied().collect::<VecDeque<_>>();
+        for &fact in component {
+            self.queued[fact] = true;
+        }
+        while let Some(fact) = queue.pop_front() {
+            self.queued[fact] = false;
+            let (lower, upper) = self.evaluate(fact);
+            let (current, next) = match bound {
+                ExportBound::Lower => (&mut self.bounds[fact].0, lower),
+                ExportBound::Upper => (&mut self.bounds[fact].1, upper),
+            };
+            debug_assert!(current.and(next.negate()).is_false());
+            if *current == next {
+                continue;
+            }
+            *current = next;
+            for &dependent in &self.dependents[fact] {
+                if self.owners[dependent] == owner
+                    && !mem::replace(&mut self.queued[dependent], true)
+                {
+                    queue.push_back(dependent);
                 }
-                ExportChange::Conflict(index, fact) => {
-                    for outgoing in 0..self.outgoing[index.index()].len() {
-                        let edge_index = self.outgoing[index.index()][outgoing];
-                        if !self.queued.contains(&ExportChange::Edge(edge_index)) {
-                            self.propagate_conflict(edge_index, fact, bound);
-                        }
-                    }
-                }
-                ExportChange::Edge(index) => self.evaluate_edge(index, bound),
             }
         }
     }

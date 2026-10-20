@@ -1422,18 +1422,6 @@ impl MarkerTree {
         (Self(lower), Self(upper))
     }
 
-    /// Whether enabling additional extras can only make this marker true.
-    ///
-    /// Environment values are held fixed. This considers singular `extra` expressions;
-    /// list-valued `extras` and `dependency_groups` markers are separate variables.
-    #[must_use]
-    pub fn is_monotonic_in_extras(self) -> bool {
-        if self.is_true() || self.is_false() || !INTERNER.shared.contains_extras(self.0) {
-            return true;
-        }
-        INTERNER.lock().is_monotonic_in_extras(self.0)
-    }
-
     /// Returns a new `MarkerTree` where only `extra` expressions are removed.
     ///
     /// If the marker did not contain any `extra` expressions, then a marker
@@ -2429,16 +2417,6 @@ mod test {
                     }
                 },
             );
-            let monotone = (0..8).all(|assignment| {
-                truth & (1 << assignment) == 0
-                    || (0..3).all(|extra| truth & (1 << (assignment | (1 << extra))) != 0)
-            });
-            assert_eq!(
-                marker.is_monotonic_in_extras(),
-                monotone,
-                "truth table {truth:08b}"
-            );
-
             for lower in 0..8u8 {
                 for upper in 0..8u8 {
                     if lower & !upper != 0 {
@@ -2664,34 +2642,6 @@ mod test {
         assert_eq!(
             marker.negate().resolve_extras_with_bounds(known),
             (MarkerTree::FALSE, condition.negate())
-        );
-        assert!(marker.is_monotonic_in_extras());
-        assert!(!marker.negate().is_monotonic_in_extras());
-    }
-
-    #[test]
-    fn is_monotonic_in_extras() {
-        assert!(MarkerTree::TRUE.is_monotonic_in_extras());
-        assert!(MarkerTree::FALSE.is_monotonic_in_extras());
-        assert!(m("extra == 'a' and extra == 'b'").is_monotonic_in_extras());
-        assert!(m("extra == 'a' or extra == 'b'").is_monotonic_in_extras());
-        assert!(m("extra == 'a' or extra != 'a'").is_monotonic_in_extras());
-        assert!(m("'a' in extras and 'dev' not in dependency_groups").is_monotonic_in_extras());
-        assert!(
-            m("(sys_platform == 'linux' and extra == 'a') or \
-               (sys_platform != 'linux' and extra == 'b')")
-            .is_monotonic_in_extras()
-        );
-        assert!(!m("extra != 'a'").is_monotonic_in_extras());
-        assert!(
-            !m("extra == 'a' or extra == 'b'")
-                .negate()
-                .is_monotonic_in_extras()
-        );
-        assert!(
-            !m("(sys_platform == 'linux' and extra == 'a') or \
-                (sys_platform != 'linux' and extra != 'b')")
-            .is_monotonic_in_extras()
         );
     }
 

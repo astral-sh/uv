@@ -935,27 +935,6 @@ impl InternerGuard<'_> {
         result
     }
 
-    /// Check whether every signed extra decision is monotonic in its Boolean variable.
-    pub(crate) fn is_monotonic_in_extras(&mut self, marker: NodeId) -> bool {
-        let mut pending = SmallVec::from_slice(&[marker]);
-        let mut visited = FxHashSet::default();
-        while let Some(marker) = pending.pop() {
-            if marker.is_true() || marker.is_false() || !visited.insert(marker) {
-                continue;
-            }
-            let node = self.shared.node(marker);
-            if let (Variable::Extra(_), Edges::Boolean { high, low }) = (&node.var, &node.children)
-                && !self
-                    .and(low.negate(marker), high.negate(marker).not())
-                    .is_false()
-            {
-                return false;
-            }
-            pending.extend(node.children.nodes().map(|child| child.negate(marker)));
-        }
-        true
-    }
-
     /// Rebuild a decision after substitution, allowing children to introduce earlier variables.
     /// Calling `create_node` directly would violate the diagram's variable ordering.
     fn rebuild_node(&mut self, variable: &Variable, children: EdgeBuilder) -> NodeId {

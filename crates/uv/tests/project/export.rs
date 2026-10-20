@@ -730,6 +730,186 @@ fn requirements_txt_transitive_extra_negative_marker() -> Result<()> {
     Ok(())
 }
 
+/// A transitive extra selects the dependency version on a sibling branch as well as its own path.
+/// The selector is reachable only on Linux, so each leaf version has a different platform marker.
+#[cfg(feature = "test-universal")]
+#[test]
+fn requirements_txt_extra_activation_on_sibling_branch() -> Result<()> {
+    let context = uv_test::test_context!("3.13");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = ["shared", "other", "selector ; sys_platform == 'linux'"]
+
+        [tool.uv]
+        package = false
+        conflicts = [[{ package = "shared", extra = "a" }, { package = "shared", extra = "b" }]]
+
+        [tool.uv.workspace]
+        members = ["shared", "other", "selector"]
+
+        [tool.uv.sources]
+        shared = { workspace = true }
+        other = { workspace = true }
+        selector = { workspace = true }
+        "#,
+    )?;
+    context.temp_dir.child("other/pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "other"
+        version = "1.0.0"
+        requires-python = ">=3.11"
+        dependencies = ["leaf>=1"]
+
+        [tool.uv]
+        package = false
+        "#,
+    )?;
+    context
+        .temp_dir
+        .child("selector/pyproject.toml")
+        .write_str(
+            r#"
+        [project]
+        name = "selector"
+        version = "1.0.0"
+        requires-python = ">=3.11"
+        dependencies = ["shared[a]"]
+
+        [tool.uv]
+        package = false
+        "#,
+        )?;
+    context.temp_dir.child("shared/pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "shared"
+        version = "1.0.0"
+        requires-python = ">=3.11"
+
+        [project.optional-dependencies]
+        a = ["leaf==1"]
+        b = ["leaf==2"]
+
+        [tool.uv]
+        package = false
+        "#,
+    )?;
+
+    let wheels = context.temp_dir.child("wheels");
+    let (filename, wheel) = WheelBuilder::new(&"leaf".parse()?, &"1.0.0".parse()?).build();
+    wheels.child(filename).write_binary(&wheel)?;
+    let (filename, wheel) = WheelBuilder::new(&"leaf".parse()?, &"2.0.0".parse()?).build();
+    wheels.child(filename).write_binary(&wheel)?;
+    context
+        .lock()
+        .arg("--offline")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg("wheels")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--frozen")
+        .arg("--no-header")
+        .arg("--no-annotate")
+        .arg("--no-hashes"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    leaf==1.0.0 ; sys_platform == 'linux'
+    leaf==2.0.0 ; sys_platform != 'linux'
+    ");
+
+    Ok(())
+}
+
+/// With b disabled, the paths with and without a reach a bridge that requests a. Their union
+/// establishes a even though following either path creates a dependency cycle.
+#[cfg(feature = "test-universal")]
+#[test]
+fn requirements_txt_extra_activation_through_complementary_paths() -> Result<()> {
+    let context = uv_test::test_context!("3.13");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = ["shared"]
+
+        [tool.uv]
+        package = false
+        conflicts = [[{ package = "shared", extra = "a" }, { package = "shared", extra = "b" }]]
+
+        [tool.uv.workspace]
+        members = ["shared"]
+
+        [tool.uv.sources]
+        shared = { workspace = true }
+        "#,
+    )?;
+    context.temp_dir.child("shared/pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "shared"
+        version = "1.0.0"
+        requires-python = ">=3.11"
+        dependencies = ["leaf>=1"]
+
+        [project.optional-dependencies]
+        a = ["leaf==1", "bridge>=3"]
+        b = ["leaf==2", "bridge==2"]
+
+        [tool.uv]
+        package = false
+        "#,
+    )?;
+
+    let wheels = context.temp_dir.child("wheels");
+    let (filename, wheel) = WheelBuilder::new(&"leaf".parse()?, &"1.0.0".parse()?)
+        .requires(&["bridge>=1".parse()?])
+        .build();
+    wheels.child(filename).write_binary(&wheel)?;
+    let (filename, wheel) = WheelBuilder::new(&"leaf".parse()?, &"2.0.0".parse()?)
+        .requires(&["bridge>=1".parse()?])
+        .build();
+    wheels.child(filename).write_binary(&wheel)?;
+    let (filename, wheel) = WheelBuilder::new(&"bridge".parse()?, &"2.0.0".parse()?).build();
+    wheels.child(filename).write_binary(&wheel)?;
+    let (filename, wheel) = WheelBuilder::new(&"bridge".parse()?, &"3.0.0".parse()?)
+        .requires(&["shared[a]".parse()?])
+        .build();
+    wheels.child(filename).write_binary(&wheel)?;
+    context
+        .lock()
+        .arg("--offline")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg("wheels")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--frozen")
+        .arg("--no-header")
+        .arg("--no-annotate")
+        .arg("--no-hashes"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    bridge==3.0.0
+    leaf==1.0.0
+    ");
+
+    Ok(())
+}
+
 /// An encoded conflict takes precedence over a literal extra with the same name, even when the
 /// encoded extra is only requested through an incompatible path.
 #[cfg(feature = "test-universal")]
