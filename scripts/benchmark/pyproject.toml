@@ -55,10 +55,6 @@ exclude-newer = "P7D"
 
 [tool.uv.exclude-newer-package]
 astral-dev-toolchain-hyperfine = "2026-10-08T08:11:00Z"
-# Allow certifi 2026.10.19 and pip 26.2.2 before the seven-day wait: they
-# remove trust in the eMudhra root that signed the compromised intermediates.
-certifi = "2026-10-20T02:24:17Z"
-pip = "2026-10-20T16:36:30Z"
 
 [tool.uv.build-backend]
 source-include = [".python-version", "README.md", "uv.lock"]

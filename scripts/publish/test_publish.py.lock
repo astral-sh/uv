@@ -8,7 +8,6 @@ exclude-newer-span = "P7D"
 
 [options.exclude-newer-package]
 certifi = "2026-10-20T02:24:17Z"
-sigstore = "2026-10-20T15:12:51Z"
 
 [manifest]
 requirements = [
@@ -17,7 +16,7 @@ requirements = [
     { name = "keyrings-alt" },
     { name = "packaging", specifier = ">=24.1,<25" },
     { name = "pypi-attestations", specifier = ">=0.0.28" },
-    { name = "sigstore", specifier = ">=4.5.1" },
+    { name = "sigstore", specifier = ">=4.4.0" },
 ]
 
 [[package]]
@@ -549,6 +548,19 @@ wheels = [
 ]
 
 [[package]]
+name = "pyopenssl"
+version = "26.4.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "cryptography" },
+    { name = "typing-extensions", marker = "python_full_version < '3.13'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/3f/e8/7325d258199b159eb2c03fe32107533e2832e70e63f4fb88a6aa00023201/pyopenssl-26.4.0.tar.gz", hash = "sha256:28dfcce0162b9211413e26dfbfdf1d24317fbeba18fc93c12400a1856b2a0bc7", size = 182046, upload-time = "2026-08-01T19:50:50.512Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/51/ad/2cf6d3fa2fae5c79e1ed9960c0d42badd0f94d81dd12b50604cdc839e648/pyopenssl-26.4.0-py3-none-any.whl", hash = "sha256:f0eb0cb2d581d3ad2b9c489468485e7f2ab6727d08401bcf9d824c3caddf3c1c", size = 56026, upload-time = "2026-08-01T19:50:48.94Z" },
+]
+
+[[package]]
 name = "pypi-attestations"
 version = "0.0.28"
 source = { registry = "https://pypi.org/simple" }
@@ -669,14 +681,16 @@ wheels = [
 
 [[package]]
 name = "sigstore"
-version = "4.5.1"
+version = "4.4.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cryptography" },
     { name = "id" },
     { name = "platformdirs" },
+    { name = "pyasn1" },
     { name = "pydantic" },
     { name = "pyjwt" },
+    { name = "pyopenssl" },
     { name = "requests" },
     { name = "rfc3161-client" },
     { name = "rfc8785" },
@@ -685,9 +699,9 @@ dependencies = [
     { name = "sigstore-rekor-types" },
     { name = "tuf" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/bb/26/0561ddc1fcda5a12e577b4716f3e345905fc5e98978def96bc78e2d538ce/sigstore-4.5.1.tar.gz", hash = "sha256:14accda8a7d4ef47cb25b4903829fb10f011048c261a5937724a43d073c4f34d", size = 90964, upload-time = "2026-10-20T15:12:50.021Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/04/a9/7f7625225c6e7041ab4460bfc5b30a6ebc40bcf6487ee28d5864149124c4/sigstore-4.4.0.tar.gz", hash = "sha256:20ffe791c1fa33ce62148c0291b46280d29c1910964d9afac419e9b1a8afc56b", size = 90986, upload-time = "2026-07-06T13:07:49.36Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e1/e7/23dc324a6a5f0c1d8da0dfd8f862b0e3ec88e0b1302fdffd34628cdd6bb2/sigstore-4.5.1-py3-none-any.whl", hash = "sha256:02e000197b34980f1d382741d6f83c2fecbcef7debf7304f36a5253f3c892cd9", size = 113192, upload-time = "2026-10-20T15:12:48.563Z" },
+    { url = "https://files.pythonhosted.org/packages/ad/37/7922b125ede9cbee53569adb992f6f86aefab009105f3b0e77bc5225636d/sigstore-4.4.0-py3-none-any.whl", hash = "sha256:80c36d08b02479e2a282d0bea93de68fe0d43a93b0d58e4d9ac6bb9f8425957c", size = 111705, upload-time = "2026-07-06T13:07:47.946Z" },
 ]
 
 [[package]]
