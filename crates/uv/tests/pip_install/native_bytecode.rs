@@ -6,7 +6,7 @@ use std::os::unix::fs::PermissionsExt;
 
 use anyhow::Result;
 use assert_fs::prelude::*;
-#[cfg(unix)]
+#[cfg(all(unix, feature = "test-r2"))]
 use fs_err::os::unix::fs::symlink;
 
 use uv_test::packse::WheelBuilder;
@@ -175,8 +175,8 @@ fn native_bytecode_unsupported_settings() -> Result<()> {
     Ok(())
 }
 
-/// Refuse to replace a symlink at the bytecode destination, as CPython does.
-#[cfg(unix)]
+/// The released compiler refuses to replace a bytecode symlink, including when cached offline.
+#[cfg(all(unix, feature = "test-r2"))]
 #[test]
 fn native_bytecode_symlink_destination() -> Result<()> {
     let context = uv_test::test_context!("3.12")
@@ -193,12 +193,14 @@ fn native_bytecode_symlink_destination() -> Result<()> {
         .write_str(&wheel_path.display().to_string())?;
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
-        .arg("--offline"), @"
+        .arg("--compile-bytecode")
+        .arg("--preview-features").arg("native-bytecode"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
+    Bytecode compiled 1 file in [TIME]
      + example==1.0.0 (from file://[TEMP_DIR]/example-1.0.0-py3-none-any.whl)
     ");
 
@@ -207,6 +209,7 @@ fn native_bytecode_symlink_destination() -> Result<()> {
     let target = context.temp_dir.child("target.pyc");
     target.write_str("untouched")?;
     let destination = cache_dir.join("__init__.cpython-312.pyc");
+    fs_err::remove_file(&destination)?;
     symlink(target.path(), &destination)?;
 
     uv_snapshot!(context.filters(), context.pip_sync()
@@ -218,7 +221,8 @@ fn native_bytecode_symlink_destination() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: Failed to bytecode-compile Python file in: [SITE_PACKAGES]/
-      cause: Bytecode destination is not a regular file: [SITE_PACKAGES]/example/__pycache__/__init__.cpython-312.pyc
+      cause: serc exited with exit status: 2:
+             serc: [SITE_PACKAGES]/example/__pycache__/__init__.cpython-312.pyc is not a regular file
     ");
     assert!(
         fs_err::symlink_metadata(destination)?
@@ -250,7 +254,7 @@ fn native_bytecode_cached_compiler() -> Result<()> {
     };
     let compiler_dir = context
         .cache_dir
-        .join("binaries-v0/serc/0.1.7")
+        .join("binaries-v0/serc/0.1.8")
         .join(target);
     fs_err::create_dir_all(&compiler_dir)?;
     let compiler = compiler_dir.join("serc");
@@ -380,7 +384,7 @@ fn native_bytecode_subprocess_failure() -> Result<()> {
     };
     let compiler_dir = context
         .cache_dir
-        .join("binaries-v0/serc/0.1.7")
+        .join("binaries-v0/serc/0.1.8")
         .join(target);
     fs_err::create_dir_all(&compiler_dir)?;
     let compiler = compiler_dir.join("serc");
@@ -427,7 +431,7 @@ fn native_bytecode_invalid_summary() -> Result<()> {
     };
     let compiler_dir = context
         .cache_dir
-        .join("binaries-v0/serc/0.1.7")
+        .join("binaries-v0/serc/0.1.8")
         .join(target);
     fs_err::create_dir_all(&compiler_dir)?;
     let compiler = compiler_dir.join("serc");
