@@ -88,6 +88,7 @@ pub(crate) mod export;
 mod inputs;
 mod installable;
 mod map;
+mod marker_cache;
 mod requirements;
 mod serialize;
 mod tree;
@@ -6486,18 +6487,18 @@ impl ResolverManifest {
 
 #[derive(Clone, Debug, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
-struct LockWire {
+struct LockWire<Marker = SimplifiedMarkerTree> {
     version: u32,
     revision: Option<u32>,
     requires_python: RequiresPython,
     /// If this lockfile was built from a forking resolution with non-identical forks, store the
     /// forks in the lockfile so we can recreate them in subsequent resolutions.
     #[serde(rename = "resolution-markers", default)]
-    fork_markers: Vec<SimplifiedMarkerTree>,
+    fork_markers: Vec<Marker>,
     #[serde(rename = "supported-markers", default)]
-    supported_environments: Vec<SimplifiedMarkerTree>,
+    supported_environments: Vec<Marker>,
     #[serde(rename = "required-markers", default)]
-    required_environments: Vec<SimplifiedMarkerTree>,
+    required_environments: Vec<Marker>,
     #[serde(rename = "conflicts", default)]
     conflicts: Option<Conflicts>,
     /// We discard the lockfile if these options match.
@@ -6506,7 +6507,7 @@ struct LockWire {
     #[serde(default)]
     manifest: ResolverManifest,
     #[serde(rename = "package", alias = "distribution", default)]
-    packages: Vec<PackageWire>,
+    packages: Vec<PackageWire<Marker>>,
 }
 
 impl TryFrom<LockWire> for Lock {
@@ -7406,7 +7407,7 @@ fn absolute_path(workspace_root: &Path, path: &Path) -> Result<PathBuf, LockErro
 
 #[derive(Clone, Debug, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
-struct PackageWire {
+struct PackageWire<Marker = SimplifiedMarkerTree> {
     #[serde(flatten)]
     id: PackageId,
     #[serde(default)]
@@ -7416,15 +7417,15 @@ struct PackageWire {
     #[serde(default)]
     wheels: Vec<Wheel>,
     #[serde(default, rename = "resolution-markers")]
-    fork_markers: Vec<SimplifiedMarkerTree>,
+    fork_markers: Vec<Marker>,
     #[serde(default)]
-    dependencies: Vec<DependencyWire>,
+    dependencies: Vec<DependencyWire<Marker>>,
     #[serde(default)]
-    optional_dependencies: BTreeMap<ExtraName, Vec<DependencyWire>>,
+    optional_dependencies: BTreeMap<ExtraName, Vec<DependencyWire<Marker>>>,
     #[serde(default)]
     default_groups: Option<DefaultGroups>,
     #[serde(default, rename = "dev-dependencies", alias = "dependency-groups")]
-    dependency_groups: BTreeMap<GroupName, Vec<DependencyWire>>,
+    dependency_groups: BTreeMap<GroupName, Vec<DependencyWire<Marker>>>,
     #[serde(default)]
     group_requires_python: BTreeMap<GroupName, GroupMetadata>,
 }
@@ -9316,13 +9317,13 @@ impl Display for Dependency {
 /// A single dependency of a package in a lockfile.
 #[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
-struct DependencyWire {
+struct DependencyWire<Marker = SimplifiedMarkerTree> {
     #[serde(flatten)]
     package_id: PackageIdForDependency,
     #[serde(default)]
     extra: BTreeSet<ExtraName>,
     #[serde(default)]
-    marker: SimplifiedMarkerTree,
+    marker: Marker,
 }
 
 impl DependencyWire {
