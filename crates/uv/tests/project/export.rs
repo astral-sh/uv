@@ -581,6 +581,155 @@ fn requirements_txt_transitive_extra_activation_cycle() -> Result<()> {
     Ok(())
 }
 
+/// A transitive request for shared[a] selects one of two conflicting versions only on Linux.
+/// The other version's negative marker must account for that request before it contributes output.
+#[cfg(feature = "test-universal")]
+#[test]
+fn requirements_txt_transitive_extra_negative_marker() -> Result<()> {
+    let context = uv_test::test_context!("3.13");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = ["shared", "aa ; sys_platform == 'linux'"]
+
+        [tool.uv]
+        package = false
+        conflicts = [[{ package = "shared", extra = "a" }, { package = "shared", extra = "b" }]]
+
+        [tool.uv.workspace]
+        members = ["aa", "ab", "shared"]
+
+        [tool.uv.sources]
+        aa = { workspace = true }
+        ab = { workspace = true }
+        shared = { workspace = true }
+        "#,
+    )?;
+
+    context.temp_dir.child("aa/pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "aa"
+        version = "1.0.0"
+        requires-python = ">=3.11"
+        dependencies = ["ab"]
+
+        [tool.uv]
+        package = false
+        "#,
+    )?;
+
+    context.temp_dir.child("ab/pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "ab"
+        version = "1.0.0"
+        requires-python = ">=3.11"
+        dependencies = ["shared[a]"]
+
+        [tool.uv]
+        package = false
+        "#,
+    )?;
+
+    context.temp_dir.child("shared/pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "shared"
+        version = "1.0.0"
+        requires-python = ">=3.11"
+        dependencies = ["leaf>=1"]
+
+        [project.optional-dependencies]
+        a = ["leaf==1.0.0"]
+        b = ["leaf==2.0.0"]
+
+        [tool.uv]
+        package = false
+        "#,
+    )?;
+
+    // The dependency markers match those generated for the workspace's conflicting extras.
+    context.temp_dir.child("uv.lock").write_str(
+        r#"
+        version = 1
+        revision = 5
+        requires-python = ">=3.11"
+        conflicts = [[
+            { package = "shared", extra = "a" },
+            { package = "shared", extra = "b" },
+        ]]
+
+        [manifest]
+        members = ["aa", "ab", "root", "shared"]
+
+        [[package]]
+        name = "aa"
+        version = "1.0.0"
+        source = { virtual = "aa" }
+        dependencies = [{ name = "ab" }]
+
+        [[package]]
+        name = "ab"
+        version = "1.0.0"
+        source = { virtual = "ab" }
+        dependencies = [
+            { name = "shared" },
+            { name = "shared", extra = ["a"], marker = "extra == 'extra-6-shared-a'" },
+        ]
+
+        [[package]]
+        name = "leaf"
+        version = "1.0.0"
+        source = { registry = "https://example.com/simple" }
+
+        [[package]]
+        name = "leaf"
+        version = "2.0.0"
+        source = { registry = "https://example.com/simple" }
+
+        [[package]]
+        name = "root"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "aa", marker = "sys_platform == 'linux'" },
+            { name = "shared" },
+        ]
+
+        [[package]]
+        name = "shared"
+        version = "1.0.0"
+        source = { virtual = "shared" }
+        dependencies = [
+            { name = "leaf", version = "1.0.0", source = { registry = "https://example.com/simple" }, marker = "extra == 'extra-6-shared-a'" },
+            { name = "leaf", version = "2.0.0", source = { registry = "https://example.com/simple" }, marker = "extra != 'extra-6-shared-a' or extra == 'extra-6-shared-b'" },
+        ]
+
+        [package.optional-dependencies]
+        a = [{ name = "leaf", version = "1.0.0", source = { registry = "https://example.com/simple" } }]
+        b = [{ name = "leaf", version = "2.0.0", source = { registry = "https://example.com/simple" } }]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--frozen")
+        .arg("--no-header")
+        .arg("--no-annotate")
+        .arg("--no-hashes"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    leaf==1.0.0 ; sys_platform == 'linux'
+    leaf==2.0.0 ; sys_platform != 'linux'
+    ");
+
+    Ok(())
+}
+
 /// An encoded conflict takes precedence over a literal extra with the same name, even when the
 /// encoded extra is only requested through an incompatible path.
 #[cfg(feature = "test-universal")]
@@ -669,6 +818,171 @@ fn requirements_txt_encoded_extra_name_precedence() -> Result<()> {
     exit_code: 0 (success)
     ----- stdout -----
     aaa-bridge==1.0.0 ; sys_platform == 'linux'
+    shared==1.0.0
+    ");
+
+    Ok(())
+}
+
+/// A negative encoded marker must wait for a transitive activation even when a literal extra has
+/// the same name. Resolving the encoded fact's presence does not establish its final value.
+/// The leaf's self-cycle cannot retain reachability after that guard closes.
+#[cfg(feature = "test-universal")]
+#[test]
+fn requirements_txt_encoded_extra_negative_marker() -> Result<()> {
+    let context = uv_test::test_context!("3.13");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["shared[extra-6-shared-a]==1.0.0", "bridge-0==1.0.0"]
+        "#,
+    )?;
+
+    context.temp_dir.child("uv.lock").write_str(
+        r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.9"
+
+        [manifest]
+        members = ["root"]
+
+        [[package]]
+        name = "root"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "shared", extra = ["extra-6-shared-a"] },
+            { name = "bridge-0" },
+        ]
+
+        [[package]]
+        name = "bridge-0"
+        version = "1.0.0"
+        source = { registry = "https://example.com/simple" }
+        dependencies = [{ name = "bridge-1" }]
+
+        [[package]]
+        name = "bridge-1"
+        version = "1.0.0"
+        source = { registry = "https://example.com/simple" }
+        dependencies = [{ name = "bridge-2" }]
+
+        [[package]]
+        name = "bridge-2"
+        version = "1.0.0"
+        source = { registry = "https://example.com/simple" }
+        dependencies = [{ name = "shared", extra = ["a"] }]
+
+        [[package]]
+        name = "shared"
+        version = "1.0.0"
+        source = { registry = "https://example.com/simple" }
+        dependencies = [{ name = "leaf", marker = "extra != 'extra-6-shared-a'" }]
+
+        [package.optional-dependencies]
+        a = []
+        extra-6-shared-a = []
+
+        [package.metadata]
+        provides-extras = ["a", "extra-6-shared-a"]
+
+        [[package]]
+        name = "leaf"
+        version = "1.0.0"
+        source = { registry = "https://example.com/simple" }
+        dependencies = [{ name = "leaf" }]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--frozen")
+        .arg("--no-header")
+        .arg("--no-annotate")
+        .arg("--no-hashes"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    bridge-0==1.0.0
+    bridge-1==1.0.0
+    bridge-2==1.0.0
+    shared==1.0.0
+    ");
+
+    Ok(())
+}
+
+/// The only path that activates shared[a] depends on that extra being inactive.
+/// Export must report the recursive condition instead of choosing a traversal-dependent result.
+#[cfg(feature = "test-universal")]
+#[test]
+fn requirements_txt_recursive_negative_extra_marker() -> Result<()> {
+    let context = uv_test::test_context!("3.13");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["shared==1.0.0"]
+        "#,
+    )?;
+
+    context.temp_dir.child("uv.lock").write_str(
+        r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.9"
+
+        [manifest]
+        members = ["root"]
+
+        [[package]]
+        name = "root"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [{ name = "shared" }]
+
+        [[package]]
+        name = "shared"
+        version = "1.0.0"
+        source = { registry = "https://example.com/simple" }
+        dependencies = [{ name = "bridge", marker = "extra != 'a'" }]
+
+        [package.optional-dependencies]
+        a = []
+
+        [[package]]
+        name = "bridge"
+        version = "1.0.0"
+        source = { registry = "https://example.com/simple" }
+        dependencies = [{ name = "shared", extra = ["a"] }]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--frozen")
+        .arg("--no-header")
+        .arg("--no-annotate")
+        .arg("--no-hashes"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Cannot determine whether to export `bridge==1.0.0 @ registry+https://example.com/simple` because its dependency markers contain recursive extra conditions
+    ");
+
+    // The unresolved bridge does not affect the reachability of the emitted package.
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--frozen")
+        .arg("--no-header")
+        .arg("--no-annotate")
+        .arg("--no-hashes")
+        .arg("--no-emit-package").arg("bridge"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
     shared==1.0.0
     ");
 

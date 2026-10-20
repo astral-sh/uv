@@ -1395,6 +1395,45 @@ impl MarkerTree {
         Self(INTERNER.lock().resolve_extras(self.0, &known_extras))
     }
 
+    /// Bound the result of replacing extras with their activation conditions.
+    ///
+    /// Each extra has a lower and upper bound, and its lower bound must imply its upper bound.
+    /// The returned markers describe where this marker definitely and possibly holds,
+    /// respectively. Extras absent from `known_extras` are false.
+    ///
+    /// Substitution is simultaneous: extras in replacement bounds are not themselves replaced.
+    /// Shared subgraphs are transformed once, without expanding disjunctive normal form.
+    /// `known_extras` is iterated only when this marker contains an `extra` expression.
+    #[must_use]
+    pub fn resolve_extras_with_bounds(
+        self,
+        known_extras: impl IntoIterator<Item = (ExtraName, (Self, Self))>,
+    ) -> (Self, Self) {
+        if self.is_true() || self.is_false() || !INTERNER.shared.contains_extras(self.0) {
+            return (self, self);
+        }
+        let known_extras: FxHashMap<_, _> = known_extras
+            .into_iter()
+            .map(|(name, (lower, upper))| (name, (lower.0, upper.0)))
+            .collect();
+        let (lower, upper) = INTERNER
+            .lock()
+            .resolve_extras_with_bounds(self.0, &known_extras);
+        (Self(lower), Self(upper))
+    }
+
+    /// Whether enabling additional extras can only make this marker true.
+    ///
+    /// Environment values are held fixed. This considers singular `extra` expressions;
+    /// list-valued `extras` and `dependency_groups` markers are separate variables.
+    #[must_use]
+    pub fn is_monotonic_in_extras(self) -> bool {
+        if self.is_true() || self.is_false() || !INTERNER.shared.contains_extras(self.0) {
+            return true;
+        }
+        INTERNER.lock().is_monotonic_in_extras(self.0)
+    }
+
     /// Returns a new `MarkerTree` where only `extra` expressions are removed.
     ///
     /// If the marker did not contain any `extra` expressions, then a marker
@@ -2351,6 +2390,309 @@ mod test {
             known.push((right.parse().expect("valid extra name"), condition));
         }
         assert_eq!(marker.resolve_extras(known), condition);
+    }
+
+    /// Exhaust all three-extra Boolean functions and their consistent activation intervals.
+    #[test]
+    fn resolve_extras_with_bounds_truth_tables() {
+        let names =
+            ["a", "b", "c"].map(|name| name.parse::<ExtraName>().expect("valid extra name"));
+        let variables = [m("extra == 'a'"), m("extra == 'b'"), m("extra == 'c'")];
+        let minterms: [MarkerTree; 8] = std::array::from_fn(|assignment| {
+            variables
+                .iter()
+                .enumerate()
+                .fold(MarkerTree::TRUE, |term, (index, &variable)| {
+                    term.and(if assignment & (1 << index) == 0 {
+                        variable.negate()
+                    } else {
+                        variable
+                    })
+                })
+        });
+        let constant = |value| {
+            if value {
+                MarkerTree::TRUE
+            } else {
+                MarkerTree::FALSE
+            }
+        };
+
+        for truth in 0..=u8::MAX {
+            let marker = minterms.iter().enumerate().fold(
+                MarkerTree::FALSE,
+                |marker, (assignment, &minterm)| {
+                    if truth & (1 << assignment) != 0 {
+                        marker.or(minterm)
+                    } else {
+                        marker
+                    }
+                },
+            );
+            let monotone = (0..8).all(|assignment| {
+                truth & (1 << assignment) == 0
+                    || (0..3).all(|extra| truth & (1 << (assignment | (1 << extra))) != 0)
+            });
+            assert_eq!(
+                marker.is_monotonic_in_extras(),
+                monotone,
+                "truth table {truth:08b}"
+            );
+
+            for lower in 0..8u8 {
+                for upper in 0..8u8 {
+                    if lower & !upper != 0 {
+                        continue;
+                    }
+                    let mut expected = (true, false);
+                    for assignment in 0..8u8 {
+                        if assignment & lower == lower && assignment & upper == assignment {
+                            let value = truth & (1 << assignment) != 0;
+                            expected.0 &= value;
+                            expected.1 |= value;
+                        }
+                    }
+                    assert_eq!(
+                        marker.resolve_extras_with_bounds(names.iter().enumerate().map(
+                            |(index, name)| (
+                                name.clone(),
+                                (
+                                    constant(lower & (1 << index) != 0),
+                                    constant(upper & (1 << index) != 0),
+                                ),
+                            )
+                        )),
+                        (constant(expected.0), constant(expected.1)),
+                        "truth table {truth:08b}, interval {lower:03b}..={upper:03b}"
+                    );
+                }
+            }
+        }
+    }
+
+    /// An unknown decision cannot hide a condition guaranteed by both branches.
+    #[test]
+    fn resolve_extras_with_bounds_consensus() {
+        assert_eq!(
+            m("extra == 'x' or extra == 'y'").resolve_extras_with_bounds([
+                (
+                    "x".parse().expect("valid extra name"),
+                    (MarkerTree::FALSE, MarkerTree::TRUE),
+                ),
+                (
+                    "y".parse().expect("valid extra name"),
+                    (MarkerTree::TRUE, MarkerTree::TRUE),
+                ),
+            ]),
+            (MarkerTree::TRUE, MarkerTree::TRUE)
+        );
+
+        let linux = m("sys_platform == 'linux'");
+        assert_eq!(
+            m("(extra == 'x' and extra == 'y') or (extra != 'x' and extra == 'z')")
+                .resolve_extras_with_bounds([
+                    (
+                        "x".parse().expect("valid extra name"),
+                        (MarkerTree::FALSE, MarkerTree::TRUE),
+                    ),
+                    (
+                        "y".parse().expect("valid extra name"),
+                        (linux, MarkerTree::TRUE),
+                    ),
+                    (
+                        "z".parse().expect("valid extra name"),
+                        (
+                            linux,
+                            m("sys_platform == 'linux' or sys_platform == 'darwin'")
+                        ),
+                    ),
+                ]),
+            (linux, MarkerTree::TRUE)
+        );
+    }
+
+    /// Negation exchanges the complemented upper and lower bounds.
+    #[test]
+    fn resolve_extras_with_bounds_negation() {
+        let known = [(
+            "a".parse().expect("valid extra name"),
+            (
+                m("sys_platform == 'linux'"),
+                m("sys_platform == 'linux' or sys_platform == 'darwin'"),
+            ),
+        )];
+        assert_eq!(
+            m("extra != 'a'").resolve_extras_with_bounds(known.clone()),
+            (
+                m("sys_platform != 'linux' and sys_platform != 'darwin'"),
+                m("sys_platform != 'linux'"),
+            )
+        );
+        assert_eq!(
+            m("extra == 'missing'").resolve_extras_with_bounds(known.clone()),
+            (MarkerTree::FALSE, MarkerTree::FALSE)
+        );
+        assert_eq!(
+            m("extra != 'missing'").resolve_extras_with_bounds(known),
+            (MarkerTree::TRUE, MarkerTree::TRUE)
+        );
+    }
+
+    /// Both bounds retain environment conditions and can introduce earlier decision variables.
+    #[test]
+    fn resolve_extras_with_bounds_environment_conditions() {
+        let marker = m("platform_release >= '24' and (extra == 'x' or extra == 'y')");
+        assert_eq!(
+            marker.resolve_extras_with_bounds([
+                (
+                    "x".parse().expect("valid extra name"),
+                    (
+                        m("sys_platform == 'linux'"),
+                        m("sys_platform == 'linux' or sys_platform == 'darwin'"),
+                    ),
+                ),
+                (
+                    "y".parse().expect("valid extra name"),
+                    (
+                        m("sys_platform == 'darwin'"),
+                        m("sys_platform == 'darwin' or sys_platform == 'win32'"),
+                    ),
+                ),
+            ]),
+            (
+                m(
+                    "platform_release >= '24' and (sys_platform == 'linux' or sys_platform == 'darwin')"
+                ),
+                m(
+                    "platform_release >= '24' and (sys_platform == 'linux' or sys_platform == 'darwin' or sys_platform == 'win32')"
+                ),
+            )
+        );
+    }
+
+    /// Exact bounds agree with ordinary simultaneous substitution for every decision kind.
+    #[test]
+    fn resolve_extras_with_bounds_exact() {
+        let known = [
+            (
+                "a".parse().expect("valid extra name"),
+                m("sys_platform == 'darwin' or extra == 'b'"),
+            ),
+            ("b".parse().expect("valid extra name"), MarkerTree::FALSE),
+        ];
+        for marker in [
+            "extra == 'a'",
+            "extra != 'a'",
+            "python_version >= '3.10' and extra == 'a'",
+            "implementation_name == 'cpython' and extra == 'a'",
+            "platform_release >= '24' and extra == 'a'",
+            "'python' in implementation_name and extra == 'a'",
+            "'dev' in dependency_groups and extra == 'a'",
+            "extra == 'missing' or extra == 'a'",
+        ] {
+            let marker = m(marker);
+            let expected = marker.resolve_extras(known.clone());
+            assert_eq!(
+                marker.resolve_extras_with_bounds(
+                    known
+                        .iter()
+                        .map(|(name, value)| (name.clone(), (*value, *value)))
+                ),
+                (expected, expected)
+            );
+            assert_eq!(
+                marker.negate().resolve_extras_with_bounds(
+                    known
+                        .iter()
+                        .map(|(name, value)| (name.clone(), (*value, *value)))
+                ),
+                (expected.negate(), expected.negate())
+            );
+        }
+    }
+
+    /// Replacement iterators can acquire the interner lock, and are unnecessary without extras.
+    #[test]
+    fn resolve_extras_with_bounds_collects_replacements_before_locking() {
+        let replacements_built = Cell::new(0);
+        let replacements = iter::once_with(|| {
+            replacements_built.set(replacements_built.get() + 1);
+            (
+                "a".parse().expect("valid extra name"),
+                (m("sys_platform == 'darwin'"), MarkerTree::TRUE),
+            )
+        });
+        let environment = m("python_version >= '3.10'");
+        assert_eq!(
+            environment.resolve_extras_with_bounds(replacements.clone()),
+            (environment, environment)
+        );
+        assert_eq!(replacements_built.get(), 0);
+        assert_eq!(
+            m("python_version >= '3.10' and extra == 'a'").resolve_extras_with_bounds(replacements),
+            (
+                m("python_version >= '3.10' and sys_platform == 'darwin'"),
+                environment,
+            )
+        );
+        assert_eq!(replacements_built.get(), 1);
+    }
+
+    /// The shared diagram has more than 16 million DNF paths but only two decisions per pair.
+    #[test]
+    fn resolve_extras_with_bounds_shared_subgraphs() {
+        let condition = m("sys_platform == 'darwin'");
+        let mut known = Vec::new();
+        let mut marker = MarkerTree::TRUE;
+        for index in 0..24 {
+            let left = format!("pair-{index:02}-a");
+            let right = format!("pair-{index:02}-b");
+            marker = marker.and(m(&format!("extra == '{left}' or extra == '{right}'")));
+            known.push((
+                left.parse().expect("valid extra name"),
+                (MarkerTree::FALSE, MarkerTree::TRUE),
+            ));
+            known.push((
+                right.parse().expect("valid extra name"),
+                (condition, condition),
+            ));
+        }
+        assert_eq!(
+            marker.resolve_extras_with_bounds(known.clone()),
+            (condition, MarkerTree::TRUE)
+        );
+        assert_eq!(
+            marker.negate().resolve_extras_with_bounds(known),
+            (MarkerTree::FALSE, condition.negate())
+        );
+        assert!(marker.is_monotonic_in_extras());
+        assert!(!marker.negate().is_monotonic_in_extras());
+    }
+
+    #[test]
+    fn is_monotonic_in_extras() {
+        assert!(MarkerTree::TRUE.is_monotonic_in_extras());
+        assert!(MarkerTree::FALSE.is_monotonic_in_extras());
+        assert!(m("extra == 'a' and extra == 'b'").is_monotonic_in_extras());
+        assert!(m("extra == 'a' or extra == 'b'").is_monotonic_in_extras());
+        assert!(m("extra == 'a' or extra != 'a'").is_monotonic_in_extras());
+        assert!(m("'a' in extras and 'dev' not in dependency_groups").is_monotonic_in_extras());
+        assert!(
+            m("(sys_platform == 'linux' and extra == 'a') or \
+               (sys_platform != 'linux' and extra == 'b')")
+            .is_monotonic_in_extras()
+        );
+        assert!(!m("extra != 'a'").is_monotonic_in_extras());
+        assert!(
+            !m("extra == 'a' or extra == 'b'")
+                .negate()
+                .is_monotonic_in_extras()
+        );
+        assert!(
+            !m("(sys_platform == 'linux' and extra == 'a') or \
+                (sys_platform != 'linux' and extra != 'b')")
+            .is_monotonic_in_extras()
+        );
     }
 
     #[test]
