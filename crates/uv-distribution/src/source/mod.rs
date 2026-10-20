@@ -290,8 +290,16 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     ) -> Result<BuiltWheelMetadata, Error> {
         let built_wheel_metadata = match &source {
             BuildableSource::Dist(SourceDist::Registry(dist)) => {
-                let RegistryArtifactRequest { index, url } =
-                    RegistryArtifactRequest::new(&dist.index, &dist.file.url)?;
+                let RegistryArtifactRequest {
+                    index,
+                    url,
+                    is_proxy,
+                } = RegistryArtifactRequest::new(
+                    &dist.index,
+                    &dist.file.url,
+                    client.index_locations(),
+                )?;
+
                 // For registry source distributions, shard by package, then version, for
                 // convenience in debugging.
                 let cache_shard = self.build_context.cache().shard(
@@ -330,7 +338,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     None,
                     dist.ext,
                     tags,
-                    hashes.into(),
+                    ArtifactHashPolicy::for_registry(hashes, is_proxy, dist.file.hashes.as_slice()),
                     client,
                 )
                 .boxed_local()
@@ -454,8 +462,16 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     ) -> Result<ArchiveMetadata, Error> {
         let metadata = match &source {
             BuildableSource::Dist(SourceDist::Registry(dist)) => {
-                let RegistryArtifactRequest { index, url } =
-                    RegistryArtifactRequest::new(&dist.index, &dist.file.url)?;
+                let RegistryArtifactRequest {
+                    index,
+                    url,
+                    is_proxy,
+                } = RegistryArtifactRequest::new(
+                    &dist.index,
+                    &dist.file.url,
+                    client.index_locations(),
+                )?;
+
                 // For registry source distributions, shard by package, then version.
                 let cache_shard = self.build_context.cache().shard(
                     CacheBucket::SourceDistributions,
@@ -491,7 +507,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     &cache_shard,
                     None,
                     dist.ext,
-                    hashes.into(),
+                    ArtifactHashPolicy::for_registry(hashes, is_proxy, dist.file.hashes.as_slice()),
                     client,
                 )
                 .boxed_local()
