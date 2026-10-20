@@ -372,6 +372,8 @@ struct BinArtifact {
 pub struct ResolvedVersion {
     /// The version number.
     pub version: Version,
+    /// The platform selected for the artifact and its cache entry.
+    platform_name: String,
     /// The ordered list of download URLs to try for this version and current platform.
     artifact_urls: Vec<SafeUrl>,
     /// The archive format.
@@ -392,6 +394,7 @@ impl ResolvedVersion {
         let artifact_urls = binary.download_urls(&version, &platform_name, archive_format)?;
         Ok(Self {
             version,
+            platform_name,
             artifact_urls,
             archive_format,
         })
@@ -713,6 +716,7 @@ fn check_version_match(
 
         return Ok(Some(ResolvedVersion {
             version: version_info.version.clone(),
+            platform_name: platform_name.to_owned(),
             artifact_urls: binary.mirror_urls(canonical_url)?,
             archive_format,
         }));
@@ -723,9 +727,9 @@ fn check_version_match(
 
 /// Install the pinned serc release for the current platform.
 pub async fn install_serc(cache: &Cache, client: &BaseClient) -> Result<PathBuf, Error> {
-    let platform = Platform::from_env()?.as_cargo_dist_triple();
+    let version = ResolvedVersion::from_version(Binary::Serc, Version::new(SERC_VERSION))?;
     if !matches!(
-        platform.as_str(),
+        version.platform_name.as_str(),
         "x86_64-apple-darwin"
             | "aarch64-apple-darwin"
             | "x86_64-pc-windows-msvc"
@@ -745,10 +749,9 @@ pub async fn install_serc(cache: &Cache, client: &BaseClient) -> Result<PathBuf,
             | "arm-unknown-linux-musleabihf"
             | "riscv64gc-unknown-linux-musl"
     ) {
-        return Err(Error::SercUnsupportedPlatform(platform));
+        return Err(Error::SercUnsupportedPlatform(version.platform_name));
     }
 
-    let version = ResolvedVersion::from_version(Binary::Serc, Version::new(SERC_VERSION))?;
     bin_install(
         Binary::Serc,
         &version,
@@ -781,15 +784,12 @@ pub async fn bin_install(
     cache: &Cache,
     reporter: &dyn Reporter,
 ) -> Result<PathBuf, Error> {
-    let platform = Platform::from_env()?;
-    let platform_name = platform.as_cargo_dist_triple();
-
     bin_install_from_urls(
         binary,
         &resolved.version,
         &resolved.artifact_urls,
         resolved.archive_format,
-        &platform_name,
+        &resolved.platform_name,
         client,
         retry_policy,
         cache,
