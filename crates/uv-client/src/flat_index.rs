@@ -6,7 +6,7 @@ use tracing::{Instrument, debug, info_span, warn};
 
 use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::cache_digest;
-use uv_distribution_types::{File, FileLocation, IndexEntryFilename, IndexUrl, UrlString};
+use uv_distribution_types::{FileLocation, IndexEntryFilename, IndexUrl, UrlString, VerbatimFile};
 use uv_pypi_types::HashDigests;
 use uv_redacted::SafeUrl;
 use uv_small_str::SmallString;
@@ -53,7 +53,7 @@ pub enum FindLinksDirectoryError {
 #[derive(Debug, Clone)]
 pub struct FlatIndexEntry {
     filename: IndexEntryFilename,
-    file: File,
+    file: VerbatimFile,
     index: IndexUrl,
 }
 
@@ -64,7 +64,7 @@ impl FlatIndexEntry {
     }
 
     /// Convert the entry into its component parts.
-    pub fn into_parts(self) -> (IndexEntryFilename, File, IndexUrl) {
+    pub fn into_parts(self) -> (IndexEntryFilename, VerbatimFile, IndexUrl) {
         (self.filename, self.file, self.index)
     }
 }
@@ -253,7 +253,7 @@ impl<'a> FlatIndexClient<'a> {
         match response {
             Ok(files) => {
                 let files = files.iter().map(|file| {
-                    rkyv::deserialize::<File, rkyv::rancor::Error>(file)
+                    rkyv::deserialize::<VerbatimFile, rkyv::rancor::Error>(file)
                         .expect("archived version always deserializes")
                 });
                 Ok(Self::entries_from_files(files, flat_index))
@@ -280,7 +280,7 @@ impl<'a> FlatIndexClient<'a> {
     }
 
     /// Parse distributions from a flat HTML index.
-    fn parse_html(text: &str, url: &SafeUrl) -> Result<Vec<File>, crate::html::Error> {
+    fn parse_html(text: &str, url: &SafeUrl) -> Result<Vec<VerbatimFile>, crate::html::Error> {
         let SimpleDetailHTML {
             project_status: _,
             base,
@@ -290,7 +290,7 @@ impl<'a> FlatIndexClient<'a> {
         let base = SmallString::from(base.as_str());
         Ok(files
             .into_iter()
-            .filter_map(|file| match File::try_from_pypi(file, &base) {
+            .filter_map(|file| match VerbatimFile::try_from_pypi(file, &base) {
                 Ok(file) => Some(file),
                 Err(err) => {
                     // Ignore files with unparsable version specifiers.
@@ -303,7 +303,7 @@ impl<'a> FlatIndexClient<'a> {
 
     /// Convert distribution files into entries for a flat index.
     fn entries_from_files(
-        files: impl IntoIterator<Item = File>,
+        files: impl IntoIterator<Item = VerbatimFile>,
         flat_index: &IndexUrl,
     ) -> FlatIndexEntries {
         let entries = files
@@ -362,14 +362,14 @@ impl<'a> FlatIndexClient<'a> {
             // SAFETY: The index path is itself constructed from a URL.
             let url = SafeUrl::from_file_path(entry.path()).unwrap();
 
-            let file = File {
+            let file = VerbatimFile {
                 dist_info_metadata: None,
                 filename: filename.into(),
                 hashes: HashDigests::empty(),
                 requires_python: None,
                 size: None,
                 upload_time_utc_ms: None,
-                url: FileLocation::AbsoluteUrl(UrlString::from(url)),
+                url: FileLocation::absolute(UrlString::from(url)),
                 yanked: None,
             };
 

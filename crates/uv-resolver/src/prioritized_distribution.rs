@@ -8,7 +8,7 @@ use uv_distribution::supported_variant_properties;
 use uv_distribution_filename::{BuildTag, WheelFilename};
 use uv_distribution_types::{
     File, IndexUrl, InstalledDist, MinimumLibcVersion, Name, RegistryBuiltDist, RegistryBuiltWheel,
-    RegistrySourceDist, RequiresPython, VariantsJsonContent, VariantsJsonFilename,
+    RegistrySourceDist, RequiresPython, VariantsJsonContent, VariantsJsonFilename, VerbatimFile,
 };
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
@@ -29,7 +29,7 @@ pub struct PrioritizedDist(Box<PrioritizedDistInner>);
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct RegistryVariantsJson {
     pub(crate) filename: VariantsJsonFilename,
-    pub(crate) file: File,
+    pub(crate) file: VerbatimFile,
     pub(crate) index: IndexUrl,
 }
 
