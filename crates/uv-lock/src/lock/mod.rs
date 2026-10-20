@@ -10153,6 +10153,15 @@ enum LockErrorKind {
         /// The ID of the dependency whose inclusion is ambiguous.
         dependency: PackageId,
     },
+    /// Recursive extra conditions leave a package's export marker undetermined.
+    #[error(
+        "Cannot determine whether to export `{package}` because its dependency markers contain recursive extra conditions",
+        package = package.cyan()
+    )]
+    UnresolvedExportConflict {
+        /// The package whose inclusion remains undetermined.
+        package: PackageId,
+    },
     /// An error that occurs when resolving metadata for a package.
     #[error("Failed to generate package metadata for `{id}`", id = id.cyan())]
     Resolution {
