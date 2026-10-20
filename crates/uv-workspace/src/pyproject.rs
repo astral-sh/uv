@@ -394,13 +394,7 @@ impl<'de> Deserialize<'de> for BuildConstraintDependency {
             }
         }
 
-        deserializer
-            .deserialize_any(BuildConstraintVisitor)
-            .map_err(|_| {
-                serde::de::Error::custom(
-                    "data did not match any variant of untagged enum BuildConstraintDependency",
-                )
-            })
+        deserializer.deserialize_any(BuildConstraintVisitor)
     }
 }
 
@@ -1041,13 +1035,7 @@ impl<'de> Deserialize<'de> for ExtraBuildDependencyWire {
             }
         }
 
-        deserializer
-            .deserialize_any(ExtraBuildDependencyVisitor)
-            .map_err(|_| {
-                serde::de::Error::custom(
-                    "data did not match any variant of untagged enum ExtraBuildDependencyWire",
-                )
-            })
+        deserializer.deserialize_any(ExtraBuildDependencyVisitor)
     }
 }
 
@@ -2213,6 +2201,8 @@ impl OptionsMetadata for BuildBackendSettingsSchema {
 
 #[cfg(test)]
 mod deserialization_tests {
+    use std::io::{self, Read};
+
     use serde::Deserialize;
 
     use super::{BuildConstraintDependency, ExtraBuildDependency};
@@ -2225,6 +2215,34 @@ mod deserialization_tests {
     #[derive(Debug, Deserialize)]
     struct ExtraBuild {
         dependency: ExtraBuildDependency,
+    }
+
+    #[test]
+    fn build_dependency_retains_read_errors() {
+        struct FailedRead;
+
+        impl Read for FailedRead {
+            fn read(&mut self, _buffer: &mut [u8]) -> io::Result<usize> {
+                Err(io::Error::other("metadata read failed"))
+            }
+        }
+
+        let reader = br#"{"requirement":"setuptools","hashes":["#
+            .as_slice()
+            .chain(FailedRead);
+        assert!(
+            serde_json::from_reader::<_, BuildConstraintDependency>(reader)
+                .unwrap_err()
+                .is_io()
+        );
+        let reader = br#"{"requirement":"torch","match-runtime":"#
+            .as_slice()
+            .chain(FailedRead);
+        assert!(
+            serde_json::from_reader::<_, ExtraBuildDependency>(reader)
+                .unwrap_err()
+                .is_io()
+        );
     }
 
     #[test]
@@ -2270,7 +2288,7 @@ mod deserialization_tests {
           |
         1 | dependency = { requirement = "setuptools>=75" }
           |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-        data did not match any variant of untagged enum BuildConstraintDependency
+        missing field `hashes`
         "#
         );
     }
@@ -2284,7 +2302,7 @@ mod deserialization_tests {
           |
         1 | dependency = { requirement = "torch>=2" }
           |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-        data did not match any variant of untagged enum ExtraBuildDependencyWire
+        missing field `match-runtime`
         "#
         );
     }
