@@ -309,9 +309,20 @@ jobs:
           # The first image alias is the name of its manifest artifact.
           echo "name=${BASE_TAGS%%,*}" >> "$GITHUB_OUTPUT"
 
+          CA_CERTIFICATES_UPDATE=""
+          if [[ "${BASE_IMAGE}" == alpine:* || "${BASE_IMAGE}" == python:*-alpine* ]]; then
+            CA_CERTIFICATES_VERSION=20261020-r0
+            CA_CERTIFICATES_UPDATE="RUN apk add --no-cache 'ca-certificates-bundle>=${CA_CERTIFICATES_VERSION}'"
+            if [[ "${BASE_IMAGE}" == python:* ]]; then
+              # Python images also install the package containing individual certificates.
+              CA_CERTIFICATES_UPDATE+=" 'ca-certificates>=${CA_CERTIFICATES_VERSION}'"
+            fi
+          fi
+
           # Generate the Dockerfile for this base image.
           cat <<EOF > Dockerfile
           FROM ${BASE_IMAGE}
+          ${CA_CERTIFICATES_UPDATE}
           COPY --from=${UV_BASE_IMAGE} /uv /uvx /usr/local/bin/
           ENV UV_TOOL_BIN_DIR="/usr/local/bin"
           ENTRYPOINT []
