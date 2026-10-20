@@ -29,11 +29,6 @@ path = "benches/workspace_discovery.rs"
 harness = false
 
 [[bench]]
-name = "uv_lock"
-path = "benches/uv_lock.rs"
-harness = false
-
-[[bench]]
 name = "uv_pep440"
 path = "benches/uv_pep440.rs"
 harness = false
@@ -83,7 +78,6 @@ uv-extract = { workspace = true }
 uv-git = { workspace = true }
 uv-git-types = { workspace = true }
 uv-install-wheel = { workspace = true }
-uv-lock = { workspace = true }
 uv-normalize = { workspace = true }
 uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
