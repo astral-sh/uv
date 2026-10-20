@@ -126,6 +126,18 @@ impl<'lock> ExportableRequirements<'lock> {
                 }
             }
 
+            // Track selected groups independently of whether they contain dependencies.
+            for group in dist
+                .dependency_groups
+                .keys()
+                .filter(|group| target.includes_group(Some(&dist.id.name), group, groups))
+            {
+                activated_items.insert(
+                    ConflictItem::from((dist.id.name.clone(), group.clone())),
+                    MarkerTree::TRUE,
+                );
+            }
+
             // Add any development dependencies.
             for (group, dep) in dist
                 .dependency_groups
@@ -139,12 +151,6 @@ impl<'lock> ExportableRequirements<'lock> {
                 })
                 .flatten()
             {
-                // Track the activated group in the list of known conflicts.
-                activated_items.insert(
-                    ConflictItem::from((dist.id.name.clone(), group.clone())),
-                    MarkerTree::TRUE,
-                );
-
                 if prune.contains(&dep.package_id.name) {
                     continue;
                 }
