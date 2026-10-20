@@ -271,7 +271,23 @@ impl VersionSet for Range<Version> {
 
 impl<T: Debug + Display + Clone + Eq + Ord> Display for Range<T> {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
-        Display::fmt(&self.encoded_versions, formatter)
+        if self.encoded_versions.is_empty() {
+            return Display::fmt(&self.encoded_versions, formatter);
+        }
+        for (index, (lower, upper)) in self.encoded_versions.iter().enumerate() {
+            if index > 0 {
+                formatter.write_str(" | ")?;
+            }
+            // Exact versions are PEP 440 constraints, including within a union of ranges.
+            if let (Bound::Included(lower), Bound::Included(upper)) = (lower, upper)
+                && lower == upper
+            {
+                write!(formatter, "=={lower}")?;
+            } else {
+                Display::fmt(&Ranges::from_iter([(lower, upper)]), formatter)?;
+            }
+        }
+        Ok(())
     }
 }
 
@@ -338,6 +354,13 @@ mod tests {
         assert_eq!(
             equality.without_local_version_sentinels().to_string(),
             "==1.0"
+        );
+        assert_eq!(
+            equality
+                .union(&range("==2.0"))
+                .without_local_version_sentinels()
+                .to_string(),
+            "==1.0 | ==2.0"
         );
 
         let upper_bound = range("<=1.0");
