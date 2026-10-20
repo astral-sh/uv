@@ -912,45 +912,50 @@ impl<'a> ExportActivationBounds<'a> {
                 .map(|fact| fact.index())
                 .collect::<Vec<_>>();
 
-            // A nonrecursive equation can be evaluated once after its inputs have been solved.
-            if let [fact] = component.as_slice()
-                && self.inputs[*fact].binary_search(fact).is_err()
-            {
-                self.bounds[*fact] = self.evaluate(*fact);
-                continue;
-            }
-
-            // Negative inputs use the fixed opposite bound, so each inner worklist grows
-            // monotonically. Restart upper passes from the new lower bound to discard
-            // support from paths whose negative conditions have closed.
-            self.solve_bound(&component, component_index, ExportBound::Upper);
-            loop {
-                let previous_upper = component
-                    .iter()
-                    .map(|&fact| self.bounds[fact].1)
-                    .collect::<Vec<_>>();
-                for &fact in &component {
-                    self.bounds[fact].0 = MarkerTree::FALSE;
-                }
-                self.solve_bound(&component, component_index, ExportBound::Lower);
-
-                for &fact in &component {
-                    self.bounds[fact].1 = self.bounds[fact].0;
-                }
-                self.solve_bound(&component, component_index, ExportBound::Upper);
-
-                // With an unchanged upper bound, another lower pass would produce the same result.
-                if component
-                    .iter()
-                    .zip(previous_upper)
-                    .all(|(&fact, previous)| self.bounds[fact].1 == previous)
-                {
-                    break;
-                }
-            }
+            self.solve_component(&component, component_index);
         }
 
         self.bounds
+    }
+
+    /// Solve one component using bounds already established for its dependencies.
+    fn solve_component(&mut self, component: &[usize], component_index: usize) {
+        // A nonrecursive equation can be evaluated once after its inputs have been solved.
+        if let [fact] = component
+            && self.inputs[*fact].binary_search(fact).is_err()
+        {
+            self.bounds[*fact] = self.evaluate(*fact);
+            return;
+        }
+
+        // Negative inputs use the fixed opposite bound, so each inner worklist grows
+        // monotonically. Restart upper passes from the new lower bound to discard
+        // support from paths whose negative conditions have closed.
+        self.solve_bound(component, component_index, ExportBound::Upper);
+        loop {
+            let previous_upper = component
+                .iter()
+                .map(|&fact| self.bounds[fact].1)
+                .collect::<Vec<_>>();
+            for &fact in component {
+                self.bounds[fact].0 = MarkerTree::FALSE;
+            }
+            self.solve_bound(component, component_index, ExportBound::Lower);
+
+            for &fact in component {
+                self.bounds[fact].1 = self.bounds[fact].0;
+            }
+            self.solve_bound(component, component_index, ExportBound::Upper);
+
+            // With an unchanged upper bound, another lower pass would produce the same result.
+            if component
+                .iter()
+                .zip(previous_upper)
+                .all(|(&fact, previous)| self.bounds[fact].1 == previous)
+            {
+                break;
+            }
+        }
     }
 
     /// Evaluate a complete activation equation over the current global intervals.
