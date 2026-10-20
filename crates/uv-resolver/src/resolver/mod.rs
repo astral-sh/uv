@@ -23,7 +23,8 @@ use tracing::{Level, debug, info, instrument, trace, warn};
 
 use uv_configuration::{Constraints, DependencyModifiers, IndexStrategy};
 use uv_distribution::{
-    ArchiveMetadata, DistributionDatabase, Metadata, supported_variant_properties,
+    ArchiveMetadata, DistributionDatabase, InstalledWheelVariant, Metadata,
+    supported_variant_properties,
 };
 use uv_distribution_types::{
     BuiltDist, DerivationChain, Dist, DistErrorKind, Identifier, IndexCapabilities, IndexLocations,
@@ -1427,12 +1428,38 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             return Ok(None);
         };
 
-        // Select a variant only for a specific environment and an installable candidate.
-        // TODO(konsti): Check variant compatibility before reusing an installed candidate.
-        let variant = if env.marker_environment().is_some()
-            && uv_preview::is_enabled(PreviewFeature::WheelVariants)
-            && let Some(prioritized) = candidate.prioritized()
+        // Universal lockfiles cannot yet record the metadata needed to select a variant.
+        let specific_environment = env.marker_environment().is_some();
+        let preview_variants =
+            specific_environment && uv_preview::is_enabled(PreviewFeature::WheelVariants);
+
+        // An installed wheel can become incompatible when the system's properties change.
+        let candidate = if specific_environment
+            && let Some(tags) = &self.tags
+            && let CandidateDist::Compatible(CompatibleDist::InstalledDist(installed)) =
+                candidate.dist()
+            && !InstalledWheelVariant::check(installed, tags.python_platform()).is_compatible()
         {
+            let Some(alternative) = self.selector.select_no_preference(
+                name,
+                &Range::singleton(candidate.version().clone()),
+                version_maps,
+                env,
+            ) else {
+                return Ok(Some(ResolverVersion::Unavailable(
+                    candidate.version().clone(),
+                    UnavailableVersion::IncompatibleDist(IncompatibleDist::Wheel(
+                        IncompatibleWheel::Tag(IncompatibleTag::Variant),
+                    )),
+                )));
+            };
+            alternative
+        } else {
+            candidate
+        };
+
+        // Check variant properties now that we have chosen a version.
+        let variant = if preview_variants && let Some(prioritized) = candidate.prioritized() {
             self.select_wheel_variant(candidate.version(), prioritized, version_maps, requests)?
         } else {
             WheelVariantSelection::default()
