@@ -434,12 +434,9 @@ fn conflict_marker_reachability<'lock>(
     // from the extra node, so reaching `foo` alone cannot activate them.
     let mut solver = SymbolicExportReachability {
         edges: Vec::with_capacity(graph.edge_count()),
-        reachability: vec![MarkerTree::FALSE; graph.node_count()],
+        nodes: vec![ReachabilityNode::new(); graph.node_count()],
         activations: vec![MarkerTree::FALSE; variables.len()],
-        dependents: vec![Vec::new(); graph.node_count()],
-        extra_facts: vec![None; graph.node_count()],
         queue: VecDeque::new(),
-        queued: vec![false; graph.node_count()],
     };
     let mut extra_nodes = FxHashMap::default();
     for edge in graph.edge_references() {
@@ -461,14 +458,14 @@ fn conflict_marker_reachability<'lock>(
             targets,
             marker: *edge.weight().marker(),
         });
-        solver.dependents[source].push(edge.id());
+        solver.nodes[source].outgoing.push(edge.id());
     }
 
     // Link package-local extra nodes to their global facts, and seed the selected root items.
     for ((package_index, extra), extra_index) in extra_nodes {
         if let Node::Package(package) = graph[package_index] {
             let item = ConflictItem::from((package.name().clone(), extra.clone()));
-            solver.extra_facts[extra_index] = variables.by_item.get(&item).copied();
+            solver.nodes[extra_index].extra_fact = variables.by_item.get(&item).copied();
             if known_conflicts.contains(&item) {
                 // Selected extras belong to unique, unconditionally reached production roots.
                 solver.add_reachability(extra_index, MarkerTree::TRUE);
@@ -492,7 +489,7 @@ fn conflict_marker_reachability<'lock>(
     let mut resolved = FxHashMap::default();
     let mut reachability = FxHashMap::default();
     for index in graph.node_indices() {
-        let marker = solver.reachability[index.index()];
+        let marker = solver.nodes[index.index()].marker;
         let (lower, upper) = *resolved.entry(marker).or_insert_with(|| {
             marker.resolve_extras_with_bounds(
                 variables
@@ -628,7 +625,7 @@ fn resolve_marker_bindings(
     let mut requests = vec![Vec::new(); variables.len()];
     for (index, edge) in solver.edges.iter().enumerate() {
         for &target in &edge.targets {
-            if let Some(fact) = solver.extra_facts[target] {
+            if let Some(fact) = solver.nodes[target].extra_fact {
                 requests[fact].push(EdgeIndex::new(index));
             }
         }
@@ -721,31 +718,47 @@ fn resolve_marker_bindings(
 /// also match the original graph. `activations` is indexed by global fact rather than node.
 struct SymbolicExportReachability {
     edges: Vec<ExportEdge>,
-    reachability: Vec<MarkerTree>,
+    nodes: Vec<ReachabilityNode>,
     activations: Vec<MarkerTree>,
-    dependents: Vec<Vec<EdgeIndex>>,
-    extra_facts: Vec<Option<usize>>,
     queue: VecDeque<usize>,
-    queued: Vec<bool>,
+}
+
+/// Reachability and worklist state for one package or optional-extra node.
+#[derive(Clone)]
+struct ReachabilityNode {
+    marker: MarkerTree,
+    outgoing: Vec<EdgeIndex>,
+    extra_fact: Option<usize>,
+    queued: bool,
+}
+
+impl ReachabilityNode {
+    /// Create an unreachable node with no outgoing edges or global activation.
+    fn new() -> Self {
+        Self {
+            marker: MarkerTree::FALSE,
+            outgoing: Vec::new(),
+            extra_fact: None,
+            queued: false,
+        }
+    }
 }
 
 impl SymbolicExportReachability {
     /// Add an optional-extra node that can be reached only by an actual request.
     fn add_node(&mut self) -> usize {
-        let index = self.reachability.len();
-        self.reachability.push(MarkerTree::FALSE);
-        self.dependents.push(Vec::new());
-        self.extra_facts.push(None);
-        self.queued.push(false);
+        let index = self.nodes.len();
+        self.nodes.push(ReachabilityNode::new());
         index
     }
 
     /// Merge complete symbolic paths and schedule only changed sources.
     fn add_reachability(&mut self, index: usize, marker: MarkerTree) {
-        let combined = self.reachability[index].or(marker);
-        if combined != self.reachability[index] {
-            self.reachability[index] = combined;
-            if !mem::replace(&mut self.queued[index], true) {
+        let node = &mut self.nodes[index];
+        let combined = node.marker.or(marker);
+        if combined != node.marker {
+            node.marker = combined;
+            if !mem::replace(&mut node.queued, true) {
                 self.queue.push_back(index);
             }
         }
@@ -766,16 +779,16 @@ impl SymbolicExportReachability {
             .map(|marker| marker.is_true())
             .collect::<Vec<_>>();
 
-        let mut reached = vec![false; self.reachability.len()];
+        let mut reached = vec![false; self.nodes.len()];
         let mut pending = self.queue.iter().copied().collect::<Vec<_>>();
         while let Some(source) = pending.pop() {
             if mem::replace(&mut reached[source], true) {
                 continue;
             }
-            if let Some(fact) = self.extra_facts[source] {
+            if let Some(fact) = self.nodes[source].extra_fact {
                 active[fact] = true;
             }
-            for &edge in &self.dependents[source] {
+            for &edge in &self.nodes[source].outgoing {
                 let edge = &self.edges[edge.index()];
                 if !edge.marker.is_true() {
                     continue;
@@ -796,10 +809,10 @@ impl SymbolicExportReachability {
     /// Close package/extra reachability, then derive each global activation from its local nodes.
     fn solve(&mut self) {
         while let Some(source) = self.queue.pop_front() {
-            self.queued[source] = false;
-            let marker = self.reachability[source];
-            for dependent in 0..self.dependents[source].len() {
-                let edge = self.dependents[source][dependent].index();
+            self.nodes[source].queued = false;
+            let marker = self.nodes[source].marker;
+            for outgoing in 0..self.nodes[source].outgoing.len() {
+                let edge = self.nodes[source].outgoing[outgoing].index();
                 let condition = marker.and(self.edges[edge].marker);
                 for target in 0..self.edges[edge].targets.len() {
                     self.add_reachability(self.edges[edge].targets[target], condition);
@@ -807,9 +820,9 @@ impl SymbolicExportReachability {
             }
         }
 
-        for (&marker, &fact) in self.reachability.iter().zip(&self.extra_facts) {
-            if let Some(fact) = fact {
-                self.activations[fact] = self.activations[fact].or(marker);
+        for node in &self.nodes {
+            if let Some(fact) = node.extra_fact {
+                self.activations[fact] = self.activations[fact].or(node.marker);
             }
         }
     }
