@@ -9,11 +9,11 @@ Released on 2026-10-20.
 
 ### Preview features
 
-- Parse and validate variant metadata ([#22512](https://github.com/astral-sh/uv/pull/22512))
+- Validate PEP 825 variant metadata and treat package versions with invalid metadata as unavailable under `wheel-variants` ([#22512](https://github.com/astral-sh/uv/pull/22512))
 
 ### Other changes
 
-- Bump webpki-root-certs to 1.0.10 ([#22760](https://github.com/astral-sh/uv/pull/22760))
+- Update the bundled Mozilla root certificates via `webpki-root-certs` 1.0.10 ([#22760](https://github.com/astral-sh/uv/pull/22760))
 
 ## 0.13.3
 
