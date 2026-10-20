@@ -20,6 +20,7 @@ use uv_cache::Cache;
 use uv_configuration::{ActiveEnvironment, DependencyGroupsWithDefaults, ExcludeDependency};
 use uv_distribution_types::{Index, MinimumLibcVersion, Requirement, RequirementSource};
 use uv_fs::{CWD, Simplified, normalize_path};
+use uv_macros::DebugNoInline;
 use uv_normalize::{DEV_DEPENDENCIES, DefaultGroups, GroupName, PackageName};
 use uv_once_map::OnceMap;
 use uv_pep440::VersionSpecifiers;
@@ -301,7 +302,7 @@ impl Error for WorkspaceError {
     }
 }
 
-#[derive(thiserror::Error, Debug)]
+#[derive(thiserror::Error, DebugNoInline)]
 pub enum WorkspaceErrorKind {
     // Workspace structure errors.
     #[error("No `pyproject.toml` found in current directory or any parent directory")]

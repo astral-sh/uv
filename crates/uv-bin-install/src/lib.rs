@@ -29,6 +29,7 @@ use uv_static::{
 use uv_cache::{Cache, CacheBucket, CacheEntry, Error as CacheError};
 use uv_client::{BaseClient, RetriableError, fetch_with_url_fallback};
 use uv_extract::{Error as ExtractError, stream};
+use uv_macros::DebugNoInline;
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
 use uv_platform::Platform;
 use uv_redacted::SafeUrl;
@@ -361,7 +362,7 @@ impl ResolvedVersion {
 }
 
 /// Errors that can occur during binary download and installation.
-#[derive(Debug, Error)]
+#[derive(DebugNoInline, Error)]
 pub enum Error {
     #[error("Failed to download from: {url}")]
     Download {
