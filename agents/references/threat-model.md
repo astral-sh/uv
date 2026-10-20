@@ -115,10 +115,10 @@ integrity, credentials, execution, and filesystem destinations while handling th
   reach. Material impact includes private-data access, writes, publication, trusted execution,
   lateral movement, or privilege escalation. A credential has negligible impact only if it is
   single-purpose and its effective authority is read-only and limited to inert test infrastructure.
-- **Availability:** When using an existing lockfile, uv must not accept more than the recorded sizes
-  for files. Remote denial of service in all other operations, including initial resolution and lock
-  updates, is outside the threat model. Any resource exhaustion is a performance bug. A one-shot
-  parser panic is a correctness bug, not a security issue.
+- **Availability:** When using an existing lockfile, uv must check that the downloaded artifacts
+  match their recorded sizes. Remote denial of service in all other operations, including initial
+  resolution and lock updates, is outside the threat model. Any resource exhaustion is a performance
+  bug. A one-shot parser panic is a correctness bug, not a security issue.
 
 ## Severity calibration
 
