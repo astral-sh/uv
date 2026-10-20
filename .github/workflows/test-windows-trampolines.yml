@@ -31,8 +31,8 @@ jobs:
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           # renovate: datasource=github-release-attachments depName=astral-sh/uv
-          version: "0.13.1"
-          checksum: "eadd9d27c134ab5ac1ffd4473b97a741407f3ea238288f03121fc4deddf90220"
+          version: "0.13.4"
+          checksum: "2b428396f12572d4429cf210ca234dd599a33b3af0958a4d5ed569d63e3f344f"
 
       - name: "Check windows crate versions match"
         run: uv run --no-project scripts/check-trampoline-version-consistency.py
@@ -96,8 +96,8 @@ jobs:
         uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           # renovate: datasource=github-release-attachments depName=astral-sh/uv
-          version: "0.13.1"
-          checksum: "3b2661a463a5baea7f5076ea2b25ab71d77f36a6c0d809e5350651792f80a672"
+          version: "0.13.4"
+          checksum: "ccec7508a07d9933d7cb1261880633efcf1f30d6e6eddab21823f1dae6f23225"
 
       - name: "rustfmt"
         working-directory: ${{ env.UV_WORKSPACE }}/crates/uv-trampoline
