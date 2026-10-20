@@ -6,7 +6,7 @@
 #     "keyrings-alt",
 #     "packaging>=24.1,<25",
 #     "pypi-attestations>=0.0.28",
-#     "sigstore>=4.5.1",
+#     "sigstore>=4.4.0",
 # ]
 # [tool.uv]
 # no-build = true

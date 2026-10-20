@@ -17,7 +17,7 @@ requirements = [
     { name = "keyrings-alt" },
     { name = "packaging", specifier = ">=24.1,<25" },
     { name = "pypi-attestations", specifier = ">=0.0.28" },
-    { name = "sigstore", specifier = ">=4.5.1" },
+    { name = "sigstore", specifier = ">=4.4.0" },
 ]
 
 [[package]]
