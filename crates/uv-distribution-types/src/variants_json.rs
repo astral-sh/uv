@@ -121,6 +121,16 @@ pub struct VariantsJsonContent {
 }
 
 impl VariantsJsonContent {
+    /// The variant label, if this describes a single compatible wheel variant.
+    pub fn compatible_wheel_label(
+        &self,
+        supported_properties: &SupportedVariantProperties,
+    ) -> Option<&VariantLabel> {
+        let label = self.variants.keys().exactly_one().ok()?;
+        self.score_variant(label, supported_properties)?;
+        Some(label)
+    }
+
     /// Parse a wheel's `variant.json`, validating its label against the wheel filename.
     ///
     /// PEP 825 requires a wheel to describe exactly the variant named in its filename.

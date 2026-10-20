@@ -385,11 +385,18 @@ impl<'a> Planner<'a> {
                                     "Requirement installed, but mismatched:\n  Installed: {installed:?}\n  Requested: {source:?}"
                                 );
                             }
-                            RequirementSatisfaction::Satisfied => {
-                                // TODO(konsti): Reinstall if the resolver selected a different
-                                // wheel variant, even when the installed variant is compatible.
-                                debug!("Requirement already installed: {installed}");
-                                continue;
+                            RequirementSatisfaction::Satisfied(variant) => {
+                                if let ResolvedDist::Installable { dist, .. } = dist
+                                    && let Dist::Built(wheel) = dist.as_ref()
+                                    && !variant.matches(wheel.wheel_filename().variant())
+                                {
+                                    debug!(
+                                        "Installed wheel variant differs from the resolved distribution: {installed}"
+                                    );
+                                } else {
+                                    debug!("Requirement already installed: {installed}");
+                                    continue;
+                                }
                             }
                             RequirementSatisfaction::OutOfDate => {
                                 debug!("Requirement installed, but not fresh: {installed}");

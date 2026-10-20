@@ -1,17 +1,65 @@
 mod nvidia;
 
 use tracing::debug;
+use uv_distribution_filename::VariantLabel;
 use uv_distribution_types::{
-    SupportedVariantFeature, SupportedVariantProperties, VariantNamespace, VariantProviderRequest,
-    VariantsJsonContent,
+    InstalledDist, SupportedVariantFeature, SupportedVariantProperties, VariantNamespace,
+    VariantProviderRequest, VariantsJsonContent,
 };
 use uv_pep440::Version;
 use uv_pep508::{Requirement, VersionOrUrl};
+use uv_preview::PreviewFeature;
 
 use crate::variant::nvidia::NvidiaVariantProvider;
 
 static NVIDIA_PROVIDER: NvidiaVariantProvider = NvidiaVariantProvider::new();
 static VENDORED_PROVIDERS: &[&dyn VendoredVariantProvider] = &[&NVIDIA_PROVIDER];
+
+/// Whether an installed wheel's variant is compatible with the current system.
+#[derive(Debug)]
+pub enum InstalledWheelVariant {
+    NonVariant,
+    Compatible(VariantLabel),
+    Incompatible,
+}
+
+impl InstalledWheelVariant {
+    pub fn check(installed: &InstalledDist) -> Self {
+        let metadata = match installed.read_variant() {
+            Ok(None) => return Self::NonVariant,
+            Ok(Some(metadata)) => metadata,
+            Err(err) => {
+                debug!("Failed to read variant metadata for {installed}: {err}");
+                return Self::Incompatible;
+            }
+        };
+        if uv_preview::is_enabled(PreviewFeature::WheelVariants)
+            && let Some(label) =
+                metadata.compatible_wheel_label(&supported_variant_properties(&metadata))
+        {
+            return Self::Compatible(label.clone());
+        }
+        Self::Incompatible
+    }
+
+    /// Whether the installed distribution is compatible with the current system.
+    pub fn is_compatible(&self) -> bool {
+        match self {
+            // TODO(konsti): Consider higher-ranked variants even when this one is compatible.
+            Self::NonVariant | Self::Compatible(_) => true,
+            Self::Incompatible => false,
+        }
+    }
+
+    /// Whether this wheel matches the variant selected for installation.
+    pub fn matches(&self, expected: Option<&VariantLabel>) -> bool {
+        match self {
+            Self::NonVariant => expected.is_none(),
+            Self::Compatible(label) => expected == Some(label),
+            Self::Incompatible => false,
+        }
+    }
+}
 
 /// A vendored wheel variant provider.
 trait VendoredVariantProvider: Sync {
