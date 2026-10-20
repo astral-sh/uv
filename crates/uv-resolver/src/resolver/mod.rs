@@ -725,10 +725,15 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             })?;
 
                         // Emit a request to fetch the metadata for each registry package.
-                        self.visit_dependencies(&dependencies, &state, requests)
-                            .map_err(|err| {
-                                enrich_dependency_error(err, next_id, &version, &state.pubgrub)
-                            })?;
+                        self.visit_dependencies(
+                            &dependencies,
+                            &state.fork_urls,
+                            &state.fork_indexes,
+                            requests,
+                        )
+                        .map_err(|err| {
+                            enrich_dependency_error(err, next_id, &version, &state.pubgrub)
+                        })?;
 
                         // Add the dependencies to the state.
                         state.add_package_version_dependencies(
@@ -777,6 +782,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             }
                         }
 
+                        self.prefetch_forks(&state, &forks, requests)
+                            .map_err(|err| {
+                                enrich_dependency_error(err, next_id, &version, &state.pubgrub)
+                            })?;
                         forked_states.extend(Self::forks_to_fork_states(
                             state,
                             &version,
@@ -969,10 +978,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     })?;
 
                 // Emit a request to fetch the metadata for each registry package.
-                self.visit_dependencies(&fork.dependencies, &state, requests)
-                    .map_err(|err| {
-                        enrich_dependency_error(err, package, &version, &state.pubgrub)
-                    })?;
+                self.visit_dependencies(
+                    &fork.dependencies,
+                    &state.fork_urls,
+                    &state.fork_indexes,
+                    requests,
+                )
+                .map_err(|err| enrich_dependency_error(err, package, &version, &state.pubgrub))?;
 
                 state.add_package_version_dependencies(
                     package,
@@ -986,11 +998,40 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         }
     }
 
+    /// Prefetch every sibling's dependencies without copying its solver state.
+    fn prefetch_forks(
+        &self,
+        state: &ForkState,
+        forks: &[Fork],
+        requests: &MetadataRequests,
+    ) -> Result<(), ResolveError> {
+        for fork in forks {
+            // Only source constraints are needed to schedule metadata requests. Discard these
+            // temporary maps before preparing the next sibling.
+            let mut fork_urls = state.fork_urls.clone();
+            let mut fork_indexes = state.fork_indexes.clone();
+            for dependency in &fork.dependencies {
+                apply_dependency_source(
+                    dependency,
+                    &fork.env,
+                    &mut fork_urls,
+                    &mut fork_indexes,
+                    &self.urls,
+                    &self.indexes,
+                    &self.git,
+                )?;
+            }
+            self.visit_dependencies(&fork.dependencies, &fork_urls, &fork_indexes, requests)?;
+        }
+        Ok(())
+    }
+
     /// Visit a set of [`PubGrubDependency`] entities prior to selection.
     fn visit_dependencies(
         &self,
         dependencies: &[PubGrubDependency],
-        state: &ForkState,
+        fork_urls: &ForkUrls,
+        fork_indexes: &ForkIndexes,
         requests: &MetadataRequests,
     ) -> Result<(), ResolveError> {
         for dependency in dependencies {
@@ -1000,12 +1041,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 parent: _,
                 source: _,
             } = dependency;
-            let Some(source) = PackageSource::for_prefetch(
-                package,
-                &state.fork_urls,
-                &state.fork_indexes,
-                &self.urls,
-            ) else {
+            let Some(source) =
+                PackageSource::for_prefetch(package, fork_urls, fork_indexes, &self.urls)
+            else {
                 continue;
             };
             self.request_package(package, source, requests)?;
@@ -2829,29 +2867,18 @@ impl<'index> ForkState<'index> {
                 package,
                 version,
                 parent: _,
-                source,
+                source: _,
             } = dependency;
 
-            let mut has_url = false;
-            if let Some(name) = package.name() {
-                // From the [`Requirement`] to [`PubGrubDependency`] conversion, we get a URL if the
-                // requirement was a URL requirement. `Urls` applies canonicalization to this and
-                // override URLs to both URL and registry requirements, which we then check for
-                // conflicts using [`ForkUrl`].
-                for url in urls.get_url(&self.env, name, source.verbatim_url(), git)? {
-                    self.fork_urls.insert(name, url, &self.env)?;
-                    has_url = true;
-                }
-
-                if let Some(index) = source.explicit_index() {
-                    self.fork_indexes.insert(name, index, &self.env)?;
-                }
-
-                // If the package is pinned to an exact index, add it to the fork.
-                for index in indexes.get(name, &self.env) {
-                    self.fork_indexes.insert(name, index, &self.env)?;
-                }
-            }
+            let has_url = apply_dependency_source(
+                dependency,
+                &self.env,
+                &mut self.fork_urls,
+                &mut self.fork_indexes,
+                urls,
+                indexes,
+                git,
+            )?;
 
             if let Some(name) = self.pubgrub.package_store[for_package]
                 .name_no_root()
@@ -3353,6 +3380,36 @@ impl<'index> ForkState<'index> {
             env: self.env,
         }
     }
+}
+
+/// Apply one dependency's canonical URL and explicit index constraints to a fork.
+///
+/// Returns whether the dependency supplies a URL, for lower-bound diagnostics.
+fn apply_dependency_source(
+    dependency: &PubGrubDependency,
+    env: &ResolverEnvironment,
+    fork_urls: &mut ForkUrls,
+    fork_indexes: &mut ForkIndexes,
+    urls: &Urls,
+    indexes: &Indexes,
+    git: &GitResolver,
+) -> Result<bool, ResolveError> {
+    let Some(name) = dependency.package.name() else {
+        return Ok(false);
+    };
+    let mut has_url = false;
+    // Apply URL canonicalization and overrides before checking for conflicting sources.
+    for url in urls.get_url(env, name, dependency.source.verbatim_url(), git)? {
+        fork_urls.insert(name, url, env)?;
+        has_url = true;
+    }
+    if let Some(index) = dependency.source.explicit_index() {
+        fork_indexes.insert(name, index, env)?;
+    }
+    for index in indexes.get(name, env) {
+        fork_indexes.insert(name, index, env)?;
+    }
+    Ok(has_url)
 }
 
 /// Widens a single version to the largest interval that contains no other known version
