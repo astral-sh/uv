@@ -1,7 +1,10 @@
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
+use std::process::Stdio;
 use std::{env, io};
 
+use serde::Deserialize;
+use tokio::io::{AsyncWriteExt, BufWriter};
 use tokio::process::Command;
 use tracing::debug;
 use walkdir::WalkDir;
@@ -14,13 +17,6 @@ use uv_python_interpreter::Interpreter;
 use uv_static::EnvVars;
 
 use super::{CompileError, compile_timeout};
-
-// Keep path arguments well below Windows' command-line limit, even after quoting.
-#[cfg(windows)]
-const MAX_PATH_ARGUMENT_BYTES: usize = 8192;
-// Unix allows larger argument lists; avoid repeatedly starting the compiler for small batches.
-#[cfg(not(windows))]
-const MAX_PATH_ARGUMENT_BYTES: usize = 65536;
 
 /// Compile a directory using the downloaded serc executable.
 pub async fn compile_serc_tree(
@@ -79,80 +75,102 @@ pub async fn compile_serc_files(
     let timeout = compile_timeout()?;
     for file in &files {
         compiler.validate_destination(file)?;
+        #[cfg(windows)]
+        if file.to_str().is_none() {
+            return Err(CompileError::SercPathEncoding(file.clone()));
+        }
     }
     let executable = Box::pin(install_serc(cache, client))
         .await
         .map_err(|err| CompileError::SercInstall(err.into()))?;
-    let mut start = 0;
-    while start < files.len() {
-        let mut end = start;
-        let mut size = 0;
-        while let Some(file) = files.get(end) {
-            // Quoting can at most double the encoded length, so budget for that too.
-            let argument_size = file.as_os_str().len().saturating_mul(2).saturating_add(3);
-            if argument_size > MAX_PATH_ARGUMENT_BYTES {
-                return Err(CompileError::SercArgumentTooLong(file.clone()));
-            }
-            if size + argument_size > MAX_PATH_ARGUMENT_BYTES {
-                break;
-            }
-            size += argument_size;
-            end += 1;
-        }
-        loop {
-            let mut command = Command::new(&executable);
-            command
-                .arg("compile")
-                .arg("--python-version")
-                .arg(&compiler.version)
-                .arg("--invalidation-mode")
-                .arg(compiler.invalidation_mode)
-                .arg("--jobs")
-                .arg(concurrency.installs.to_string())
-                .arg("--quiet");
-            if compiler.optimization > 0 {
-                command.arg(format!(
-                    "-{}",
-                    "O".repeat(usize::from(compiler.optimization))
-                ));
-            }
-            command
-                .arg("--")
-                .args(&files[start..end])
-                .kill_on_drop(true);
-            // The Python compiler applies this timeout per file. A batch can use the sum of those
-            // budgets because serc does not report per-file progress.
-            let result = if let Some(timeout) = timeout {
-                let count = u32::try_from(end - start).unwrap_or(u32::MAX);
-                let timeout = timeout.saturating_mul(count);
-                tokio::time::timeout(timeout, command.output())
-                    .await
-                    .map_err(|_| CompileError::SercTimeout(timeout))?
-            } else {
-                command.output().await
-            };
-            let output = match result {
-                // The environment and platform limits also count toward the argument limit.
-                // Retry a smaller batch when the OS refuses to start the subprocess.
-                Err(err) if err.kind() == io::ErrorKind::ArgumentListTooLong && end - start > 1 => {
-                    end = start + (end - start) / 2;
-                    continue;
-                }
-                result => result.map_err(CompileError::SercSubcommand)?,
-            };
-            if !output.status.success() {
-                return Err(CompileError::SercFailure {
-                    status: output.status,
-                    stderr: String::from_utf8_lossy(&output.stderr)
-                        .trim_end()
-                        .to_owned(),
-                });
-            }
-            start = end;
-            break;
-        }
+    let mut command = Command::new(&executable);
+    command
+        .arg("compile")
+        .arg("--files-from")
+        .arg("-")
+        .arg("--null")
+        .arg("--skip-current")
+        .arg("--output-format")
+        .arg("json")
+        .arg("--python-version")
+        .arg(&compiler.version)
+        .arg("--invalidation-mode")
+        .arg(compiler.invalidation_mode)
+        .arg("--jobs")
+        .arg(concurrency.installs.to_string())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true);
+    if compiler.optimization > 0 {
+        command.arg(format!(
+            "-{}",
+            "O".repeat(usize::from(compiler.optimization))
+        ));
     }
-    Ok(files.len())
+    let compile = async {
+        let mut child = command.spawn().map_err(CompileError::SercSubcommand)?;
+        let stdin = child
+            .stdin
+            .take()
+            .ok_or_else(|| CompileError::SercStdin(io::Error::other("missing stdin pipe")))?;
+        let write = async {
+            let mut stdin = BufWriter::new(stdin);
+            for file in &files {
+                // These are raw path bytes on Unix and, after validation above, UTF-8 on Windows.
+                stdin.write_all(file.as_os_str().as_encoded_bytes()).await?;
+                stdin.write_all(b"\0").await?;
+            }
+            stdin.flush().await?;
+            drop(stdin);
+            Ok::<_, io::Error>(())
+        };
+        let (written, output) = tokio::join!(write, child.wait_with_output());
+        let output = output.map_err(CompileError::SercSubcommand)?;
+        // Prefer the compiler's diagnostic if it exits before consuming the file list.
+        if !output.status.success() {
+            return Err(CompileError::SercFailure {
+                status: output.status,
+                stderr: String::from_utf8_lossy(&output.stderr)
+                    .trim_end()
+                    .to_owned(),
+            });
+        }
+        written.map_err(CompileError::SercStdin)?;
+        Ok(output)
+    };
+    // The Python compiler applies this timeout per file. Serc uses the combined budget because
+    // its summary does not report per-file progress.
+    let output = if let Some(timeout) = timeout {
+        let count = u32::try_from(files.len()).unwrap_or(u32::MAX);
+        let timeout = timeout.saturating_mul(count);
+        tokio::time::timeout(timeout, compile)
+            .await
+            .map_err(|_| CompileError::SercTimeout(timeout))??
+    } else {
+        compile.await?
+    };
+    let summary: SercSummary =
+        serde_json::from_slice(&output.stdout).map_err(CompileError::SercOutput)?;
+    // Serc deduplicates paths, so its total can be smaller than the submitted file list.
+    if summary
+        .compiled
+        .checked_add(summary.skipped)
+        .is_none_or(|total| total > files.len())
+    {
+        return Err(CompileError::SercOutputCount {
+            compiled: summary.compiled,
+            skipped: summary.skipped,
+            submitted: files.len(),
+        });
+    }
+    Ok(summary.compiled)
+}
+
+#[derive(Deserialize)]
+struct SercSummary {
+    compiled: usize,
+    skipped: usize,
 }
 
 struct SercCompiler {
@@ -170,7 +188,7 @@ impl SercCompiler {
             ));
         }
         let version = interpreter.python_minor_version().to_string();
-        // Serc 0.1.6 supports these bytecode formats. Prereleases can change magic within a minor.
+        // Serc 0.1.7 supports these bytecode formats. Prereleases can change magic within a minor.
         let magic = match version.as_str() {
             "3.12" => [0xcb, 0x0d, 0x0d, 0x0a],
             "3.13" => [0xf3, 0x0d, 0x0d, 0x0a],

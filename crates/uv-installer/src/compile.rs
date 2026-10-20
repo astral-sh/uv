@@ -61,6 +61,18 @@ pub enum CompileError {
     SercInstall(#[source] anyhow::Error),
     #[error("Failed to start serc")]
     SercSubcommand(#[source] io::Error),
+    #[error("Failed to send source paths to serc")]
+    SercStdin(#[source] io::Error),
+    #[error("Invalid compilation summary from serc")]
+    SercOutput(#[source] serde_json::Error),
+    #[error(
+        "serc reported {compiled} compiled and {skipped} skipped files for {submitted} source paths"
+    )]
+    SercOutputCount {
+        compiled: usize,
+        skipped: usize,
+        submitted: usize,
+    },
     #[error("serc timed out after {}s", .0.as_secs_f32())]
     SercTimeout(Duration),
     #[error("serc exited with {status}:\n{stderr}")]
@@ -76,8 +88,9 @@ pub enum CompileError {
         #[source]
         err: io::Error,
     },
-    #[error("Source path is too long to pass to serc: {}", .0.user_display())]
-    SercArgumentTooLong(PathBuf),
+    #[cfg(windows)]
+    #[error("Source path cannot be encoded as UTF-8 for serc: {}", .0.user_display())]
+    SercPathEncoding(PathBuf),
     #[error(r#"Bytecode compilation failed, expected "{0}", received: "{1}""#)]
     WrongPath(String, String),
     #[error("Failed to write to Python {device}")]

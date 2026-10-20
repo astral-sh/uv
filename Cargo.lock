@@ -6869,6 +6869,8 @@ dependencies = [
  "rayon",
  "rustc-hash",
  "same-file",
+ "serde",
+ "serde_json",
  "tempfile",
  "thiserror",
  "tokio",
