@@ -358,6 +358,8 @@ fn requirements_txt_conditional_transitive_extra() -> Result<()> {
     Ok(())
 }
 
+/// An extra requested through an incompatible path must not activate another package version.
+/// A leaf also reached by an unconditional dependency remains unconditional.
 #[cfg(feature = "test-universal")]
 #[test]
 fn requirements_txt_does_not_activate_extra_through_incompatible_path() -> Result<()> {
@@ -758,6 +760,7 @@ fn requirements_txt_extra_activation_on_sibling_branch() -> Result<()> {
         selector = { workspace = true }
         "#,
     )?;
+
     context.temp_dir.child("other/pyproject.toml").write_str(
         r#"
         [project]
@@ -770,21 +773,23 @@ fn requirements_txt_extra_activation_on_sibling_branch() -> Result<()> {
         package = false
         "#,
     )?;
+
     context
         .temp_dir
         .child("selector/pyproject.toml")
         .write_str(
             r#"
-        [project]
-        name = "selector"
-        version = "1.0.0"
-        requires-python = ">=3.11"
-        dependencies = ["shared[a]"]
+            [project]
+            name = "selector"
+            version = "1.0.0"
+            requires-python = ">=3.11"
+            dependencies = ["shared[a]"]
 
-        [tool.uv]
-        package = false
-        "#,
+            [tool.uv]
+            package = false
+            "#,
         )?;
+
     context.temp_dir.child("shared/pyproject.toml").write_str(
         r#"
         [project]
@@ -801,11 +806,15 @@ fn requirements_txt_extra_activation_on_sibling_branch() -> Result<()> {
         "#,
     )?;
 
+    // Include both leaf versions so the lock records both conflicting branches.
     let wheels = context.temp_dir.child("wheels");
+
     let (filename, wheel) = WheelBuilder::new(&"leaf".parse()?, &"1.0.0".parse()?).build();
     wheels.child(filename).write_binary(&wheel)?;
+
     let (filename, wheel) = WheelBuilder::new(&"leaf".parse()?, &"2.0.0".parse()?).build();
     wheels.child(filename).write_binary(&wheel)?;
+
     context
         .lock()
         .arg("--offline")
@@ -855,6 +864,7 @@ fn requirements_txt_extra_activation_through_complementary_paths() -> Result<()>
         shared = { workspace = true }
         "#,
     )?;
+
     context.temp_dir.child("shared/pyproject.toml").write_str(
         r#"
         [project]
@@ -872,21 +882,27 @@ fn requirements_txt_extra_activation_through_complementary_paths() -> Result<()>
         "#,
     )?;
 
+    // The newer bridge requests shared[a], closing the cycle through either leaf version.
     let wheels = context.temp_dir.child("wheels");
+
     let (filename, wheel) = WheelBuilder::new(&"leaf".parse()?, &"1.0.0".parse()?)
         .requires(&["bridge>=1".parse()?])
         .build();
     wheels.child(filename).write_binary(&wheel)?;
+
     let (filename, wheel) = WheelBuilder::new(&"leaf".parse()?, &"2.0.0".parse()?)
         .requires(&["bridge>=1".parse()?])
         .build();
     wheels.child(filename).write_binary(&wheel)?;
+
     let (filename, wheel) = WheelBuilder::new(&"bridge".parse()?, &"2.0.0".parse()?).build();
     wheels.child(filename).write_binary(&wheel)?;
+
     let (filename, wheel) = WheelBuilder::new(&"bridge".parse()?, &"3.0.0".parse()?)
         .requires(&["shared[a]".parse()?])
         .build();
     wheels.child(filename).write_binary(&wheel)?;
+
     context
         .lock()
         .arg("--offline")
@@ -939,6 +955,7 @@ fn requirements_txt_extra_activation_unique_recursive_selection() -> Result<()> 
         shared = { workspace = true }
         "#,
     )?;
+
     context.temp_dir.child("shared/pyproject.toml").write_str(
         r#"
         [project]
@@ -958,23 +975,30 @@ fn requirements_txt_extra_activation_unique_recursive_selection() -> Result<()> 
         "#,
     )?;
 
+    // The choices request the extras that constrain their own versions.
     let wheels = context.temp_dir.child("wheels");
+
     let (filename, wheel) = WheelBuilder::new(&"choice-a".parse()?, &"1.0.0".parse()?)
         .requires(&["shared[a]".parse()?])
         .build();
     wheels.child(filename).write_binary(&wheel)?;
+
     let (filename, wheel) = WheelBuilder::new(&"choice-a".parse()?, &"2.0.0".parse()?).build();
     wheels.child(filename).write_binary(&wheel)?;
+
     let (filename, wheel) = WheelBuilder::new(&"choice-a".parse()?, &"3.0.0".parse()?)
         .requires(&["shared[a]".parse()?])
         .build();
     wheels.child(filename).write_binary(&wheel)?;
+
     let (filename, wheel) = WheelBuilder::new(&"choice-b".parse()?, &"2.0.0".parse()?)
         .requires(&["shared[b]".parse()?])
         .build();
     wheels.child(filename).write_binary(&wheel)?;
+
     let (filename, wheel) = WheelBuilder::new(&"choice-b".parse()?, &"3.0.0".parse()?).build();
     wheels.child(filename).write_binary(&wheel)?;
+
     context
         .lock()
         .arg("--offline")
@@ -1027,6 +1051,7 @@ fn requirements_txt_extra_activation_retains_default_selection() -> Result<()> {
         shared = { workspace = true }
         "#,
     )?;
+
     context.temp_dir.child("shared/pyproject.toml").write_str(
         r#"
         [project]
@@ -1046,21 +1071,28 @@ fn requirements_txt_extra_activation_retains_default_selection() -> Result<()> {
         "#,
     )?;
 
+    // The older choice-a requests a, while the newer choice-b requests b.
     let wheels = context.temp_dir.child("wheels");
+
     let (filename, wheel) = WheelBuilder::new(&"choice-a".parse()?, &"1.0.0".parse()?)
         .requires(&["shared[a]".parse()?])
         .build();
     wheels.child(filename).write_binary(&wheel)?;
+
     let (filename, wheel) = WheelBuilder::new(&"choice-a".parse()?, &"2.0.0".parse()?).build();
     wheels.child(filename).write_binary(&wheel)?;
+
     let (filename, wheel) = WheelBuilder::new(&"choice-b".parse()?, &"1.0.0".parse()?).build();
     wheels.child(filename).write_binary(&wheel)?;
+
     let (filename, wheel) = WheelBuilder::new(&"choice-b".parse()?, &"2.0.0".parse()?)
         .requires(&["shared[b]".parse()?])
         .build();
     wheels.child(filename).write_binary(&wheel)?;
+
     let (filename, wheel) = WheelBuilder::new(&"leaf".parse()?, &"1.0.0".parse()?).build();
     wheels.child(filename).write_binary(&wheel)?;
+
     context
         .lock()
         .arg("--offline")
@@ -1622,6 +1654,7 @@ fn export_recursive_extra_marker_on_virtual_packages() -> Result<()> {
         shared = { workspace = true }
         "#,
     )?;
+
     context.temp_dir.child("shared/pyproject.toml").write_str(
         r#"
         [project]
@@ -1635,35 +1668,37 @@ fn export_recursive_extra_marker_on_virtual_packages() -> Result<()> {
         b = []
         "#,
     )?;
+
     context
         .temp_dir
         .child("bridge-a/pyproject.toml")
         .write_str(
             r#"
-        [project]
-        name = "bridge-a"
-        version = "1.0.0"
-        requires-python = ">=3.9"
-        dependencies = ["shared[a]"]
+            [project]
+            name = "bridge-a"
+            version = "1.0.0"
+            requires-python = ">=3.9"
+            dependencies = ["shared[a]"]
 
-        [tool.uv]
-        package = false
-        "#,
+            [tool.uv]
+            package = false
+            "#,
         )?;
+
     context
         .temp_dir
         .child("bridge-b/pyproject.toml")
         .write_str(
             r#"
-        [project]
-        name = "bridge-b"
-        version = "1.0.0"
-        requires-python = ">=3.9"
-        dependencies = ["shared[b]"]
+            [project]
+            name = "bridge-b"
+            version = "1.0.0"
+            requires-python = ">=3.9"
+            dependencies = ["shared[b]"]
 
-        [tool.uv]
-        package = false
-        "#,
+            [tool.uv]
+            package = false
+            "#,
         )?;
 
     context.temp_dir.child("uv.lock").write_str(
@@ -1708,6 +1743,7 @@ fn export_recursive_extra_marker_on_virtual_packages() -> Result<()> {
         "#,
     )?;
 
+    // Requirements and pylock omit the virtual bridges, whose selection is unresolved.
     uv_snapshot!(context.filters(), context.export()
         .arg("--frozen")
         .arg("--no-header")
@@ -1733,6 +1769,7 @@ fn export_recursive_extra_marker_on_virtual_packages() -> Result<()> {
     directory = { path = "shared", editable = true }
     "#);
 
+    // CycloneDX includes virtual packages, so it must resolve which bridge is present.
     uv_snapshot!(context.filters(), context.export()
         .arg("--frozen")
         .arg("--no-header")

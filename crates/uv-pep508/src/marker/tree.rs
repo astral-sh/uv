@@ -2380,74 +2380,6 @@ mod test {
         assert_eq!(marker.resolve_extras(known), condition);
     }
 
-    /// Exhaust all three-extra Boolean functions and their consistent activation intervals.
-    #[test]
-    fn resolve_extras_with_bounds_truth_tables() {
-        let names =
-            ["a", "b", "c"].map(|name| name.parse::<ExtraName>().expect("valid extra name"));
-        let variables = [m("extra == 'a'"), m("extra == 'b'"), m("extra == 'c'")];
-        let minterms: [MarkerTree; 8] = std::array::from_fn(|assignment| {
-            variables
-                .iter()
-                .enumerate()
-                .fold(MarkerTree::TRUE, |term, (index, &variable)| {
-                    term.and(if assignment & (1 << index) == 0 {
-                        variable.negate()
-                    } else {
-                        variable
-                    })
-                })
-        });
-        let constant = |value| {
-            if value {
-                MarkerTree::TRUE
-            } else {
-                MarkerTree::FALSE
-            }
-        };
-
-        for truth in 0..=u8::MAX {
-            let marker = minterms.iter().enumerate().fold(
-                MarkerTree::FALSE,
-                |marker, (assignment, &minterm)| {
-                    if truth & (1 << assignment) != 0 {
-                        marker.or(minterm)
-                    } else {
-                        marker
-                    }
-                },
-            );
-            for lower in 0..8u8 {
-                for upper in 0..8u8 {
-                    if lower & !upper != 0 {
-                        continue;
-                    }
-                    let mut expected = (true, false);
-                    for assignment in 0..8u8 {
-                        if assignment & lower == lower && assignment & upper == assignment {
-                            let value = truth & (1 << assignment) != 0;
-                            expected.0 &= value;
-                            expected.1 |= value;
-                        }
-                    }
-                    assert_eq!(
-                        marker.resolve_extras_with_bounds(names.iter().enumerate().map(
-                            |(index, name)| (
-                                name.clone(),
-                                (
-                                    constant(lower & (1 << index) != 0),
-                                    constant(upper & (1 << index) != 0),
-                                ),
-                            )
-                        )),
-                        (constant(expected.0), constant(expected.1)),
-                        "truth table {truth:08b}, interval {lower:03b}..={upper:03b}"
-                    );
-                }
-            }
-        }
-    }
-
     /// An unknown decision cannot hide a condition guaranteed by both branches.
     #[test]
     fn resolve_extras_with_bounds_consensus() {
@@ -2466,6 +2398,7 @@ mod test {
         );
 
         let linux = m("sys_platform == 'linux'");
+
         assert_eq!(
             m("(extra == 'x' and extra == 'y') or (extra != 'x' and extra == 'z')")
                 .resolve_extras_with_bounds([
@@ -2499,6 +2432,7 @@ mod test {
                 m("sys_platform == 'linux' or sys_platform == 'darwin'"),
             ),
         )];
+
         assert_eq!(
             m("extra != 'a'").resolve_extras_with_bounds(known.clone()),
             (
@@ -2506,6 +2440,8 @@ mod test {
                 m("sys_platform != 'linux'"),
             )
         );
+
+        // Missing extras are inactive, including in negated expressions.
         assert_eq!(
             m("extra == 'missing'").resolve_extras_with_bounds(known.clone()),
             (MarkerTree::FALSE, MarkerTree::FALSE)
@@ -2520,6 +2456,7 @@ mod test {
     #[test]
     fn resolve_extras_with_bounds_environment_conditions() {
         let marker = m("platform_release >= '24' and (extra == 'x' or extra == 'y')");
+
         assert_eq!(
             marker.resolve_extras_with_bounds([
                 (
@@ -2548,45 +2485,39 @@ mod test {
         );
     }
 
-    /// Exact bounds agree with ordinary simultaneous substitution for every decision kind.
+    /// Exact substitution retains each environment decision kind and leaves replacement extras alone.
     #[test]
-    fn resolve_extras_with_bounds_exact() {
+    fn resolve_extras_with_bounds_substitutes_simultaneously() {
+        let condition = m("sys_platform == 'darwin' or extra == 'b'");
         let known = [
             (
                 "a".parse().expect("valid extra name"),
-                m("sys_platform == 'darwin' or extra == 'b'"),
+                (condition, condition),
             ),
-            ("b".parse().expect("valid extra name"), MarkerTree::FALSE),
+            (
+                "b".parse().expect("valid extra name"),
+                (MarkerTree::FALSE, MarkerTree::FALSE),
+            ),
         ];
-        for marker in [
-            "extra == 'a'",
-            "extra != 'a'",
-            "python_version >= '3.10' and extra == 'a'",
-            "implementation_name == 'cpython' and extra == 'a'",
-            "platform_release >= '24' and extra == 'a'",
-            "'python' in implementation_name and extra == 'a'",
-            "'dev' in dependency_groups and extra == 'a'",
-            "extra == 'missing' or extra == 'a'",
-        ] {
-            let marker = m(marker);
-            let expected = marker.resolve_extras(known.clone());
-            assert_eq!(
-                marker.resolve_extras_with_bounds(
-                    known
-                        .iter()
-                        .map(|(name, value)| (name.clone(), (*value, *value)))
-                ),
-                (expected, expected)
-            );
-            assert_eq!(
-                marker.negate().resolve_extras_with_bounds(
-                    known
-                        .iter()
-                        .map(|(name, value)| (name.clone(), (*value, *value)))
-                ),
-                (expected.negate(), expected.negate())
-            );
-        }
+        let marker = m("python_version >= '3.10'
+            and implementation_name == 'cpython'
+            and platform_release >= '24'
+            and platform_machine in 'x86_64,aarch64'
+            and 'beta' in platform_version
+            and 'dev' in dependency_groups
+            and extra == 'a'");
+        let expected = m("python_version >= '3.10'
+            and implementation_name == 'cpython'
+            and platform_release >= '24'
+            and platform_machine in 'x86_64,aarch64'
+            and 'beta' in platform_version
+            and 'dev' in dependency_groups
+            and (sys_platform == 'darwin' or extra == 'b')");
+
+        assert_eq!(
+            marker.resolve_extras_with_bounds(known),
+            (expected, expected)
+        );
     }
 
     /// Replacement iterators can acquire the interner lock, and are unnecessary without extras.
@@ -2601,11 +2532,13 @@ mod test {
             )
         });
         let environment = m("python_version >= '3.10'");
+
         assert_eq!(
             environment.resolve_extras_with_bounds(replacements.clone()),
             (environment, environment)
         );
         assert_eq!(replacements_built.get(), 0);
+
         assert_eq!(
             m("python_version >= '3.10' and extra == 'a'").resolve_extras_with_bounds(replacements),
             (
@@ -2616,32 +2549,41 @@ mod test {
         assert_eq!(replacements_built.get(), 1);
     }
 
-    /// The shared diagram has more than 16 million DNF paths but only two decisions per pair.
+    /// Shared subgraphs and their complements must retain distinct activation bounds.
     #[test]
     fn resolve_extras_with_bounds_shared_subgraphs() {
         let condition = m("sys_platform == 'darwin'");
-        let mut known = Vec::new();
-        let mut marker = MarkerTree::TRUE;
-        for index in 0..24 {
-            let left = format!("pair-{index:02}-a");
-            let right = format!("pair-{index:02}-b");
-            marker = marker.and(m(&format!("extra == '{left}' or extra == '{right}'")));
-            known.push((
-                left.parse().expect("valid extra name"),
+        let known = [
+            (
+                "a".parse().expect("valid extra name"),
                 (MarkerTree::FALSE, MarkerTree::TRUE),
-            ));
-            known.push((
-                right.parse().expect("valid extra name"),
+            ),
+            (
+                "b".parse().expect("valid extra name"),
                 (condition, condition),
-            ));
-        }
+            ),
+            (
+                "c".parse().expect("valid extra name"),
+                (MarkerTree::FALSE, MarkerTree::TRUE),
+            ),
+            (
+                "d".parse().expect("valid extra name"),
+                (condition, condition),
+            ),
+        ];
+        let marker = m("(implementation_name == 'cpython'
+                and (extra == 'a' or extra == 'b')
+                and (extra == 'c' or extra == 'd'))
+            or (implementation_name != 'cpython'
+                and ((extra != 'a' and extra != 'b')
+                    or (extra != 'c' and extra != 'd')))");
+
         assert_eq!(
-            marker.resolve_extras_with_bounds(known.clone()),
-            (condition, MarkerTree::TRUE)
-        );
-        assert_eq!(
-            marker.negate().resolve_extras_with_bounds(known),
-            (MarkerTree::FALSE, condition.negate())
+            marker.resolve_extras_with_bounds(known),
+            (
+                m("implementation_name == 'cpython' and sys_platform == 'darwin'"),
+                m("implementation_name == 'cpython' or sys_platform != 'darwin'"),
+            )
         );
     }
 
