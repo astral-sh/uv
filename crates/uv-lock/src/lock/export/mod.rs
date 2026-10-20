@@ -70,7 +70,7 @@ impl<'lock> ExportableRequirements<'lock> {
     ) -> Result<Self, LockError> {
         let size_guess = target.lock().packages.len();
         let mut graph = Graph::<Node<'lock>, Edge<'lock>>::with_capacity(size_guess, size_guess);
-        let mut inverse = vec![None; size_guess];
+        let mut node_by_package = vec![None; size_guess];
 
         let mut queue: VecDeque<(PackageIndex, Option<&ExtraName>)> = VecDeque::new();
         let mut seen = FxHashSet::default();
@@ -109,7 +109,7 @@ impl<'lock> ExportableRequirements<'lock> {
                 let package_index = target.lock().by_id[&dist.id];
 
                 // Add the workspace package to the graph.
-                let index = *inverse[package_index.0]
+                let index = *node_by_package[package_index.0]
                     .get_or_insert_with(|| graph.add_node(Node::Package(dist)));
                 graph.add_edge(
                     root,
@@ -137,6 +137,7 @@ impl<'lock> ExportableRequirements<'lock> {
             {
                 // Empty selected groups still participate in conflicts.
                 activated_items.insert(ConflictItem::from((dist.id.name.clone(), group.clone())));
+
                 for dep in dependencies {
                     if prune.contains(&dep.package_id.name) {
                         continue;
@@ -145,7 +146,7 @@ impl<'lock> ExportableRequirements<'lock> {
                     let dep_dist = target.lock().package(dep.index);
 
                     // Add the dependency to the graph.
-                    let dep_index = *inverse[dep.index.0]
+                    let dep_index = *node_by_package[dep.index.0]
                         .get_or_insert_with(|| graph.add_node(Node::Package(dep_dist)));
 
                     // Add an edge from the root. Development dependencies may be installed without
@@ -225,7 +226,7 @@ impl<'lock> ExportableRequirements<'lock> {
                     let package_index = target.lock().by_id[&dist.id];
 
                     // Add the dependency to the graph and get its index.
-                    let dep_index = *inverse[package_index.0]
+                    let dep_index = *node_by_package[package_index.0]
                         .get_or_insert_with(|| graph.add_node(Node::Package(dist)));
 
                     // Add an edge from the root.
@@ -251,9 +252,9 @@ impl<'lock> ExportableRequirements<'lock> {
             }
         }
 
-        // Create all the relevant nodes.
+        // Traverse each package's regular and requested optional dependencies separately.
         while let Some((package_index, extra)) = queue.pop_front() {
-            let index = inverse[package_index.0].expect("queued package has a graph node");
+            let index = node_by_package[package_index.0].expect("queued package has a graph node");
             let package = target.lock().package(package_index);
 
             let deps = if let Some(extra) = extra {
@@ -273,11 +274,10 @@ impl<'lock> ExportableRequirements<'lock> {
                     continue;
                 }
 
-                // Evaluate the conflict marker.
                 let dep_dist = target.lock().package(dep.index);
 
                 // Add the dependency to the graph.
-                let dep_index = *inverse[dep.index.0]
+                let dep_index = *node_by_package[dep.index.0]
                     .get_or_insert_with(|| graph.add_node(Node::Package(dep_dist)));
 
                 let dep_extras = dep.extra.iter().collect::<Vec<_>>();
@@ -417,6 +417,9 @@ impl Edge<'_> {
 /// variables remain symbolic. Combining complete paths first preserves correlations between
 /// alternative forks. Each referenced conflict item then has one activation equation, shared
 /// by every branch of the dependency graph.
+///
+/// For example, if the only path requesting `foo[ssl]` has marker `sys_platform == 'linux'`,
+/// that condition replaces references to `foo[ssl]` throughout the graph, including on siblings.
 fn conflict_marker_reachability<'lock>(
     graph: &Graph<Node<'lock>, Edge<'lock>>,
     root: NodeIndex,
@@ -436,8 +439,8 @@ fn conflict_marker_reachability<'lock>(
         });
     }
 
-    // Ordinary extras only need package-local reachability nodes. Global variables are
-    // needed for marker inputs and for binding declared conflict names.
+    // Intern the global facts used by marker inputs. Include declared conflicts as well: their
+    // encoded names can shadow literal extra names even when no path activates them.
     let conflict_items = conflicts
         .iter()
         .flat_map(ConflictSet::iter)
@@ -459,12 +462,14 @@ fn conflict_marker_reachability<'lock>(
             encoded.insert(name, index);
         }
     };
+
     for item in &conflict_items {
         add_fact((*item).clone());
     }
     for item in known_conflicts {
         add_fact(item.clone());
     }
+
     for edge in graph.edge_references() {
         if let Node::Package(package) = graph[edge.target()] {
             for extra in edge.weight().dep_extras() {
@@ -476,6 +481,9 @@ fn conflict_marker_reachability<'lock>(
         }
     }
 
+    // Give each requested package extra its own reachability node. For `a -> foo[ssl]`, the
+    // edge reaches both `foo` and `foo[ssl]`; the optional dependencies of `foo[ssl]` leave
+    // from the extra node, so reaching `foo` alone cannot activate them.
     let mut solver = SymbolicExportReachability {
         edges: Vec::with_capacity(graph.edge_count()),
         reachability: vec![MarkerTree::FALSE; graph.node_count()],
@@ -485,10 +493,10 @@ fn conflict_marker_reachability<'lock>(
         queue: VecDeque::new(),
         queued: vec![false; graph.node_count()],
     };
-    let mut extras = FxHashMap::default();
+    let mut extra_nodes = FxHashMap::default();
     for edge in graph.edge_references() {
         let source = match edge.weight() {
-            Edge::Optional { extra, .. } => *extras
+            Edge::Optional { extra, .. } => *extra_nodes
                 .entry((edge.source(), *extra))
                 .or_insert_with(|| solver.add_node()),
             Edge::Prod { .. } => edge.source().index(),
@@ -496,7 +504,7 @@ fn conflict_marker_reachability<'lock>(
         let mut targets = vec![edge.target().index()];
         for extra in edge.weight().dep_extras() {
             targets.push(
-                *extras
+                *extra_nodes
                     .entry((edge.target(), *extra))
                     .or_insert_with(|| solver.add_node()),
             );
@@ -508,7 +516,8 @@ fn conflict_marker_reachability<'lock>(
         solver.dependents[source].push(edge.id());
     }
 
-    for ((package_index, extra), extra_index) in extras {
+    // Link package-local extra nodes to their global facts, and seed the selected root items.
+    for ((package_index, extra), extra_index) in extra_nodes {
         if let Node::Package(package) = graph[package_index] {
             let item = ConflictItem::from((package.name().clone(), extra.clone()));
             solver.extra_facts[extra_index] = facts.get(&item).copied();
@@ -524,6 +533,7 @@ fn conflict_marker_reachability<'lock>(
         }
     }
     solver.add_reachability(root.index(), MarkerTree::TRUE);
+
     resolve_marker_bindings(graph, root, &mut solver, &facts, &encoded, &fact_names);
     solver.simplify_unconditional_activations(&encoded);
     solver.solve();
@@ -542,6 +552,8 @@ fn conflict_marker_reachability<'lock>(
                     .map(|fact| (fact_names[fact].clone(), bounds[fact])),
             )
         });
+
+        // A difference matters only if it describes a possible environment.
         if let Node::Package(package) = graph[index]
             && include_package(package)
             && !upper.and(lower.negate()).is_false()
@@ -553,6 +565,7 @@ fn conflict_marker_reachability<'lock>(
         }
         reachability.insert(index, lower);
     }
+
     Ok(reachability)
 }
 
@@ -565,9 +578,10 @@ struct ExportEdge {
 
 /// Bind raw and encoded extra names before evaluating their activation conditions.
 ///
-/// An encoded fact takes precedence over a scoped literal of the same spelling when
-/// that fact can reach the marker's context. Presence is structural, including false
-/// paths; its value is subsequently resolved from the global activation equation.
+/// For example, on an edge out of `bar`, `extra == 'extra-3-foo-ssl'` could refer to the
+/// encoded conflict `foo[ssl]` or the literal extra `bar[extra-3-foo-ssl]`. The encoded fact
+/// wins when it is structurally present at the edge, even through a path with a false marker.
+/// Its activation value is resolved later.
 fn resolve_marker_bindings(
     graph: &Graph<Node<'_>, Edge<'_>>,
     root: NodeIndex,
@@ -585,12 +599,15 @@ fn resolve_marker_bindings(
             }
         }
     }
+
     let scoped_fact = |source: NodeIndex, name: &ExtraName| match graph[source] {
         Node::Package(package) => facts
             .get(&ConflictItem::from((package.name().clone(), name.clone())))
             .copied(),
         Node::Root => None,
     };
+
+    // Find names that could refer to either a local extra or an encoded conflict.
     let mut aliases: FxHashMap<usize, Vec<(EdgeIndex, usize)>> = FxHashMap::default();
     for edge in graph.edge_references() {
         edge.weight().marker().visit_extras(|_, name| {
@@ -604,8 +621,10 @@ fn resolve_marker_bindings(
             }
         });
     }
+
     let mut overrides = FxHashMap::default();
     for (fact, bindings) in aliases {
+        // Selected facts are present from the root; requested facts become present at the target.
         let mut pending = if solver.activations[fact].is_true() {
             vec![root]
         } else {
@@ -617,6 +636,7 @@ fn resolve_marker_bindings(
                 .expect("request belongs to an export edge")
                 .1
         }));
+
         let mut present = vec![false; graph.node_count()];
         while let Some(index) = pending.pop() {
             if present[index.index()] {
@@ -625,6 +645,7 @@ fn resolve_marker_bindings(
             present[index.index()] = true;
             pending.extend(graph.neighbors_directed(index, Direction::Outgoing));
         }
+
         for (index, scoped) in bindings {
             let (parent, _) = graph
                 .edge_endpoints(index)
@@ -634,6 +655,9 @@ fn resolve_marker_bindings(
             }
         }
     }
+
+    // Replace each extra name with its bound fact. An edge's own request is already active
+    // when evaluating that edge's marker.
     for edge in graph.edge_references() {
         let mut replacements = Vec::new();
         edge.weight().marker().visit_extras(|_, name| {
@@ -656,6 +680,9 @@ fn resolve_marker_bindings(
 }
 
 /// Least package and optional-extra reachability with conflict variables held symbolic.
+///
+/// Original graph nodes keep their indices, and optional-extra nodes are appended. Edge indices
+/// also match the original graph. `activations` is indexed by global fact rather than node.
 struct SymbolicExportReachability {
     edges: Vec<ExportEdge>,
     reachability: Vec<MarkerTree>,
@@ -696,11 +723,13 @@ impl SymbolicExportReachability {
         if self.activations.is_empty() {
             return;
         }
+
         let mut active = self
             .activations
             .iter()
             .map(|marker| marker.is_true())
             .collect::<Vec<_>>();
+
         let mut reached = vec![false; self.reachability.len()];
         let mut pending = self.queue.iter().copied().collect::<Vec<_>>();
         while let Some(source) = pending.pop() {
@@ -718,6 +747,7 @@ impl SymbolicExportReachability {
                 pending.extend(edge.targets.iter().copied());
             }
         }
+
         if active.iter().any(|&active| active) {
             for edge in &mut self.edges {
                 edge.marker = edge
@@ -740,6 +770,7 @@ impl SymbolicExportReachability {
                 }
             }
         }
+
         for (&marker, &fact) in self.reachability.iter().zip(&self.extra_facts) {
             if let Some(fact) = fact {
                 self.activations[fact] = self.activations[fact].or(marker);
@@ -773,12 +804,18 @@ enum ExportBound {
 }
 
 /// Solve global activation equations in dependency order, iterating only recursive components.
+///
+/// Under founded evaluation, a positive cycle cannot activate itself. Each `(lower, upper)` pair
+/// describes environments where an item is definitely or possibly active under that rule. For
+/// example, `a = a` has no external support, so both bounds are false. Mutually negative
+/// equations such as `a = !b; b = !a` can remain uncertain.
 struct ExportActivationBounds<'a> {
+    /// Activation condition for each global fact; it may refer to itself or other facts.
     conditions: &'a [MarkerTree],
     names: &'a [ExtraName],
     inputs: Vec<Vec<usize>>,
     dependents: Vec<Vec<usize>>,
-    owners: Vec<usize>,
+    component_by_fact: Vec<usize>,
     queued: Vec<bool>,
     bounds: Vec<(MarkerTree, MarkerTree)>,
 }
@@ -800,12 +837,13 @@ impl<'a> ExportActivationBounds<'a> {
                 dependents[input].push(fact);
             }
         }
+
         Self {
             conditions,
             names,
             inputs,
             dependents,
-            owners: vec![0; conditions.len()],
+            component_by_fact: vec![0; conditions.len()],
             queued: vec![false; conditions.len()],
             bounds: vec![(MarkerTree::FALSE, MarkerTree::FALSE); conditions.len()],
         }
@@ -817,23 +855,28 @@ impl<'a> ExportActivationBounds<'a> {
         for _ in self.conditions {
             graph.add_node(());
         }
+
         for (fact, inputs) in self.inputs.iter().enumerate() {
             for &input in inputs {
                 // SCC postorder then visits an equation's dependencies before its readers.
                 graph.add_edge(NodeIndex::new(fact), NodeIndex::new(input), ());
             }
         }
+
         let components = kosaraju_scc(&graph);
-        for (owner, component) in components.iter().enumerate() {
+        for (component_index, component) in components.iter().enumerate() {
             for fact in component {
-                self.owners[fact.index()] = owner;
+                self.component_by_fact[fact.index()] = component_index;
             }
         }
-        for (owner, component) in components.iter().enumerate() {
+
+        for (component_index, component) in components.iter().enumerate() {
             let component = component
                 .iter()
                 .map(|fact| fact.index())
                 .collect::<Vec<_>>();
+
+            // A nonrecursive equation can be evaluated once after its inputs have been solved.
             if let [fact] = component.as_slice()
                 && self.inputs[*fact].binary_search(fact).is_err()
             {
@@ -844,7 +887,7 @@ impl<'a> ExportActivationBounds<'a> {
             // Negative inputs use the fixed opposite bound, so each inner worklist grows
             // monotonically. Restart upper passes from the new lower bound to discard
             // support from paths whose negative conditions have closed.
-            self.solve_bound(&component, owner, ExportBound::Upper);
+            self.solve_bound(&component, component_index, ExportBound::Upper);
             loop {
                 let previous_upper = component
                     .iter()
@@ -853,11 +896,14 @@ impl<'a> ExportActivationBounds<'a> {
                 for &fact in &component {
                     self.bounds[fact].0 = MarkerTree::FALSE;
                 }
-                self.solve_bound(&component, owner, ExportBound::Lower);
+                self.solve_bound(&component, component_index, ExportBound::Lower);
+
                 for &fact in &component {
                     self.bounds[fact].1 = self.bounds[fact].0;
                 }
-                self.solve_bound(&component, owner, ExportBound::Upper);
+                self.solve_bound(&component, component_index, ExportBound::Upper);
+
+                // With an unchanged upper bound, another lower pass would produce the same result.
                 if component
                     .iter()
                     .zip(previous_upper)
@@ -867,6 +913,7 @@ impl<'a> ExportActivationBounds<'a> {
                 }
             }
         }
+
         self.bounds
     }
 
@@ -880,11 +927,12 @@ impl<'a> ExportActivationBounds<'a> {
     }
 
     /// Compute one least fixed point without revisiting unrelated components.
-    fn solve_bound(&mut self, component: &[usize], owner: usize, bound: ExportBound) {
+    fn solve_bound(&mut self, component: &[usize], component_index: usize, bound: ExportBound) {
         let mut queue = component.iter().copied().collect::<VecDeque<_>>();
         for &fact in component {
             self.queued[fact] = true;
         }
+
         while let Some(fact) = queue.pop_front() {
             self.queued[fact] = false;
             let (lower, upper) = self.evaluate(fact);
@@ -897,8 +945,9 @@ impl<'a> ExportActivationBounds<'a> {
                 continue;
             }
             *current = next;
+
             for &dependent in &self.dependents[fact] {
-                if self.owners[dependent] == owner
+                if self.component_by_fact[dependent] == component_index
                     && !mem::replace(&mut self.queued[dependent], true)
                 {
                     queue.push_back(dependent);

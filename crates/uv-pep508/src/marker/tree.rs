@@ -1412,6 +1412,7 @@ impl MarkerTree {
         if self.is_true() || self.is_false() || !INTERNER.shared.contains_extras(self.0) {
             return (self, self);
         }
+
         let known_extras: FxHashMap<_, _> = known_extras
             .into_iter()
             .map(|(name, (lower, upper))| (name, (lower.0, upper.0)))

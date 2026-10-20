@@ -882,6 +882,7 @@ impl InternerGuard<'_> {
                 .copied()
                 .unwrap_or((NodeId::FALSE, NodeId::FALSE));
             debug_assert!(self.and(lower, upper.not()).is_false());
+
             if lower.is_true() {
                 self.resolve_extras_with_bounds_cached(high.negate(marker), known_extras, cache)
             } else if upper.is_false() {
@@ -894,14 +895,19 @@ impl InternerGuard<'_> {
                 );
                 let (low_lower, low_upper) =
                     self.resolve_extras_with_bounds_cached(low.negate(marker), known_extras, cache);
+
+                // An extra is definitely absent only outside its upper bound; it is possibly
+                // absent outside its lower bound. Negation therefore swaps the bounds.
                 let positive_lower = self.and(lower, high_lower);
                 let negative_lower = self.and(upper.not(), low_lower);
                 let mut result_lower = self.or(positive_lower, negative_lower);
                 if lower != upper {
-                    // Both branches can guarantee the marker even when this extra is unknown.
+                    // Both branches can guarantee the marker even when this extra is unknown:
+                    // `x or y` is true if `y` is definitely true, regardless of `x`.
                     let consensus = self.and(high_lower, low_lower);
                     result_lower = self.or(result_lower, consensus);
                 }
+
                 let positive_upper = self.and(upper, high_upper);
                 let negative_upper = self.and(lower.not(), low_upper);
                 (result_lower, self.or(positive_upper, negative_upper))
@@ -913,12 +919,14 @@ impl InternerGuard<'_> {
                 lower_changed |= lower != child;
                 lower
             });
+
             let mut upper_changed = false;
             let upper_children = node.children.map(marker, |child| {
                 let (_, upper) = self.resolve_extras_with_bounds_cached(child, known_extras, cache);
                 upper_changed |= upper != child;
                 upper
             });
+
             let lower = if lower_changed {
                 self.rebuild_node(&node.var, lower_children)
             } else {
@@ -931,6 +939,7 @@ impl InternerGuard<'_> {
             };
             (lower, upper)
         };
+
         cache.insert(marker, result);
         result
     }
