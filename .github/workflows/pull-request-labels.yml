@@ -68,7 +68,7 @@ jobs:
 
       - name: "Determine pull request labels"
         id: labels
-        uses: openai/codex-action@c97f61512499740f4c5320dad158bdcd02807053
+        uses: openai/codex-action@c05cfd74ad95c626cdf05c6685e62becc3bf7813
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
