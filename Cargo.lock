@@ -6525,6 +6525,7 @@ dependencies = [
  "fs-err",
  "http",
  "indoc",
+ "insta",
  "itertools 0.14.0",
  "jiff",
  "memchr",
