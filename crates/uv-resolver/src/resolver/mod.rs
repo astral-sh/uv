@@ -5,6 +5,7 @@ use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fmt::{Display, Formatter};
 use std::ops::Bound;
+use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Instant;
 use std::{mem, thread};
@@ -375,9 +376,17 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 forked_states.sort_by(|a, b| cmp_requires_python(&a.env, &b.env));
             }
         }
+        let mut forked_states: Vec<_> = forked_states
+            .into_iter()
+            .map(|state| PendingFork {
+                state: Rc::new(state),
+                action: ForkAction::Initial,
+            })
+            .collect();
         let mut resolutions = vec![];
 
-        'FORK: while let Some(mut state) = forked_states.pop() {
+        'FORK: while let Some(fork) = forked_states.pop() {
+            let mut state = self.materialize_fork(fork, requests)?;
             if let Some(split) = state.env.end_user_fork_display() {
                 let requires_python = state.python_requirement.target();
                 debug!("Solving {split} (requires-python: {requires_python:?})");
@@ -612,7 +621,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     let version = match version {
                         ResolverVersion::Unforked(version) => version,
                         ResolverVersion::Forked(forks) => {
-                            forked_states.extend(self.version_forks_to_fork_states(state, forks));
+                            forked_states.extend(Self::version_forks_to_fork_states(state, forks));
                             continue 'FORK;
                         }
                         ResolverVersion::Unavailable(version, reason) => {
@@ -768,15 +777,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             }
                         }
 
-                        for new_fork_state in self.forks_to_fork_states(
+                        forked_states.extend(Self::forks_to_fork_states(
                             state,
                             &version,
                             forks,
-                            requests,
                             &diverging_packages,
-                        ) {
-                            forked_states.push(new_fork_state?);
-                        }
+                        ));
                         continue 'FORK;
                     }
                     ForkedDependencies::RequiresPython(requires_python) => {
@@ -813,7 +819,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                     })
                                     .collect();
                                 forked_states
-                                    .extend(self.version_forks_to_fork_states(state, forks));
+                                    .extend(Self::version_forks_to_fork_states(state, forks));
                                 continue 'FORK;
                             }
                         }
@@ -881,15 +887,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         )
     }
 
-    /// Convert the dependency [`Fork`]s into [`ForkState`]s.
-    fn forks_to_fork_states<'a, 'index: 'a>(
-        &'a self,
+    /// Queue dependency forks against one immutable checkpoint.
+    fn forks_to_fork_states<'index>(
         current_state: ForkState<'index>,
-        version: &'a Version,
+        version: &Version,
         forks: Vec<Fork>,
-        requests: &'a MetadataRequests,
-        diverging_packages: &'a BTreeSet<PackageName>,
-    ) -> impl Iterator<Item = Result<ForkState<'index>, ResolveError>> + 'a {
+        diverging_packages: &BTreeSet<PackageName>,
+    ) -> impl Iterator<Item = PendingFork<'index>> {
         debug!(
             "Splitting resolution on {}=={} over {} into {} resolution{} with separate markers",
             current_state.pubgrub.package_store[current_state.next],
@@ -902,33 +906,57 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             if forks.len() == 1 { "" } else { "s" }
         );
         assert!(forks.len() >= 2);
-        // This is a somewhat tortured technique to ensure
-        // that our resolver state is only cloned as much
-        // as it needs to be. We basically move the state
-        // into `forked_states`, and then only clone it if
-        // there is at least one more fork to visit.
-        let package = current_state.next;
-        let mut cur_state = Some(current_state);
-        let forks_len = forks.len();
-        forks
-            .into_iter()
-            .enumerate()
-            .map(move |(i, fork)| {
-                let is_last = i == forks_len - 1;
-                let forked_state = cur_state.take().unwrap();
-                if !is_last {
-                    cur_state = Some(forked_state.clone());
-                }
+        let state = Rc::new(current_state);
+        let version = version.clone();
+        forks.into_iter().map(move |fork| PendingFork {
+            state: Rc::clone(&state),
+            action: ForkAction::Dependencies {
+                fork,
+                version: version.clone(),
+            },
+        })
+    }
 
-                let env = fork.env.clone();
-                (fork, forked_state.with_env(env))
-            })
-            .map(move |(fork, mut forked_state)| {
+    /// Queue version forks against one immutable checkpoint.
+    fn version_forks_to_fork_states(
+        current_state: ForkState<'_>,
+        forks: Vec<VersionFork>,
+    ) -> impl Iterator<Item = PendingFork<'_>> {
+        let state = Rc::new(current_state);
+        forks.into_iter().map(move |fork| PendingFork {
+            state: Rc::clone(&state),
+            action: ForkAction::Version(fork),
+        })
+    }
+
+    /// Materialize only the next fork, taking ownership of the checkpoint for its last sibling.
+    fn materialize_fork<'index>(
+        &self,
+        pending: PendingFork<'index>,
+        requests: &MetadataRequests,
+    ) -> Result<ForkState<'index>, ResolveError> {
+        let state = Rc::unwrap_or_clone(pending.state);
+        match pending.action {
+            ForkAction::Initial => Ok(state),
+            ForkAction::Version(fork) => {
+                let continuation = match fork.version {
+                    Some(version) => ForkContinuation::UseVersion {
+                        package: fork.id,
+                        version,
+                    },
+                    None => ForkContinuation::SelectVersion { package: fork.id },
+                };
+                Ok(state.with_env(fork.env).with_continuation(continuation))
+            }
+            ForkAction::Dependencies { fork, version } => {
+                let mut state = state.with_env(fork.env);
+                let package = state.next;
+
                 // Enrich the state with any URLs, etc.
-                forked_state
+                state
                     .visit_package_version_dependencies(
                         package,
-                        version,
+                        &version,
                         &self.urls,
                         &self.indexes,
                         &fork.dependencies,
@@ -937,59 +965,25 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         self.selector.resolution_strategy(),
                     )
                     .map_err(|err| {
-                        enrich_dependency_error(err, package, version, &forked_state.pubgrub)
+                        enrich_dependency_error(err, package, &version, &state.pubgrub)
                     })?;
 
                 // Emit a request to fetch the metadata for each registry package.
-                self.visit_dependencies(&fork.dependencies, &forked_state, requests)
+                self.visit_dependencies(&fork.dependencies, &state, requests)
                     .map_err(|err| {
-                        enrich_dependency_error(err, package, version, &forked_state.pubgrub)
+                        enrich_dependency_error(err, package, &version, &state.pubgrub)
                     })?;
 
-                // Add the dependencies to the state.
-                forked_state.add_package_version_dependencies(
+                state.add_package_version_dependencies(
                     package,
-                    version,
+                    &version,
                     fork.dependencies,
                     &self.index,
                     &self.installed_packages,
                 );
-
-                Ok(forked_state)
-            })
-    }
-
-    /// Convert the dependency [`Fork`]s into [`ForkState`]s.
-    #[expect(clippy::unused_self)]
-    fn version_forks_to_fork_states<'index>(
-        &self,
-        current_state: ForkState<'index>,
-        forks: Vec<VersionFork>,
-    ) -> impl Iterator<Item = ForkState<'index>> {
-        // This is a somewhat tortured technique to ensure
-        // that our resolver state is only cloned as much
-        // as it needs to be. We basically move the state
-        // into `forked_states`, and then only clone it if
-        // there is at least one more fork to visit.
-        let mut cur_state = Some(current_state);
-        let forks_len = forks.len();
-        forks.into_iter().enumerate().map(move |(i, fork)| {
-            let is_last = i == forks_len - 1;
-            let forked_state = cur_state.take().unwrap();
-            if !is_last {
-                cur_state = Some(forked_state.clone());
+                Ok(state)
             }
-            let continuation = match fork.version {
-                Some(version) => ForkContinuation::UseVersion {
-                    package: fork.id,
-                    version,
-                },
-                None => ForkContinuation::SelectVersion { package: fork.id },
-            };
-            forked_state
-                .with_env(fork.env)
-                .with_continuation(continuation)
-        })
+        }
     }
 
     /// Visit a set of [`PubGrubDependency`] entities prior to selection.
@@ -2687,6 +2681,21 @@ enum ForkContinuation {
         package: Id<PubGrubPackage>,
         version: Version,
     },
+}
+
+/// A pending fork shares its parent's checkpoint until it is selected for resolution.
+///
+/// Forks run sequentially. Keeping only their changes here avoids copying the incompatibility
+/// arena and assignment history for every sibling while those siblings are still waiting.
+struct PendingFork<'index> {
+    state: Rc<ForkState<'index>>,
+    action: ForkAction,
+}
+
+enum ForkAction {
+    Initial,
+    Dependencies { fork: Fork, version: Version },
+    Version(VersionFork),
 }
 
 /// State that is used during unit propagation in the resolver, one instance per fork.
