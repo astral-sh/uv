@@ -3,6 +3,14 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.13.3
+
+Released on 2026-10-20.
+
+### Performance
+
+- Avoid severe `uv export` slowdowns in dependency graphs with extras ([#22750](https://github.com/astral-sh/uv/pull/22750))
+
 ## 0.13.2
 
 Released on 2026-10-19.
@@ -250,4 +258,5 @@ See [changelogs/0.2.x](./changelogs/0.2.x.md)
 See [changelogs/0.1.x](./changelogs/0.1.x.md)
 
 <!-- prettier-ignore-end -->
+
 
