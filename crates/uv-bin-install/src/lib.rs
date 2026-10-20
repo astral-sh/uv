@@ -312,7 +312,7 @@ impl fmt::Display for BinVersion {
 const RUFF_GITHUB_URL_PREFIX: &str = "https://github.com/astral-sh/ruff/releases/download/";
 
 /// The pinned serc version used for bytecode compilation.
-const SERC_VERSION: [u64; 3] = [0, 1, 6];
+const SERC_VERSION: [u64; 3] = [0, 1, 7];
 
 /// The canonical GitHub URL prefix for serc releases.
 const SERC_GITHUB_URL_PREFIX: &str = "https://github.com/astral-sh/serc/releases/download/";
@@ -1449,11 +1449,11 @@ mod tests {
             urls,
             vec![
                 SafeUrl::parse(
-                    "https://releases.astral.sh/github/serc/releases/download/0.1.6/serc-aarch64-apple-darwin.tar.gz",
+                    "https://releases.astral.sh/github/serc/releases/download/0.1.7/serc-aarch64-apple-darwin.tar.gz",
                 )
                 .expect("default Astral mirror serc URL should be valid"),
                 SafeUrl::parse(
-                    "https://github.com/astral-sh/serc/releases/download/0.1.6/serc-aarch64-apple-darwin.tar.gz",
+                    "https://github.com/astral-sh/serc/releases/download/0.1.7/serc-aarch64-apple-darwin.tar.gz",
                 )
                 .expect("canonical serc URL should be valid"),
             ]
@@ -1462,7 +1462,7 @@ mod tests {
         assert!(
             !Binary::Serc
                 .default_constraints()
-                .contains(&Version::new([0, 1, 7]))
+                .contains(&Version::new([0, 1, 8]))
         );
     }
 
@@ -1481,7 +1481,7 @@ mod tests {
             urls,
             vec![
                 SafeUrl::parse(
-                    "https://nexus.example.com/repository/releases.astral.sh/github/serc/releases/download/0.1.6/serc-aarch64-apple-darwin.tar.gz",
+                    "https://nexus.example.com/repository/releases.astral.sh/github/serc/releases/download/0.1.7/serc-aarch64-apple-darwin.tar.gz",
                 )
                 .expect("custom Astral mirror serc URL should be valid"),
             ]
@@ -1491,7 +1491,7 @@ mod tests {
     #[test]
     fn serc_mirror_urls_custom_astral_mirror() {
         let canonical_url = SafeUrl::parse(
-            "https://github.com/astral-sh/serc/releases/download/0.1.6/serc-aarch64-apple-darwin.tar.gz",
+            "https://github.com/astral-sh/serc/releases/download/0.1.7/serc-aarch64-apple-darwin.tar.gz",
         )
         .expect("canonical serc URL should be valid");
         let urls = Binary::Serc
@@ -1505,7 +1505,7 @@ mod tests {
             urls,
             vec![
                 SafeUrl::parse(
-                    "https://nexus.example.com/repository/releases.astral.sh/github/serc/releases/download/0.1.6/serc-aarch64-apple-darwin.tar.gz",
+                    "https://nexus.example.com/repository/releases.astral.sh/github/serc/releases/download/0.1.7/serc-aarch64-apple-darwin.tar.gz",
                 )
                 .expect("custom Astral mirror serc URL should be valid"),
             ]
@@ -1515,7 +1515,7 @@ mod tests {
     #[test]
     fn serc_mirror_urls_use_default_astral_mirror_then_github() {
         let canonical_url = SafeUrl::parse(
-            "https://github.com/astral-sh/serc/releases/download/0.1.6/serc-aarch64-apple-darwin.tar.gz",
+            "https://github.com/astral-sh/serc/releases/download/0.1.7/serc-aarch64-apple-darwin.tar.gz",
         )
         .expect("canonical serc URL should be valid");
         let default_urls = Binary::Serc
@@ -1530,7 +1530,7 @@ mod tests {
             default_urls,
             vec![
                 SafeUrl::parse(
-                    "https://releases.astral.sh/github/serc/releases/download/0.1.6/serc-aarch64-apple-darwin.tar.gz",
+                    "https://releases.astral.sh/github/serc/releases/download/0.1.7/serc-aarch64-apple-darwin.tar.gz",
                 )
                 .expect("default Astral mirror serc URL should be valid"),
                 canonical_url,
