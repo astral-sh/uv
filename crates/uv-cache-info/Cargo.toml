@@ -17,7 +17,6 @@ workspace = true
 
 [dependencies]
 uv-fs = { workspace = true }
-uv-warnings = { workspace = true }
 
 fs-err = { workspace = true }
 globwalk = { workspace = true }

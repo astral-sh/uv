@@ -2,15 +2,11 @@ use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use serde::de::{
-    IgnoredAny, MapAccess, SeqAccess, Visitor,
-    value::{MapAccessDeserializer, SeqAccessDeserializer},
-};
+use serde::de::{IgnoredAny, MapAccess, Visitor, value::MapAccessDeserializer};
 use serde::{Deserialize, Deserializer};
 use tracing::{debug, info_span, warn};
 
 use uv_fs::{Simplified, created_time};
-use uv_warnings::warn_user_once;
 
 use crate::git_info::{Commit, Tags};
 use crate::glob::cluster_globs;
@@ -18,6 +14,8 @@ use crate::timestamp::Timestamp;
 
 #[derive(Debug, thiserror::Error)]
 pub enum CacheInfoError {
+    #[error("Failed to parse cache keys in `{}`", _0.user_display())]
+    PyprojectToml(PathBuf, #[source] Box<toml::de::Error>),
     #[error("Failed to parse glob patterns for `cache-keys`: {0}")]
     Glob(#[from] globwalk::GlobError),
     #[error(transparent)]
@@ -76,16 +74,14 @@ impl CacheInfo {
         // Read the cache keys.
         let pyproject_path = directory.join("pyproject.toml");
         let cache_keys = if let Ok(contents) = fs_err::read_to_string(&pyproject_path) {
-            let result = info_span!("toml::from_str cache keys", path = %pyproject_path.display())
-                .in_scope(|| toml::from_str::<PyProjectToml>(&contents));
-            if let Ok(pyproject_toml) = result {
-                pyproject_toml
-                    .tool
-                    .and_then(|tool| tool.uv)
-                    .and_then(|tool_uv| tool_uv.cache_keys)
-            } else {
-                None
-            }
+            let pyproject_toml =
+                info_span!("toml::from_str cache keys", path = %pyproject_path.display())
+                    .in_scope(|| toml::from_str::<PyProjectToml>(&contents))
+                    .map_err(|err| CacheInfoError::PyprojectToml(pyproject_path, Box::new(err)))?;
+            pyproject_toml
+                .tool
+                .and_then(|tool| tool.uv)
+                .and_then(|tool_uv| tool_uv.cache_keys)
         } else {
             None
         };
@@ -424,9 +420,7 @@ impl<'de> Deserialize<'de> for CacheKey {
             }
         }
 
-        deserializer.deserialize_any(CacheKeyVisitor).map_err(|_| {
-            serde::de::Error::custom("data did not match any variant of untagged enum CacheKey")
-        })
+        deserializer.deserialize_any(CacheKeyVisitor)
     }
 }
 
@@ -468,29 +462,9 @@ impl<'de> Deserialize<'de> for GitPattern {
             {
                 GitSet::deserialize(MapAccessDeserializer::new(map)).map(GitPattern::Set)
             }
-
-            fn visit_seq<A>(self, mut sequence: A) -> Result<Self::Value, A::Error>
-            where
-                A: SeqAccess<'de>,
-            {
-                let git = GitSet::deserialize(SeqAccessDeserializer::new(&mut sequence))?;
-                if sequence.next_element::<IgnoredAny>()?.is_some() {
-                    return Err(serde::de::Error::custom("extra Git cache field"));
-                }
-                warn_user_once!(
-                    "The array form of `git` cache keys is deprecated and will be removed in a future release. Use a table with `commit` and `tags` fields instead. Array elements correspond to `commit`, then `tags`."
-                );
-                Ok(GitPattern::Set(git))
-            }
         }
 
-        deserializer
-            .deserialize_any(GitPatternVisitor)
-            .map_err(|_| {
-                serde::de::Error::custom(
-                    "data did not match any variant of untagged enum GitPattern",
-                )
-            })
+        deserializer.deserialize_any(GitPatternVisitor)
     }
 }
 
@@ -587,46 +561,49 @@ mod tests {
     }
 
     #[test]
-    fn cache_key_git_sequence() -> Result<(), toml::de::Error> {
-        let key: CacheKey = toml::from_str("git = [true, false]")?;
-        insta::assert_debug_snapshot!(key, @r#"
-        Git {
-            git: Set(
-                GitSet {
-                    commit: Some(
-                        true,
-                    ),
-                    tags: Some(
-                        false,
-                    ),
-                },
-            ),
-        }
-        "#);
-        Ok(())
-    }
-
-    #[test]
-    fn cache_key_git_sequence_extra_field() {
-        insta::assert_snapshot!(toml::from_str::<CacheKey>("git = [true, false, true]").unwrap_err(), @"data did not match any variant of untagged enum CacheKey");
+    fn cache_key_git_sequence() {
+        insta::assert_snapshot!(toml::from_str::<CacheKey>("git = [true, false]").unwrap_err(), @"
+        TOML parse error at line 1, column 7
+          |
+        1 | git = [true, false]
+          |       ^^^^^^^^^^^^^
+        invalid type: sequence, expected a boolean or a Git cache key table
+        ");
     }
 
     #[test]
     fn cache_key_extra_field() {
-        insta::assert_snapshot!(toml::from_str::<CacheKey>(r#"
-            file = "Cargo.lock"
+        insta::assert_snapshot!(toml::from_str::<CacheKey>(r#"file = "Cargo.lock"
             env = "UV_CACHE_INFO"
-        "#).unwrap_err(), @"data did not match any variant of untagged enum CacheKey");
+        "#).unwrap_err(), @r#"
+        TOML parse error at line 1, column 1
+          |
+        1 | file = "Cargo.lock"
+          | ^
+        extra cache key field
+        "#);
     }
 
     #[test]
     fn cache_key_invalid_git() {
-        insta::assert_snapshot!(toml::from_str::<CacheKey>("git = { commit = 42 }").unwrap_err(), @"data did not match any variant of untagged enum CacheKey");
+        insta::assert_snapshot!(toml::from_str::<CacheKey>("git = { commit = 42 }").unwrap_err(), @"
+        TOML parse error at line 1, column 18
+          |
+        1 | git = { commit = 42 }
+          |                  ^^
+        invalid type: integer `42`, expected a boolean
+        ");
     }
 
     #[test]
     fn git_pattern_unknown_field() {
-        insta::assert_snapshot!(toml::from_str::<GitPattern>("unknown = true").unwrap_err(), @"data did not match any variant of untagged enum GitPattern");
+        insta::assert_snapshot!(toml::from_str::<GitPattern>("unknown = true").unwrap_err(), @"
+        TOML parse error at line 1, column 1
+          |
+        1 | unknown = true
+          | ^^^^^^^
+        unknown field `unknown`, expected `commit` or `tags`
+        ");
     }
 }
 

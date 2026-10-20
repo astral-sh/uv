@@ -37,39 +37,38 @@ fn cache_dir_uses_configured_test_context_path() {
     ");
 }
 
-/// Multiple array-form Git cache keys emit one warning and remain accepted until migrated to tables.
+/// Invalid cache keys in a local dependency must fail instead of falling back to the default keys.
 #[test]
-fn cache_key_git_sequence_deprecated() -> Result<()> {
-    let context = uv_test::test_context_with_versions!(&[]);
+fn cache_key_git_sequence() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
 
-    let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(
-        r"
+    let project = context.temp_dir.child("project");
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["uv_build>=0.5.15,<10000"]
+        build-backend = "uv_build"
+
         [tool.uv]
-        cache-keys = [{ git = [true, false] }, { git = [false, true] }]
-        ",
-    )?;
+        cache-keys = [{ git = [true, false] }]
+    "#})?;
+    project.child("src/project/__init__.py").touch()?;
 
-    uv_snapshot!(context.filters(), context.command().arg("cache").arg("dir"), @"
-    exit_code: 0 (success)
-    ----- stdout -----
-    [CACHE_DIR]/
-
+    uv_snapshot!(context.filters(), context.pip_install().arg("./project").arg("--offline"), @"
+    exit_code: 2 (failure)
     ----- stderr -----
-    warning: The array form of `git` cache keys is deprecated and will be removed in a future release. Use a table with `commit` and `tags` fields instead. Array elements correspond to `commit`, then `tags`.
-    ");
-
-    pyproject_toml.write_str(
-        r"
-        [tool.uv]
-        cache-keys = [{ git = { commit = true, tags = false } }, { git = { commit = false, tags = true } }]
-        ",
-    )?;
-
-    uv_snapshot!(context.filters(), context.command().arg("cache").arg("dir"), @"
-    exit_code: 0 (success)
-    ----- stdout -----
-    [CACHE_DIR]/
+    Resolved 1 package in [TIME]
+    error: Failed to build `project @ file://[TEMP_DIR]/project`
+      cause: Failed to parse cache keys in `project/pyproject.toml`
+      cause: TOML parse error at line 11, column 23
+                |
+             11 | cache-keys = [{ git = [true, false] }]
+                |                       ^^^^^^^^^^^^^
+             invalid type: sequence, expected a boolean or a Git cache key table
     ");
 
     Ok(())
