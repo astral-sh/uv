@@ -6014,6 +6014,8 @@ name = "uv-build-commands"
 version = "0.0.95"
 dependencies = [
  "anyhow",
+ "astral-tokio-tar",
+ "async-compression",
  "fs-err",
  "futures",
  "owo-colors",
@@ -6026,6 +6028,7 @@ dependencies = [
  "uv-build-backend",
  "uv-build-frontend",
  "uv-cache",
+ "uv-cli",
  "uv-client",
  "uv-command-support",
  "uv-configuration",
@@ -6039,9 +6042,12 @@ dependencies = [
  "uv-fs",
  "uv-install-wheel",
  "uv-installer",
+ "uv-lock",
+ "uv-lock-operations",
  "uv-normalize",
  "uv-pep440",
  "uv-preview",
+ "uv-pypi-types",
  "uv-python-discovery",
  "uv-python-interpreter",
  "uv-python-types",
@@ -6903,6 +6909,8 @@ dependencies = [
 name = "uv-lock"
 version = "0.0.95"
 dependencies = [
+ "anyhow",
+ "astral-version-ranges",
  "either",
  "fs-err",
  "futures",
@@ -6949,6 +6957,7 @@ dependencies = [
  "uv-redacted",
  "uv-resolver-types",
  "uv-small-str",
+ "uv-static",
  "uv-types",
  "uv-version",
  "uv-warnings",

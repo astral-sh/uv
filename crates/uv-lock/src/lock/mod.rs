@@ -3014,6 +3014,56 @@ impl Lock {
         upgrade_packages
     }
 
+    /// Check whether packages contain only local workspace members and PyPI packages.
+    pub(crate) fn has_only_pypi_and_workspace_sources(&self, packages: &[&Package]) -> bool {
+        packages.iter().all(|package| {
+            (self.is_workspace_package(package) && package.id.source.is_local())
+                || package.is_from_pypi_registry()
+        })
+    }
+
+    /// Check whether a PyPI registry artifact has no URL.
+    pub(crate) fn has_pypi_artifacts_without_urls(packages: &[&Package]) -> bool {
+        packages.iter().any(|package| {
+            package.is_from_pypi_registry()
+                && (match &package.sdist {
+                    Some(SourceDist::Path { .. } | SourceDist::Metadata { .. }) => true,
+                    None | Some(SourceDist::Url { .. }) => false,
+                } || package.wheels.iter().any(|wheel| match &wheel.url {
+                    WheelWireSource::Path { .. } | WheelWireSource::Filename { .. } => true,
+                    WheelWireSource::Url { .. } => false,
+                }))
+        })
+    }
+
+    /// Check whether a package's runtime declarations match its recorded metadata.
+    pub(crate) fn matches_package_requirements(
+        &self,
+        root: &Path,
+        package: &Package,
+        requires_dist: &[Requirement],
+        provides_extras: &[ExtraName],
+    ) -> Result<bool, LockError> {
+        let expected: BTreeSet<_> = provides_extras.iter().collect();
+        let actual: BTreeSet<_> = package.metadata.provides_extra.iter().collect();
+        let normalizer = RequirementNormalizer::new(root, &self.requires_python);
+        Ok(normalizer.requirements(requires_dist.iter().cloned())?
+            == normalizer.requirements(package.metadata.requires_dist.iter().cloned())?
+            && (!self.supports_provides_extra() || expected == actual))
+    }
+
+    /// Compare two sets of runtime declarations using the supplied Python range.
+    pub(crate) fn matches_requirements_for_python(
+        root: &Path,
+        requires_python: &RequiresPython,
+        left: &[Requirement],
+        right: &[Requirement],
+    ) -> Result<bool, LockError> {
+        let normalizer = RequirementNormalizer::new(root, requires_python);
+        Ok(normalizer.requirements(left.iter().cloned())?
+            == normalizer.requirements(right.iter().cloned())?)
+    }
+
     /// Return a [`HashStrategy`] that verifies artifacts recorded in this lockfile.
     ///
     /// Registry hashes apply to package names and versions; direct archive hashes apply to URLs
@@ -7905,7 +7955,8 @@ impl Source {
     fn is_pypi_registry(&self) -> bool {
         matches!(
             self,
-            Self::Registry(RegistrySource::Url(url)) if url.as_ref() == PYPI_URL.as_str()
+            Self::Registry(RegistrySource::Url(url))
+                if url.as_ref().strip_suffix('/').unwrap_or(url.as_ref()) == PYPI_URL.as_str()
         )
     }
 
