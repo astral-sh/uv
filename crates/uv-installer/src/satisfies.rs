@@ -6,11 +6,12 @@ use tracing::{debug, trace};
 
 use uv_cache_info::CacheInfo;
 use uv_cache_key::{CanonicalUrl, RepositoryUrl};
-use uv_distribution_filename::ExpandedTags;
+use uv_distribution::InstalledWheelVariant;
+use uv_distribution_filename::{DistExtension, ExpandedTags, WheelFilename};
 use uv_distribution_types::{
     BuildInfo, BuildVariables, ConfigSettings, ExtraBuildRequirement, ExtraBuildRequires,
     ExtraBuildVariables, InstalledDirectUrlDist, InstalledDist, InstalledDistKind,
-    PackageConfigSettings, RequirementSource,
+    PackageConfigSettings, RemoteSource, RequirementSource,
 };
 use uv_git_types::GitLfs;
 use uv_normalize::PackageName;
@@ -29,10 +30,10 @@ pub struct BuildSettings<'a> {
     pub extra_build_variables: &'a ExtraBuildVariables,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug)]
 pub(crate) enum RequirementSatisfaction {
     Mismatch,
-    Satisfied,
+    Satisfied(InstalledWheelVariant),
     OutOfDate,
     CacheInvalid,
 }
@@ -454,9 +455,6 @@ impl RequirementSatisfaction {
             }
         }
 
-        // TODO(konsti): Check the installed wheel's variant against the current system properties.
-        // Those can change even when the wheel and its platform tags stay the same.
-
         // If a resolved version is provided, check that it matches the installed version.
         // This is needed for sources that don't include explicit version specifiers (e.g.,
         // directory dependencies with dynamic versioning), where the resolver may have determined
@@ -472,9 +470,44 @@ impl RequirementSatisfaction {
             }
         }
 
-        // Otherwise, assume the requirement is up-to-date.
-        Self::Satisfied
+        let variant = InstalledWheelVariant::check(distribution);
+        if !variant.is_compatible()
+            || source_wheel_filename(source)
+                .is_some_and(|filename| !variant.matches(filename.variant()))
+        {
+            return Self::Mismatch;
+        }
+
+        Self::Satisfied(variant)
     }
+}
+
+/// Return the wheel filename for a direct wheel requirement.
+fn source_wheel_filename(source: &RequirementSource) -> Option<WheelFilename> {
+    let filename = match source {
+        RequirementSource::Url {
+            location,
+            ext: DistExtension::Wheel,
+            ..
+        } => location.filename().ok()?,
+        RequirementSource::GitPath {
+            install_path,
+            ext: DistExtension::Wheel,
+            ..
+        } => Cow::Borrowed(install_path.file_name()?.to_str()?),
+        RequirementSource::Path {
+            install_path,
+            ext: DistExtension::Wheel,
+            ..
+        } => Cow::Borrowed(install_path.file_name()?.to_str()?),
+        RequirementSource::Registry { .. }
+        | RequirementSource::Url { .. }
+        | RequirementSource::GitDirectory { .. }
+        | RequirementSource::GitPath { .. }
+        | RequirementSource::Path { .. }
+        | RequirementSource::Directory { .. } => return None,
+    };
+    filename.parse().ok()
 }
 
 /// Determine the [`ConfigSettings`] for the given package name.
