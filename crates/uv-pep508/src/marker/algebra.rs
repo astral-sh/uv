@@ -850,6 +850,100 @@ impl InternerGuard<'_> {
         result
     }
 
+    /// Substitute activation intervals without enumerating DNF paths.
+    pub(crate) fn resolve_extras_with_bounds(
+        &mut self,
+        marker: NodeId,
+        known_extras: &FxHashMap<ExtraName, (NodeId, NodeId)>,
+    ) -> (NodeId, NodeId) {
+        self.resolve_extras_with_bounds_cached(marker, known_extras, &mut FxHashMap::default())
+    }
+
+    /// Transform each signed node once, computing both activation bounds together.
+    fn resolve_extras_with_bounds_cached(
+        &mut self,
+        marker: NodeId,
+        known_extras: &FxHashMap<ExtraName, (NodeId, NodeId)>,
+        cache: &mut FxHashMap<NodeId, (NodeId, NodeId)>,
+    ) -> (NodeId, NodeId) {
+        if marker.is_true() || marker.is_false() {
+            return (marker, marker);
+        }
+        if let Some(&result) = cache.get(&marker) {
+            return result;
+        }
+
+        let node = self.shared.node(marker);
+        let result = if let (Variable::Extra(name), Edges::Boolean { high, low }) =
+            (&node.var, &node.children)
+        {
+            let (lower, upper) = known_extras
+                .get(name.extra())
+                .copied()
+                .unwrap_or((NodeId::FALSE, NodeId::FALSE));
+            debug_assert!(self.and(lower, upper.not()).is_false());
+
+            if lower.is_true() {
+                self.resolve_extras_with_bounds_cached(high.negate(marker), known_extras, cache)
+            } else if upper.is_false() {
+                self.resolve_extras_with_bounds_cached(low.negate(marker), known_extras, cache)
+            } else {
+                let (high_lower, high_upper) = self.resolve_extras_with_bounds_cached(
+                    high.negate(marker),
+                    known_extras,
+                    cache,
+                );
+                let (low_lower, low_upper) =
+                    self.resolve_extras_with_bounds_cached(low.negate(marker), known_extras, cache);
+
+                // An extra is definitely absent only outside its upper bound; it is possibly
+                // absent outside its lower bound. Negation therefore swaps the bounds.
+                let positive_lower = self.and(lower, high_lower);
+                let negative_lower = self.and(upper.not(), low_lower);
+                let mut result_lower = self.or(positive_lower, negative_lower);
+                if lower != upper {
+                    // Both branches can guarantee the marker even when this extra is unknown:
+                    // `x or y` is true if `y` is definitely true, regardless of `x`.
+                    let consensus = self.and(high_lower, low_lower);
+                    result_lower = self.or(result_lower, consensus);
+                }
+
+                let positive_upper = self.and(upper, high_upper);
+                let negative_upper = self.and(lower.not(), low_upper);
+                (result_lower, self.or(positive_upper, negative_upper))
+            }
+        } else {
+            let mut lower_changed = false;
+            let lower_children = node.children.map(marker, |child| {
+                let (lower, _) = self.resolve_extras_with_bounds_cached(child, known_extras, cache);
+                lower_changed |= lower != child;
+                lower
+            });
+
+            let mut upper_changed = false;
+            let upper_children = node.children.map(marker, |child| {
+                let (_, upper) = self.resolve_extras_with_bounds_cached(child, known_extras, cache);
+                upper_changed |= upper != child;
+                upper
+            });
+
+            let lower = if lower_changed {
+                self.rebuild_node(&node.var, lower_children)
+            } else {
+                marker
+            };
+            let upper = if upper_changed {
+                self.rebuild_node(&node.var, upper_children)
+            } else {
+                marker
+            };
+            (lower, upper)
+        };
+
+        cache.insert(marker, result);
+        result
+    }
+
     /// Rebuild a decision after substitution, allowing children to introduce earlier variables.
     /// Calling `create_node` directly would violate the diagram's variable ordering.
     fn rebuild_node(&mut self, variable: &Variable, children: EdgeBuilder) -> NodeId {
