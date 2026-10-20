@@ -37,6 +37,44 @@ fn cache_dir_uses_configured_test_context_path() {
     ");
 }
 
+/// Multiple array-form Git cache keys emit one warning and remain accepted until migrated to tables.
+#[test]
+fn cache_key_git_sequence_deprecated() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]);
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r"
+        [tool.uv]
+        cache-keys = [{ git = [true, false] }, { git = [false, true] }]
+        ",
+    )?;
+
+    uv_snapshot!(context.filters(), context.command().arg("cache").arg("dir"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [CACHE_DIR]/
+
+    ----- stderr -----
+    warning: The array form of `git` cache keys is deprecated and will be removed in a future release. Use a table with `commit` and `tags` fields instead. Array elements correspond to `commit`, then `tags`.
+    ");
+
+    pyproject_toml.write_str(
+        r"
+        [tool.uv]
+        cache-keys = [{ git = { commit = true, tags = false } }, { git = { commit = false, tags = true } }]
+        ",
+    )?;
+
+    uv_snapshot!(context.filters(), context.command().arg("cache").arg("dir"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [CACHE_DIR]/
+    ");
+
+    Ok(())
+}
+
 /// When the active cache directory is inside an explicit build source, we should warn and continue
 /// the build.
 #[test]

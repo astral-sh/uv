@@ -10,6 +10,7 @@ use serde::{Deserialize, Deserializer};
 use tracing::{debug, info_span, warn};
 
 use uv_fs::{Simplified, created_time};
+use uv_warnings::warn_user_once;
 
 use crate::git_info::{Commit, Tags};
 use crate::glob::cluster_globs;
@@ -476,6 +477,9 @@ impl<'de> Deserialize<'de> for GitPattern {
                 if sequence.next_element::<IgnoredAny>()?.is_some() {
                     return Err(serde::de::Error::custom("extra Git cache field"));
                 }
+                warn_user_once!(
+                    "The array form of `git` cache keys is deprecated and will be removed in a future release. Use a table with `commit` and `tags` fields instead. Array elements correspond to `commit`, then `tags`."
+                );
                 Ok(GitPattern::Set(git))
             }
         }
