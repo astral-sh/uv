@@ -6,11 +6,16 @@
 #     "keyrings-alt",
 #     "packaging>=24.1,<25",
 #     "pypi-attestations>=0.0.28",
-#     "sigstore>=4.4.0",
+#     "sigstore>=4.5.1",
 # ]
 # [tool.uv]
 # no-build = true
 # exclude-newer = "P7D"
+#
+# [tool.uv.exclude-newer-package]
+# # Override the seven-day cutoff to allow sigstore 4.5.1, recommended in
+# # response to the eMudhra certificate incident.
+# sigstore = "2026-10-20T15:12:51Z"
 # ///
 
 """Test `uv publish`.
