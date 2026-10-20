@@ -1,5 +1,7 @@
 use anyhow::{Result, anyhow};
 use assert_fs::prelude::*;
+#[cfg(feature = "test-pypi")]
+use indoc::indoc;
 use insta::allow_duplicates;
 
 #[cfg(feature = "test-pypi")]
@@ -517,7 +519,10 @@ fn upgrade_updates_requirement_without_updating_lockfile_or_environment() -> Res
     assert_eq!(context.read_bytes("uv.lock"), lock);
     let lock_contents = context.read("uv.lock");
     assert!(
-        lock_contents.contains("name = \"idna\"\nversion = \"2.10\""),
+        lock_contents.contains(indoc! {r#"
+            name = "idna"
+            version = "2.10"
+        "#}),
         "{lock_contents}"
     );
     assert!(environment_sentinel.exists());

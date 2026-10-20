@@ -15,7 +15,7 @@ use http_body_util::{BodyExt, StreamBody};
 use hyper::body::Frame;
 use hyper::service::service_fn;
 use hyper_util::rt::TokioIo;
-use indoc::formatdoc;
+use indoc::{formatdoc, indoc};
 use insta::{allow_duplicates, assert_snapshot};
 use serde_json::json;
 use sha2::{Digest, Sha256};
@@ -1362,7 +1362,10 @@ fn assert_wheel_download(
     let site_packages = context.site_packages();
     assert_eq!(
         context.read(site_packages.join("build_tag/__init__.py")),
-        "def main():\n    print(\"1\")\n",
+        indoc! {r#"
+            def main():
+                print("1")
+        "#},
     );
     let metadata = context.read(site_packages.join("build_tag-1.0.0.dist-info/METADATA"));
     let wheel = context.read(site_packages.join("build_tag-1.0.0.dist-info/WHEEL"));

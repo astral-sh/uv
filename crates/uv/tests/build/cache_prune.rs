@@ -247,7 +247,10 @@ async fn prune_force() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_filtered_counts();
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("typing-extensions\niniconfig")?;
+    requirements_txt.write_str(indoc! {"
+        typing-extensions
+        iniconfig
+    "})?;
 
     // Install a requirement, to populate the cache.
     context

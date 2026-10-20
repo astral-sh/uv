@@ -5,6 +5,7 @@ use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::fixture::ChildPath;
 use assert_fs::prelude::*;
+use indoc::{formatdoc, indoc};
 
 use uv_test::uv_snapshot;
 
@@ -358,7 +359,11 @@ fn uninstall_versionless_egg_info_file() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let egg_info = ChildPath::new(context.site_packages()).child("demo.egg-info");
-    egg_info.write_str("Metadata-Version: 1.1\nName: demo\nVersion: 1.0\n")?;
+    egg_info.write_str(indoc! {"
+        Metadata-Version: 1.1
+        Name: demo
+        Version: 1.0
+    "})?;
 
     uv_snapshot!(context.pip_uninstall().arg("demo"), @"
     exit_code: 2 (failure)
@@ -406,10 +411,15 @@ Version: 0.22.0
         .child("zstandard.egg-link")
         .write_str(target.path().to_str().unwrap())?;
 
-    site_packages.child("easy-install.pth").write_str(&format!(
-        "something\n{}\nanother thing\n",
-        normcase(target.path().to_str().unwrap())
-    ))?;
+    site_packages
+        .child("easy-install.pth")
+        .write_str(&formatdoc! {"
+            something
+            {}
+            another thing
+        ",
+            normcase(target.path().to_str().unwrap())
+        })?;
 
     // Run `pip uninstall`.
     uv_snapshot!(context.pip_uninstall()
@@ -423,7 +433,10 @@ Version: 0.22.0
     // The entry in `easy-install.pth` should be removed.
     assert_eq!(
         context.read(site_packages.child("easy-install.pth")),
-        "something\nanother thing\n",
+        indoc! {"
+            something
+            another thing
+        "},
         "easy-install.pth should not contain the path to the uninstalled package"
     );
     // The `.egg-link` file should be removed.
@@ -538,7 +551,12 @@ fn uninstall_record_path_traversal() -> Result<()> {
         .site_packages()
         .join("evilpkg-0.1.0.dist-info/RECORD");
     let record = context.read(&record_file);
-    let record = format!("{}\n{},,0\n", record.trim(), traversal_record);
+    let record = formatdoc! {"
+        {}
+        {traversal_record},,0
+    ",
+        record.trim()
+    };
     fs_err::write(record_file, &record)?;
 
     let init_py = context.site_packages().join("evilpkg/__init__.py");
@@ -590,9 +608,10 @@ fn uninstall_egg_info_top_level_path_traversal() -> Result<()> {
     let traversal_entry = format!("{}traversal_target", "../".repeat(depth));
     assert!(context.site_packages().join(&traversal_entry).exists());
 
-    egg_info
-        .child("top_level.txt")
-        .write_str(&format!("evilpkg\n{traversal_entry}\n"))?;
+    egg_info.child("top_level.txt").write_str(&formatdoc! {"
+        evilpkg
+        {traversal_entry}
+    "})?;
 
     let init_py = site_packages.child("evilpkg").child("__init__.py");
     init_py.touch()?;
@@ -641,9 +660,10 @@ fn uninstall_egg_info_top_level_drive_relative() -> Result<()> {
         .child("traversal_target")
         .child("secret.txt");
     target_file.write_str("I should not be deleted")?;
-    egg_info
-        .child("top_level.txt")
-        .write_str(&format!("evilpkg\n{traversal_entry}\n"))?;
+    egg_info.child("top_level.txt").write_str(&formatdoc! {"
+        evilpkg
+        {traversal_entry}
+    "})?;
 
     let init_py = site_packages.child("evilpkg").child("__init__.py");
     init_py.touch()?;

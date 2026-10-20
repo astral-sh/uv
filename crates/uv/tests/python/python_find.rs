@@ -1120,7 +1120,11 @@ fn python_find_script_interpreter_error_chain() -> Result<()> {
         # ///
     "})?;
     let python = context.temp_dir.child("broken-python");
-    python.write_str("#!/bin/sh\nprintf 'interpreter probe failed\\n' >&2\nexit 42\n")?;
+    python.write_str(indoc! {r"
+        #!/bin/sh
+        printf 'interpreter probe failed\n' >&2
+        exit 42
+    "})?;
     fs_err::set_permissions(&python, std::fs::Permissions::from_mode(0o755))?;
     context
         .temp_dir

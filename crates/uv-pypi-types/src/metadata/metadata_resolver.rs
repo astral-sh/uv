@@ -275,6 +275,8 @@ mod tests {
     use std::assert_matches;
     use std::str::FromStr;
 
+    use indoc::indoc;
+
     use uv_normalize::PackageName;
     use uv_pep440::Version;
 
@@ -287,26 +289,48 @@ mod tests {
         let meta = ResolutionMetadata::parse_metadata(s.as_bytes());
         assert_matches!(meta, Err(MetadataError::FieldNotFound("Name")));
 
-        let s = "Metadata-Version: 1.0\nName: asdf";
+        let s = indoc! {"
+            Metadata-Version: 1.0
+            Name: asdf
+        "};
         let meta = ResolutionMetadata::parse_metadata(s.as_bytes());
         assert_matches!(meta, Err(MetadataError::FieldNotFound("Version")));
 
-        let s = "Metadata-Version: 1.0\nName: asdf\nVersion: 1.0";
+        let s = indoc! {"
+            Metadata-Version: 1.0
+            Name: asdf
+            Version: 1.0"
+        };
         let meta = ResolutionMetadata::parse_metadata(s.as_bytes()).unwrap();
         assert_eq!(meta.name, PackageName::from_str("asdf").unwrap());
         assert_eq!(meta.version, Version::new([1, 0]));
 
-        let s = "Metadata-Version: 1.0\nName: asdf\nVersion: 1.0\nAuthor: 中文\n\n一个 Python 包";
+        let s = indoc! {"
+            Metadata-Version: 1.0
+            Name: asdf
+            Version: 1.0
+            Author: 中文
+
+            一个 Python 包
+        "};
         let meta = ResolutionMetadata::parse_metadata(s.as_bytes()).unwrap();
         assert_eq!(meta.name, PackageName::from_str("asdf").unwrap());
         assert_eq!(meta.version, Version::new([1, 0]));
 
-        let s = "Metadata-Version: 1.0\nName: =?utf-8?q?foobar?=\nVersion: 1.0";
+        let s = indoc! {"
+            Metadata-Version: 1.0
+            Name: =?utf-8?q?foobar?=
+            Version: 1.0
+        "};
         let meta = ResolutionMetadata::parse_metadata(s.as_bytes()).unwrap();
         assert_eq!(meta.name, PackageName::from_str("foobar").unwrap());
         assert_eq!(meta.version, Version::new([1, 0]));
 
-        let s = "Metadata-Version: 1.0\nName: =?utf-8?q?=C3=A4_space?= <x@y.org>\nVersion: 1.0";
+        let s = indoc! {"
+            Metadata-Version: 1.0
+            Name: =?utf-8?q?=C3=A4_space?= <x@y.org>
+            Version: 1.0
+        "};
         let meta = ResolutionMetadata::parse_metadata(s.as_bytes());
         assert_matches!(meta, Err(MetadataError::InvalidName(_)));
     }
@@ -317,24 +341,44 @@ mod tests {
         let meta = ResolutionMetadata::parse_pkg_info(s.as_bytes());
         assert_matches!(meta, Err(MetadataError::UnsupportedMetadataVersion(_)));
 
-        let s = "Metadata-Version: 2.2\nName: asdf";
+        let s = indoc! {"
+            Metadata-Version: 2.2
+            Name: asdf
+        "};
         let meta = ResolutionMetadata::parse_pkg_info(s.as_bytes());
         assert_matches!(meta, Err(MetadataError::FieldNotFound("Version")));
 
-        let s = "Metadata-Version: 2.3\nName: asdf";
+        let s = indoc! {"
+            Metadata-Version: 2.3
+            Name: asdf
+        "};
         let meta = ResolutionMetadata::parse_pkg_info(s.as_bytes());
         assert_matches!(meta, Err(MetadataError::FieldNotFound("Version")));
 
-        let s = "Metadata-Version: 2.3\nName: asdf\nVersion: 1.0";
+        let s = indoc! {"
+            Metadata-Version: 2.3
+            Name: asdf
+            Version: 1.0
+        "};
         let meta = ResolutionMetadata::parse_pkg_info(s.as_bytes()).unwrap();
         assert_eq!(meta.name, PackageName::from_str("asdf").unwrap());
         assert_eq!(meta.version, Version::new([1, 0]));
 
-        let s = "Metadata-Version: 2.3\nName: asdf\nVersion: 1.0\nDynamic: Requires-Dist";
+        let s = indoc! {"
+            Metadata-Version: 2.3
+            Name: asdf
+            Version: 1.0
+            Dynamic: Requires-Dist
+        "};
         let meta = ResolutionMetadata::parse_pkg_info(s.as_bytes()).unwrap_err();
         assert_matches!(meta, MetadataError::DynamicField("Requires-Dist"));
 
-        let s = "Metadata-Version: 2.3\nName: asdf\nVersion: 1.0\nRequires-Dist: foo";
+        let s = indoc! {"
+            Metadata-Version: 2.3
+            Name: asdf
+            Version: 1.0
+            Requires-Dist: foo"
+        };
         let meta = ResolutionMetadata::parse_pkg_info(s.as_bytes()).unwrap();
         assert_eq!(meta.name, PackageName::from_str("asdf").unwrap());
         assert_eq!(meta.version, Version::new([1, 0]));

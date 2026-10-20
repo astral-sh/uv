@@ -1008,7 +1008,10 @@ mod tests {
         .unwrap();
         fs_err::write(
             src.path().join("license.txt"),
-            "Copy carefully.\nSincerely, the authors",
+            indoc! {"
+                Copy carefully.
+                Sincerely, the authors
+            "},
         )
         .unwrap();
 

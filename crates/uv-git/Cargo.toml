@@ -36,3 +36,6 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 which = { workspace = true }
+
+[dev-dependencies]
+indoc = { workspace = true }

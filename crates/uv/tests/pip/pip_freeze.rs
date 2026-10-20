@@ -2,6 +2,7 @@ use anyhow::{Result, anyhow};
 use assert_cmd::prelude::*;
 use assert_fs::fixture::ChildPath;
 use assert_fs::prelude::*;
+use indoc::{formatdoc, indoc};
 
 use uv_redacted::SafeUrl;
 use uv_test::uv_snapshot;
@@ -11,7 +12,10 @@ fn freeze_many() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
+    requirements_txt.write_str(indoc! {"
+        MarkupSafe==2.1.3
+        tomli==2.0.1
+    "})?;
 
     // Run `pip sync`.
     context
@@ -92,7 +96,10 @@ fn freeze_url() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("anyio\niniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl")?;
+    requirements_txt.write_str(indoc! {"
+        anyio
+        iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl
+    "})?;
 
     // Run `pip sync`.
     context
@@ -127,18 +134,22 @@ fn freeze_direct_archive_hashes() -> Result<()> {
 
     let project = site_packages.child("project-1.0.0.dist-info");
     project.create_dir_all()?;
-    project
-        .child("METADATA")
-        .write_str("Metadata-Version: 2.1\nName: project\nVersion: 1.0.0\n")?;
+    project.child("METADATA").write_str(indoc! {"
+        Metadata-Version: 2.1
+        Name: project
+        Version: 1.0.0
+    "})?;
     project.child("direct_url.json").write_str(
         r#"{"url":"https://example.com/project-1.0.0.tar.gz","subdirectory":"src","archive_info":{"hashes":{"sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}}"#,
     )?;
 
     let legacy = site_packages.child("legacy-1.0.0.dist-info");
     legacy.create_dir_all()?;
-    legacy
-        .child("METADATA")
-        .write_str("Metadata-Version: 2.1\nName: legacy\nVersion: 1.0.0\n")?;
+    legacy.child("METADATA").write_str(indoc! {"
+        Metadata-Version: 2.1
+        Name: legacy
+        Version: 1.0.0
+    "})?;
     legacy.child("direct_url.json").write_str(
         r#"{"url":"https://example.com/legacy-1.0.0.tar.gz","archive_info":{"hash":"sha256=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}}"#,
     )?;
@@ -168,8 +179,11 @@ fn freeze_direct_archive_hash_roundtrip() -> Result<()> {
 
     let ok = site_packages.child("ok-1.0.0.dist-info");
     ok.create_dir_all()?;
-    ok.child("METADATA")
-        .write_str("Metadata-Version: 2.1\nName: ok\nVersion: 1.0.0\n")?;
+    ok.child("METADATA").write_str(indoc! {"
+        Metadata-Version: 2.1
+        Name: ok
+        Version: 1.0.0
+    "})?;
     ok.child("direct_url.json").write_str(&format!(
         r#"{{"url":"{wheel_url}","subdirectory":"src","archive_info":{{"hashes":{{"sha256":"79f0b33e6ce1e09eaa1784c8eee275dfe84d215d9c65c652f07c18e85fdaac5f"}}}}}}"#,
     ))?;
@@ -225,13 +239,15 @@ fn freeze_with_editable() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str(&format!(
-        "anyio\n-e {}",
+    requirements_txt.write_str(&formatdoc! {"
+        anyio
+        -e {}
+    ",
         context
             .workspace_root
             .join("test/packages/poetry_editable")
             .display()
-    ))?;
+    })?;
 
     // Run `pip sync`.
     context
@@ -444,7 +460,10 @@ fn freeze_path() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
+    requirements_txt.write_str(indoc! {"
+        MarkupSafe==2.1.3
+        tomli==2.0.1
+    "})?;
 
     let target = context.temp_dir.child("install-path");
 
@@ -475,10 +494,16 @@ fn freeze_multiple_paths() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let requirements_txt1 = context.temp_dir.child("requirements1.txt");
-    requirements_txt1.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
+    requirements_txt1.write_str(indoc! {"
+        MarkupSafe==2.1.3
+        tomli==2.0.1
+    "})?;
 
     let requirements_txt2 = context.temp_dir.child("requirements2.txt");
-    requirements_txt2.write_str("MarkupSafe==2.1.3\nrequests==2.31.0")?;
+    requirements_txt2.write_str(indoc! {"
+        MarkupSafe==2.1.3
+        requests==2.31.0
+    "})?;
 
     let target1 = context.temp_dir.child("install-path1");
     let target2 = context.temp_dir.child("install-path2");
@@ -533,7 +558,10 @@ fn freeze_with_quiet_flag() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
+    requirements_txt.write_str(indoc! {"
+        MarkupSafe==2.1.3
+        tomli==2.0.1
+    "})?;
 
     // Run `pip sync`.
     context
@@ -559,7 +587,10 @@ fn freeze_target() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
+    requirements_txt.write_str(indoc! {"
+        MarkupSafe==2.1.3
+        tomli==2.0.1
+    "})?;
 
     let target = context.temp_dir.child("target");
 
@@ -598,7 +629,10 @@ fn freeze_prefix() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
+    requirements_txt.write_str(indoc! {"
+        MarkupSafe==2.1.3
+        tomli==2.0.1
+    "})?;
 
     let prefix = context.temp_dir.child("prefix");
 

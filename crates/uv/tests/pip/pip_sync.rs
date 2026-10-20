@@ -377,7 +377,10 @@ fn install_many() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
+    requirements_txt.write_str(indoc! {"
+        MarkupSafe==2.1.3
+        tomli==2.0.1
+    "})?;
 
     uv_snapshot!(context.pip_sync()
         .arg("requirements.txt")
@@ -584,7 +587,10 @@ fn install_sequential() -> Result<()> {
         .success();
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("iniconfig==2.0.0\ntomli==2.0.1")?;
+    requirements_txt.write_str(indoc! {"
+        iniconfig==2.0.0
+        tomli==2.0.1
+    "})?;
 
     uv_snapshot!(context.pip_sync()
         .arg("requirements.txt")
@@ -733,7 +739,10 @@ fn install_git_subdirectories() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("example-pkg-a @ git+https://github.com/pypa/sample-namespace-packages.git@df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45#subdirectory=pkg_resources/pkg_a\nexample-pkg-b @ git+https://github.com/pypa/sample-namespace-packages.git@df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45#subdirectory=pkg_resources/pkg_b")?;
+    requirements_txt.write_str(indoc! {"
+        example-pkg-a @ git+https://github.com/pypa/sample-namespace-packages.git@df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45#subdirectory=pkg_resources/pkg_a
+        example-pkg-b @ git+https://github.com/pypa/sample-namespace-packages.git@df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45#subdirectory=pkg_resources/pkg_b
+    "})?;
 
     uv_snapshot!(context.pip_sync()
         .arg("requirements.txt")
@@ -2076,7 +2085,10 @@ fn duplicate_package_overlap() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("MarkupSafe==2.1.3\nMarkupSafe==2.1.2")?;
+    requirements_txt.write_str(indoc! {"
+        MarkupSafe==2.1.3
+        MarkupSafe==2.1.2
+    "})?;
 
     uv_snapshot!(context.pip_sync()
         .arg("requirements.txt")
@@ -2097,7 +2109,10 @@ fn duplicate_package_disjoint() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("MarkupSafe==2.1.3\nMarkupSafe==2.1.2 ; python_version < '3.6'")?;
+    requirements_txt.write_str(indoc! {"
+        MarkupSafe==2.1.3
+        MarkupSafe==2.1.2 ; python_version < '3.6'
+    "})?;
 
     uv_snapshot!(context.pip_sync()
         .arg("requirements.txt")
@@ -2120,7 +2135,10 @@ fn reinstall() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
+    requirements_txt.write_str(indoc! {"
+        MarkupSafe==2.1.3
+        tomli==2.0.1
+    "})?;
 
     uv_snapshot!(context.pip_sync()
         .arg("requirements.txt")
@@ -2166,7 +2184,10 @@ fn reinstall_package() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
+    requirements_txt.write_str(indoc! {"
+        MarkupSafe==2.1.3
+        tomli==2.0.1
+    "})?;
 
     uv_snapshot!(context.pip_sync()
         .arg("requirements.txt")
@@ -2260,7 +2281,10 @@ fn refresh() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
+    requirements_txt.write_str(indoc! {"
+        MarkupSafe==2.1.3
+        tomli==2.0.1
+    "})?;
 
     uv_snapshot!(context.pip_sync()
         .arg("requirements.txt")
@@ -2309,7 +2333,10 @@ fn refresh_package() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
+    requirements_txt.write_str(indoc! {"
+        MarkupSafe==2.1.3
+        tomli==2.0.1
+    "})?;
 
     uv_snapshot!(context.pip_sync()
         .arg("requirements.txt")
@@ -3049,7 +3076,10 @@ fn irrelevant_constraint() -> Result<()> {
 fn repeat_requirement_identical() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
-    requirements_in.write_str("anyio\nanyio")?;
+    requirements_in.write_str(indoc! {"
+        anyio
+        anyio
+    "})?;
 
     uv_snapshot!(context.pip_sync()
         .arg("requirements.in"), @"
@@ -3069,7 +3099,10 @@ fn repeat_requirement_identical() -> Result<()> {
 fn repeat_requirement_compatible() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
-    requirements_in.write_str("anyio\nanyio==4.0.0")?;
+    requirements_in.write_str(indoc! {"
+        anyio
+        anyio==4.0.0
+    "})?;
 
     uv_snapshot!(context.pip_sync()
         .arg("requirements.in"), @"
@@ -3089,7 +3122,10 @@ fn repeat_requirement_compatible() -> Result<()> {
 fn repeat_requirement_incompatible() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
-    requirements_in.write_str("anyio<4.0.0\nanyio==4.0.0")?;
+    requirements_in.write_str(indoc! {"
+        anyio<4.0.0
+        anyio==4.0.0
+    "})?;
 
     uv_snapshot!(context.pip_sync()
         .arg("requirements.in"), @"
@@ -3901,8 +3937,10 @@ fn require_hashes_wheel_url() -> Result<()> {
     // despite the wrong hash, like pip, since we don't validate hashes for already-installed
     // distributions.
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt
-        .write_str("anyio==4.0.0 --hash=sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f\niniconfig==2.0.0 --hash=sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374")?;
+    requirements_txt.write_str(indoc! {"
+        anyio==4.0.0 --hash=sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+        iniconfig==2.0.0 --hash=sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374
+    "})?;
 
     uv_snapshot!(context.pip_sync()
         .arg("requirements.txt")
@@ -4337,8 +4375,10 @@ fn require_hashes_repeated_dependency() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt
-        .write_str("anyio==4.0.0 --hash=sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a\nanyio")?;
+    requirements_txt.write_str(indoc! {"
+        anyio==4.0.0 --hash=sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
+        anyio
+    "})?;
 
     uv_snapshot!(context.pip_sync()
         .arg("requirements.txt")
@@ -4351,8 +4391,10 @@ fn require_hashes_repeated_dependency() -> Result<()> {
 
     // Reverse the order.
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt
-        .write_str("anyio\nanyio==4.0.0 --hash=sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a")?;
+    requirements_txt.write_str(indoc! {"
+        anyio
+        anyio==4.0.0 --hash=sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
+    "})?;
 
     uv_snapshot!(context.pip_sync()
         .arg("requirements.txt")

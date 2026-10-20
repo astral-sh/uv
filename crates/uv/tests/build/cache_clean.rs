@@ -6,6 +6,7 @@ use std::os::unix::fs::PermissionsExt;
 use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
+use indoc::indoc;
 
 #[cfg(target_os = "linux")]
 use std::process::Command;
@@ -27,7 +28,10 @@ fn clean_all() -> Result<()> {
         .with_filtered_sizes_and_units();
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("typing-extensions\niniconfig")?;
+    requirements_txt.write_str(indoc! {"
+        typing-extensions
+        iniconfig
+    "})?;
 
     // Install a requirement, to populate the cache.
     context
@@ -258,7 +262,10 @@ fn clear_all_alias() -> Result<()> {
         .with_filtered_sizes_and_units();
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("typing-extensions\niniconfig")?;
+    requirements_txt.write_str(indoc! {"
+        typing-extensions
+        iniconfig
+    "})?;
 
     // Install a requirement, to populate the cache.
     context
@@ -289,7 +296,10 @@ async fn clean_force() -> Result<()> {
         .with_filtered_sizes_and_units();
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("typing-extensions\niniconfig")?;
+    requirements_txt.write_str(indoc! {"
+        typing-extensions
+        iniconfig
+    "})?;
 
     // Install a requirement, to populate the cache.
     context
@@ -348,7 +358,10 @@ fn clean_package_pypi() -> Result<()> {
         ));
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("anyio\niniconfig")?;
+    requirements_txt.write_str(indoc! {"
+        anyio
+        iniconfig
+    "})?;
 
     // Install a requirement, to populate the cache.
     context
@@ -409,7 +422,10 @@ fn clean_package_index() -> Result<()> {
         ));
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("anyio\niniconfig")?;
+    requirements_txt.write_str(indoc! {"
+        anyio
+        iniconfig
+    "})?;
 
     // Install a requirement, to populate the cache.
     context

@@ -5638,8 +5638,10 @@ fn add_requirements_file() -> Result<()> {
     "#})?;
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt
-        .write_str("Flask==2.3.2\nanyio @ git+https://github.com/agronholm/anyio.git@4.4.0")?;
+    requirements_txt.write_str(indoc! {"
+        Flask==2.3.2
+        anyio @ git+https://github.com/agronholm/anyio.git@4.4.0
+    "})?;
 
     uv_snapshot!(context.filters(), context.add().arg("-r").arg("requirements.txt"), @"
     exit_code: 0 (success)
@@ -5930,7 +5932,11 @@ fn add_requirements_file_with_marker_flag() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let requirements_win_txt = context.temp_dir.child("requirements.win.txt");
-    requirements_win_txt.write_str("anyio>=2.31.0\niniconfig>=2; sys_platform != 'fantasy_os'\nnumpy>1.9; sys_platform == 'fantasy_os'")?;
+    requirements_win_txt.write_str(indoc! {"
+        anyio>=2.31.0
+        iniconfig>=2; sys_platform != 'fantasy_os'
+        numpy>1.9; sys_platform == 'fantasy_os'
+    "})?;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     let base_pyproject_toml = indoc! {r#"

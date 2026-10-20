@@ -44,6 +44,7 @@ tracing = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
+indoc = { workspace = true }
 insta = { workspace = true }
 url = { workspace = true }
 

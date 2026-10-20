@@ -4,6 +4,7 @@ use assert_fs::fixture::ChildPath;
 use assert_fs::fixture::FileWriteStr;
 use assert_fs::fixture::PathChild;
 use assert_fs::prelude::*;
+use indoc::{formatdoc, indoc};
 
 use uv_static::EnvVars;
 use uv_test::uv_snapshot;
@@ -52,9 +53,11 @@ fn list_editable_non_file_url() -> Result<()> {
 
     let dist_info = ChildPath::new(context.site_packages()).child("project-1.0.0.dist-info");
     dist_info.create_dir_all()?;
-    dist_info
-        .child("METADATA")
-        .write_str("Metadata-Version: 2.1\nName: project\nVersion: 1.0.0\n")?;
+    dist_info.child("METADATA").write_str(indoc! {"
+        Metadata-Version: 2.1
+        Name: project
+        Version: 1.0.0
+    "})?;
     dist_info
         .child("direct_url.json")
         .write_str(r#"{"url":"https://example.com/project","dir_info":{"editable":true}}"#)?;
@@ -83,9 +86,11 @@ fn list_invalid_direct_url() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let dist_info = ChildPath::new(context.site_packages()).child("project-1.0.0.dist-info");
     dist_info.create_dir_all()?;
-    dist_info
-        .child("METADATA")
-        .write_str("Metadata-Version: 2.1\nName: project\nVersion: 1.0.0\n")?;
+    dist_info.child("METADATA").write_str(indoc! {"
+        Metadata-Version: 2.1
+        Name: project
+        Version: 1.0.0
+    "})?;
     dist_info
         .child("direct_url.json")
         .write_str(r#"{"url":"not-a-url","archive_info":{}}"#)?;
@@ -111,9 +116,11 @@ fn list_ambiguous_direct_url() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let dist_info = ChildPath::new(context.site_packages()).child("project-1.0.0.dist-info");
     dist_info.create_dir_all()?;
-    dist_info
-        .child("METADATA")
-        .write_str("Metadata-Version: 2.1\nName: project\nVersion: 1.0.0\n")?;
+    dist_info.child("METADATA").write_str(indoc! {"
+        Metadata-Version: 2.1
+        Name: project
+        Version: 1.0.0
+    "})?;
     dist_info.child("direct_url.json").write_str(
         r#"{"url":"https://user/name:password@example.com/project.git","vcs_info":{"vcs":"git"}}"#,
     )?;
@@ -138,9 +145,11 @@ fn list_invalid_direct_url_json() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let dist_info = ChildPath::new(context.site_packages()).child("project-1.0.0.dist-info");
     dist_info.create_dir_all()?;
-    dist_info
-        .child("METADATA")
-        .write_str("Metadata-Version: 2.1\nName: project\nVersion: 1.0.0\n")?;
+    dist_info.child("METADATA").write_str(indoc! {"
+        Metadata-Version: 2.1
+        Name: project
+        Version: 1.0.0
+    "})?;
     dist_info.child("direct_url.json").write_str("{")?;
 
     uv_snapshot!(context.filters(), context.pip_list().arg("--format=freeze"), @"
@@ -159,9 +168,11 @@ fn list_invalid_direct_url_metadata() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let dist_info = ChildPath::new(context.site_packages()).child("project-1.0.0.dist-info");
     dist_info.create_dir_all()?;
-    dist_info
-        .child("METADATA")
-        .write_str("Metadata-Version: 2.1\nName: project\nVersion: 1.0.0\n")?;
+    dist_info.child("METADATA").write_str(indoc! {"
+        Metadata-Version: 2.1
+        Name: project
+        Version: 1.0.0
+    "})?;
     dist_info
         .child("direct_url.json")
         .write_str(r#"{"url":"https://example.com/project"}"#)?;
@@ -712,10 +723,15 @@ Version: 0.22.0
         .child("zstandard.egg-link")
         .write_str(target.path().to_str().unwrap())?;
 
-    site_packages.child("easy-install.pth").write_str(&format!(
-        "something\n{}\nanother thing\n",
-        target.path().to_str().unwrap()
-    ))?;
+    site_packages
+        .child("easy-install.pth")
+        .write_str(&formatdoc! {"
+            something
+            {}
+            another thing
+        ",
+            target.path().to_str().unwrap()
+        })?;
 
     uv_snapshot!(context.filters(), context.pip_list()
         .arg("--editable"), @"
@@ -826,7 +842,10 @@ fn list_target() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
+    requirements_txt.write_str(indoc! {"
+        MarkupSafe==2.1.3
+        tomli==2.0.1
+    "})?;
 
     let target = context.temp_dir.child("target");
 
@@ -868,7 +887,10 @@ fn list_prefix() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
+    requirements_txt.write_str(indoc! {"
+        MarkupSafe==2.1.3
+        tomli==2.0.1
+    "})?;
 
     let prefix = context.temp_dir.child("prefix");
 

@@ -1439,7 +1439,11 @@ mod test {
         let os_name = "posix";
         assert_eq!(
             format_shebang(executable, os_name, false),
-            "#!/bin/sh\n'''exec' '/usr/bin/path to python3' \"$0\" \"$@\"\n' '''"
+            indoc! {r#"
+                #!/bin/sh
+                '''exec' '/usr/bin/path to python3' "$0" "$@"
+                ' '''"#
+            }
         );
 
         // And if we want a relocatable script, we should use the `exec` trick with `dirname`.
@@ -1447,7 +1451,11 @@ mod test {
         let os_name = "posix";
         assert_eq!(
             format_shebang(executable, os_name, true),
-            "#!/bin/sh\n'''exec' \"$(dirname -- \"$(realpath -- \"$0\")\")\"/'python3' \"$0\" \"$@\"\n' '''"
+            indoc! {r#"
+                #!/bin/sh
+                '''exec' "$(dirname -- "$(realpath -- "$0")")"/'python3' "$0" "$@"
+                ' '''"#
+            }
         );
 
         // Except on Windows...
@@ -1473,7 +1481,11 @@ mod test {
         let os_name = "posix";
         assert_eq!(
             format_shebang(executable, os_name, false),
-            "#!/bin/sh\n'''exec' '/usr/bin/path/to/a/very/long/executable/executable/executable/executable/executable/executable/executable/executable/name/python3' \"$0\" \"$@\"\n' '''"
+            indoc! {r#"
+                #!/bin/sh
+                '''exec' '/usr/bin/path/to/a/very/long/executable/executable/executable/executable/executable/executable/executable/executable/name/python3' "$0" "$@"
+                ' '''"#
+            }
         );
     }
 

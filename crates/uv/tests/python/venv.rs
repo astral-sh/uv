@@ -910,7 +910,10 @@ fn create_venv_reads_request_from_python_versions_file() {
     context
         .temp_dir
         .child(PYTHON_VERSIONS_FILENAME)
-        .write_str("3.12\n3.11")
+        .write_str(indoc! {"
+            3.12
+            3.11
+        "})
         .unwrap();
 
     uv_snapshot!(context.filters(), context.venv().arg("--clear"), @"

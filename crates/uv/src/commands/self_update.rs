@@ -844,6 +844,9 @@ mod tests {
     use std::thread::JoinHandle;
     use std::time::Duration;
 
+    #[cfg(unix)]
+    use indoc::{formatdoc, indoc};
+
     use super::*;
 
     fn spawn_http_server(
@@ -1149,7 +1152,12 @@ mod tests {
 
         fs_err::write(
             &installer_path,
-            "#!/bin/sh\nprintf 'hello from stdout\\n'\nprintf 'hello from stderr\\n' >&2\nexit 23\n",
+            indoc! {r"
+                #!/bin/sh
+                printf 'hello from stdout\n'
+                printf 'hello from stderr\n' >&2
+                exit 23
+            "},
         )
         .unwrap();
         fs_err::set_permissions(&installer_path, std::fs::Permissions::from_mode(0o744)).unwrap();
@@ -1189,10 +1197,17 @@ mod tests {
 
         fs_err::write(
             &installer_path,
-            format!(
-                "#!/bin/sh\nset -eu\n{{\nprintf 'CARGO_DIST_FORCE_INSTALL_DIR=%s\\n' \"$CARGO_DIST_FORCE_INSTALL_DIR\"\nprintf 'UV_INSTALL_DIR=%s\\n' \"$UV_INSTALL_DIR\"\nprintf 'UV_NO_MODIFY_PATH=%s\\n' \"${{UV_NO_MODIFY_PATH-}}\"\n}} > \"{}\"\n",
+            formatdoc! {r#"
+                #!/bin/sh
+                set -eu
+                {{
+                printf 'CARGO_DIST_FORCE_INSTALL_DIR=%s\n' "$CARGO_DIST_FORCE_INSTALL_DIR"
+                printf 'UV_INSTALL_DIR=%s\n' "$UV_INSTALL_DIR"
+                printf 'UV_NO_MODIFY_PATH=%s\n' "${{UV_NO_MODIFY_PATH-}}"
+                }} > "{}"
+            "#,
                 output_path.display()
-            ),
+            },
         )
         .unwrap();
         fs_err::set_permissions(&installer_path, std::fs::Permissions::from_mode(0o744)).unwrap();
@@ -1209,11 +1224,14 @@ mod tests {
 
         assert_eq!(
             fs_err::read_to_string(&output_path).unwrap(),
-            format!(
-                "CARGO_DIST_FORCE_INSTALL_DIR={}\nUV_INSTALL_DIR={}\nUV_NO_MODIFY_PATH=1\n",
+            formatdoc! {"
+                CARGO_DIST_FORCE_INSTALL_DIR={}
+                UV_INSTALL_DIR={}
+                UV_NO_MODIFY_PATH=1
+            ",
                 install_prefix.display(),
                 install_prefix.display(),
-            )
+            }
         );
     }
 
@@ -1229,10 +1247,15 @@ mod tests {
 
         fs_err::write(
             &installer_path,
-            format!(
-                "#!/bin/sh\nset -eu\n{{\nprintf 'UV_DOWNLOAD_URL=%s\\n' \"${{UV_DOWNLOAD_URL-}}\"\n}} > \"{}\"\n",
+            formatdoc! {r#"
+                #!/bin/sh
+                set -eu
+                {{
+                printf 'UV_DOWNLOAD_URL=%s\n' "${{UV_DOWNLOAD_URL-}}"
+                }} > "{}"
+            "#,
                 output_path.display()
-            ),
+            },
         )
         .unwrap();
         fs_err::set_permissions(&installer_path, std::fs::Permissions::from_mode(0o744)).unwrap();
@@ -1265,10 +1288,15 @@ mod tests {
 
         fs_err::write(
             &installer_path,
-            format!(
-                "#!/bin/sh\nset -eu\n{{\nprintf 'UV_NO_MODIFY_PATH=%s\\n' \"${{UV_NO_MODIFY_PATH-}}\"\n}} > \"{}\"\n",
+            formatdoc! {r#"
+                #!/bin/sh
+                set -eu
+                {{
+                printf 'UV_NO_MODIFY_PATH=%s\n' "${{UV_NO_MODIFY_PATH-}}"
+                }} > "{}"
+            "#,
                 output_path.display()
-            ),
+            },
         )
         .unwrap();
         fs_err::set_permissions(&installer_path, std::fs::Permissions::from_mode(0o744)).unwrap();

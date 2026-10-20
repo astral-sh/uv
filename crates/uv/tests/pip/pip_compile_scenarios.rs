@@ -10,6 +10,7 @@ use std::process::Command;
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::{FileWriteStr, PathChild};
+use indoc::indoc;
 use predicates::prelude::predicate;
 
 use uv_static::EnvVars;
@@ -75,7 +76,10 @@ fn lowest_direct_fork_max_python() -> Result<()> {
     let server = PackseServer::new("fork/lowest-direct-fork-max-python.toml");
 
     let requirements_in = context.temp_dir.child("requirements.in");
-    requirements_in.write_str("forkroot==3.0.0\nforkdep>=2.8 ; python_full_version < '3.12'")?;
+    requirements_in.write_str(indoc! {"
+        forkroot==3.0.0
+        forkdep>=2.8 ; python_full_version < '3.12'
+    "})?;
 
     let output = uv_snapshot!(context.filters(), command(&context, python_versions, &server)
         .arg("--resolution=lowest-direct")
@@ -148,7 +152,10 @@ fn lowest_direct_fork_min_python() -> Result<()> {
     let server = PackseServer::new("fork/lowest-direct-fork-min-python.toml");
 
     let requirements_in = context.temp_dir.child("requirements.in");
-    requirements_in.write_str("forkroot==3.0.0\nforkdep>=3 ; python_full_version >= '3.12'")?;
+    requirements_in.write_str(indoc! {"
+        forkroot==3.0.0
+        forkdep>=3 ; python_full_version >= '3.12'
+    "})?;
 
     let output = uv_snapshot!(context.filters(), command(&context, python_versions, &server)
         .arg("--resolution=lowest-direct")
@@ -226,7 +233,10 @@ fn lowest_fork_max_python() -> Result<()> {
     let server = PackseServer::new("fork/lowest-fork-max-python.toml");
 
     let requirements_in = context.temp_dir.child("requirements.in");
-    requirements_in.write_str("forkroot==3.0.0\nforkdep>=2.8 ; python_full_version < '3.12'")?;
+    requirements_in.write_str(indoc! {"
+        forkroot==3.0.0
+        forkdep>=2.8 ; python_full_version < '3.12'
+    "})?;
 
     let output = uv_snapshot!(context.filters(), command(&context, python_versions, &server)
         .arg("--resolution=lowest")
@@ -299,7 +309,10 @@ fn lowest_fork_min_python() -> Result<()> {
     let server = PackseServer::new("fork/lowest-fork-min-python.toml");
 
     let requirements_in = context.temp_dir.child("requirements.in");
-    requirements_in.write_str("forkroot==3.0.0\nforkdep>=3 ; python_full_version >= '3.12'")?;
+    requirements_in.write_str(indoc! {"
+        forkroot==3.0.0
+        forkdep>=3 ; python_full_version >= '3.12'
+    "})?;
 
     let output = uv_snapshot!(context.filters(), command(&context, python_versions, &server)
         .arg("--resolution=lowest")
