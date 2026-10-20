@@ -8237,6 +8237,7 @@ dependencies = [
  "rustc-hash",
  "schemars",
  "serde",
+ "serde_json",
  "tempfile",
  "thiserror",
  "tokio",
