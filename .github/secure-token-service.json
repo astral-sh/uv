@@ -157,7 +157,7 @@
       "environment": "automations",
       "caller_ref": "refs/pull/*/merge",
       "caller_workflow": "ci.yml",
-      "reusable_workflow": "astral-sh/github-actions/.github/workflows/pull-request-security-review.yml@6a612d86f84507386fc1e361e3fda194351ceadd",
+      "reusable_workflow": "astral-sh/github-actions/.github/workflows/pull-request-security-review.yml@b504bbb0ff97d4bbf8176c145409bbc1e40a1f5e",
       "on": ["pull_request"],
       "permissions": { "pull_requests": "write" },
       "target": "uv"
