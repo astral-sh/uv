@@ -116,7 +116,7 @@ integrity, credentials, execution, and filesystem destinations while handling th
   lateral movement, or privilege escalation. A credential has negligible impact only if it is
   single-purpose and its effective authority is read-only and limited to inert test infrastructure.
 - **Availability:** When using an existing lockfile, uv must check that the downloaded artifacts
-  match their recorded sizes. Remote denial of service in all other operations, including initial
+  match their recorded sizes. Remote denial of service in all operations, including initial
   resolution and lock updates, is outside the threat model. Any resource exhaustion is a performance
   bug. A one-shot parser panic is a correctness bug, not a security issue.
 
