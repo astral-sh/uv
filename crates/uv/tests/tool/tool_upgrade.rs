@@ -565,8 +565,12 @@ fn tool_upgrade_recomputes_relative_exclude_newer() {
         .assert()
         .success();
 
+    // The relative `exclude-newer` is re-resolved from the current configuration on upgrade,
+    // rather than reusing the receipt's stored value.
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("black")
+        .arg("--exclude-newer")
+        .arg("3 weeks")
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, "2024-04-15T00:00:00Z")
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
