@@ -1,6 +1,6 @@
 [package]
 name = "uv-lock"
-version = "0.0.93"
+version = "0.0.96"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -68,5 +68,6 @@ tracing = { workspace = true }
 uuid = { workspace = true, features = ["v4"] }
 
 [dev-dependencies]
+indoc = { workspace = true }
 insta = { workspace = true }
 toml = { workspace = true }

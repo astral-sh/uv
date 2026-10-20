@@ -870,6 +870,8 @@ fn redact_git_error(mut error: anyhow::Error, url: &SafeUrl) -> anyhow::Error {
 
 #[cfg(test)]
 mod tests {
+    use indoc::indoc;
+
     use super::*;
 
     #[test]
@@ -918,7 +920,13 @@ mod tests {
 
         assert_eq!(
             error.to_string(),
-            "process didn't exit successfully: `git fetch --force 'https://git:****@example.com/org/repo.git' '+HEAD:refs/remotes/origin/HEAD'` (exit status: 128)\n--- stdout\ngit output\n--- stderr\nfatal: Authentication failed for 'https://git:****@example.com/org/repo.git'"
+            indoc! {"
+                process didn't exit successfully: `git fetch --force 'https://git:****@example.com/org/repo.git' '+HEAD:refs/remotes/origin/HEAD'` (exit status: 128)
+                --- stdout
+                git output
+                --- stderr
+                fatal: Authentication failed for 'https://git:****@example.com/org/repo.git'"
+            }
         );
         assert_eq!(process_error.code, Some(128));
         assert_eq!(

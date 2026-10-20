@@ -222,7 +222,11 @@ fn check_versionless_egg_info_file() -> Result<()> {
 
     ChildPath::new(context.site_packages())
         .child("demo.egg-info")
-        .write_str("Metadata-Version: 1.1\nName: demo\nVersion: 1.0\n")?;
+        .write_str(indoc! {"
+            Metadata-Version: 1.1
+            Name: demo
+            Version: 1.0
+        "})?;
 
     uv_snapshot!(context.pip_check(), @"
     exit_code: 0 (success)
@@ -323,7 +327,10 @@ fn check_multiple_incompatible_packages() -> Result<()> {
     );
 
     let requirements_txt_two = context.temp_dir.child("requirements_two.txt");
-    requirements_txt_two.write_str("idna==2.4\nurllib3==1.20")?;
+    requirements_txt_two.write_str(indoc! {"
+        idna==2.4
+        urllib3==1.20
+    "})?;
 
     uv_snapshot!(context
         .pip_install()

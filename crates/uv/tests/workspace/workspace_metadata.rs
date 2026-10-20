@@ -40,22 +40,24 @@ fn write_wheel_with_metadata(
 
     let metadata_path = format!("{dist_info_prefix}.dist-info/METADATA");
     let entry = ZipEntryBuilder::new(metadata_path.clone().into(), Compression::Stored);
-    block_on(
-        writer.write_entry_whole(
-            entry,
-            format!(
-                "Metadata-Version: 2.1\nName: {name}\nVersion: {version}\n{additional_metadata}"
-            )
-            .as_bytes(),
-        ),
-    )?;
+    let metadata = formatdoc! {"
+        Metadata-Version: 2.1
+        Name: {name}
+        Version: {version}
+    "} + additional_metadata;
+    block_on(writer.write_entry_whole(entry, metadata.as_bytes()))?;
     record.push(format!("{metadata_path},,"));
 
     let wheel_path = format!("{dist_info_prefix}.dist-info/WHEEL");
     let entry = ZipEntryBuilder::new(wheel_path.clone().into(), Compression::Stored);
     block_on(writer.write_entry_whole(
         entry,
-        b"Wheel-Version: 1.0\nGenerator: uv-test\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        indoc! {b"
+            Wheel-Version: 1.0
+            Generator: uv-test
+            Root-Is-Purelib: true
+            Tag: py3-none-any
+        "},
     ))?;
     record.push(format!("{wheel_path},,"));
 
@@ -827,9 +829,10 @@ fn workspace_metadata_script_dependency_edges() -> Result<()> {
         "metadata-edge",
         "1.0.0",
         "metadata_edge-1.0.0",
-        &format!(
-            "Provides-Extra: feature\nRequires-Dist: metadata-edge-child @ {child_url}; extra == 'feature'\n"
-        ),
+        &formatdoc! {"
+            Provides-Extra: feature
+            Requires-Dist: metadata-edge-child @ {child_url}; extra == 'feature'
+        "},
         &[],
     )?;
     let first_url = SafeUrl::from_file_path(first.path())
@@ -843,9 +846,10 @@ fn workspace_metadata_script_dependency_edges() -> Result<()> {
         "metadata-edge",
         "2.0.0",
         "metadata_edge-2.0.0",
-        &format!(
-            "Provides-Extra: feature\nRequires-Dist: metadata-edge-child @ {child_url}; extra == 'feature'\n"
-        ),
+        &formatdoc! {"
+            Provides-Extra: feature
+            Requires-Dist: metadata-edge-child @ {child_url}; extra == 'feature'
+        "},
         &[],
     )?;
     let second_url = SafeUrl::from_file_path(second.path())

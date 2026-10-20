@@ -194,7 +194,11 @@ fn install_ascii_wheel_script_in_non_ascii_environment() -> Result<()> {
     let (filename, wheel) = WheelBuilder::new(&"ascii-script".parse()?, &"1.0.0".parse()?)
         .files(&[(
             "ascii_script-1.0.0.data/scripts/ascii-script",
-            "#!python\n# coding: ascii\nprint('ok')\n",
+            indoc! {"
+                #!python
+                # coding: ascii
+                print('ok')
+            "},
         )])
         .build();
     fs::write(context.temp_dir.join(&filename), wheel)?;
@@ -231,7 +235,11 @@ fn install_wheel_script_does_not_execute_decoded_interpreter_path() -> Result<()
     let (filename, wheel) = WheelBuilder::new(&"encoded-script".parse()?, &"1.0.0".parse()?)
         .files(&[(
             "encoded_script-1.0.0.data/scripts/encoded-script",
-            "#!python\n# coding: utf-7\nprint('ok')\n",
+            indoc! {"
+                #!python
+                # coding: utf-7
+                print('ok')
+            "},
         )])
         .build();
     fs::write(context.temp_dir.join(&filename), wheel)?;
@@ -5440,7 +5448,10 @@ fn install_constraints_from_pyproject() -> Result<()> {
 fn install_constraints_inline() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let requirementstxt = context.temp_dir.child("requirements.txt");
-    requirementstxt.write_str("anyio==3.7.0\n-c constraints.txt")?;
+    requirementstxt.write_str(indoc! {"
+        anyio==3.7.0
+        -c constraints.txt
+    "})?;
 
     let constraints_txt = context.temp_dir.child("constraints.txt");
     constraints_txt.write_str("idna<3.4")?;
@@ -5487,7 +5498,10 @@ fn install_constraints_remote() {
 fn install_constraints_inline_remote() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let requirementstxt = context.temp_dir.child("requirements.txt");
-    requirementstxt.write_str("typing-extensions>=4.0\n-c https://raw.githubusercontent.com/apache/airflow/constraints-2-6/constraints-3.11.txt")?;
+    requirementstxt.write_str(indoc! {"
+        typing-extensions>=4.0
+        -c https://raw.githubusercontent.com/apache/airflow/constraints-2-6/constraints-3.11.txt
+    "})?;
 
     uv_snapshot!(context.pip_install()
             .arg("-r")
@@ -7915,10 +7929,13 @@ async fn install_package_basic_auth_from_netrc_index_in_requirements() -> Result
     ))?;
 
     let requirements = context.temp_dir.child("requirements.txt");
-    requirements.write_str(&format!(
-        "\nanyio\n--index-url {}/basic-auth/simple\n    ",
-        proxy.uri()
-    ))?;
+    requirements.write_str(&formatdoc! {"
+
+        anyio
+        --index-url {}/basic-auth/simple
+    ",
+        proxy.uri(),
+    })?;
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
@@ -12105,8 +12122,10 @@ fn switch_python_version() -> Result<()> {
      + iniconfig==2.0.0
     ");
 
-    requirements_txt
-        .write_str("iniconfig ; python_version == '3.12'\nanyio ; python_version < '3.12'")?;
+    requirements_txt.write_str(indoc! {"
+        iniconfig ; python_version == '3.12'
+        anyio ; python_version < '3.12'
+    "})?;
 
     // Add `anyio`, though it's only installed because of `--python-version`.
     uv_snapshot!(context.pip_install()
@@ -14102,9 +14121,10 @@ fn install_git_submodule_relative_url() -> Result<()> {
         .output()?;
 
     // Create a simple file in helpers
-    helpers_dir
-        .child("helper.py")
-        .write_str("def help():\n    return 'I am a helper'")?;
+    helpers_dir.child("helper.py").write_str(indoc! {"
+        def help():
+            return 'I am a helper'
+    "})?;
 
     // Create a nested dependency of the helper repository. This lives outside the parent
     // repository so the helper must resolve it through its own relative submodule URL.
@@ -14116,9 +14136,10 @@ fn install_git_submodule_relative_url() -> Result<()> {
         .current_dir(grandchild_dir.path())
         .output()?;
 
-    grandchild_dir
-        .child("grandchild.py")
-        .write_str("def help():\n    return 'I am a nested helper'")?;
+    grandchild_dir.child("grandchild.py").write_str(indoc! {"
+        def help():
+            return 'I am a nested helper'
+    "})?;
 
     Command::new("git")
         .args(["add", "."])
@@ -16316,11 +16337,19 @@ fn install_in_prefix_symlinked_wheel_data_directory() -> Result<()> {
     for (name, contents) in [
         (
             "foo-0.1.0.dist-info/METADATA",
-            "Metadata-Version: 2.1\nName: foo\nVersion: 0.1.0\n",
+            indoc! {"
+                Metadata-Version: 2.1
+                Name: foo
+                Version: 0.1.0
+            "},
         ),
         (
             "foo-0.1.0.dist-info/WHEEL",
-            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+            indoc! {"
+                Wheel-Version: 1.0
+                Root-Is-Purelib: true
+                Tag: py3-none-any
+            "},
         ),
         ("foo-0.1.0.dist-info/RECORD", record.as_str()),
         (data_path, "foo manual\n"),
@@ -16391,11 +16420,19 @@ fn reject_reserved_wheel_data_script_name() -> Result<()> {
                 ("foo/__init__.py", ""),
                 (
                     "foo-0.1.0.dist-info/METADATA",
-                    "Metadata-Version: 2.1\nName: foo\nVersion: 0.1.0\n",
+                    indoc! {"
+                        Metadata-Version: 2.1
+                        Name: foo
+                        Version: 0.1.0
+                    "},
                 ),
                 (
                     "foo-0.1.0.dist-info/WHEEL",
-                    "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+                    indoc! {"
+                        Wheel-Version: 1.0
+                        Root-Is-Purelib: true
+                        Tag: py3-none-any
+                    "},
                 ),
                 ("foo-0.1.0.dist-info/RECORD", record.as_str()),
                 ("foo-0.1.0.data/data/harmless.txt", "this must not be moved"),

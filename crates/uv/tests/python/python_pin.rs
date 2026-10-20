@@ -12,6 +12,7 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::SymlinkToFile;
 use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
 #[cfg(unix)]
+use indoc::formatdoc;
 use indoc::indoc;
 use insta::assert_snapshot;
 use uv_platform::{Arch, Os};
@@ -68,7 +69,10 @@ fn python_pin_warning_chain() -> Result<()> {
     context
         .temp_dir
         .child(PYTHON_VERSION_FILENAME)
-        .write_str(&format!("{0}\n{0}\n", python.path().display()))?;
+        .write_str(&formatdoc! {"
+            {0}
+            {0}
+        ", python.path().display()})?;
 
     uv_snapshot!(context.filters(), context.python_pin(), @"
     exit_code: 0 (success)
@@ -263,7 +267,10 @@ async fn python_pin_downloads_metadata_once_for_multiple_pins() -> Result<()> {
     context
         .temp_dir
         .child(PYTHON_VERSION_FILENAME)
-        .write_str("3.11\n3.12\n")?;
+        .write_str(indoc! {"
+            3.11
+            3.12
+        "})?;
 
     let server = MockServer::start().await;
     Mock::given(method("GET"))
@@ -887,7 +894,10 @@ fn python_pin_rm_versions() -> Result<()> {
     let global = context.user_config_dir.child("uv");
     global.create_dir_all()?;
     let global_versions = global.child(PYTHON_VERSIONS_FILENAME);
-    global_versions.write_str("3.11\n3.12\n")?;
+    global_versions.write_str(indoc! {"
+        3.11
+        3.12
+    "})?;
 
     let local_versions = context.temp_dir.child(PYTHON_VERSIONS_FILENAME);
     local_versions.write_str("3.12\n")?;

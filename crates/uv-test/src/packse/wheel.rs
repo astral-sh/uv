@@ -104,12 +104,12 @@ impl<'a> WheelBuilder<'a> {
             (format!("{dist_info}/METADATA"), metadata),
             (
                 format!("{dist_info}/WHEEL"),
-                format!(
-                    "Wheel-Version: 1.0\n\
-                     Generator: uv-test\n\
-                     Root-Is-Purelib: true\n\
-                     Tag: {tag}\n"
-                ),
+                formatdoc! {"
+                    Wheel-Version: 1.0
+                    Generator: uv-test
+                    Root-Is-Purelib: true
+                    Tag: {tag}
+                "},
             ),
         ];
 
@@ -223,7 +223,10 @@ pub fn generate_sdist(
 
 /// Build the callable module used by generated console scripts.
 fn build_cli_module(name: &PackageName) -> String {
-    format!("def main():\n    print('Hello from {name}!')\n")
+    formatdoc! {"
+        def main():
+            print('Hello from {name}!')
+    "}
 }
 
 /// Build PEP 566 / PEP 643 metadata content.

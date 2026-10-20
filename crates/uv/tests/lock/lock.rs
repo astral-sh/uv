@@ -2191,10 +2191,11 @@ async fn lock_sdist_url_locked_build_dependency_hash_mismatch() -> Result<()> {
         .await;
     Mock::given(method("GET"))
         .and(path(format!("{wheel_path}.metadata")))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .set_body_string("Metadata-Version: 2.3\nName: review-dep\nVersion: 1.0.0\n"),
-        )
+        .respond_with(ResponseTemplate::new(200).set_body_string(indoc! {"
+            Metadata-Version: 2.3
+            Name: review-dep
+            Version: 1.0.0
+        "}))
         .mount(&server)
         .await;
     Mock::given(method("GET"))
@@ -22068,7 +22069,12 @@ fn lock_without_metadata_conflicting_group_with_extra_and_different_specifiers()
 fn lock_metadata_free_many_conflicts() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let extra_declarations = (1..=24)
-        .map(|conflict_number| format!("a{conflict_number} = []\nb{conflict_number} = []"))
+        .map(|conflict_number| {
+            formatdoc! {"
+                a{conflict_number} = []
+                b{conflict_number} = []"
+            }
+        })
         .collect::<Vec<_>>()
         .join("\n");
     let project_conflicts = (1..=24)
@@ -38386,7 +38392,11 @@ fn lock_script_editable_path_dependency_change() -> Result<()> {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         !output.status.success(),
-        "expected `uv lock --script script.py --locked` to fail after editable dependency changes, but it succeeded\n{stderr}"
+        indoc! {"
+            expected `uv lock --script script.py --locked` to fail after editable dependency changes, but it succeeded
+            {}"
+        },
+        stderr
     );
     assert!(stderr.contains("needs to be updated"), "{stderr}");
 

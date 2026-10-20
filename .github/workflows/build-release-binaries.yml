@@ -533,6 +533,15 @@ jobs:
             # Install cargo extensions as a static musl binary so it runs in any container.
             scripts/install-cargo-extensions.sh
 
+            # Keep package/version/file information in diagnostics without embedding
+            # the build machine's Cargo home and registry index directory in every path.
+            # TODO: Use Cargo's profile-level `trim-paths` once it is stable.
+            cargo fetch --locked --target "${{ matrix.target }}"
+            for registry in "${CARGO_HOME:-$HOME/.cargo}"/registry/src/*; do
+                [[ -d "$registry" ]] || continue
+                export RUSTFLAGS="${RUSTFLAGS:+${RUSTFLAGS} }--remap-path-prefix=$registry/=registry/"
+            done
+
             if [[ "${{ matrix.target }}" == "x86_64-unknown-linux-gnu" ]]; then
                 rustup component add llvm-tools-preview
                 python${{ env.PYTHON_VERSION }} scripts/build_uv_pgo.py \
@@ -590,6 +599,13 @@ jobs:
           args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml --compatibility pypi
           before-script-linux: |
             scripts/install-cargo-extensions.sh
+
+            # TODO: Use Cargo's profile-level `trim-paths` once it is stable.
+            cargo fetch --locked --target "${{ matrix.target }}"
+            for registry in "${CARGO_HOME:-$HOME/.cargo}"/registry/src/*; do
+                [[ -d "$registry" ]] || continue
+                export RUSTFLAGS="${RUSTFLAGS:+${RUSTFLAGS} }--remap-path-prefix=$registry/=registry/"
+            done
 
             if [[ "${{ matrix.target }}" == "x86_64-unknown-linux-gnu" ]]; then
                 # Fold identical functions with Rust's bundled LLD.

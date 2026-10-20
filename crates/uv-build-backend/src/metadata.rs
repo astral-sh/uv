@@ -1,5 +1,6 @@
 use indexmap::IndexMap;
 use itertools::Itertools;
+use serde::de::{MapAccess, Visitor, value::MapAccessDeserializer};
 use serde::{Deserialize, Deserializer};
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, Bound};
@@ -1092,13 +1093,7 @@ impl License {
 ///
 /// The entry is derived from the email format of `John Doe <john.doe@example.net>`. You need to
 /// provide at least name or email.
-#[derive(Deserialize, Debug, Clone)]
-// deny_unknown_fields prevents using the name field when the email is not a string.
-#[serde(
-    untagged,
-    deny_unknown_fields,
-    expecting = "a table with 'name' and/or 'email' keys"
-)]
+#[derive(Debug, Clone)]
 pub(crate) enum Contact {
     /// TODO(konsti): RFC 822 validation.
     NameEmail { name: String, email: String },
@@ -1106,6 +1101,58 @@ pub(crate) enum Contact {
     Name { name: String },
     /// TODO(konsti): RFC 822 validation.
     Email { email: String },
+}
+
+impl<'de> Deserialize<'de> for Contact {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct Fields {
+            #[serde(default, deserialize_with = "deserialize_string")]
+            name: Option<String>,
+            #[serde(default, deserialize_with = "deserialize_string")]
+            email: Option<String>,
+        }
+
+        fn deserialize_string<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+        where
+            D: Deserializer<'de>,
+        {
+            String::deserialize(deserializer).map(Some)
+        }
+
+        struct ContactVisitor;
+
+        impl<'de> Visitor<'de> for ContactVisitor {
+            type Value = Contact;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                formatter.write_str("a table with 'name' and/or 'email' keys")
+            }
+
+            fn visit_map<A>(self, map: A) -> Result<Self::Value, A::Error>
+            where
+                A: MapAccess<'de>,
+            {
+                let Fields { name, email } = Fields::deserialize(MapAccessDeserializer::new(map))?;
+                match (name, email) {
+                    (Some(name), Some(email)) => Ok(Contact::NameEmail { name, email }),
+                    (Some(name), None) => Ok(Contact::Name { name }),
+                    (None, Some(email)) => Ok(Contact::Email { email }),
+                    (None, None) => Err(serde::de::Error::custom(
+                        "a table with 'name' and/or 'email' keys",
+                    )),
+                }
+            }
+        }
+
+        deserializer
+            .deserialize_map(ContactVisitor)
+            .map_err(|_| serde::de::Error::custom("a table with 'name' and/or 'email' keys"))
+    }
 }
 
 /// A trove classifier as originally specified in PEP 301.
@@ -1290,6 +1337,56 @@ mod tests {
             let _ = write!(formatted, "\n  Caused by: {source}");
         }
         formatted
+    }
+
+    /// A valid name must not make an invalid email acceptable.
+    #[test]
+    fn contact_invalid_email() {
+        let contents = extend_project(r#"authors = [{ name = "Ferris", email = 42 }]"#);
+        assert_snapshot!(toml::from_str::<PyProjectToml>(&contents).unwrap_err(), @r#"
+        TOML parse error at line 4, column 11
+          |
+        4 | authors = [{ name = "Ferris", email = 42 }]
+          |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        a table with 'name' and/or 'email' keys
+        "#);
+    }
+
+    #[test]
+    fn contact_unknown_field() {
+        let contents =
+            extend_project(r#"maintainers = [{ email = "ferris@example.org", extra = true }]"#);
+        assert_snapshot!(toml::from_str::<PyProjectToml>(&contents).unwrap_err(), @r#"
+        TOML parse error at line 4, column 15
+          |
+        4 | maintainers = [{ email = "ferris@example.org", extra = true }]
+          |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        a table with 'name' and/or 'email' keys
+        "#);
+    }
+
+    #[test]
+    fn contact_empty() {
+        let contents = extend_project("authors = [{}]");
+        assert_snapshot!(toml::from_str::<PyProjectToml>(&contents).unwrap_err(), @r#"
+        TOML parse error at line 4, column 11
+          |
+        4 | authors = [{}]
+          |           ^^^^
+        a table with 'name' and/or 'email' keys
+        "#);
+    }
+
+    #[test]
+    fn contact_sequence() {
+        let contents = extend_project(r#"authors = [["Ferris", "ferris@example.org"]]"#);
+        assert_snapshot!(toml::from_str::<PyProjectToml>(&contents).unwrap_err(), @r#"
+        TOML parse error at line 4, column 11
+          |
+        4 | authors = [["Ferris", "ferris@example.org"]]
+          |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        a table with 'name' and/or 'email' keys
+        "#);
     }
 
     #[test]
