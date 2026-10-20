@@ -109,7 +109,7 @@ jobs:
       - name: "Diagnose workflow failure"
         id: diagnose
         if: steps.context.outputs.ready == 'true'
-        uses: openai/codex-action@a8d8be6ee028bea4525bc722d16f36687b408c81
+        uses: openai/codex-action@c97f61512499740f4c5320dad158bdcd02807053
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
