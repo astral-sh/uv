@@ -5,13 +5,13 @@ use std::str::FromStr;
 
 use reqwest::Proxy;
 use serde::{Deserialize, Deserializer, Serialize};
-use url::Url;
 
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
+use uv_redacted::policy::Raw;
 
 /// A proxy URL with a supported scheme and a host.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct ProxyUrl(DisplaySafeUrl);
+pub struct ProxyUrl(SafeUrl<Raw>);
 
 /// The destination scheme to which a [`ProxyUrl`] applies.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -22,7 +22,7 @@ pub enum ProxyUrlKind {
 
 impl ProxyUrl {
     /// Returns a reference to the underlying URL.
-    fn as_url(&self) -> &DisplaySafeUrl {
+    fn as_url(&self) -> &SafeUrl<Raw> {
         &self.0
     }
 
@@ -42,7 +42,7 @@ pub enum ProxyUrlError {
     #[error(
         "invalid proxy URL scheme `{scheme}` in `{url}`: expected http, https, socks5, or socks5h"
     )]
-    InvalidScheme { scheme: String, url: DisplaySafeUrl },
+    InvalidScheme { scheme: String, url: SafeUrl },
 }
 
 /// Returns true if the input likely has no scheme (no "://" present).
@@ -59,11 +59,11 @@ impl FromStr for ProxyUrl {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         fn try_with_http_scheme(s: &str) -> Result<ProxyUrl, ProxyUrlError> {
             let with_scheme = format!("http://{s}");
-            let url = Url::parse(&with_scheme)?;
+            let url = SafeUrl::parse_relaxed(&with_scheme)?;
             ProxyUrl::try_from(url)
         }
 
-        match Url::parse(s) {
+        match SafeUrl::parse_relaxed(s) {
             Ok(url) => match Self::try_from(url) {
                 Ok(proxy) => Ok(proxy),
                 Err(ProxyUrlError::InvalidScheme { .. }) if lacks_scheme(s) => {
@@ -77,18 +77,17 @@ impl FromStr for ProxyUrl {
     }
 }
 
-impl TryFrom<Url> for ProxyUrl {
+impl TryFrom<SafeUrl> for ProxyUrl {
     type Error = ProxyUrlError;
 
-    fn try_from(url: Url) -> Result<Self, Self::Error> {
-        let url = DisplaySafeUrl::from_url(url);
+    fn try_from(url: SafeUrl) -> Result<Self, Self::Error> {
         match url.scheme() {
             "http" | "https" | "socks5" | "socks5h" => {
                 // Reqwest can reinterpret a hostless SOCKS URL as an HTTP proxy.
                 if !url.has_host() {
                     return Err(ProxyUrlError::InvalidUrl(url::ParseError::EmptyHost));
                 }
-                Ok(Self(url))
+                Ok(Self(url.with_policy(Raw)))
             }
             scheme => Err(ProxyUrlError::InvalidScheme {
                 scheme: scheme.to_string(),
@@ -119,7 +118,7 @@ impl Serialize for ProxyUrl {
     where
         S: serde::ser::Serializer,
     {
-        serializer.serialize_str(self.as_url().as_str())
+        self.as_url().serialize(serializer)
     }
 }
 
@@ -173,7 +172,7 @@ mod tests {
             .parse::<ProxyUrl>()
             .unwrap();
         assert_eq!(
-            Url::from(url.as_url().clone()).to_string(),
+            url.as_url().clone().into_unsafe_url().to_string(),
             "http://user:pass@proxy.example.com:8080/"
         );
     }
@@ -190,7 +189,7 @@ mod tests {
             .parse::<ProxyUrl>()
             .unwrap();
         assert_eq!(
-            Url::from(url.as_url().clone()).to_string(),
+            url.as_url().clone().into_unsafe_url().to_string(),
             "http://user:pass@proxy.example.com:8080/"
         );
 
@@ -235,7 +234,7 @@ mod tests {
     #[test]
     fn proxy_url_without_host() -> Result<(), ProxyUrlError> {
         for input in ["socks5h:///proxy", "socks5:foo"] {
-            let url = Url::parse(input)?;
+            let url = SafeUrl::parse_relaxed(input)?;
             assert_matches!(
                 ProxyUrl::try_from(url),
                 Err(ProxyUrlError::InvalidUrl(url::ParseError::EmptyHost))

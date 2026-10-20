@@ -2,11 +2,10 @@ use std::borrow::Borrow;
 use std::collections::BTreeSet;
 use std::str::FromStr;
 
-use itertools::Itertools;
 use rustc_hash::FxHashMap;
 
 use uv_normalize::{ExtraName, GroupName, InvalidNameError, PackageName};
-use uv_pep508::{ExtraOperator, MarkerEnvironment, MarkerExpression, MarkerOperator, MarkerTree};
+use uv_pep508::{MarkerEnvironment, MarkerExpression, MarkerOperator, MarkerTree};
 use uv_pypi_types::{ConflictItem, ConflictKind, Conflicts, Inference};
 
 #[derive(Debug, thiserror::Error)]
@@ -172,14 +171,32 @@ impl UniversalMarker {
     /// This will effectively simplify the conflict marker in this universal
     /// marker. In particular, it enables simplifying based on the fact that no
     /// two items from the same set in the given conflicts can be active at a
-    /// given time.
+    /// given time. If every valid selection has the same nonempty environment marker,
+    /// the result contains only that environment marker. Otherwise, invalid selections
+    /// remain reachable so lockfile readers can discover transitive conflicts.
     pub fn imbibe(&mut self, conflicts: ConflictMarker) {
         if conflicts.marker.is_true() {
             return;
         }
-        let self_marker = self.marker;
-        self.marker = conflicts.marker;
-        self.marker = self.marker.implies(self_marker);
+
+        if !self.has_conflict_marker() && !self.marker.is_false() {
+            return;
+        }
+
+        // If every valid conflict selection has the same environment marker, that marker does
+        // not need to repeat the conflicts.
+        let reachable = self.marker.and(conflicts.marker);
+        let environment = reachable.without_extras();
+        if !environment.is_false() && reachable == environment.and(conflicts.marker) {
+            self.marker = environment;
+            self.pep508 = environment;
+            return;
+        }
+
+        // Lockfile readers discover transitively activated conflicts by following dependency
+        // edges. Conflict-dependent and impossible edges must remain reachable when an invalid
+        // combination is selected, so those readers can report the conflict.
+        self.marker = conflicts.marker.implies(self.marker);
         self.pep508 = self.marker.without_extras();
     }
 
@@ -489,12 +506,7 @@ impl ConflictMarker {
         }
         let mut marker = Self::TRUE;
         for set in conflicts.iter() {
-            for (item1, item2) in set.iter().tuple_combinations() {
-                let pair = Self::from_conflict_item(item1)
-                    .negate()
-                    .or(Self::from_conflict_item(item2).negate());
-                marker = marker.and(pair);
-            }
+            marker = marker.and(Self::at_most_one(set.iter()));
         }
         marker
     }
@@ -516,16 +528,29 @@ impl ConflictMarker {
 
         let mut marker = Self::TRUE;
         for set in conflicts.iter() {
-            for (first, second) in set
+            let items = set
                 .iter()
-                .filter(|item| referenced.contains(&encode_conflict_item(item)))
-                .tuple_combinations()
-            {
-                let pair = Self::from_conflict_item(first)
-                    .negate()
-                    .or(Self::from_conflict_item(second).negate());
-                marker = marker.and(pair);
-            }
+                .filter(|item| referenced.contains(&encode_conflict_item(item)));
+            marker = marker.and(Self::at_most_one(items));
+        }
+        marker
+    }
+
+    /// Allows at most one item without enumerating every conflicting pair.
+    /// Each item excludes the union of all preceding items in the set.
+    fn at_most_one<'a>(items: impl Iterator<Item = &'a ConflictItem>) -> Self {
+        let mut items = items.map(Self::from_conflict_item);
+        let Some(mut previous_item) = items.next() else {
+            return Self::TRUE;
+        };
+        let mut previous = Self {
+            marker: MarkerTree::FALSE,
+        };
+        let mut marker = Self::TRUE;
+        for item in items {
+            previous = previous.or(previous_item);
+            marker = marker.and(previous.and(item).negate());
+            previous_item = item;
         }
         marker
     }
@@ -819,130 +844,24 @@ pub fn resolve_activated_extras(
         return marker;
     }
 
-    let mut transformed = MarkerTree::FALSE;
-
-    // Convert the marker to DNF, then re-build it.
-    for dnf in marker.to_dnf() {
-        let mut or = MarkerTree::TRUE;
-
-        for marker in dnf {
-            let MarkerExpression::Extra {
-                ref operator,
-                ref name,
-            } = marker
-            else {
-                or = or.and(MarkerTree::expression(marker));
-                continue;
-            };
-
-            let Some(name) = name.as_extra() else {
-                or = or.and(MarkerTree::expression(marker));
-                continue;
-            };
-
-            // Given an extra marker (like `extra == 'extra-7-project-cpu'`), search for the
-            // corresponding conflict; once found, inline the marker of conditions under which the
-            // conflict is known to be true.
-            let mut found = false;
-            for (conflict_item, conflict_marker) in known_conflicts {
-                // Search for the conflict item as an extra.
-                if let Some(extra) = conflict_item.extra() {
-                    let package = conflict_item.package();
-                    let encoded = encode_package_extra(package, extra);
-                    if encoded == *name {
-                        match operator {
-                            ExtraOperator::Equal => {
-                                or = or.and(*conflict_marker);
-                                found = true;
-                                break;
-                            }
-                            ExtraOperator::NotEqual => {
-                                or = or.and(conflict_marker.negate());
-                                found = true;
-                                break;
-                            }
-                        }
-                    }
+    let scoped_extras = scope_package.into_iter().flat_map(|package| {
+        known_conflicts
+            .iter()
+            .filter_map(move |(conflict_item, &condition)| {
+                if conflict_item.package() == package
+                    && let Some(extra) = conflict_item.extra()
+                {
+                    Some((extra.clone(), condition))
+                } else {
+                    None
                 }
-
-                // Search for the conflict item as a group.
-                if let Some(group) = conflict_item.group() {
-                    let package = conflict_item.package();
-                    let encoded = encode_package_group(package, group);
-                    if encoded == *name {
-                        match operator {
-                            ExtraOperator::Equal => {
-                                or = or.and(*conflict_marker);
-                                found = true;
-                                break;
-                            }
-                            ExtraOperator::NotEqual => {
-                                or = or.and(conflict_marker.negate());
-                                found = true;
-                                break;
-                            }
-                        }
-                    }
-                }
-
-                // Search for the conflict item as a project.
-                if conflict_item.extra().is_none() && conflict_item.group().is_none() {
-                    let package = conflict_item.package();
-                    let encoded = encode_project(package);
-                    if encoded == *name {
-                        match operator {
-                            ExtraOperator::Equal => {
-                                or = or.and(*conflict_marker);
-                                found = true;
-                                break;
-                            }
-                            ExtraOperator::NotEqual => {
-                                or = or.and(conflict_marker.negate());
-                                found = true;
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Search for an unencoded package extra in the current package scope.
-            if !found {
-                if let Some(package) = scope_package {
-                    let conflict_item = ConflictItem::from((package.clone(), name.clone()));
-                    if let Some(conflict_marker) = known_conflicts.get(&conflict_item) {
-                        match operator {
-                            ExtraOperator::Equal => {
-                                or = or.and(*conflict_marker);
-                                found = true;
-                            }
-                            ExtraOperator::NotEqual => {
-                                or = or.and(conflict_marker.negate());
-                                found = true;
-                            }
-                        }
-                    }
-                }
-            }
-
-            // If we didn't find the marker in the list of known conflicts, assume it's always
-            // false.
-            if !found {
-                match operator {
-                    ExtraOperator::Equal => {
-                        or = or.and(MarkerTree::FALSE);
-                    }
-                    ExtraOperator::NotEqual => {
-                        or = or.and(MarkerTree::TRUE);
-                    }
-                }
-            }
-        }
-
-        transformed = transformed.or(or);
-    }
-
-    transformed
+            })
+    });
+    let encoded_extras = known_conflicts
+        .iter()
+        .map(|(conflict_item, &condition)| (encode_conflict_item(conflict_item), condition));
+    // Encoded conflict names take precedence over unencoded package extras.
+    marker.resolve_extras(scoped_extras.chain(encoded_extras))
 }
 
 #[cfg(test)]
@@ -1078,26 +997,26 @@ mod tests {
         let cm = ConflictMarker::from_conflicts(&conflicts);
         assert_eq!(
             to_str(cm),
-            "extra != 'extra-3-pkg-foo' or extra != 'extra-3-pkg-bar'"
+            "extra != 'extra-3-pkg-bar' or extra != 'extra-3-pkg-foo'"
         );
 
         let conflicts = create_conflicts([create_set(["foo", "bar", "baz"])]);
         let cm = ConflictMarker::from_conflicts(&conflicts);
         assert_eq!(
             to_str(cm),
-            "(extra != 'extra-3-pkg-baz' and extra != 'extra-3-pkg-foo') \
+            "(extra != 'extra-3-pkg-bar' and extra != 'extra-3-pkg-baz') \
              or (extra != 'extra-3-pkg-bar' and extra != 'extra-3-pkg-foo') \
-             or (extra != 'extra-3-pkg-bar' and extra != 'extra-3-pkg-baz')",
+             or (extra != 'extra-3-pkg-baz' and extra != 'extra-3-pkg-foo')",
         );
 
         let conflicts = create_conflicts([create_set(["foo", "bar"]), create_set(["fox", "ant"])]);
         let cm = ConflictMarker::from_conflicts(&conflicts);
         assert_eq!(
             to_str(cm),
-            "(extra != 'extra-3-pkg-bar' and extra != 'extra-3-pkg-fox') or \
+            "(extra != 'extra-3-pkg-ant' and extra != 'extra-3-pkg-bar') or \
              (extra != 'extra-3-pkg-ant' and extra != 'extra-3-pkg-foo') or \
-             (extra != 'extra-3-pkg-ant' and extra != 'extra-3-pkg-bar') or \
-             (extra == 'extra-3-pkg-bar' and extra != 'extra-3-pkg-foo' and extra != 'extra-3-pkg-fox')",
+             (extra != 'extra-3-pkg-bar' and extra != 'extra-3-pkg-fox') or \
+             (extra != 'extra-3-pkg-foo' and extra != 'extra-3-pkg-fox')",
         );
         // I believe because markers are put into DNF, the marker we get here
         // is a lot bigger than what we might expect. Namely, this is how it's
@@ -1157,6 +1076,33 @@ mod tests {
         }
     }
 
+    /// Only referenced items in the same conflict set constrain each other.
+    #[test]
+    fn relevant_conflicts_as_marker() {
+        let conflicts = create_conflicts([
+            create_set(["foo", "bar", "baz"]),
+            create_set(["fox", "ant"]),
+        ]);
+        let pair = create_extra_marker("foo")
+            .negate()
+            .or(create_extra_marker("bar").negate());
+        for (referenced, expected) in [
+            (&[][..], ConflictMarker::TRUE),
+            (&["foo"][..], ConflictMarker::TRUE),
+            (&["foo", "fox"][..], ConflictMarker::TRUE),
+            (&["foo", "bar"][..], pair),
+        ] {
+            let markers = referenced
+                .iter()
+                .map(|extra| UniversalMarker::new(MarkerTree::TRUE, create_extra_marker(extra)));
+            assert_eq!(
+                ConflictMarker::from_relevant_conflicts(&conflicts, markers),
+                expected,
+                "referenced extras: {referenced:?}",
+            );
+        }
+    }
+
     /// This tests conflict marker simplification after "imbibing" world
     /// knowledge about which extras/groups cannot be activated together.
     #[test]
@@ -1173,7 +1119,7 @@ mod tests {
             UniversalMarker::new(MarkerTree::TRUE, foo.negate().or(bar.negate()));
         assert_eq!(
             format!("{dep_conflict_marker:?}"),
-            "extra != 'extra-3-pkg-foo' or extra != 'extra-3-pkg-bar'"
+            "extra != 'extra-3-pkg-bar' or extra != 'extra-3-pkg-foo'"
         );
         dep_conflict_marker.imbibe(conflicts_marker);
         assert_eq!(format!("{dep_conflict_marker:?}"), "true");
@@ -1189,6 +1135,98 @@ mod tests {
         marker.imbibe(ConflictMarker::TRUE);
 
         assert_eq!(marker, expected);
+    }
+
+    #[test]
+    fn imbibe_environment_only() {
+        let conflicts = create_conflicts([create_set(["foo", "bar"])]);
+        let conflicts_marker = ConflictMarker::from_conflicts(&conflicts);
+        let environment =
+            MarkerTree::from_str("python_full_version < '3.12'").expect("valid marker expression");
+        let mut marker = UniversalMarker::from_combined(environment);
+
+        marker.imbibe(conflicts_marker);
+
+        assert_eq!(marker, UniversalMarker::from_combined(environment));
+    }
+
+    #[test]
+    fn imbibe_environment_with_conflict_world() {
+        let conflicts = create_conflicts([create_set(["foo", "bar", "baz"])]);
+        let conflicts_marker = ConflictMarker::from_conflicts(&conflicts);
+        let environment =
+            MarkerTree::from_str("python_full_version < '3.12'").expect("valid marker expression");
+        let mut marker = UniversalMarker::new(environment, conflicts_marker);
+
+        marker.imbibe(conflicts_marker);
+
+        assert_eq!(marker, UniversalMarker::from_combined(environment));
+    }
+
+    #[test]
+    fn imbibe_environment_with_impossible_selection() {
+        let conflicts = create_conflicts([create_set(["foo", "bar"])]);
+        let conflicts_marker = ConflictMarker::from_conflicts(&conflicts);
+        let environment =
+            MarkerTree::from_str("python_full_version < '3.12'").expect("valid marker expression");
+        let impossible = create_extra_marker("foo")
+            .marker
+            .and(create_extra_marker("bar").marker);
+        let mut marker = UniversalMarker::from_combined(environment.or(impossible));
+
+        marker.imbibe(conflicts_marker);
+
+        assert_eq!(marker, UniversalMarker::from_combined(environment));
+    }
+
+    /// An unreachable edge must still allow readers to discover conflicting requests.
+    #[test]
+    fn imbibe_false_marker() {
+        let conflicts = create_conflicts([create_set(["foo", "bar"])]);
+        let conflicts_marker = ConflictMarker::from_conflicts(&conflicts);
+        let mut marker = UniversalMarker::FALSE;
+
+        marker.imbibe(conflicts_marker);
+
+        assert_eq!(
+            marker,
+            UniversalMarker::new(
+                MarkerTree::TRUE,
+                create_extra_marker("foo").and(create_extra_marker("bar")),
+            ),
+        );
+    }
+
+    #[test]
+    fn imbibe_impossible_selection() {
+        let conflicts = create_conflicts([create_set(["foo", "bar"])]);
+        let conflicts_marker = ConflictMarker::from_conflicts(&conflicts);
+        let mut marker = UniversalMarker::new(
+            MarkerTree::TRUE,
+            create_extra_marker("foo").and(create_extra_marker("bar")),
+        );
+        let expected = marker;
+
+        marker.imbibe(conflicts_marker);
+
+        assert_eq!(marker, expected);
+    }
+
+    /// The extra condition is necessary even when an environment condition is also present.
+    #[test]
+    fn imbibe_environment_dependent_extra() {
+        let conflicts = create_conflicts([create_set(["foo", "bar"])]);
+        let conflicts_marker = ConflictMarker::from_conflicts(&conflicts);
+        let environment =
+            MarkerTree::from_str("sys_platform == 'darwin'").expect("valid marker expression");
+        let foo = create_extra_marker("foo").marker;
+        let bar = create_extra_marker("bar").marker;
+        let mut marker = UniversalMarker::from_combined(environment.and(foo));
+
+        marker.imbibe(conflicts_marker);
+
+        assert_eq!(marker.combined(), environment.and(foo).or(foo.and(bar)));
+        assert_eq!(marker.pep508(), MarkerTree::TRUE);
     }
 
     #[test]
@@ -1247,5 +1285,42 @@ mod tests {
         let cm = MarkerTree::from_str("python_version >= '3.10' and extra == 'bar'").unwrap();
         let cm = resolve_activated_extras(cm, Some(&package), &known_conflicts);
         assert!(cm.is_false());
+    }
+
+    #[test]
+    fn resolve_encoded_conflicts_before_scoped_extras() {
+        let package = create_package("pkg");
+        let known_conflicts = FxHashMap::from_iter([
+            (
+                ConflictItem::from((
+                    package.clone(),
+                    ExtraName::from_str("foo").expect("valid marker or name"),
+                )),
+                MarkerTree::from_str("sys_platform == 'darwin'").expect("valid marker or name"),
+            ),
+            (
+                ConflictItem::from((
+                    package.clone(),
+                    ExtraName::from_str("extra-3-pkg-foo").expect("valid marker or name"),
+                )),
+                MarkerTree::TRUE,
+            ),
+            (
+                ConflictItem::from((
+                    package.clone(),
+                    GroupName::from_str("dev").expect("valid marker or name"),
+                )),
+                MarkerTree::from_str("python_version >= '3.11'").expect("valid marker or name"),
+            ),
+            (ConflictItem::from(package.clone()), MarkerTree::TRUE),
+        ]);
+        let marker = MarkerTree::from_str(
+            "extra == 'extra-3-pkg-foo' and extra != 'group-3-pkg-dev' and extra == 'project-3-pkg'",
+        ).expect("valid marker or name");
+        assert_eq!(
+            resolve_activated_extras(marker, Some(&package), &known_conflicts),
+            MarkerTree::from_str("sys_platform == 'darwin' and python_version < '3.11'")
+                .expect("valid marker or name"),
+        );
     }
 }

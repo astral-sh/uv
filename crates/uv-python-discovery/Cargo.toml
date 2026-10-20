@@ -25,6 +25,7 @@ uv-dirs = { workspace = true }
 uv-distribution-types = { workspace = true }
 uv-errors = { workspace = true }
 uv-fs = { workspace = true }
+uv-macros = { workspace = true }
 uv-pep440 = { workspace = true }
 uv-platform = { workspace = true }
 uv-python-interpreter = { workspace = true }
@@ -42,7 +43,7 @@ indicatif = { workspace = true }
 itertools = { workspace = true }
 owo-colors = { workspace = true }
 rayon = { workspace = true }
-regex = { workspace = true }
+regex = { workspace = true, features = ["perf", "unicode"] }
 reqwest-retry = { workspace = true }
 rustc-hash = { workspace = true }
 same-file = { workspace = true }

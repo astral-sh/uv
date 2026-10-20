@@ -43,7 +43,6 @@ use std::str::FromStr;
 use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::instrument;
 use unscanny::{Pattern, Scanner};
-use url::Url;
 
 #[cfg(feature = "http")]
 use uv_client::{BaseClient, ClientBuildError};
@@ -58,7 +57,7 @@ use uv_fs::normalize_path;
 use uv_pep508::{Pep508Error, RequirementOrigin, VerbatimUrl, expand_env_vars};
 use uv_pypi_types::VerbatimParsedUrl;
 #[cfg(feature = "http")]
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 
 pub use crate::requirement::{MakeEditableError, RequirementsTxtRequirement};
 use crate::shquote::unquote;
@@ -1113,12 +1112,12 @@ fn parse_value<'a, T>(
 /// Fetch the contents of a URL and return them as a string.
 #[cfg(feature = "http")]
 async fn read_url_to_string(
-    url: &DisplaySafeUrl,
+    url: &SafeUrl,
     client: BaseClient,
 ) -> Result<String, RequirementsTxtParserError> {
     let response = client
         .for_host(url)
-        .get(Url::from(url.clone()))
+        .get(url.clone())
         .send()
         .await
         .map_err(|err| RequirementsTxtParserError::from_reqwest_middleware(url.clone(), err))?;
@@ -1219,9 +1218,9 @@ pub enum RequirementsTxtParserError {
         end: usize,
     },
     #[cfg(feature = "http")]
-    Reqwest(DisplaySafeUrl, reqwest_middleware::Error),
+    Reqwest(SafeUrl, reqwest_middleware::Error),
     #[cfg(feature = "http")]
-    ClientBuild(DisplaySafeUrl, Box<ClientBuildError>),
+    ClientBuild(SafeUrl, Box<ClientBuildError>),
 }
 
 impl Display for RequirementsTxtParserError {
@@ -1458,11 +1457,11 @@ impl From<io::Error> for RequirementsTxtParserError {
 
 #[cfg(feature = "http")]
 impl RequirementsTxtParserError {
-    fn from_reqwest(url: DisplaySafeUrl, err: reqwest::Error) -> Self {
+    fn from_reqwest(url: SafeUrl, err: reqwest::Error) -> Self {
         Self::Reqwest(url, reqwest_middleware::Error::Reqwest(err))
     }
 
-    fn from_reqwest_middleware(url: DisplaySafeUrl, err: reqwest_middleware::Error) -> Self {
+    fn from_reqwest_middleware(url: SafeUrl, err: reqwest_middleware::Error) -> Self {
         Self::Reqwest(url, err)
     }
 }
@@ -2178,7 +2177,7 @@ mod test {
                                 url: VerbatimParsedUrl {
                                     parsed_url: Directory(
                                         ParsedDirectoryUrl {
-                                            url: DisplaySafeUrl {
+                                            url: SafeUrl {
                                                 scheme: "file",
                                                 cannot_be_a_base: false,
                                                 username: "",
@@ -2197,7 +2196,7 @@ mod test {
                                         },
                                     ),
                                     verbatim: VerbatimUrl {
-                                        url: DisplaySafeUrl {
+                                        url: SafeUrl {
                                             scheme: "file",
                                             cannot_be_a_base: false,
                                             username: "",
@@ -2458,7 +2457,7 @@ mod test {
                 editables: [],
                 index_url: Some(
                     VerbatimUrl {
-                        url: DisplaySafeUrl {
+                        url: SafeUrl {
                             scheme: "https",
                             cannot_be_a_base: false,
                             username: "",
@@ -2535,7 +2534,7 @@ mod test {
                                 url: VerbatimParsedUrl {
                                     parsed_url: Path(
                                         ParsedPathUrl {
-                                            url: DisplaySafeUrl {
+                                            url: SafeUrl {
                                                 scheme: "file",
                                                 cannot_be_a_base: false,
                                                 username: "",
@@ -2551,7 +2550,7 @@ mod test {
                                         },
                                     ),
                                     verbatim: VerbatimUrl {
-                                        url: DisplaySafeUrl {
+                                        url: SafeUrl {
                                             scheme: "file",
                                             cannot_be_a_base: false,
                                             username: "",
@@ -2586,7 +2585,7 @@ mod test {
                                 url: VerbatimParsedUrl {
                                     parsed_url: Path(
                                         ParsedPathUrl {
-                                            url: DisplaySafeUrl {
+                                            url: SafeUrl {
                                                 scheme: "file",
                                                 cannot_be_a_base: false,
                                                 username: "",
@@ -2602,7 +2601,7 @@ mod test {
                                         },
                                     ),
                                     verbatim: VerbatimUrl {
-                                        url: DisplaySafeUrl {
+                                        url: SafeUrl {
                                             scheme: "file",
                                             cannot_be_a_base: false,
                                             username: "",
@@ -2637,7 +2636,7 @@ mod test {
                                 url: VerbatimParsedUrl {
                                     parsed_url: Path(
                                         ParsedPathUrl {
-                                            url: DisplaySafeUrl {
+                                            url: SafeUrl {
                                                 scheme: "file",
                                                 cannot_be_a_base: false,
                                                 username: "",
@@ -2653,7 +2652,7 @@ mod test {
                                         },
                                     ),
                                     verbatim: VerbatimUrl {
-                                        url: DisplaySafeUrl {
+                                        url: SafeUrl {
                                             scheme: "file",
                                             cannot_be_a_base: false,
                                             username: "",
@@ -2692,7 +2691,7 @@ mod test {
                                 url: VerbatimParsedUrl {
                                     parsed_url: Path(
                                         ParsedPathUrl {
-                                            url: DisplaySafeUrl {
+                                            url: SafeUrl {
                                                 scheme: "file",
                                                 cannot_be_a_base: false,
                                                 username: "",
@@ -2708,7 +2707,7 @@ mod test {
                                         },
                                     ),
                                     verbatim: VerbatimUrl {
-                                        url: DisplaySafeUrl {
+                                        url: SafeUrl {
                                             scheme: "file",
                                             cannot_be_a_base: false,
                                             username: "",
@@ -2743,7 +2742,7 @@ mod test {
                                 url: VerbatimParsedUrl {
                                     parsed_url: Path(
                                         ParsedPathUrl {
-                                            url: DisplaySafeUrl {
+                                            url: SafeUrl {
                                                 scheme: "file",
                                                 cannot_be_a_base: false,
                                                 username: "",
@@ -2759,7 +2758,7 @@ mod test {
                                         },
                                     ),
                                     verbatim: VerbatimUrl {
-                                        url: DisplaySafeUrl {
+                                        url: SafeUrl {
                                             scheme: "file",
                                             cannot_be_a_base: false,
                                             username: "",
@@ -2794,7 +2793,7 @@ mod test {
                                 url: VerbatimParsedUrl {
                                     parsed_url: Path(
                                         ParsedPathUrl {
-                                            url: DisplaySafeUrl {
+                                            url: SafeUrl {
                                                 scheme: "file",
                                                 cannot_be_a_base: false,
                                                 username: "",
@@ -2810,7 +2809,7 @@ mod test {
                                         },
                                     ),
                                     verbatim: VerbatimUrl {
-                                        url: DisplaySafeUrl {
+                                        url: SafeUrl {
                                             scheme: "file",
                                             cannot_be_a_base: false,
                                             username: "",

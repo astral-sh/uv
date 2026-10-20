@@ -1,6 +1,5 @@
 use std::collections::BTreeMap;
 use std::env;
-use std::ffi::OsStr;
 use std::io::Write;
 use std::path::Path;
 use std::str::FromStr;
@@ -161,16 +160,15 @@ pub async fn pip_compile(
     });
 
     // If the user is exporting to PEP 751, ensure the filename matches the specification.
-    if matches!(format, PipCompileFormat::PylockToml) {
-        if let Some(file_name) = output_file
-            .and_then(Path::file_name)
-            .and_then(OsStr::to_str)
-        {
-            if !is_pylock_toml(file_name) {
-                return Err(anyhow!(
-                    "Expected the output filename to be `pylock.toml` or `pylock.<name>.toml`, where `<name>` is non-empty and contains no dots; found `{file_name}`",
-                ));
-            }
+    if matches!(format, PipCompileFormat::PylockToml)
+        && let Some(output_file) = output_file
+    {
+        let file_name = output_file.file_name().unwrap_or(output_file.as_os_str());
+        if !file_name.to_str().is_some_and(is_pylock_toml) {
+            let file_name = file_name.to_string_lossy();
+            return Err(anyhow!(
+                "Expected the output filename to be `pylock.toml` or `pylock.<name>.toml`, where `<name>` is non-empty and contains no dots; found `{file_name}`",
+            ));
         }
     }
 
@@ -311,7 +309,7 @@ pub async fn pip_compile(
         // be able to use `PythonInstallation::find(...)` here.
         let request = if let Some(version) = python_version.as_ref() {
             // TODO(zanieb): We should consolidate `VersionRequest` and `PythonVersion`
-            PythonRequest::Version(VersionRequest::from(version))
+            PythonRequest::Version(VersionRequest::try_from(version)?)
         } else {
             PythonRequest::default()
         };
@@ -761,11 +759,10 @@ pub async fn pip_compile(
 
             // Determine the directory relative to which the output file should be written.
             let output_file = output_file.map(std::path::absolute).transpose()?;
-            let install_path = if let Some(output_file) = output_file.as_deref() {
-                output_file.parent().unwrap()
-            } else {
-                &*CWD
-            };
+            let install_path = output_file
+                .as_deref()
+                .and_then(Path::parent)
+                .unwrap_or(&CWD);
 
             // Convert the resolution to a `pylock.toml` file.
             let mut export = PylockToml::from_resolution(

@@ -85,7 +85,7 @@ pub(crate) fn required_dist(
         } => Dist::from_http_url(
             requirement.name.clone(),
             url.clone(),
-            location.clone(),
+            location.as_url().clone(),
             subdirectory.clone(),
             *ext,
         )?,

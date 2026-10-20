@@ -34,6 +34,7 @@ uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
 uv-preview = { workspace = true, features = ["testing"] }
 uv-python-discovery = { workspace = true }
+uv-redacted = { workspace = true }
 uv-static = { workspace = true }
 uv-version = { workspace = true }
 
@@ -52,7 +53,7 @@ indoc = { workspace = true }
 insta = { workspace = true, features = ["filters"] }
 itertools = { workspace = true }
 predicates = { workspace = true }
-regex = { workspace = true }
+regex = { workspace = true, features = ["perf", "unicode"] }
 reqwest = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -63,6 +64,5 @@ tempfile = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 toml = { workspace = true }
-url = { workspace = true }
 walkdir = { workspace = true }
 wiremock = { workspace = true }

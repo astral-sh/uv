@@ -211,10 +211,6 @@ jiff = { version = "0.2.0", default-features = false, features = [
   "serde",
   "std",
   "tz-fat",
-  "tz-system",
-  "tzdb-bundle-platform",
-  "tzdb-concatenated",
-  "tzdb-zoneinfo",
 ] }
 junction = { version = "2.0.0", default-features = false, features = ["unstable_admin"] }
 libc = { version = "0.2.0", default-features = false, features = ["std"] }
@@ -229,14 +225,26 @@ pathdiff = { version = "0.2.1", default-features = false }
 percent-encoding = { version = "2.3.1", default-features = false, features = ["std"] }
 petgraph = { version = "0.8.0", default-features = false, features = ["std"] }
 proc-macro2 = { version = "1.0.86", default-features = false, features = ["proc-macro"] }
-procfs = { version = "0.18.0", default-features = false, features = ["flate2"] }
+procfs = { version = "0.18.0", default-features = false }
 pubgrub = { version = "0.6.1", package = "astral-pubgrub", default-features = false }
 quote = { version = "1.0.37", default-features = false, features = ["proc-macro"] }
 rand = { version = "0.10.2", default-features = false, features = ["thread_rng"] }
 rayon = { version = "1.10.0", default-features = false }
 ref-cast = { version = "1.0.24", default-features = false }
 reflink-copy = { version = "0.1.19", default-features = false }
-regex = { version = "1.13.0", default-features = false, features = ["perf", "std", "unicode"] }
+# Keep the regex features used by uv-build in the base set. Other consumers opt into the full
+# `perf` and `unicode` feature sets.
+regex = { version = "1.13.0", default-features = false, features = [
+  "perf-backtrack",
+  "perf-cache",
+  "perf-dfa",
+  "perf-inline",
+  "perf-literal",
+  "std",
+  "unicode-case",
+  "unicode-gencat",
+  "unicode-perl",
+] }
 regex-automata = { version = "0.4.8", default-features = false, features = [
   "dfa-build",
   "dfa-search",
@@ -293,7 +301,7 @@ shellexpand = { version = "3.1.0", default-features = false, features = [
 ] }
 security-framework = { version = "3", default-features = false }
 self-replace = { version = "1.5.0", default-features = false }
-serc = { version = "0.1.5", default-features = false }
+serc = { version = "0.1.7", default-features = false }
 siphasher = { version = "1.0.3", default-features = false }
 serde = { version = "1.0.210", default-features = false, features = ["derive", "rc", "std"] }
 serde_json = { version = "1.0.128", default-features = false, features = ["std"] }
@@ -522,7 +530,7 @@ panic = "abort"
 # release builds.
 [profile.profiling]
 inherits = "release"
-codegen-units = 16
+codegen-units = 1
 strip = false
 debug = "full"
 lto = false

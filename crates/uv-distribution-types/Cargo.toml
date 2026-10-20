@@ -37,7 +37,12 @@ bitflags = { workspace = true }
 fs-err = { workspace = true }
 http = { workspace = true }
 itertools = { workspace = true }
-jiff = { workspace = true }
+jiff = { workspace = true, features = [
+  "tz-system",
+  "tzdb-bundle-platform",
+  "tzdb-concatenated",
+  "tzdb-zoneinfo",
+] }
 memchr = { workspace = true }
 owo-colors = { workspace = true }
 percent-encoding = { workspace = true }

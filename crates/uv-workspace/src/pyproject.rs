@@ -34,7 +34,8 @@ use uv_pypi_types::{
     ConflictError, Conflicts, DependencyGroups, SchemaConflicts, SupportedEnvironments,
     VerbatimParsedUrl,
 };
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
+use uv_redacted::policy::Raw;
 use uv_toml::deserialize_unique_map;
 
 use crate::DefaultGroupsError;
@@ -1248,7 +1249,7 @@ pub enum Source {
     /// ```
     Git {
         /// The repository URL (without the `git+` prefix).
-        git: DisplaySafeUrl,
+        git: SafeUrl<Raw>,
         /// The path to the directory with the `pyproject.toml`, if it's not in the repository root.
         subdirectory: Option<PortablePathBuf>,
         /// The path to the archive within the repository.
@@ -1276,7 +1277,7 @@ pub enum Source {
     /// flask = { url = "https://files.pythonhosted.org/packages/61/80/ffe1da13ad9300f87c93af113edd0638c75138c42a0994becfacac078c06/flask-3.0.3-py3-none-any.whl" }
     /// ```
     Url {
-        url: DisplaySafeUrl,
+        url: SafeUrl<Raw>,
         /// For source distributions, the path to the directory with the `pyproject.toml`, if it's
         /// not in the archive root.
         subdirectory: Option<PortablePathBuf>,
@@ -1364,13 +1365,13 @@ impl<'de> Deserialize<'de> for Source {
         #[derive(Deserialize, Debug, Clone)]
         #[serde(rename_all = "kebab-case", deny_unknown_fields)]
         struct CatchAll {
-            git: Option<DisplaySafeUrl>,
+            git: Option<SafeUrl>,
             subdirectory: Option<PortablePathBuf>,
             rev: Option<String>,
             tag: Option<String>,
             branch: Option<String>,
             lfs: Option<bool>,
-            url: Option<DisplaySafeUrl>,
+            url: Option<SafeUrl>,
             path: Option<PortablePathBuf>,
             editable: Option<bool>,
             package: Option<bool>,
@@ -1460,13 +1461,13 @@ impl<'de> Deserialize<'de> for Source {
 
             // If the user prefixed the URL with `git+`, strip it.
             let git = if let Some(git) = git.as_str().strip_prefix("git+") {
-                DisplaySafeUrl::parse(git).map_err(serde::de::Error::custom)?
+                SafeUrl::parse(git).map_err(serde::de::Error::custom)?
             } else {
                 git
             };
 
             return Ok(Self::Git {
-                git,
+                git: git.with_policy(Raw),
                 subdirectory,
                 path,
                 rev,
@@ -1528,7 +1529,7 @@ impl<'de> Deserialize<'de> for Source {
             }
 
             return Ok(Self::Url {
-                url,
+                url: url.with_policy(Raw),
                 subdirectory,
                 marker,
                 extra,
@@ -1928,7 +1929,7 @@ impl Source {
                         tag,
                         branch,
                         lfs: lfs.into(),
-                        git: git.url().clone(),
+                        git: git.url().clone().with_policy(Raw),
                         subdirectory: subdirectory.map(PortablePathBuf::from),
                         path: None,
                         marker: MarkerTree::TRUE,
@@ -1941,7 +1942,7 @@ impl Source {
                         tag,
                         branch,
                         lfs: lfs.into(),
-                        git: git.url().clone(),
+                        git: git.url().clone().with_policy(Raw),
                         subdirectory: subdirectory.map(PortablePathBuf::from),
                         path: None,
                         marker: MarkerTree::TRUE,
@@ -1960,7 +1961,7 @@ impl Source {
                         tag,
                         branch,
                         lfs: lfs.into(),
-                        git: git.url().clone(),
+                        git: git.url().clone().with_policy(Raw),
                         subdirectory: None,
                         path: Some(PortablePathBuf::from(install_path.as_path())),
                         marker: MarkerTree::TRUE,
@@ -1973,7 +1974,7 @@ impl Source {
                         tag,
                         branch,
                         lfs: lfs.into(),
-                        git: git.url().clone(),
+                        git: git.url().clone().with_policy(Raw),
                         subdirectory: None,
                         path: Some(PortablePathBuf::from(install_path.as_path())),
                         marker: MarkerTree::TRUE,

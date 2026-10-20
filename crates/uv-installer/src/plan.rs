@@ -23,7 +23,7 @@ use uv_pep508::VerbatimUrl;
 use uv_platform_tags::{AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagCompatibility, Tags};
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_python_interpreter::PythonEnvironment;
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 use uv_types::HashStrategy;
 
 use crate::satisfies::{BuildSettings, RequirementSatisfaction};
@@ -73,7 +73,7 @@ pub struct IncompatibleWheelError {
 
 #[derive(Debug)]
 enum IncompatibleWheelKind {
-    Url(DisplaySafeUrl),
+    Url(SafeUrl),
     Path(PathBuf),
 }
 
@@ -631,7 +631,7 @@ impl<'a> Planner<'a> {
                     }
                 }
                 Dist::Source(SourceDist::Registry(sdist)) => {
-                    if let Some(distribution) = registry_index.source(sdist, no_build, no_binary) {
+                    if let Some(distribution) = registry_index.source(sdist, no_build) {
                         debug!("Registry requirement already cached: {distribution}");
                         cached.push(CachedDist::Registry(distribution.clone()));
                         continue;

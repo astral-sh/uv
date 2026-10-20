@@ -46,7 +46,6 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true, features = ["io"] }
 tracing = { workspace = true }
-url = { workspace = true }
 
 [dev-dependencies]
 uv-errors = { workspace = true }

@@ -13,7 +13,7 @@ use uv_fs::Simplified;
 use uv_normalize::{GroupName, PackageName};
 use uv_pep440::Version;
 use uv_python_types::PythonArchitecture;
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 use uv_static::{EnvVars, InvalidEnvironmentVariable, parse_boolish_environment_variable};
 use uv_torch::AmdGpuArchitecture;
 use uv_warnings::warn_user;
@@ -807,7 +807,7 @@ pub struct EnvironmentOptions {
     pub venv_relocatable: EnvFlag,
     pub init_bare: EnvFlag,
     pub malware_check: EnvFlag,
-    pub malware_check_url: Option<DisplaySafeUrl>,
+    pub malware_check_url: Option<SafeUrl>,
     #[cfg(unix)]
     pub run_rlimit_nofile: Option<u32>,
 }
@@ -964,7 +964,7 @@ impl EnvironmentOptions {
             malware_check: EnvFlag::new(EnvVars::UV_MALWARE_CHECK)?,
             malware_check_url: parse_string_environment_variable(EnvVars::UV_MALWARE_CHECK_URL)?
                 .map(|value| {
-                    value.parse::<DisplaySafeUrl>().map_err(|err| {
+                    value.parse::<SafeUrl>().map_err(|err| {
                         Error::InvalidEnvironmentVariable(InvalidEnvironmentVariable {
                             name: EnvVars::UV_MALWARE_CHECK_URL.to_string(),
                             value,

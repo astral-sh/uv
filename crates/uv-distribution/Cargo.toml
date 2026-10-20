@@ -16,6 +16,7 @@ doctest = false
 workspace = true
 
 [dependencies]
+uv-macros = { workspace = true }
 uv-python-types = { workspace = true }
 uv-auth = { workspace = true }
 uv-cache = { workspace = true }
@@ -64,7 +65,6 @@ tokio = { workspace = true }
 tokio-util = { workspace = true, features = ["compat"] }
 toml = { workspace = true }
 tracing = { workspace = true }
-url = { workspace = true }
 version-ranges = { workspace = true }
 walkdir = { workspace = true }
 

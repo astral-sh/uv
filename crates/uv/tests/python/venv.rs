@@ -72,6 +72,27 @@ fn create_venv() {
 }
 
 #[test]
+#[cfg(unix)]
+fn create_venv_ksh() {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+
+    // OpenBSD ksh requires `.` to source the activation script.
+    // See astral-sh/uv#22537.
+    uv_snapshot!(context.filters(), context.venv()
+        .arg("--python")
+        .arg("3.12")
+        .env(EnvVars::SHELL, "/bin/ksh"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Activate with: . .venv/bin/activate
+    ");
+
+    context.venv.assert(predicates::path::is_dir());
+}
+
+#[test]
 fn create_venv_skips_distutils_patch_on_py310() {
     let context = uv_test::test_context_with_versions!(&["3.10"]);
 
@@ -1501,15 +1522,15 @@ fn create_venv_unknown_python_patch() {
 #[cfg(feature = "test-python-patch")]
 #[test]
 fn create_venv_python_patch() {
-    let context = uv_test::test_context_with_versions!(&["3.12.9"]);
+    let context = uv_test::test_context_with_versions!(&["3.12.15"]);
 
     uv_snapshot!(context.filters(), context.venv()
         .arg(context.venv.as_os_str())
         .arg("--python")
-        .arg("3.12.9"), @r"
+        .arg("3.12.15"), @r"
     exit_code: 0 (success)
     ----- stderr -----
-    Using CPython 3.12.9 interpreter at: [PYTHON-3.12.9]
+    Using CPython 3.12.15 interpreter at: [PYTHON-3.12.15]
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
     "
@@ -2148,6 +2169,33 @@ fn create_venv_apostrophe() {
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert_eq!(stdout.trim(), venv_dir.to_string_lossy());
+}
+
+/// Emulate a ksh without ksh93's `${.sh.file}` parameter using a POSIX shell.
+#[test]
+#[cfg(unix)]
+fn activate_non_relocatable_venv_ksh() {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+    context
+        .venv()
+        .arg("--no-relocatable")
+        .arg("--python")
+        .arg("3.12")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.external_command("sh")
+        .arg("-c")
+        .arg(indoc! {r"
+            unset BASH_VERSION ZSH_VERSION
+            readonly SCRIPT_PATH=caller
+            . .venv/bin/activate && python -c 'import sys; print(sys.prefix)'
+        "})
+        .env(EnvVars::KSH_VERSION, "test"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [VENV]/
+    ");
 }
 
 #[test]

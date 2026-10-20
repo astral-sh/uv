@@ -1,8 +1,9 @@
 use anyhow::{Result, anyhow};
 use assert_fs::prelude::*;
 use insta::allow_duplicates;
-use url::Url;
 
+#[cfg(feature = "test-pypi")]
+use uv_redacted::SafeUrl;
 use uv_static::EnvVars;
 use uv_test::packse::PackseServer;
 use uv_test::{TestContext, uv_snapshot};
@@ -1669,7 +1670,7 @@ fn upgrade_allows_registry_source() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let empty_index = context.temp_dir.child("empty-index");
     empty_index.create_dir_all()?;
-    let empty_index = Url::from_directory_path(empty_index.path())
+    let empty_index = SafeUrl::from_directory_path(empty_index.path())
         .map_err(|()| anyhow!("Failed to create empty index URL"))?;
     let pyproject_toml = format!(
         r#"

@@ -846,40 +846,29 @@ fn tool_run_url() {
 #[test]
 #[cfg(feature = "test-git")]
 fn tool_run_git() {
-    let context = uv_test::test_context!("3.12")
-        .with_filtered_counts()
-        .with_tool_dirs();
+    let context = uv_test::test_context!("3.12").with_tool_dirs();
 
     uv_snapshot!(context.filters(), context.tool_run()
-        .arg("git+https://github.com/psf/black@24.2.0")
-        .arg("--version"), @"
+        .arg("git+https://github.com/astral-sh/uv-dynamic-requires-python-test@75a612dc87fc215e999a25a0efc376cbf9831afa#subdirectory=static"), @"
     exit_code: 0 (success)
     ----- stdout -----
-    black, 24.2.0 (compiled: no)
-    Python (CPython) 3.12.[X]
+    3.12
 
     ----- stderr -----
-    Resolved [N] packages in [TIME]
-    Prepared [N] packages in [TIME]
-    Installed [N] packages in [TIME]
-     + black==24.2.0 (from git+https://github.com/psf/black@6fdf8a4af28071ed1d079c01122b34c5d587207a)
-     + click==8.1.7
-     + mypy-extensions==1.0.0
-     + packaging==24.0
-     + pathspec==0.12.1
-     + platformdirs==4.2.0
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + static-requires-python-tool==0.1.0 (from git+https://github.com/astral-sh/uv-dynamic-requires-python-test@75a612dc87fc215e999a25a0efc376cbf9831afa#subdirectory=static)
     ");
 
     uv_snapshot!(context.filters(), context.tool_run()
-        .arg("black @ git+https://github.com/psf/black@24.2.0")
-        .arg("--version"), @"
+        .arg("static-requires-python-tool @ git+https://github.com/astral-sh/uv-dynamic-requires-python-test@75a612dc87fc215e999a25a0efc376cbf9831afa#subdirectory=static"), @"
     exit_code: 0 (success)
     ----- stdout -----
-    black, 24.2.0 (compiled: no)
-    Python (CPython) 3.12.[X]
+    3.12
 
     ----- stderr -----
-    Resolved [N] packages in [TIME]
+    Resolved 1 package in [TIME]
     ");
 
     // Clear the cache.
@@ -887,38 +876,29 @@ fn tool_run_git() {
 
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("--from")
-        .arg("git+https://github.com/psf/black@24.2.0")
-        .arg("black")
-        .arg("--version"), @"
+        .arg("git+https://github.com/astral-sh/uv-dynamic-requires-python-test@75a612dc87fc215e999a25a0efc376cbf9831afa#subdirectory=static")
+        .arg("static-requires-python-tool"), @"
     exit_code: 0 (success)
     ----- stdout -----
-    black, 24.2.0 (compiled: no)
-    Python (CPython) 3.12.[X]
+    3.12
 
     ----- stderr -----
-    Resolved [N] packages in [TIME]
-    Prepared [N] packages in [TIME]
-    Installed [N] packages in [TIME]
-     + black==24.2.0 (from git+https://github.com/psf/black@6fdf8a4af28071ed1d079c01122b34c5d587207a)
-     + click==8.1.7
-     + mypy-extensions==1.0.0
-     + packaging==24.0
-     + pathspec==0.12.1
-     + platformdirs==4.2.0
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + static-requires-python-tool==0.1.0 (from git+https://github.com/astral-sh/uv-dynamic-requires-python-test@75a612dc87fc215e999a25a0efc376cbf9831afa#subdirectory=static)
     ");
 
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("--from")
-        .arg("black @ git+https://github.com/psf/black@24.2.0")
-        .arg("black")
-        .arg("--version"), @"
+        .arg("static-requires-python-tool @ git+https://github.com/astral-sh/uv-dynamic-requires-python-test@75a612dc87fc215e999a25a0efc376cbf9831afa#subdirectory=static")
+        .arg("static-requires-python-tool"), @"
     exit_code: 0 (success)
     ----- stdout -----
-    black, 24.2.0 (compiled: no)
-    Python (CPython) 3.12.[X]
+    3.12
 
     ----- stderr -----
-    Resolved [N] packages in [TIME]
+    Resolved 1 package in [TIME]
     ");
 }
 

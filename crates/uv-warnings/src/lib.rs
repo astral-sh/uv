@@ -16,6 +16,11 @@ use uv_errors::{ErrorOptions, Stderr, write_error_chain_with_options};
 /// Whether user-facing warnings are enabled.
 pub static ENABLED: AtomicBool = AtomicBool::new(false);
 
+/// Return whether user-facing warnings are enabled.
+pub fn is_enabled() -> bool {
+    ENABLED.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 /// Enable user-facing warnings.
 pub fn enable() {
     ENABLED.store(true, std::sync::atomic::Ordering::Relaxed);

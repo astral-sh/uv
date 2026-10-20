@@ -260,13 +260,15 @@ impl ManagedPythonInstallations {
     ///
     /// ## Errors
     ///
+    /// - The version is not a valid interpreter request
     /// - The platform metadata cannot be read
     /// - A directory for the installation cannot be read
     pub fn find_version<'a>(
         &'a self,
         version: &'a PythonVersion,
     ) -> Result<impl DoubleEndedIterator<Item = ManagedPythonInstallation> + 'a, Error> {
-        let request = VersionRequest::from(version);
+        let request = VersionRequest::try_from(version)
+            .map_err(|_| Error::InvalidPythonVersion(version.to_string()))?;
         Ok(Self::find_matching_current_platform()?
             .filter(move |installation| request.matches_installation_key(installation.key())))
     }
@@ -344,6 +346,7 @@ pub struct ManagedPythonInstallation {
 impl ManagedPythonInstallation {
     pub fn new(path: PathBuf, download: &ManagedPythonDownload) -> Result<Self, Error> {
         let implementation = ImplementationName::try_from(&download.key().implementation)?;
+        let path = std::path::absolute(&path).map_err(|err| Error::AbsolutePath(path, err))?;
         Ok(Self {
             path,
             key: download.key().clone(),
@@ -1087,7 +1090,13 @@ impl From<&ManagedPythonInstallation> for PythonDownloadRequest {
     fn from(installation: &ManagedPythonInstallation) -> Self {
         let key = installation.key();
         Self::new(
-            Some(VersionRequest::from(&key.version())),
+            Some(VersionRequest::from_components(
+                key.major,
+                key.minor,
+                key.patch,
+                key.prerelease,
+                PythonVariant::Default,
+            )),
             Some(installation.key_implementation()),
             Some(ArchRequest::Explicit(*key.arch())),
             Some(*key.os()),

@@ -1,5 +1,3 @@
-use std::ops::Deref;
-
 use anyhow::{Result, bail};
 use clap::Parser;
 use futures::TryStreamExt;
@@ -43,7 +41,7 @@ pub(crate) async fn validate_zip(
 
     let response = client
         .uncached_client(&archive.url)
-        .get(archive.url.deref().clone())
+        .get(archive.url.clone())
         .send()
         .await?;
     let reader = response

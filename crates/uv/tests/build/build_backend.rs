@@ -1,5 +1,7 @@
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
+#[cfg(unix)]
+use assert_fs::fixture::SymlinkToFile;
 use assert_fs::fixture::{FileTouch, FileWriteBin, FileWriteStr, PathChild, PathCreateDir};
 use flate2::bufread::GzDecoder;
 use fs_err::File;
@@ -1087,6 +1089,165 @@ fn license_file_must_be_utf8() -> Result<()> {
     Ok(())
 }
 
+/// License globs must exclude unrelated files and symlinks that do not resolve to regular files.
+#[test]
+fn license_glob_excludes_nonmatching_files() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        license-files = ["licenses/**/LICENSE.txt"]
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    context.temp_dir.child("src/project/__init__.py").touch()?;
+    context
+        .temp_dir
+        .child("licenses/vendor[1]/LICENSE.txt")
+        .write_str("Vendor license")?;
+    context
+        .temp_dir
+        .child("licenses/vendor[1]/thing.bin")
+        .write_binary(&[0xff])?;
+    #[cfg(unix)]
+    {
+        fs_err::os::unix::fs::symlink(
+            "thing.bin",
+            context.temp_dir.join("licenses/vendor[1]/symlink.bin"),
+        )?;
+        context.temp_dir.child("assets").create_dir_all()?;
+        fs_err::os::unix::fs::symlink(
+            "../../assets",
+            context.temp_dir.join("licenses/vendor[1]/assets-link"),
+        )?;
+        fs_err::os::unix::fs::symlink(
+            "missing",
+            context.temp_dir.join("licenses/vendor[1]/dangling-link"),
+        )?;
+        context
+            .temp_dir
+            .child("licenses/directory")
+            .create_dir_all()?;
+        fs_err::os::unix::fs::symlink(
+            "../../assets",
+            context.temp_dir.join("licenses/directory/LICENSE.txt"),
+        )?;
+        context
+            .temp_dir
+            .child("licenses/dangling")
+            .create_dir_all()?;
+        fs_err::os::unix::fs::symlink(
+            "missing",
+            context.temp_dir.join("licenses/dangling/LICENSE.txt"),
+        )?;
+    }
+
+    uv_snapshot!(context.build().arg("--sdist").arg("--wheel").arg("--list"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    Building project-0.1.0.tar.gz will include the following files:
+    project-0.1.0/PKG-INFO (generated)
+    project-0.1.0/pyproject.toml (generated)
+    project-0.1.0/pyproject.toml.orig (pyproject.toml)
+    project-0.1.0/licenses/vendor[1]/LICENSE.txt (licenses/vendor[1]/LICENSE.txt)
+    project-0.1.0/src/project/__init__.py (src/project/__init__.py)
+    Building project-0.1.0-py3-none-any.whl will include the following files:
+    project/__init__.py (src/project/__init__.py)
+    project-0.1.0.dist-info/licenses/licenses/vendor[1]/LICENSE.txt (licenses/vendor[1]/LICENSE.txt)
+    project-0.1.0.dist-info/WHEEL (generated)
+    project-0.1.0.dist-info/METADATA (generated)
+    ");
+
+    uv_snapshot!(context.filters(), context.build().arg("--sdist").arg("--wheel"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Building source distribution...
+    Building wheel...
+    Successfully built dist/project-0.1.0.tar.gz
+    Successfully built dist/project-0.1.0-py3-none-any.whl
+    ");
+
+    Ok(())
+}
+
+/// Matching directory and dangling symlinks do not satisfy the requirement to match a license file.
+#[test]
+#[cfg(unix)]
+fn license_glob_matching_only_non_files_errors() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        license-files = ["licenses/*"]
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    context.temp_dir.child("src/project/__init__.py").touch()?;
+    context.temp_dir.child("licenses").create_dir_all()?;
+    context.temp_dir.child("assets").create_dir_all()?;
+    fs_err::os::unix::fs::symlink("../assets", context.temp_dir.join("licenses/directory"))?;
+    fs_err::os::unix::fs::symlink("missing", context.temp_dir.join("licenses/dangling"))?;
+
+    uv_snapshot!(context
+        .build_backend()
+        .arg("build-wheel")
+        .arg(context.temp_dir.path()), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Invalid project metadata
+      cause: `project.license-files` glob `licenses/*` did not match any files
+    ");
+
+    Ok(())
+}
+
+/// A symlinked module directory must not produce a source distribution without its code.
+#[test]
+#[cfg(unix)]
+fn symlinked_module_directory() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    context.temp_dir.child("real-package/__init__.py").touch()?;
+    context.temp_dir.child("src").create_dir_all()?;
+    fs_err::os::unix::fs::symlink("../real-package", context.temp_dir.join("src/project"))?;
+
+    uv_snapshot!(context.filters(), context.build().arg("--sdist"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Building source distribution...
+    error: Failed to build `[TEMP_DIR]/`
+      cause: Failed to write tar archive to `dist/project-0.1.0.tar.gz`
+      cause: failed to read archive file payload source
+      cause: failed to read from file `[TEMP_DIR]/src/project`: Is a directory (os error 21)
+    ");
+
+    Ok(())
+}
+
 /// Test that a symlinked file (here: license) gets included.
 #[test]
 #[cfg(unix)]
@@ -1454,11 +1615,14 @@ fn venv_in_source_tree() {
         .assert()
         .success();
 
-    context
-        .venv()
-        .arg(context.temp_dir.join("src").join("foo").join(".venv"))
-        .assert()
-        .success();
+    let venv = context.temp_dir.child("src/foo/.venv");
+    context.venv().arg(venv.path()).assert().success();
+
+    // Reject the virtual environment before attempting to read its files.
+    #[cfg(unix)]
+    venv.child("broken")
+        .symlink_to_file("missing")
+        .expect("create a dangling symlink");
 
     uv_snapshot!(context.filters(), context.build(), @"
     exit_code: 2 (failure)

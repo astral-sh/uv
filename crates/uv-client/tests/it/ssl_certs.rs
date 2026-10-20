@@ -10,13 +10,12 @@ use temp_env::async_with_vars;
 use tempfile::{NamedTempFile, TempDir};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
-use url::Url;
 
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Certificates, RegistryClientBuilder};
 use uv_distribution_types::IndexUrl;
 use uv_errors::{ErrorOptions, Hinted, write_error_chain_with_options};
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 use uv_static::EnvVars;
 
 use crate::http_util::{
@@ -351,7 +350,7 @@ impl TestClient {
     /// Assert that an HTTPS connection to a public host succeeds.
     #[cfg(feature = "test-pypi")]
     async fn expect_https_connect_succeeds_for_host(&self, host: &str) {
-        let url = DisplaySafeUrl::from_str(&format!("https://{host}/")).unwrap();
+        let url = SafeUrl::from_str(&format!("https://{host}/")).unwrap();
         let vars = self.ssl_vars();
         let system_certs = self.system_certs;
         async_with_vars(vars, async {
@@ -369,7 +368,7 @@ impl TestClient {
     /// error on the client side.
     #[cfg(feature = "test-pypi")]
     async fn expect_https_connect_fails_for_host(&self, host: &str) {
-        let url = DisplaySafeUrl::from_str(&format!("https://{host}/")).unwrap();
+        let url = SafeUrl::from_str(&format!("https://{host}/")).unwrap();
         let vars = self.ssl_vars();
         let system_certs = self.system_certs;
         async_with_vars(vars, async {
@@ -393,7 +392,7 @@ impl TestClient {
         let system_certs = self.system_certs;
         async_with_vars(vars, async {
             let (server_task, addr) = start_https_user_agent_server(&cert.server).await.unwrap();
-            let response = send_request(addr, system_certs, self.cert.as_deref()).await;
+            let response = send_request(addr, system_certs, self.cert.as_deref(), 3).await;
             check(response, server_task).await;
         })
         .await;
@@ -415,7 +414,8 @@ impl TestClient {
             let (server_task, addr) = start_https_mtls_user_agent_server(&cert.ca, &cert.server)
                 .await
                 .unwrap();
-            let response = send_request(addr, system_certs, self.cert.as_deref()).await;
+            // The server accepts one connection; retries would connect to a closed port.
+            let response = send_request(addr, system_certs, self.cert.as_deref(), 0).await;
             check(response, server_task).await;
         })
         .await;
@@ -427,24 +427,26 @@ async fn send_request(
     addr: SocketAddr,
     system_certs: bool,
     cert: Option<&Path>,
+    retries: u32,
 ) -> Result<reqwest::Response, reqwest_middleware::Error> {
-    let url = DisplaySafeUrl::from_str(&format!("https://{addr}")).unwrap();
-    send_request_to_with_cert(&url, system_certs, cert).await
+    let url = SafeUrl::from_str(&format!("https://{addr}")).unwrap();
+    send_request_to_with_cert(&url, system_certs, cert, retries).await
 }
 
 /// Send a GET request to an arbitrary URL using a fresh registry client.
 #[cfg(feature = "test-pypi")]
 async fn send_request_to(
-    url: &DisplaySafeUrl,
+    url: &SafeUrl,
     system_certs: bool,
 ) -> Result<reqwest::Response, reqwest_middleware::Error> {
-    send_request_to_with_cert(url, system_certs, None).await
+    send_request_to_with_cert(url, system_certs, None, 3).await
 }
 
 async fn send_request_to_with_cert(
-    url: &DisplaySafeUrl,
+    url: &SafeUrl,
     system_certs: bool,
     cert: Option<&Path>,
+    retries: u32,
 ) -> Result<reqwest::Response, reqwest_middleware::Error> {
     let cache = Cache::temp().unwrap().init().await.unwrap();
     let custom_certificates = if let Some(cert) = cert {
@@ -453,6 +455,7 @@ async fn send_request_to_with_cert(
         Certificates::from_env()
     };
     let base = BaseClientBuilder::default()
+        .retries(retries)
         .no_retry_delay(true)
         .with_system_certs(system_certs);
     let base = if let Some(certificates) = custom_certificates {
@@ -467,7 +470,7 @@ async fn send_request_to_with_cert(
         .cached_client()
         .uncached()
         .for_host(url)
-        .get(Url::from(url.clone()))
+        .get(url.clone())
         .send()
         .await
 }
@@ -534,7 +537,7 @@ async fn test_certificate_tls_alerts_are_not_retried() -> Result<()> {
         Ok::<_, anyhow::Error>(())
     });
 
-    let response = send_request(addr, false, None).await;
+    let response = send_request(addr, false, None, 3).await;
     assert_fatal_reqwest_error(&response);
     server_task.await??;
     Ok(())
@@ -565,7 +568,7 @@ async fn test_non_certificate_tls_errors_are_retried() -> Result<()> {
         Ok::<_, anyhow::Error>(())
     });
 
-    let response = send_request(addr, false, None).await;
+    let response = send_request(addr, false, None, 3).await;
     let Err(reqwest_middleware::Error::Middleware(middleware_error)) = response else {
         panic!("expected middleware error, got: {response:?}");
     };

@@ -477,7 +477,7 @@
       "description": "The URL for publishing packages to the Python package index (by default:\n<https://upload.pypi.org/legacy/>).",
       "anyOf": [
         {
-          "$ref": "#/definitions/DisplaySafeUrl"
+          "$ref": "#/definitions/SafeUrl"
         },
         {
           "type": "null"
@@ -696,7 +696,7 @@
           "description": "The vulnerability service URL to use for automatic malware checks.",
           "anyOf": [
             {
-              "$ref": "#/definitions/DisplaySafeUrl"
+              "$ref": "#/definitions/SafeUrl"
             },
             {
               "type": "null"
@@ -934,11 +934,6 @@
         }
       }
     },
-    "DisplaySafeUrl": {
-      "description": "A [`Url`] wrapper that redacts credentials and sensitive query parameters when displaying the URL.\n\n`DisplaySafeUrl` wraps the standard [`url::Url`] type, providing functionality to mask\nsecrets by default when the URL is displayed or logged. This helps prevent accidental\nexposure of sensitive information in logs and debug output.\n\n# Examples\n\n```\nuse uv_redacted::DisplaySafeUrl;\nuse std::str::FromStr;\n\n// Create a `DisplaySafeUrl` from a `&str`\nlet mut url = DisplaySafeUrl::parse(\"https://user:password@example.com\").unwrap();\n\n// Display will mask secrets\nassert_eq!(url.to_string(), \"https://user:****@example.com/\");\n\n// You can still access the username and password\nassert_eq!(url.username(), \"user\");\nassert_eq!(url.password(), Some(\"password\"));\n\n// And you can still update the username and password\nlet _ = url.set_username(\"new_user\");\nlet _ = url.set_password(Some(\"new_password\"));\nassert_eq!(url.username(), \"new_user\");\nassert_eq!(url.password(), Some(\"new_password\"));\n\n// It is also possible to remove the credentials entirely\nurl.remove_credentials();\nassert_eq!(url.username(), \"\");\nassert_eq!(url.password(), None);\n```",
-      "type": "string",
-      "format": "uri"
-    },
     "ExcludeDependency": {
       "description": "An exclusion, either global or scoped to a specific package version.",
       "anyOf": [
@@ -1140,7 +1135,7 @@
           "description": "The URL of the upload endpoint.\n\nWhen using `uv publish --index <name>`, this URL is used for publishing.\n\nA configuration for the default index PyPI would look as follows:\n\n```toml\n[[tool.uv.index]]\nname = \"pypi\"\nurl = \"https://pypi.org/simple\"\npublish-url = \"https://upload.pypi.org/legacy/\"\n```",
           "anyOf": [
             {
-              "$ref": "#/definitions/DisplaySafeUrl"
+              "$ref": "#/definitions/SafeUrl"
             },
             {
               "type": "null"
@@ -2008,6 +2003,11 @@
         }
       ]
     },
+    "SafeUrl": {
+      "description": "A URL.",
+      "type": "string",
+      "format": "uri"
+    },
     "SchemaConflictItem": {
       "description": "A single item in a conflicting set.\n\nEach item is a pair of an (optional) package and a corresponding extra or group name for that\npackage.",
       "type": "object",
@@ -2089,7 +2089,7 @@
               "description": "The repository URL (without the `git+` prefix).",
               "allOf": [
                 {
-                  "$ref": "#/definitions/DisplaySafeUrl"
+                  "$ref": "#/definitions/SafeUrl"
                 }
               ]
             },
@@ -2181,7 +2181,7 @@
               ]
             },
             "url": {
-              "$ref": "#/definitions/DisplaySafeUrl"
+              "$ref": "#/definitions/SafeUrl"
             }
           },
           "additionalProperties": false,

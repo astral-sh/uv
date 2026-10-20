@@ -98,7 +98,6 @@ tracing = { workspace = true }
 tracing-durations-export = { workspace = true, features = ["plot"], optional = true }
 tracing-subscriber = { workspace = true, features = ["env-filter", "registry"] }
 tracing-tree = { workspace = true }
-url = { workspace = true }
 walkdir = { workspace = true }
 which = { workspace = true }
 
@@ -137,7 +136,7 @@ hyper-util = { workspace = true }
 indoc = { workspace = true }
 insta = { workspace = true }
 predicates = { workspace = true }
-regex = { workspace = true }
+regex = { workspace = true, features = ["perf", "unicode"] }
 reqwest = { workspace = true, default-features = false }
 sha2 = { workspace = true }
 tar-codec = { workspace = true }

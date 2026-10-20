@@ -58,6 +58,11 @@ name = "macos_dylib"
 path = "benches/macos_dylib.rs"
 harness = false
 
+[[bench]]
+name = "uv_pep508"
+path = "benches/uv_pep508.rs"
+harness = false
+
 [dev-dependencies]
 uv = { workspace = true }
 uv-cache = { workspace = true }
@@ -73,6 +78,7 @@ uv-extract = { workspace = true }
 uv-git = { workspace = true }
 uv-git-types = { workspace = true }
 uv-install-wheel = { workspace = true }
+uv-normalize = { workspace = true }
 uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
 uv-performance-memory-allocator = { workspace = true }
@@ -84,6 +90,7 @@ uv-python-interpreter = { workspace = true }
 uv-python-types = { workspace = true }
 uv-redacted = { workspace = true }
 uv-resolver = { workspace = true }
+uv-resolver-types = { workspace = true }
 uv-static = { workspace = true }
 uv-types = { workspace = true }
 uv-workspace = { workspace = true }
@@ -97,6 +104,7 @@ flate2 = { workspace = true }
 fs-err = { workspace = true }
 futures = { workspace = true }
 jiff = { workspace = true }
+rustc-hash = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
 tar-codec = { workspace = true }

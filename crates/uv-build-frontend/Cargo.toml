@@ -41,7 +41,7 @@ fs-err = { workspace = true }
 indoc = { workspace = true }
 itertools = { workspace = true }
 owo-colors = { workspace = true }
-regex = { workspace = true }
+regex = { workspace = true, features = ["perf", "unicode"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tempfile = { workspace = true }

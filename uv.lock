@@ -1859,6 +1859,9 @@ docs = [
 release = [
     { name = "rooster", marker = "python_full_version >= '3.12'" },
 ]
+test = [
+    { name = "astral-dev-toolchain-cargo-nextest" },
+]
 
 [package.group-requires-python]
 docker = ">=3.12"
@@ -1896,6 +1899,7 @@ docs = [
     { name = "mkdocs-redirects", marker = "python_full_version >= '3.12'", specifier = ">=1.2.2" },
 ]
 release = [{ name = "rooster", marker = "python_full_version >= '3.12'", specifier = "==0.1.1" }]
+test = [{ name = "astral-dev-toolchain-cargo-nextest", specifier = ">=0.9.143" }]
 
 [[package]]
 name = "validate-pyproject"

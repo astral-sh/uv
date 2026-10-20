@@ -2,7 +2,7 @@ use std::path::Path;
 
 use anyhow::{Context, Result, anyhow};
 use uv_git::GIT;
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 
 pub(super) struct GitFixture {
     pub(super) name: &'static str,
@@ -14,7 +14,7 @@ pub(super) struct GitFixture {
 
 impl GitFixture {
     /// Fetch the pinned history before entering a benchmark's timed loop.
-    pub(super) fn prepare(&self) -> Result<DisplaySafeUrl> {
+    pub(super) fn prepare(&self) -> Result<SafeUrl> {
         let directory = std::path::absolute(
             Path::new("../../target/bench-git").join(format!("{}.git", self.name)),
         )?;
@@ -51,8 +51,7 @@ impl GitFixture {
             &directory,
             &["update-ref", "--no-deref", "HEAD", self.commit],
         )?;
-        DisplaySafeUrl::from_file_path(directory)
-            .map_err(|()| anyhow!("Invalid Git repository URL"))
+        SafeUrl::from_file_path(directory).map_err(|()| anyhow!("Invalid Git repository URL"))
     }
 }
 

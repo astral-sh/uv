@@ -22,7 +22,7 @@ use uv_configuration::{
 use uv_distribution_types::{IndexCapabilities, IndexLocations, IndexUrl};
 use uv_fs::{CWD, find_git_repository_root, relative_to};
 use uv_lock::Lock;
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 use uv_warnings::warn_user;
 
 mod reporter;
@@ -50,7 +50,7 @@ pub async fn audit_lock(
     cache: &Cache,
     printer: Printer,
     service: VulnerabilityServiceFormat,
-    service_url: Option<DisplaySafeUrl>,
+    service_url: Option<SafeUrl>,
     ignore: &[VulnerabilityID],
     ignore_until_fixed: &[VulnerabilityID],
 ) -> Result<AuditOutcome> {

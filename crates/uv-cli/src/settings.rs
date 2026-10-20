@@ -40,7 +40,7 @@ use uv_pypi_types::SupportedEnvironments;
 use uv_python_types::{
     Prefix, PythonArchitecture, PythonDownloads, PythonPreference, PythonVersion, Target,
 };
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 use uv_settings::{
     Combine, EnvFlag, EnvironmentOptions, FilesystemOptions, FrozenFlag, FrozenSource,
     IndexOptions, LockCheck, LockedFlag, LockedSource, MalwareCheckSettings, Options, PipOptions,
@@ -1331,7 +1331,7 @@ pub struct ToolAuditSettings {
     pub names: Vec<PackageName>,
     pub output_format: AuditOutputFormat,
     pub service_format: VulnerabilityServiceFormat,
-    pub service_url: Option<DisplaySafeUrl>,
+    pub service_url: Option<SafeUrl>,
     pub ignore: Vec<VulnerabilityID>,
     pub ignore_until_fixed: Vec<VulnerabilityID>,
     pub filesystem: ResolverInstallerOptions,
@@ -3176,7 +3176,7 @@ pub struct AuditSettings {
     pub settings: ResolverSettings,
     pub output_format: AuditOutputFormat,
     pub service_format: VulnerabilityServiceFormat,
-    pub service_url: Option<DisplaySafeUrl>,
+    pub service_url: Option<SafeUrl>,
     pub ignore: Vec<VulnerabilityID>,
     pub ignore_until_fixed: Vec<VulnerabilityID>,
 }
@@ -5006,7 +5006,7 @@ pub struct PublishSettings {
     pub no_attestations: bool,
 
     // Both CLI and configuration.
-    pub publish_url: DisplaySafeUrl,
+    pub publish_url: SafeUrl,
     pub trusted_publishing: TrustedPublishing,
     pub keyring_provider: KeyringProviderType,
     pub check_url: Option<IndexUrl>,
@@ -5071,7 +5071,7 @@ impl PublishSettings {
             publish_url: args
                 .publish_url
                 .combine(publish_url)
-                .unwrap_or_else(|| DisplaySafeUrl::parse(PYPI_PUBLISH_URL).unwrap()),
+                .unwrap_or_else(|| SafeUrl::parse(PYPI_PUBLISH_URL).unwrap()),
             trusted_publishing: args
                 .trusted_publishing
                 .combine(trusted_publishing)

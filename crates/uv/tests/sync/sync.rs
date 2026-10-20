@@ -1,5 +1,3 @@
-use std::collections::BTreeMap;
-
 use anyhow::{Result, anyhow};
 use assert_cmd::prelude::*;
 use assert_fs::{fixture::ChildPath, prelude::*};
@@ -11,14 +9,14 @@ use sha2::{Digest, Sha256};
 #[cfg(feature = "test-git")]
 use std::process::Command;
 use tempfile::tempdir_in;
-use url::Url;
 use wiremock::matchers::{basic_auth, body_string_contains, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use uv_fs::Simplified;
+use uv_redacted::SafeUrl;
 use uv_static::EnvVars;
 use uv_test::package_server::PackageServer;
-use uv_test::packse::{PackseServer, generate_wheel, generate_wheel_with_files};
+use uv_test::packse::{PackseServer, WheelBuilder};
 
 use uv_test::{TestContext, download_to_disk, uv_snapshot, venv_bin_path};
 
@@ -564,15 +562,8 @@ fn sync_lockfile_without_workspace_sources() -> Result<()> {
 #[test]
 fn sync_frozen_project_build_sources() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let (helper_filename, helper_wheel) = generate_wheel(
-        &"build-helper".parse()?,
-        &"1.0.0".parse()?,
-        &[],
-        &BTreeMap::new(),
-        None,
-        "py3-none-any",
-        &[],
-    );
+    let (helper_filename, helper_wheel) =
+        WheelBuilder::new(&"build-helper".parse()?, &"1.0.0".parse()?).build();
     context
         .temp_dir
         .child(helper_filename)
@@ -631,15 +622,8 @@ fn sync_frozen_project_build_sources() -> Result<()> {
             return filename
     "#})?;
 
-    let (child_filename, child_wheel) = generate_wheel(
-        &"child".parse()?,
-        &"1.0.0".parse()?,
-        &[],
-        &BTreeMap::new(),
-        None,
-        "py3-none-any",
-        &[],
-    );
+    let (child_filename, child_wheel) =
+        WheelBuilder::new(&"child".parse()?, &"1.0.0".parse()?).build();
     child.child(child_filename).write_binary(&child_wheel)?;
 
     uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
@@ -2630,8 +2614,8 @@ fn sync_non_project_dev_dependencies() -> Result<()> {
         dependencies = ["iniconfig>=1"]
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
     child
@@ -3354,8 +3338,8 @@ fn sync_non_project_group() -> Result<()> {
         baz = ["typing-extensions"]
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
     child
@@ -4804,8 +4788,8 @@ fn sync_relative_wheel() -> Result<()> {
     ok = { path = "wheels/ok-1.0.0-py3-none-any.whl" }
 
     [build-system]
-    requires = ["hatchling"]
-    build-backend = "hatchling.build"
+    requires = ["uv_build>=0.7,<10000"]
+    build-backend = "uv_build"
     "#;
 
     context
@@ -10095,8 +10079,8 @@ fn sync_override_package() -> Result<()> {
         requires-python = ">=3.12"
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [tool.uv]
         package = false
@@ -10122,8 +10106,8 @@ fn sync_override_package() -> Result<()> {
         dependencies = ["core"]
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [tool.uv.sources]
         core = { path = "./core" }
@@ -10158,8 +10142,8 @@ fn sync_override_package() -> Result<()> {
         dependencies = ["core"]
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [tool.uv.sources]
         core = { path = "./core", package = true }
@@ -10188,8 +10172,8 @@ fn sync_override_package() -> Result<()> {
         requires-python = ">=3.12"
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
 
@@ -10215,8 +10199,8 @@ fn sync_override_package() -> Result<()> {
         dependencies = ["core"]
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [tool.uv.sources]
         core = { path = "./core", package = false }
@@ -10245,8 +10229,8 @@ fn sync_override_package() -> Result<()> {
         requires-python = ">=3.12"
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [tool.uv]
         package = true
@@ -10264,8 +10248,8 @@ fn sync_override_package() -> Result<()> {
         dependencies = ["core"]
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [tool.uv.sources]
         core = { path = "./core", package = false }
@@ -10294,8 +10278,8 @@ fn sync_override_package() -> Result<()> {
         dependencies = ["core"]
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [tool.uv.sources]
         core = { path = "./core" }
@@ -11744,8 +11728,8 @@ fn sync_all_extras() -> Result<()> {
         testing = ["packaging>=24"]
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
     child
@@ -11775,6 +11759,7 @@ fn sync_all_extras() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 8 packages in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 2 packages in [TIME]
     Installed 1 package in [TIME]
      + packaging==24.0
@@ -12012,8 +11997,8 @@ fn sync_all_groups() -> Result<()> {
         testing = ["packaging>=24"]
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
     child
@@ -12043,6 +12028,7 @@ fn sync_all_groups() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 8 packages in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 2 packages in [TIME]
     Installed 1 package in [TIME]
      + packaging==24.0
@@ -13116,7 +13102,7 @@ fn lock_git_poetry_path_dependency() -> Result<()> {
         .assert()
         .success();
 
-    let repository_url = Url::from_directory_path(repository.path())
+    let repository_url = SafeUrl::from_directory_path(repository.path())
         .map_err(|()| anyhow!("failed to convert repository path to file URL"))?;
     context
         .temp_dir
@@ -13250,7 +13236,7 @@ fn sync_git_metadata_archive_dependency() -> Result<()> {
         .assert()
         .success();
 
-    let repository_url = Url::from_directory_path(repository.path())
+    let repository_url = SafeUrl::from_directory_path(repository.path())
         .map_err(|()| anyhow!("failed to convert repository path to file URL"))?;
     context
         .temp_dir
@@ -15312,8 +15298,8 @@ fn repeated_dev_member_all_packages() -> Result<()> {
         members = ["second"]
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
 
@@ -15336,8 +15322,8 @@ fn repeated_dev_member_all_packages() -> Result<()> {
         dependencies = ["iniconfig"]
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
 
@@ -15748,8 +15734,8 @@ fn conflicting_editable() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = []
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
         )?;
     context
@@ -15899,8 +15885,8 @@ fn undeclared_editable() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = []
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
         )?;
     context
@@ -17606,8 +17592,8 @@ fn toggle_workspace_editable() -> Result<()> {
         dependencies = ["iniconfig>=1"]
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
     child
@@ -17708,7 +17694,7 @@ fn toggle_workspace_editable() -> Result<()> {
      ~ child==0.1.0 (from file://[TEMP_DIR]/child)
     ");
 
-    assert!(!context.site_packages().join("_child.pth").exists());
+    assert!(!context.site_packages().join("child.pth").exists());
 
     uv_snapshot!(context.filters(), context.sync().arg("--editable"), @"
     exit_code: 0 (success)
@@ -17719,7 +17705,7 @@ fn toggle_workspace_editable() -> Result<()> {
      ~ child==0.1.0 (from file://[TEMP_DIR]/child)
     ");
 
-    assert!(context.site_packages().join("_child.pth").exists());
+    assert!(context.site_packages().join("child.pth").exists());
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -17802,8 +17788,8 @@ fn toggle_workspace_editable() -> Result<()> {
         );
     });
 
-    // Verify that `_child.pth` does not exist in the site-packages directory.
-    assert!(!context.site_packages().join("_child.pth").exists());
+    // Verify that `child.pth` does not exist in the site-packages directory.
+    assert!(!context.site_packages().join("child.pth").exists());
 
     // But `--editable` on the command line should override the lockfile.
     uv_snapshot!(context.filters(), context.sync().arg("--editable"), @"
@@ -17815,8 +17801,8 @@ fn toggle_workspace_editable() -> Result<()> {
      ~ child==0.1.0 (from file://[TEMP_DIR]/child)
     ");
 
-    // Verify that `_child.pth` exists in the site-packages directory.
-    assert!(context.site_packages().join("_child.pth").exists());
+    // Verify that `child.pth` exists in the site-packages directory.
+    assert!(context.site_packages().join("child.pth").exists());
 
     Ok(())
 }
@@ -17837,8 +17823,8 @@ fn workspace_editable_conflict() -> Result<()> {
         dependencies = ["iniconfig>=1"]
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
     child1
@@ -17861,8 +17847,8 @@ fn workspace_editable_conflict() -> Result<()> {
         child1 = { workspace = true }
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
     child2
@@ -18073,8 +18059,8 @@ fn workspace_editable_conflict() -> Result<()> {
         child1 = { workspace = true, editable = true }
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
 
@@ -18155,10 +18141,11 @@ fn sync_no_sources_editable_to_package_switch() -> Result<()> {
         requires-python = ">=3.8"
 
         [build-system]
-        requires = ["setuptools>=61", "wheel"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
+    local_dep.child("src/anyio/__init__.py").touch()?;
 
     // Create main project with editable source for the local dependency.
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -18174,13 +18161,14 @@ fn sync_no_sources_editable_to_package_switch() -> Result<()> {
         anyio = { path = "./local_dep", editable = true }
 
         [build-system]
-        requires = ["setuptools>=67"]
-        build-backend = "setuptools.build_meta"
-
-        [tool.setuptools.packages.find]
-        exclude = ["local_dep*"]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
+    context
+        .temp_dir
+        .child("src/test_no_sources/__init__.py")
+        .touch()?;
 
     // Step 1: `uv sync --no-sources` should install `anyio` from PyPI.
     uv_snapshot!(context.filters(), context.sync().arg("--no-sources"), @"
@@ -18299,8 +18287,8 @@ fn sync_reinstalls_on_version_change() -> Result<()> {
         requires-python = ">=3.12"
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
     child
@@ -18334,8 +18322,8 @@ fn sync_reinstalls_on_version_change() -> Result<()> {
         requires-python = ">=3.12"
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
 
@@ -18493,7 +18481,7 @@ async fn sync_malware_check_keyring_auth() -> Result<()> {
         .success();
 
     let server = MockServer::start().await;
-    let mut malware_check_url = Url::parse(&server.uri())?;
+    let mut malware_check_url = SafeUrl::parse(&server.uri())?;
     malware_check_url
         .set_username("public")
         .map_err(|()| anyhow!("failed to set malware check URL username"))?;
@@ -18842,15 +18830,7 @@ fn build_hash_project() -> Result<(TestContext, String)> {
         ("dynamic-dependency", "1.0.0"),
         ("project", "0.1.0"),
     ] {
-        let (filename, wheel) = generate_wheel(
-            &name.parse()?,
-            &version.parse()?,
-            &[],
-            &BTreeMap::new(),
-            None,
-            "py3-none-any",
-            &[],
-        );
+        let (filename, wheel) = WheelBuilder::new(&name.parse()?, &version.parse()?).build();
         if name == "build-dependency" {
             build_hash = hex::encode(Sha256::digest(&wheel));
         }
@@ -19312,7 +19292,7 @@ fn project_build_hashes_add() -> Result<()> {
             "import build_dependency\nPath(__file__).with_name('backend-executed').touch()",
         ))?;
     let context = uv_test::test_context!("3.12");
-    let wheels = Url::from_directory_path(child.temp_dir.child("wheels").path())
+    let wheels = SafeUrl::from_directory_path(child.temp_dir.child("wheels").path())
         .map_err(|()| anyhow!("absolute wheels path"))?;
     let pyproject = formatdoc! {r#"
         [project]
@@ -19635,24 +19615,19 @@ fn project_build_hashes_untrusted_metadata() -> Result<()> {
         .temp_dir
         .child("wheels/dynamic_dependency-1.0.0-py3-none-any.whl");
     let child_hash = hex::encode(Sha256::digest(context.read_bytes(child.path())));
-    let child_url = Url::from_file_path(child.path()).expect("absolute wheel path");
-    let (filename, wheel) = generate_wheel(
-        &"build-dependency".parse()?,
-        &"1.0.0".parse()?,
-        &[format!("dynamic-dependency @ {child_url}#sha256={child_hash}").parse()?],
-        &BTreeMap::new(),
-        None,
-        "py3-none-any",
-        &[],
-    );
+    let child_url = SafeUrl::from_file_path(child.path()).expect("absolute wheel path");
+    let (filename, wheel) = WheelBuilder::new(&"build-dependency".parse()?, &"1.0.0".parse()?)
+        .requires(&[format!("dynamic-dependency @ {child_url}#sha256={child_hash}").parse()?])
+        .build();
     let hash = hex::encode(Sha256::digest(&wheel));
     context
         .temp_dir
         .child("wheels")
         .child(&filename)
         .write_binary(&wheel)?;
-    let parent_url = Url::from_file_path(context.temp_dir.child("wheels").child(filename).path())
-        .expect("absolute wheel path");
+    let parent_url =
+        SafeUrl::from_file_path(context.temp_dir.child("wheels").child(filename).path())
+            .expect("absolute wheel path");
     let pyproject = context.read("pyproject.toml").replace(
         "build-dependency==1.0.0",
         &format!("build-dependency @ {parent_url}#sha256={hash}"),
@@ -19690,7 +19665,7 @@ fn project_build_hashes_untrusted_metadata() -> Result<()> {
 fn project_build_hashes_script() -> Result<()> {
     let (context, hash) = build_hash_project()?;
     let project_url =
-        Url::from_directory_path(context.temp_dir.path()).expect("absolute project path");
+        SafeUrl::from_directory_path(context.temp_dir.path()).expect("absolute project path");
     let script = context.temp_dir.child("script.py");
     script.write_str(&formatdoc! {r#"
         # /// script
@@ -19796,29 +19771,17 @@ fn project_build_hashes_locked_script_run_with_no_sync() -> Result<()> {
         "#);
     });
 
-    let (filename, changed_wheel) = generate_wheel_with_files(
-        &"build-dependency".parse()?,
-        &"1.0.0".parse()?,
-        &[],
-        &BTreeMap::new(),
-        None,
-        "py3-none-any",
-        &[("build_dependency/changed.py", "changed = True\n")],
-    );
+    let (filename, changed_wheel) =
+        WheelBuilder::new(&"build-dependency".parse()?, &"1.0.0".parse()?)
+            .files(&[("build_dependency/changed.py", "changed = True\n")])
+            .build();
     package
         .child("wheels")
         .child(filename)
         .write_binary(&changed_wheel)?;
     let changed_hash = hex::encode(Sha256::digest(&changed_wheel));
-    let (filename, newer_wheel) = generate_wheel(
-        &"build-dependency".parse()?,
-        &"2.0.0".parse()?,
-        &[],
-        &BTreeMap::new(),
-        None,
-        "py3-none-any",
-        &[],
-    );
+    let (filename, newer_wheel) =
+        WheelBuilder::new(&"build-dependency".parse()?, &"2.0.0".parse()?).build();
     package
         .child("wheels")
         .child(filename)

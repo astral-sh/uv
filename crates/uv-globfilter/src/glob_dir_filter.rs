@@ -3,6 +3,7 @@ use regex_automata::dfa;
 use regex_automata::dfa::Automaton;
 use std::path::{MAIN_SEPARATOR, MAIN_SEPARATOR_STR, Path};
 use tracing::warn;
+use walkdir::DirEntry;
 
 /// Chosen at a whim -Konsti
 const DFA_SIZE_LIMIT: usize = 1_000_000;
@@ -72,11 +73,23 @@ impl GlobDirFilter {
         Ok(Self { glob_set, dfa })
     }
 
-    /// Whether the path (file or directory) matches any of the globs.
+    /// Whether a file path matches any complete glob.
+    pub fn match_file(&self, path: &Path) -> bool {
+        self.glob_set.is_match(path)
+    }
+
+    /// Whether the entry at the given relative path matches any of the globs.
     ///
-    /// We include a directory if we are potentially including files it contains.
-    pub fn match_path(&self, path: &Path) -> bool {
-        self.match_directory(path) || self.glob_set.is_match(path)
+    /// We include a directory if we are potentially including files it contains. Symlinks whose
+    /// target is not known to be a file are included conservatively so callers can handle them.
+    pub fn match_path(&self, path: &Path, entry: &DirEntry) -> bool {
+        if self.match_file(path) {
+            return true;
+        }
+
+        let file_type = entry.file_type();
+        (file_type.is_dir() || (file_type.is_symlink() && !entry.path().is_file()))
+            && self.match_directory(path)
     }
 
     /// Check whether a directory or any of its children can be matched by any of the globs.
@@ -251,7 +264,7 @@ mod tests {
                     .path()
                     .strip_prefix(walkdir_root)
                     .expect("walkdir starts with root");
-                if include_matcher.match_path(relative) {
+                if include_matcher.match_path(relative, entry) {
                     // Translate windows paths back to the unix fixture
                     Some(relative.to_str().unwrap().replace(MAIN_SEPARATOR, "/"))
                 } else {

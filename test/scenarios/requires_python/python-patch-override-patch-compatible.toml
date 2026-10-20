@@ -17,4 +17,4 @@ requires_python = ">=3.9.0"
 python = "3.9.0"
 
 [environment]
-python = "3.9.21"
+python = "3.9.25"

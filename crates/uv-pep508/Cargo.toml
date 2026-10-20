@@ -23,9 +23,9 @@ uv-redacted = { workspace = true }
 
 arcstr = { workspace = true}
 boxcar = { workspace = true }
+hashbrown = { workspace = true }
 indexmap = { workspace = true }
 itertools = { workspace = true }
-regex = { workspace = true }
 rkyv = { workspace = true, optional = true }
 rustc-hash = { workspace = true }
 schemars = { workspace = true, optional = true }
@@ -53,6 +53,8 @@ schemars = ["dep:schemars"]
 # (`foo @ ./foo-3.0.0-py3-none-any.whl`). The `non-pep508-features` controls whether these non-spec features will
 # be supported.
 non-pep508-extensions = []
+# Enable `url::Url` as a requirement URL type and direct conversion to `VerbatimUrl`.
+unsafe-url = []
 default = []
 rkyv = ["dep:rkyv"]
 # Match the API of the published crate, for compatibility.

@@ -7,11 +7,11 @@ use assert_fs::prelude::*;
 use fs_err as fs;
 use indoc::{formatdoc, indoc};
 use predicates::Predicate;
-use url::Url;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use uv_fs::Simplified;
+use uv_redacted::SafeUrl;
 use uv_static::EnvVars;
 use uv_test::find_links::FindLinksServer;
 use uv_test::packse::PackseServer;
@@ -1293,7 +1293,7 @@ fn install_local_wheel() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(&format!(
         "tomli @ {}",
-        Url::from_file_path(archive.path()).unwrap()
+        SafeUrl::from_file_path(archive.path()).unwrap()
     ))?;
 
     uv_snapshot!(context.filters(), context.pip_sync()
@@ -1383,7 +1383,10 @@ fn install_local_wheel() -> Result<()> {
 
     // Reinstall without the package name.
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str(&format!("{}", Url::from_file_path(archive.path()).unwrap()))?;
+    requirements_txt.write_str(&format!(
+        "{}",
+        SafeUrl::from_file_path(archive.path()).unwrap()
+    ))?;
 
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
@@ -1457,7 +1460,7 @@ fn mismatched_version() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(&format!(
         "tomli @ {}",
-        Url::from_file_path(archive.path()).unwrap()
+        SafeUrl::from_file_path(archive.path()).unwrap()
     ))?;
 
     uv_snapshot!(context.filters(), context.pip_sync()
@@ -1502,7 +1505,7 @@ fn mismatched_name() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(&format!(
         "foo @ {}",
-        Url::from_file_path(archive.path()).unwrap()
+        SafeUrl::from_file_path(archive.path()).unwrap()
     ))?;
 
     uv_snapshot!(context.filters(), context.pip_sync()
@@ -1536,7 +1539,7 @@ fn install_local_source_distribution() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(&format!(
         "wheel @ {}",
-        Url::from_file_path(archive.path()).unwrap()
+        SafeUrl::from_file_path(archive.path()).unwrap()
     ))?;
 
     uv_snapshot!(context.filters(), context.pip_sync()
@@ -1839,7 +1842,7 @@ fn install_path_source_dist_cached() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(&format!(
         "source-distribution @ {}",
-        Url::from_file_path(archive.path()).unwrap()
+        SafeUrl::from_file_path(archive.path()).unwrap()
     ))?;
 
     uv_snapshot!(context.filters(), context.pip_sync()
@@ -1924,7 +1927,7 @@ fn install_path_built_dist_cached() -> Result<()> {
     );
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    let url = Url::from_file_path(archive.path()).unwrap();
+    let url = SafeUrl::from_file_path(archive.path()).unwrap();
     requirements_txt.write_str(&format!("tomli @ {url}"))?;
 
     uv_snapshot!(context.filters(), context.pip_sync()

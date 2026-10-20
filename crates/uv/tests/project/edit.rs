@@ -18,7 +18,6 @@ use serde_json::json;
 use std::path::Path;
 #[cfg(unix)]
 use std::{fs::Permissions, os::unix::fs::PermissionsExt};
-use url::Url;
 use wiremock::{
     Mock, MockServer, ResponseTemplate,
     matchers::{method, path},
@@ -27,6 +26,7 @@ use wiremock::{
 #[cfg(feature = "test-git-lfs")]
 use uv_cache_key::{RepositoryUrl, cache_digest};
 use uv_fs::Simplified;
+use uv_redacted::SafeUrl;
 use uv_static::EnvVars;
 
 use uv_test::package_server::PackageServer;
@@ -1700,8 +1700,8 @@ fn add_remove_workspace() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
     "#})?;
     context
         .temp_dir
@@ -1720,8 +1720,8 @@ fn add_remove_workspace() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
     "#})?;
     context
         .temp_dir
@@ -1775,8 +1775,8 @@ fn add_remove_workspace() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [tool.uv.sources]
         child2 = { workspace = true }
@@ -1857,8 +1857,8 @@ fn add_remove_workspace() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#
         );
     });
@@ -2295,8 +2295,8 @@ fn add_workspace_editable() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
     "#})?;
     context
         .temp_dir
@@ -2315,8 +2315,8 @@ fn add_workspace_editable() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
     "#})?;
     context
         .temp_dir
@@ -2361,8 +2361,8 @@ fn add_workspace_editable() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [tool.uv.sources]
         child2 = { workspace = true, editable = false }
@@ -2401,8 +2401,8 @@ fn add_workspace_editable() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [tool.uv.sources]
         child2 = { workspace = true, editable = true }
@@ -2492,8 +2492,8 @@ fn add_workspace_path() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
     "#})?;
     context
         .temp_dir
@@ -2609,8 +2609,8 @@ fn add_path_implicit_workspace() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
     "#})?;
     workspace
         .child("packages")
@@ -2731,8 +2731,8 @@ fn add_path_no_workspace() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
     "#})?;
     workspace
         .child("packages")
@@ -2841,8 +2841,8 @@ fn add_path_adjacent_directory() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
     "#})?;
     dependency
         .child("src")
@@ -3037,7 +3037,7 @@ fn add_relative_and_absolute_paths() -> Result<()> {
     ");
 
     // Add a dependency using a file:// URL (also absolute).
-    let file_url = Url::from_file_path(file_url_dep.path()).unwrap();
+    let file_url = SafeUrl::from_file_path(file_url_dep.path()).unwrap();
     uv_snapshot!(context.filters(), context.add().arg(file_url.as_str()).current_dir(project.path()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -5734,8 +5734,8 @@ fn add_requirements_file_non_editable() -> Result<()> {
         requires-python = ">=3.12"
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
     "#})?;
     child
         .child("src")
@@ -5803,8 +5803,8 @@ fn add_requirements_file_editable() -> Result<()> {
         requires-python = ">=3.12"
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
     "#})?;
     child
         .child("src")
@@ -5872,8 +5872,8 @@ fn add_requirements_file_editable_override() -> Result<()> {
         requires-python = ">=3.12"
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
     "#})?;
     child
         .child("src")
@@ -14202,7 +14202,7 @@ async fn add_redirect_cross_origin() -> Result<()> {
         .mount(&redirect_server)
         .await;
 
-    let mut redirect_url = Url::parse(&redirect_server.uri())?;
+    let mut redirect_url = SafeUrl::parse(&redirect_server.uri())?;
     let _ = redirect_url.set_username("public");
     let _ = redirect_url.set_password(Some("heron"));
 
@@ -14251,7 +14251,7 @@ async fn add_redirect_cross_origin_credentials_in_location() -> Result<()> {
         .mount(&redirect_server)
         .await;
 
-    let redirect_url = Url::parse(&redirect_server.uri())?;
+    let redirect_url = SafeUrl::parse(&redirect_server.uri())?;
 
     uv_snapshot!(context.filters(), context.add().arg("--default-index").arg(redirect_url.as_str()).arg("anyio"), @"
     exit_code: 0 (success)
@@ -14313,7 +14313,7 @@ async fn add_redirect_with_keyring_cross_origin() -> Result<()> {
         .mount(&redirect_server)
         .await;
 
-    let mut redirect_url = Url::parse(&redirect_server.uri())?;
+    let mut redirect_url = SafeUrl::parse(&redirect_server.uri())?;
     let _ = redirect_url.set_username("public");
 
     uv_snapshot!(context.filters(), context.add().arg("--default-index")
@@ -14363,7 +14363,7 @@ async fn pip_install_redirect_with_netrc_cross_origin() -> Result<()> {
         .mount(&redirect_server)
         .await;
 
-    let mut redirect_url = Url::parse(&redirect_server.uri())?;
+    let mut redirect_url = SafeUrl::parse(&redirect_server.uri())?;
     let _ = redirect_url.set_username("public");
 
     uv_snapshot!(context.filters(), context.pip_install()
@@ -15364,8 +15364,8 @@ fn add_no_install_project() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
     "#})?;
     context
         .temp_dir
@@ -15400,8 +15400,8 @@ fn add_no_install_project() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#
         );
     });

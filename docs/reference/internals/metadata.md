@@ -48,6 +48,19 @@ dependency groups are just lists of things you might want when working on the pa
 If the workspace root defines dependency groups but is not itself a package, its `"workspace"` node
 provides the corresponding group node ids through `dependency_groups`.
 
+## Installed packages
+
+When an environment exists, `environment.packages` is an inventory of its installed distributions,
+including those absent from the lockfile. Each entry contains the installed name, version, metadata
+path, and editable status.
+
+An installed distribution is matched by normalized name to a package in the selected resolution. A
+matched entry then uses that package's resolution node ID. The entry's `version` reports the actual
+installed version; node IDs should be treated as opaque.
+
+`module_owners` maps importable module names to package IDs in `environment.packages`. IDs for
+packages outside the selected resolution do not appear in `resolution`.
+
 ## Handling multiple versions of a package
 
 Two versions of a package cannot be installed into a Python environment, but the dependency graph
@@ -182,6 +195,15 @@ Here is a human-readable annotated example:
       "version": "3.12.12",
       // The Python implementation name
       "implementation": "cpython"
+    },
+    // Installed distributions, keyed by opaque node IDs
+    "packages": {
+      "idna==3.10@unmanaged+/workspace/.venv/lib/python3.12/site-packages/idna-3.10.dist-info": {
+        "name": "idna",
+        "version": "3.10",
+        "path": "/workspace/.venv/lib/python3.12/site-packages/idna-3.10.dist-info",
+        "editable": false
+      }
     }
   },
   // Information about the script target, only present with `--script`.
@@ -203,6 +225,15 @@ Here is a human-readable annotated example:
   //
   // `marker` fields all have this as an implicit constraint that is omitted for cleanliness
   "requires_python": ">=3.12",
+  // Module owners refer to entries in `environment.packages`.
+  // Matched package IDs also refer to nodes in `resolution`.
+  "module_owners": {
+    "idna": [
+      {
+        "package_id": "idna==3.10@unmanaged+/workspace/.venv/lib/python3.12/site-packages/idna-3.10.dist-info"
+      }
+    ]
+  },
   // A list of workspace members
   "members": [
     {

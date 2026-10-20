@@ -33,7 +33,6 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use rustc_hash::FxHashSet;
 use tracing::instrument;
-use url::Url;
 
 use uv_cache_key::CanonicalUrl;
 use uv_client::BaseClientBuilder;
@@ -753,11 +752,7 @@ async fn read_file(
         RequirementsInput::Stdin => Ok(uv_fs::read_stdin_to_string_transcode()?),
         RequirementsInput::Remote(url) => {
             let client = client_builder.build()?;
-            let response = client
-                .for_host(url)
-                .get(Url::from(url.clone()))
-                .send()
-                .await?;
+            let response = client.for_host(url).get(url.clone()).send().await?;
 
             response.error_for_status_ref()?;
 

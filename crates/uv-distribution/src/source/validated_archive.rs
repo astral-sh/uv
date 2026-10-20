@@ -164,7 +164,7 @@ mod tests {
     use tokio_util::compat::FuturesAsyncReadCompatExt;
 
     use uv_distribution_types::{DirectSourceUrl, SourceUrl};
-    use uv_redacted::DisplaySafeUrl;
+    use uv_redacted::SafeUrl;
 
     use super::*;
 
@@ -196,8 +196,7 @@ mod tests {
         reader: impl AsyncRead + Unpin,
         validation: ArchiveValidation<'_>,
     ) -> Result<ValidatedSourceArchive, Error> {
-        let url =
-            DisplaySafeUrl::parse("https://example.com/source.tar.gz").expect("valid test URL");
+        let url = SafeUrl::parse("https://example.com/source.tar.gz").expect("valid test URL");
         let source = BuildableSource::Url(SourceUrl::Direct(DirectSourceUrl {
             url: &url,
             subdirectory: None,

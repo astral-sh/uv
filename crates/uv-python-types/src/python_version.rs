@@ -8,7 +8,7 @@ use std::ops::Deref;
 use std::str::FromStr;
 
 use thiserror::Error;
-use uv_pep440::Version;
+use uv_pep440::{Prerelease, Version};
 use uv_pep508::{MarkerEnvironment, StringVersion};
 use uv_static::EnvVars;
 
@@ -120,6 +120,20 @@ impl Display for PythonVersion {
 }
 
 impl PythonVersion {
+    /// Construct a Python version from known release components.
+    pub(crate) fn from_components(
+        major: u8,
+        minor: u8,
+        patch: u8,
+        prerelease: Option<Prerelease>,
+    ) -> Self {
+        Self(
+            Version::new([u64::from(major), u64::from(minor), u64::from(patch)])
+                .with_pre(prerelease)
+                .into(),
+        )
+    }
+
     /// Return a [`MarkerEnvironment`] compatible with the given [`PythonVersion`], based on
     /// a base [`MarkerEnvironment`].
     ///

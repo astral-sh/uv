@@ -14,7 +14,6 @@ use uv_distribution_types::{
 };
 use uv_fs::{directories, files};
 use uv_normalize::PackageName;
-use uv_pep440::Version;
 use uv_platform_tags::Tags;
 use uv_types::HashStrategy;
 
@@ -57,33 +56,17 @@ impl IndexEntry<'_> {
         no_build: bool,
         no_binary: bool,
     ) -> bool {
-        self.matches_index_and_build_policy(index, no_build, no_binary)
-            && self.dist.filename == *filename
-    }
-
-    fn matches_source(
-        &self,
-        index: &IndexUrl,
-        name: &PackageName,
-        version: &Version,
-        no_build: bool,
-        no_binary: bool,
-    ) -> bool {
-        self.matches_index_and_build_policy(index, no_build, no_binary)
-            && self.dist.filename.name == *name
-            && self.dist.filename.version == *version
-    }
-
-    fn matches_index_and_build_policy(
-        &self,
-        index: &IndexUrl,
-        no_build: bool,
-        no_binary: bool,
-    ) -> bool {
-        if *self.index.url() != *index {
+        if self.index.url() != index || self.dist.filename != *filename {
             return false;
         }
         if self.built { !no_build } else { !no_binary }
+    }
+
+    fn matches_source(&self, source: &RegistrySourceDist) -> bool {
+        self.built
+            && self.index.url() == &source.index
+            && self.dist.filename.name == source.name
+            && self.dist.filename.version == source.version
     }
 }
 
@@ -153,29 +136,28 @@ impl<'a> RegistryWheelIndex<'a> {
     }
 
     /// Return a cached wheel that satisfies a registry source distribution requirement.
+    ///
+    /// Only consider wheels built from source. The resolver may have excluded a published wheel
+    /// for the same version, for example due to `--exclude-newer`.
     pub fn source(
         &mut self,
         source: &'a RegistrySourceDist,
         no_build: bool,
-        no_binary: bool,
     ) -> Option<&CachedRegistryDist> {
+        if no_build {
+            return None;
+        }
         self.get(&source.name).find_map(|entry| {
-            if !entry.matches_source(
-                &source.index,
-                &source.name,
-                &source.version,
-                no_build,
-                no_binary,
-            ) {
+            if !entry.matches_source(source) {
                 return None;
             }
             if source.size_is_authoritative
                 && let Some(expected) = source.file.size
-                && (!entry.built || entry.size != Some(expected))
+                && entry.size != Some(expected)
             {
                 debug!(
-                    "Skipping cached wheel `{}`: expected source archive size {expected}, cached archive size {:?} (built from source: {})",
-                    entry.dist.filename, entry.size, entry.built,
+                    "Skipping cached wheel `{}`: expected source archive size {expected}, cached archive size {:?}",
+                    entry.dist.filename, entry.size,
                 );
                 return None;
             }
@@ -396,8 +378,8 @@ impl<'a> RegistryWheelIndex<'a> {
                 .then_with(|| {
                     a.dist
                         .filename
-                        .compatibility(tags)
-                        .cmp(&b.dist.filename.compatibility(tags))
+                        .tag_compatibility(tags)
+                        .cmp(&b.dist.filename.tag_compatibility(tags))
                         .then_with(|| a.built.cmp(&b.built))
                 })
         });

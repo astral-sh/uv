@@ -5,7 +5,6 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
-use std::collections::BTreeMap;
 #[cfg(all(unix, feature = "test-universal"))]
 use std::os::unix::fs::FileTypeExt;
 #[cfg(all(feature = "test-universal", feature = "test-git"))]
@@ -19,9 +18,7 @@ use uv_static::EnvVars;
 use uv_test::archive::generate_source_archive;
 #[cfg(feature = "test-universal")]
 use uv_test::copy_dir_ignore;
-use uv_test::packse::PackseServer;
-use uv_test::packse::generate_wheel;
-use uv_test::packse::scenario::Scenario;
+use uv_test::packse::{PackseServer, WheelBuilder, scenario::Scenario};
 #[cfg(all(feature = "test-universal", feature = "test-git"))]
 use uv_test::{READ_ONLY_GITHUB_SSH_DEPLOY_KEY, READ_ONLY_GITHUB_TOKEN, decode_token};
 use uv_test::{TestContext, apply_filters, uv_snapshot};
@@ -4563,6 +4560,42 @@ fn pep_751_no_packages() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
+#[test]
+fn pep_751_supported_environments() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+
+            [tool.uv]
+            environments = [
+                "sys_platform == 'linux' and python_full_version >= '3.12'",
+                "sys_platform == 'darwin'",
+            ]
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.export().args(["--format", "pylock.toml", "--no-header"]), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    lock-version = "1.0"
+    created-by = "uv"
+    environments = ["sys_platform == 'linux'", "sys_platform == 'darwin'"]
+    requires-python = ">=3.12"
+    packages = []
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    "#);
+
+    Ok(())
+}
+
 /// Indexes such as HTML-only indexes don't always provide hashes, but pylock.toml requires at
 /// least one hash per package file, so uv downloads the files and computes the hashes.
 #[test]
@@ -5626,6 +5659,56 @@ async fn pep_751_https_credentials() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
+#[test]
+fn pep_751_index_strips_userinfo_and_preserves_query() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["example"]
+    "#})?;
+    context.temp_dir.child("uv.lock").write_str(indoc! {r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [[package]]
+        name = "example"
+        version = "1.0.0"
+        source = { registry = "https://user:password@example.com/simple?st=2026-09-15T16:34:14Z&sig=abc%2Bdef%3D" }
+        wheels = [{ url = "https://example.com/example-1.0.0-py3-none-any.whl", hash = "sha256:0000000000000000000000000000000000000000000000000000000000000000" }]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [{ name = "example" }]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.export()
+        .args(["--frozen", "--offline", "--no-header", "--format", "pylock.toml"]), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    lock-version = "1.0"
+    created-by = "uv"
+    requires-python = ">=3.12"
+
+    [[packages]]
+    name = "example"
+    version = "1.0.0"
+    index = "https://example.com/simple?st=2026-09-15T16:34:14Z&sig=abc%2Bdef%3D"
+    wheels = [{ url = "https://example.com/example-1.0.0-py3-none-any.whl", hashes = { sha256 = "0000000000000000000000000000000000000000000000000000000000000000" } }]
+    "#);
+
+    Ok(())
+}
+
 /// Check that relative and absolute paths are preserved in pylock.toml export.
 ///
 /// See: <https://github.com/astral-sh/uv/issues/16514>
@@ -5778,15 +5861,7 @@ fn pep_751_output_file_relative_paths() -> Result<()> {
         .temp_dir
         .child("child/src/child/__init__.py")
         .touch()?;
-    let (filename, wheel) = generate_wheel(
-        &"helper".parse()?,
-        &"1.0.0".parse()?,
-        &[],
-        &BTreeMap::new(),
-        None,
-        "py3-none-any",
-        &[],
-    );
+    let (filename, wheel) = WheelBuilder::new(&"helper".parse()?, &"1.0.0".parse()?).build();
     context.temp_dir.child(filename).write_binary(&wheel)?;
     let sdist = generate_source_archive(&"sdist".parse()?, &"1.0.0".parse()?, "", None)?;
     context
@@ -12926,7 +13001,8 @@ fn frozen_lockfile_non_project_workspace() -> Result<()> {
           "path": "[VENV]/[BIN]/[PYTHON]",
           "version": "3.12.[X]",
           "implementation": "cpython"
-        }
+        },
+        "packages": {}
       },
       "workspace": {
         "path": "[TEMP_DIR]/",

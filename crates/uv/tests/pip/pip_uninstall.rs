@@ -664,6 +664,21 @@ fn uninstall_egg_info_top_level_drive_relative() -> Result<()> {
     Ok(())
 }
 
+/// The uninstall warning redacts the password and sensitive query value.
+#[test]
+#[cfg(feature = "test-python")]
+fn uninstall_url_redacts_credentials() {
+    let context = uv_test::test_context!("3.12");
+
+    uv_snapshot!(context.filters(), context.pip_uninstall()
+        .arg("https://user:password@example.com/demo-1.0-py3-none-any.whl?sig=signature"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: Skipping `https://user:****@example.com/demo-1.0-py3-none-any.whl?sig=****` as it is not installed
+    warning: No packages to uninstall
+    ");
+}
+
 /// `--yes` is accepted for `pip uninstall` compatibility, but emits a warning.
 #[test]
 fn yes_flag() {

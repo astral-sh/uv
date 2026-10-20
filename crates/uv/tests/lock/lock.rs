@@ -1,5 +1,4 @@
 #[cfg(feature = "test-universal")]
-use std::collections::BTreeMap;
 #[cfg(all(feature = "test-universal", feature = "test-git"))]
 use std::process::Command;
 
@@ -14,7 +13,6 @@ use insta::assert_snapshot;
 use serde_json::json;
 #[cfg(feature = "test-universal")]
 use sha2::{Digest, Sha256};
-use url::Url;
 #[cfg(feature = "test-universal")]
 use walkdir::WalkDir;
 #[cfg(feature = "test-universal")]
@@ -26,13 +24,14 @@ use wiremock::{
 #[cfg(feature = "test-universal")]
 use uv_fs::PythonExt;
 use uv_fs::{Simplified, create_symlink};
+use uv_redacted::SafeUrl;
 use uv_static::EnvVars;
 #[cfg(feature = "test-universal")]
 use uv_test::archive::{generate_source_archive, write_tar_gz};
 #[cfg(feature = "test-universal")]
 use uv_test::package_server::PackageServer;
 #[cfg(feature = "test-universal")]
-use uv_test::packse::{PackseServer, generate_wheel_with_files, scenario::Scenario};
+use uv_test::packse::{PackseServer, WheelBuilder, scenario::Scenario};
 #[cfg(all(feature = "test-universal", feature = "test-git"))]
 use uv_test::{READ_ONLY_GITHUB_TOKEN, decode_token};
 use uv_test::{diff_snapshot, uv_snapshot};
@@ -1589,13 +1588,14 @@ fn lock_sdist_git_archive() -> Result<()> {
         dependencies = ["iniconfig"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [tool.uv.sources]
         iniconfig = { git = "https://github.com/astral-sh/archive-in-git-test", path = "archives/iniconfig-2.0.0.tar.gz" }
         "#,
     )?;
+    context.temp_dir.child("src/project/__init__.py").touch()?;
 
     uv_snapshot!(context.filters(), context.sync(), @r###"
     exit_code: 0 (success)
@@ -1731,13 +1731,14 @@ fn lock_wheel_git_archive() -> Result<()> {
         dependencies = ["iniconfig"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [tool.uv.sources]
         iniconfig = { git = "https://github.com/astral-sh/archive-in-git-test", path = "archives/iniconfig-2.0.0-py3-none-any.whl" }
         "#,
     )?;
+    context.temp_dir.child("src/project/__init__.py").touch()?;
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
     exit_code: 0 (success)
@@ -2094,15 +2095,9 @@ fn lock_sdist_url() -> Result<()> {
 /// Create a deterministic wheel whose module can be imported by a source build backend.
 #[cfg(feature = "test-universal")]
 fn locked_build_dependency_wheel(module: &str) -> Result<Vec<u8>> {
-    let (_, wheel) = generate_wheel_with_files(
-        &"review-dep".parse()?,
-        &"1.0.0".parse()?,
-        &[],
-        &BTreeMap::new(),
-        None,
-        "py3-none-any",
-        &[("review_dep/payload.py", module)],
-    );
+    let (_, wheel) = WheelBuilder::new(&"review-dep".parse()?, &"1.0.0".parse()?)
+        .files(&[("review_dep/payload.py", module)])
+        .build();
     Ok(wheel)
 }
 
@@ -2537,15 +2532,9 @@ fn lock_wheel_path_relock_hash_mismatch() -> Result<()> {
     let name = "demo-pkg".parse()?;
     let version = "1.0.0".parse()?;
     let [(filename, trusted), (_, replacement)] = ["original", "replacement"].map(|contents| {
-        generate_wheel_with_files(
-            &name,
-            &version,
-            &[],
-            &BTreeMap::new(),
-            None,
-            "py3-none-any",
-            &[("demo_pkg/data.txt", contents)],
-        )
+        WheelBuilder::new(&name, &version)
+            .files(&[("demo_pkg/data.txt", contents)])
+            .build()
     });
     let archive = context.temp_dir.child(&filename);
     let trusted_digest = hex::encode(Sha256::digest(&trusted));
@@ -5950,13 +5939,11 @@ fn lock_conflicting_workspace_members() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
-
-        [tool.setuptools.packages.find]
-        include = ["example"]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
+    context.temp_dir.child("src/example/__init__.py").touch()?;
 
     // Create the subproject
     let subproject_dir = context.temp_dir.child("subexample");
@@ -5972,10 +5959,11 @@ fn lock_conflicting_workspace_members() -> Result<()> {
         dependencies = ["sortedcontainers==2.4.0"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
+    subproject_dir.child("src/subexample/__init__.py").touch()?;
 
     // Lock should succeed because we declared the conflict
     uv_snapshot!(context.filters(), context.lock(), @"
@@ -6201,13 +6189,11 @@ fn lock_conflicting_workspace_members_depends_direct_extra() -> Result<()> {
         subexample = { workspace = true }
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
-
-        [tool.setuptools.packages.find]
-        include = ["example"]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
+    context.temp_dir.child("src/example/__init__.py").touch()?;
 
     // Create the subproject
     let subproject_dir = context.temp_dir.child("subexample");
@@ -6223,10 +6209,11 @@ fn lock_conflicting_workspace_members_depends_direct_extra() -> Result<()> {
         dependencies = ["sortedcontainers==2.4.0"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
+    subproject_dir.child("src/subexample/__init__.py").touch()?;
 
     // This should succeed, because the conflict is optional
     uv_snapshot!(context.filters(), context.lock(), @"
@@ -6493,13 +6480,11 @@ fn lock_conflicting_workspace_members_depends_transitive_extra() -> Result<()> {
         indirection = { workspace = true }
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
-
-        [tool.setuptools.packages.find]
-        include = ["example"]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
+    context.temp_dir.child("src/example/__init__.py").touch()?;
 
     // Create the indirection subproject
     let subproject_dir = context.temp_dir.child("indirection");
@@ -6521,10 +6506,13 @@ fn lock_conflicting_workspace_members_depends_transitive_extra() -> Result<()> {
         subexample = { workspace = true }
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
+    subproject_dir
+        .child("src/indirection/__init__.py")
+        .touch()?;
 
     // Create the incompatible subproject
     let subproject_dir = context.temp_dir.child("subexample");
@@ -6540,10 +6528,11 @@ fn lock_conflicting_workspace_members_depends_transitive_extra() -> Result<()> {
         dependencies = ["sortedcontainers==2.4.0"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
+    subproject_dir.child("src/subexample/__init__.py").touch()?;
 
     // This succeeds, but should fail. We have an unconditional conflict via `example ->
     // indirection[foo] -> subexample`, so `example` is unusable.
@@ -11183,7 +11172,7 @@ fn lock_relative_transitive_workspace_paths() -> Result<()> {
 
     let shared_dependency_alias = context.temp_dir.child("shared-dependency-alias");
     create_symlink(shared_dependency.path(), shared_dependency_alias.path())?;
-    let shared_dependency_url = Url::from_file_path(shared_dependency_alias.path())
+    let shared_dependency_url = SafeUrl::from_file_path(shared_dependency_alias.path())
         .map_err(|()| anyhow::anyhow!("shared dependency path is not a valid file URL"))?;
 
     intermediate
@@ -11254,7 +11243,7 @@ fn lock_relative_transitive_archive_paths() -> Result<()> {
             .join("test/links/ok-1.0.0-py3-none-any.whl"),
         wheel.path(),
     )?;
-    let wheel_url = Url::from_file_path(wheel.path())
+    let wheel_url = SafeUrl::from_file_path(wheel.path())
         .map_err(|()| anyhow::anyhow!("wheel path is not a valid file URL"))?;
 
     let source_archive = context
@@ -11267,7 +11256,7 @@ fn lock_relative_transitive_archive_paths() -> Result<()> {
             .join("test/links/basic_package-0.1.0.tar.gz"),
         source_archive.path(),
     )?;
-    let source_archive_url = Url::from_file_path(source_archive.path())
+    let source_archive_url = SafeUrl::from_file_path(source_archive.path())
         .map_err(|()| anyhow::anyhow!("source archive path is not a valid file URL"))?;
 
     let project = context.temp_dir.child("project");
@@ -11406,7 +11395,7 @@ fn lock_relative_inactive_dependency_metadata_paths() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
     "#})?;
-    let child_url = Url::from_file_path(child.path())
+    let child_url = SafeUrl::from_file_path(child.path())
         .map_err(|()| anyhow::anyhow!("child path is not a valid file URL"))?;
 
     let active_child = context.temp_dir.child("active-child");
@@ -11421,7 +11410,7 @@ fn lock_relative_inactive_dependency_metadata_paths() -> Result<()> {
             requires = ["hatchling"]
             build-backend = "hatchling.build"
         "#})?;
-    let active_child_url = Url::from_file_path(active_child.path())
+    let active_child_url = SafeUrl::from_file_path(active_child.path())
         .map_err(|()| anyhow::anyhow!("active child path is not a valid file URL"))?;
 
     let relative_child = context.temp_dir.child("relative-child");
@@ -11438,16 +11427,16 @@ fn lock_relative_inactive_dependency_metadata_paths() -> Result<()> {
             requires = ["hatchling"]
             build-backend = "hatchling.build"
         "#})?;
-    let relative_child_url = Url::from_file_path(relative_child.path())
+    let relative_child_url = SafeUrl::from_file_path(relative_child.path())
         .map_err(|()| anyhow::anyhow!("relative child path is not a valid file URL"))?;
     let relative_child_alias = context.temp_dir.child("relative-child-alias");
     create_symlink(relative_child.path(), relative_child_alias.path())?;
-    let relative_child_alias_url = Url::from_file_path(relative_child_alias.path())
+    let relative_child_alias_url = SafeUrl::from_file_path(relative_child_alias.path())
         .map_err(|()| anyhow::anyhow!("relative child alias is not a valid file URL"))?;
 
     // Discover the ordinary parent through configured metadata to keep the baseline deterministic.
     let parent = context.temp_dir.child("parent");
-    let parent_url = Url::from_file_path(parent.path())
+    let parent_url = SafeUrl::from_file_path(parent.path())
         .map_err(|()| anyhow::anyhow!("parent path is not a valid file URL"))?;
 
     let project = indoc! {r#"
@@ -11693,9 +11682,9 @@ fn lock_ignored_dependency_metadata_paths() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
     "#})?;
-    let active_child_url = Url::from_file_path(active_child.path())
+    let active_child_url = SafeUrl::from_file_path(active_child.path())
         .map_err(|()| anyhow::anyhow!("active child path is not a valid file URL"))?;
-    let inactive_child_url = Url::from_file_path(inactive_child.path())
+    let inactive_child_url = SafeUrl::from_file_path(inactive_child.path())
         .map_err(|()| anyhow::anyhow!("inactive child path is not a valid file URL"))?;
 
     let parent = context.temp_dir.child("parent");
@@ -12886,8 +12875,8 @@ fn lock_mixed_hashes() -> Result<()> {
           </body>
         </html>
     "#,
-        Url::from_file_path(&wheel).unwrap().as_str(),
-        Url::from_file_path(&sdist).unwrap().as_str(),
+        SafeUrl::from_file_path(&wheel).unwrap().as_str(),
+        SafeUrl::from_file_path(&sdist).unwrap().as_str(),
     })?;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -12901,10 +12890,10 @@ fn lock_mixed_hashes() -> Result<()> {
         [tool.uv]
         extra-index-url = ["{}"]
         "#,
-        Url::from_file_path(&root).unwrap().as_str()
+        SafeUrl::from_file_path(&root).unwrap().as_str()
     })?;
 
-    let index_url = Url::from_file_path(&root).unwrap().to_string();
+    let index_url = SafeUrl::from_file_path(&root).unwrap().to_string();
     let filters = [(index_url.as_str(), "file://[TMP]")]
         .into_iter()
         .chain(context.filters())
@@ -12982,8 +12971,8 @@ fn lock_mixed_hashes() -> Result<()> {
           </body>
         </html>
     "#,
-        Url::from_file_path(&wheel).unwrap().as_str(),
-        Url::from_file_path(&sdist).unwrap().as_str(),
+        SafeUrl::from_file_path(&wheel).unwrap().as_str(),
+        SafeUrl::from_file_path(&sdist).unwrap().as_str(),
     })?;
 
     // Lock again with `--refresh` to pick up the SHA512 hash from the updated index.
@@ -13744,8 +13733,8 @@ fn lock_same_version_multiple_urls() -> Result<()> {
           "dependency @ {} ; sys_platform != 'darwin'",
         ]
         "#,
-        Url::from_file_path(context.temp_dir.join("v1")).unwrap(),
-        Url::from_file_path(context.temp_dir.join("v2")).unwrap(),
+        SafeUrl::from_file_path(context.temp_dir.join("v1")).unwrap(),
+        SafeUrl::from_file_path(context.temp_dir.join("v2")).unwrap(),
     })?;
 
     uv_snapshot!(context.filters(), context.lock(), @"
@@ -17412,7 +17401,7 @@ fn lock_find_links_http_wheel() -> Result<()> {
     Resolved 2 packages in [TIME]
     ");
 
-    assert!(context.cache_dir.child("flat-index-v6").is_dir());
+    assert!(context.cache_dir.child("flat-index-v7").is_dir());
 
     let lock = context.read("uv.lock");
 
@@ -17598,7 +17587,7 @@ fn lock_find_links_explicit_index() -> Result<()> {
         [tool.uv.sources]
         tqdm = {{ index = "local" }}
         "#,
-        Url::from_file_path(context.temp_dir.join("links/")).unwrap()
+        SafeUrl::from_file_path(context.temp_dir.join("links/")).unwrap()
     })?;
 
     uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @"
@@ -17695,7 +17684,7 @@ fn lock_find_links_higher_priority_index() -> Result<()> {
         format = "flat"
         url = "{}"
         "#,
-        Url::from_file_path(context.temp_dir.join("links/")).unwrap()
+        SafeUrl::from_file_path(context.temp_dir.join("links/")).unwrap()
     })?;
 
     uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @"
@@ -17788,7 +17777,7 @@ fn lock_find_links_lower_priority_index() -> Result<()> {
         format = "flat"
         url = "{}"
         "#,
-        Url::from_file_path(context.temp_dir.join("links/")).unwrap()
+        SafeUrl::from_file_path(context.temp_dir.join("links/")).unwrap()
     })?;
 
     uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @"
@@ -17902,8 +17891,8 @@ fn lock_local_index() -> Result<()> {
           </body>
         </html>
     "#,
-        Url::from_file_path(wheel).unwrap().as_str(),
-        Url::from_file_path(sdist).unwrap().as_str(),
+        SafeUrl::from_file_path(wheel).unwrap().as_str(),
+        SafeUrl::from_file_path(sdist).unwrap().as_str(),
     })?;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -17917,7 +17906,7 @@ fn lock_local_index() -> Result<()> {
         [tool.uv]
         extra-index-url = ["{}"]
         "#,
-        Url::from_file_path(&root).unwrap().as_str()
+        SafeUrl::from_file_path(&root).unwrap().as_str()
     })?;
 
     uv_snapshot!(context.filters(), context.lock().env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
@@ -17928,7 +17917,7 @@ fn lock_local_index() -> Result<()> {
 
     let lock = context.read("uv.lock");
 
-    let index = Url::from_file_path(&root).unwrap().to_string();
+    let index = SafeUrl::from_file_path(&root).unwrap().to_string();
     let filters = [(index.as_str(), "file://[TMP]")]
         .into_iter()
         .chain(context.filters())
@@ -18197,7 +18186,7 @@ fn lock_sources_archive() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = ["workspace @ {}"]
         "#,
-        Url::from_file_path(&workspace_archive).unwrap(),
+        SafeUrl::from_file_path(&workspace_archive).unwrap(),
     })?;
 
     uv_snapshot!( context.lock(), @"
@@ -18309,16 +18298,39 @@ fn lock_sources_archive() -> Result<()> {
 fn lock_sources_source_tree() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
-    // Download the source.
-    let workspace_archive = context.temp_dir.child("workspace.zip");
-    download_to_disk(
-        "https://github.com/user-attachments/files/16592193/workspace.zip",
-        &workspace_archive,
-    );
+    let workspace = context.temp_dir.child("workspace");
+    workspace.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "workspace"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio"]
 
-    // Unzip the file.
-    let file = fs_err::File::open(&*workspace_archive)?;
-    uv_extract::unzip(file, &context.temp_dir)?;
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+
+        [tool.uv.workspace]
+        members = ["anyio"]
+
+        [tool.uv.sources]
+        anyio = { workspace = true }
+    "#})?;
+    workspace.child("src/workspace/__init__.py").touch()?;
+
+    let anyio = workspace.child("anyio");
+    anyio.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "anyio"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    anyio.child("src/anyio/__init__.py").touch()?;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(&formatdoc! {
@@ -18330,17 +18342,12 @@ fn lock_sources_source_tree() -> Result<()> {
         dependencies = ["workspace @ file://{}"]
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
-
-        [tool.hatch.metadata]
-        allow-direct-references = true
-
-        [tool.hatch.build.targets.wheel]
-        packages = ["src/project"]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
         context.temp_dir.child("workspace").portable_display()
     })?;
+    context.temp_dir.child("src/project/__init__.py").touch()?;
 
     uv_snapshot!(context.filters(), context.lock(), @"
     exit_code: 0 (success)
@@ -18601,8 +18608,8 @@ fn lock_mixed_extras() -> Result<()> {
         async = ["iniconfig>=2"]
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
     "#})?;
     leaf1.child("src/leaf1/__init__.py").touch()?;
 
@@ -18616,8 +18623,8 @@ fn lock_mixed_extras() -> Result<()> {
         dependencies = ["leaf2"]
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [tool.uv.sources]
         leaf2 = { workspace = true }
@@ -18639,8 +18646,8 @@ fn lock_mixed_extras() -> Result<()> {
         async = ["packaging>=24"]
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
     "#})?;
     leaf2.child("src/leaf2/__init__.py").touch()?;
 
@@ -18825,8 +18832,8 @@ fn lock_transitive_extra() -> Result<()> {
         async = ["iniconfig>=2"]
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
     "#})?;
     leaf.child("src/leaf/__init__.py").touch()?;
 
@@ -19953,7 +19960,7 @@ fn normalize_false_marker_dependency_groups() -> Result<()> {
 
     let local = context.temp_dir.child("local");
     local.create_dir_all()?;
-    let local_url = Url::from_file_path(local.path())
+    let local_url = SafeUrl::from_file_path(local.path())
         .map_err(|()| anyhow::anyhow!("local path is not a valid file URL"))?;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -22802,7 +22809,7 @@ fn lock_metadata_free_nested_group_conditional_registry_constraint() -> Result<(
             .as_inline_table()
             .and_then(|dependency| dependency.get("marker"))
             .and_then(toml_edit::Value::as_str)
-            .is_some_and(|marker| marker.starts_with("sys_platform == 'win32' or"))
+            .is_some_and(|marker| marker == "sys_platform == 'win32'")
     }) else {
         anyhow::bail!("other dependency group did not contain its base edge");
     };
@@ -24137,7 +24144,7 @@ fn lock_metadata_free_shared_git_direct_source() -> Result<()> {
         .assert()
         .success();
 
-    let repository_url = Url::from_directory_path(repository.path())
+    let repository_url = SafeUrl::from_directory_path(repository.path())
         .map_err(|()| anyhow!("failed to convert repository path to file URL"))?;
     context
         .temp_dir
@@ -24437,7 +24444,7 @@ fn lock_metadata_free_overridden_recursive_extra_source() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let server = PackseServer::new("extras/lock-without-metadata.toml");
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    let child_url = Url::from_file_path(context.temp_dir.child("child").path())
+    let child_url = SafeUrl::from_file_path(context.temp_dir.child("child").path())
         .map_err(|()| anyhow::anyhow!("child path is not a valid file URL"))?;
     pyproject_toml.write_str(&formatdoc! {r#"
         [project]
@@ -24619,7 +24626,7 @@ fn lock_metadata_free_shared_backend_direct_source() -> Result<()> {
             )
             return dist_info.name
         "#,
-            child_url = Url::from_file_path(context.temp_dir.child("child").path())
+            child_url = SafeUrl::from_file_path(context.temp_dir.child("child").path())
                 .map_err(|()| anyhow!("failed to construct a file URL for the local child"))?,
         })?;
 
@@ -27927,7 +27934,7 @@ fn lock_explicit_default_index() -> Result<()> {
     DEBUG Found static `requires-dist` for: [TEMP_DIR]/
     DEBUG Resolving despite existing lockfile due to mismatched requirements for: `project==0.1.0`
       Requested: {Requirement { name: PackageName("anyio"), extras: [], groups: [], marker: true, source: Registry { specifier: VersionSpecifiers([]), index: None, conflict: None }, scope: Global, origin: None }}
-      Existing: {Requirement { name: PackageName("iniconfig"), extras: [], groups: [], marker: true, source: Registry { specifier: VersionSpecifiers([VersionSpecifier { operator: Equal, version: "2" }]), index: Some(IndexMetadata { url: Url(VerbatimUrl { url: DisplaySafeUrl { scheme: "https", cannot_be_a_base: false, username: "", password: None, host: Some(Domain("test.pypi.org")), port: None, path: "/simple", query: None, fragment: None }, given: None, expanded: false, force_relative: false }), format: Simple }), conflict: None }, scope: Global, origin: None }}
+      Existing: {Requirement { name: PackageName("iniconfig"), extras: [], groups: [], marker: true, source: Registry { specifier: VersionSpecifiers([VersionSpecifier { operator: Equal, version: "2" }]), index: Some(IndexMetadata { url: Url(VerbatimUrl { url: SafeUrl { scheme: "https", cannot_be_a_base: false, username: "", password: None, host: Some(Domain("test.pypi.org")), port: None, path: "/simple", query: None, fragment: None }, given: None, expanded: false, force_relative: false }), format: Simple }), conflict: None }, scope: Global, origin: None }}
     DEBUG Found static `pyproject.toml` for: project @ file://[TEMP_DIR]/
     DEBUG Solving with installed Python version: 3.12.[X]
     DEBUG Solving with target Python version: >=3.12
@@ -38920,16 +38927,16 @@ fn lock_pytorch_cpu() -> Result<()> {
 
         [package.optional-dependencies]
         cpu = [
-            { name = "torch", version = "2.5.1", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(python_full_version < '3.13' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-7-project-cpu') or (python_full_version >= '3.13' and extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124') or (platform_machine != 'aarch64' and extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124') or (platform_python_implementation != 'CPython' and extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124') or (sys_platform == 'darwin' and extra == 'extra-7-project-cpu') or (sys_platform != 'linux' and extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124')" },
-            { name = "torch", version = "2.5.1+cpu", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(python_full_version >= '3.13' and sys_platform == 'linux' and extra == 'extra-7-project-cpu') or (python_full_version < '3.13' and sys_platform == 'linux' and extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124') or (platform_machine != 'aarch64' and sys_platform == 'linux' and extra == 'extra-7-project-cpu') or (platform_python_implementation != 'CPython' and sys_platform == 'linux' and extra == 'extra-7-project-cpu') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-7-project-cpu') or (sys_platform == 'darwin' and extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124')" },
-            { name = "torchvision", version = "0.20.1", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(python_full_version < '3.13' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-7-project-cpu') or (python_full_version >= '3.13' and extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124') or (platform_machine != 'aarch64' and extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124') or (platform_python_implementation != 'CPython' and extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124') or (sys_platform == 'darwin' and extra == 'extra-7-project-cpu') or (sys_platform != 'linux' and extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124')" },
-            { name = "torchvision", version = "0.20.1+cpu", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(python_full_version >= '3.13' and sys_platform == 'linux' and extra == 'extra-7-project-cpu') or (python_full_version < '3.13' and sys_platform == 'linux' and extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124') or (platform_machine != 'aarch64' and sys_platform == 'linux' and extra == 'extra-7-project-cpu') or (platform_python_implementation != 'CPython' and sys_platform == 'linux' and extra == 'extra-7-project-cpu') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-7-project-cpu') or (sys_platform == 'darwin' and extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124')" },
+            { name = "torch", version = "2.5.1", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(python_full_version < '3.13' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-7-project-cpu') or (sys_platform == 'darwin' and extra == 'extra-7-project-cpu') or (extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124')" },
+            { name = "torch", version = "2.5.1+cpu", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(python_full_version >= '3.13' and sys_platform == 'linux' and extra == 'extra-7-project-cpu') or (platform_machine != 'aarch64' and sys_platform == 'linux' and extra == 'extra-7-project-cpu') or (platform_python_implementation != 'CPython' and sys_platform == 'linux' and extra == 'extra-7-project-cpu') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-7-project-cpu') or (extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124')" },
+            { name = "torchvision", version = "0.20.1", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(python_full_version < '3.13' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-7-project-cpu') or (sys_platform == 'darwin' and extra == 'extra-7-project-cpu') or (extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124')" },
+            { name = "torchvision", version = "0.20.1+cpu", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(python_full_version >= '3.13' and sys_platform == 'linux' and extra == 'extra-7-project-cpu') or (platform_machine != 'aarch64' and sys_platform == 'linux' and extra == 'extra-7-project-cpu') or (platform_python_implementation != 'CPython' and sys_platform == 'linux' and extra == 'extra-7-project-cpu') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-7-project-cpu') or (extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124')" },
         ]
         cu124 = [
-            { name = "torch", version = "2.5.1", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }, marker = "(python_full_version < '3.13' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-7-project-cu124') or (python_full_version >= '3.13' and extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124') or (platform_machine != 'aarch64' and extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124') or (platform_python_implementation != 'CPython' and extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124') or (sys_platform != 'linux' and extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124')" },
-            { name = "torch", version = "2.5.1+cu124", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }, marker = "(python_full_version >= '3.13' and extra == 'extra-7-project-cu124') or (python_full_version < '3.13' and extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124') or (platform_machine != 'aarch64' and extra == 'extra-7-project-cu124') or (platform_python_implementation != 'CPython' and extra == 'extra-7-project-cu124') or (sys_platform != 'linux' and extra == 'extra-7-project-cu124')" },
-            { name = "torchvision", version = "0.20.1", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }, marker = "(python_full_version < '3.13' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-7-project-cu124') or (python_full_version >= '3.13' and extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124') or (platform_machine != 'aarch64' and extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124') or (platform_python_implementation != 'CPython' and extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124') or (sys_platform != 'linux' and extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124')" },
-            { name = "torchvision", version = "0.20.1+cu124", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }, marker = "(python_full_version >= '3.13' and extra == 'extra-7-project-cu124') or (python_full_version < '3.13' and extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124') or (platform_machine != 'aarch64' and extra == 'extra-7-project-cu124') or (platform_python_implementation != 'CPython' and extra == 'extra-7-project-cu124') or (sys_platform != 'linux' and extra == 'extra-7-project-cu124')" },
+            { name = "torch", version = "2.5.1", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }, marker = "(python_full_version < '3.13' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-7-project-cu124') or (extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124')" },
+            { name = "torch", version = "2.5.1+cu124", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }, marker = "(python_full_version >= '3.13' and extra == 'extra-7-project-cu124') or (platform_machine != 'aarch64' and extra == 'extra-7-project-cu124') or (platform_python_implementation != 'CPython' and extra == 'extra-7-project-cu124') or (sys_platform != 'linux' and extra == 'extra-7-project-cu124') or (extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124')" },
+            { name = "torchvision", version = "0.20.1", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }, marker = "(python_full_version < '3.13' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-7-project-cu124') or (extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124')" },
+            { name = "torchvision", version = "0.20.1+cu124", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }, marker = "(python_full_version >= '3.13' and extra == 'extra-7-project-cu124') or (platform_machine != 'aarch64' and extra == 'extra-7-project-cu124') or (platform_python_implementation != 'CPython' and extra == 'extra-7-project-cu124') or (sys_platform != 'linux' and extra == 'extra-7-project-cu124') or (extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124')" },
         ]
 
         [package.metadata]
@@ -39474,9 +39481,9 @@ fn lock_pytorch_index_preferences() -> Result<()> {
 
         [package.optional-dependencies]
         cpu = [
-            { name = "torch", version = "2.2.2", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(python_full_version < '3.13' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-7-project-cpu') or (python_full_version >= '3.13' and extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu118') or (platform_machine != 'aarch64' and extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu118') or (platform_python_implementation != 'CPython' and extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu118') or (sys_platform != 'linux' and extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu118')" },
+            { name = "torch", version = "2.2.2", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(python_full_version < '3.13' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-7-project-cpu') or (extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu118')" },
             { name = "torch", version = "2.2.2", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform == 'darwin' and extra == 'extra-7-project-cpu') or (extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu118')" },
-            { name = "torch", version = "2.2.2+cpu", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(python_full_version >= '3.13' and sys_platform == 'linux' and extra == 'extra-7-project-cpu') or (python_full_version < '3.13' and sys_platform == 'linux' and extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu118') or (platform_machine != 'aarch64' and sys_platform == 'linux' and extra == 'extra-7-project-cpu') or (platform_python_implementation != 'CPython' and sys_platform == 'linux' and extra == 'extra-7-project-cpu') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-7-project-cpu') or (sys_platform == 'darwin' and extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu118')" },
+            { name = "torch", version = "2.2.2+cpu", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(python_full_version >= '3.13' and sys_platform == 'linux' and extra == 'extra-7-project-cpu') or (platform_machine != 'aarch64' and sys_platform == 'linux' and extra == 'extra-7-project-cpu') or (platform_python_implementation != 'CPython' and sys_platform == 'linux' and extra == 'extra-7-project-cpu') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-7-project-cpu') or (extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu118')" },
         ]
         cu118 = [
             { name = "torch", version = "2.2.2", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform == 'darwin' and extra == 'extra-7-project-cu118') or (extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu118')" },
@@ -40832,7 +40839,7 @@ fn lock_invalid_fork_markers() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock(), @"
     exit_code: 0 (success)
     ----- stderr -----
-    warning: Resolving despite existing lockfile due to fork markers not covering the supported environments: `(python_full_version >= '3.8' and python_full_version < '3.10') or (python_full_version >= '3.8' and platform_python_implementation == 'CPython')` vs `python_full_version >= '3.8'`
+    warning: Resolving despite existing lockfile due to fork markers not covering the supported environments: `(python_full_version >= '3.8' and python_full_version < '3.10') or (python_full_version >= '3.10' and platform_python_implementation == 'CPython')` vs `python_full_version >= '3.8'`
     Resolved 2 packages in [TIME]
     Updated idna v3.10 -> v3.6
     ");
@@ -41091,9 +41098,8 @@ fn lock_conflict_for_disjoint_python_version() -> Result<()> {
 #[cfg(all(feature = "test-universal", feature = "test-python-patch"))]
 #[test]
 fn lock_requires_python_empty_lock_file() -> Result<()> {
-    // N.B. These versions were selected based on what was
-    // in `.python-versions` at the time of writing (2025-06-16).
-    let (v1, v2) = ("3.13.0", "3.13.2");
+    // Use two patch versions from `.python-versions` to exercise disjoint requirements.
+    let (v1, v2) = ("3.13.0", "3.13.16");
     let context = uv_test::test_context_with_versions!(&[v1, v2]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -41182,8 +41188,8 @@ fn lock_requires_python_empty_lock_file() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock().arg("--upgrade-package=python"), @r"
     exit_code: 0 (success)
     ----- stderr -----
-    Using CPython 3.13.2 interpreter at: [PYTHON-3.13.2]
-    warning: Resolving despite existing lockfile due to fork markers being disjoint with `requires-python`: `python_full_version == '3.13.0'` vs `python_full_version == '3.13.2'`
+    Using CPython 3.13.16 interpreter at: [PYTHON-3.13.16]
+    warning: Resolving despite existing lockfile due to fork markers being disjoint with `requires-python`: `python_full_version == '3.13.0'` vs `python_full_version == '3.13.16'`
     Resolved 3 packages in [TIME]
     ");
 
@@ -41195,7 +41201,7 @@ fn lock_requires_python_empty_lock_file() -> Result<()> {
             lock, @r#"
         version = 1
         revision = 5
-        requires-python = "==3.13.2"
+        requires-python = "==3.13.16"
         resolution-markers = [
             "sys_platform == 'darwin'",
             "platform_machine == 'aarch64' and sys_platform == 'linux'",
@@ -46629,18 +46635,12 @@ fn lock_resolution_inputs_local_source_constraints() -> Result<()> {
     "#})?;
     let server = PackseServer::from_scenario(&scenario);
     let context = uv_test::test_context!("3.12");
-    let (filename, wheel) = generate_wheel_with_files(
-        &"provider".parse()?,
-        &"1.0.0".parse()?,
-        &["b==1.0.0a1".parse()?],
-        &BTreeMap::new(),
-        None,
-        "py3-none-any",
-        &[],
-    );
+    let (filename, wheel) = WheelBuilder::new(&"provider".parse()?, &"1.0.0".parse()?)
+        .requires(&["b==1.0.0a1".parse()?])
+        .build();
     context.temp_dir.child(&filename).write_binary(&wheel)?;
     let pyproject = context.temp_dir.child("pyproject.toml");
-    let source = Url::from_file_path(context.temp_dir.child(&filename).path())
+    let source = SafeUrl::from_file_path(context.temp_dir.child(&filename).path())
         .map_err(|()| anyhow!("invalid wheel path"))?;
 
     // The constrained local wheel requires a prerelease from the registry.
@@ -46712,7 +46712,7 @@ fn lock_resolution_inputs_local_source_constraints() -> Result<()> {
 fn lock_resolution_inputs_dynamic_constraints() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let pyproject = context.temp_dir.child("pyproject.toml");
-    let provider_url = Url::from_directory_path(context.temp_dir.child("provider").path())
+    let provider_url = SafeUrl::from_directory_path(context.temp_dir.child("provider").path())
         .map_err(|()| anyhow!("invalid provider directory"))?;
 
     // Select a local package whose backend provides its version.

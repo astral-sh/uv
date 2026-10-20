@@ -53,7 +53,6 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true, features = ["compat"] }
 tracing = { workspace = true }
-url = { workspace = true }
 zstd = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]

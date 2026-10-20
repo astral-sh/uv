@@ -19,8 +19,8 @@ use uv_globfilter::{GlobDirFilter, PortableGlobParser};
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::{Operator, Version, VersionSpecifiers};
 use uv_pep508::{
-    ExtraOperator, MarkerEnvironment, MarkerExpression, MarkerTree, MarkerValueExtra, Requirement,
-    VersionOrUrl,
+    ExtraOperator, MarkerEnvironment, MarkerExpression, MarkerTree, MarkerValueExtra, Pep508Url,
+    Requirement, VerbatimUrl, VersionOrUrl,
 };
 use uv_pypi_types::{
     BuildKind, Identifier, IdentifierParseError, Keywords, Metadata23, ProjectUrls,
@@ -263,7 +263,7 @@ pub fn check_direct_build(
     #[derive(Deserialize)]
     #[serde(rename_all = "kebab-case")]
     struct PyProjectToml {
-        build_system: BuildSystem,
+        build_system: BuildSystem<VerbatimParsedUrl>,
     }
 
     let path = source_tree.join("pyproject.toml");
@@ -421,44 +421,33 @@ impl PyProjectToml {
         self.project.readme.as_ref()
     }
 
-    /// The license files that need to be included in the source distribution.
-    pub(crate) fn license_files_source_dist(&self) -> impl Iterator<Item = &str> {
-        let license_file = self
-            .project
+    /// The pre-PEP 639 license file, which is included in the source distribution.
+    pub(crate) fn legacy_license_file(&self) -> Option<&str> {
+        self.project
             .license
             .as_ref()
             .and_then(|license| license.file())
-            .into_iter();
-        let license_files = self
-            .project
-            .license_files
-            .iter()
-            .flatten()
-            .map(String::as_str);
-        license_files.chain(license_file)
     }
 
-    /// The license files that need to be included in the wheel.
-    pub(crate) fn license_files_wheel(&self) -> impl Iterator<Item = &str> {
-        // The pre-PEP 639 `license = { file = "..." }` is included inline in `METADATA`.
-        self.project
-            .license_files
-            .iter()
-            .flatten()
-            .map(String::as_str)
+    /// Borrow the configured settings, or construct defaults when the table is absent.
+    pub(crate) fn settings(&self) -> Cow<'_, BuildBackendSettings> {
+        self.tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.build_backend.as_ref())
+            .map_or_else(
+                || Cow::Owned(BuildBackendSettings::default()),
+                Cow::Borrowed,
+            )
     }
 
-    pub(crate) fn settings(&self) -> Option<&BuildBackendSettings> {
-        self.tool.as_ref()?.uv.as_ref()?.build_backend.as_ref()
-    }
-
-    /// See [`BuildSystem::check_build_system`].
-    pub(crate) fn check_build_system(
-        &self,
-        uv_version: &str,
-        build_kind: BuildKind,
-    ) -> Vec<String> {
-        self.build_system.check_build_system(uv_version, build_kind)
+    /// Warn if the build-system table is inconsistent with the running backend.
+    pub(crate) fn warn_build_system(&self, uv_version: &str, build_kind: BuildKind) {
+        if uv_warnings::is_enabled() {
+            for warning in self.build_system.check_build_system(uv_version, build_kind) {
+                warn_user_once!("{warning}");
+            }
+        }
     }
 
     /// Validate and convert a `pyproject.toml` to core metadata.
@@ -797,18 +786,8 @@ impl PyProjectToml {
                     .strip_prefix(root)
                     .expect("walkdir starts with root");
 
-                if !license_globs.match_path(relative) {
-                    trace!("Not a license files match: {}", relative.user_display());
-                    continue;
-                }
-
-                let file_type = entry.file_type();
-
-                if !(file_type.is_file() || file_type.is_symlink()) {
-                    trace!(
-                        "Not a file or symlink in license files match: {}",
-                        relative.user_display()
-                    );
+                if !license_globs.match_file(relative) || !entry.path().is_file() {
+                    trace!("Not a license file match: {}", relative.user_display());
                     continue;
                 }
 
@@ -1189,11 +1168,14 @@ pub(crate) struct ToolUv {
 }
 
 /// The `[build-system]` section of a pyproject.toml as specified in PEP 517.
+///
+/// The frontend resolves these dependencies. Only direct-build validation needs to classify URLs
+/// as distributions that uv can install.
 #[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
-#[serde(rename_all = "kebab-case")]
-struct BuildSystem {
+#[serde(rename_all = "kebab-case", bound(deserialize = ""))]
+struct BuildSystem<T: Pep508Url = VerbatimUrl> {
     /// PEP 508 dependencies required to execute the build system.
-    requires: Vec<SerdeVerbatim<Requirement<VerbatimParsedUrl>>>,
+    requires: Vec<SerdeVerbatim<Requirement<T>>>,
     /// A string naming a Python object that will be used to perform the build.
     build_backend: Option<String>,
     /// <https://peps.python.org/pep-0517/#in-tree-build-backends>
@@ -1762,6 +1744,7 @@ mod tests {
         let pyproject_toml: PyProjectToml = toml::from_str(&contents).unwrap();
         assert_snapshot!(
             pyproject_toml
+                .build_system
                 .check_build_system("0.4.15+test", BuildKind::Wheel)
                 .join("\n"),
             @""
@@ -1782,18 +1765,21 @@ mod tests {
         let pyproject_toml: PyProjectToml = toml::from_str(contents).unwrap();
         assert_snapshot!(
             pyproject_toml
+                .build_system
                 .check_build_system("0.4.15+test", BuildKind::Wheel)
                 .join("\n"),
             @""
         );
         assert_snapshot!(
             pyproject_toml
+                .build_system
                 .check_build_system("0.4.15+test", BuildKind::Editable)
                 .join("\n"),
             @""
         );
         assert_snapshot!(
             pyproject_toml
+                .build_system
                 .check_build_system("0.4.15+test", BuildKind::Sdist)
                 .join("\n"),
             @r#"`build_system.requires = ["uv_build"]` is missing an upper bound on the `uv_build` version such as `<0.5`. Without bounding the `uv_build` version, the source distribution will break when a future, breaking version of `uv_build` is released."#
@@ -1814,6 +1800,7 @@ mod tests {
         let pyproject_toml: PyProjectToml = toml::from_str(contents).unwrap();
         assert_snapshot!(
             pyproject_toml
+                .build_system
                 .check_build_system("0.4.15+test", BuildKind::Wheel)
                 .join("\n"),
             @"Expected `build-system.requires` to contain only `uv_build`, found `uv-build>=0.4.15,<0.5.0`, `wheel`"
@@ -1834,6 +1821,7 @@ mod tests {
         let pyproject_toml: PyProjectToml = toml::from_str(contents).unwrap();
         assert_snapshot!(
             pyproject_toml
+                .build_system
                 .check_build_system("0.4.15+test", BuildKind::Wheel)
                 .join("\n"),
             @"Expected `build-system.requires` to be `uv_build`, found `setuptools`"
@@ -1854,6 +1842,7 @@ mod tests {
         let pyproject_toml: PyProjectToml = toml::from_str(contents).unwrap();
         assert_snapshot!(
             pyproject_toml
+                .build_system
                 .check_build_system("0.4.15+test", BuildKind::Wheel)
                 .join("\n"),
             @r#"`build_system.build-backend` was expected to be `"uv_build"`, not `"setuptools"`"#
@@ -2258,6 +2247,48 @@ mod tests {
             check_direct_build(temp_dir.path(), "0.10.0", &marker_environment(), []).unwrap_err(),
             @"`build_system.requires` uses a URL requirement"
         );
+    }
+
+    #[test]
+    fn build_system_frontend_url() -> Result<(), Error> {
+        let _preview = uv_preview::test::with_features(&[]);
+        let source = TempDir::new()?;
+        fs_err::write(
+            source.path().join("pyproject.toml"),
+            indoc! {r#"
+                [project]
+                name = "hello-world"
+                version = "0.1.0"
+
+                [build-system]
+                requires = ["uv_build @ hg+https://example.com/uv-build"]
+                build-backend = "uv_build"
+            "#},
+        )?;
+        let output = TempDir::new()?;
+        let dist_info = crate::metadata(source.path(), output.path(), "0.13.1")?;
+        assert_snapshot!(
+            fs_err::read_to_string(output.path().join(dist_info).join("METADATA"))?,
+            @"
+            Metadata-Version: 2.3
+            Name: hello-world
+            Version: 0.1.0
+            "
+        );
+        assert_snapshot!(
+            check_direct_build(source.path(), "0.13.1", &marker_environment(), [])
+                .expect_err("direct builds require a URL supported by uv"),
+            @r#"
+            its `pyproject.toml` failed to parse: TOML parse error at line 6, column 12
+              |
+            6 | requires = ["uv_build @ hg+https://example.com/uv-build"]
+              |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            Unsupported URL prefix `hg` in URL `hg+https://example.com/uv-build` (Mercurial is not supported)
+            uv_build @ hg+https://example.com/uv-build
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            "#
+        );
+        Ok(())
     }
 
     #[test]

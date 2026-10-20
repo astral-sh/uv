@@ -22,7 +22,8 @@ use uv_pypi_types::{
     ConflictItem, ParsedGitDirectoryUrl, ParsedGitPathUrl, ParsedUrl, ParsedUrlError,
     VerbatimParsedUrl,
 };
-use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
+use uv_redacted::policy::Raw;
+use uv_redacted::{SafeUrl, SafeUrlError};
 use uv_workspace::pyproject::{PyProjectToml, Source, Sources, WorkspaceReference};
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache, WorkspaceError};
 
@@ -195,7 +196,7 @@ impl LoweredRequirement {
                             ..
                         } => {
                             let source = git_source(
-                                git,
+                                git.into_url(),
                                 subdirectory.map(Box::<Path>::from),
                                 path.map(Box::<Path>::from).map(PathBuf::from),
                                 rev,
@@ -392,7 +393,7 @@ impl LoweredRequirement {
                             ..
                         } => {
                             let source = git_source(
-                                git,
+                                git.into_url(),
                                 subdirectory.map(Box::<Path>::from),
                                 path.map(Box::<Path>::from).map(PathBuf::from),
                                 rev,
@@ -585,17 +586,17 @@ pub enum LoweringError {
     #[error("Workspace members are not allowed in non-workspace contexts")]
     WorkspaceMember,
     #[error(transparent)]
-    InvalidUrl(#[from] DisplaySafeUrlError),
+    InvalidUrl(#[from] SafeUrlError),
     #[error(transparent)]
     IndexCredentials(#[from] IndexCredentialsError),
     #[error(transparent)]
     InvalidVerbatimUrl(#[from] uv_pep508::VerbatimUrlError),
     #[error("Fragments are not allowed in URLs: {0}")]
-    ForbiddenFragment(DisplaySafeUrl),
+    ForbiddenFragment(SafeUrl),
     #[error(
         "`{0}` is associated with a URL source, but references a Git repository. Consider using a Git source instead (e.g., `{0} = {{ git = \"{1}\" }}`)"
     )]
-    MissingGitSource(PackageName, DisplaySafeUrl),
+    MissingGitSource(PackageName, SafeUrl),
     #[error("`workspace = false` is not yet supported")]
     WorkspaceFalse,
     #[error(transparent)]
@@ -677,7 +678,7 @@ fn missing_index_hint(locations: &IndexLocations, index: &IndexName) -> Option<S
 
 /// Convert a Git source into a [`RequirementSource`].
 fn git_source(
-    git: DisplaySafeUrl,
+    git: SafeUrl,
     subdirectory: Option<Box<Path>>,
     path: Option<PathBuf>,
     rev: Option<String>,
@@ -694,7 +695,7 @@ fn git_source(
     };
 
     // Create a PEP 508-compatible URL.
-    let mut url = DisplaySafeUrl::parse(&format!("git+{git}"))?;
+    let mut url = SafeUrl::parse(&format!("git+{git}"))?;
     if let Some(rev) = reference.as_str() {
         let path = format!("{}@{}", url.path(), rev);
         url.set_path(&path);
@@ -752,12 +753,12 @@ fn git_source(
 /// Convert a URL source into a [`RequirementSource`].
 fn url_source(
     requirement: &uv_pep508::Requirement<VerbatimParsedUrl>,
-    url: DisplaySafeUrl,
+    url: SafeUrl<Raw>,
     subdirectory: Option<Box<Path>>,
 ) -> Result<RequirementSource, LoweringError> {
-    let mut verbatim_url = url.clone();
+    let mut verbatim_url = url.as_url().clone();
     if verbatim_url.fragment().is_some() {
-        return Err(LoweringError::ForbiddenFragment(url));
+        return Err(LoweringError::ForbiddenFragment(url.into_url()));
     }
     if let Some(subdirectory) = subdirectory.as_ref() {
         let subdirectory = subdirectory
@@ -771,7 +772,7 @@ fn url_source(
         Err(..) if looks_like_git_repository(&url) => {
             return Err(LoweringError::MissingGitSource(
                 requirement.name.clone(),
-                url.clone(),
+                url.as_url().clone(),
             ));
         }
         Err(err) => {
@@ -1009,7 +1010,7 @@ fn git_directory_source_from_path(
     } else {
         Some(subdirectory.into_owned().into_boxed_path())
     };
-    let url = DisplaySafeUrl::from(ParsedGitDirectoryUrl {
+    let url = SafeUrl::from(ParsedGitDirectoryUrl {
         url: git.clone(),
         subdirectory: subdirectory.clone(),
     });
@@ -1032,7 +1033,7 @@ fn git_archive_source_from_path(
     let install_path = normalize_path(install_path).into_owned();
     let ext = DistExtension::from_path(&install_path)
         .map_err(|err| ParsedUrlError::MissingExtensionPath(install_path.clone(), err))?;
-    let url = DisplaySafeUrl::from(ParsedGitPathUrl {
+    let url = SafeUrl::from(ParsedGitPathUrl {
         url: git.clone(),
         install_path: install_path.clone(),
         ext,

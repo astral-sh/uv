@@ -15,6 +15,7 @@ use uv_distribution_types::{
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifier};
 use uv_pypi_types::{Conflicts, HashDigests, ParsedUrl, VerbatimParsedUrl, Yanked};
+use uv_resolver_types::PackageRole;
 use uv_types::HashStrategy;
 
 use crate::graph_ops::{marker_reachability, simplify_conflict_markers};
@@ -29,7 +30,7 @@ use crate::{InMemoryIndex, MetadataResponse, Options, ResolveError, VersionsResp
 
 /// Create a new [`ResolverOutput`] from the resolved PubGrub state.
 pub(crate) fn from_state(
-    mut resolutions: Vec<ResolvedFork>,
+    resolutions: Vec<ResolvedFork>,
     project: Option<&PackageName>,
     workspace_members: &BTreeSet<PackageName>,
     requirements: Vec<Requirement>,
@@ -44,6 +45,8 @@ pub(crate) fn from_state(
     options: Options,
 ) -> Result<ResolverOutput, ResolveError> {
     let size_guess = resolutions[0].nodes.len();
+    let has_forks = resolutions.len() > 1;
+    let mut fork_markers = Vec::new();
     let mut graph: Graph<ResolutionGraphNode, UniversalMarker, Directed> =
         Graph::with_capacity(size_guess, size_guess);
     let mut inverse: FxHashMap<ResolutionNode, NodeIndex<u32>> =
@@ -53,18 +56,35 @@ pub(crate) fn from_state(
     // Add the root node.
     let root_index = graph.add_node(ResolutionGraphNode::Root);
 
-    for resolution in &mut resolutions {
+    let mut seen = FxHashSet::default();
+    for resolution in resolutions {
+        let marker = resolution.env.try_universal_markers().unwrap_or_default();
+        // A single unconditional resolution has no fork markers.
+        if has_forks || !marker.is_true() {
+            fork_markers.push(marker);
+        }
+        let mut node_indices = Vec::with_capacity(resolution.nodes.len());
         // Add every package to the graph.
-        for (package, selected) in resolution.nodes.drain(..) {
+        for (package, selected) in resolution.nodes {
             let node = ResolutionNode {
                 package,
                 version: selected.version().clone(),
             };
-            let Entry::Vacant(entry) = inverse.entry(node) else {
-                // Insert each node only once.
-                continue;
+            let entry = match inverse.entry(node) {
+                Entry::Occupied(entry) => {
+                    node_indices.push(*entry.get());
+                    continue;
+                }
+                Entry::Vacant(entry) => entry,
             };
             let package = &entry.key().package;
+            let package_role = if project == Some(&package.name) {
+                PackageRole::Project
+            } else if workspace_members.contains(&package.name) {
+                PackageRole::WorkspaceMember
+            } else {
+                PackageRole::Dependency
+            };
             let node = add_version(
                 &mut graph,
                 &mut diagnostics,
@@ -73,44 +93,27 @@ pub(crate) fn from_state(
                 index,
                 package,
                 selected,
-                project == Some(&package.name) || workspace_members.contains(&package.name),
+                package_role,
             );
             entry.insert(node);
+            node_indices.push(node);
         }
-    }
-
-    let mut seen = FxHashSet::default();
-    for resolution in &resolutions {
-        let marker = resolution.env.try_universal_markers().unwrap_or_default();
 
         // Add every edge to the graph, propagating the marker for the current fork, if
         // necessary.
-        for edge in &resolution.edges {
-            if !seen.insert((edge, marker)) {
-                // Insert each node only once.
+        for edge in resolution.edges {
+            let from_index = edge.from.map_or(root_index, |from| node_indices[from.0]);
+            let to_index = node_indices[edge.to.0];
+            // Local indices can denote different packages in different forks. Deduplicate only
+            // after translating both endpoints into the merged graph.
+            if !seen.insert((from_index, to_index, edge.marker, marker)) {
+                // Insert each edge only once.
                 continue;
             }
 
-            add_edge(&mut graph, &inverse, root_index, edge, marker);
+            add_edge(&mut graph, from_index, to_index, &edge, marker);
         }
     }
-
-    let fork_markers: Vec<UniversalMarker> = if let [resolution] = resolutions.as_slice() {
-        // In the case of a singleton marker, we only include it if it's not
-        // always true. Otherwise, we keep our `fork_markers` empty as there
-        // are no forks.
-        resolution
-            .env
-            .try_universal_markers()
-            .into_iter()
-            .filter(|marker| !marker.is_true())
-            .collect()
-    } else {
-        resolutions
-            .iter()
-            .map(|resolution| resolution.env.try_universal_markers().unwrap_or_default())
-            .collect()
-    };
 
     // Compute and apply the marker reachability.
     let mut reachability = marker_reachability(&graph, &fork_markers);
@@ -191,14 +194,11 @@ pub(crate) fn from_state(
 
 fn add_edge(
     graph: &mut Graph<ResolutionGraphNode, UniversalMarker>,
-    inverse: &FxHashMap<ResolutionNode, NodeIndex>,
-    root_index: NodeIndex,
+    from_index: NodeIndex,
+    to_index: NodeIndex,
     edge: &ResolutionDependencyEdge,
     marker: UniversalMarker,
 ) {
-    let from_index = edge.from.as_ref().map_or(root_index, |from| inverse[from]);
-    let to_index = inverse[&edge.to];
-
     let edge_marker = {
         let mut edge_marker = edge.universal_marker();
         edge_marker.and(marker);
@@ -225,7 +225,7 @@ fn add_version(
     in_memory: &InMemoryIndex,
     package: &ResolutionPackage,
     selected: SelectedDistribution,
-    is_workspace_member: bool,
+    package_role: PackageRole,
 ) -> NodeIndex {
     let ResolutionPackage {
         name,
@@ -258,17 +258,10 @@ fn add_version(
         }),
     }
 
-    // We normally write dependency paths relative to the lockfile. For the current project and
-    // workspace members, preserve the user's choice of relative or absolute paths instead.
-    // Metadata from `tool.uv.dependency-metadata` already preserves that choice.
-    // Only change this copy, not shared metadata.
-    let metadata = if is_workspace_member {
-        metadata.map(|metadata| metadata.with_force_relative(false))
-    } else {
-        metadata
-    };
-
-    if let Some(metadata) = metadata.as_ref() {
+    if let Some(response) = metadata.as_ref()
+        && let MetadataResponse::Found(archive) = response.as_ref()
+    {
+        let metadata = &archive.metadata;
         // Validate the extra.
         if let Some(extra) = kind.extra() {
             if !metadata.provides_extra.contains(extra) {
@@ -298,6 +291,7 @@ fn add_version(
         kind: kind.clone(),
         hashes,
         metadata,
+        role: package_role,
         marker: UniversalMarker::TRUE,
     }))
 }
@@ -452,7 +446,7 @@ fn has_lower_bound(
             return true;
         }
 
-        let Some(metadata) = neighbor_dist.metadata.as_ref() else {
+        let Some(metadata) = neighbor_dist.metadata() else {
             // We can't check for lower bounds if we lack metadata.
             return true;
         };

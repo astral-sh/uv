@@ -23,6 +23,8 @@ use tokio_stream::wrappers::ReceiverStream;
 use wiremock::matchers::{any, method};
 use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
+#[cfg(feature = "test-pypi")]
+use uv_redacted::SafeUrl;
 use uv_static::EnvVars;
 use uv_test::{TestContext, uv_snapshot};
 
@@ -943,7 +945,7 @@ async fn proxy_no_proxy_in_uv_toml() {
     let proxy_uri = proxy_server.uri();
 
     // Note: reqwest's NoProxy matches on host only, not host:port
-    let target_url = url::Url::parse(&target_uri).unwrap();
+    let target_url = SafeUrl::parse(&target_uri).unwrap();
     let target_host = target_url.host_str().unwrap();
 
     let context = context
@@ -1425,6 +1427,27 @@ fn write_wheel_lockfile(context: &TestContext, server: &str, size: u64, hash: &s
         "#,
     })?;
     Ok(())
+}
+
+/// Metadata errors from HTTP range requests must redact URL passwords and `sig` query values.
+#[cfg(feature = "test-python")]
+#[test]
+fn remote_wheel_metadata_error_redacts_url() {
+    let context = uv_test::test_context!("3.12");
+    let (server, _guard, _, _) = wheel_server(&context, RangeResponse::Supported, 0);
+    let server = server.replacen("http://", "http://user:password@", 1);
+
+    // The served wheel contains `build_tag` metadata, which does not match the requested name.
+    uv_snapshot!(context.filters(), context
+        .pip_install()
+        .arg("--no-index")
+        .arg(format!("tqdm @ {server}/tqdm-1.0.0-py3-none-any.whl?sig=signature&keep=value")), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to download `tqdm @ http://user:****@[LOCALHOST]/tqdm-1.0.0-py3-none-any.whl?sig=****&keep=value`
+      cause: Failed to read metadata: http://user:****@[LOCALHOST]/tqdm-1.0.0-py3-none-any.whl?sig=****&keep=value
+      cause: The .dist-info directory `build_tag-1.0.0` does not start with the normalized package name: tqdm
+    ");
 }
 
 #[test]

@@ -462,7 +462,10 @@ impl SourceBuild {
                 install_path,
                 &venv,
                 &pep517_backend,
-                build_context,
+                build_context.cache(),
+                build_context
+                    .source_tree_editable_policy()
+                    .workspace_member_editable(None),
                 package_name.as_ref(),
                 package_version.as_ref(),
                 version_id,
@@ -569,7 +572,10 @@ impl SourceBuild {
             install_path,
             &self.venv,
             &self.pep517_backend,
-            build_context,
+            build_context.cache(),
+            build_context
+                .source_tree_editable_policy()
+                .workspace_member_editable(None),
             self.package_name.as_ref(),
             self.package_version.as_ref(),
             self.version_id.as_deref(),
@@ -1114,7 +1120,8 @@ async fn get_pep517_build_requirements(
     install_path: &Path,
     venv: &PythonEnvironment,
     pep517_backend: &Pep517Backend,
-    build_context: &impl BuildContext,
+    cache: &Cache,
+    workspace_member_editable: bool,
     package_name: Option<&PackageName>,
     package_version: Option<&Version>,
     version_id: Option<&str>,
@@ -1223,11 +1230,9 @@ async fn get_pep517_build_requirements(
             install_path,
             locations,
             &no_sources,
-            build_context
-                .source_tree_editable_policy()
-                .workspace_member_editable(None),
+            workspace_member_editable,
             stop_discovery_at,
-            build_context.cache(),
+            cache,
             workspace_cache,
             credentials_cache,
         )
