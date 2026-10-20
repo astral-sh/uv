@@ -2,6 +2,7 @@
 
 use std::cmp::Ordering;
 use std::collections::Bound;
+use std::fmt::{self, Display, Formatter};
 use std::ops::Deref;
 use std::sync::LazyLock;
 use version_ranges::Ranges;
@@ -14,6 +15,34 @@ use crate::{
 /// The smallest valid PEP 440 version.
 static PEP440_MIN_VERSION: LazyLock<Version> =
     LazyLock::new(|| Version::new([0]).with_dev(Some(0)));
+
+/// Display version constraints with explicit equality operators, including within unions.
+pub fn display_version_ranges<V: Display + Clone + Ord>(ranges: &Ranges<V>) -> impl Display {
+    struct DisplayRanges<'a, V>(&'a Ranges<V>);
+
+    impl<V: Display + Clone + Ord> Display for DisplayRanges<'_, V> {
+        fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
+            if self.0.is_empty() {
+                return Display::fmt(self.0, formatter);
+            }
+            for (index, (lower, upper)) in self.0.iter().enumerate() {
+                if index > 0 {
+                    formatter.write_str(" | ")?;
+                }
+                if let (Bound::Included(lower), Bound::Included(upper)) = (lower, upper)
+                    && lower == upper
+                {
+                    write!(formatter, "=={lower}")?;
+                } else {
+                    Display::fmt(&Ranges::from_iter([(lower, upper)]), formatter)?;
+                }
+            }
+            Ok(())
+        }
+    }
+
+    DisplayRanges(ranges)
+}
 
 /// Rewrite internal local-version sentinels into bounds suitable for diagnostics.
 pub fn strip_local_version_sentinels(ranges: &Ranges<Version>) -> Ranges<Version> {
