@@ -926,11 +926,11 @@ fn requirements_txt_extra_activation_through_complementary_paths() -> Result<()>
     Ok(())
 }
 
-/// The retained lock branches have one consistent selection: both extras must be active.
-/// The requests form a cycle, so neither extra can be established before considering the other.
+/// Mutually recursive extra requests cannot be resolved from their activation bounds.
+/// Export reports the unresolved condition even when the lock has one consistent selection.
 #[cfg(feature = "test-universal")]
 #[test]
-fn requirements_txt_extra_activation_unique_recursive_selection() -> Result<()> {
+fn requirements_txt_extra_activation_unresolved_recursive_selection() -> Result<()> {
     let context = uv_test::test_context!("3.13");
 
     context.temp_dir.child("pyproject.toml").write_str(
@@ -1013,10 +1013,9 @@ fn requirements_txt_extra_activation_unique_recursive_selection() -> Result<()> 
         .arg("--no-header")
         .arg("--no-annotate")
         .arg("--no-hashes"), @"
-    exit_code: 0 (success)
-    ----- stdout -----
-    choice-a==1.0.0
-    choice-b==2.0.0
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Cannot determine whether to export `choice-a==1.0.0 @ registry+wheels` because its dependency markers contain recursive extra conditions
     ");
 
     Ok(())
@@ -1117,84 +1116,10 @@ fn requirements_txt_extra_activation_retains_default_selection() -> Result<()> {
     Ok(())
 }
 
-/// Resolving the recursive condition requires enabling a, even though its positive cycle has no
-/// initial request. The complete selection must therefore replace the default omission of leaf.
+/// Selecting an empty group activates its encoded marker even without group dependency edges.
 #[cfg(feature = "test-universal")]
 #[test]
-fn requirements_txt_extra_activation_reconsiders_default_false() -> Result<()> {
-    let context = uv_test::test_context!("3.13");
-
-    context.temp_dir.child("pyproject.toml").write_str(
-        r#"
-        [project]
-        name = "root"
-        version = "0.1.0"
-        requires-python = ">=3.9"
-        dependencies = ["shared==1.0.0"]
-        "#,
-    )?;
-
-    context.temp_dir.child("uv.lock").write_str(
-        r#"
-        version = 1
-        revision = 3
-        requires-python = ">=3.9"
-
-        [manifest]
-        members = ["root"]
-
-        [[package]]
-        name = "root"
-        version = "0.1.0"
-        source = { virtual = "." }
-        dependencies = [{ name = "shared" }]
-
-        [[package]]
-        name = "shared"
-        version = "1.0.0"
-        source = { registry = "https://example.com/simple" }
-        dependencies = [
-            { name = "leaf", marker = "extra == 'a'" },
-            { name = "bridge", marker = "extra != 'a' and extra != 'b'" },
-        ]
-
-        [package.optional-dependencies]
-        a = []
-        b = []
-
-        [[package]]
-        name = "leaf"
-        version = "1.0.0"
-        source = { registry = "https://example.com/simple" }
-        dependencies = [{ name = "shared", extra = ["a"] }]
-
-        [[package]]
-        name = "bridge"
-        version = "1.0.0"
-        source = { registry = "https://example.com/simple" }
-        dependencies = [{ name = "shared", extra = ["b"] }]
-        "#,
-    )?;
-
-    uv_snapshot!(context.filters(), context.export()
-        .arg("--frozen")
-        .arg("--no-header")
-        .arg("--no-annotate")
-        .arg("--no-hashes"), @"
-    exit_code: 0 (success)
-    ----- stdout -----
-    leaf==1.0.0
-    shared==1.0.0
-    ");
-
-    Ok(())
-}
-
-/// A selected empty group rules out one recursive extra selection, even though the group does
-/// not contribute any dependency edges.
-#[cfg(feature = "test-universal")]
-#[test]
-fn requirements_txt_empty_group_conflict_selection() -> Result<()> {
+fn requirements_txt_empty_group_activation() -> Result<()> {
     let context = uv_test::test_context!("3.13");
 
     context.temp_dir.child("pyproject.toml").write_str(
@@ -1215,10 +1140,6 @@ fn requirements_txt_empty_group_conflict_selection() -> Result<()> {
         version = 1
         revision = 3
         requires-python = ">=3.9"
-        conflicts = [
-            [{ package = "shared", extra = "a" }, { package = "shared", extra = "b" }],
-            [{ package = "root", group = "dev" }, { package = "shared", extra = "a" }],
-        ]
 
         [manifest]
         members = ["root"]
@@ -1236,15 +1157,7 @@ fn requirements_txt_empty_group_conflict_selection() -> Result<()> {
         name = "shared"
         version = "1.0.0"
         source = { registry = "https://example.com/simple" }
-        dependencies = [
-            { name = "shared", extra = ["a"], marker = "extra != 'b'" },
-            { name = "shared", extra = ["b"], marker = "extra != 'a'" },
-            { name = "leaf", marker = "extra == 'a'" },
-        ]
-
-        [package.optional-dependencies]
-        a = []
-        b = []
+        dependencies = [{ name = "leaf", marker = "extra == 'group-4-root-dev'" }]
 
         [[package]]
         name = "leaf"
@@ -1262,16 +1175,17 @@ fn requirements_txt_empty_group_conflict_selection() -> Result<()> {
         .arg("--no-hashes"), @"
     exit_code: 0 (success)
     ----- stdout -----
+    leaf==1.0.0
     shared==1.0.0
     ");
 
     Ok(())
 }
 
-/// A group-only export leaves the production project inactive when solving recursive conflicts.
+/// A group-only export leaves the production project's encoded marker inactive.
 #[cfg(feature = "test-universal")]
 #[test]
-fn requirements_txt_only_group_conflict_selection() -> Result<()> {
+fn requirements_txt_only_group_project_activation() -> Result<()> {
     let context = uv_test::test_context!("3.13");
 
     context.temp_dir.child("pyproject.toml").write_str(
@@ -1292,11 +1206,6 @@ fn requirements_txt_only_group_conflict_selection() -> Result<()> {
         version = 1
         revision = 3
         requires-python = ">=3.9"
-        conflicts = [
-            [{ package = "root" }, { package = "root", group = "dev" }],
-            [{ package = "shared", extra = "a" }, { package = "shared", extra = "b" }],
-            [{ package = "root", group = "dev" }, { package = "shared", extra = "a" }],
-        ]
 
         [manifest]
         members = ["root"]
@@ -1313,15 +1222,7 @@ fn requirements_txt_only_group_conflict_selection() -> Result<()> {
         name = "shared"
         version = "1.0.0"
         source = { registry = "https://example.com/simple" }
-        dependencies = [
-            { name = "shared", extra = ["a"], marker = "extra != 'b'" },
-            { name = "shared", extra = ["b"], marker = "extra != 'a'" },
-            { name = "leaf", marker = "extra == 'a'" },
-        ]
-
-        [package.optional-dependencies]
-        a = []
-        b = []
+        dependencies = [{ name = "leaf", marker = "extra != 'project-4-root'" }]
 
         [[package]]
         name = "leaf"
@@ -1339,6 +1240,7 @@ fn requirements_txt_only_group_conflict_selection() -> Result<()> {
         .arg("--no-hashes"), @"
     exit_code: 0 (success)
     ----- stdout -----
+    leaf==1.0.0
     shared==1.0.0
     ");
 

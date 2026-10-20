@@ -420,7 +420,7 @@ fn conflict_marker_reachability<'lock>(
     }
 
     // Ordinary extras only need package-local reachability nodes. Global variables are
-    // needed for explicit marker inputs and declared conflict constraints.
+    // needed for marker inputs and for binding declared conflict names.
     let conflict_items = conflicts
         .iter()
         .flat_map(ConflictSet::iter)
@@ -511,10 +511,11 @@ fn conflict_marker_reachability<'lock>(
     solver.simplify_unconditional_activations(&encoded);
     solver.solve();
 
+    // Recursive activations may remain uncertain, but only emitted packages need
+    // determined reachability. Omitted packages still participate in the analysis.
     let bounds = ExportActivationBounds::new(&solver.activations, &fact_names, &encoded).solve();
     let mut resolved = FxHashMap::default();
     let mut reachability = FxHashMap::default();
-    let mut unresolved = MarkerTree::FALSE;
     for index in graph.node_indices() {
         let marker = solver.reachability[index.index()];
         let (lower, upper) = *resolved.entry(marker).or_insert_with(|| {
@@ -526,46 +527,14 @@ fn conflict_marker_reachability<'lock>(
         });
         if let Node::Package(package) = graph[index]
             && include_package(package)
+            && !upper.and(lower.negate()).is_false()
         {
-            unresolved = unresolved.or(upper.and(lower.negate()));
-        }
-        reachability.insert(index, lower);
-    }
-    if unresolved.is_false() {
-        return Ok(reachability);
-    }
-
-    // Preserve founded defaults where they determine the output. Elsewhere, require
-    // complete, consistent assignments to agree on every emitted package. The relation
-    // must not assume any founded bounds: a complete solution can require an activation
-    // that the founded approximation leaves false.
-    let models = solver
-        .activation_models(graph, &fact_names, &facts, conflicts)
-        .and(unresolved);
-    let missing = unresolved.and(models.without_extras().negate());
-    let mut projected = FxHashMap::default();
-    for index in graph.node_indices() {
-        let Node::Package(package) = graph[index] else {
-            continue;
-        };
-        if !include_package(package) {
-            continue;
-        }
-        let marker = solver.reachability[index.index()];
-        let (lower, upper) = resolved[&marker];
-        let (present, absent) = *projected.entry(marker).or_insert_with(|| {
-            (
-                models.and(marker).without_extras(),
-                models.and(marker.negate()).without_extras(),
-            )
-        });
-        if !missing.and(upper.and(lower.negate())).is_false() || !present.and(absent).is_false() {
             return Err(LockErrorKind::UnresolvedExportConflict {
                 package: package.id.clone(),
             }
             .into());
         }
-        reachability.insert(index, lower.and(unresolved.negate()).or(present));
+        reachability.insert(index, lower);
     }
     Ok(reachability)
 }
@@ -759,47 +728,6 @@ impl SymbolicExportReachability {
                 self.activations[fact] = self.activations[fact].or(marker);
             }
         }
-    }
-
-    /// Describe all self-consistent selections among the retained lock branches.
-    ///
-    /// Each fact equals its actual request condition. Declared conflicts and distinct
-    /// package versions or sources cannot be selected together, even for omitted nodes.
-    fn activation_models(
-        &self,
-        graph: &Graph<Node<'_>, Edge<'_>>,
-        names: &[ExtraName],
-        facts: &FxHashMap<ConflictItem, usize>,
-        conflicts: &Conflicts,
-    ) -> MarkerTree {
-        let variables = names.iter().map(conflict_variable).collect::<Vec<_>>();
-        let mut models = MarkerTree::TRUE;
-        for (&variable, &condition) in variables.iter().zip(&self.activations) {
-            models = models.and(
-                variable
-                    .and(condition)
-                    .or(variable.negate().and(condition.negate())),
-            );
-        }
-        for set in conflicts.iter() {
-            let mut selected = MarkerTree::FALSE;
-            for item in set.iter() {
-                let variable = variables[facts[item]];
-                models = models.and(selected.and(variable).negate());
-                selected = selected.or(variable);
-            }
-        }
-        let mut packages = FxHashMap::default();
-        for (index, node) in graph.node_references() {
-            let Node::Package(package) = node else {
-                continue;
-            };
-            let marker = self.reachability[index.index()];
-            let selected = packages.entry(package.name()).or_insert(MarkerTree::FALSE);
-            models = models.and(selected.and(marker).negate());
-            *selected = selected.or(marker);
-        }
-        models
     }
 }
 
