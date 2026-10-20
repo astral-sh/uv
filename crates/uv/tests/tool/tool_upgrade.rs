@@ -2109,3 +2109,29 @@ fn new_tool_index() -> PackseServer {
     .expect("new tool scenario should parse");
     PackseServer::from_scenario(&scenario)
 }
+
+/// An index with two releases of a synthetic tool, uploaded at different times.
+fn exclude_newer_tool_index() -> PackseServer {
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "exclude-newer-tool-index"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.foo.versions."1.0.0"]
+        requires_python = ">=3.11"
+        sdist = false
+        entry_points = ["foo"]
+        wheel = { upload_time = "2024-01-01T00:00:00Z" }
+
+        [packages.foo.versions."2.0.0"]
+        requires_python = ">=3.11"
+        sdist = false
+        entry_points = ["foo"]
+        wheel = { upload_time = "2024-03-20T00:00:00Z" }
+    "#})
+    .expect("exclude-newer tool scenario should parse");
+    PackseServer::from_scenario(&scenario)
+}
