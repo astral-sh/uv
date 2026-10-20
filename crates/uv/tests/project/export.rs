@@ -910,6 +910,254 @@ fn requirements_txt_extra_activation_through_complementary_paths() -> Result<()>
     Ok(())
 }
 
+/// The retained lock branches have one consistent selection: both extras must be active.
+/// The requests form a cycle, so neither extra can be established before considering the other.
+#[cfg(feature = "test-universal")]
+#[test]
+fn requirements_txt_extra_activation_unique_recursive_selection() -> Result<()> {
+    let context = uv_test::test_context!("3.13");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = ["shared"]
+
+        [tool.uv]
+        package = false
+        conflicts = [
+            [{ package = "shared", extra = "a" }, { package = "shared", extra = "adummy" }],
+            [{ package = "shared", extra = "b" }, { package = "shared", extra = "bdummy" }],
+        ]
+
+        [tool.uv.workspace]
+        members = ["shared"]
+
+        [tool.uv.sources]
+        shared = { workspace = true }
+        "#,
+    )?;
+    context.temp_dir.child("shared/pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "shared"
+        version = "1.0.0"
+        requires-python = ">=3.11"
+        dependencies = ["choice-a>=1", "choice-b>=2"]
+
+        [project.optional-dependencies]
+        a = ["choice-a!=2", "choice-b==2"]
+        adummy = []
+        b = ["choice-a<=2"]
+        bdummy = []
+
+        [tool.uv]
+        package = false
+        "#,
+    )?;
+
+    let wheels = context.temp_dir.child("wheels");
+    let (filename, wheel) = WheelBuilder::new(&"choice-a".parse()?, &"1.0.0".parse()?)
+        .requires(&["shared[a]".parse()?])
+        .build();
+    wheels.child(filename).write_binary(&wheel)?;
+    let (filename, wheel) = WheelBuilder::new(&"choice-a".parse()?, &"2.0.0".parse()?).build();
+    wheels.child(filename).write_binary(&wheel)?;
+    let (filename, wheel) = WheelBuilder::new(&"choice-a".parse()?, &"3.0.0".parse()?)
+        .requires(&["shared[a]".parse()?])
+        .build();
+    wheels.child(filename).write_binary(&wheel)?;
+    let (filename, wheel) = WheelBuilder::new(&"choice-b".parse()?, &"2.0.0".parse()?)
+        .requires(&["shared[b]".parse()?])
+        .build();
+    wheels.child(filename).write_binary(&wheel)?;
+    let (filename, wheel) = WheelBuilder::new(&"choice-b".parse()?, &"3.0.0".parse()?).build();
+    wheels.child(filename).write_binary(&wheel)?;
+    context
+        .lock()
+        .arg("--offline")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg("wheels")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--frozen")
+        .arg("--no-header")
+        .arg("--no-annotate")
+        .arg("--no-hashes"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    choice-a==1.0.0
+    choice-b==2.0.0
+    ");
+
+    Ok(())
+}
+
+/// An unsupported positive cycle must not enable a when the default selection already determines
+/// the export. Enabling a would select another consistent pair of versions and disable b.
+#[cfg(feature = "test-universal")]
+#[test]
+fn requirements_txt_extra_activation_retains_default_selection() -> Result<()> {
+    let context = uv_test::test_context!("3.13");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = ["shared"]
+
+        [tool.uv]
+        package = false
+        conflicts = [
+            [{ package = "shared", extra = "a" }, { package = "shared", extra = "adummy" }],
+            [{ package = "shared", extra = "b" }, { package = "shared", extra = "bdummy" }],
+        ]
+
+        [tool.uv.workspace]
+        members = ["shared"]
+
+        [tool.uv.sources]
+        shared = { workspace = true }
+        "#,
+    )?;
+    context.temp_dir.child("shared/pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "shared"
+        version = "1.0.0"
+        requires-python = ">=3.11"
+        dependencies = ["choice-a>=1", "choice-b>=1"]
+
+        [project.optional-dependencies]
+        a = ["choice-a==1", "choice-b==1"]
+        adummy = []
+        b = ["leaf==1"]
+        bdummy = []
+
+        [tool.uv]
+        package = false
+        "#,
+    )?;
+
+    let wheels = context.temp_dir.child("wheels");
+    let (filename, wheel) = WheelBuilder::new(&"choice-a".parse()?, &"1.0.0".parse()?)
+        .requires(&["shared[a]".parse()?])
+        .build();
+    wheels.child(filename).write_binary(&wheel)?;
+    let (filename, wheel) = WheelBuilder::new(&"choice-a".parse()?, &"2.0.0".parse()?).build();
+    wheels.child(filename).write_binary(&wheel)?;
+    let (filename, wheel) = WheelBuilder::new(&"choice-b".parse()?, &"1.0.0".parse()?).build();
+    wheels.child(filename).write_binary(&wheel)?;
+    let (filename, wheel) = WheelBuilder::new(&"choice-b".parse()?, &"2.0.0".parse()?)
+        .requires(&["shared[b]".parse()?])
+        .build();
+    wheels.child(filename).write_binary(&wheel)?;
+    let (filename, wheel) = WheelBuilder::new(&"leaf".parse()?, &"1.0.0".parse()?).build();
+    wheels.child(filename).write_binary(&wheel)?;
+    context
+        .lock()
+        .arg("--offline")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg("wheels")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--frozen")
+        .arg("--no-header")
+        .arg("--no-annotate")
+        .arg("--no-hashes"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    choice-a==2.0.0
+    choice-b==2.0.0
+    leaf==1.0.0
+    ");
+
+    Ok(())
+}
+
+/// Resolving the recursive condition requires enabling a, even though its positive cycle has no
+/// initial request. The complete selection must therefore replace the default omission of leaf.
+#[cfg(feature = "test-universal")]
+#[test]
+fn requirements_txt_extra_activation_reconsiders_default_false() -> Result<()> {
+    let context = uv_test::test_context!("3.13");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["shared==1.0.0"]
+        "#,
+    )?;
+
+    context.temp_dir.child("uv.lock").write_str(
+        r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.9"
+
+        [manifest]
+        members = ["root"]
+
+        [[package]]
+        name = "root"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [{ name = "shared" }]
+
+        [[package]]
+        name = "shared"
+        version = "1.0.0"
+        source = { registry = "https://example.com/simple" }
+        dependencies = [
+            { name = "leaf", marker = "extra == 'a'" },
+            { name = "bridge", marker = "extra != 'a' and extra != 'b'" },
+        ]
+
+        [package.optional-dependencies]
+        a = []
+        b = []
+
+        [[package]]
+        name = "leaf"
+        version = "1.0.0"
+        source = { registry = "https://example.com/simple" }
+        dependencies = [{ name = "shared", extra = ["a"] }]
+
+        [[package]]
+        name = "bridge"
+        version = "1.0.0"
+        source = { registry = "https://example.com/simple" }
+        dependencies = [{ name = "shared", extra = ["b"] }]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--frozen")
+        .arg("--no-header")
+        .arg("--no-annotate")
+        .arg("--no-hashes"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    leaf==1.0.0
+    shared==1.0.0
+    ");
+
+    Ok(())
+}
+
 /// An encoded conflict takes precedence over a literal extra with the same name, even when the
 /// encoded extra is only requested through an incompatible path.
 #[cfg(feature = "test-universal")]
@@ -1164,6 +1412,152 @@ fn requirements_txt_recursive_negative_extra_marker() -> Result<()> {
     exit_code: 0 (success)
     ----- stdout -----
     shared==1.0.0
+    ");
+
+    Ok(())
+}
+
+/// The two possible extra selections reach different virtual packages. Installable formats omit
+/// both virtual packages, while CycloneDX must distinguish which virtual component is present.
+#[cfg(feature = "test-universal")]
+#[test]
+fn export_recursive_extra_marker_on_virtual_packages() -> Result<()> {
+    let context = uv_test::test_context!("3.13");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["shared"]
+
+        [tool.uv.workspace]
+        members = ["shared", "bridge-a", "bridge-b"]
+
+        [tool.uv.sources]
+        shared = { workspace = true }
+        "#,
+    )?;
+    context.temp_dir.child("shared/pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "shared"
+        version = "1.0.0"
+        requires-python = ">=3.9"
+        dependencies = ["bridge-a", "bridge-b"]
+
+        [project.optional-dependencies]
+        a = []
+        b = []
+        "#,
+    )?;
+    context
+        .temp_dir
+        .child("bridge-a/pyproject.toml")
+        .write_str(
+            r#"
+        [project]
+        name = "bridge-a"
+        version = "1.0.0"
+        requires-python = ">=3.9"
+        dependencies = ["shared[a]"]
+
+        [tool.uv]
+        package = false
+        "#,
+        )?;
+    context
+        .temp_dir
+        .child("bridge-b/pyproject.toml")
+        .write_str(
+            r#"
+        [project]
+        name = "bridge-b"
+        version = "1.0.0"
+        requires-python = ">=3.9"
+        dependencies = ["shared[b]"]
+
+        [tool.uv]
+        package = false
+        "#,
+        )?;
+
+    context.temp_dir.child("uv.lock").write_str(
+        r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.9"
+
+        [manifest]
+        members = ["root", "shared", "bridge-a", "bridge-b"]
+
+        [[package]]
+        name = "root"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [{ name = "shared" }]
+
+        [[package]]
+        name = "shared"
+        version = "1.0.0"
+        source = { editable = "shared" }
+        dependencies = [
+            { name = "bridge-a", marker = "extra != 'b'" },
+            { name = "bridge-b", marker = "extra != 'a'" },
+        ]
+
+        [package.optional-dependencies]
+        a = []
+        b = []
+
+        [[package]]
+        name = "bridge-a"
+        version = "1.0.0"
+        source = { virtual = "bridge-a" }
+        dependencies = [{ name = "shared", extra = ["a"] }]
+
+        [[package]]
+        name = "bridge-b"
+        version = "1.0.0"
+        source = { virtual = "bridge-b" }
+        dependencies = [{ name = "shared", extra = ["b"] }]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--frozen")
+        .arg("--no-header")
+        .arg("--no-annotate")
+        .arg("--no-hashes"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./shared
+    ");
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--frozen")
+        .arg("--no-header")
+        .arg("--format").arg("pylock.toml"), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    lock-version = "1.0"
+    created-by = "uv"
+    requires-python = ">=3.9"
+
+    [[packages]]
+    name = "shared"
+    directory = { path = "shared", editable = true }
+    "#);
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--frozen")
+        .arg("--no-header")
+        .arg("--format").arg("cyclonedx1.5"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
+    error: Cannot determine whether to export `bridge-a==1.0.0 @ virtual+bridge-a` because its dependency markers contain recursive extra conditions
     ");
 
     Ok(())

@@ -14,7 +14,7 @@ use uv_configuration::{
 };
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep508::{ExtraOperator, MarkerExpression, MarkerTree, MarkerValueExtra};
-use uv_pypi_types::ConflictItem;
+use uv_pypi_types::{ConflictItem, ConflictSet, Conflicts};
 
 use uv_resolver_types::universal_marker::encode_conflict_item;
 
@@ -50,6 +50,8 @@ struct ExportableRequirements<'lock>(Vec<ExportableRequirement<'lock>>);
 
 impl<'lock> ExportableRequirements<'lock> {
     /// Generate the set of exportable [`ExportableRequirement`] entries from the given lockfile.
+    ///
+    /// `emit_package` controls output visibility. Omitted packages still contribute dependencies.
     fn from_lock(
         target: &impl Installable<'lock>,
         prune: &[PackageName],
@@ -57,6 +59,7 @@ impl<'lock> ExportableRequirements<'lock> {
         groups: &DependencyGroupsWithDefaults,
         annotate: bool,
         install_options: &'lock InstallOptions,
+        emit_package: impl Fn(&Package) -> bool,
     ) -> Result<Self, LockError> {
         let size_guess = target.lock().packages.len();
         let mut graph = Graph::<Node<'lock>, Edge<'lock>>::with_capacity(size_guess, size_guess);
@@ -315,16 +318,21 @@ impl<'lock> ExportableRequirements<'lock> {
         }
 
         let include_package = |package: &Package| {
-            install_options.include_package(
-                package.as_install_target(),
-                target.project_name(),
-                target.lock().members(),
-            )
+            emit_package(package)
+                && install_options.include_package(
+                    package.as_install_target(),
+                    target.project_name(),
+                    target.lock().members(),
+                )
         };
 
         // Determine the reachability of each node in the graph.
-        let mut reachability =
-            conflict_marker_reachability(&graph, &activated_items, include_package)?;
+        let mut reachability = conflict_marker_reachability(
+            &graph,
+            &activated_items,
+            target.lock().conflicts(),
+            include_package,
+        )?;
 
         // Collect all packages.
         let nodes = graph
@@ -415,6 +423,7 @@ impl Edge<'_> {
 fn conflict_marker_reachability<'lock>(
     graph: &Graph<Node<'lock>, Edge<'lock>>,
     known_conflicts: &FxHashMap<ConflictItem, MarkerTree>,
+    conflicts: &Conflicts,
     include_package: impl Fn(&Package) -> bool,
 ) -> Result<FxHashMap<NodeIndex, MarkerTree>, LockError> {
     let mut referenced_names = FxHashSet::default();
@@ -429,14 +438,21 @@ fn conflict_marker_reachability<'lock>(
         });
     }
 
-    // Ordinary extras only need package-local reachability nodes. Introduce a global
-    // variable only when an explicit marker can observe its activation.
+    // Ordinary extras only need package-local reachability nodes. Global variables are
+    // needed for explicit marker inputs and declared conflict constraints.
+    let conflict_items = conflicts
+        .iter()
+        .flat_map(ConflictSet::iter)
+        .collect::<FxHashSet<_>>();
     let mut facts = FxHashMap::default();
     let mut encoded = FxHashMap::default();
     let mut fact_names = Vec::new();
     let mut add_fact = |item: ConflictItem| {
         let name = encode_conflict_item(&item);
-        if referenced_names.contains(&name) || referenced_scoped.contains(&item) {
+        if referenced_names.contains(&name)
+            || referenced_scoped.contains(&item)
+            || conflict_items.contains(&item)
+        {
             let index = *facts.entry(item).or_insert_with(|| {
                 let index = fact_names.len();
                 fact_names.push(name.clone());
@@ -445,6 +461,9 @@ fn conflict_marker_reachability<'lock>(
             encoded.insert(name, index);
         }
     };
+    for item in &conflict_items {
+        add_fact((*item).clone());
+    }
     for item in known_conflicts.keys() {
         add_fact(item.clone());
     }
@@ -571,6 +590,7 @@ fn conflict_marker_reachability<'lock>(
     let bounds = ExportActivationBounds::new(&solver.activations, &fact_names, &encoded).solve();
     let mut resolved = FxHashMap::default();
     let mut reachability = FxHashMap::default();
+    let mut unresolved = MarkerTree::FALSE;
     for index in graph.node_indices() {
         let marker = solver.reachability[index.index()];
         let (lower, upper) = *resolved.entry(marker).or_insert_with(|| {
@@ -580,16 +600,48 @@ fn conflict_marker_reachability<'lock>(
                     .map(|fact| (fact_names[fact].clone(), bounds[fact])),
             )
         });
-        if lower != upper
-            && let Node::Package(package) = graph[index]
+        if let Node::Package(package) = graph[index]
             && include_package(package)
         {
+            unresolved = unresolved.or(upper.and(lower.negate()));
+        }
+        reachability.insert(index, lower);
+    }
+    if unresolved.is_false() {
+        return Ok(reachability);
+    }
+
+    // Preserve founded defaults where they determine the output. Elsewhere, require
+    // complete, consistent assignments to agree on every emitted package. The relation
+    // must not assume any founded bounds: a complete solution can require an activation
+    // that the founded approximation leaves false.
+    let models = solver
+        .activation_models(graph, &fact_names, &facts, conflicts)
+        .and(unresolved);
+    let missing = unresolved.and(models.without_extras().negate());
+    let mut projected = FxHashMap::default();
+    for index in graph.node_indices() {
+        let Node::Package(package) = graph[index] else {
+            continue;
+        };
+        if !include_package(package) {
+            continue;
+        }
+        let marker = solver.reachability[index.index()];
+        let (lower, upper) = resolved[&marker];
+        let (present, absent) = *projected.entry(marker).or_insert_with(|| {
+            (
+                models.and(marker).without_extras(),
+                models.and(marker.negate()).without_extras(),
+            )
+        });
+        if !missing.and(upper.and(lower.negate())).is_false() || !present.and(absent).is_false() {
             return Err(LockErrorKind::UnresolvedExportConflict {
                 package: package.id.clone(),
             }
             .into());
         }
-        reachability.insert(index, lower);
+        reachability.insert(index, lower.and(unresolved.negate()).or(present));
     }
     Ok(reachability)
 }
@@ -683,10 +735,7 @@ fn resolve_marker_bindings(
                                     if edge.activated.binary_search(&fact).is_ok() {
                                         MarkerTree::TRUE
                                     } else {
-                                        MarkerTree::expression(MarkerExpression::Extra {
-                                            operator: ExtraOperator::Equal,
-                                            name: MarkerValueExtra::Extra(fact_names[fact].clone()),
-                                        })
+                                        conflict_variable(&fact_names[fact])
                                     }
                                 });
                         (name, marker)
@@ -749,6 +798,55 @@ impl SymbolicExportReachability {
             }
         }
     }
+
+    /// Describe all self-consistent selections among the retained lock branches.
+    ///
+    /// Each fact equals its actual request condition. Declared conflicts and distinct
+    /// package versions or sources cannot be selected together, even for omitted nodes.
+    fn activation_models(
+        &self,
+        graph: &Graph<Node<'_>, Edge<'_>>,
+        names: &[ExtraName],
+        facts: &FxHashMap<ConflictItem, usize>,
+        conflicts: &Conflicts,
+    ) -> MarkerTree {
+        let variables = names.iter().map(conflict_variable).collect::<Vec<_>>();
+        let mut models = MarkerTree::TRUE;
+        for (&variable, &condition) in variables.iter().zip(&self.activations) {
+            models = models.and(
+                variable
+                    .and(condition)
+                    .or(variable.negate().and(condition.negate())),
+            );
+        }
+        for set in conflicts.iter() {
+            let mut selected = MarkerTree::FALSE;
+            for item in set.iter() {
+                let variable = variables[facts[item]];
+                models = models.and(selected.and(variable).negate());
+                selected = selected.or(variable);
+            }
+        }
+        let mut packages = FxHashMap::default();
+        for (index, node) in graph.node_references() {
+            let Node::Package(package) = node else {
+                continue;
+            };
+            let marker = self.reachability[index.index()];
+            let selected = packages.entry(package.name()).or_insert(MarkerTree::FALSE);
+            models = models.and(selected.and(marker).negate());
+            *selected = selected.or(marker);
+        }
+        models
+    }
+}
+
+/// The canonical Boolean variable for one global conflict item.
+fn conflict_variable(name: &ExtraName) -> MarkerTree {
+    MarkerTree::expression(MarkerExpression::Extra {
+        operator: ExtraOperator::Equal,
+        name: MarkerValueExtra::Extra(name.clone()),
+    })
 }
 
 /// Return the distinct canonical conflict variables read by a marker.

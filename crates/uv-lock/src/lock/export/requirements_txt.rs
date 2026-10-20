@@ -45,6 +45,15 @@ impl<'lock> RequirementsTxtExport<'lock> {
             dev,
             annotate,
             install_options,
+            |package| match &package.id.source {
+                Source::Virtual(_) => false,
+                Source::Registry(_)
+                | Source::Git(..)
+                | Source::Direct(..)
+                | Source::Path(_)
+                | Source::Directory(_)
+                | Source::Editable(_) => true,
+            },
         )?;
 
         // Sort the nodes, such that unnamed URLs (editables) appear at the top.

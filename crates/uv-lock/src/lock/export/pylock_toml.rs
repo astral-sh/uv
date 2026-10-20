@@ -793,6 +793,15 @@ impl<'lock> PylockToml {
             dev,
             annotate,
             install_options,
+            |package| match &package.id.source {
+                Source::Virtual(_) => false,
+                Source::Registry(_)
+                | Source::Git(..)
+                | Source::Direct(..)
+                | Source::Path(_)
+                | Source::Directory(_)
+                | Source::Editable(_) => true,
+            },
         )?;
 
         // Sort the nodes.

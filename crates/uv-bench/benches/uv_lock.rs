@@ -80,6 +80,49 @@ fn export_shared_transitive_extras(criterion: &mut Criterion<WallTime>) {
     }
 }
 
+/// Export extras whose activation alternates along an acyclic chain of negative markers.
+fn export_negative_activation_chain(criterion: &mut Criterion<WallTime>) {
+    let extras = ExtrasSpecification::default().with_defaults(DefaultExtras::default());
+    let groups = DependencyGroupsWithDefaults::none();
+    let install_options = InstallOptions::default();
+    let root = PackageName::from_str("root").expect("Valid package name");
+    let mut group = criterion.benchmark_group("export/negative_activation_chain");
+
+    for size in [100, 300] {
+        let lock = negative_activation_chain_lock(size);
+        let target = ExportBenchmarkTarget {
+            lock: &lock,
+            root: &root,
+        };
+        let export = || {
+            RequirementsTxtExport::from_lock(
+                black_box(&target),
+                &[],
+                &extras,
+                &groups,
+                false,
+                None,
+                false,
+                &install_options,
+            )
+            .expect("Valid export fixture")
+        };
+
+        let mut expected = String::from("feature-0000==1.0.0\n");
+        for index in (1..size).step_by(2) {
+            writeln!(expected, "feature-{index:04}==1.0.0")
+                .expect("Writing to a string cannot fail");
+        }
+        assert_eq!(export().to_string(), expected);
+
+        group.bench_function(BenchmarkId::from_parameter(size), |benchmark| {
+            benchmark.iter(|| black_box(export()));
+        });
+    }
+
+    group.finish();
+}
+
 /// Give referenced extras overlapping but distinct activation conditions.
 fn feature_marker(index: usize) -> &'static str {
     if index.is_multiple_of(2) {
@@ -193,6 +236,57 @@ source = {{ registry = "https://example.com/simple" }}
     Lock::from_toml(&contents).expect("Valid generated lockfile")
 }
 
+/// Generate a frozen lock where each extra is requested only when its predecessor is absent.
+fn negative_activation_chain_lock(size: usize) -> Lock {
+    assert!(size > 0);
+    let mut contents = String::from(
+        r#"version = 1
+revision = 3
+requires-python = ">=3.9"
+
+[manifest]
+members = ["root"]
+
+[[package]]
+name = "root"
+version = "0.1.0"
+source = { virtual = "." }
+dependencies = [
+{ name = "feature-0000" },
+"#,
+    );
+    for index in 1..size {
+        writeln!(
+            contents,
+            r#"{{ name = "feature-{index:04}", extra = ["enabled"], marker = "extra != 'extra-12-feature-{previous:04}-enabled'" }},"#,
+            previous = index - 1,
+        )
+        .expect("Writing to a string cannot fail");
+    }
+    contents.push_str("]\n");
+
+    for index in 0..size {
+        writeln!(
+            contents,
+            r#"
+[[package]]
+name = "feature-{index:04}"
+version = "1.0.0"
+source = {{ registry = "https://example.com/simple" }}
+
+[package.optional-dependencies]
+enabled = []
+
+[package.metadata]
+provides-extras = ["enabled"]
+"#,
+        )
+        .expect("Writing to a string cannot fail");
+    }
+
+    Lock::from_toml(&contents).expect("Valid generated lockfile")
+}
+
 struct ExportBenchmarkTarget<'lock> {
     lock: &'lock Lock,
     root: &'lock PackageName,
@@ -216,5 +310,9 @@ impl<'lock> Installable<'lock> for ExportBenchmarkTarget<'lock> {
     }
 }
 
-criterion_group!(uv_lock, export_shared_transitive_extras);
+criterion_group!(
+    uv_lock,
+    export_shared_transitive_extras,
+    export_negative_activation_chain
+);
 criterion_main!(uv_lock);
