@@ -1236,6 +1236,83 @@ fn requirements_txt_empty_group_conflict_selection() -> Result<()> {
     Ok(())
 }
 
+/// A group-only export leaves the production project inactive when solving recursive conflicts.
+#[cfg(feature = "test-universal")]
+#[test]
+fn requirements_txt_only_group_conflict_selection() -> Result<()> {
+    let context = uv_test::test_context!("3.13");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = []
+
+        [dependency-groups]
+        dev = ["shared==1.0.0"]
+        "#,
+    )?;
+
+    context.temp_dir.child("uv.lock").write_str(
+        r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.9"
+        conflicts = [
+            [{ package = "root" }, { package = "root", group = "dev" }],
+            [{ package = "shared", extra = "a" }, { package = "shared", extra = "b" }],
+            [{ package = "root", group = "dev" }, { package = "shared", extra = "a" }],
+        ]
+
+        [manifest]
+        members = ["root"]
+
+        [[package]]
+        name = "root"
+        version = "0.1.0"
+        source = { virtual = "." }
+
+        [package.dependency-groups]
+        dev = [{ name = "shared" }]
+
+        [[package]]
+        name = "shared"
+        version = "1.0.0"
+        source = { registry = "https://example.com/simple" }
+        dependencies = [
+            { name = "shared", extra = ["a"], marker = "extra != 'b'" },
+            { name = "shared", extra = ["b"], marker = "extra != 'a'" },
+            { name = "leaf", marker = "extra == 'a'" },
+        ]
+
+        [package.optional-dependencies]
+        a = []
+        b = []
+
+        [[package]]
+        name = "leaf"
+        version = "1.0.0"
+        source = { registry = "https://example.com/simple" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--frozen")
+        .arg("--only-group")
+        .arg("dev")
+        .arg("--no-header")
+        .arg("--no-annotate")
+        .arg("--no-hashes"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    shared==1.0.0
+    ");
+
+    Ok(())
+}
+
 /// An encoded conflict takes precedence over a literal extra with the same name, even when the
 /// encoded extra is only requested through an incompatible path.
 #[cfg(feature = "test-universal")]
