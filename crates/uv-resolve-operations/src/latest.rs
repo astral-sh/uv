@@ -4,8 +4,8 @@ use tracing::debug;
 use uv_client::{MetadataFormat, RegistryClient, VersionFiles};
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
-    File, IndexCapabilities, IndexEntryFilename, IndexLocations, IndexMetadataRef, IndexUrl,
-    RequiresPython,
+    IndexCapabilities, IndexEntryFilename, IndexLocations, IndexMetadataRef, IndexUrl,
+    RequiresPython, VerbatimFile,
 };
 use uv_normalize::PackageName;
 use uv_platform_tags::Tags;
@@ -41,7 +41,7 @@ impl LatestClient<'_> {
         &self,
         package: &PackageName,
         filename: &DistFilename,
-        file: &File,
+        file: &VerbatimFile,
         exclude_newer: Option<&jiff::Timestamp>,
     ) -> bool {
         // Respect any exclude-newer cutoffs that were provided.
