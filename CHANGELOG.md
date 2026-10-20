@@ -3,6 +3,18 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.13.4
+
+Released on 2026-10-20.
+
+### Preview features
+
+- Parse and validate variant metadata ([#22512](https://github.com/astral-sh/uv/pull/22512))
+
+### Other changes
+
+- Bump webpki-root-certs to 1.0.10 ([#22760](https://github.com/astral-sh/uv/pull/22760))
+
 ## 0.13.3
 
 Released on 2026-10-20.
