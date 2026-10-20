@@ -5,6 +5,7 @@ use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fmt::{Display, Formatter};
 use std::ops::Bound;
+use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Instant;
 use std::{mem, thread};
@@ -58,7 +59,7 @@ use crate::pubgrub::{
     PubGrubPython, Range,
 };
 use crate::python_requirement::PythonRequirement;
-use crate::resolution::ResolverOutput;
+use crate::resolution::{ResolutionGraphBuilder, ResolverOutput};
 use crate::resolution_mode::ResolutionStrategy;
 use crate::resolved::ResolvedDistRef;
 pub(crate) use crate::resolver::availability::{
@@ -92,7 +93,7 @@ use crate::{DependencyMode, Exclusions, FlatIndex, Options, ResolutionMode, Vers
 pub(crate) use provider::MetadataUnavailable;
 pub(crate) use resolution::{
     Resolution, ResolutionDependencyEdge, ResolutionNode, ResolutionNodeId, ResolutionPackage,
-    ResolvedFork, SelectedDistribution,
+    SelectedDistribution,
 };
 use uv_configuration::ForkStrategy;
 
@@ -375,9 +376,24 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 forked_states.sort_by(|a, b| cmp_requires_python(&a.env, &b.env));
             }
         }
-        let mut resolutions = vec![];
+        let mut forked_states: Vec<_> = forked_states
+            .into_iter()
+            .map(|state| PendingFork {
+                state: Rc::new(state),
+                action: ForkAction::Initial,
+            })
+            .collect();
+        let mut resolutions = ResolutionGraphBuilder::new(
+            self.project.as_ref(),
+            &self.workspace_members,
+            &self.preferences,
+            &self.hasher,
+            &self.index,
+            &self.git,
+        );
 
-        'FORK: while let Some(mut state) = forked_states.pop() {
+        'FORK: while let Some(fork) = forked_states.pop() {
+            let mut state = self.materialize_fork(fork, requests)?;
             if let Some(split) = state.env.end_user_fork_display() {
                 let requires_python = state.python_requirement.target();
                 debug!("Solving {split} (requires-python: {requires_python:?})");
@@ -486,7 +502,21 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 }
                             }
 
-                            resolutions.push(resolution);
+                            if tracing::enabled!(Level::DEBUG)
+                                && let Some(env) = resolution.env.end_user_fork_display()
+                            {
+                                let packages: FxHashSet<_> = resolution
+                                    .nodes
+                                    .iter()
+                                    .map(|(package, _)| &package.name)
+                                    .collect();
+                                debug!(
+                                    "Distinct solution for {env} with {} package(s)",
+                                    packages.len()
+                                );
+                            }
+                            resolution.trace_resolution();
+                            resolutions.push(resolution)?;
                             continue 'FORK;
                         };
                         trace!(
@@ -612,7 +642,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     let version = match version {
                         ResolverVersion::Unforked(version) => version,
                         ResolverVersion::Forked(forks) => {
-                            forked_states.extend(self.version_forks_to_fork_states(state, forks));
+                            forked_states.extend(Self::version_forks_to_fork_states(state, forks));
                             continue 'FORK;
                         }
                         ResolverVersion::Unavailable(version, reason) => {
@@ -716,10 +746,15 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             })?;
 
                         // Emit a request to fetch the metadata for each registry package.
-                        self.visit_dependencies(&dependencies, &state, requests)
-                            .map_err(|err| {
-                                enrich_dependency_error(err, next_id, &version, &state.pubgrub)
-                            })?;
+                        self.visit_dependencies(
+                            &dependencies,
+                            &state.fork_urls,
+                            &state.fork_indexes,
+                            requests,
+                        )
+                        .map_err(|err| {
+                            enrich_dependency_error(err, next_id, &version, &state.pubgrub)
+                        })?;
 
                         // Add the dependencies to the state.
                         state.add_package_version_dependencies(
@@ -768,15 +803,16 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             }
                         }
 
-                        for new_fork_state in self.forks_to_fork_states(
+                        self.prefetch_forks(&state, &forks, requests)
+                            .map_err(|err| {
+                                enrich_dependency_error(err, next_id, &version, &state.pubgrub)
+                            })?;
+                        forked_states.extend(Self::forks_to_fork_states(
                             state,
                             &version,
                             forks,
-                            requests,
                             &diverging_packages,
-                        ) {
-                            forked_states.push(new_fork_state?);
-                        }
+                        ));
                         continue 'FORK;
                     }
                     ForkedDependencies::RequiresPython(requires_python) => {
@@ -813,7 +849,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                     })
                                     .collect();
                                 forked_states
-                                    .extend(self.version_forks_to_fork_states(state, forks));
+                                    .extend(Self::version_forks_to_fork_states(state, forks));
                                 continue 'FORK;
                             }
                         }
@@ -836,44 +872,16 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 }
             }
         }
-        if resolutions.len() > 1 {
+        if resolutions.num_forks() > 1 {
             info!(
                 "Solved your requirements for {} environments",
-                resolutions.len()
+                resolutions.num_forks()
             );
         }
-        if tracing::enabled!(Level::DEBUG) {
-            for resolution in &resolutions {
-                if let Some(env) = resolution.env.end_user_fork_display() {
-                    let packages: FxHashSet<_> = resolution
-                        .nodes
-                        .iter()
-                        .map(|(package, _)| &package.name)
-                        .collect();
-                    debug!(
-                        "Distinct solution for {env} with {} package(s)",
-                        packages.len()
-                    );
-                }
-            }
-        }
-        for resolution in &resolutions {
-            resolution.trace_resolution();
-        }
-        let resolutions = resolutions
-            .into_iter()
-            .map(|resolution| resolution.finalize(&self.index, &self.git))
-            .collect::<Result<Vec<_>, _>>()?;
-        crate::resolution::from_state(
-            resolutions,
-            self.project.as_ref(),
-            &self.workspace_members,
+        resolutions.finish(
             self.requirements.clone(),
             self.constraints.clone(),
             self.modifiers.clone(),
-            &self.preferences,
-            &self.hasher,
-            &self.index,
             self.python_requirement.target().clone(),
             &self.conflicts,
             self.selector.resolution_strategy(),
@@ -881,15 +889,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         )
     }
 
-    /// Convert the dependency [`Fork`]s into [`ForkState`]s.
-    fn forks_to_fork_states<'a, 'index: 'a>(
-        &'a self,
+    /// Queue dependency forks against one immutable checkpoint.
+    fn forks_to_fork_states<'index>(
         current_state: ForkState<'index>,
-        version: &'a Version,
+        version: &Version,
         forks: Vec<Fork>,
-        requests: &'a MetadataRequests,
-        diverging_packages: &'a BTreeSet<PackageName>,
-    ) -> impl Iterator<Item = Result<ForkState<'index>, ResolveError>> + 'a {
+        diverging_packages: &BTreeSet<PackageName>,
+    ) -> impl Iterator<Item = PendingFork<'index>> {
         debug!(
             "Splitting resolution on {}=={} over {} into {} resolution{} with separate markers",
             current_state.pubgrub.package_store[current_state.next],
@@ -902,33 +908,57 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             if forks.len() == 1 { "" } else { "s" }
         );
         assert!(forks.len() >= 2);
-        // This is a somewhat tortured technique to ensure
-        // that our resolver state is only cloned as much
-        // as it needs to be. We basically move the state
-        // into `forked_states`, and then only clone it if
-        // there is at least one more fork to visit.
-        let package = current_state.next;
-        let mut cur_state = Some(current_state);
-        let forks_len = forks.len();
-        forks
-            .into_iter()
-            .enumerate()
-            .map(move |(i, fork)| {
-                let is_last = i == forks_len - 1;
-                let forked_state = cur_state.take().unwrap();
-                if !is_last {
-                    cur_state = Some(forked_state.clone());
-                }
+        let state = Rc::new(current_state);
+        let version = version.clone();
+        forks.into_iter().map(move |fork| PendingFork {
+            state: Rc::clone(&state),
+            action: ForkAction::Dependencies {
+                fork,
+                version: version.clone(),
+            },
+        })
+    }
 
-                let env = fork.env.clone();
-                (fork, forked_state.with_env(env))
-            })
-            .map(move |(fork, mut forked_state)| {
+    /// Queue version forks against one immutable checkpoint.
+    fn version_forks_to_fork_states(
+        current_state: ForkState<'_>,
+        forks: Vec<VersionFork>,
+    ) -> impl Iterator<Item = PendingFork<'_>> {
+        let state = Rc::new(current_state);
+        forks.into_iter().map(move |fork| PendingFork {
+            state: Rc::clone(&state),
+            action: ForkAction::Version(fork),
+        })
+    }
+
+    /// Materialize only the next fork, taking ownership of the checkpoint for its last sibling.
+    fn materialize_fork<'index>(
+        &self,
+        pending: PendingFork<'index>,
+        requests: &MetadataRequests,
+    ) -> Result<ForkState<'index>, ResolveError> {
+        let state = Rc::unwrap_or_clone(pending.state);
+        match pending.action {
+            ForkAction::Initial => Ok(state),
+            ForkAction::Version(fork) => {
+                let continuation = match fork.version {
+                    Some(version) => ForkContinuation::UseVersion {
+                        package: fork.id,
+                        version,
+                    },
+                    None => ForkContinuation::SelectVersion { package: fork.id },
+                };
+                Ok(state.with_env(fork.env).with_continuation(continuation))
+            }
+            ForkAction::Dependencies { fork, version } => {
+                let mut state = state.with_env(fork.env);
+                let package = state.next;
+
                 // Enrich the state with any URLs, etc.
-                forked_state
+                state
                     .visit_package_version_dependencies(
                         package,
-                        version,
+                        &version,
                         &self.urls,
                         &self.indexes,
                         &fork.dependencies,
@@ -937,66 +967,64 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         self.selector.resolution_strategy(),
                     )
                     .map_err(|err| {
-                        enrich_dependency_error(err, package, version, &forked_state.pubgrub)
+                        enrich_dependency_error(err, package, &version, &state.pubgrub)
                     })?;
 
                 // Emit a request to fetch the metadata for each registry package.
-                self.visit_dependencies(&fork.dependencies, &forked_state, requests)
-                    .map_err(|err| {
-                        enrich_dependency_error(err, package, version, &forked_state.pubgrub)
-                    })?;
+                self.visit_dependencies(
+                    &fork.dependencies,
+                    &state.fork_urls,
+                    &state.fork_indexes,
+                    requests,
+                )
+                .map_err(|err| enrich_dependency_error(err, package, &version, &state.pubgrub))?;
 
-                // Add the dependencies to the state.
-                forked_state.add_package_version_dependencies(
+                state.add_package_version_dependencies(
                     package,
-                    version,
+                    &version,
                     fork.dependencies,
                     &self.index,
                     &self.installed_packages,
                 );
-
-                Ok(forked_state)
-            })
+                Ok(state)
+            }
+        }
     }
 
-    /// Convert the dependency [`Fork`]s into [`ForkState`]s.
-    #[expect(clippy::unused_self)]
-    fn version_forks_to_fork_states<'index>(
+    /// Prefetch every sibling's dependencies without copying its solver state.
+    fn prefetch_forks(
         &self,
-        current_state: ForkState<'index>,
-        forks: Vec<VersionFork>,
-    ) -> impl Iterator<Item = ForkState<'index>> {
-        // This is a somewhat tortured technique to ensure
-        // that our resolver state is only cloned as much
-        // as it needs to be. We basically move the state
-        // into `forked_states`, and then only clone it if
-        // there is at least one more fork to visit.
-        let mut cur_state = Some(current_state);
-        let forks_len = forks.len();
-        forks.into_iter().enumerate().map(move |(i, fork)| {
-            let is_last = i == forks_len - 1;
-            let forked_state = cur_state.take().unwrap();
-            if !is_last {
-                cur_state = Some(forked_state.clone());
+        state: &ForkState,
+        forks: &[Fork],
+        requests: &MetadataRequests,
+    ) -> Result<(), ResolveError> {
+        for fork in forks {
+            // Only source constraints are needed to schedule metadata requests. Discard these
+            // temporary maps before preparing the next sibling.
+            let mut fork_urls = state.fork_urls.clone();
+            let mut fork_indexes = state.fork_indexes.clone();
+            for dependency in &fork.dependencies {
+                apply_dependency_source(
+                    dependency,
+                    &fork.env,
+                    &mut fork_urls,
+                    &mut fork_indexes,
+                    &self.urls,
+                    &self.indexes,
+                    &self.git,
+                )?;
             }
-            let continuation = match fork.version {
-                Some(version) => ForkContinuation::UseVersion {
-                    package: fork.id,
-                    version,
-                },
-                None => ForkContinuation::SelectVersion { package: fork.id },
-            };
-            forked_state
-                .with_env(fork.env)
-                .with_continuation(continuation)
-        })
+            self.visit_dependencies(&fork.dependencies, &fork_urls, &fork_indexes, requests)?;
+        }
+        Ok(())
     }
 
     /// Visit a set of [`PubGrubDependency`] entities prior to selection.
     fn visit_dependencies(
         &self,
         dependencies: &[PubGrubDependency],
-        state: &ForkState,
+        fork_urls: &ForkUrls,
+        fork_indexes: &ForkIndexes,
         requests: &MetadataRequests,
     ) -> Result<(), ResolveError> {
         for dependency in dependencies {
@@ -1006,12 +1034,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 parent: _,
                 source: _,
             } = dependency;
-            let Some(source) = PackageSource::for_prefetch(
-                package,
-                &state.fork_urls,
-                &state.fork_indexes,
-                &self.urls,
-            ) else {
+            let Some(source) =
+                PackageSource::for_prefetch(package, fork_urls, fork_indexes, &self.urls)
+            else {
                 continue;
             };
             self.request_package(package, source, requests)?;
@@ -2689,6 +2714,21 @@ enum ForkContinuation {
     },
 }
 
+/// A pending fork shares its parent's checkpoint until it is selected for resolution.
+///
+/// Forks run sequentially. Keeping only their changes here avoids copying the incompatibility
+/// arena and assignment history for every sibling while those siblings are still waiting.
+struct PendingFork<'index> {
+    state: Rc<ForkState<'index>>,
+    action: ForkAction,
+}
+
+enum ForkAction {
+    Initial,
+    Dependencies { fork: Fork, version: Version },
+    Version(VersionFork),
+}
+
 /// State that is used during unit propagation in the resolver, one instance per fork.
 #[derive(Clone)]
 pub(crate) struct ForkState<'index> {
@@ -2820,29 +2860,18 @@ impl<'index> ForkState<'index> {
                 package,
                 version,
                 parent: _,
-                source,
+                source: _,
             } = dependency;
 
-            let mut has_url = false;
-            if let Some(name) = package.name() {
-                // From the [`Requirement`] to [`PubGrubDependency`] conversion, we get a URL if the
-                // requirement was a URL requirement. `Urls` applies canonicalization to this and
-                // override URLs to both URL and registry requirements, which we then check for
-                // conflicts using [`ForkUrl`].
-                for url in urls.get_url(&self.env, name, source.verbatim_url(), git)? {
-                    self.fork_urls.insert(name, url, &self.env)?;
-                    has_url = true;
-                }
-
-                if let Some(index) = source.explicit_index() {
-                    self.fork_indexes.insert(name, index, &self.env)?;
-                }
-
-                // If the package is pinned to an exact index, add it to the fork.
-                for index in indexes.get(name, &self.env) {
-                    self.fork_indexes.insert(name, index, &self.env)?;
-                }
-            }
+            let has_url = apply_dependency_source(
+                dependency,
+                &self.env,
+                &mut self.fork_urls,
+                &mut self.fork_indexes,
+                urls,
+                indexes,
+                git,
+            )?;
 
             if let Some(name) = self.pubgrub.package_store[for_package]
                 .name_no_root()
@@ -3344,6 +3373,36 @@ impl<'index> ForkState<'index> {
             env: self.env,
         }
     }
+}
+
+/// Apply one dependency's canonical URL and explicit index constraints to a fork.
+///
+/// Returns whether the dependency supplies a URL, for lower-bound diagnostics.
+fn apply_dependency_source(
+    dependency: &PubGrubDependency,
+    env: &ResolverEnvironment,
+    fork_urls: &mut ForkUrls,
+    fork_indexes: &mut ForkIndexes,
+    urls: &Urls,
+    indexes: &Indexes,
+    git: &GitResolver,
+) -> Result<bool, ResolveError> {
+    let Some(name) = dependency.package.name() else {
+        return Ok(false);
+    };
+    let mut has_url = false;
+    // Apply URL canonicalization and overrides before checking for conflicting sources.
+    for url in urls.get_url(env, name, dependency.source.verbatim_url(), git)? {
+        fork_urls.insert(name, url, env)?;
+        has_url = true;
+    }
+    if let Some(index) = dependency.source.explicit_index() {
+        fork_indexes.insert(name, index, env)?;
+    }
+    for index in indexes.get(name, env) {
+        fork_indexes.insert(name, index, env)?;
+    }
+    Ok(has_url)
 }
 
 /// Widens a single version to the largest interval that contains no other known version
