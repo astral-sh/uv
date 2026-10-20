@@ -34,14 +34,14 @@ use uv_distribution_filename::{
     BuildTag, DistExtension, ExtensionError, SourceDistExtension, WheelFilename,
 };
 use uv_distribution_types::{
-    ArchiveHashPolicy, BuiltDist, DependencyMetadata, DirectUrlBuiltDist, DirectUrlSourceDist,
-    DirectorySourceDist, Dist, ExcludeNewerOverride, ExcludeNewerSpan, ExcludeNewerValue,
-    FileLocation, FirstParty, GitDirectorySourceDist, GitPathBuiltDist, GitPathSourceDist,
-    HashValidation, Identifier, IndexLocations, IndexMetadata, IndexUrl, MetadataHashPolicy,
-    MinimumLibcVersion, Name, NameRequirementSpecification, PYPI_URL, PathBuiltDist,
-    PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, RemoteSource,
-    Requirement, RequirementSource, RequiresPython, ResolvedDist, SimplifiedMarkerTree,
-    StaticMetadata, ToUrlError, UrlString, VersionId,
+    ArchiveHashPolicy, BuiltDist, CanonicalFileLocation, DependencyMetadata, DirectUrlBuiltDist,
+    DirectUrlSourceDist, DirectorySourceDist, Dist, ExcludeNewerOverride, ExcludeNewerSpan,
+    ExcludeNewerValue, FileLocation, FirstParty, GitDirectorySourceDist, GitPathBuiltDist,
+    GitPathSourceDist, HashValidation, Identifier, IndexLocations, IndexMetadata, IndexUrl,
+    MetadataHashPolicy, MinimumLibcVersion, Name, NameRequirementSpecification, PYPI_URL,
+    PathBuiltDist, PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist,
+    RemoteSource, Requirement, RequirementSource, RequiresPython, ResolvedDist,
+    SimplifiedMarkerTree, StaticMetadata, ToUrlError, UrlString, VersionId,
 };
 use uv_fs::{PortablePath, PortablePathBuf, Simplified, normalize_path, try_relative_to_if};
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
@@ -7111,7 +7111,7 @@ impl Package {
                     requires_python: None,
                     size: sdist.size(),
                     upload_time_utc_ms: sdist.upload_time().map(Timestamp::as_millisecond),
-                    url: FileLocation::AbsoluteUrl(file_url.clone()),
+                    url: CanonicalFileLocation::absolute(file_url.clone()),
                     yanked: None,
                 });
 
@@ -7144,7 +7144,7 @@ impl Package {
 
                 let file_url = match sdist {
                     SourceDist::Url { url: file_url, .. } => {
-                        FileLocation::AbsoluteUrl(file_url.clone())
+                        CanonicalFileLocation::absolute(file_url.clone())
                     }
                     SourceDist::Path {
                         path: file_path, ..
@@ -7155,7 +7155,7 @@ impl Package {
                                 path: file_path.into_boxed_path(),
                             }
                         })?;
-                        FileLocation::AbsoluteUrl(UrlString::from(file_url))
+                        CanonicalFileLocation::from_url(file_url)
                     }
                     SourceDist::Metadata { .. } => {
                         return Err(LockErrorKind::MissingPath {
@@ -9018,7 +9018,7 @@ impl Wheel {
             RegistrySource::Url(url) => {
                 let file_location = match &self.url {
                     WheelWireSource::Url { url: file_url } => {
-                        FileLocation::AbsoluteUrl(file_url.clone())
+                        CanonicalFileLocation::absolute(file_url.clone())
                     }
                     WheelWireSource::Path { .. } | WheelWireSource::Filename { .. } => {
                         return Err(LockErrorKind::MissingUrl {
@@ -9051,7 +9051,7 @@ impl Wheel {
             RegistrySource::Path(index_path) => {
                 let file_location = match &self.url {
                     WheelWireSource::Url { url: file_url } => {
-                        FileLocation::AbsoluteUrl(file_url.clone())
+                        CanonicalFileLocation::absolute(file_url.clone())
                     }
                     WheelWireSource::Path { path: file_path } => {
                         let file_path = root.join(index_path).join(file_path);
@@ -9060,7 +9060,7 @@ impl Wheel {
                                 path: file_path.into_boxed_path(),
                             }
                         })?;
-                        FileLocation::AbsoluteUrl(UrlString::from(file_url))
+                        CanonicalFileLocation::from_url(file_url)
                     }
                     WheelWireSource::Filename { .. } => {
                         return Err(LockErrorKind::MissingPath {
@@ -9403,11 +9403,11 @@ where
         .transpose()
 }
 
-/// Convert a [`FileLocation`] into a normalized [`UrlString`].
-fn normalize_file_location(location: &FileLocation) -> Result<UrlString, ToUrlError> {
+/// Convert a [`CanonicalFileLocation`] into a normalized [`UrlString`].
+fn normalize_file_location(location: &CanonicalFileLocation) -> Result<UrlString, ToUrlError> {
     match location {
-        FileLocation::AbsoluteUrl(absolute) => Ok(absolute.without_fragment().into_owned()),
-        FileLocation::RelativeUrl(_, _) => Ok(normalize_url(location.to_url()?)),
+        FileLocation::AbsoluteUrl(absolute, _) => Ok(absolute.without_fragment().into_owned()),
+        FileLocation::RelativeUrl(_, _, _) => Ok(normalize_url(location.to_url()?)),
     }
 }
 
