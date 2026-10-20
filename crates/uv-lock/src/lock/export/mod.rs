@@ -25,13 +25,20 @@ pub(crate) use crate::lock::export::metadata::{
 };
 pub use crate::lock::export::pylock_toml::{PylockToml, PylockTomlError, PylockTomlErrorKind};
 pub use crate::lock::export::requirements_txt::RequirementsTxtExport;
-use crate::lock::{LockErrorKind, PackageIndex};
+use crate::lock::{LockErrorKind, PackageIndex, Source};
 use crate::{Installable, InstallableRootKind, LockError, Package};
 
 pub mod cyclonedx_json;
 mod metadata;
 mod pylock_toml;
 mod requirements_txt;
+
+/// Whether to include virtual packages in the export.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum VirtualPackages {
+    Include,
+    Exclude,
+}
 
 /// A flat requirement, with its associated marker.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -51,7 +58,7 @@ struct ExportableRequirements<'lock>(Vec<ExportableRequirement<'lock>>);
 impl<'lock> ExportableRequirements<'lock> {
     /// Generate the set of exportable [`ExportableRequirement`] entries from the given lockfile.
     ///
-    /// `emit_package` controls output visibility. Omitted packages still contribute dependencies.
+    /// Excluded virtual packages still contribute dependencies.
     fn from_lock(
         target: &impl Installable<'lock>,
         prune: &[PackageName],
@@ -59,7 +66,7 @@ impl<'lock> ExportableRequirements<'lock> {
         groups: &DependencyGroupsWithDefaults,
         annotate: bool,
         install_options: &'lock InstallOptions,
-        emit_package: impl Fn(&Package) -> bool,
+        virtual_packages: VirtualPackages,
     ) -> Result<Self, LockError> {
         let size_guess = target.lock().packages.len();
         let mut graph = Graph::<Node<'lock>, Edge<'lock>>::with_capacity(size_guess, size_guess);
@@ -304,7 +311,17 @@ impl<'lock> ExportableRequirements<'lock> {
         }
 
         let include_package = |package: &Package| {
-            emit_package(package)
+            let include_source = match &package.id.source {
+                Source::Virtual(_) => virtual_packages == VirtualPackages::Include,
+                Source::Registry(_)
+                | Source::Git(..)
+                | Source::Direct(..)
+                | Source::Path(_)
+                | Source::Directory(_)
+                | Source::Editable(_) => true,
+            };
+
+            include_source
                 && install_options.include_package(
                     package.as_install_target(),
                     target.project_name(),

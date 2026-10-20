@@ -14,7 +14,7 @@ use uv_normalize::PackageName;
 use uv_pypi_types::{ParsedArchiveUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl};
 use uv_redacted::SafeUrl;
 
-use crate::lock::export::{ExportableRequirement, ExportableRequirements};
+use crate::lock::export::{ExportableRequirement, ExportableRequirements, VirtualPackages};
 use crate::lock::{Package, PackageId, Source};
 use crate::{Installable, LockError};
 
@@ -45,15 +45,7 @@ impl<'lock> RequirementsTxtExport<'lock> {
             dev,
             annotate,
             install_options,
-            |package| match &package.id.source {
-                Source::Virtual(_) => false,
-                Source::Registry(_)
-                | Source::Git(..)
-                | Source::Direct(..)
-                | Source::Path(_)
-                | Source::Directory(_)
-                | Source::Editable(_) => true,
-            },
+            VirtualPackages::Exclude,
         )?;
 
         // Sort the nodes, such that unnamed URLs (editables) appear at the top.
