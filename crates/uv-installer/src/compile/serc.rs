@@ -1,9 +1,7 @@
-use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::{env, io};
 
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use serde::Deserialize;
 use tokio::io::{AsyncWriteExt, BufWriter};
 use tokio::process::Command;
@@ -16,7 +14,6 @@ use uv_client::BaseClient;
 use uv_configuration::Concurrency;
 use uv_python_interpreter::Interpreter;
 use uv_static::EnvVars;
-use uv_threads::initialize_rayon_once;
 
 use super::{CompileError, compile_timeout};
 
@@ -75,24 +72,9 @@ pub async fn compile_serc_files(
     }
     let compiler = SercCompiler::new(interpreter)?;
     let timeout = compile_timeout()?;
-    let validate = |file: &PathBuf| {
-        if let Err(error) = compiler.validate_destination(file) {
-            return Some(error);
-        }
-        #[cfg(windows)]
-        if file.to_str().is_none() {
-            return Some(CompileError::SercPathEncoding(file.clone()));
-        }
-        None
-    };
-    let error = if files.len() <= 1 {
-        files.iter().find_map(validate)
-    } else {
-        initialize_rayon_once();
-        files.par_iter().find_map_first(validate)
-    };
-    if let Some(error) = error {
-        return Err(error);
+    #[cfg(windows)]
+    if let Some(file) = files.iter().find(|file| file.to_str().is_none()) {
+        return Err(CompileError::SercPathEncoding(file.clone()));
     }
     let executable = Box::pin(install_serc(cache, client))
         .await
@@ -188,7 +170,6 @@ struct SercSummary {
 
 struct SercCompiler {
     version: String,
-    cache_suffix: String,
     optimization: u8,
     invalidation_mode: &'static str,
 }
@@ -201,7 +182,7 @@ impl SercCompiler {
             ));
         }
         let version = interpreter.python_minor_version().to_string();
-        // Serc 0.1.7 supports these bytecode formats. Prereleases can change magic within a minor.
+        // Serc supports these bytecode formats. Prereleases can change magic within a minor.
         let magic = match version.as_str() {
             "3.12" => [0xcb, 0x0d, 0x0d, 0x0a],
             "3.13" => [0xf3, 0x0d, 0x0d, 0x0a],
@@ -245,11 +226,6 @@ impl SercCompiler {
             setting: "optimization levels above 255",
             variable: "PYTHONOPTIMIZE",
         })?;
-        let cache_suffix = if optimization == 0 {
-            format!("{expected_tag}.pyc")
-        } else {
-            format!("{expected_tag}.opt-{optimization}.pyc")
-        };
         let invalidation_mode = match env::var_os(EnvVars::PYC_INVALIDATION_MODE) {
             Some(value) => match value.to_str() {
                 Some("TIMESTAMP") => "timestamp",
@@ -275,44 +251,8 @@ impl SercCompiler {
         );
         Ok(Self {
             version,
-            cache_suffix,
             optimization,
             invalidation_mode,
         })
-    }
-
-    fn validate_destination(&self, source: &Path) -> Result<(), CompileError> {
-        let parent = source
-            .parent()
-            .ok_or_else(|| CompileError::SercDestination(source.to_path_buf()))?;
-        let filename = source
-            .file_name()
-            .ok_or_else(|| CompileError::SercDestination(source.to_path_buf()))?;
-        let separator = filename
-            .as_encoded_bytes()
-            .iter()
-            .rposition(|&byte| byte == b'.');
-        let mut stem = if separator == Some(0) {
-            // Serc treats a lone leading dot as an extension separator, like CPython.
-            let mut prefixed = OsString::from("_");
-            prefixed.push(filename);
-            Path::new(&prefixed).extension().map(OsString::from)
-        } else {
-            source.file_stem().map(OsString::from)
-        }
-        .ok_or_else(|| CompileError::SercDestination(source.to_path_buf()))?;
-        if separator.is_some() {
-            stem.push(".");
-        }
-        stem.push(&self.cache_suffix);
-        let destination = parent.join("__pycache__").join(stem);
-        match fs_err::symlink_metadata(&destination) {
-            Ok(metadata) if !metadata.file_type().is_file() => {
-                Err(CompileError::SercDestination(destination))
-            }
-            Ok(_) => Ok(()),
-            Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(()),
-            Err(err) => Err(CompileError::SercDestinationIo { destination, err }),
-        }
     }
 }
