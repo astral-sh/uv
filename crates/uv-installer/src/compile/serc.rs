@@ -170,7 +170,7 @@ impl SercCompiler {
             ));
         }
         let version = interpreter.python_minor_version().to_string();
-        // Serc 0.1.5 supports these bytecode formats. Prereleases can change magic within a minor.
+        // Serc 0.1.6 supports these bytecode formats. Prereleases can change magic within a minor.
         let magic = match version.as_str() {
             "3.12" => [0xcb, 0x0d, 0x0d, 0x0a],
             "3.13" => [0xf3, 0x0d, 0x0d, 0x0a],
