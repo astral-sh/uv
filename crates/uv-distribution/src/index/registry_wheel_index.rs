@@ -18,6 +18,7 @@ use uv_platform_tags::Tags;
 use uv_types::HashStrategy;
 
 use crate::download::check_wheel_variant_compatibility;
+use crate::hash::ArtifactHashPolicy;
 use crate::index::cached_wheel::{CachedWheel, ResolvedWheel};
 use crate::source::{HTTP_REVISION, HttpRevisionPointer, LOCAL_REVISION, LocalRevisionPointer};
 
@@ -115,14 +116,17 @@ impl<'a> RegistryWheelIndex<'a> {
     /// Return a cached wheel that satisfies a registry wheel requirement.
     pub fn wheel(
         &mut self,
-        wheel: &'a RegistryBuiltDist,
+        distribution: &'a RegistryBuiltDist,
         no_build: bool,
         no_binary: bool,
     ) -> Option<&CachedRegistryDist> {
-        let wheel = wheel.best_wheel();
-        self.get(&wheel.filename.name).find_map(|entry| {
+        let wheel = distribution.best_wheel();
+        let required = self
+            .hasher
+            .archive_policy_for_package(&wheel.filename.name, &wheel.filename.version);
+        self.matching(&wheel.filename.name, |entry| {
             if !entry.matches_wheel(&wheel.index, &wheel.filename, no_build, no_binary) {
-                return None;
+                return false;
             }
             if wheel.size_is_authoritative
                 && let Some(expected) = wheel.file.size
@@ -132,10 +136,30 @@ impl<'a> RegistryWheelIndex<'a> {
                     "Skipping cached wheel `{}`: expected wheel archive size {expected}, cached archive size {:?} (built from source: {})",
                     entry.dist.filename, entry.size, entry.built,
                 );
-                return None;
+                return false;
             }
-            Some(&entry.dist)
+            let index_hashes = if entry.built {
+                // Built wheels record the source archive's hashes. A hashed wheel can only be
+                // replaced by a source whose bytes we can verify.
+                let source_hashes = distribution
+                    .sdist
+                    .as_ref()
+                    .filter(|source| entry.matches_source(source))
+                    .map_or(&[][..], |source| source.file.hashes.as_slice());
+                if source_hashes.is_empty()
+                    && !wheel.file.hashes.is_empty()
+                    && !required.requires_validation()
+                {
+                    return false;
+                }
+                source_hashes
+            } else {
+                wheel.file.hashes.as_slice()
+            };
+            ArtifactHashPolicy::from(required).can_reuse(&entry.dist, index_hashes)
         })
+        .next()
+        .map(IndexEntry::dist)
     }
 
     /// Return a cached wheel that satisfies a registry source distribution requirement.
@@ -150,9 +174,12 @@ impl<'a> RegistryWheelIndex<'a> {
         if no_build {
             return None;
         }
-        self.get(&source.name).find_map(|entry| {
+        let required = self
+            .hasher
+            .archive_policy_for_package(&source.name, &source.version);
+        self.matching(&source.name, |entry| {
             if !entry.matches_source(source) {
-                return None;
+                return false;
             }
             if source.size_is_authoritative
                 && let Some(expected) = source.file.size
@@ -162,22 +189,34 @@ impl<'a> RegistryWheelIndex<'a> {
                     "Skipping cached wheel `{}`: expected source archive size {expected}, cached archive size {:?}",
                     entry.dist.filename, entry.size,
                 );
-                return None;
+                return false;
             }
-            Some(&entry.dist)
+            ArtifactHashPolicy::from(required).can_reuse(&entry.dist, source.file.hashes.as_slice())
         })
+        .next()
+        .map(IndexEntry::dist)
     }
 
     /// Return an iterator over available wheels for a given package.
     ///
     /// If the package is not yet indexed, this will index the package by reading from the cache.
     pub fn get(&mut self, name: &'a PackageName) -> impl Iterator<Item = &IndexEntry<'_>> {
+        self.matching(name, |_| true)
+    }
+
+    fn matching(
+        &mut self,
+        name: &'a PackageName,
+        matches: impl Fn(&IndexEntry<'_>) -> bool,
+    ) -> impl Iterator<Item = &IndexEntry<'_>> {
         self.get_impl(name)
             .iter()
             .rev()
-            // A cached wheel with invalid variant metadata cannot satisfy the resolution.
-            .filter(|entry| {
-                check_wheel_variant_compatibility(&entry.dist.filename, &entry.dist.path).is_ok()
+            // Verify the selected archive before reading its variant metadata.
+            .filter(move |entry| {
+                matches(entry)
+                    && check_wheel_variant_compatibility(&entry.dist.filename, &entry.dist.path)
+                        .is_ok()
             })
     }
 
