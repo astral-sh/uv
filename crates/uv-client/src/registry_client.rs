@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::fmt::{self, Debug, Formatter};
 use std::io::BufReader;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
@@ -41,6 +41,7 @@ use uv_redacted::SafeUrl;
 use uv_small_str::SmallString;
 use uv_torch::TorchStrategy;
 
+use self::registry_wheel_request::RegistryWheelRequest;
 use crate::base_client::{BaseClientBuilder, ClientBuildError, ExtraMiddleware, RedirectPolicy};
 use crate::cached_client::CacheControl;
 use crate::flat_index::FlatIndexEntry;
@@ -51,6 +52,8 @@ use crate::{
     BaseClient, CachedClient, Error, ErrorKind, FlatIndexClient, RedirectClientWithMiddleware,
     RetryState,
 };
+
+mod registry_wheel_request;
 
 /// Cache parsed core metadata and variant requirements from the same wheel.
 #[derive(Serialize, Deserialize)]
@@ -1035,39 +1038,18 @@ impl RegistryClient {
     ) -> Result<ResolutionMetadata, Error> {
         let metadata = match &built_dist {
             BuiltDist::Registry(wheels) => {
-                #[derive(Debug, Clone)]
-                enum WheelLocation {
-                    /// A local file path.
-                    Path(PathBuf),
-                    /// A remote URL.
-                    Url(SafeUrl),
-                }
-
                 let wheel = wheels.best_wheel();
 
-                let url = wheel
-                    .file
-                    .location
-                    .to_url()
-                    .map_err(ErrorKind::InvalidUrl)?;
-                let location = if url.scheme() == "file" {
-                    let path = url
+                let request = RegistryWheelRequest::for_wheel(wheel)?;
+                if request.as_url().scheme() == "file" {
+                    let path = request
+                        .as_url()
                         .to_file_path()
-                        .map_err(|()| ErrorKind::NonFileUrl(url.clone()))?;
-                    WheelLocation::Path(path)
+                        .map_err(|()| ErrorKind::NonFileUrl(request.into_url()))?;
+                    Self::wheel_metadata_local(&path, &path, &wheel.filename, built_dist).await?
                 } else {
-                    WheelLocation::Url(url)
-                };
-
-                match location {
-                    WheelLocation::Path(path) => {
-                        Self::wheel_metadata_local(&path, &path, &wheel.filename, built_dist)
-                            .await?
-                    }
-                    WheelLocation::Url(url) => {
-                        self.wheel_metadata_registry(wheel, &url, capabilities)
-                            .await?
-                    }
+                    self.wheel_metadata_registry(wheel, request, capabilities)
+                        .await?
                 }
             }
             BuiltDist::DirectUrl(wheel) => {
@@ -1076,14 +1058,8 @@ impl RegistryClient {
                         .await?
                         .core
                 } else {
-                    self.wheel_metadata_no_pep658(
-                        &wheel.filename,
-                        &wheel.url,
-                        None,
-                        WheelCache::Url(&wheel.url),
-                        capabilities,
-                    )
-                    .await?
+                    self.wheel_metadata_no_pep658(&wheel.filename, &wheel.url, None, capabilities)
+                        .await?
                 }
             }
             BuiltDist::Path(wheel) => {
@@ -1168,44 +1144,32 @@ impl RegistryClient {
         .map_err(|err| ErrorKind::Io(err.into()))?
     }
 
-    /// Fetch the metadata from a wheel file.
+    /// Fetch registry wheel metadata using its prepared URL and effective index.
     async fn wheel_metadata_registry(
         &self,
         wheel: &RegistryBuiltWheel,
-        url: &SafeUrl,
+        request: RegistryWheelRequest<'_>,
         capabilities: &IndexCapabilities,
     ) -> Result<ResolutionMetadata, Error> {
-        let RegistryBuiltWheel {
-            filename,
-            file,
-            index,
-            ..
-        } = wheel;
+        let RegistryBuiltWheel { filename, file, .. } = wheel;
+        let (url, effective_index) = request.into_parts();
 
         // If the metadata file is available at its own url (PEP 658), download it from there.
         if let Some(hashes) = &file.dist_info_metadata {
-            let mut url = url.clone();
+            let mut url = url;
             let path = format!("{}.metadata", url.path());
             url.set_path(&path);
 
             let cache_entry = self.cache.entry(
                 CacheBucket::Wheels,
-                WheelCache::Index(index).wheel_dir(filename.name.as_ref()),
+                WheelCache::Index(effective_index).wheel_dir(filename.name.as_ref()),
                 format!("{}.msgpack", filename.cache_key()),
             );
-            let cache_control = match self.connectivity {
-                Connectivity::Online
-                    if let Some(header) = self.indexes.artifact_cache_control_for(index) =>
-                {
-                    CacheControl::Override(header)
-                }
-                Connectivity::Online => CacheControl::from(
-                    self.cache
-                        .freshness(&cache_entry, Some(&filename.name), None)
-                        .map_err(ErrorKind::Io)?,
-                ),
-                Connectivity::Offline => CacheControl::AllowStale,
-            };
+            let cache_control = self.wheel_metadata_cache_control(
+                &cache_entry,
+                &filename.name,
+                Some(effective_index),
+            )?;
 
             // Acquire an advisory lock, to guard against concurrent writes.
             #[cfg(windows)]
@@ -1246,14 +1210,8 @@ impl RegistryClient {
         } else {
             // Without PEP 658, read the metadata from the wheel using HTTP range requests.
             // If the server doesn't support range requests, fall back to streaming the wheel.
-            self.wheel_metadata_no_pep658(
-                filename,
-                url,
-                Some(index),
-                WheelCache::Index(index),
-                capabilities,
-            )
-            .await
+            self.wheel_metadata_no_pep658(filename, &url, Some(effective_index), capabilities)
+                .await
         }
     }
 
@@ -1302,15 +1260,15 @@ impl RegistryClient {
         .await
     }
 
-    /// Get the wheel metadata if it isn't available in an index through PEP 658
-    async fn wheel_metadata_no_pep658<'data>(
+    /// Read wheel metadata using range requests or by streaming the wheel.
+    async fn wheel_metadata_no_pep658(
         &self,
-        filename: &'data WheelFilename,
-        url: &'data SafeUrl,
-        index: Option<&'data IndexUrl>,
-        cache_shard: WheelCache<'data>,
-        capabilities: &'data IndexCapabilities,
+        filename: &WheelFilename,
+        url: &SafeUrl,
+        effective_index: Option<&IndexUrl>,
+        capabilities: &IndexCapabilities,
     ) -> Result<ResolutionMetadata, Error> {
+        let cache_shard = effective_index.map_or(WheelCache::Url(url), WheelCache::Index);
         let cache_entry = self.cache.entry(
             CacheBucket::Wheels,
             cache_shard.wheel_dir(filename.name.as_ref()),
@@ -1319,7 +1277,7 @@ impl RegistryClient {
         self.fetch_wheel_metadata(
             filename,
             url,
-            index,
+            effective_index,
             cache_entry,
             capabilities,
             |core, _| Ok(core),
@@ -1331,7 +1289,7 @@ impl RegistryClient {
         &self,
         filename: &WheelFilename,
         url: &SafeUrl,
-        index: Option<&IndexUrl>,
+        effective_index: Option<&IndexUrl>,
         cache_entry: CacheEntry,
         capabilities: &IndexCapabilities,
         cache_metadata: impl Fn(
@@ -1347,20 +1305,8 @@ impl RegistryClient {
                 .map_err(|err| Error::from(ErrorKind::Metadata(url.to_string(), err)))
         };
 
-        let cache_control = match self.connectivity {
-            Connectivity::Online
-                if let Some(index) = index
-                    && let Some(header) = self.indexes.artifact_cache_control_for(index) =>
-            {
-                CacheControl::Override(header)
-            }
-            Connectivity::Online => CacheControl::from(
-                self.cache
-                    .freshness(&cache_entry, Some(&filename.name), None)
-                    .map_err(ErrorKind::Io)?,
-            ),
-            Connectivity::Offline => CacheControl::AllowStale,
-        };
+        let cache_control =
+            self.wheel_metadata_cache_control(&cache_entry, &filename.name, effective_index)?;
 
         // Acquire an advisory lock, to guard against concurrent writes.
         #[cfg(windows)]
@@ -1370,7 +1316,7 @@ impl RegistryClient {
         };
 
         // Attempt to fetch via a range request.
-        if index.is_none_or(|index| capabilities.supports_range_requests(index)) {
+        if effective_index.is_none_or(|index| capabilities.supports_range_requests(index)) {
             let req = self
                 .uncached_client(url)
                 .head(url.clone())
@@ -1435,7 +1381,7 @@ impl RegistryClient {
             match result {
                 Ok(metadata) => return Ok(metadata),
                 Err(err) => {
-                    if err.is_http_range_requests_unsupported(url, index) {
+                    if err.is_http_range_requests_unsupported(url, effective_index) {
                         if self.metadata_range_request == MetadataRangeRequest::Require {
                             return Err(ErrorKind::MetadataRangeRequestsRequired(
                                 url.clone(),
@@ -1449,7 +1395,7 @@ impl RegistryClient {
                         warn!("Range requests not supported for `{filename}`; streaming wheel");
 
                         // Mark the index as not supporting range requests.
-                        if let Some(index) = index {
+                        if let Some(index) = effective_index {
                             capabilities.set_no_range_requests(index.clone());
                         }
                     } else {
@@ -1495,6 +1441,29 @@ impl RegistryClient {
             .get_serde_with_retry(req, &cache_entry, cache_control, read_metadata_stream)
             .await
             .map_err(crate::Error::from)
+    }
+
+    /// Choose the cache policy for a wheel metadata HTTP request.
+    fn wheel_metadata_cache_control(
+        &self,
+        cache_entry: &CacheEntry,
+        package_name: &PackageName,
+        effective_index: Option<&IndexUrl>,
+    ) -> Result<CacheControl, Error> {
+        Ok(match self.connectivity {
+            Connectivity::Online
+                if let Some(index) = effective_index
+                    && let Some(header) = self.indexes.artifact_cache_control_for(index) =>
+            {
+                CacheControl::Override(header)
+            }
+            Connectivity::Online => CacheControl::from(
+                self.cache
+                    .freshness(cache_entry, Some(package_name), None)
+                    .map_err(ErrorKind::Io)?,
+            ),
+            Connectivity::Offline => CacheControl::AllowStale,
+        })
     }
 
     /// Handle a specific `reqwest` error, and convert it to [`io::Error`].
