@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use anyhow::Result;
+use indoc::{formatdoc, indoc};
 use rcgen::CustomExtension;
 use temp_env::async_with_vars;
 use tempfile::{NamedTempFile, TempDir};
@@ -78,11 +79,13 @@ impl TestCertificate {
         let client_cert_path = temp_dir.path().join("client.pem");
         fs_err::write(
             &client_cert_path,
-            format!(
-                "{}\n{}",
+            formatdoc! {"
+                {}
+                {}
+            ",
                 client.public.pem(),
                 client.private.serialize_pem()
-            ),
+            },
         )?;
 
         Ok(Self {
@@ -99,7 +102,10 @@ impl TestCertificate {
         let mut file = NamedTempFile::new().unwrap();
         write!(
             file,
-            "{}\n{}",
+            indoc! {"
+                {}
+                {}
+            "},
             self.ca.public.pem(),
             self.server.public.pem()
         )
@@ -126,7 +132,13 @@ impl TestCertificate {
         let dir = TempDir::new().unwrap();
         fs_err::write(
             dir.path().join("bundle.pem"),
-            format!("{}\n{}", self.ca.public.pem(), self.server.public.pem()),
+            formatdoc! {"
+                {}
+                {}
+            ",
+                self.ca.public.pem(),
+                self.server.public.pem()
+            },
         )
         .unwrap();
         dir
@@ -719,7 +731,10 @@ async fn test_ssl_cert_file_bundle_ignores_invalid_trust_anchor() -> Result<()> 
     let mut bundle = NamedTempFile::new()?;
     write!(
         bundle,
-        "{}\n{}",
+        indoc! {"
+            {}
+            {}
+        "},
         invalid_cert.ca.public.pem(),
         valid_cert.ca.public.pem()
     )?;

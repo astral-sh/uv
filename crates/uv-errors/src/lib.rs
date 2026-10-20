@@ -605,7 +605,10 @@ mod tests {
 
         assert_eq!(
             debug_error_chain(&error).to_string(),
-            "0: OuterError { source: InnerError { code: 42 } }\n1: InnerError { code: 42 }"
+            indoc! {"
+                0: OuterError { source: InnerError { code: 42 } }
+                1: InnerError { code: 42 }"
+            }
         );
     }
 
@@ -746,9 +749,12 @@ mod tests {
     #[test]
     fn test_multiline_main_message_wraps_each_line() {
         #[derive(Debug, thiserror::Error)]
-        #[error(
-            "There is no command `foobar` for `uv`. Did you mean one of:\n    auth\n    run\n    init"
-        )]
+        #[error("{}", indoc! {"
+            There is no command `foobar` for `uv`. Did you mean one of:
+                auth
+                run
+                init"
+        })]
         struct Suggestions;
 
         let error = Suggestions;

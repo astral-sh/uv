@@ -25,9 +25,11 @@ fn format_reuses_settings_workspace_discovery() -> Result<()> {
         "#})?;
     let member = context.temp_dir.child("member");
     member.create_dir_all()?;
-    member
-        .child("pyproject.toml")
-        .write_str("[project]\nname = \"member\"\nversion = \"0.1.0\"\n")?;
+    member.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "member"
+        version = "0.1.0"
+    "#})?;
     context.temp_dir.child("main.py").write_str("x = 1\n")?;
 
     uv_snapshot!(context.filters(), context.format()

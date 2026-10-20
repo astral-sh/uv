@@ -2,6 +2,7 @@ use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::PathChild;
 use fs_err as fs;
+use indoc::formatdoc;
 use insta::assert_snapshot;
 use uv_static::EnvVars;
 use uv_test::uv_snapshot;
@@ -164,10 +165,12 @@ async fn tool_list_outdated_respects_configured_index() -> Result<()> {
 
     fs::write(
         context.temp_dir.child("uv.toml"),
-        format!(
-            "[[index]]\nname = \"ordinary\"\nurl = \"{}/simple\"\ndefault = true\n",
-            server.uri()
-        ),
+        formatdoc! {r#"
+            [[index]]
+            name = "ordinary"
+            url = "{}/simple"
+            default = true
+        "#, server.uri()},
     )?;
 
     uv_snapshot!(context.filters(), context.tool_list()

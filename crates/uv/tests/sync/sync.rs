@@ -18616,7 +18616,10 @@ async fn sync_malware_check_disabled() {
     user_config_dir.create_dir_all().unwrap();
     user_config_dir
         .child("uv.toml")
-        .write_str("[audit]\nmalware-check = true")
+        .write_str(indoc! {"
+            [audit]
+            malware-check = true
+        "})
         .unwrap();
 
     let server = MockServer::start().await;
@@ -19288,8 +19291,11 @@ fn project_build_hashes_add() -> Result<()> {
         .temp_dir
         .child("backend.py")
         .write_str(&child.read("backend.py").replace(
-            "import build_dependency",
-            "import build_dependency\nPath(__file__).with_name('backend-executed').touch()",
+            "import build_dependency\n",
+            indoc! {"
+                import build_dependency
+                Path(__file__).with_name('backend-executed').touch()
+            "},
         ))?;
     let context = uv_test::test_context!("3.12");
     let wheels = SafeUrl::from_directory_path(child.temp_dir.child("wheels").path())
@@ -19366,10 +19372,13 @@ fn project_build_hashes_missing() -> Result<()> {
 #[test]
 fn project_build_hashes_lock_dynamic_metadata() -> Result<()> {
     let (context, hash) = build_hash_project()?;
-    context.temp_dir.child("backend.py").write_str(&format!(
-        "{}\nbuild_editable = build_wheel\n",
-        context.read("backend.py")
-    ))?;
+    context
+        .temp_dir
+        .child("backend.py")
+        .write_str(&formatdoc! {"
+            {}
+            build_editable = build_wheel
+        ", context.read("backend.py")})?;
     // `uv lock` invokes the build backend to discover the dynamic version, so build dependencies
     // need hashes even when nothing is being installed.
     context
@@ -19582,7 +19591,16 @@ fn project_build_hashes_workspace_root_policy() -> Result<()> {
     // Syncing from a workspace member uses the root's build-hash policy, even if the member disables it.
     let (context, _) = build_hash_project()?;
     let pyproject = context.read("pyproject.toml");
-    context.temp_dir.child("pyproject.toml").write_str(&format!("{pyproject}\nrequire-build-hashes = true\n\n[tool.uv.workspace]\nmembers = [\"member\"]\n"))?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+            {pyproject}
+            require-build-hashes = true
+
+            [tool.uv.workspace]
+            members = ["member"]
+        "#})?;
     let member = context.temp_dir.child("member");
     member.child("pyproject.toml").write_str(indoc! {r#"
         [project]
