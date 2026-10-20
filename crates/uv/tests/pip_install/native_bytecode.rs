@@ -8,19 +8,13 @@ use indoc::indoc;
 use insta::allow_duplicates;
 use walkdir::WalkDir;
 
-use uv_test::packse::generate_wheel_with_files;
+use uv_test::packse::WheelBuilder;
 use uv_test::{TestContext, uv_snapshot};
 
 /// Create a wheel with valid Python and invalid source such as vendored Python 2 code.
 fn bytecode_wheel(context: &TestContext) -> Result<PathBuf> {
-    let (filename, bytes) = generate_wheel_with_files(
-        &"example".parse()?,
-        &"1.0.0".parse()?,
-        &[],
-        &BTreeMap::new(),
-        None,
-        "py3-none-any",
-        &[
+    let (filename, bytes) = WheelBuilder::new(&"example".parse()?, &"1.0.0".parse()?)
+        .files(&[
             (
                 "example/module.py",
                 indoc! {r#"
@@ -34,8 +28,8 @@ fn bytecode_wheel(context: &TestContext) -> Result<PathBuf> {
             ),
             ("example/invalid.py", "def invalid syntax\n"),
             ("example/python2.py", "print 'Python 2'\n"),
-        ],
-    );
+        ])
+        .build();
     let wheel = context.temp_dir.join(filename);
     fs_err::write(&wheel, bytes)?;
     Ok(wheel)
