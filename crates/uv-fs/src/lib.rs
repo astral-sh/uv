@@ -1,7 +1,9 @@
-use std::io::{self, Write};
+use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
+#[cfg(unix)]
+use fs_err::os::unix::fs::OpenOptionsExt;
 #[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
 #[cfg(windows)]
@@ -9,9 +11,6 @@ use std::os::windows::io::AsRawHandle;
 
 #[cfg(target_os = "linux")]
 use std::time::{Duration, UNIX_EPOCH};
-
-#[cfg(feature = "tokio")]
-use std::io::Read;
 
 #[cfg(feature = "tokio")]
 use encoding_rs_io::DecodeReaderBytes;
@@ -958,6 +957,30 @@ pub fn is_virtualenv_base(path: impl AsRef<Path>) -> bool {
     path.as_ref().join("pyvenv.cfg").is_file()
 }
 
+/// Read the path in a `.venv` redirect file (PEP 832), relative to the file's directory.
+pub fn read_venv_redirect(path: &Path) -> io::Result<PathBuf> {
+    let mut options = fs_err::OpenOptions::new();
+    options.read(true);
+    // A redirect may be replaced with a FIFO before it is opened.
+    #[cfg(unix)]
+    options.custom_flags(rustix::fs::OFlags::NONBLOCK.bits().cast_signed());
+    let mut file = options.open(path)?;
+    if !file.metadata()?.is_file() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "the redirect is not a regular file",
+        ));
+    }
+    let mut contents = String::new();
+    file.read_to_string(&mut contents)?;
+    let line = contents
+        .strip_suffix("\r\n")
+        .or_else(|| contents.strip_suffix('\n'))
+        .unwrap_or(&contents);
+
+    Ok(path.parent().unwrap_or(Path::new("")).join(line))
+}
+
 /// Whether the error is due to a lock being held.
 #[cfg(feature = "tokio")]
 fn is_known_already_locked_error(err: &std::fs::TryLockError) -> bool {
@@ -1118,6 +1141,28 @@ mod tests {
             .expect_err("A socket cannot be atomically replaced");
         assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
         assert!(fs_err::metadata(&path)?.file_type().is_socket());
+        Ok(())
+    }
+
+    #[test]
+    fn read_venv_redirect_file() -> io::Result<()> {
+        let tempdir = tempfile::tempdir()?;
+        let path = tempdir.path().join(".venv");
+        for contents in [
+            "other environment",
+            "other environment\n",
+            "other environment\r\n",
+        ] {
+            fs_err::write(&path, contents)?;
+            assert_eq!(
+                read_venv_redirect(&path)?,
+                tempdir.path().join("other environment")
+            );
+        }
+
+        let target = tempdir.path().join("environments/default");
+        fs_err::write(&path, format!("{}\n", target.display()))?;
+        assert_eq!(read_venv_redirect(&path)?, target);
         Ok(())
     }
 

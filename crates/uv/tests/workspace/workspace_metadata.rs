@@ -224,13 +224,25 @@ fn workspace_metadata_ignores_unusable_environment() -> Result<()> {
     let broken_metadata: serde_json::Value =
         serde_json::from_slice(&broken_output.get_output().stdout)?;
 
+    fs_err::remove_dir_all(environment.path())?;
+    environment.write_str("missing\n")?;
+    let redirect_output = context
+        .workspace_metadata()
+        .current_dir(&workspace)
+        .assert()
+        .success();
+    let redirect_metadata: serde_json::Value =
+        serde_json::from_slice(&redirect_output.get_output().stdout)?;
+
     insta::assert_json_snapshot!(serde_json::json!({
         "broken_environment": broken_metadata.get("environment"),
         "empty_environment": empty_metadata.get("environment"),
+        "redirect_environment": redirect_metadata.get("environment"),
     }), @r#"
     {
       "broken_environment": null,
-      "empty_environment": null
+      "empty_environment": null,
+      "redirect_environment": null
     }
     "#);
 

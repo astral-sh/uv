@@ -1883,6 +1883,7 @@
             "check-command",
             "packaged-init",
             "centralized-project-envs",
+            "venv-redirect-files",
             "tool-install-locks",
             "workspace-list-scripts",
             "index-hash-algorithm",

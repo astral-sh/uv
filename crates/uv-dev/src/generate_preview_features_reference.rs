@@ -412,6 +412,11 @@ mod tests {
         installations and upgrades. The lockfile records the tool's resolved dependencies and also
         provides the dependency information used by `uv tool audit`.
 
+        ### `venv-redirect-files` {#venv-redirect-files}
+
+        uv can discover virtual environments through [PEP 832](https://peps.python.org/pep-0832/)
+        `.venv` redirect files. Enabling this feature silences the preview warning.
+
         ### `venv-safe-clear` {#venv-safe-clear}
 
         The `uv venv --clear` option refuses to clear a directory that does not contain a

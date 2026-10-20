@@ -17,6 +17,7 @@ use uv_configuration::{
     VersionControlError, VersionControlSystem,
 };
 use uv_distribution_types::RequiresPython;
+use uv_environment_operations::project_environment_root;
 use uv_fs::{CWD, Simplified};
 use uv_git::GIT;
 use uv_install_wheel::reserved_script_name;
@@ -42,6 +43,14 @@ use uv_warnings::warn_user_once;
 use uv_workspace::{
     DiscoveryOptions, MemberDiscovery, Workspace, WorkspaceCache, WorkspaceErrorKind,
 };
+
+/// Find an existing environment in the directory being initialized, including a `.venv` redirect.
+fn find_existing_environment(path: &Path, cache: &Cache) -> Option<PythonEnvironment> {
+    let root = project_environment_root(&path.join(".venv"), cache).ok()?;
+    let environment = PythonEnvironment::from_root(root.discovery_path()?, cache).ok()?;
+    root.validate().ok()?;
+    Some(environment)
+}
 
 /// Add one or more packages to the project requirements.
 #[expect(clippy::single_match_else, clippy::fn_params_excessive_bools)]
@@ -626,7 +635,7 @@ async fn determine_requires_python(
         debug!("Using Python version `{requires_python}` from request `{python_request}`");
 
         Ok((requires_python, python_pin))
-    } else if let Ok(virtualenv) = PythonEnvironment::from_root(path.join(".venv"), cache) {
+    } else if let Some(virtualenv) = find_existing_environment(path, cache) {
         // (2) An existing Python environment in the target directory
         let interpreter = virtualenv.into_interpreter();
 
