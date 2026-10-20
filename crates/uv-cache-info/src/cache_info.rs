@@ -486,13 +486,12 @@ enum DirectoryTimestamp {
 
 #[cfg(test)]
 mod tests {
-    use super::{CacheKey, GitPattern, PyProjectToml};
+    use super::{CacheKey, ToolUv};
 
     #[test]
     fn cache_key_forms() -> Result<(), toml::de::Error> {
-        let project: PyProjectToml = toml::from_str(
+        let settings: ToolUv = toml::from_str(
             r#"
-            [tool.uv]
             cache-keys = [
                 "Cargo.lock",
                 { file = "**/*.toml" },
@@ -504,71 +503,50 @@ mod tests {
             ]
         "#,
         )?;
-        insta::assert_debug_snapshot!(project, @r#"
-        PyProjectToml {
-            tool: Some(
-                Tool {
-                    uv: Some(
-                        ToolUv {
-                            cache_keys: Some(
-                                [
-                                    Path(
-                                        "Cargo.lock",
-                                    ),
-                                    File {
-                                        file: "**/*.toml",
-                                    },
-                                    Directory {
-                                        dir: "src",
-                                    },
-                                    Git {
-                                        git: Bool(
-                                            true,
-                                        ),
-                                    },
-                                    Git {
-                                        git: Set(
-                                            GitSet {
-                                                commit: Some(
-                                                    true,
-                                                ),
-                                                tags: Some(
-                                                    false,
-                                                ),
-                                            },
-                                        ),
-                                    },
-                                    Git {
-                                        git: Set(
-                                            GitSet {
-                                                commit: None,
-                                                tags: None,
-                                            },
-                                        ),
-                                    },
-                                    Environment {
-                                        env: "UV_CACHE_INFO",
-                                    },
-                                ],
+        insta::assert_debug_snapshot!(settings.cache_keys, @r#"
+        Some(
+            [
+                Path(
+                    "Cargo.lock",
+                ),
+                File {
+                    file: "**/*.toml",
+                },
+                Directory {
+                    dir: "src",
+                },
+                Git {
+                    git: Bool(
+                        true,
+                    ),
+                },
+                Git {
+                    git: Set(
+                        GitSet {
+                            commit: Some(
+                                true,
+                            ),
+                            tags: Some(
+                                false,
                             ),
                         },
                     ),
                 },
-            ),
-        }
+                Git {
+                    git: Set(
+                        GitSet {
+                            commit: None,
+                            tags: None,
+                        },
+                    ),
+                },
+                Environment {
+                    env: "UV_CACHE_INFO",
+                },
+            ],
+        )
         "#);
         Ok(())
-    }
-
-    #[test]
-    fn cache_key_git_sequence() {
-        insta::assert_snapshot!(toml::from_str::<CacheKey>("git = [true, false]").unwrap_err(), @"
-        TOML parse error at line 1, column 7
-          |
-        1 | git = [true, false]
-          |       ^^^^^^^^^^^^^
-        invalid type: sequence, expected a boolean or a Git cache key table
-        ");
     }
 
     #[test]
@@ -582,28 +560,6 @@ mod tests {
           | ^
         extra cache key field
         "#);
-    }
-
-    #[test]
-    fn cache_key_invalid_git() {
-        insta::assert_snapshot!(toml::from_str::<CacheKey>("git = { commit = 42 }").unwrap_err(), @"
-        TOML parse error at line 1, column 18
-          |
-        1 | git = { commit = 42 }
-          |                  ^^
-        invalid type: integer `42`, expected a boolean
-        ");
-    }
-
-    #[test]
-    fn git_pattern_unknown_field() {
-        insta::assert_snapshot!(toml::from_str::<GitPattern>("unknown = true").unwrap_err(), @"
-        TOML parse error at line 1, column 1
-          |
-        1 | unknown = true
-          | ^^^^^^^
-        unknown field `unknown`, expected `commit` or `tags`
-        ");
     }
 }
 

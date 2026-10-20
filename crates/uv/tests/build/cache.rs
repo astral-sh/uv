@@ -47,16 +47,10 @@ fn cache_key_git_sequence() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
-        requires-python = ">=3.12"
-
-        [build-system]
-        requires = ["uv_build>=0.5.15,<10000"]
-        build-backend = "uv_build"
 
         [tool.uv]
         cache-keys = [{ git = [true, false] }]
     "#})?;
-    project.child("src/project/__init__.py").touch()?;
 
     uv_snapshot!(context.filters(), context.pip_install().arg("./project").arg("--offline"), @"
     exit_code: 2 (failure)
@@ -64,10 +58,10 @@ fn cache_key_git_sequence() -> Result<()> {
     Resolved 1 package in [TIME]
     error: Failed to build `project @ file://[TEMP_DIR]/project`
       cause: Failed to parse cache keys in `project/pyproject.toml`
-      cause: TOML parse error at line 11, column 23
-                |
-             11 | cache-keys = [{ git = [true, false] }]
-                |                       ^^^^^^^^^^^^^
+      cause: TOML parse error at line 6, column 23
+               |
+             6 | cache-keys = [{ git = [true, false] }]
+               |                       ^^^^^^^^^^^^^
              invalid type: sequence, expected a boolean or a Git cache key table
     ");
 
