@@ -7,9 +7,9 @@
 
 Released on 2026-10-20.
 
-### Other changes
+### Performance
 
-- Revert optional-extra activation tracking in exports ([#22750](https://github.com/astral-sh/uv/pull/22750))
+- Avoid severe `uv export` slowdowns in dependency graphs with extras ([#22750](https://github.com/astral-sh/uv/pull/22750))
 
 ## 0.13.2
 
