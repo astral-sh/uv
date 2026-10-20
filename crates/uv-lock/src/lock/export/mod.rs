@@ -585,6 +585,7 @@ fn conflict_marker_reachability<'lock>(
         solver.add_reachability(root.index(), MarkerTree::TRUE);
     }
     resolve_marker_bindings(graph, &mut solver.edges, &fact_names, &known_facts, &roots);
+    solver.simplify_unconditional_activations(&roots, &encoded);
     solver.solve();
 
     let bounds = ExportActivationBounds::new(&solver.activations, &fact_names, &encoded).solve();
@@ -773,6 +774,54 @@ impl SymbolicExportReachability {
             self.reachability[index] = combined;
             if !mem::replace(&mut self.queued[index], true) {
                 self.queue.push_back(index);
+            }
+        }
+    }
+
+    /// Fold activations proved by unconditional request paths before building symbolic paths.
+    ///
+    /// Only constant-true guards and seeds establish these facts, independently of any
+    /// assumed activation. All unproved activations remain symbolic.
+    fn simplify_unconditional_activations(
+        &mut self,
+        roots: &[NodeIndex],
+        encoded: &FxHashMap<ExtraName, usize>,
+    ) {
+        if self.activations.is_empty() {
+            return;
+        }
+        let mut active = self
+            .activations
+            .iter()
+            .map(|marker| marker.is_true())
+            .collect::<Vec<_>>();
+        let mut reached = vec![false; self.reachability.len()];
+        let mut pending = roots.iter().map(|root| root.index()).collect::<Vec<_>>();
+        while let Some(source) = pending.pop() {
+            if mem::replace(&mut reached[source], true) {
+                continue;
+            }
+            pending.extend(
+                self.seeds[source]
+                    .iter()
+                    .filter_map(|&(extra, marker)| marker.is_true().then_some(extra)),
+            );
+            for &edge in &self.dependents[source] {
+                let edge = &self.edges[edge.index()];
+                if !edge.marker.is_true() {
+                    continue;
+                }
+                pending.extend(edge.targets.iter().copied());
+                for &fact in &edge.activated {
+                    active[fact] = true;
+                }
+            }
+        }
+        if active.iter().any(|&active| active) {
+            for edge in &mut self.edges {
+                edge.marker = edge
+                    .marker
+                    .simplify_extras_with(|name| active[encoded[name]]);
             }
         }
     }
