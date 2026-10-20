@@ -55,6 +55,11 @@ exclude-newer = "P7D"
 
 [tool.uv.exclude-newer-package]
 astral-dev-toolchain-hyperfine = "2026-10-08T08:11:00Z"
+# Set certifi's cutoff to admit 2026.10.19 before the seven-day wait: its CA
+# bundle removes the eMudhra root that anchors the compromised intermediates.
+# Remove the cutoff once 2026.10.19 is seven days old, so later certifi
+# releases can be selected after the seven-day wait.
+certifi = "2026-10-20T02:24:17Z"
 
 [tool.uv.build-backend]
 source-include = [".python-version", "README.md", "uv.lock"]

@@ -8,6 +8,7 @@ exclude-newer-span = "P7D"
 
 [options.exclude-newer-package]
 astral-dev-toolchain-hyperfine = "2026-10-08T08:11:00Z"
+certifi = "2026-10-20T02:24:17Z"
 
 [manifest]
 build-constraints = [{ name = "uv-build", specifier = "==0.12.3", hashes = ["sha256:322d634f2fbf8c7965dde52106db8040b0cc23dbc07b6508d900f217843bd129", "sha256:39adb84a210edaffc4eab8f59a2fc66579d08ea4e75acd3f36548f33f4a3eefc", "sha256:3bdf349e221a93544c940157361d22e5b6d73bc9bd1b302364461d8afd46479a", "sha256:3f6cda73d200e755d8aec6492af22c279ce69e460241a5f7507eba4aeb08abb7", "sha256:48117d0f8d7be3e88f2e8e63e608873bc2aa950f5d9c3a845650e41632dfd0e9", "sha256:52d1bb3e76217f4ece4fb2b89a7536d481af087567d83428cc72d570b540f3df", "sha256:6d0d59550fc9498087c071e9c842c87cd5288e0f8bda4888a633d6be79c3178c", "sha256:7b9bd7b737e8e79370684c959e9500eb32fee44efc396d51ab11ca598d1596a2", "sha256:7f13598c88b44a9b46c5d74370a0c12954f2e328d9193e80358a38edf95c7608", "sha256:855dbaf6912805e70ae1c788a282dc023d69f6acaec0955d14e57759017e11de", "sha256:9bc47530837f8a544c7a9e11e6636a950bc68aac1837462052dc180f45318f96", "sha256:aa2c683d59b2c593b3b3f20e9bdc949131f3e6dd11250f214093a4b800e2472d", "sha256:ad894d87c4e048973ba975aa85f9c8b30fe1065b8c10ec2adfd8395333a6df4f", "sha256:b294990201d431fb0e7cfada5a00e7e5d4c520c32c86a437a11825f73960c441", "sha256:b6f51ed4411a35f008c9ef6e28016ac8f167f5c14fb2d0e453a9a97246b14206", "sha256:b92f3c999dceaa1ba544587be5e85708bbc7a584f4e22dbb770409699eeffe80", "sha256:c821185380be7573bed6e653f995c6211258bd5351cbccf4072cef3ebfcf1a5c", "sha256:cf304c80cf6200aad0956bbc2cdb1e23dd49bfeb74e036a263050de2b0e54f91", "sha256:d1d47f328fb52f62cbc4915c82c96850d246d9029e6f461bfd01f31f43a13451"] }]
@@ -208,11 +209,11 @@ filecache = [
 
 [[package]]
 name = "certifi"
-version = "2026.7.22"
+version = "2026.10.19"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/a3/c2/24167ea9858356b47a87a50d39908bfdb72ceeefe0041586e704e5376b3a/certifi-2026.7.22.tar.gz", hash = "sha256:741e2c3b351ddf169a738da9f2c048608ff7f2c5cc02f1ebc6b118bb090d5d55", size = 138112, upload-time = "2026-07-22T03:35:12.644Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/a6/bd/1436c50cc46699de0230fbaacc1d1de7bfec413176099949e9d5112e88f2/certifi-2026.10.19.tar.gz", hash = "sha256:035c1e85572b141bf1c3a3eff0e33a8eb74917522f2559075ff8d2fea780a1ae", size = 137598, upload-time = "2026-10-20T02:24:16.604Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/0b/a7/71ac2cff56fec219ed242bb11b8efb69fcc4bec75db06fb7bfe35de520e6/certifi-2026.7.22-py3-none-any.whl", hash = "sha256:62f22742b58a1a33014a2b6b706588a8d7e2a88ae7bd1a6ebe8c992928483775", size = 136983, upload-time = "2026-07-22T03:35:11.276Z" },
+    { url = "https://files.pythonhosted.org/packages/c4/51/29046e48f693c54e5b7412216d447a1d8362c9653148d98c02cdf65fa733/certifi-2026.10.19-py3-none-any.whl", hash = "sha256:42d35340cc5b9ba78e818ddbff0c5b1c2b779de448a340fd1b989f5fa8670e1b", size = 136464, upload-time = "2026-10-20T02:24:15.072Z" },
 ]
 
 [[package]]
