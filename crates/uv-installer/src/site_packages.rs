@@ -537,7 +537,7 @@ impl SitePackages {
                         | RequirementSatisfaction::CacheInvalid => {
                             return Ok(SatisfiesResult::Unsatisfied(requirement));
                         }
-                        RequirementSatisfaction::Satisfied => {}
+                        RequirementSatisfaction::Satisfied(_) => {}
                     }
 
                     // Validate that the installed version satisfies the constraints.
@@ -557,7 +557,7 @@ impl SitePackages {
                                 | RequirementSatisfaction::CacheInvalid => {
                                     return Ok(SatisfiesResult::Unsatisfied((*constraint).clone()));
                                 }
-                                RequirementSatisfaction::Satisfied => {}
+                                RequirementSatisfaction::Satisfied(_) => {}
                             }
                         }
                     }
