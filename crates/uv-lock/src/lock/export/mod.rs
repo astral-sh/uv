@@ -463,6 +463,7 @@ fn conflict_marker_reachability<'lock>(
         edges: Vec::with_capacity(graph.edge_count()),
         reachability: vec![None; graph.node_count()],
         contexts: vec![FxHashMap::default(); graph.node_count()],
+        live_facts: vec![Vec::new(); graph.node_count()],
         dependents: vec![Vec::new(); graph.node_count()],
         seeds: vec![Vec::new(); graph.node_count()],
         outgoing: vec![Vec::new(); graph.node_count()],
@@ -556,6 +557,7 @@ fn conflict_marker_reachability<'lock>(
         solver.add_reachability(root.index(), MarkerTree::TRUE);
     }
     solver.resolve_marker_bindings();
+    solver.retain_live_conflicts(facts.len());
     solver.solve();
     graph
         .node_indices()
@@ -602,6 +604,7 @@ struct ExportReachability<'graph, 'lock> {
     // encoded fact that takes precedence over a scoped extra with the same spelling.
     reachability: Vec<Option<MarkerTree>>,
     contexts: Vec<FxHashMap<usize, MarkerTree>>,
+    live_facts: Vec<Vec<usize>>,
     dependents: Vec<Vec<EdgeIndex>>,
     seeds: Vec<Vec<(usize, MarkerTree)>>,
     outgoing: Vec<Vec<EdgeIndex>>,
@@ -677,6 +680,43 @@ impl ExportReachability<'_, '_> {
         }
     }
 
+    /// Retain conflict facts only where they can reach a marker that reads them.
+    fn retain_live_conflicts(&mut self, fact_count: usize) {
+        let mut readers = vec![Vec::new(); fact_count];
+        for edge in self.graph.edge_references() {
+            for &fact in &self.edges[edge.id().index()].inputs {
+                readers[fact].push(edge.source());
+            }
+        }
+
+        // Reuse one visited array across facts. Visiting facts in order also leaves each node's
+        // live fact IDs sorted for membership checks during propagation.
+        let mut seen = vec![usize::MAX; self.graph.node_count()];
+        for (fact, mut pending) in readers.into_iter().enumerate() {
+            while let Some(index) = pending.pop() {
+                if seen[index.index()] == fact {
+                    continue;
+                }
+                seen[index.index()] = fact;
+                self.live_facts[index.index()].push(fact);
+                for edge in self.graph.edges_directed(index, Direction::Incoming) {
+                    // An edge that activates this fact replaces the inherited value, so its
+                    // parent's context cannot affect the value read downstream.
+                    if self.edges[edge.id().index()]
+                        .activated
+                        .binary_search(&fact)
+                        .is_err()
+                    {
+                        pending.push(edge.source());
+                    }
+                }
+            }
+        }
+        for (context, live) in self.contexts.iter_mut().zip(&self.live_facts) {
+            context.retain(|fact, _| live.binary_search(fact).is_ok());
+        }
+    }
+
     /// Add a package-local extra node, initially unreachable.
     fn add_node(&mut self) -> usize {
         let index = self.reachability.len();
@@ -704,6 +744,9 @@ impl ExportReachability<'_, '_> {
 
     /// Merge a path's conditions into an explicitly referenced conflict fact.
     fn add_conflict(&mut self, index: NodeIndex, fact: usize, marker: MarkerTree) {
+        if self.live_facts[index.index()].binary_search(&fact).is_err() {
+            return;
+        }
         let changed = match self.contexts[index.index()].entry(fact) {
             Entry::Occupied(mut existing) => {
                 let combined = existing.get().or(marker);

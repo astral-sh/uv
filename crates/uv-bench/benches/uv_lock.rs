@@ -15,14 +15,16 @@ use uv_normalize::{DefaultExtras, PackageName};
 
 /// Export independent extras whose optional dependencies share a dependency cycle.
 ///
-/// Explicit marker variants consume a small subset of those extras after traversing the cycle.
+/// Explicit markers consume extras either locally or after traversing the cycle.
 fn export_shared_transitive_extras(criterion: &mut Criterion<WallTime>) {
     let extras = ExtrasSpecification::default().with_defaults(DefaultExtras::default());
     let groups = DependencyGroupsWithDefaults::none();
     let install_options = InstallOptions::default();
     let root = PackageName::from_str("root").expect("Valid package name");
-    for marker_variables in [0, 1, 32] {
-        let name = if marker_variables == 0 {
+    for (marker_variables, local_markers) in [(0, false), (0, true), (1, false), (32, false)] {
+        let name = if local_markers {
+            "export/local_extra_markers".to_owned()
+        } else if marker_variables == 0 {
             "export/shared_transitive_extras".to_owned()
         } else {
             format!("export/explicit_transitive_extras/{marker_variables}")
@@ -30,7 +32,7 @@ fn export_shared_transitive_extras(criterion: &mut Criterion<WallTime>) {
         let mut group = criterion.benchmark_group(name);
 
         for size in [100, 300] {
-            let lock = shared_transitive_extras_lock(size, marker_variables);
+            let lock = shared_transitive_extras_lock(size, marker_variables, local_markers);
             let target = ExportBenchmarkTarget {
                 lock: &lock,
                 root: &root,
@@ -88,7 +90,11 @@ fn feature_marker(index: usize) -> &'static str {
 }
 
 /// Generate a frozen lock whose independent extras all activate the same dependency cycle.
-fn shared_transitive_extras_lock(size: usize, marker_variables: usize) -> Lock {
+fn shared_transitive_extras_lock(
+    size: usize,
+    marker_variables: usize,
+    local_markers: bool,
+) -> Lock {
     // At least one unconditional extra makes the cycle reachable in every environment.
     assert!(marker_variables < size);
     let mut contents = String::from(
@@ -132,6 +138,11 @@ dependencies = [
     } else {
         String::new()
     };
+    let local_marker = if local_markers {
+        r#", marker = "extra == 'enabled'""#
+    } else {
+        ""
+    };
 
     for index in 0..size {
         writeln!(
@@ -143,7 +154,7 @@ version = "1.0.0"
 source = {{ registry = "https://example.com/simple" }}
 
 [package.optional-dependencies]
-enabled = [{{ name = "chain-0000" }}]
+enabled = [{{ name = "chain-0000"{local_marker} }}]
 
 [package.metadata]
 provides-extras = ["enabled"]
