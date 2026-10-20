@@ -5922,7 +5922,6 @@ version = "0.0.96"
 dependencies = [
  "astral-reqwest-middleware",
  "astral-reqwest-retry",
- "astral_async_zip",
  "fs-err",
  "futures",
  "jiff",
