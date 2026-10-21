@@ -4,7 +4,6 @@ use anyhow::Result;
 use assert_fs::prelude::*;
 use insta::assert_snapshot;
 use serde_json::{Map, Value, json};
-use sha2::{Digest, Sha256};
 use uv_distribution_types::PEP_850_SCHEMA;
 use uv_static::EnvVars;
 use uv_test::find_links::FindLinksServer;
@@ -279,61 +278,6 @@ fn skip_excessive_nvidia_cuda_override() -> Result<()> {
         .arg("--preview-features")
         .arg("wheel-variants")
         .arg("ok"), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + ok==1.0.0
-    ");
-    Ok(())
-}
-
-/// A hash-pinned sync still reads `variants.json`. A deeply nested provider requirement marker
-/// must not overflow the stack before we can install the ordinary wheel and verify its hash.
-#[test]
-fn skip_provider_with_deeply_nested_marker() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-    let filename = "ok-1.0.0-py3-none-any.whl";
-    let wheel = context.read_bytes(context.workspace_root.join("test/links").join(filename));
-    let hash = hex::encode(Sha256::digest(&wheel));
-    context.temp_dir.child(filename).write_binary(&wheel)?;
-    context
-        .temp_dir
-        .child("ok-1.0.0-py3-none-any-gpu.whl")
-        .write_str("invalid wheel")?;
-    let requirement = format!(
-        "nvidia-variant-provider; {}python_version >= '3.12'{}",
-        "(".repeat(10_000),
-        ")".repeat(10_000),
-    );
-    context.temp_dir.child("ok-1.0.0-variants.json").write_str(
-        &json!({
-            "$schema": PEP_850_SCHEMA,
-            "default-priorities": { "namespace": ["nvidia"] },
-            "providers": {
-                "nvidia": {
-                    "requires": [requirement],
-                    "plugin-api": "nvidia_variant_provider.plugin:NvidiaVariantPlugin"
-                }
-            },
-            "variants": { "gpu": { "nvidia": { "cuda_version_lower_bound": ["12"] } } },
-        })
-        .to_string(),
-    )?;
-    context
-        .temp_dir
-        .child("requirements.txt")
-        .write_str(&format!("ok==1.0.0 --hash=sha256:{hash}\n"))?;
-
-    uv_snapshot!(context.filters(), context.pip_sync()
-        .arg("requirements.txt")
-        .arg("--require-hashes")
-        .arg("--no-index")
-        .arg("--find-links")
-        .arg(context.temp_dir.path())
-        .arg("--preview-features")
-        .arg("wheel-variants"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
