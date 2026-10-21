@@ -1,7 +1,8 @@
 site_name: uv
 theme:
   name: material
-  logo: assets/logo-letter.svg
+  font: false
+  logo: assets/logo-brand.svg
   favicon: assets/favicon.ico
   features:
     - navigation.path
@@ -166,6 +167,7 @@ plugins:
           - reference/contributing.md
 extra_css:
   - stylesheets/extra.css
+  - stylesheets/brand.css
 extra_javascript:
   - js/extra.js
 extra:
