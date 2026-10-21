@@ -145,6 +145,21 @@ pub enum PylockTomlErrorKind {
     VariantWheelRead(PackageName, #[source] Box<uv_distribution::Error>),
     #[error("Package `{0}` uses unsupported variant metadata schema `{1}`")]
     UnsupportedVariantSchema(PackageName, String),
+    #[error(
+        "Cannot export variant-dependent package inclusion for `{0}` to pylock.toml; \
+         PEP 825 permits variant markers only in dependency specifiers"
+    )]
+    VariantPackageMarker(PackageName),
+    #[error(
+        "Cannot export variant-dependent environments to pylock.toml; \
+         PEP 825 permits variant markers only in dependency specifiers"
+    )]
+    VariantEnvironmentMarker,
+    #[error(
+        "Cannot export variant-dependent dependencies for `{0}` to pylock.toml; \
+         the resolved package set depends on the selected wheel"
+    )]
+    VariantDependencies(PackageName),
     #[error("Package `{0}` does not include a compatible wheel for the current platform")]
     MissingWheel(PackageName),
     #[error("`packages.wheel` entry for `{0}` must have a `path` or `url`")]
@@ -278,7 +293,11 @@ pub struct PylockToml {
     #[serde(deserialize_with = "deserialize_lock_version")]
     lock_version: Version,
     created_by: String,
-    #[serde(skip_serializing)]
+    #[serde(
+        skip_serializing,
+        default,
+        deserialize_with = "deserialize_environments"
+    )]
     environments: Option<Vec<MarkerTree>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub requires_python: Option<RequiresPython>,
@@ -305,6 +324,32 @@ where
     }
 
     Ok(version)
+}
+
+fn deserialize_environments<'de, D>(deserializer: D) -> Result<Option<Vec<MarkerTree>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let environments = Vec::<MarkerTree>::deserialize(deserializer)?;
+    if environments.iter().any(MarkerTree::has_variant_expression) {
+        return Err(serde::de::Error::custom(
+            "variant markers are not permitted in environments",
+        ));
+    }
+    Ok(Some(environments))
+}
+
+fn deserialize_package_marker<'de, D>(deserializer: D) -> Result<MarkerTree, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let marker = MarkerTree::deserialize(deserializer)?;
+    if marker.has_variant_expression() {
+        return Err(serde::de::Error::custom(
+            "variant markers are not permitted in packages.marker",
+        ));
+    }
+    Ok(marker)
 }
 
 /// Deserialize artifact [`Hashes`], warning about invalid empty tables.
@@ -351,7 +396,8 @@ pub struct PylockTomlPackage {
     #[serde(
         skip_serializing_if = "uv_pep508::marker::ser::is_empty",
         serialize_with = "uv_pep508::marker::ser::serialize",
-        default
+        default,
+        deserialize_with = "deserialize_package_marker"
     )]
     marker: MarkerTree,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -680,6 +726,23 @@ impl<'lock> PylockToml {
             if omit.contains(dist.name()) {
                 continue;
             }
+            if node.marker.pep508().has_variant_expression() {
+                return Err(PylockTomlErrorKind::VariantPackageMarker(
+                    dist.name().clone(),
+                ));
+            }
+            if tags.is_some()
+                && node.metadata().is_some_and(|metadata| {
+                    metadata
+                        .requires_dist
+                        .iter()
+                        .any(|requirement| requirement.marker.has_variant_expression())
+                })
+            {
+                return Err(PylockTomlErrorKind::VariantDependencies(
+                    dist.name().clone(),
+                ));
+            }
 
             // "The version MUST NOT be included when it cannot be guaranteed to be consistent with the code used (i.e. when a source tree is used)."
             let version = version
@@ -734,12 +797,22 @@ impl<'lock> PylockToml {
                     return Err(PylockTomlErrorKind::GitArchiveUnsupported(package.name));
                 }
                 Dist::Built(BuiltDist::Registry(dist)) => {
+                    let best_wheel = dist.best_wheel();
+                    if best_wheel.filename.variant().is_some()
+                        && node
+                            .variants_json
+                            .as_ref()
+                            .is_none_or(|source| source.index != best_wheel.index)
+                    {
+                        return Err(PylockTomlErrorKind::MissingVariantMetadata(package.name));
+                    }
                     package.wheels = Self::filter_and_convert_wheels(
                         resolution,
                         tags,
                         &requires_python,
                         node_index,
                         &dist.wheels,
+                        node.variants_json.as_ref(),
                         build_options.no_binary_package(dist.name()),
                     )?;
 
@@ -839,6 +912,7 @@ impl<'lock> PylockToml {
                         &requires_python,
                         node_index,
                         &dist.wheels,
+                        node.variants_json.as_ref(),
                         build_options.no_binary_package(&dist.name),
                     )?;
 
@@ -906,8 +980,7 @@ impl<'lock> PylockToml {
         })
     }
 
-    /// Filter wheels based on build options (--no-binary) and incompatible tags and return the
-    /// rest.
+    /// Filter wheels by build options, tag compatibility, and variant metadata source.
     ///
     /// Returns `Ok(None)` if no wheels are compatible.
     fn filter_and_convert_wheels(
@@ -916,23 +989,26 @@ impl<'lock> PylockToml {
         requires_python: &RequiresPython,
         node_index: NodeIndex,
         wheels: &[RegistryBuiltWheel],
+        variants_json_source: Option<&RegistryVariantsJson>,
         no_binary: bool,
     ) -> Result<Option<Vec<PylockTomlWheel>>, PylockTomlErrorKind> {
         if no_binary {
             return Ok(None);
         }
 
-        // Filter wheels based on tag compatibility and requires-python.
+        // Variant metadata describes only artifacts from its own index.
         let wheels: Vec<_> = wheels
             .iter()
             .filter(|wheel| {
-                !is_wheel_unreachable(
-                    &wheel.filename,
-                    resolution,
-                    requires_python,
-                    node_index,
-                    tags,
-                )
+                (wheel.filename.variant().is_none()
+                    || variants_json_source.is_some_and(|source| source.index == wheel.index))
+                    && !is_wheel_unreachable(
+                        &wheel.filename,
+                        resolution,
+                        requires_python,
+                        node_index,
+                        tags,
+                    )
             })
             .map(PylockTomlWheel::from_registry_wheel)
             .collect::<Result<Vec<_>, _>>()?;
@@ -992,6 +1068,11 @@ impl<'lock> PylockToml {
         let mut packages = ExportPackages::default();
         for node in nodes {
             let package = node.package;
+            if node.marker.has_variant_expression() {
+                return Err(PylockTomlErrorKind::VariantPackageMarker(
+                    package.id.name.clone(),
+                ));
+            }
 
             // Extract the `packages.wheels` field.
             //
@@ -1215,14 +1296,20 @@ impl<'lock> PylockToml {
             })?;
         }
 
+        let environments = if target.lock().supported_environments().is_empty() {
+            None
+        } else {
+            let environments = target.lock().simplified_supported_environments();
+            if environments.iter().any(MarkerTree::has_variant_expression) {
+                return Err(PylockTomlErrorKind::VariantEnvironmentMarker);
+            }
+            Some(environments)
+        };
+
         Ok(Self {
             lock_version,
             created_by,
-            environments: if target.lock().supported_environments().is_empty() {
-                None
-            } else {
-                Some(target.lock().simplified_supported_environments())
-            },
+            environments,
             requires_python: Some(requires_python),
             extras,
             dependency_groups,
