@@ -7,6 +7,7 @@ use sha2::{Digest, Sha256};
 use uv_distribution_types::PEP_825_SCHEMA;
 use uv_static::EnvVars;
 use uv_test::archive::generate_source_archive;
+use uv_test::packse::{PackseServer, WheelBuilder};
 use uv_test::uv_snapshot;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -834,12 +835,25 @@ fn universal_lock_excludes_variant_wheels() -> Result<()> {
             .join("test/links/ok-1.0.0-py3-none-any.whl"),
         links.child("ok-1.0.0-py3-none-any.whl"),
     )?;
+    let metadata = json!({
+        "$schema": PEP_825_SCHEMA,
+        "default-priorities": { "namespace": ["x86_64"] },
+        "variants": { "null": {} },
+    })
+    .to_string();
+    let context = context.with_filter((
+        hex::encode(Sha256::digest(metadata.as_bytes())),
+        "[SIDECAR_HASH]",
+    ));
+    let name = "ok".parse()?;
+    let version = "1.0.0".parse()?;
+    let (_, wheel) = WheelBuilder::new(&name, &version)
+        .files(&[("ok-1.0.0.dist-info/variant.json", &metadata)])
+        .build();
     links
-        .child("ok-1.0.0-9-py3-none-any-cpu.whl")
-        .write_str("invalid wheel")?;
-    links
-        .child("ok-2.0.0-py3-none-any-null.whl")
-        .write_str("invalid wheel")?;
+        .child("ok-1.0.0-py3-none-any-null.whl")
+        .write_binary(&wheel)?;
+    links.child("ok-1.0.0-variants.json").write_str(&metadata)?;
     context
         .temp_dir
         .child("pyproject.toml")
@@ -890,6 +904,7 @@ fn universal_lock_excludes_variant_wheels() -> Result<()> {
         name = "ok"
         version = "1.0.0"
         source = { registry = "[TEMP_DIR]/links" }
+        variants-json = { path = "[TEMP_DIR]/links/ok-1.0.0-variants.json", hash = "sha256:[SIDECAR_HASH]" }
         wheels = [
             { path = "[TEMP_DIR]/links/ok-1.0.0-py3-none-any.whl" },
         ]
@@ -899,7 +914,7 @@ fn universal_lock_excludes_variant_wheels() -> Result<()> {
     // A lockfile containing a variant wheel must not make it installable.
     let lock = context.read("uv.lock").replace(
         "ok-1.0.0-py3-none-any.whl",
-        "ok-1.0.0-9-py3-none-any-cpu.whl",
+        "ok-1.0.0-py3-none-any-null.whl",
     );
     context.temp_dir.child("uv.lock").write_str(&lock)?;
     uv_snapshot!(context.filters(), context.sync()
