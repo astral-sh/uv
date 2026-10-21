@@ -406,6 +406,14 @@ impl Display for ConflictingDistributionError {
     }
 }
 
+/// A package's inclusion depends on a wheel variant, which a requirements file cannot represent.
+#[derive(Debug, thiserror::Error)]
+#[error(
+    "Cannot write package `{0}` to a requirements file because its inclusion depends on the \
+     selected wheel variant"
+)]
+pub struct RequirementsTxtVariantMarkerError(pub PackageName);
+
 /// Convert a [`ResolverOutput`] into a [`uv_distribution_types::Resolution`].
 ///
 /// This involves converting [`ResolutionGraphNode`]s into [`Node`]s, which in turn involves
