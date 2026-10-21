@@ -1870,6 +1870,10 @@ pub struct PathArchivePointer {
 }
 
 impl PathArchivePointer {
+    pub(crate) fn new(timestamp: Timestamp, archive: Archive) -> Self {
+        Self { timestamp, archive }
+    }
+
     /// Read an [`PathArchivePointer`] from the cache.
     pub fn read_from(path: impl AsRef<Path>) -> Result<Option<Self>, Error> {
         match fs_err::read(path) {
