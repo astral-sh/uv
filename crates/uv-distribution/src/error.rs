@@ -44,6 +44,8 @@ pub enum Error {
         label: VariantLabel,
         properties: UnsupportedVariantProperties,
     },
+    #[error("Wheel variant provider dependencies must use non-variant wheels: `{0}`")]
+    VariantProviderDependency(String),
     #[error("Building source distributions is disabled")]
     NoBuild,
     #[error("Building source distributions for `{0}` is disabled")]
@@ -304,6 +306,7 @@ impl Error {
         match self {
             Self::WheelVariantsDisabled(_)
             | Self::IncompatibleWheelVariant { .. }
+            | Self::VariantProviderDependency(_)
             | Self::NoBuild
             | Self::NoBuildPackage(_)
             | Self::InvalidUrl(_)
