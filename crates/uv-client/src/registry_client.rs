@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::fmt::{self, Debug, Formatter};
 use std::io::BufReader;
@@ -11,9 +12,11 @@ use futures::{FutureExt, StreamExt, TryStreamExt};
 use http::{HeaderMap, StatusCode};
 use itertools::Either;
 use reqwest::{Proxy, Response};
+use rkyv::util::AlignedVec;
 use rustc_hash::FxHashMap;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+use tokio::io::AsyncReadExt;
 use tokio::sync::{Mutex, Semaphore};
 use tracing::{Instrument, Span, debug, info_span, instrument, trace, warn};
 
@@ -42,7 +45,7 @@ use uv_small_str::SmallString;
 use uv_torch::TorchStrategy;
 
 use crate::base_client::{BaseClientBuilder, ClientBuildError, ExtraMiddleware, RedirectPolicy};
-use crate::cached_client::CacheControl;
+use crate::cached_client::{CacheControl, Cacheable};
 use crate::flat_index::FlatIndexEntry;
 use crate::html::SimpleDetailHTML;
 use crate::remote_metadata::wheel_metadata_from_remote_zip;
@@ -69,11 +72,41 @@ impl CachedVariantWheelMetadata {
     }
 }
 
+/// Maximum decoded size of index-level variant metadata.
+const MAX_VARIANTS_JSON_SIZE: usize = 8 * 1024 * 1024;
+
 /// Index-level variant metadata and the SHA-256 digest of its exact bytes.
 #[derive(Debug)]
 pub struct FetchedVariantsJson {
     pub contents: Vec<u8>,
     pub hash: HashDigest,
+}
+
+/// A raw cache payload whose size is bounded before allocating the cache entry.
+struct VariantsJsonBytes(Vec<u8>);
+
+impl Cacheable for VariantsJsonBytes {
+    // Leave room for the HTTP cache policy and trailer.
+    const MAX_CACHE_ENTRY_SIZE: usize = MAX_VARIANTS_JSON_SIZE + 64 * 1024;
+
+    type Target = Vec<u8>;
+
+    fn from_aligned_bytes(bytes: AlignedVec) -> Result<Self::Target, Error> {
+        if bytes.len() > MAX_VARIANTS_JSON_SIZE {
+            return Err(
+                ErrorKind::ArchiveRead("variant metadata cache entry is too large".into()).into(),
+            );
+        }
+        Ok(bytes.to_vec())
+    }
+
+    fn to_bytes(&self) -> Result<Cow<'_, [u8]>, Error> {
+        Ok(Cow::Borrowed(&self.0))
+    }
+
+    fn into_target(self) -> Self::Target {
+        self.0
+    }
 }
 
 /// A builder for an [`RegistryClient`].
@@ -974,13 +1007,21 @@ impl RegistryClient {
             let path = url
                 .to_file_path()
                 .map_err(|()| ErrorKind::NonFileUrl(url.clone()))?;
-            let bytes = fs_err::tokio::read(path).await.map_err(ErrorKind::Io)?;
+            let mut bytes = Vec::new();
+            fs_err::tokio::File::open(path)
+                .await
+                .map_err(ErrorKind::Io)?
+                .take((MAX_VARIANTS_JSON_SIZE + 1) as u64)
+                .read_to_end(&mut bytes)
+                .await
+                .map_err(ErrorKind::Io)?;
+            check_variants_json_size(&url, bytes.len())?;
             verify_metadata_hashes(&url, &bytes, &file.hashes)?;
             return Ok(fetched_variants_json(bytes));
         }
 
         let cache_key = format!(
-            "variants-json-{}",
+            "variants-json-v2-{}",
             cache_digest(&(
                 url.as_str(),
                 file.hashes
@@ -992,7 +1033,7 @@ impl RegistryClient {
         let cache_entry = self.cache.entry(
             CacheBucket::Wheels,
             WheelCache::Index(index).wheel_dir(package_name.as_ref()),
-            format!("{cache_key}.msgpack"),
+            format!("{cache_key}.http"),
         );
         // TODO(konsti): Revisit cache freshness once variant metadata mutability is specified.
         let cache_control = match self.connectivity {
@@ -1016,12 +1057,16 @@ impl RegistryClient {
             lock_entry.lock().await.map_err(ErrorKind::CacheLock)?
         };
 
-        let response_callback = async |response: Response, _: &mut RetryState| {
-            let bytes = response.bytes().await.map_err(|err| {
+        let response_callback = async |mut response: Response, _: &mut RetryState| {
+            let mut bytes = Vec::new();
+            while let Some(chunk) = response.chunk().await.map_err(|err| {
                 ErrorKind::from_reqwest(url.clone(), err, self.client.certificate_source())
-            })?;
+            })? {
+                check_variants_json_size(&url, bytes.len().saturating_add(chunk.len()))?;
+                bytes.extend_from_slice(&chunk);
+            }
             verify_metadata_hashes(&url, &bytes, &file.hashes)?;
-            Ok::<Vec<u8>, Error>(bytes.to_vec())
+            Ok::<VariantsJsonBytes, Error>(VariantsJsonBytes(bytes))
         };
         let request = self
             .uncached_client(&url)
@@ -1032,8 +1077,9 @@ impl RegistryClient {
             })?;
         let bytes = self
             .cached_client()
-            .get_serde_with_retry(request, &cache_entry, cache_control, response_callback)
+            .get_cacheable_with_retry(request, &cache_entry, cache_control, response_callback)
             .await?;
+        verify_metadata_hashes(&url, &bytes, &file.hashes)?;
         Ok(fetched_variants_json(bytes))
     }
 
@@ -1576,6 +1622,17 @@ fn verify_metadata_hashes(url: &SafeUrl, bytes: &[u8], hashes: &HashDigests) -> 
                 actual,
             }));
         }
+    }
+    Ok(())
+}
+
+fn check_variants_json_size(url: &SafeUrl, size: usize) -> Result<(), Error> {
+    if size > MAX_VARIANTS_JSON_SIZE {
+        return Err(ErrorKind::VariantsJsonTooLarge {
+            url: url.clone(),
+            limit: MAX_VARIANTS_JSON_SIZE,
+        }
+        .into());
     }
     Ok(())
 }

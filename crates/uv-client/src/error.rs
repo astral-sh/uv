@@ -173,6 +173,7 @@ impl Error {
             | ErrorKind::LocalPackageNotFound(_)
             | ErrorKind::LocalIndexNotFound(_)
             | ErrorKind::MetadataHashMismatch { .. }
+            | ErrorKind::VariantsJsonTooLarge { .. }
             | ErrorKind::MetadataParseError(..)
             | ErrorKind::BadJson { .. }
             | ErrorKind::BadHtml { .. }
@@ -488,6 +489,10 @@ pub enum ErrorKind {
         expected: HashDigest,
         actual: HashDigest,
     },
+
+    /// The variant metadata exceeds the decoded size limit.
+    #[error("Variant metadata at `{url}` exceeds the maximum size of {limit} bytes")]
+    VariantsJsonTooLarge { url: SafeUrl, limit: usize },
 
     /// The metadata file could not be parsed.
     #[error("Couldn't parse metadata of `{0}` from `{1}`")]
