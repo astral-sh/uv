@@ -787,7 +787,7 @@ fn sdist_metadata_ignores_variant_wheels() -> Result<()> {
 }
 
 #[test]
-fn universal_lock_excludes_variant_wheels() -> Result<()> {
+fn universal_lock_preserves_variant_wheels() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let links = context.temp_dir.child("links");
     links.create_dir_all()?;
@@ -869,6 +869,7 @@ fn universal_lock_excludes_variant_wheels() -> Result<()> {
         variants-json = { path = "[TEMP_DIR]/links/ok-1.0.0-variants.json", hash = "sha256:[SIDECAR_HASH]" }
         wheels = [
             { path = "[TEMP_DIR]/links/ok-1.0.0-py3-none-any.whl" },
+            { path = "[TEMP_DIR]/links/ok-1.0.0-py3-none-any-null.whl" },
         ]
         "#);
     });

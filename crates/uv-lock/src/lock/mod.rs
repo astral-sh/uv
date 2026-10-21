@@ -2545,13 +2545,12 @@ impl Lock {
             }
             let wheels = &mut package.wheels;
             wheels.retain(|wheel| {
-                wheel.filename.variant().is_none()
-                    && !is_wheel_unreachable_for_marker(
-                        &wheel.filename,
-                        &requires_python,
-                        &wheel_marker,
-                        None,
-                    )
+                !is_wheel_unreachable_for_marker(
+                    &wheel.filename,
+                    &requires_python,
+                    &wheel_marker,
+                    None,
+                )
             });
 
             package.add_dependencies(
