@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use tracing::debug;
 
 use uv_distribution_filename::VariantLabel;
+use uv_pep508::MarkerVariant;
 pub use uv_pep508::{VariantFeature, VariantNamespace, VariantValue};
 
 // TODO(konsti): Standardize on a single schema URL once the variant metadata format is finalized.
@@ -47,6 +48,18 @@ pub type VariantProperties =
 pub struct SelectedVariant {
     pub label: VariantLabel,
     pub properties: VariantProperties,
+}
+
+impl SelectedVariant {
+    /// Return the selected wheel as seen by dependency markers.
+    pub fn marker_environment(selected: Option<&Self>) -> MarkerVariant<'_> {
+        match selected {
+            Some(selected) => MarkerVariant::Selected {
+                label: selected.label.as_str(),
+            },
+            None => MarkerVariant::Ordinary,
+        }
+    }
 }
 
 /// Required variant properties unsupported by the target system.
