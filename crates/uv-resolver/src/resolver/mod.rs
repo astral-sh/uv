@@ -25,9 +25,9 @@ use uv_configuration::{Constraints, DependencyModifiers, IndexStrategy};
 use uv_distribution::{ArchiveMetadata, DistributionDatabase, InstalledWheelVariant};
 use uv_distribution_types::{
     BuiltDist, DerivationChain, Dist, DistErrorKind, Identifier, IndexCapabilities, IndexLocations,
-    IndexMetadata, IndexUrl, InstalledDist, Name, RemoteSource, Requirement, RequiresPython,
-    ResolutionRecorder, ResolvedDist, SelectedVariant, SourceDist, SupportedVariantProperties,
-    VariantsJsonContent, VersionOrUrlRef,
+    IndexMetadata, IndexUrl, InstalledDist, Name, RegistryVariantsJson, RemoteSource, Requirement,
+    RequiresPython, ResolutionRecorder, ResolvedDist, SelectedVariant, SourceDist,
+    SupportedVariantProperties, VariantsJsonContent, VersionOrUrlRef,
 };
 use uv_git::GitResolver;
 use uv_normalize::PackageName;
@@ -54,7 +54,7 @@ use crate::pins::FilePins;
 use crate::preferences::{PreferenceSource, Preferences};
 use crate::prioritized_distribution::{
     CompatibleDist, IncompatibleDist, IncompatibleSource, IncompatibleWheel, PrioritizedDist,
-    PythonRequirementKind, RegistryVariantsJson, implied_markers,
+    PythonRequirementKind, implied_markers,
 };
 use crate::pubgrub::{
     DependencySource, PubGrubDependency, PubGrubPackage, PubGrubPackageInner, PubGrubPriorities,
@@ -2398,13 +2398,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     .await
                     .map_err(ResolveError::Client)?;
                 let response = match response {
-                    VariantsJsonResponse::Found(contents) => {
-                        VariantsJsonContent::from_slice(&contents)
+                    VariantsJsonResponse::Found(fetched) => {
+                        VariantsJsonContent::from_slice(&fetched.contents)
                             .map(|content| {
-                                Arc::new(ParsedVariantsJson {
-                                    content,
-                                    artifact: variants_json.clone(),
-                                })
+                                let mut artifact = variants_json.clone();
+                                artifact.file.hashes = fetched.hash.into();
+                                Arc::new(ParsedVariantsJson { content, artifact })
                             })
                             .map_err(|source| {
                                 MetadataUnavailable::InvalidVariantMetadata(Arc::new(

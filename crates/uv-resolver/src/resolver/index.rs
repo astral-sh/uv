@@ -3,13 +3,13 @@ use std::sync::Arc;
 
 use rustc_hash::FxHasher;
 use uv_distribution_types::{
-    DistributionId, IndexUrl, SelectedVariant, SupportedVariantProperties, VariantsJsonContent,
+    DistributionId, IndexUrl, RegistryVariantsJson, SelectedVariant, SupportedVariantProperties,
+    VariantsJsonContent,
 };
 use uv_normalize::PackageName;
 use uv_once_map::{RegisteredEntry, RegisteredOnceMap};
 use uv_resolver_types::DistributionMetadataIndex;
 
-use crate::prioritized_distribution::RegistryVariantsJson;
 use crate::resolver::provider::{MetadataUnavailable, VersionsResponse};
 
 /// In-memory index of package metadata.
