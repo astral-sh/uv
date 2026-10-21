@@ -9,7 +9,7 @@ use tracing::debug;
 
 use uv_distribution_filename::VariantLabel;
 use uv_normalize::{InvalidNameError, PackageName};
-pub use uv_normalize::{VariantFeature, VariantNamespace, VariantValue};
+pub use uv_normalize::{VariantFeature, VariantNamespace, VariantProperties, VariantValue};
 use uv_pep440::{Version, VersionParseError, VersionSpecifier};
 use uv_pep508::MarkerVariant;
 use version_ranges::Ranges;
@@ -46,10 +46,6 @@ pub enum VariantsJsonParseError {
     },
 }
 
-/// Variant properties, grouped by namespace and feature.
-pub type VariantProperties =
-    BTreeMap<VariantNamespace, BTreeMap<VariantFeature, Vec<VariantValue>>>;
-
 /// The variant properties used to resolve a wheel's dependencies for an installation target.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SelectedVariant {
@@ -63,6 +59,7 @@ impl SelectedVariant {
         match selected {
             Some(selected) => MarkerVariant::Selected {
                 label: selected.label.as_str(),
+                properties: &selected.properties,
             },
             None => MarkerVariant::Ordinary,
         }
