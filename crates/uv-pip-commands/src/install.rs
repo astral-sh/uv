@@ -16,7 +16,7 @@ use uv_configuration::{
     Modifications, NoSources, Override, PipInstallFormat, Reinstall, TargetTriple, Upgrade,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
-use uv_distribution::LoweredExtraBuildDependencies;
+use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations, Name,
     NameRequirementSpecification, Origin, PackageConfigSettings, Requirement, Resolution,
@@ -551,7 +551,13 @@ pub async fn pip_install(
             &groups,
             &build_options,
             hash_checking,
-        )?
+            &DistributionDatabase::new(
+                &client,
+                &build_dispatch,
+                concurrency.downloads_semaphore.clone(),
+            ),
+        )
+        .await?
     } else {
         // When resolving, don't take any external preferences into account.
         let preferences = Vec::default();

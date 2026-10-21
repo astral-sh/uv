@@ -20,8 +20,9 @@ use uv_configuration::{
     BuildOptions, DependencyGroupsWithDefaults, EditableMode, ExtrasSpecificationWithDefaults,
     InstallOptions,
 };
+use uv_distribution::DistributionDatabase;
 use uv_distribution_filename::{
-    BuildTag, DistExtension, ExtensionError, SourceDistExtension, SourceDistFilename,
+    DistExtension, ExtensionError, SourceDistExtension, SourceDistFilename,
     SourceDistFilenameError, WheelFilename, WheelFilenameError,
 };
 use uv_distribution_types::{
@@ -29,7 +30,8 @@ use uv_distribution_types::{
     FileLocation, FirstParty, GitDirectorySourceDist, IndexUrl, Name, Node, PEP_825_SCHEMA,
     PEP_850_SCHEMA, PathBuiltDist, PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel,
     RegistrySourceDist, RegistryVariantsJson, RemoteSource, RequiresPython, Resolution,
-    ResolvedDist, SourceDist, ToUrlError, UrlString, VariantsJsonContent, VariantsJsonParseError,
+    ResolvedDist, SelectedVariant, SourceDist, SupportedVariantProperties, ToUrlError, UrlString,
+    VariantsJsonContent, VariantsJsonParseError,
 };
 use uv_fs::{PortablePathBuf, normalize_path, try_relative_to_if};
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
@@ -37,11 +39,13 @@ use uv_git_types::{GitLfs, GitOid, GitReference, GitUrl, GitUrlParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
 use uv_pep508::{MarkerEnvironment, MarkerTree, VerbatimUrl};
-use uv_platform_tags::{TagCompatibility, TagPriority, Tags};
+use uv_platform_tags::{TagCompatibility, Tags};
+use uv_preview::PreviewFeature;
 use uv_pypi_types::{HashDigests, Hashes, ParsedGitDirectoryUrl, VcsKind};
 use uv_redacted::SafeUrl;
 use uv_redacted::policy::{Raw, Stripped};
 use uv_small_str::SmallString;
+use uv_types::BuildContext;
 use uv_warnings::warn_user_once;
 
 use uv_resolver_types::ResolverOutput;
@@ -128,9 +132,11 @@ pub enum PylockTomlErrorKind {
     #[error("Package `{0}` is missing variant metadata for wheel `{1}`")]
     MissingVariantLabel(PackageName, WheelFilename),
     #[error(
-        "Package `{0}` contains a wheel variant, which pylock.toml installation does not support"
+        "This lockfile uses wheel variants; pass `--preview-features wheel-variants` to use it"
     )]
-    WheelVariantUnsupported(PackageName),
+    WheelVariantsPreview,
+    #[error("Failed to determine supported wheel variants for `{0}`")]
+    VariantProvider(PackageName, #[source] Box<uv_distribution::Error>),
     #[error("Failed to fetch variant metadata for `{0}`")]
     VariantMetadataFetch(PackageName, #[source] uv_client::Error),
     #[error("Invalid variant metadata for `{0}`")]
@@ -480,6 +486,14 @@ struct PylockTomlWheel {
     size: Option<u64>,
     #[serde(deserialize_with = "deserialize_hashes")]
     hashes: Hashes,
+}
+
+/// A wheel's declared identity and, for an eligible variant, its validated source.
+struct PylockWheelCandidate<'a> {
+    wheel: &'a PylockTomlWheel,
+    filename: Cow<'a, WheelFilename>,
+    compatibility: TagCompatibility,
+    registry: Option<Box<RegistryBuiltWheel>>,
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
@@ -1305,7 +1319,7 @@ impl<'lock> PylockToml {
     }
 
     /// Convert the [`PylockToml`] to a [`Resolution`].
-    pub fn to_resolution(
+    pub async fn to_resolution<Context: BuildContext>(
         self,
         install_path: &Path,
         markers: &MarkerEnvironment,
@@ -1313,6 +1327,8 @@ impl<'lock> PylockToml {
         groups: &[GroupName],
         tags: &Tags,
         build_options: &BuildOptions,
+        database: &DistributionDatabase<'_, Context>,
+        require_hashes: bool,
     ) -> Result<Resolution, PylockTomlError> {
         if let Some(environments) = &self.environments
             && !environments
@@ -1329,6 +1345,7 @@ impl<'lock> PylockToml {
         // Add the root node.
         let root = graph.add_node(Node::Root);
         let mut active_packages = HashSet::new();
+        let mut variant_contexts = Vec::new();
 
         for package in self.packages {
             // Omit packages that aren't relevant to the current environment.
@@ -1404,38 +1421,114 @@ impl<'lock> PylockToml {
 
             // Validate every active wheel before selecting the compatible candidate. Otherwise an
             // incompatible or malformed wheel can be silently ignored when an sdist is present.
+            let mut wheels = Vec::new();
             for wheel in package.wheels.iter().flatten() {
                 let filename = wheel.filename(&package.name)?;
                 validate_wheel_filename(&filename, &package.name, package.version.as_ref())?;
+                wheels.push(PylockWheelCandidate {
+                    wheel,
+                    compatibility: filename.tag_compatibility(tags),
+                    filename,
+                    registry: None,
+                });
             }
 
             let no_binary = build_options.no_binary_package(&package.name);
             let no_build = build_options.no_build_package(&package.name);
-            let is_wheel = package
+            let archive_wheel = package
                 .archive
                 .as_ref()
                 .map(|archive| archive.wheel_filename(&package.name))
                 .transpose()?
-                .flatten()
-                .is_some();
-            if !package.variant_wheel_filenames()?.is_empty() {
-                return Err(
-                    PylockTomlErrorKind::WheelVariantUnsupported(package.name.clone()).into(),
-                );
-            }
-
-            // Search for a matching wheel.
-            let dist = if let Some(best_wheel) =
-                package.find_best_wheel(tags).filter(|_| !no_binary)
+                .flatten();
+            let is_wheel = archive_wheel.is_some();
+            let mut filenames = wheels
+                .iter()
+                .map(|wheel| wheel.filename.as_ref())
+                .chain(archive_wheel.as_ref())
+                .filter(|filename| filename.variant().is_some())
+                .peekable();
+            if filenames.peek().is_some() && !uv_preview::is_enabled(PreviewFeature::WheelVariants)
             {
-                let hashes = HashDigests::from(best_wheel.hashes.clone());
-                let built_dist = Dist::Built(BuiltDist::Registry(RegistryBuiltDist {
-                    wheels: vec![best_wheel.to_registry_wheel(
+                return Err(PylockTomlErrorKind::WheelVariantsPreview.into());
+            }
+            let package_index = package.index.as_ref().map(SafeUrl::as_url);
+            let metadata = package.validate_variant_metadata(filenames)?;
+            let mut supported = SupportedVariantProperties::default();
+            let mut archive_dist = None;
+            if let Some(metadata) = metadata.filter(|_| !no_binary) {
+                // Validate every eligible variant's source before running the package's providers.
+                // Reuse that source if selected. Ordinary wheels need no I/O until we choose one.
+                let mut eligible = false;
+                for candidate in &mut wheels {
+                    if candidate.filename.variant().is_some()
+                        && candidate.compatibility.is_compatible()
+                    {
+                        candidate.registry = Some(Box::new(candidate.wheel.to_registry_wheel(
+                            install_path,
+                            candidate.filename.clone().into_owned(),
+                            package_index,
+                        )?));
+                        eligible = true;
+                    }
+                }
+                if let Some(archive) = &package.archive
+                    && archive_wheel.as_ref().is_some_and(|filename| {
+                        filename.variant().is_some()
+                            && filename.tag_compatibility(tags).is_compatible()
+                    })
+                {
+                    archive_dist = Some(archive.to_dist(
                         install_path,
                         &package.name,
                         package.version.as_ref(),
-                        package.index.as_ref().map(SafeUrl::as_url),
-                    )?],
+                    )?);
+                    eligible = true;
+                }
+                if eligible {
+                    supported = database
+                        .supported_variant_properties(metadata, require_hashes)
+                        .await
+                        .map_err(|err| {
+                            PylockTomlErrorKind::VariantProvider(
+                                package.name.clone(),
+                                Box::new(err),
+                            )
+                        })?;
+                }
+            }
+
+            // Prefer compatible variants, then the best tags and build. Keep the first wheel on ties.
+            let best_wheel = wheels
+                .iter_mut()
+                .rev()
+                .filter_map(|wheel| {
+                    let TagCompatibility::Compatible(tags) = wheel.compatibility else {
+                        return None;
+                    };
+                    let variant = match wheel.filename.variant() {
+                        Some(label) => Some(metadata?.score_variant(label, &supported)?),
+                        None => None,
+                    };
+                    let priority = (variant, tags, wheel.filename.build_tag().cloned());
+                    Some((priority, wheel))
+                })
+                .max_by(|(a, _), (b, _)| a.cmp(b));
+
+            let dist = if let Some((_, best)) = best_wheel.filter(|_| !no_binary) {
+                let wheel = if let Some(wheel) = best.registry.take() {
+                    *wheel
+                } else {
+                    best.wheel.to_registry_wheel(
+                        install_path,
+                        best.filename.clone().into_owned(),
+                        package_index,
+                    )?
+                };
+                let hashes = wheel.file.hashes.clone();
+                package.record_variant_context(&wheel.filename, &supported, &mut variant_contexts);
+                let built_dist = Dist::Built(BuiltDist::Registry(RegistryBuiltDist {
+                    wheels: vec![wheel],
                     best_wheel_index: 0,
                     sdist: None,
                 }));
@@ -1454,7 +1547,7 @@ impl<'lock> PylockToml {
                     install_path,
                     &package.name,
                     package.version.as_ref(),
-                    package.index.as_ref().map(SafeUrl::as_url),
+                    package_index,
                 )?));
                 let dist = ResolvedDist::Installable {
                     dist: Arc::new(sdist),
@@ -1493,13 +1586,32 @@ impl<'lock> PylockToml {
                     hashes,
                     install: true,
                 }
-            } else if let Some(dist) = package
-                .archive
-                .as_ref()
-                .filter(|_| if is_wheel { !no_binary } else { !no_build })
-            {
+            } else if let Some(dist) = package.archive.as_ref().filter(|_| {
+                if let Some(filename) = &archive_wheel {
+                    !no_binary
+                        && filename.variant().is_none_or(|label| {
+                            archive_dist.is_some()
+                                && metadata.is_some_and(|metadata| {
+                                    metadata.score_variant(label, &supported).is_some()
+                                })
+                        })
+                } else {
+                    !no_build
+                }
+            }) {
                 let hashes = HashDigests::from(dist.hashes.clone());
-                let dist = dist.to_dist(install_path, &package.name, package.version.as_ref())?;
+                let dist = if let Some(dist) = archive_dist {
+                    dist
+                } else {
+                    dist.to_dist(install_path, &package.name, package.version.as_ref())?
+                };
+                if let Dist::Built(wheel) = &dist {
+                    package.record_variant_context(
+                        wheel.wheel_filename(),
+                        &supported,
+                        &mut variant_contexts,
+                    );
+                }
                 let dist = ResolvedDist::Installable {
                     dist: Arc::new(dist),
                     version: package.version,
@@ -1525,13 +1637,13 @@ impl<'lock> PylockToml {
                         kind: Box::new(PylockTomlErrorKind::IncompatibleWheelOnly(
                             package.name.clone(),
                         )),
-                        hint: package.tag_hint(tags, markers),
+                        hint: package.tag_hint(&wheels, tags, markers),
                     }),
                     (false, false) => Err(PylockTomlError {
                         kind: Box::new(PylockTomlErrorKind::NeitherSourceDistNorWheel(
                             package.name.clone(),
                         )),
-                        hint: package.tag_hint(tags, markers),
+                        hint: package.tag_hint(&wheels, tags, markers),
                     }),
                 };
             };
@@ -1540,17 +1652,32 @@ impl<'lock> PylockToml {
             graph.add_edge(root, index, Edge::Prod);
         }
 
-        Ok(Resolution::new(graph))
+        Ok(Resolution::new(graph).with_variant_contexts(variant_contexts))
     }
 }
 
 impl PylockTomlPackage {
-    /// Ensure every variant wheel has complete metadata.
-    fn validate_variant_metadata(
+    fn record_variant_context(
         &self,
-        filenames: &[WheelFilename],
+        filename: &WheelFilename,
+        supported: &SupportedVariantProperties,
+        contexts: &mut Vec<(WheelFilename, SelectedVariant)>,
+    ) {
+        if let Some(label) = filename.variant()
+            && let Some(metadata) = &self.variants_json
+            && let Some(selected) = metadata.select_variant(label, supported)
+        {
+            contexts.push((filename.clone(), selected));
+        }
+    }
+
+    /// Ensure every variant wheel has complete metadata.
+    fn validate_variant_metadata<'a>(
+        &self,
+        filenames: impl IntoIterator<Item = &'a WheelFilename>,
     ) -> Result<Option<&VariantsJsonContent>, PylockTomlErrorKind> {
-        if filenames.is_empty() {
+        let mut filenames = filenames.into_iter().peekable();
+        if filenames.peek().is_none() {
             return Ok(None);
         }
         let metadata = self
@@ -1691,44 +1818,17 @@ impl PylockTomlPackage {
         Ok(table)
     }
 
-    /// Return the index of the best wheel for the given tags.
-    fn find_best_wheel(&self, tags: &Tags) -> Option<&PylockTomlWheel> {
-        type WheelPriority = (TagPriority, Option<BuildTag>);
-
-        let mut best: Option<(WheelPriority, &PylockTomlWheel)> = None;
-        for wheel in self.wheels.iter().flatten() {
-            let Ok(filename) = wheel.filename(&self.name) else {
-                continue;
-            };
-            let TagCompatibility::Compatible(tag_priority) = filename.compatibility(tags) else {
-                continue;
-            };
-            let build_tag = filename.build_tag().cloned();
-            let wheel_priority = (tag_priority, build_tag);
-            match &best {
-                None => {
-                    best = Some((wheel_priority, wheel));
-                }
-                Some((best_priority, _)) => {
-                    if wheel_priority > *best_priority {
-                        best = Some((wheel_priority, wheel));
-                    }
-                }
-            }
-        }
-
-        best.map(|(_, i)| i)
-    }
-
     /// Generate a [`WheelTagHint`] based on wheel-tag incompatibilities.
-    fn tag_hint(&self, tags: &Tags, markers: &MarkerEnvironment) -> Option<WheelTagHint> {
-        let filenames = self
-            .wheels
+    fn tag_hint(
+        &self,
+        wheels: &[PylockWheelCandidate<'_>],
+        tags: &Tags,
+        markers: &MarkerEnvironment,
+    ) -> Option<WheelTagHint> {
+        let filenames = wheels
             .iter()
-            .flatten()
-            .filter_map(|wheel| wheel.filename(&self.name).ok())
+            .map(|wheel| wheel.filename.as_ref())
             .collect::<Vec<_>>();
-        let filenames = filenames.iter().map(Cow::as_ref).collect::<Vec<_>>();
         WheelTagHint::from_wheels(&self.name, self.version.as_ref(), &filenames, tags, markers)
     }
 
@@ -1804,13 +1904,9 @@ impl PylockTomlWheel {
     fn to_registry_wheel(
         &self,
         install_path: &Path,
-        name: &PackageName,
-        version: Option<&Version>,
+        filename: WheelFilename,
         index: Option<&SafeUrl>,
     ) -> Result<RegistryBuiltWheel, PylockTomlErrorKind> {
-        let filename = self.filename(name)?.into_owned();
-        validate_wheel_filename(&filename, name, version)?;
-
         let file_url = if let Some(path) = self.path.as_ref() {
             let path = install_path.join(path);
             validate_path_size(&path, self.size)?;
@@ -1819,7 +1915,7 @@ impl PylockTomlWheel {
         } else if let Some(url) = self.url.as_ref().map(SafeUrl::as_url) {
             UrlString::from(url)
         } else {
-            return Err(PylockTomlErrorKind::WheelMissingPathUrl(name.clone()));
+            return Err(PylockTomlErrorKind::WheelMissingPathUrl(filename.name));
         };
 
         let index = if let Some(index) = index {
