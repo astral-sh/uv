@@ -6,16 +6,25 @@ use std::sync::Arc;
 
 use itertools::Itertools;
 use petgraph::Graph;
+use petgraph::graph::NodeIndex;
 use rustc_hash::{FxHashMap, FxHashSet};
 
+use uv_cache::Cache;
+use uv_client::RegistryClient;
 use uv_configuration::{
     BuildOptions, DependencyGroupsWithDefaults, ExtrasSpecification,
     ExtrasSpecificationWithDefaults, InstallOptions,
 };
-use uv_distribution_types::{Edge, FirstParty, Node, Resolution, ResolvedDist};
+use uv_distribution::{DistributionDatabase, read_locked_wheel_variant};
+use uv_distribution_types::{
+    BuiltDist, Dist, Edge, FirstParty, Node, RegistryBuiltDist, Resolution, ResolvedDist,
+    SelectedVariant, VariantsJsonContent,
+};
 use uv_normalize::{DefaultExtras, ExtraName, GroupName, PackageName};
+use uv_pep508::{MarkerVariant, MarkerVariantsEnvironment};
 use uv_platform_tags::Tags;
 use uv_pypi_types::{ConflictKind, ConflictSet, ResolverMarkerEnvironment};
+use uv_types::BuildContext;
 
 use uv_resolver_types::UniversalMarker;
 use uv_resolver_types::universal_marker::ActivatedConflictItems;
@@ -132,7 +141,7 @@ pub trait Installable<'lock> {
     ) -> Result<Resolution, LockError> {
         let (roots, group_root) = self.resolution_roots(groups)?;
 
-        InstallableExt::to_resolution_from_packages(
+        InstallableExt::traverse_packages(
             self,
             &roots,
             group_root,
@@ -144,7 +153,121 @@ pub trait Installable<'lock> {
             tags,
             build_options,
             install_options,
+            None,
         )
+        .map(|traversal| Resolution::new(traversal.graph))
+    }
+
+    /// Return whether this lock contains a wheel variant.
+    fn has_variants(&self) -> bool {
+        self.lock().packages().iter().any(package_has_variants)
+    }
+
+    /// Select each reachable package's artifact before following its dependencies.
+    #[expect(async_fn_in_trait)]
+    async fn to_resolution_with_variants<Context: BuildContext>(
+        &self,
+        marker_env: &ResolverMarkerEnvironment,
+        tags: &Tags,
+        extras: &ExtrasSpecificationWithDefaults,
+        groups: &DependencyGroupsWithDefaults,
+        build_options: &BuildOptions,
+        install_options: &InstallOptions,
+        client: &RegistryClient,
+        database: &DistributionDatabase<'_, Context>,
+        cache: &Cache,
+        require_provider_hashes: bool,
+    ) -> Result<Resolution, LockError> {
+        let (roots, group_root) = self.resolution_roots(groups)?;
+        let mut selections = VariantSelections::default();
+        loop {
+            let traversal = self.traverse_packages(
+                &roots,
+                group_root,
+                true,
+                DependencySelectionContext::None,
+                marker_env,
+                extras,
+                groups,
+                tags,
+                build_options,
+                install_options,
+                Some(&selections),
+            )?;
+            let mut pending = pending_variants(&traversal.inverse).peekable();
+            if pending.peek().is_none() {
+                let contexts = selections.selected.iter().filter_map(|(index, node)| {
+                    let Node::Dist {
+                        dist: ResolvedDist::Installable { dist, .. },
+                        ..
+                    } = node
+                    else {
+                        return None;
+                    };
+                    let Dist::Built(built) = dist.as_ref() else {
+                        return None;
+                    };
+                    let filename = built.wheel_filename();
+                    let variant = selections
+                        .variants
+                        .get(&variant_base(self.lock().package(*index)))?;
+                    Some((filename.clone(), variant.clone()))
+                });
+                return Ok(Resolution::new(traversal.graph).with_variant_contexts(contexts));
+            }
+            if !self.lock().conflicts().is_empty()
+                && let Some((index, _)) = pending.peek()
+            {
+                return Err(LockErrorKind::VariantConflictReachability {
+                    package_id: self.lock().package(*index).id.clone(),
+                }
+                .into());
+            }
+            for (index, install) in pending {
+                let package = self.lock().package(index);
+                let default_build_options = BuildOptions::default();
+                let build_options = if install {
+                    build_options
+                } else {
+                    &default_build_options
+                };
+                let to_node = |package: &Package| {
+                    node_from_package(
+                        self,
+                        package,
+                        TagPolicy::Variant(tags),
+                        marker_env,
+                        build_options,
+                        install,
+                    )
+                };
+                let node = to_node(package)?;
+                let selected = select_variant(
+                    package,
+                    node,
+                    self.install_path(),
+                    tags,
+                    client,
+                    database,
+                    cache,
+                    require_provider_hashes,
+                )
+                .await?;
+                let (node, variant) = if let Some(selected) = selected {
+                    selected
+                } else {
+                    let mut source_package = package.clone();
+                    source_package.wheels.clear();
+                    (to_node(&source_package)?, None)
+                };
+                if let Some(variant) = variant {
+                    selections.variants.insert(variant_base(package), variant);
+                } else {
+                    selections.variants.remove(&variant_base(package));
+                }
+                selections.selected.insert(index, node);
+            }
+        }
     }
 
     /// Create an installable [`Node`] from a [`Package`].
@@ -230,11 +353,13 @@ trait InstallableExt<'lock>: Installable<'lock> {
         Ok((roots, group_root))
     }
 
-    /// Convert concrete locked packages to a [`Resolution`].
+    /// Traverse the dependencies of concrete locked packages.
+    ///
+    /// The graph is complete when the inverse table has no reachable pending variants.
     ///
     /// `include_manifest` controls whether requirements attached directly to the lock target are
     /// included in addition to `roots`.
-    fn to_resolution_from_packages(
+    fn traverse_packages(
         &self,
         roots: &[&Package],
         group_root: Option<&Package>,
@@ -246,13 +371,69 @@ trait InstallableExt<'lock>: Installable<'lock> {
         tags: &Tags,
         build_options: &BuildOptions,
         install_options: &InstallOptions,
-    ) -> Result<Resolution, LockError> {
-        let make_node = |package: &Package, install: bool| {
-            if install {
-                self.package_to_node(package, tags, build_options, install_options, marker_env)
-            } else {
-                self.non_installable_node(package, tags, marker_env)
+        selections: Option<&VariantSelections>,
+    ) -> Result<Traversal, LockError> {
+        let variant_environment = |package: &Package| CurrentVariant {
+            current: selections
+                .and_then(|selections| selections.variants.get(&variant_base(package))),
+            all: selections.map(|selections| &selections.variants),
+        };
+        let insert_node = |graph: &mut Graph<Node, Edge>,
+                           state: &mut Option<TraversalNode>,
+                           package_index: PackageIndex,
+                           install: bool,
+                           update: bool|
+         -> Result<Option<NodeIndex>, LockError> {
+            if let Some(TraversalNode::Ready(index)) = *state
+                && !update
+            {
+                return Ok(Some(index));
             }
+            let package = self.lock().package(package_index);
+            let install = install
+                || matches!(
+                    *state,
+                    Some(TraversalNode::PendingVariant { install: true })
+                );
+            let node = if let Some(selections) = selections
+                && package_has_variants(package)
+            {
+                let install = install
+                    && install_options.include_package(
+                        package.as_install_target(),
+                        self.project_name(),
+                        self.lock().members(),
+                    );
+                if let Some(Node::Dist {
+                    dist,
+                    hashes,
+                    install: selected_install,
+                }) = selections.selected.get(&package_index)
+                    && (!install || *selected_install)
+                {
+                    Node::Dist {
+                        dist: dist.clone(),
+                        hashes: hashes.clone(),
+                        install,
+                    }
+                } else {
+                    *state = Some(TraversalNode::PendingVariant { install });
+                    return Ok(None);
+                }
+            } else if install {
+                self.package_to_node(package, tags, build_options, install_options, marker_env)?
+            } else {
+                self.non_installable_node(package, tags, marker_env)?
+            };
+            let index = match *state {
+                Some(TraversalNode::Ready(index)) => {
+                    graph[index] = node;
+                    index
+                }
+                Some(TraversalNode::PendingVariant { .. }) | None => graph.add_node(node),
+            };
+            *state = Some(TraversalNode::Ready(index));
+            Ok(Some(index))
         };
         let size_guess = self.lock().packages.len();
         let mut petgraph = Graph::with_capacity(size_guess, size_guess);
@@ -335,11 +516,20 @@ trait InstallableExt<'lock>: Installable<'lock> {
             // Add the workspace package to the graph.
             let package_index = self.lock().by_id[&dist.id];
             let install = root_kind == InstallableRootKind::Production && groups.prod();
-            let index = petgraph.add_node(make_node(dist, install)?);
-            inverse[package_index.0] = Some(index);
-
-            // Add an edge from the root.
-            petgraph.add_edge(root, index, Edge::Prod);
+            // Each root has its own graph node, even when roots name the same package.
+            if matches!(inverse[package_index.0], Some(TraversalNode::Ready(_))) {
+                inverse[package_index.0] = None;
+            }
+            let index = insert_node(
+                &mut petgraph,
+                &mut inverse[package_index.0],
+                package_index,
+                install,
+                false,
+            )?;
+            if let Some(index) = index {
+                petgraph.add_edge(root, index, Edge::Prod);
+            }
 
             // Push the package onto the queue.
             initialized_roots.push((dist, package_index, index, root_kind));
@@ -347,6 +537,10 @@ trait InstallableExt<'lock>: Installable<'lock> {
 
         // Add the workspace dependencies to the queue.
         for (dist, package_index, index, root_kind) in initialized_roots {
+            let Some(index) = index else {
+                queue.push_back((package_index, None));
+                continue;
+            };
             if root_kind == InstallableRootKind::Production && groups.prod() {
                 // Push its dependencies onto the queue.
                 queue.push_back((package_index, None));
@@ -382,8 +576,9 @@ trait InstallableExt<'lock>: Installable<'lock> {
                     dependencies_for_conflict_validation.push((dist, dep));
                 }
                 let additional_activated_extras = newly_activated_extras(dep, &activated_extras);
-                if !dep.complexified_marker.evaluate(
+                if !dep.complexified_marker.evaluate_with_variants(
                     marker_env,
+                    &variant_environment(dist),
                     activated_projects.iter().copied(),
                     activated_extras
                         .iter()
@@ -394,36 +589,19 @@ trait InstallableExt<'lock>: Installable<'lock> {
                     continue;
                 }
 
-                let dep_dist = self.lock().package(dep.index);
-
-                // Add the package to the graph.
-                let dep_index = match inverse[dep.index.0] {
-                    None => {
-                        let index = petgraph.add_node(make_node(dep_dist, true)?);
-                        inverse[dep.index.0] = Some(index);
-                        index
-                    }
-                    Some(index) => {
-                        // Critically, if the package is already in the graph, then it's a workspace
-                        // member. If it was omitted due to, e.g., `--only-dev`, but is itself
-                        // referenced as a development dependency, then we need to re-enable it.
-                        let node = &mut petgraph[index];
-                        if !groups.prod() || matches!(node, Node::Dist { install: false, .. }) {
-                            *node = make_node(dep_dist, true)?;
-                        }
-                        index
-                    }
-                };
-
-                petgraph.add_edge(
-                    index,
-                    dep_index,
-                    // This is OK because we are resolving to a resolution for
-                    // a specific marker environment and set of extras/groups.
-                    // So at this point, we know the extras/groups have been
-                    // satisfied, so we can safely drop the conflict marker.
-                    Edge::Dev(group.clone()),
-                );
+                // A workspace member omitted by the root may be required by this group.
+                let update = !groups.prod()
+                    || inverse[dep.index.0].is_some_and(|state| state.is_omitted(&petgraph));
+                if let Some(dep_index) = insert_node(
+                    &mut petgraph,
+                    &mut inverse[dep.index.0],
+                    dep.index,
+                    true,
+                    update,
+                )? {
+                    // The conflict marker has already been evaluated for this environment.
+                    petgraph.add_edge(index, dep_index, Edge::Dev(group.clone()));
+                }
 
                 // Persist any self-extras activated by this group dependency (e.g., a group
                 // that references `pkg[extra]`). Without this, conflict markers on transitive
@@ -476,17 +654,15 @@ trait InstallableExt<'lock>: Installable<'lock> {
 
                 // Add the package to the graph.
                 let package_index = self.lock().by_id[&dist.id];
-                let index = match inverse[package_index.0] {
-                    None => {
-                        let index = petgraph.add_node(make_node(dist, groups.prod())?);
-                        inverse[package_index.0] = Some(index);
-                        index
-                    }
-                    Some(index) => index,
-                };
-
-                // Add the edge.
-                petgraph.add_edge(root, index, Edge::Prod);
+                if let Some(index) = insert_node(
+                    &mut petgraph,
+                    &mut inverse[package_index.0],
+                    package_index,
+                    groups.prod(),
+                    false,
+                )? {
+                    petgraph.add_edge(root, index, Edge::Prod);
+                }
 
                 // Push its dependencies on the queue.
                 add_reachability(
@@ -541,26 +717,15 @@ trait InstallableExt<'lock>: Installable<'lock> {
 
                 // Add the package to the graph.
                 let package_index = self.lock().by_id[&dist.id];
-                let index = match inverse[package_index.0] {
-                    None => {
-                        let index = petgraph.add_node(make_node(dist, true)?);
-                        inverse[package_index.0] = Some(index);
-                        index
-                    }
-                    Some(index) => {
-                        // Critically, if the package is already in the graph, then it's a workspace
-                        // member. If it was omitted due to, e.g., `--only-dev`, but is itself
-                        // referenced as a development dependency, then we need to re-enable it.
-                        let node = &mut petgraph[index];
-                        if !groups.prod() {
-                            *node = make_node(dist, true)?;
-                        }
-                        index
-                    }
-                };
-
-                // Add the edge.
-                petgraph.add_edge(root, index, Edge::Dev(group.clone()));
+                if let Some(index) = insert_node(
+                    &mut petgraph,
+                    &mut inverse[package_index.0],
+                    package_index,
+                    true,
+                    !groups.prod(),
+                )? {
+                    petgraph.add_edge(root, index, Edge::Dev(group.clone()));
+                }
 
                 // Persist any self-extras activated by this group dependency. Mirrors the
                 // handling in the package-level `dependency_groups` loop above; without this,
@@ -715,48 +880,43 @@ trait InstallableExt<'lock>: Installable<'lock> {
 
         while let Some((package_index, extra)) = queue.pop_front() {
             let package = self.lock().package(package_index);
+            let Some(TraversalNode::Ready(index)) = inverse[package_index.0] else {
+                continue;
+            };
             for dep in package_dependencies(package, extra) {
                 if validate_conflicts && dep.complexified_marker.has_conflict_marker() {
                     dependencies_for_conflict_validation.push((package, dep));
                 }
-                if !dep
-                    .complexified_marker
-                    .evaluate_activated(marker_env, &activated)
-                {
+                if !dep.complexified_marker.evaluate_activated_with_variants(
+                    marker_env,
+                    &variant_environment(package),
+                    &activated,
+                ) {
                     continue;
                 }
 
-                let dep_dist = self.lock().package(dep.index);
-
-                // Add the dependency to the graph.
-                let dep_index = match inverse[dep.index.0] {
-                    None => {
-                        let index = petgraph.add_node(make_node(dep_dist, true)?);
-                        inverse[dep.index.0] = Some(index);
-                        index
-                    }
-                    Some(index) => {
-                        if matches!(&petgraph[index], Node::Dist { install: false, .. }) {
-                            petgraph[index] = make_node(dep_dist, true)?;
-                        }
-                        index
-                    }
-                };
-
-                // Add the edge.
-                let index = inverse[package_index.0].expect("queued package has a graph node");
-                petgraph.add_edge(
-                    index,
-                    dep_index,
-                    if let Some(extra) = extra {
-                        Edge::Optional(extra.clone())
-                    } else {
-                        Edge::Prod
-                    },
-                );
+                let update = inverse[dep.index.0].is_some_and(|state| state.is_omitted(&petgraph));
+                let dep_index = insert_node(
+                    &mut petgraph,
+                    &mut inverse[dep.index.0],
+                    dep.index,
+                    true,
+                    update,
+                )?;
+                if let Some(dep_index) = dep_index {
+                    petgraph.add_edge(
+                        index,
+                        dep_index,
+                        if let Some(extra) = extra {
+                            Edge::Optional(extra.clone())
+                        } else {
+                            Edge::Prod
+                        },
+                    );
+                }
 
                 // Push its dependencies on the queue.
-                if seen.insert((dep.index, None)) {
+                if seen.insert((dep.index, None)) || (update && dep_index.is_none()) {
                     queue.push_back((dep.index, None));
                 }
                 for extra in &dep.extra {
@@ -823,7 +983,10 @@ trait InstallableExt<'lock>: Installable<'lock> {
             }
         }
 
-        Ok(Resolution::new(petgraph))
+        Ok(Traversal {
+            graph: petgraph,
+            inverse,
+        })
     }
 }
 
@@ -921,18 +1084,21 @@ impl Lock {
             install_path,
             project_name,
         };
-        target.to_resolution_from_packages(
-            &[package],
-            None,
-            false,
-            dependency.context(),
-            marker_env,
-            &extras,
-            &groups,
-            tags,
-            build_options,
-            install_options,
-        )
+        target
+            .traverse_packages(
+                &[package],
+                None,
+                false,
+                dependency.context(),
+                marker_env,
+                &extras,
+                &groups,
+                tags,
+                build_options,
+                install_options,
+                None,
+            )
+            .map(|traversal| Resolution::new(traversal.graph))
     }
 
     /// Materialize the exact dependency subgraph reachable from concrete locked `roots`.
@@ -986,19 +1152,245 @@ impl Lock {
             install_path,
             project_name,
         };
-        target.to_resolution_from_packages(
-            &concrete_roots,
-            None,
-            false,
-            DependencySelectionContext::None,
-            marker_env,
-            extras,
-            groups,
-            tags,
-            build_options,
-            install_options,
-        )
+        target
+            .traverse_packages(
+                &concrete_roots,
+                None,
+                false,
+                DependencySelectionContext::None,
+                marker_env,
+                extras,
+                groups,
+                tags,
+                build_options,
+                install_options,
+                None,
+            )
+            .map(|traversal| Resolution::new(traversal.graph))
     }
+}
+
+fn package_has_variants(package: &Package) -> bool {
+    package.variants_json.is_some()
+        || package
+            .wheels
+            .iter()
+            .any(|wheel| wheel.filename.variant().is_some())
+}
+
+fn variant_base(package: &Package) -> String {
+    format!(
+        "{}=={}",
+        package.name(),
+        package
+            .version()
+            .map(ToString::to_string)
+            .unwrap_or_default()
+    )
+}
+
+#[derive(Default)]
+struct VariantSelections {
+    selected: FxHashMap<PackageIndex, Node>,
+    variants: FxHashMap<String, SelectedVariant>,
+}
+
+struct Traversal {
+    graph: Graph<Node, Edge>,
+    /// The graph node or pending variant selection for each package in the lock.
+    inverse: Vec<Option<TraversalNode>>,
+}
+
+/// Track whether a package is ready in this pass or waiting for artifact selection.
+#[derive(Clone, Copy)]
+enum TraversalNode {
+    Ready(NodeIndex),
+    PendingVariant { install: bool },
+}
+
+impl TraversalNode {
+    fn is_omitted(self, graph: &Graph<Node, Edge>) -> bool {
+        match self {
+            Self::Ready(index) => matches!(graph[index], Node::Dist { install: false, .. }),
+            Self::PendingVariant { install } => !install,
+        }
+    }
+}
+
+/// Inspect packages whose artifact selection is reachable from the selected roots.
+fn pending_variants(
+    inverse: &[Option<TraversalNode>],
+) -> impl Iterator<Item = (PackageIndex, bool)> {
+    inverse
+        .iter()
+        .copied()
+        .enumerate()
+        .filter_map(|(index, state)| match state {
+            Some(TraversalNode::PendingVariant { install }) => Some((PackageIndex(index), install)),
+            Some(TraversalNode::Ready(_)) | None => None,
+        })
+}
+
+struct CurrentVariant<'a> {
+    current: Option<&'a SelectedVariant>,
+    all: Option<&'a FxHashMap<String, SelectedVariant>>,
+}
+
+impl MarkerVariantsEnvironment for CurrentVariant<'_> {
+    fn get(&self, base: Option<&str>) -> MarkerVariant<'_> {
+        let selected = match base {
+            None => self.current,
+            Some(base) => self.all.and_then(|all| all.get(base)),
+        };
+        SelectedVariant::marker_environment(selected)
+    }
+}
+
+async fn select_variant<Context: BuildContext>(
+    package: &Package,
+    mut node: Node,
+    install_path: &Path,
+    tags: &Tags,
+    client: &RegistryClient,
+    database: &DistributionDatabase<'_, Context>,
+    cache: &Cache,
+    require_provider_hashes: bool,
+) -> Result<Option<(Node, Option<SelectedVariant>)>, LockError> {
+    let Node::Dist {
+        dist: ResolvedDist::Installable { dist, .. },
+        hashes,
+        ..
+    } = &mut node
+    else {
+        return Ok(Some((node, None)));
+    };
+    let Dist::Built(built) = Arc::make_mut(dist) else {
+        return Ok(Some((node, None)));
+    };
+    let variant = match built {
+        BuiltDist::Registry(registry) => {
+            let selected = select_registry_variant(
+                package,
+                registry,
+                install_path,
+                tags,
+                client,
+                database,
+                require_provider_hashes,
+            )
+            .await?;
+            let Some((index, variant)) = selected else {
+                let ordinary = registry.best_wheel().filename.variant().is_none();
+                return Ok(ordinary.then_some((node, None)));
+            };
+            registry.best_wheel_index = index;
+            *hashes = registry.best_wheel().file.hashes.clone();
+            Some(variant)
+        }
+        BuiltDist::DirectUrl(_) | BuiltDist::Path(_) | BuiltDist::GitPath(_) => {
+            let Some(label) = built.wheel_filename().variant() else {
+                return Ok(Some((node, None)));
+            };
+            let metadata = read_locked_wheel_variant(client, cache, built, hashes.as_slice())
+                .await
+                .map_err(|error| LockErrorKind::VariantSelection {
+                    package_id: package.id.clone(),
+                    error,
+                })?;
+            let Some(metadata) = metadata else {
+                return Ok(None);
+            };
+            if !metadata.contains_variant(label) {
+                return Ok(None);
+            }
+            let supported = database
+                .supported_variant_properties(&metadata, require_provider_hashes)
+                .await
+                .map_err(|error| LockErrorKind::VariantSelection {
+                    package_id: package.id.clone(),
+                    error,
+                })?;
+            let Some(variant) = metadata.select_variant(label, &supported) else {
+                return Ok(None);
+            };
+            Some(variant)
+        }
+    };
+    Ok(Some((node, variant)))
+}
+
+async fn select_registry_variant<Context: BuildContext>(
+    package: &Package,
+    registry: &RegistryBuiltDist,
+    install_path: &Path,
+    tags: &Tags,
+    client: &RegistryClient,
+    database: &DistributionDatabase<'_, Context>,
+    require_provider_hashes: bool,
+) -> Result<Option<(usize, SelectedVariant)>, LockError> {
+    let Some(first_candidate) = registry.wheels.iter().position(|wheel| {
+        wheel.filename.variant().is_some() && wheel.filename.tag_compatibility(tags).is_compatible()
+    }) else {
+        return Ok(None);
+    };
+    let Some(sidecar) = package.to_registry_variants_json(install_path)? else {
+        return Ok(None);
+    };
+    let mut candidates = registry
+        .wheels
+        .iter()
+        .enumerate()
+        .skip(first_candidate)
+        .filter(|(_, wheel)| wheel.index == sidecar.index)
+        .filter_map(|(index, wheel)| {
+            let filename = &wheel.filename;
+            let label = filename.variant()?;
+            let tags = filename.tag_compatibility(tags);
+            tags.is_compatible()
+                .then_some((index, label, tags, filename.build_tag()))
+        })
+        .peekable();
+    if candidates.peek().is_none() {
+        return Ok(None);
+    }
+    let fetched = client
+        .fetch_variants_json(package.name(), &sidecar.file, &sidecar.index)
+        .await
+        .map_err(|error| LockErrorKind::VariantsJsonFetch {
+            package_id: package.id.clone(),
+            error,
+        })?;
+    let metadata = VariantsJsonContent::from_slice(&fetched.contents).map_err(|error| {
+        LockErrorKind::VariantsJsonParse {
+            package_id: package.id.clone(),
+            error,
+        }
+    })?;
+    let mut candidates = candidates
+        .filter(|(_, label, ..)| metadata.contains_variant(label))
+        .peekable();
+    if candidates.peek().is_none() {
+        return Ok(None);
+    }
+    let supported = database
+        .supported_variant_properties(&metadata, require_provider_hashes)
+        .await
+        .map_err(|error| LockErrorKind::VariantSelection {
+            package_id: package.id.clone(),
+            error,
+        })?;
+    let selected = candidates
+        .filter_map(|(index, label, tags, build_tag)| {
+            let score = metadata.score_variant(label, &supported)?;
+            Some(((score, tags, build_tag), index, label))
+        })
+        .max_by(|(left, ..), (right, ..)| left.cmp(right))
+        .and_then(|(_, index, label)| {
+            metadata
+                .select_variant(label, &supported)
+                .map(|variant| (index, variant))
+        });
+    Ok(selected)
 }
 
 #[cfg(test)]
@@ -1522,7 +1914,7 @@ provides-extras = ["cli"]
             project_name: Some(project.name()),
         };
         let resolution = target
-            .to_resolution_from_packages(
+            .traverse_packages(
                 &[project],
                 Some(group_root),
                 false,
@@ -1533,7 +1925,9 @@ provides-extras = ["cli"]
                 &TAGS,
                 &BuildOptions::default(),
                 &InstallOptions::default(),
+                None,
             )
+            .map(|traversal| Resolution::new(traversal.graph))
             .expect("valid resolution");
 
         assert!(
