@@ -3,6 +3,8 @@ use std::fmt::{Display, Formatter, Write};
 use std::ops::{Deref, DerefMut};
 use std::str::FromStr;
 
+use uv_macros::DebugNoInline;
+
 #[derive(
     Default,
     Debug,
@@ -408,7 +410,7 @@ impl FromStr for AbiTag {
     }
 }
 
-#[derive(Debug, thiserror::Error, PartialEq, Eq)]
+#[derive(DebugNoInline, thiserror::Error, PartialEq, Eq)]
 pub enum ParseAbiTagError {
     #[error("Unknown ABI tag format: {0}")]
     UnknownFormat(String),

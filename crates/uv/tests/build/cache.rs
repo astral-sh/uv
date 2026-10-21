@@ -37,6 +37,37 @@ fn cache_dir_uses_configured_test_context_path() {
     ");
 }
 
+/// Invalid cache keys in a local dependency must fail instead of falling back to the default keys.
+#[test]
+fn cache_key_git_sequence() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let project = context.temp_dir.child("project");
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+
+        [tool.uv]
+        cache-keys = [{ git = [true, false] }]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.pip_install().arg("./project").arg("--offline"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Failed to build `project @ file://[TEMP_DIR]/project`
+      cause: Failed to parse cache keys in `project/pyproject.toml`
+      cause: TOML parse error at line 6, column 23
+               |
+             6 | cache-keys = [{ git = [true, false] }]
+               |                       ^^^^^^^^^^^^^
+             invalid type: sequence, expected a boolean or a Git cache key table
+    ");
+
+    Ok(())
+}
+
 /// When the active cache directory is inside an explicit build source, we should warn and continue
 /// the build.
 #[test]
