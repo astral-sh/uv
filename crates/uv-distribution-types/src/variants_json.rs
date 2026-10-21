@@ -63,7 +63,6 @@ pub struct VariantsJsonContent {
     #[serde(rename = "$schema")]
     schema: String,
     default_priorities: DefaultPriorities,
-    /// With PEP 825 metadata alone, only variants without properties are compatible.
     #[serde(skip_serializing_if = "Option::is_none")]
     providers: Option<BTreeMap<VariantNamespace, VariantProvider>>,
     variants: BTreeMap<VariantLabel, VariantProperties>,
