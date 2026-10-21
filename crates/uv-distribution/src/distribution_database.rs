@@ -1,6 +1,6 @@
 use std::cmp::Reverse;
 use std::future::Future;
-use std::io::{self, Seek};
+use std::io::{self, BufReader, Seek};
 use std::path::Path;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -48,6 +48,7 @@ use crate::download::{check_wheel_variant_properties, read_wheel_variant_metadat
 use crate::error::PythonVersion;
 use crate::extracted_wheel::{ExtractedWheel, HashedWheel, WheelExtractor};
 use crate::hash::http_hash_algorithms;
+use crate::locked_wheel::cache_authenticated_wheel;
 use crate::metadata::{ArchiveMetadata, Metadata};
 use crate::source::SourceDistributionBuilder;
 use crate::{
@@ -711,30 +712,36 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         hashes: ArchiveHashPolicy<'_>,
     ) -> Result<LocalWheel, Error> {
         let filename = dist.wheel_filename();
-        let streamed = match self
-            .stream_wheel(
-                url.clone(),
-                dist.index(),
-                filename,
-                size,
-                wheel_entry,
-                dist,
-                hashes,
-            )
-            .await
-        {
-            Ok(archive) => Some(archive),
-            Err(Error::Extract(name, err)) => {
-                if err.is_http_streaming_unsupported() {
-                    warn!("Streaming unsupported for `{dist}`; downloading wheel to disk ({err})");
-                } else if err.is_http_streaming_failed() {
-                    warn!("Streaming failed for `{dist}`; downloading wheel to disk ({err})");
-                } else {
-                    return Err(Error::Extract(name, err));
+        let streamed = if filename.variant().is_some() {
+            None
+        } else {
+            match self
+                .stream_wheel(
+                    url.clone(),
+                    dist.index(),
+                    filename,
+                    size,
+                    wheel_entry,
+                    dist,
+                    hashes,
+                )
+                .await
+            {
+                Ok(archive) => Some(archive),
+                Err(Error::Extract(name, err)) => {
+                    if err.is_http_streaming_unsupported() {
+                        warn!(
+                            "Streaming unsupported for `{dist}`; downloading wheel to disk ({err})"
+                        );
+                    } else if err.is_http_streaming_failed() {
+                        warn!("Streaming failed for `{dist}`; downloading wheel to disk ({err})");
+                    } else {
+                        return Err(Error::Extract(name, err));
+                    }
+                    None
                 }
-                None
+                Err(err) => return Err(err),
             }
-            Err(err) => return Err(err),
         };
         let archive = match streamed {
             Some(archive) => archive,
@@ -1255,6 +1262,28 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             hashes
         };
 
+        // Variant metadata must be checked against the original ZIP entries before extraction.
+        let archive = if filename.variant().is_some() && archive.is_none() {
+            let file = fs_err::tokio::File::open(path)
+                .await
+                .map_err(Error::CacheRead)?;
+            let archive = cache_authenticated_wheel(
+                file,
+                self.build_context.cache(),
+                &wheel_entry,
+                dist,
+                hashes,
+                None,
+            )
+            .await?;
+            PathArchivePointer::new(modified, archive.clone())
+                .write_to(&pointer_entry)
+                .await?;
+            Some(archive)
+        } else {
+            archive
+        };
+
         // If the file is already unzipped, and the cache is up-to-date, return it.
         if let Some(archive) = archive {
             Ok(LocalWheel {
@@ -1378,7 +1407,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     .map_err(Error::CacheWrite)?;
                 let reader = fs_err::File::open(&path).map_err(Error::CacheWrite)?;
                 extractor
-                    .extract_seekable(reader)
+                    .extract_seekable(reader, false)
                     .map_err(|err| Error::Extract(path.to_string_lossy().into_owned(), err))
             }
         })
@@ -1642,6 +1671,7 @@ impl<'a> WheelCacheEntry<'a> {
             && archive.has_digests(self.hashes)
             && archive.exists(self.cache)
             && (self.expected_size.is_none() || archive.size.is_some())
+            && archive.has_unambiguous_variant_metadata()
     }
 
     pub(crate) async fn get_http(
@@ -1727,15 +1757,24 @@ pub(crate) async fn cache_seekable_wheel(
 ) -> Result<Archive, Error> {
     let root = cache.root().to_path_buf();
     let filename = dist.wheel_filename().clone();
+    let distribution = dist.to_string();
     let extracted = tokio::task::spawn_blocking(move || {
         file.rewind().map_err(Error::CacheRead)?;
+        if filename.variant().is_some() {
+            uv_metadata::read_archive_wheel_variant(&filename, BufReader::new(&mut file))
+                .map_err(|err| Error::LockedWheelVariant(distribution, Box::new(err)))?;
+            file.rewind().map_err(Error::CacheRead)?;
+        }
         WheelExtractor::new(&root, content_addressed)
             .map_err(Error::CacheWrite)?
-            .extract_seekable(file)
+            .extract_seekable(file, filename.variant().is_some())
             .map_err(|err| Error::Extract(filename.to_string(), err))
     })
     .await??;
-    cache_extracted_wheel(cache, extracted, entry, dist, hashes, Some(size)).await
+    let mut archive =
+        cache_extracted_wheel(cache, extracted, entry, dist, hashes, Some(size)).await?;
+    archive.variant_metadata_checked = dist.wheel_filename().variant().is_some();
+    Ok(archive)
 }
 
 /// Validate and publish an extracted wheel.
@@ -1838,7 +1877,9 @@ impl HttpArchivePointer {
             Ok(file) => {
                 let data = DataWithCachePolicy::from_reader(file)?.into_data();
                 let archive = rmp_serde::from_slice::<Archive>(&data)?;
-                Ok(Some(Self { archive }))
+                Ok(archive
+                    .has_unambiguous_variant_metadata()
+                    .then_some(Self { archive }))
             }
             Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(None),
             Err(err) => Err(Error::CacheRead(err)),
@@ -1878,7 +1919,13 @@ impl PathArchivePointer {
     /// Read an [`PathArchivePointer`] from the cache.
     pub fn read_from(path: impl AsRef<Path>) -> Result<Option<Self>, Error> {
         match fs_err::read(path) {
-            Ok(cached) => Ok(Some(rmp_serde::from_slice::<Self>(&cached)?)),
+            Ok(cached) => {
+                let pointer = rmp_serde::from_slice::<Self>(&cached)?;
+                Ok(pointer
+                    .archive
+                    .has_unambiguous_variant_metadata()
+                    .then_some(pointer))
+            }
             Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(None),
             Err(err) => Err(Error::CacheRead(err)),
         }

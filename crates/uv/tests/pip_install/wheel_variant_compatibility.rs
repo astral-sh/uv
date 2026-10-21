@@ -6,7 +6,7 @@ use anyhow::Result;
 #[cfg(feature = "test-git")]
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
-use indoc::indoc;
+use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
@@ -18,6 +18,8 @@ use uv_test::archive::generate_source_archive;
 use uv_test::find_links::FindLinksServer;
 use uv_test::packse::{PackseServer, WheelBuilder};
 use uv_test::uv_snapshot;
+use wiremock::matchers::{method, path};
+use wiremock::{Mock, MockServer, ResponseTemplate};
 
 fn null_variant() -> Value {
     json!({
@@ -404,6 +406,51 @@ fn install_git_path_variant_wheel() -> Result<()> {
     ----- stderr -----
     error: Failed to download `ok @ git+file://[TEMP_DIR]/repository/@[COMMIT]#path=ok-1.0.0-py3-none-any-gpu.whl`
       cause: Wheel variant `gpu` requires unsupported properties: `nvidia :: cuda_version_lower_bound :: 12` and `nvidia :: sm_arch :: 89_real`
+    ");
+    Ok(())
+}
+
+/// A pylock install validates the original local wheel before caching its extracted contents.
+#[test]
+fn pylock_rejects_local_wheel_with_duplicate_variant_metadata() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let variant = null_variant().to_string();
+    let (_, wheel) = WheelBuilder::new(&"ok".parse()?, &"1.0.0".parse()?)
+        .files(&[
+            ("ok-1.0.0.dist-info/variant.json", &variant),
+            ("ok-1.0.0.dist-info/variant.json", &variant),
+        ])
+        .build();
+    let filename = "ok-1.0.0-py3-none-any-null.whl";
+    context.temp_dir.child(filename).write_binary(&wheel)?;
+    let hash = hex::encode(Sha256::digest(&wheel));
+    context
+        .temp_dir
+        .child("pylock.toml")
+        .write_str(&formatdoc! {r#"
+        lock-version = "1.0"
+        created-by = "test"
+
+        [[packages]]
+        name = "ok"
+        version = "1.0.0"
+        archive = {{ path = "{filename}", hashes = {{ sha256 = "{hash}" }} }}
+
+        [packages.variants-json]
+        "$schema" = "https://variants-schema.wheelnext.dev/peps/825/v0.1.1.json"
+        default-priorities = {{ namespace = ["x86_64"] }}
+        variants = {{ null = {{}} }}
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview-features")
+        .arg("pylock,wheel-variants")
+        .arg("pylock.toml"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to read `ok @ file://[TEMP_DIR]/ok-1.0.0-py3-none-any-null.whl`
+      cause: Failed to read variant metadata from `ok @ file://[TEMP_DIR]/ok-1.0.0-py3-none-any-null.whl`
+      cause: Multiple `variant.json` entries in the wheel's .dist-info directory
     ");
     Ok(())
 }
@@ -879,6 +926,277 @@ fn incompatible_installed_variant_without_replacement() -> Result<()> {
             .join("ok-1.0.0.dist-info/variant.json")
             .is_file()
     );
+    Ok(())
+}
+
+/// A malformed variant wheel must be rejected before its provider is installed.
+#[tokio::test]
+async fn pylock_rejects_invalid_variant_source_before_provider() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let provider_index = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/simple/variant-provider/"))
+        .respond_with(ResponseTemplate::new(500))
+        .expect(0)
+        .mount(&provider_index)
+        .await;
+    context.temp_dir.child("pylock.toml").write_str(&format!(
+        indoc! {r#"
+            lock-version = "1.0"
+            created-by = "test"
+
+            [[packages]]
+            name = "ok"
+            version = "1.0.0"
+
+            [packages.archive]
+            url = "https://example.org/other-1.0.0-py3-none-any-accelerated.whl"
+
+            [packages.archive.hashes]
+            sha256 = "0000000000000000000000000000000000000000000000000000000000000000"
+
+            [packages.variants-json]
+            "$schema" = "{}"
+
+            [packages.variants-json.default-priorities]
+            namespace = ["example"]
+
+            [packages.variants-json.providers.example]
+            requires = ["variant-provider==1.0.0"]
+            plugin-api = "variant_provider.plugin:Provider"
+
+            [packages.variants-json.variants.accelerated.example]
+            acceleration = ["enabled"]
+        "#},
+        PEP_850_SCHEMA
+    ))?;
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview-features")
+        .arg("pylock,wheel-variants")
+        .arg("--variant-provider")
+        .arg("example=variant-provider@variant_provider.plugin:Provider")
+        .arg("--variant-provider-index")
+        .arg(format!("{}/simple/", provider_index.uri()))
+        .arg("--no-index")
+        .arg("pylock.toml"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Wheel filename `other-1.0.0-py3-none-any-accelerated.whl` does not match package name `ok`
+    ");
+    Ok(())
+}
+
+/// A frozen export must authenticate the direct wheel before reading its embedded metadata.
+#[test]
+fn pylock_rejects_changed_locked_variant_wheel() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let variant = null_variant().to_string();
+    let (_, wheel) = WheelBuilder::new(&"ok".parse()?, &"1.0.0".parse()?)
+        .files(&[("ok-1.0.0.dist-info/variant.json", &variant)])
+        .build();
+    let wheel_path = context.temp_dir.child("ok-1.0.0-py3-none-any-null.whl");
+    wheel_path.write_binary(&wheel)?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["ok"]
+
+        [tool.uv.sources]
+        ok = { path = "ok-1.0.0-py3-none-any-null.whl" }
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("--no-index"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    let changed_wheel = vec![0; wheel.len()];
+    wheel_path.write_binary(&changed_wheel)?;
+    let context = context
+        .with_filter((hex::encode(Sha256::digest(&wheel)), "[LOCKED_WHEEL_HASH]"))
+        .with_filter((
+            hex::encode(Sha256::digest(&changed_wheel)),
+            "[CHANGED_WHEEL_HASH]",
+        ));
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("--frozen")
+        .arg("--format")
+        .arg("pylock.toml"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to read locked wheel variant metadata for `ok`
+      cause: Hash mismatch for `ok @ file://[TEMP_DIR]/ok-1.0.0-py3-none-any-null.whl`
+
+             Expected:
+               sha256:[LOCKED_WHEEL_HASH]
+
+             Computed:
+               sha256:[CHANGED_WHEEL_HASH]
+    ");
+    Ok(())
+}
+
+/// Different ZIP entry names can extract to the same metadata path. Reject the archive
+/// before publishing the extracted wheel to the cache.
+#[test]
+fn reject_cached_wheel_with_duplicate_variant_metadata() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let variant = null_variant().to_string();
+    let (_, wheel) = WheelBuilder::new(&"ok".parse()?, &"1.0.0".parse()?)
+        .files(&[
+            ("ok-1.0.0.dist-info/variant.json", &variant),
+            ("ok-1.0.0.dist-info/./variant.json", &variant),
+        ])
+        .build();
+    let filename = "ok-1.0.0-py3-none-any-null.whl";
+    let hash = hex::encode(Sha256::digest(&wheel));
+    let size = wheel.len();
+    context.temp_dir.child(filename).write_binary(&wheel)?;
+    let server = FindLinksServer::new(context.temp_dir.path());
+    let url = format!("{}/{filename}", server.url());
+    let context = context.with_filter((server.url(), "http://[LOCALHOST]"));
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["ok"]
+        "#})?;
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(&formatdoc! {r#"
+            version = 1
+            revision = 3
+            requires-python = ">=3.12"
+
+            [[package]]
+            name = "ok"
+            version = "1.0.0"
+            source = {{ url = "{url}" }}
+            wheels = [{{ url = "{url}", hash = "sha256:{hash}", size = {size} }}]
+
+            [[package]]
+            name = "project"
+            version = "0.1.0"
+            source = {{ virtual = "." }}
+            dependencies = [{{ name = "ok" }}]
+        "#})?;
+    context
+        .temp_dir
+        .child("pylock.toml")
+        .write_str(&formatdoc! {r#"
+            lock-version = "1.0"
+            created-by = "test"
+
+            [[packages]]
+            name = "ok"
+            version = "1.0.0"
+            archive = {{ url = "{url}", size = {size}, hashes = {{ sha256 = "{hash}" }} }}
+
+            [packages.variants-json]
+            "$schema" = "https://variants-schema.wheelnext.dev/peps/825/v0.1.1.json"
+            default-priorities = {{ namespace = ["x86_64"] }}
+            variants = {{ null = {{}} }}
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--frozen")
+        .arg("--format")
+        .arg("pylock.toml")
+        .arg("--preview-features")
+        .arg("wheel-variants"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to read locked wheel variant metadata for `ok`
+      cause: Failed to extract archive: ok-1.0.0-py3-none-any-null.whl
+      cause: ZIP file contains multiple entries for the same output path: ok-1.0.0.dist-info/variant.json
+    ");
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview-features")
+        .arg("pylock,wheel-variants")
+        .arg("pylock.toml"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to download `ok @ http://[LOCALHOST]/ok-1.0.0-py3-none-any-null.whl`
+      cause: Failed to extract archive: ok-1.0.0-py3-none-any-null.whl
+      cause: ZIP file contains multiple entries for the same output path: ok-1.0.0.dist-info/variant.json
+    ");
+    Ok(())
+}
+
+/// Stop reading a changed direct wheel as soon as it exceeds the locked size.
+#[test]
+fn pylock_rejects_oversized_locked_variant_wheel() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let filename = "ok-1.0.0-py3-none-any-null.whl";
+    context
+        .temp_dir
+        .child(filename)
+        .write_binary(b"0123456789")?;
+    let server = FindLinksServer::new(context.temp_dir.path());
+    let url = format!("{}/{filename}", server.url());
+    let context = context.with_filter((server.url(), "http://[LOCALHOST]"));
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["ok"]
+        "#})?;
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(&formatdoc! {r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [[package]]
+        name = "ok"
+        version = "1.0.0"
+        source = {{ url = "{url}" }}
+
+        [[package.wheels]]
+        url = "{url}"
+        hash = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+        size = 1
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = {{ virtual = "." }}
+        dependencies = [{{ name = "ok" }}]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("--frozen")
+        .arg("--format")
+        .arg("pylock.toml"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to read locked wheel variant metadata for `ok`
+      cause: Size mismatch for `ok @ http://[LOCALHOST]/ok-1.0.0-py3-none-any-null.whl`: expected 1 bytes, but downloaded 2 bytes
+    ");
     Ok(())
 }
 

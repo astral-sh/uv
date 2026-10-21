@@ -22,6 +22,29 @@ use super::{
 };
 use crate::archive_path::SanitizedArchivePath;
 
+#[derive(Clone, Copy)]
+enum ExtractionMode {
+    Unhashed,
+    UniquePaths,
+    Hashed,
+}
+
+impl ExtractionMode {
+    fn require_unique_paths(self) -> bool {
+        match self {
+            Self::Unhashed => false,
+            Self::UniquePaths | Self::Hashed => true,
+        }
+    }
+
+    fn hash_contents(self) -> bool {
+        match self {
+            Self::Unhashed | Self::UniquePaths => false,
+            Self::Hashed => true,
+        }
+    }
+}
+
 /// A successfully extracted file, or an explicit directory that can affect the digest.
 enum ExtractedEntry {
     File {
@@ -34,8 +57,17 @@ enum ExtractedEntry {
 }
 
 /// Unzip a `.zip` archive into the target directory.
-pub(crate) fn unzip(reader: fs_err::File, target: &Path) -> Result<Vec<UnhashedFile>, Error> {
-    let UnzipOutput::Unhashed(files) = unzip_inner(reader, target, false)? else {
+pub(crate) fn unzip(
+    reader: fs_err::File,
+    target: &Path,
+    require_unique_paths: bool,
+) -> Result<Vec<UnhashedFile>, Error> {
+    let mode = if require_unique_paths {
+        ExtractionMode::UniquePaths
+    } else {
+        ExtractionMode::Unhashed
+    };
+    let UnzipOutput::Unhashed(files) = unzip_inner(reader, target, mode)? else {
         return Err(Error::Io(std::io::Error::other(
             "seekable ZIP hash tree was unexpectedly computed",
         )));
@@ -52,7 +84,8 @@ pub(crate) fn unzip_and_hash(
     reader: fs_err::File,
     target: &Path,
 ) -> Result<(Vec<HashedFile>, DirhashTree), Error> {
-    let UnzipOutput::Hashed { files, tree } = unzip_inner(reader, target, true)? else {
+    let UnzipOutput::Hashed { files, tree } = unzip_inner(reader, target, ExtractionMode::Hashed)?
+    else {
         return Err(Error::Io(std::io::Error::other(
             "seekable ZIP hash tree was not computed",
         )));
@@ -63,7 +96,7 @@ pub(crate) fn unzip_and_hash(
 fn unzip_inner(
     reader: fs_err::File,
     target: &Path,
-    hash_contents: bool,
+    mode: ExtractionMode,
 ) -> Result<UnzipOutput, Error> {
     // Parse the central directory once, then clone the archive reader per Rayon job so
     // extraction stays parallel for already-downloaded wheels. AllowStdIo adapts synchronous
@@ -71,7 +104,7 @@ fn unzip_inner(
     let archive = block_on(ZipFileReader::new(AllowStdIo::new(
         CloneableSeekableReader::new(reader),
     )))?;
-    if hash_contents {
+    if mode.require_unique_paths() {
         validate_unique_output_paths(archive.file().entries())?;
     }
 
@@ -91,12 +124,12 @@ fn unzip_inner(
                     target,
                     &directories,
                     skip_validation,
-                    hash_contents,
+                    mode,
                 )
             },
         );
 
-    if !hash_contents {
+    if !mode.hash_contents() {
         let files = extracted
             .filter_map(|result| match result {
                 Ok(Some(ExtractedEntry::File { path, size, .. })) => {
@@ -166,7 +199,7 @@ fn extract_entry<R>(
     target: &Path,
     directories: &Mutex<FxHashSet<PathBuf>>,
     skip_validation: bool,
-    hash_contents: bool,
+    mode: ExtractionMode,
 ) -> Result<Option<ExtractedEntry>, Error>
 where
     R: std::io::BufRead + std::io::Seek + Unpin,
@@ -186,7 +219,7 @@ where
     let path = target.join(enclosed_name.as_path());
     if entry.dir()? {
         create_directory_once(directories, &path)?;
-        if hash_contents {
+        if mode.hash_contents() {
             validate_directory_entry(&entry, enclosed_name.as_path(), skip_validation)?;
         }
         return Ok(Some(ExtractedEntry::Directory(enclosed_name)));
@@ -203,7 +236,7 @@ where
         enclosed_name,
         &path,
         skip_validation,
-        hash_contents,
+        mode,
     )
     .map(Some)
 }
@@ -269,26 +302,32 @@ fn extract_file_entry<R>(
     enclosed_name: SanitizedArchivePath,
     path: &Path,
     skip_validation: bool,
-    hash_contents: bool,
+    mode: ExtractionMode,
 ) -> Result<ExtractedEntry, Error>
 where
     R: std::io::BufRead + std::io::Seek + Unpin,
 {
-    let outfile = if hash_contents {
+    // The filesystem can identify two names as the same path even when their spelling differs.
+    let outfile = if mode.require_unique_paths() {
         fs_err::OpenOptions::new()
             .write(true)
             .create_new(true)
             .open(path)
+            .map_err(|err| match err.kind() {
+                std::io::ErrorKind::AlreadyExists => Error::DuplicateOutputPath {
+                    path: enclosed_name.as_path().to_path_buf(),
+                },
+                _ => Error::Io(err),
+            })?
     } else {
-        fs_err::File::create(path)
-    }
-    .map_err(Error::Io)?;
+        fs_err::File::create(path).map_err(Error::Io)?
+    };
     let size = entry.uncompressed_size();
     let writer = buffered_file_writer(outfile, size);
 
     // Keep the hashing state out of ordinary extraction, and pin both futures here to avoid
     // moving their large state into `block_on`.
-    let (copied, computed_crc32, digest) = if hash_contents {
+    let (copied, computed_crc32, digest) = if mode.hash_contents() {
         let (copied, computed_crc32, digest) =
             block_on(pin!(copy_and_hash_entry(archive, file_number, writer)))?;
         (copied, computed_crc32, Some(digest))

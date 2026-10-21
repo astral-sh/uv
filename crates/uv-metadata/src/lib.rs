@@ -3,7 +3,7 @@
 //! This module reads all fields exhaustively. The fields are defined in the [Core metadata
 //! specification](https://packaging.python.org/en/latest/specifications/core-metadata/).
 
-use std::io;
+use std::io::{self, Read};
 use std::path::Path;
 
 use async_zip::base::read::seek::ZipFileReader;
@@ -20,6 +20,9 @@ use uv_pypi_types::ResolutionMetadata;
 pub use dist_info_stem::DistInfoStem;
 
 mod dist_info_stem;
+
+/// Maximum uncompressed size of a wheel's `variant.json`.
+const MAX_VARIANT_METADATA_SIZE: u64 = 1024 * 1024;
 
 /// The caller is responsible for attaching the path or url we failed to read.
 #[derive(Debug, Error)]
@@ -42,6 +45,10 @@ pub enum Error {
     InvalidMetadata(String, Box<uv_pypi_types::MetadataError>),
     #[error("Missing `variant.json` in the wheel's .dist-info directory")]
     MissingVariantMetadata,
+    #[error("Multiple `variant.json` entries in the wheel's .dist-info directory")]
+    MultipleVariantMetadata,
+    #[error("Wheel variant metadata exceeds the maximum size of {MAX_VARIANT_METADATA_SIZE} bytes")]
+    OversizedVariantMetadata,
     #[error(transparent)]
     InvalidVariantMetadata(#[from] VariantsJsonParseError),
     #[error("Bad CRC (got {computed:08x}, expected {expected:08x}) for file: {path}")]
@@ -168,20 +175,74 @@ pub async fn validate_archive_variant<R: AsyncBufRead + AsyncSeek + Unpin>(
     path: &str,
     label: &VariantLabel,
 ) -> Result<(), Error> {
-    let index = reader
+    read_archive_variant(reader, path, label).await?;
+    Ok(())
+}
+
+/// Read a wheel's `variant.json` from an authenticated archive.
+pub fn read_archive_wheel_variant(
+    filename: &WheelFilename,
+    reader: impl std::io::BufRead + std::io::Seek + Unpin,
+) -> Result<Option<VariantsJsonContent>, Error> {
+    let Some(label) = filename.variant() else {
+        return Ok(None);
+    };
+    block_on(async {
+        let mut reader = ZipFileReader::new(AllowStdIo::new(reader)).await?;
+        let ((), stem) = find_archive_dist_info(
+            filename,
+            reader
+                .file()
+                .entries()
+                .iter()
+                .filter_map(|entry| Some(((), entry.filename().as_str().ok()?))),
+        )?;
+        let path = format!("{stem}.dist-info/variant.json");
+        read_archive_variant(&mut reader, &path, label)
+            .await
+            .map(Some)
+    })
+}
+
+async fn read_archive_variant<R: AsyncBufRead + AsyncSeek + Unpin>(
+    reader: &mut ZipFileReader<R>,
+    path: &str,
+    label: &VariantLabel,
+) -> Result<VariantsJsonContent, Error> {
+    let mut entries = reader
         .file()
         .entries()
         .iter()
-        .position(|entry| entry.filename().as_str().ok() == Some(path))
-        .ok_or(Error::MissingVariantMetadata)?;
+        .enumerate()
+        .filter(|(_, entry)| entry.filename().as_str().ok() == Some(path));
+    let (index, entry) = entries.next().ok_or(Error::MissingVariantMetadata)?;
+    if entries.next().is_some() {
+        return Err(Error::MultipleVariantMetadata);
+    }
+    if entry.uncompressed_size() > MAX_VARIANT_METADATA_SIZE {
+        return Err(Error::OversizedVariantMetadata);
+    }
+    let expected = entry.crc32();
+    let mut entry = reader.reader_with_entry(index).await?;
     let mut contents = Vec::new();
-    reader
-        .reader_with_entry(index)
-        .await?
-        .read_to_end_checked(&mut contents)
-        .await?;
-    VariantsJsonContent::from_wheel(&contents, label)?;
-    Ok(())
+    (&mut entry)
+        .compat()
+        .take(MAX_VARIANT_METADATA_SIZE + 1)
+        .read_to_end(&mut contents)
+        .await
+        .map_err(Error::Io)?;
+    if contents.len() as u64 > MAX_VARIANT_METADATA_SIZE {
+        return Err(Error::OversizedVariantMetadata);
+    }
+    let computed = entry.compute_hash();
+    if computed != expected {
+        return Err(Error::BadCrc32 {
+            path: path.to_string(),
+            computed,
+            expected,
+        });
+    }
+    Ok(VariantsJsonContent::from_wheel(&contents, label)?)
 }
 
 /// Find the `.dist-info` directory in an unzipped wheel.
@@ -335,7 +396,15 @@ pub fn read_flat_wheel_metadata(
 
 /// Read a wheel's `variant.json` and check that it describes the variant named in the filename.
 pub fn read_wheel_variant(path: &Path, label: &VariantLabel) -> Result<VariantsJsonContent, Error> {
-    let contents = fs_err::read(path).map_err(Error::Io)?;
+    let mut contents = Vec::new();
+    fs_err::File::open(path)
+        .map_err(Error::Io)?
+        .take(MAX_VARIANT_METADATA_SIZE + 1)
+        .read_to_end(&mut contents)
+        .map_err(Error::Io)?;
+    if contents.len() as u64 > MAX_VARIANT_METADATA_SIZE {
+        return Err(Error::OversizedVariantMetadata);
+    }
     Ok(VariantsJsonContent::from_wheel(&contents, label)?)
 }
 
