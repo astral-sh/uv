@@ -3136,6 +3136,14 @@ mod test {
         assert_eq!(simplified, expected);
     }
 
+    /// Render a local-version exclusion combined with an upper bound.
+    #[test]
+    #[should_panic(expected = "OperatorLocalCombo")]
+    fn local_version_exclusion() {
+        let marker = m("python_full_version not in '3.20+x' and python_full_version < '4'");
+        let _ = marker.contents().unwrap().to_string();
+    }
+
     #[test]
     fn test_marker_simplification() {
         assert_false("python_version == '3.9.1'");
