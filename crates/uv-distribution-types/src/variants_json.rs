@@ -1,3 +1,4 @@
+use std::cmp::Reverse;
 use std::collections::{BTreeMap, HashSet};
 
 use serde::{Deserialize, Serialize};
@@ -34,6 +35,23 @@ pub enum VariantsJsonParseError {
 
 /// Variant properties, grouped by namespace and feature.
 type VariantProperties = BTreeMap<VariantNamespace, BTreeMap<VariantFeature, Vec<VariantValue>>>;
+
+/// Compatible features and values by namespace, ordered from most to least preferred.
+///
+/// Namespaces are also ordered, but their ordering comes from the package instead of the provider
+/// and doesn't need to be captured here.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct SupportedVariantProperties {
+    properties: BTreeMap<VariantNamespace, Vec<(VariantFeature, Vec<VariantValue>)>>,
+}
+
+/// The priority of a compatible variant. Higher scores are preferred.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct VariantScore {
+    properties: Vec<Reverse<(usize, usize, usize)>>,
+    label: Reverse<VariantLabel>,
+}
 
 /// Index-level metadata for wheel variants, as defined by PEP 825.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -86,6 +104,47 @@ impl VariantsJsonContent {
                 labels: metadata.variants.keys().map(ToString::to_string).collect(),
             })
         }
+    }
+
+    /// Score a variant using the target's ordered compatible features and values.
+    ///
+    /// Returns `None` if the label is missing or any of its features is unsupported.
+    pub fn score_variant(
+        &self,
+        label: &VariantLabel,
+        preferences: &SupportedVariantProperties,
+    ) -> Option<VariantScore> {
+        let mut properties = Vec::new();
+        for (namespace, features) in self.variants.get(label)? {
+            if features.is_empty() {
+                continue;
+            }
+            let namespace_priority = self
+                .default_priorities
+                .namespace
+                .iter()
+                .position(|name| name == namespace)?;
+            let supported = preferences.properties.get(namespace)?;
+            for (feature, values) in features {
+                let (feature_priority, (_, supported_values)) = supported
+                    .iter()
+                    .enumerate()
+                    .find(|(_, (name, _))| name == feature)?;
+                let value_priority = supported_values
+                    .iter()
+                    .position(|value| values.contains(value))?;
+                properties.push(Reverse((
+                    namespace_priority,
+                    feature_priority,
+                    value_priority,
+                )));
+            }
+        }
+        properties.sort_unstable_by(|left, right| right.cmp(left));
+        Some(VariantScore {
+            properties,
+            label: Reverse(label.clone()),
+        })
     }
 
     /// Parse and validate the contents of a variant metadata file.
