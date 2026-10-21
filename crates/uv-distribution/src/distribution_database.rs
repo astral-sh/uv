@@ -27,7 +27,8 @@ use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
     ArchiveHashPolicy, BuildInfo, BuildableSource, BuiltDist, Dist, DistRef, GitPathBuiltDist,
     HashCollection, HashValidation, Hashed, IndexUrl, InstalledDist, MetadataHashPolicy, Name,
-    ResolutionRecorder, SourceDist, SourceUrl, VariantsJsonContent, parse_url_hashes,
+    ResolutionRecorder, SourceDist, SourceUrl, SupportedVariantProperties, VariantsJsonContent,
+    parse_url_hashes,
 };
 use uv_extract::dirhash::{DirectoryDigest, HashedFile};
 use uv_extract::hash::Hasher;
@@ -36,7 +37,7 @@ use uv_git::{Fetch, GIT_LFS, GitError};
 use uv_metadata::read_archive_wheel_variant;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
-use uv_platform_tags::Tags;
+use uv_platform_tags::{Platform, Tags};
 use uv_preview::PreviewFeature;
 use uv_pypi_types::{HashDigest, HashDigests, PyProjectToml, ResolutionMetadata};
 use uv_python_types::PythonVariant;
@@ -45,7 +46,7 @@ use uv_threads::initialize_rayon_once;
 use uv_types::{BuildContext, BuildStack};
 
 use crate::archive::Archive;
-use crate::download::{check_wheel_variant_compatibility, read_extracted_wheel_variant};
+use crate::download::{check_wheel_variant_properties, read_wheel_variant_metadata};
 use crate::error::PythonVersion;
 use crate::extracted_wheel::{ExtractedWheel, HashedWheel, WheelExtractor};
 use crate::hash::http_hash_algorithms;
@@ -150,6 +151,26 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         }
     }
 
+    /// Obtain compatible properties for a release or wheel.
+    pub async fn supported_variant_properties(
+        &self,
+        metadata: &VariantsJsonContent,
+        platform: Option<&Platform>,
+    ) -> SupportedVariantProperties {
+        if let Some(target) = self
+            .build_context
+            .variant_policy()
+            .and_then(|policy| policy.target())
+        {
+            return target.clone();
+        }
+        let platform = match platform {
+            Some(platform) => platform,
+            None => self.build_context.interpreter().await.platform(),
+        };
+        crate::variant::supported_variant_properties(metadata, platform)
+    }
+
     /// Set the [`Reporter`] to use for the [`DistributionDatabase`].
     #[must_use]
     pub fn with_reporter(self, reporter: Arc<dyn Reporter>) -> Self {
@@ -229,11 +250,14 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             Dist::Built(built) => {
                 check_supported_wheel_variant(built)?;
                 let wheel = self.get_wheel(built, hashes).await?;
-                check_wheel_variant_compatibility(
-                    &wheel.filename,
-                    &wheel.archive,
-                    tags.python_platform(),
-                )?;
+                if let Some(metadata) =
+                    read_wheel_variant_metadata(&wheel.filename, &wheel.archive)?
+                {
+                    let supported = self
+                        .supported_variant_properties(&metadata, Some(tags.python_platform()))
+                        .await;
+                    check_wheel_variant_properties(&wheel.filename, &metadata, &supported)?;
+                }
                 Ok(wheel)
             }
             // TODO(konsti): Support source distributions that build variant wheels.
@@ -323,7 +347,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 // With `Cache-Control: no-store`, `pip compile --generate-hashes` can hash one
                 // wheel and check compatibility against a different wheel returned by a second GET.
                 let wheel = Box::pin(self.get_wheel(wheel, hashes)).await?;
-                return read_extracted_wheel_variant(filename, &wheel.archive, label).map(Some);
+                return read_wheel_variant_metadata(filename, &wheel.archive);
             }
             // Registry candidates use index variant metadata.
             BuiltDist::Registry(_) => return Ok(None),
