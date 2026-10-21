@@ -5,6 +5,7 @@ pub use base_client::{
     RetryParsingError, fetch_with_url_fallback,
 };
 pub use cached_client::{CacheControl, CachedClient, CachedClientError, DataWithCachePolicy};
+pub use content_disposition::{ContentDispositionError, content_disposition_filename};
 pub use error::{Error, ErrorKind, ProblemDetails, WrappedReqwestError};
 pub use file_hash::FileHashError;
 pub use flat_index::{FlatIndexClient, FlatIndexEntries, FlatIndexEntry, FlatIndexError};
@@ -19,6 +20,7 @@ pub use tls::{CertificateFileError, Certificates};
 
 mod base_client;
 mod cached_client;
+mod content_disposition;
 mod error;
 mod file_hash;
 mod flat_index;
