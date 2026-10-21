@@ -70,7 +70,7 @@ impl Display for MarkerValueVersion {
 }
 
 /// Those environment markers with an arbitrary string as value such as `sys_platform`
-#[derive(Copy, Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub enum MarkerValueString {
     /// `implementation_name`
     ImplementationName,
@@ -102,6 +102,8 @@ pub enum MarkerValueString {
     SysPlatformDeprecated,
     /// `variant_label`, the label of the selected variant wheel
     VariantLabel,
+    /// A variant label scoped to the package whose dependencies contain it.
+    VariantLabelBase(ArcStr),
 }
 
 impl Display for MarkerValueString {
@@ -123,6 +125,7 @@ impl Display for MarkerValueString {
             }
             Self::SysPlatform | Self::SysPlatformDeprecated => f.write_str("sys_platform"),
             Self::VariantLabel => f.write_str("variant_label"),
+            Self::VariantLabelBase(base) => write!(f, "variant_label[\"{base}\"]"),
         }
     }
 }
@@ -535,7 +538,7 @@ pub enum MarkerExpression {
 }
 
 /// The kind of a [`MarkerExpression`].
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub(crate) enum MarkerExpressionKind {
     /// A version expression, e.g. `<version key> <version op> <quoted PEP 440 version>`.
     Version(MarkerValueVersion),
@@ -648,7 +651,7 @@ impl MarkerExpression {
         match self {
             Self::Version { key, .. } => MarkerExpressionKind::Version(*key),
             Self::VersionIn { key, .. } => MarkerExpressionKind::VersionIn(*key),
-            Self::String { key, .. } => MarkerExpressionKind::String(*key),
+            Self::String { key, .. } => MarkerExpressionKind::String(key.clone()),
             Self::List { pair, .. } => MarkerExpressionKind::List(pair.key()),
             Self::Extra { .. } => MarkerExpressionKind::Extra,
         }
@@ -790,23 +793,29 @@ impl<'a> MarkerVariant<'a> {
 
 /// Look up the selected wheel for a dependency marker.
 pub trait MarkerVariantsEnvironment {
-    /// Return the selected wheel.
-    fn get(&self) -> MarkerVariant<'_>;
+    /// Return the selected wheel, optionally scoped to its owning package.
+    fn get(&self, base: Option<&str>) -> MarkerVariant<'_>;
 }
 
 impl MarkerVariantsEnvironment for MarkerVariant<'_> {
-    fn get(&self) -> MarkerVariant<'_> {
-        *self
+    fn get(&self, base: Option<&str>) -> MarkerVariant<'_> {
+        match base {
+            None => *self,
+            Some(_) => match self {
+                Self::Universal => Self::Universal,
+                Self::Ordinary | Self::Selected { .. } => Self::Ordinary,
+            },
+        }
     }
 }
 
 fn marker_string<'a>(
     env: Option<&'a MarkerEnvironment>,
     variants: &'a impl MarkerVariantsEnvironment,
-    key: CanonicalMarkerValueString,
+    key: &CanonicalMarkerValueString,
 ) -> Option<&'a str> {
     if key.is_variant_label() {
-        variants.get().label()
+        variants.get(key.variant_base()).label()
     } else {
         env.and_then(|env| env.get_string(key))
     }
@@ -1015,7 +1024,7 @@ impl MarkerTree {
                 };
                 MarkerTreeKind::String(StringMarkerTree {
                     id: self.0,
-                    key: *key,
+                    key: key.clone(),
                     map,
                 })
             }
@@ -1025,7 +1034,7 @@ impl MarkerTree {
                 };
                 MarkerTreeKind::VersionString(VersionMarkerTree {
                     id: self.0,
-                    key: *key,
+                    key: key.clone(),
                     map,
                 })
             }
@@ -1034,7 +1043,7 @@ impl MarkerTree {
                     unreachable!()
                 };
                 MarkerTreeKind::In(InMarkerTree {
-                    key: *key,
+                    key: key.clone(),
                     value,
                     high: high.negate(self.0),
                     low: low.negate(self.0),
@@ -1045,7 +1054,7 @@ impl MarkerTree {
                     unreachable!()
                 };
                 MarkerTreeKind::Contains(ContainsMarkerTree {
-                    key: *key,
+                    key: key.clone(),
                     value,
                     high: high.negate(self.0),
                     low: low.negate(self.0),
@@ -1163,7 +1172,7 @@ impl MarkerTree {
                 });
             }
             MarkerTreeKind::String(marker) => {
-                let Some(l_string) = marker_string(env, variants, marker.key()) else {
+                let Some(l_string) = marker_string(env, variants, &marker.key()) else {
                     return marker.children().any(|(_, tree)| {
                         tree.evaluate_reporter_impl(env, extras, variants, reporter)
                     });
@@ -1196,7 +1205,7 @@ impl MarkerTree {
                 }
             }
             MarkerTreeKind::VersionString(marker) => {
-                let Some(value) = env.and_then(|env| env.get_string(marker.key())) else {
+                let Some(value) = env.and_then(|env| env.get_string(&marker.key())) else {
                     return marker.edges().any(|(_, tree)| {
                         tree.evaluate_reporter_impl(env, extras, variants, reporter)
                     });
@@ -1211,7 +1220,7 @@ impl MarkerTree {
                 }
             }
             MarkerTreeKind::In(marker) => {
-                let Some(value) = marker_string(env, variants, marker.key()) else {
+                let Some(value) = marker_string(env, variants, &marker.key()) else {
                     return marker.children().any(|(_, tree)| {
                         tree.evaluate_reporter_impl(env, extras, variants, reporter)
                     });
@@ -1221,7 +1230,7 @@ impl MarkerTree {
                     .evaluate_reporter_impl(env, extras, variants, reporter);
             }
             MarkerTreeKind::Contains(marker) => {
-                let Some(value) = marker_string(env, variants, marker.key()) else {
+                let Some(value) = marker_string(env, variants, &marker.key()) else {
                     return marker.children().any(|(_, tree)| {
                         tree.evaluate_reporter_impl(env, extras, variants, reporter)
                     });
@@ -1237,21 +1246,24 @@ impl MarkerTree {
                     });
                 }
                 let edge = match marker.pair() {
-                    CanonicalMarkerListPair::VariantNamespaces { namespace } => variants
-                        .get()
+                    CanonicalMarkerListPair::VariantNamespaces { base, namespace } => variants
+                        .get(base.as_deref())
                         .contains(|properties| properties.contains_key(namespace)),
-                    CanonicalMarkerListPair::VariantFeatures { namespace, feature } => {
-                        variants.get().contains(|properties| {
-                            properties
-                                .get(namespace)
-                                .is_some_and(|features| features.contains_key(feature))
-                        })
-                    }
+                    CanonicalMarkerListPair::VariantFeatures {
+                        base,
+                        namespace,
+                        feature,
+                    } => variants.get(base.as_deref()).contains(|properties| {
+                        properties
+                            .get(namespace)
+                            .is_some_and(|features| features.contains_key(feature))
+                    }),
                     CanonicalMarkerListPair::VariantProperties {
+                        base,
                         namespace,
                         feature,
                         value,
-                    } => variants.get().contains(|properties| {
+                    } => variants.get(base.as_deref()).contains(|properties| {
                         properties
                             .get(namespace)
                             .and_then(|features| features.get(feature))
@@ -1458,7 +1470,7 @@ impl MarkerTree {
     /// Simplify markers for a wheel with a fixed filename label.
     ///
     /// Supported properties remain target-dependent except for ordinary and null wheels,
-    /// whose property sets are always empty.
+    /// whose property sets are always empty. Scoped markers belong to other packages.
     #[must_use]
     pub fn simplify_variant_label(self, label: &str) -> Self {
         if !self.has_variant_expression() {
@@ -1480,9 +1492,9 @@ impl MarkerTree {
                     value,
                 } => Some(label.contains(value.as_str())),
                 Variable::List(
-                    CanonicalMarkerListPair::VariantNamespaces { .. }
-                    | CanonicalMarkerListPair::VariantFeatures { .. }
-                    | CanonicalMarkerListPair::VariantProperties { .. },
+                    CanonicalMarkerListPair::VariantNamespaces { base: None, .. }
+                    | CanonicalMarkerListPair::VariantFeatures { base: None, .. }
+                    | CanonicalMarkerListPair::VariantProperties { base: None, .. },
                 ) if label.is_empty() || label == "null" => Some(false),
                 _ => None,
             })
@@ -1694,6 +1706,15 @@ impl MarkerTree {
         imp(self, &mut f, &mut None);
     }
 
+    /// Scope variant expressions to the package whose selected wheel determines their values.
+    #[must_use]
+    pub fn with_variant_base(self, base: &str) -> Self {
+        if !self.has_variant_expression() {
+            return self;
+        }
+        Self::from_operation(|interner| interner.scope_variants(self.0, base))
+    }
+
     fn simplify_extras_with_impl(self, is_extra: &impl Fn(&ExtraName) -> bool) -> Self {
         Self::from_operation(|interner| {
             interner.restrict_by(self.0, &|var| match var {
@@ -1772,10 +1793,10 @@ pub struct VersionMarkerTree<'a, K = CanonicalMarkerValueVersion> {
     map: &'a [(Ranges<Version>, NodeId)],
 }
 
-impl<K: Copy> VersionMarkerTree<'_, K> {
+impl<K: Clone> VersionMarkerTree<'_, K> {
     /// The key for this node.
     pub fn key(&self) -> K {
-        self.key
+        self.key.clone()
     }
 
     /// The edges of this node, corresponding to possible output ranges of the given variable.
@@ -1786,13 +1807,13 @@ impl<K: Copy> VersionMarkerTree<'_, K> {
     }
 }
 
-impl<K: Copy + Ord> PartialOrd for VersionMarkerTree<'_, K> {
+impl<K: Clone + Ord> PartialOrd for VersionMarkerTree<'_, K> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl<K: Copy + Ord> Ord for VersionMarkerTree<'_, K> {
+impl<K: Clone + Ord> Ord for VersionMarkerTree<'_, K> {
     fn cmp(&self, other: &Self) -> Ordering {
         self.key()
             .cmp(&other.key())
@@ -1811,7 +1832,7 @@ pub struct StringMarkerTree<'a> {
 impl StringMarkerTree<'_> {
     /// The key for this node.
     pub fn key(&self) -> CanonicalMarkerValueString {
-        self.key
+        self.key.clone()
     }
 
     /// The edges of this node, corresponding to possible output ranges of the given variable.
@@ -1848,7 +1869,7 @@ pub struct InMarkerTree<'a> {
 impl InMarkerTree<'_> {
     /// The key (LHS) for this expression.
     pub fn key(&self) -> CanonicalMarkerValueString {
-        self.key
+        self.key.clone()
     }
 
     /// The value (RHS) for this expression.
@@ -1898,7 +1919,7 @@ pub struct ContainsMarkerTree<'a> {
 impl ContainsMarkerTree<'_> {
     /// The key (LHS) for this expression.
     pub fn key(&self) -> CanonicalMarkerValueString {
-        self.key
+        self.key.clone()
     }
 
     /// The value (RHS) for this expression.
@@ -2196,6 +2217,17 @@ mod test {
                 &[]
             )
         );
+    }
+
+    #[test]
+    fn pep825_package_scopes() {
+        let parent = m("variant_label == 'null'").with_variant_base("parent==1");
+        let child = m("variant_label == '' and 'nvidia::sm_arch' in variant_features");
+        let scoped = parent.and(child).with_variant_base("child==1");
+        assert!(!scoped.is_false());
+        assert_eq!(scoped, parent.and(child.with_variant_base("child==1")));
+        assert_eq!(scoped, scoped.with_variant_base("successor==1"));
+        assert_eq!(scoped, m(&scoped.try_to_string().expect("scoped marker")));
     }
 
     /// Every Boolean function of three extras must roundtrip to the same diagram. The cover
