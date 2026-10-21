@@ -1025,7 +1025,8 @@ async fn do_lock(
                 lock.without_unused_exclude_newer_packages()
             } else {
                 lock
-            };
+            }
+            .with_minimum_schema_version();
 
             let unchanged = if let Some(check_lockfile_contents) = check_lockfile_contents {
                 previous.is_some() && check_lockfile_contents == lock.to_toml()?.as_str()

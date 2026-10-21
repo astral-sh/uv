@@ -86,6 +86,7 @@ use self::requirements::{RequirementNormalizer, normalize_collection, normalize_
 
 mod deserialize;
 pub(crate) mod export;
+mod format;
 mod inputs;
 mod installable;
 mod map;
@@ -95,19 +96,24 @@ mod tree;
 #[cfg(test)]
 mod windows_emulation_tests;
 
-/// The current version of the lockfile format.
+/// The default version of the lockfile format.
 const VERSION: u32 = 1;
+
+/// The latest supported version, required for direct URLs with discovered filenames.
+const MAX_VERSION: u32 = 2;
 
 /// An error returned when parsing a lockfile.
 #[derive(Debug, thiserror::Error)]
 pub enum LockParseError {
     /// The lockfile uses an unsupported schema version.
-    #[error("unsupported lockfile schema version (v{version}, but only v{supported} is supported)")]
+    #[error(
+        "unsupported lockfile schema version (v{version}, but versions up to v{supported} are supported)"
+    )]
     UnsupportedVersion { supported: u32, version: u32 },
 
     /// The lockfile cannot be parsed and uses an unsupported schema version.
     #[error(
-        "failed to parse lockfile using an unsupported schema version (v{version}, but only v{supported} is supported)"
+        "failed to parse lockfile using an unsupported schema version (v{version}, but versions up to v{supported} are supported)"
     )]
     UnparsableVersion {
         supported: u32,
@@ -313,12 +319,8 @@ pub(crate) struct HashedDist {
 pub struct Lock {
     /// The (major) version of the lockfile format.
     ///
-    /// Changes to the major version indicate backwards- and forwards-incompatible changes to the
-    /// lockfile format. A given uv version only supports a single major version of the lockfile
-    /// format.
-    ///
-    /// In other words, a version of uv that supports version 2 of the lockfile format will not be
-    /// able to read lockfiles generated under version 1 or 3.
+    /// Changes to the major version indicate changes older readers cannot interpret. Version 2
+    /// adds filenames for opaque direct URLs; version 1 remains supported for ordinary URLs.
     version: u32,
     /// The revision of the lockfile format.
     ///
@@ -2654,11 +2656,12 @@ impl Lock {
         } else {
             lock
         };
-        Ok(if metadata_free {
+        let lock = if metadata_free {
             lock.without_package_metadata()
         } else {
             lock
-        })
+        };
+        Ok(lock.with_minimum_schema_version())
     }
 
     /// Initialize a [`Lock`] from a list of [`Package`] entries.
@@ -3167,7 +3170,7 @@ impl Lock {
     pub fn configured_member_default_groups(
         &self,
     ) -> Option<impl Iterator<Item = (&PackageName, &DefaultGroups)>> {
-        ((self.version(), self.revision()) >= (VERSION, DEFAULT_GROUPS_REVISION)).then(|| {
+        ((self.version(), self.revision()) >= (1, DEFAULT_GROUPS_REVISION)).then(|| {
             self.workspace_packages().filter_map(|package| {
                 package
                     .default_groups
@@ -3181,7 +3184,7 @@ impl Lock {
     ///
     /// Returns `None` if the lockfile predates this metadata.
     pub fn workspace_default_groups(&self) -> Option<DefaultGroups> {
-        ((self.version(), self.revision()) >= (VERSION, DEFAULT_GROUPS_REVISION)).then(|| {
+        ((self.version(), self.revision()) >= (1, DEFAULT_GROUPS_REVISION)).then(|| {
             self.manifest
                 .default_groups
                 .clone()
@@ -3196,13 +3199,11 @@ impl Lock {
     pub fn member_group_metadata(
         &self,
     ) -> Option<impl Iterator<Item = (&PackageName, &BTreeMap<GroupName, GroupMetadata>)>> {
-        ((self.version(), self.revision()) >= (VERSION, MEMBER_GROUP_METADATA_REVISION)).then(
-            || {
-                self.workspace_packages()
-                    .filter(|package| !package.group_requires_python.is_empty())
-                    .map(|package| (&package.id.name, &package.group_requires_python))
-            },
-        )
+        ((self.version(), self.revision()) >= (1, MEMBER_GROUP_METADATA_REVISION)).then(|| {
+            self.workspace_packages()
+                .filter(|package| !package.group_requires_python.is_empty())
+                .map(|package| (&package.id.name, &package.group_requires_python))
+        })
     }
 
     /// Return dependency group metadata for a workspace root without a `[project]` table.
@@ -3216,7 +3217,7 @@ impl Lock {
     /// A single-project lockfile's root counts as a member even when the workspace member list is
     /// omitted.
     pub fn member_default_groups(&self, name: &PackageName) -> Option<DefaultGroups> {
-        if (self.version(), self.revision()) < (VERSION, DEFAULT_GROUPS_REVISION) {
+        if (self.version(), self.revision()) < (1, DEFAULT_GROUPS_REVISION) {
             return None;
         }
         let index = *self.workspace_members.get(name)?;
@@ -3784,10 +3785,10 @@ impl Lock {
                 Ok(lock) => lock,
                 Err(source) => {
                     if let Ok(lock) = toml::from_str::<LockVersion>(input)
-                        && lock.version() != VERSION
+                        && !(VERSION..=MAX_VERSION).contains(&lock.version())
                     {
                         return Err(LockParseError::UnparsableVersion {
-                            supported: VERSION,
+                            supported: MAX_VERSION,
                             version: lock.version(),
                             source,
                         });
@@ -3797,9 +3798,9 @@ impl Lock {
             },
         };
 
-        if lock.version() != VERSION {
+        if !(VERSION..=MAX_VERSION).contains(&lock.version()) {
             return Err(LockParseError::UnsupportedVersion {
-                supported: VERSION,
+                supported: MAX_VERSION,
                 version: lock.version(),
             });
         }
@@ -6754,15 +6755,23 @@ impl Package {
                         Dist::Built(built_dist)
                     }
                     Source::Direct(url, direct) => {
-                        let filename: WheelFilename =
-                            self.wheels[best_wheel_index].filename.clone();
+                        let wheel = &self.wheels[best_wheel_index];
+                        let filename = wheel.filename.clone();
+                        let archive = if let Some(filename) = &wheel.header_filename {
+                            ArchiveUrlFilename::Header {
+                                filename: filename.clone(),
+                                ext: DistExtension::Wheel,
+                            }
+                        } else {
+                            ArchiveUrlFilename::Url(DistExtension::Wheel)
+                        };
                         let url = SafeUrl::from(ParsedArchiveUrl {
                             url: url.to_url().map_err(LockErrorKind::InvalidUrl)?,
                             subdirectory: direct.subdirectory.clone(),
-                            archive: ArchiveUrlFilename::Url(DistExtension::Wheel),
+                            archive,
                         });
                         let direct_dist = DirectUrlBuiltDist {
-                            header_filename: None,
+                            header_filename: wheel.header_filename.clone(),
                             filename,
                             location: Box::new(url.clone()),
                             url: VerbatimUrl::from_url(url),
@@ -6863,7 +6872,7 @@ impl Package {
                 id: self.id.clone(),
             }
             .into()),
-            (true, false) if self.id.source.is_wheel() => Err(LockErrorKind::NoBinaryWheelOnly {
+            (true, false) if self.is_wheel() => Err(LockErrorKind::NoBinaryWheelOnly {
                 id: self.id.clone(),
             }
             .into()),
@@ -6875,7 +6884,7 @@ impl Package {
                 id: self.id.clone(),
             }
             .into()),
-            (false, false) if self.id.source.is_wheel() => Err(LockError {
+            (false, false) if self.is_wheel() => Err(LockError {
                 kind: Box::new(LockErrorKind::IncompatibleWheelOnly {
                     id: self.id.clone(),
                 }),
@@ -6908,6 +6917,22 @@ impl Package {
             tag_policy.tags(),
             markers,
         )
+    }
+
+    /// Whether this package is available only as a direct or local wheel.
+    fn is_wheel(&self) -> bool {
+        match &self.id.source {
+            Source::Direct(..) => self.sdist.is_none() && !self.wheels.is_empty(),
+            Source::Path(path) => match DistExtension::from_path(path) {
+                Ok(DistExtension::Wheel) => true,
+                Ok(DistExtension::Source(_)) | Err(_) => false,
+            },
+            Source::Registry(_)
+            | Source::Git(..)
+            | Source::Directory(_)
+            | Source::Editable(_)
+            | Source::Virtual(_) => false,
+        }
     }
 
     /// Convert the source of this [`Package`] to a [`SourceDist`] that can be used in installation.
@@ -7044,13 +7069,24 @@ impl Package {
                 }
             }
             Source::Direct(url, direct) => {
+                if self.sdist.is_none() && !self.wheels.is_empty() {
+                    return Ok(None);
+                }
+                let header_filename = self
+                    .sdist
+                    .as_ref()
+                    .and_then(SourceDist::header_filename)
+                    .map(Box::<str>::from);
                 // A direct URL source can also be a wheel, so validate the extension.
+                let extension = DistExtension::from_path(url.base_str()).or_else(|err| {
+                    header_filename
+                        .as_deref()
+                        .map_or(Err(err), DistExtension::from_path)
+                });
                 let DistExtension::Source(ext) =
-                    DistExtension::from_path(url.base_str()).map_err(|err| {
-                        LockErrorKind::MissingExtension {
-                            id: self.id.clone(),
-                            err,
-                        }
+                    extension.map_err(|err| LockErrorKind::MissingExtension {
+                        id: self.id.clone(),
+                        err,
                     })?
                 else {
                     return Ok(None);
@@ -7062,13 +7098,21 @@ impl Package {
                     .into());
                 }
                 let location = url.to_url().map_err(LockErrorKind::InvalidUrl)?;
+                let archive = if let Some(filename) = &header_filename {
+                    ArchiveUrlFilename::Header {
+                        filename: filename.clone(),
+                        ext: DistExtension::Source(ext),
+                    }
+                } else {
+                    ArchiveUrlFilename::Url(DistExtension::Source(ext))
+                };
                 let url = SafeUrl::from(ParsedArchiveUrl {
                     url: location.clone(),
                     subdirectory: direct.subdirectory.clone(),
-                    archive: ArchiveUrlFilename::Url(DistExtension::Source(ext)),
+                    archive,
                 });
                 let direct_dist = DirectUrlSourceDist {
-                    header_filename: None,
+                    header_filename,
                     name: self.id.name.clone(),
                     location: Box::new(location),
                     subdirectory: direct.subdirectory.clone(),
@@ -8027,29 +8071,6 @@ impl Source {
         matches!(self, Self::Registry(..) | Self::Git(_, _))
     }
 
-    /// Returns `true` if the source is that of a wheel.
-    fn is_wheel(&self) -> bool {
-        match self {
-            Self::Path(path) => {
-                matches!(
-                    DistExtension::from_path(path).ok(),
-                    Some(DistExtension::Wheel)
-                )
-            }
-            Self::Direct(url, _) => {
-                matches!(
-                    DistExtension::from_path(url.as_ref()).ok(),
-                    Some(DistExtension::Wheel)
-                )
-            }
-            Self::Directory(..) => false,
-            Self::Editable(..) => false,
-            Self::Virtual(..) => false,
-            Self::Git(..) => false,
-            Self::Registry(..) => false,
-        }
-    }
-
     /// Returns `true` if the source is that of a source tree.
     fn is_source_tree(&self) -> bool {
         match self {
@@ -8392,6 +8413,8 @@ enum GitSourceKind {
 /// Inspired by: <https://discuss.python.org/t/lock-files-again-but-this-time-w-sdists/46593>
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct SourceDistMetadata {
+    /// A server-provided filename when the direct URL has no recognized archive extension.
+    filename: Option<Box<str>>,
     /// A hash of the source distribution.
     hash: Option<HashDigest>,
     /// The size of the source distribution in bytes.
@@ -8431,6 +8454,7 @@ impl<'de> serde::Deserialize<'de> for SourceDist {
         struct Fields {
             url: Option<UrlString>,
             path: Option<PortablePathBuf>,
+            filename: Option<Box<str>>,
             #[serde(default, deserialize_with = "deserialize_optional_hash_digest")]
             hash: Option<HashDigest>,
             size: Option<u64>,
@@ -8441,12 +8465,14 @@ impl<'de> serde::Deserialize<'de> for SourceDist {
         let Fields {
             url,
             path,
+            filename,
             hash,
             size,
             upload_time,
         } = serde::Deserialize::deserialize(deserializer)?;
 
         let metadata = SourceDistMetadata {
+            filename,
             hash,
             size,
             upload_time,
@@ -8465,10 +8491,21 @@ impl<'de> serde::Deserialize<'de> for SourceDist {
 
 impl SourceDist {
     fn filename(&self) -> Option<Cow<'_, str>> {
+        if let Some(filename) = self.header_filename() {
+            return Some(Cow::Borrowed(filename));
+        }
         match self {
             Self::Metadata { .. } => None,
             Self::Url { url, .. } => url.filename().ok(),
             Self::Path { path, .. } => path.file_name().map(|filename| filename.to_string_lossy()),
+        }
+    }
+
+    fn header_filename(&self) -> Option<&str> {
+        match self {
+            Self::Metadata { metadata }
+            | Self::Url { metadata, .. }
+            | Self::Path { metadata, .. } => metadata.filename.as_deref(),
         }
     }
 
@@ -8556,8 +8593,8 @@ impl SourceDist {
             uv_distribution_types::SourceDist::Registry(ref reg_dist) => {
                 Self::from_registry_dist(reg_dist, index, index_locations)
             }
-            uv_distribution_types::SourceDist::DirectUrl(_) => {
-                Self::from_direct_dist(id, hashes).map(Some)
+            uv_distribution_types::SourceDist::DirectUrl(ref direct_dist) => {
+                Self::from_direct_dist(id, direct_dist, hashes).map(Some)
             }
             uv_distribution_types::SourceDist::Path(_) => {
                 Self::from_path_dist(id, hashes).map(Some)
@@ -8603,6 +8640,7 @@ impl SourceDist {
                 Ok(Some(Self::Url {
                     url,
                     metadata: SourceDistMetadata {
+                        filename: None,
                         hash,
                         size,
                         upload_time,
@@ -8637,6 +8675,7 @@ impl SourceDist {
                     Ok(Some(Self::Path {
                         path,
                         metadata: SourceDistMetadata {
+                            filename: None,
                             hash,
                             size,
                             upload_time,
@@ -8656,6 +8695,7 @@ impl SourceDist {
                     Ok(Some(Self::Url {
                         url,
                         metadata: SourceDistMetadata {
+                            filename: None,
                             hash,
                             size,
                             upload_time,
@@ -8666,7 +8706,11 @@ impl SourceDist {
         }
     }
 
-    fn from_direct_dist(id: &PackageId, hashes: &[HashDigest]) -> Result<Self, LockError> {
+    fn from_direct_dist(
+        id: &PackageId,
+        direct_dist: &DirectUrlSourceDist,
+        hashes: &[HashDigest],
+    ) -> Result<Self, LockError> {
         let Some(hash) = hashes.iter().max().cloned() else {
             let kind = LockErrorKind::Hash {
                 id: id.clone(),
@@ -8677,6 +8721,7 @@ impl SourceDist {
         };
         Ok(Self::Metadata {
             metadata: SourceDistMetadata {
+                filename: direct_dist.header_filename.clone(),
                 hash: Some(hash),
                 size: None,
                 upload_time: None,
@@ -8695,6 +8740,7 @@ impl SourceDist {
         };
         Ok(Self::Metadata {
             metadata: SourceDistMetadata {
+                filename: None,
                 hash: Some(hash),
                 size: None,
                 upload_time: None,
@@ -8713,6 +8759,7 @@ impl SourceDist {
         };
         Ok(Self::Metadata {
             metadata: SourceDistMetadata {
+                filename: None,
                 hash: Some(hash),
                 size: None,
                 upload_time: None,
@@ -8831,11 +8878,11 @@ struct Wheel {
     upload_time: Option<Timestamp>,
     /// The filename of the wheel.
     ///
-    /// This isn't part of the wire format since it's redundant with the
-    /// URL. But we do use it for various things, and thus compute it at
-    /// deserialization time. Not being able to extract a wheel filename from a
-    /// wheel URL is thus a deserialization error.
+    /// This is inferred from the URL or path unless an opaque URL has a separate filename.
+    /// The parsed filename provides the package name, version, and compatibility tags.
     filename: WheelFilename,
+    /// The original server-provided filename for an opaque direct URL.
+    header_filename: Option<Box<str>>,
 }
 
 impl Wheel {
@@ -8971,6 +9018,7 @@ impl Wheel {
             size,
             upload_time,
             filename,
+            header_filename: None,
         })
     }
 
@@ -8983,6 +9031,7 @@ impl Wheel {
             size: None,
             upload_time: None,
             filename: direct_dist.filename.clone(),
+            header_filename: direct_dist.header_filename.clone(),
         }
     }
 
@@ -8995,6 +9044,7 @@ impl Wheel {
             size: None,
             upload_time: None,
             filename: path_dist.filename.clone(),
+            header_filename: None,
         }
     }
 
@@ -9007,6 +9057,7 @@ impl Wheel {
             size: None,
             upload_time: None,
             filename: path_dist.filename.clone(),
+            header_filename: None,
         }
     }
 
@@ -9104,7 +9155,7 @@ impl Wheel {
 struct WheelWire {
     url: Option<UrlString>,
     path: Option<Box<Path>>,
-    filename: Option<WheelFilename>,
+    filename: Option<Box<str>>,
     /// A hash of the built distribution.
     ///
     /// This is only present for wheels that come from registries and direct
@@ -9153,11 +9204,21 @@ impl TryFrom<WheelWire> for Wheel {
     type Error = String;
 
     fn try_from(wire: WheelWire) -> Result<Self, String> {
+        let explicit_filename = wire
+            .filename
+            .as_deref()
+            .map(WheelFilename::from_str)
+            .transpose()
+            .map_err(|err| err.to_string())?;
+        let mut header_filename = None;
         let source = if let Some(url) = wire.url {
+            if DistExtension::from_path(url.base_str()).is_err() {
+                header_filename.clone_from(&wire.filename);
+            }
             WheelWireSource::Url { url }
         } else if let Some(path) = wire.path {
             WheelWireSource::Path { path }
-        } else if let Some(filename) = wire.filename {
+        } else if let Some(filename) = explicit_filename {
             WheelWireSource::Filename { filename }
         } else {
             return Err("wheel has no URL, path, or filename".to_string());
@@ -9165,7 +9226,11 @@ impl TryFrom<WheelWire> for Wheel {
 
         let filename = match &source {
             WheelWireSource::Url { url } => {
-                let filename = url.filename().map_err(|err| err.to_string())?;
+                let filename = if let Some(filename) = header_filename.as_deref() {
+                    Cow::Borrowed(filename)
+                } else {
+                    url.filename().map_err(|err| err.to_string())?
+                };
                 filename.parse::<WheelFilename>().map_err(|err| {
                     format!("failed to parse `{filename}` as wheel filename: {err}")
                 })?
@@ -9190,6 +9255,7 @@ impl TryFrom<WheelWire> for Wheel {
             size: wire.size,
             upload_time: wire.upload_time,
             filename,
+            header_filename,
         })
     }
 }

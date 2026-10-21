@@ -121,6 +121,10 @@ pub enum PylockTomlErrorKind {
     MissingSource(PackageName),
     #[error("Package `{0}` uses a Git archive, which pylock.toml export does not support")]
     GitArchiveUnsupported(PackageName),
+    #[error(
+        "Package `{0}` requires a Content-Disposition filename, which pylock.toml export does not support"
+    )]
+    ContentDispositionUnsupported(PackageName),
     #[error("Package `{0}` does not include a compatible wheel for the current platform")]
     MissingWheel(PackageName),
     #[error("`packages.wheel` entry for `{0}` must have a `path` or `url`")]
@@ -512,6 +516,11 @@ impl<'lock> PylockToml {
 
             match &**dist {
                 Dist::Built(BuiltDist::DirectUrl(dist)) => {
+                    if dist.header_filename.is_some() {
+                        return Err(PylockTomlErrorKind::ContentDispositionUnsupported(
+                            package.name,
+                        ));
+                    }
                     package.archive = Some(PylockTomlArchive {
                         url: Some((*dist.location).clone().with_policy(Raw)),
                         path: None,
@@ -585,6 +594,11 @@ impl<'lock> PylockToml {
                     }
                 }
                 Dist::Source(SourceDist::DirectUrl(dist)) => {
+                    if dist.header_filename.is_some() {
+                        return Err(PylockTomlErrorKind::ContentDispositionUnsupported(
+                            package.name,
+                        ));
+                    }
                     package.archive = Some(PylockTomlArchive {
                         url: Some((*dist.location).clone().with_policy(Raw)),
                         path: None,
@@ -824,6 +838,13 @@ impl<'lock> PylockToml {
         let mut packages = Vec::with_capacity(nodes.len());
         for node in nodes {
             let package = node.package;
+            if let Source::Direct(url, _) = &package.id.source
+                && DistExtension::from_path(url.base_str()).is_err()
+            {
+                return Err(PylockTomlErrorKind::ContentDispositionUnsupported(
+                    package.id.name.clone(),
+                ));
+            }
 
             // Extract the `packages.wheels` field.
             //

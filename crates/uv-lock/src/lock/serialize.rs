@@ -523,6 +523,9 @@ fn write_source_dist_inline(
             writer.inline_value(&mut first, "path", PortablePath::from(path).to_string())?;
         }
     }
+    if let Some(filename) = source_dist.header_filename() {
+        writer.inline_value(&mut first, "filename", filename)?;
+    }
     if let Some(hash) = source_dist.hash() {
         writer.inline_value(&mut first, "hash", hash.to_string())?;
     }
@@ -542,6 +545,9 @@ fn write_wheel_inline(writer: &mut LockWriter, wheel: &Wheel) -> Result<(), Writ
     match &wheel.url {
         WheelWireSource::Url { url } => {
             writer.inline_value(&mut first, "url", url.as_ref())?;
+            if let Some(filename) = &wheel.header_filename {
+                writer.inline_value(&mut first, "filename", filename.as_ref())?;
+            }
         }
         WheelWireSource::Path { path } => {
             writer.inline_value(&mut first, "path", PortablePath::from(path).to_string())?;
