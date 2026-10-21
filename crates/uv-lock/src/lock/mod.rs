@@ -2547,7 +2547,6 @@ impl Lock {
             {
                 package.metadata = PackageMetadata::from_distribution(metadata, root, dist.role)?;
             }
-            package.wheels.retain(|wheel| wheel.filename.variant().is_none());
 
             if let Some(index) = dist.index()
                 && let Some(route) = index_locations.proxy_route_for(index)

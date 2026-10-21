@@ -102,6 +102,7 @@ impl<'a> ResolutionGraphBuilder<'a> {
                 package,
                 entry.key().version.clone(),
                 &resolution.pins,
+                &resolution.env,
                 self.index,
                 self.git,
             )?;
