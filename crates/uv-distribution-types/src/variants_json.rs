@@ -37,6 +37,9 @@ pub enum VariantsJsonParseError {
 type VariantProperties = BTreeMap<VariantNamespace, BTreeMap<VariantFeature, Vec<VariantValue>>>;
 
 /// Compatible features and values by namespace, ordered from most to least preferred.
+///
+/// Namespaces are also ordered, but their ordering comes from the package instead of the provider
+/// and doesn't need to be captured here.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct VariantPreferences {
@@ -308,9 +311,9 @@ impl TryFrom<String> for VariantValue {
 fn valid_component(value: &str, allow_period: bool) -> bool {
     !value.is_empty()
         && value.bytes().all(|character| {
-            character.is_ascii_lowercase()
-                || character.is_ascii_digit()
-                || character == b'_'
-                || (allow_period && character == b'.')
-        })
+        character.is_ascii_lowercase()
+            || character.is_ascii_digit()
+            || character == b'_'
+            || (allow_period && character == b'.')
+    })
 }
