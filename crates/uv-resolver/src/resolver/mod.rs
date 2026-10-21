@@ -14,7 +14,7 @@ use either::Either;
 use futures::{FutureExt, StreamExt};
 use itertools::Itertools;
 use papaya::{HashMap, ResizeMode};
-use pubgrub::{ConflictId, Id, Ranges, State, Term};
+use pubgrub::{ConflictId, Id, IncompatibilityArena, Ranges, State, Term};
 use rustc_hash::{FxHashMap, FxHashSet};
 use tokio::sync::mpsc::{self, Receiver};
 use tokio::sync::oneshot;
@@ -364,12 +364,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         let root = PubGrubPackage::from(PubGrubPackageInner::Root(self.project.clone()));
         let pubgrub = State::init(root.clone(), MIN_VERSION.clone());
         let prefetcher = BatchPrefetcher::new(self.capabilities.clone(), requests.clone());
-        let state = ForkState::new(
+        let mut state = ForkState::new(
             pubgrub,
             self.env.clone(),
             self.python_requirement.clone(),
             prefetcher,
         );
+        // Pending forks keep solver checkpoints; the active branch exclusively owns the arena.
+        let mut incompatibility_arena = state.pubgrub.take_incompatibility_arena();
         let mut preferences = self.preferences.clone();
         let mut forked_states = self.env.initial_forked_states(state)?;
 
@@ -403,7 +405,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         );
 
         'FORK: while let Some(fork) = forked_states.pop() {
-            let mut state = self.materialize_fork(fork, requests)?;
+            let mut state = self.materialize_fork(fork, incompatibility_arena, requests)?;
             if let Some(split) = state.env.end_user_fork_display() {
                 let requires_python = state.python_requirement.target();
                 debug!("Solving {split} (requires-python: {requires_python:?})");
@@ -483,7 +485,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 start.elapsed().as_secs_f32()
                             );
 
-                            let resolution = state.into_resolution();
+                            let (resolution, mut arena) = state.into_resolution();
+                            if let Some(next) = forked_states.last() {
+                                arena.rewind_to(&next.state.pubgrub);
+                            } else {
+                                // Release the final arena before merging the completed graph.
+                                arena = IncompatibilityArena::default();
+                            }
+                            incompatibility_arena = arena;
 
                             // Walk over the selected versions, and mark them as preferences. We have to
                             // add forks back as to not override the preferences from the lockfile for
@@ -642,6 +651,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     let version = match version {
                         ResolverVersion::Unforked(version) => version,
                         ResolverVersion::Forked(forks) => {
+                            incompatibility_arena = state.pubgrub.take_incompatibility_arena();
                             forked_states.extend(Self::version_forks_to_fork_states(state, forks));
                             continue 'FORK;
                         }
@@ -805,6 +815,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             .map_err(|err| {
                                 enrich_dependency_error(err, next_id, &version, &state.pubgrub)
                             })?;
+                        incompatibility_arena = state.pubgrub.take_incompatibility_arena();
                         forked_states.extend(Self::forks_to_fork_states(
                             state,
                             &version,
@@ -846,6 +857,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                         version: None,
                                     })
                                     .collect();
+                                incompatibility_arena = state.pubgrub.take_incompatibility_arena();
                                 forked_states
                                     .extend(Self::version_forks_to_fork_states(state, forks));
                                 continue 'FORK;
@@ -868,6 +880,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 }
             }
         }
+        drop(incompatibility_arena);
+
         if resolutions.num_forks() > 1 {
             info!(
                 "Solved your requirements for {} environments",
@@ -931,9 +945,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     fn materialize_fork<'index>(
         &self,
         pending: PendingFork<'index>,
+        incompatibility_arena: IncompatibilityArena<UvDependencyProvider>,
         requests: &MetadataRequests,
     ) -> Result<ForkState<'index>, ResolveError> {
-        let state = Rc::unwrap_or_clone(pending.state);
+        let mut state = Rc::unwrap_or_clone(pending.state);
+        state
+            .pubgrub
+            .restore_incompatibility_arena(incompatibility_arena);
         match pending.action {
             ForkAction::Initial => Ok(state),
             ForkAction::Version(fork) => {
@@ -3285,7 +3303,12 @@ impl<'index> ForkState<'index> {
         (url, index)
     }
 
-    fn into_resolution(self) -> Resolution<'index> {
+    fn into_resolution(
+        mut self,
+    ) -> (
+        Resolution<'index>,
+        IncompatibilityArena<UvDependencyProvider>,
+    ) {
         let solution: FxHashMap<_, _> = self.pubgrub.partial_solution.extract_solution().collect();
         // Node order can affect diagnostic order and which artifact hashes `requirements.txt`
         // emits when it merges the same package version from different sources.
@@ -3428,12 +3451,17 @@ impl<'index> ForkState<'index> {
             }
         }
 
-        Resolution {
-            nodes,
-            edges,
-            pins: self.pins,
-            env: self.env,
-        }
+        // The owned result contains no solver IDs or borrowed incompatibility records.
+        let arena = self.pubgrub.take_incompatibility_arena();
+        (
+            Resolution {
+                nodes,
+                edges,
+                pins: self.pins,
+                env: self.env,
+            },
+            arena,
+        )
     }
 }
 
