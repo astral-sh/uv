@@ -1131,3 +1131,116 @@ async fn registry_variant_wheels_are_not_selectable() -> Result<()> {
     ");
     Ok(())
 }
+
+/// A conflicting extra makes the variant branch unreachable, while selecting that branch requires
+/// the sidecar bytes to match the lockfile.
+#[test]
+fn frozen_sync_authenticates_reachable_variant_metadata() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let links = context.temp_dir.child("links");
+    links.create_dir_all()?;
+    let metadata = json!({
+        "$schema": PEP_825_SCHEMA,
+        "default-priorities": { "namespace": ["x86_64"] },
+        "variants": { "null": {} },
+    })
+    .to_string();
+    let name = "ok".parse()?;
+    let version = "1.0.0".parse()?;
+    let (_, wheel) = WheelBuilder::new(&name, &version)
+        .files(&[("ok-1.0.0.dist-info/variant.json", &metadata)])
+        .build();
+    links
+        .child("ok-1.0.0-py3-none-any-null.whl")
+        .write_binary(&wheel)?;
+    let cpu_version = "2.0.0".parse()?;
+    let (_, cpu_wheel) = WheelBuilder::new(&name, &cpu_version).build();
+    links
+        .child("ok-2.0.0-py3-none-any.whl")
+        .write_binary(&cpu_wheel)?;
+    let sidecar = links.child("ok-1.0.0-variants.json");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "example"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        cpu = ["ok==2.0.0"]
+        gpu = ["ok==1.0.0"]
+
+        [tool.uv]
+        conflicts = [[{ extra = "cpu" }, { extra = "gpu" }]]
+        no-index = true
+        find-links = ["links"]
+        preview-features = ["wheel-variants"]
+    "#})?;
+
+    let digest = hex::encode(Sha256::digest(metadata.as_bytes()));
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(&formatdoc! {r#"
+        version = 1
+        revision = 5
+        requires-python = ">=3.12"
+        conflicts = [[
+            {{ package = "example", extra = "cpu" }},
+            {{ package = "example", extra = "gpu" }},
+        ]]
+
+        [[package]]
+        name = "example"
+        version = "1.0.0"
+        source = {{ virtual = "." }}
+
+        [package.optional-dependencies]
+        cpu = [{{ name = "ok", version = "2.0.0", source = {{ registry = "links" }} }}]
+        gpu = [{{ name = "ok", version = "1.0.0", source = {{ registry = "links" }} }}]
+
+        [[package]]
+        name = "ok"
+        version = "1.0.0"
+        source = {{ registry = "links" }}
+        variants-json = {{ path = "ok-1.0.0-variants.json", hash = "sha256:{digest}" }}
+        wheels = [{{ path = "ok-1.0.0-py3-none-any-null.whl" }}]
+
+        [[package]]
+        name = "ok"
+        version = "2.0.0"
+        source = {{ registry = "links" }}
+        wheels = [{{ path = "ok-2.0.0-py3-none-any.whl" }}]
+    "#})?;
+
+    let changed_metadata = "tampered";
+    sidecar.write_str(changed_metadata)?;
+    let context = context
+        .with_filter((digest, "[LOCKED_SIDECAR_HASH]"))
+        .with_filter((
+            hex::encode(Sha256::digest(changed_metadata.as_bytes())),
+            "[CHANGED_SIDECAR_HASH]",
+        ));
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--extra").arg("cpu"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==2.0.0
+    ");
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--extra").arg("gpu"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to fetch wheel variant metadata for `ok==1.0.0 @ registry+links`
+      cause: Hash mismatch for package metadata at `file://[TEMP_DIR]/links/ok-1.0.0-variants.json`
+
+             Expected:
+               sha256:[LOCKED_SIDECAR_HASH]
+
+             Computed:
+               sha256:[CHANGED_SIDECAR_HASH]
+    ");
+    Ok(())
+}

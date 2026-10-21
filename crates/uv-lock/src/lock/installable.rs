@@ -23,7 +23,7 @@ use uv_distribution_types::{
 use uv_normalize::{DefaultExtras, ExtraName, GroupName, PackageName};
 use uv_pep508::{MarkerTree, MarkerVariant, MarkerVariantsEnvironment};
 use uv_platform_tags::Tags;
-use uv_pypi_types::{ConflictKind, ConflictSet, ResolverMarkerEnvironment};
+use uv_pypi_types::{ConflictItem, ConflictKind, ConflictSet, ResolverMarkerEnvironment};
 use uv_types::BuildContext;
 
 use uv_resolver_types::UniversalMarker;
@@ -88,6 +88,51 @@ fn package_dependencies<'a>(
         None => &package.dependencies,
     };
     dependencies.iter()
+}
+
+fn push_possible_dependency<'lock>(
+    queue: &mut Vec<(PackageIndex, Option<&'lock ExtraName>)>,
+    dependency: &'lock Dependency,
+    marker_env: &ResolverMarkerEnvironment,
+) {
+    if !dependency
+        .complexified_marker
+        .pep508()
+        .evaluate(marker_env, &[])
+    {
+        return;
+    }
+    queue.push((dependency.index, None));
+    queue.extend(
+        dependency
+            .extra
+            .iter()
+            .map(|extra| (dependency.index, Some(extra))),
+    );
+}
+
+/// Find extras that could be activated from the selected roots. The environment is fixed, while
+/// conflict items and variant selections may change during the traversal.
+fn potentially_activated_extras<'lock>(
+    lock: &'lock Lock,
+    mut queue: Vec<(PackageIndex, Option<&'lock ExtraName>)>,
+    marker_env: &ResolverMarkerEnvironment,
+) -> FxHashSet<(&'lock PackageName, &'lock ExtraName)> {
+    let mut seen = FxHashSet::default();
+    let mut extras = FxHashSet::default();
+    while let Some((index, extra)) = queue.pop() {
+        if !seen.insert((index, extra)) {
+            continue;
+        }
+        let package = lock.package(index);
+        if let Some(extra) = extra {
+            extras.insert((package.name(), extra));
+        }
+        for dependency in package_dependencies(package, extra) {
+            push_possible_dependency(&mut queue, dependency, marker_env);
+        }
+    }
+    extras
 }
 
 /// Determines which dependencies are included from an install target root.
@@ -215,15 +260,18 @@ pub trait Installable<'lock> {
                 });
                 return Ok(Resolution::new(traversal.graph).with_variant_contexts(contexts));
             }
-            if !self.lock().conflicts().is_empty()
-                && let Some((index, _)) = pending.peek()
+            if !pending.clone().any(|(_, _, stable)| stable)
+                && let Some((index, _, _)) = pending.peek()
             {
                 return Err(LockErrorKind::VariantConflictReachability {
                     package_id: self.lock().package(*index).id.clone(),
                 }
                 .into());
             }
-            for (index, install) in pending {
+            for (index, install, stable) in pending {
+                if !stable {
+                    continue;
+                }
                 let package = self.lock().package(index);
                 let default_build_options = BuildOptions::default();
                 let build_options = if install {
@@ -419,7 +467,7 @@ trait InstallableExt<'lock>: Installable<'lock> {
                 } else {
                     *state = Some(TraversalNode::PendingVariant {
                         install,
-                        reachable: false,
+                        stable: None,
                     });
                     return Ok(None);
                 }
@@ -1015,22 +1063,89 @@ trait InstallableExt<'lock>: Installable<'lock> {
             }
         }
 
-        for (package_index, extra) in unresolved {
-            if track_variant_conflicts {
+        let is_active = |item: &ConflictItem| match item.kind() {
+            ConflictKind::Project => activated_projects.contains(&item.package()),
+            ConflictKind::Extra(extra) => activated_extras.contains(&(item.package(), extra)),
+            ConflictKind::Group(group) => activated_groups.contains(&(item.package(), group)),
+        };
+        if !unresolved.is_empty() {
+            let potentially_activated_extras = if has_conflicts {
+                let mut possible_roots = conflict_reachability.keys().copied().collect::<Vec<_>>();
+                if groups.prod() {
+                    for root in roots {
+                        let index = self.lock().by_id[&root.id];
+                        possible_roots.extend(
+                            extras
+                                .extra_names(root.optional_dependencies.keys())
+                                .map(|extra| (index, Some(extra))),
+                        );
+                    }
+                }
+                for root in roots.iter().copied().chain(group_root) {
+                    for (group, dependencies) in &root.dependency_groups {
+                        if self.includes_group(Some(root.name()), group, groups) {
+                            for dependency in dependencies {
+                                push_possible_dependency(
+                                    &mut possible_roots,
+                                    dependency,
+                                    marker_env,
+                                );
+                            }
+                        }
+                    }
+                }
+                potentially_activated_extras(self.lock(), possible_roots, marker_env)
+            } else {
+                FxHashSet::default()
+            };
+            // Selection can reveal additional extras. Run providers only for packages that stay
+            // reachable regardless of extras that unresolved packages might activate.
+            for (package_index, extra) in unresolved {
                 let package = self.lock().package(package_index);
-                let reachability = conflict_reachability[&(package_index, extra)];
-                if !reachability.evaluate_activated_with_variants(
-                    marker_env,
-                    &variant_environment(package),
-                    &activated,
-                ) {
+                let reachability = if track_variant_conflicts {
+                    conflict_reachability[&(package_index, extra)]
+                } else {
+                    UniversalMarker::TRUE
+                };
+                if track_variant_conflicts
+                    && !reachability.evaluate_activated_with_variants(
+                        marker_env,
+                        &variant_environment(package),
+                        &activated,
+                    )
+                {
                     continue;
                 }
-            }
-            if let Some(TraversalNode::PendingVariant { reachable, .. }) =
-                &mut inverse[package_index.0]
-            {
-                *reachable = true;
+                let stable = if has_conflicts {
+                    let mut stable_reachability = reachability;
+                    for set in self.lock().conflicts().iter() {
+                        let set_active = set.iter().any(is_active);
+                        for item in set.iter() {
+                            if is_active(item) {
+                                stable_reachability.assume_conflict_item(item);
+                            } else {
+                                let fixed_inactive = match item.kind() {
+                                    ConflictKind::Project | ConflictKind::Group(_) => true,
+                                    ConflictKind::Extra(extra) => !potentially_activated_extras
+                                        .contains(&(item.package(), extra)),
+                                };
+                                if set_active || fixed_inactive {
+                                    stable_reachability.assume_not_conflict_item(item);
+                                }
+                            }
+                        }
+                    }
+                    stable_reachability.conflict().is_true()
+                } else {
+                    true
+                };
+                if let Some(TraversalNode::PendingVariant {
+                    stable: node_stable,
+                    ..
+                }) = &mut inverse[package_index.0]
+                {
+                    *node_stable = Some(node_stable.unwrap_or(false) || stable);
+                }
             }
         }
 
@@ -1061,16 +1176,7 @@ trait InstallableExt<'lock>: Installable<'lock> {
                         continue;
                     }
 
-                    let active = match item.kind() {
-                        ConflictKind::Project => activated_projects.contains(&item.package()),
-                        ConflictKind::Extra(extra) => {
-                            activated_extras.contains(&(item.package(), extra))
-                        }
-                        ConflictKind::Group(group) => {
-                            activated_groups.contains(&(item.package(), group))
-                        }
-                    };
-                    if active {
+                    if is_active(item) {
                         marker.assume_conflict_item(item);
                     } else {
                         marker.assume_not_conflict_item(item);
@@ -1314,8 +1420,9 @@ enum TraversalNode {
     Ready(NodeIndex),
     PendingVariant {
         install: bool,
-        /// Whether a path remains reachable after conflict evaluation.
-        reachable: bool,
+        /// `None` until a path remains reachable after conflict evaluation.
+        /// `Some(true)` means that path also survives additional activated extras.
+        stable: Option<bool>,
     },
 }
 
@@ -1331,7 +1438,7 @@ impl TraversalNode {
 /// Inspect packages whose artifact selection is reachable from the selected roots.
 fn pending_variants(
     inverse: &[Option<TraversalNode>],
-) -> impl Iterator<Item = (PackageIndex, bool)> {
+) -> impl Iterator<Item = (PackageIndex, bool, bool)> + Clone {
     inverse
         .iter()
         .copied()
@@ -1339,14 +1446,9 @@ fn pending_variants(
         .filter_map(|(index, state)| match state {
             Some(TraversalNode::PendingVariant {
                 install,
-                reachable: true,
-            }) => Some((PackageIndex(index), install)),
-            Some(
-                TraversalNode::Ready(_)
-                | TraversalNode::PendingVariant {
-                    reachable: false, ..
-                },
-            )
+                stable: Some(stable),
+            }) => Some((PackageIndex(index), install, stable)),
+            Some(TraversalNode::Ready(_) | TraversalNode::PendingVariant { stable: None, .. })
             | None => None,
         })
 }
@@ -2156,7 +2258,7 @@ provides-extras = ["cli"]
     }
 
     /// An unselected extra and a dependency for another platform can contain activators for a
-    /// conflicting extra. Neither should make its variant reachable on this platform.
+    /// conflicting extra. Their presence must not make a reachable variant branch appear unstable.
     #[test]
     fn schedules_only_reachable_variants_with_unselected_activators() {
         let lock = Lock::from_toml(
@@ -2239,7 +2341,7 @@ hash = "sha256:2222222222222222222222222222222222222222222222222222222222222222"
 
         let pending = pending_variants(&traversal.inverse).collect::<Vec<_>>();
         let selected = package(&lock, "selected", "1.0.0");
-        assert_eq!(pending, [(lock.by_id[&selected.id], true)]);
+        assert_eq!(pending, [(lock.by_id[&selected.id], true, true)]);
     }
 
     #[test]
