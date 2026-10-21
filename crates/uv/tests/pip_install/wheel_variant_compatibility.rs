@@ -397,6 +397,22 @@ fn selected_variant_properties_filter_dependencies() -> Result<()> {
      + chosen==1.0.0
      + ok==1.0.0
     ");
+
+    let recorded = context.read(
+        context
+            .site_packages()
+            .join("ok-1.0.0.dist-info/uv_variant.json"),
+    );
+    assert_eq!(
+        serde_json::from_str::<Value>(&recorded)?,
+        json!({"label": "blas", "properties": {"blas_lapack": {"library": ["openblas"]}}}),
+    );
+    uv_snapshot!(context.pip_check(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Checked 2 packages in [TIME]
+    All installed packages are compatible
+    ");
     Ok(())
 }
 
