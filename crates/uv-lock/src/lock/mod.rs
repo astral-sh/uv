@@ -65,7 +65,7 @@ use uv_pypi_types::{
 use uv_redacted::{SafeUrl, SafeUrlError};
 use uv_resolver_types::{
     AnnotatedDist, ConflictMarker, DistributionMetadataIndex, MetadataResponse, PackageRole,
-    ResolutionGraphNode, ResolverOutput, UniversalMarker,
+    RequirementsTxtVariantMarkerError, ResolutionGraphNode, ResolverOutput, UniversalMarker,
 };
 use uv_small_str::SmallString;
 use uv_types::{BuildContext, HashStrategy};
@@ -10035,6 +10035,9 @@ impl std::fmt::Display for WheelTagHint {
 /// is with the caller somewhere in such cases.
 #[derive(DebugNoInline, thiserror::Error)]
 enum LockErrorKind {
+    /// A package's inclusion depends on a wheel variant.
+    #[error(transparent)]
+    RequirementsTxtVariantMarker(#[from] RequirementsTxtVariantMarkerError),
     /// An error that occurs when collecting dependency-group settings.
     #[error(transparent)]
     DependencyGroups(#[from] DependencyGroupError),
