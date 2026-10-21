@@ -6942,6 +6942,7 @@ dependencies = [
  "toml_writer",
  "tracing",
  "uuid",
+ "uv-cache",
  "uv-cache-key",
  "uv-client",
  "uv-configuration",

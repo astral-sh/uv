@@ -6092,13 +6092,22 @@ enum TagPolicy<'tags> {
     /// Prefer wheels that match the specified platform tags, but fall back to incompatible wheels
     /// if necessary.
     Preferred(&'tags Tags),
+    /// Require matching platform tags while deferring variant compatibility to artifact selection.
+    Variant(&'tags Tags),
 }
 
 impl<'tags> TagPolicy<'tags> {
     /// Returns the platform tags to consider.
     fn tags(&self) -> &'tags Tags {
         match self {
-            Self::Required(tags) | Self::Preferred(tags) => tags,
+            Self::Required(tags) | Self::Preferred(tags) | Self::Variant(tags) => tags,
+        }
+    }
+
+    fn compatibility(self, filename: &WheelFilename) -> TagCompatibility {
+        match self {
+            Self::Required(tags) | Self::Preferred(tags) => filename.compatibility(tags),
+            Self::Variant(tags) => filename.tag_compatibility(tags),
         }
     }
 }
@@ -7294,17 +7303,17 @@ impl Package {
     }
 
     fn find_best_wheel(&self, tag_policy: TagPolicy<'_>) -> Option<usize> {
-        type WheelPriority<'lock> = (TagPriority, Option<&'lock BuildTag>);
+        type WheelPriority<'lock> = (bool, TagPriority, Option<&'lock BuildTag>);
 
         let mut best: Option<(WheelPriority, usize)> = None;
         for (i, wheel) in self.wheels.iter().enumerate() {
             let TagCompatibility::Compatible(tag_priority) =
-                wheel.filename.compatibility(tag_policy.tags())
+                tag_policy.compatibility(&wheel.filename)
             else {
                 continue;
             };
             let build_tag = wheel.filename.build_tag();
-            let wheel_priority = (tag_priority, build_tag);
+            let wheel_priority = (wheel.filename.variant().is_none(), tag_priority, build_tag);
             match best {
                 None => {
                     best = Some((wheel_priority, i));
@@ -7319,7 +7328,7 @@ impl Package {
 
         let best = best.map(|(_, i)| i);
         match tag_policy {
-            TagPolicy::Required(_) => best,
+            TagPolicy::Required(_) | TagPolicy::Variant(_) => best,
             TagPolicy::Preferred(_) => best.or_else(|| self.wheels.first().map(|_| 0)),
         }
     }
@@ -10285,6 +10294,28 @@ enum LockErrorKind {
         #[source]
         io::Error,
     ),
+    #[error(
+        "Cannot select a wheel variant for `{package_id}` from a lock with conflicting requirements"
+    )]
+    VariantConflictReachability { package_id: PackageId },
+    #[error("Failed to fetch wheel variant metadata for `{package_id}`")]
+    VariantsJsonFetch {
+        package_id: PackageId,
+        #[source]
+        error: uv_client::Error,
+    },
+    #[error("Failed to parse wheel variant metadata for `{package_id}`")]
+    VariantsJsonParse {
+        package_id: PackageId,
+        #[source]
+        error: uv_distribution_types::VariantsJsonParseError,
+    },
+    #[error("Failed to select a wheel variant for `{package_id}`")]
+    VariantSelection {
+        package_id: PackageId,
+        #[source]
+        error: uv_distribution::Error,
+    },
     /// An error that occurs when an ambiguous `package.dependency` is
     /// missing a `version` field.
     #[error("Dependency `{name}` has missing `version` field but has more than one matching package", name = name.cyan())]
