@@ -4,6 +4,7 @@ pub use download::{LocalWheel, check_supported_wheel_variant, read_wheel_variant
 pub use error::Error;
 pub use first_party::FirstPartyPackages;
 pub use index::{BuiltWheelIndex, RegistryWheelIndex};
+pub use locked_wheel::read_locked_wheel_variant;
 pub use metadata::{
     ArchiveMetadata, BuildRequires, FlatRequiresDist, LoweredExtraBuildDependencies,
     LoweredRequirement, LoweringError, Metadata, MetadataError, RequiresDist,
@@ -22,6 +23,7 @@ mod extracted_wheel;
 mod first_party;
 mod hash;
 mod index;
+mod locked_wheel;
 mod metadata;
 mod reporter;
 mod source;
