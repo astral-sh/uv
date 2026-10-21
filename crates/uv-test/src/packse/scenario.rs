@@ -153,13 +153,15 @@ pub struct Variants {
     pub wheels: BTreeMap<VariantLabel, VariantWheel>,
 }
 
-/// Properties and wheel tags for a variant wheel.
+/// Properties, dependencies, and wheel tags for a variant wheel.
 #[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct VariantWheel {
     /// Variant properties, each written as `namespace :: feature :: value`.
     #[serde(default, deserialize_with = "deserialize_variant_properties")]
     pub properties: VariantProperties,
+    /// Dependencies for this wheel, defaulting to the package version's requirements.
+    pub requires: Option<Vec<Requirement>>,
     /// Wheel tags, defaulting to the package version's wheel tags.
     #[serde(default)]
     pub wheel_tags: Vec<WheelTag>,

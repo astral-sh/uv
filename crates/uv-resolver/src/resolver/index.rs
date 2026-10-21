@@ -3,14 +3,14 @@ use std::sync::Arc;
 
 use rustc_hash::FxHasher;
 use uv_distribution_types::{
-    DistributionId, IndexUrl, RegistryVariantsJson, SelectedVariant, SupportedVariantProperties,
-    VariantsJsonContent,
+    Dist, DistributionId, IndexUrl, RegistryVariantsJson, SelectedVariant,
+    SupportedVariantProperties, VariantsJsonContent,
 };
 use uv_normalize::PackageName;
 use uv_once_map::{RegisteredEntry, RegisteredOnceMap};
 use uv_resolver_types::DistributionMetadataIndex;
 
-use crate::resolver::provider::{MetadataUnavailable, VersionsResponse};
+use crate::resolver::provider::{MetadataResponse, MetadataUnavailable, VersionsResponse};
 
 /// In-memory index of package metadata.
 #[derive(Default, Clone)]
@@ -35,6 +35,9 @@ struct SharedInMemoryIndex {
 
     /// Target-specific variant selections for direct wheels.
     direct_variants: DirectWheelVariantIndex,
+
+    /// Dependency metadata combined across the wheels retained by a universal resolution.
+    variant_dependencies: FxOnceMap<Arc<Dist>, Arc<MetadataResponse>>,
 }
 
 #[derive(Debug)]
@@ -83,6 +86,10 @@ impl InMemoryIndex {
         &self,
     ) -> &FxOnceMap<RegistryVariantsJson, Arc<SupportedVariantProperties>> {
         &self.0.variant_properties
+    }
+
+    pub(crate) fn variant_dependencies(&self) -> &FxOnceMap<Arc<Dist>, Arc<MetadataResponse>> {
+        &self.0.variant_dependencies
     }
 
     /// Return exclusive access to distribution metadata when no cloned index can use it.

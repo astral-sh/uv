@@ -53,6 +53,13 @@ pub enum Error {
     },
     #[error("Wheel variant provider dependencies must use non-variant wheels: `{0}`")]
     VariantProviderDependency(String),
+    #[error(
+        "Wheels `{first}` and `{second}` have the same variant label but different dependencies"
+    )]
+    VariantWheelDependencies {
+        first: Box<WheelFilename>,
+        second: Box<WheelFilename>,
+    },
     #[error("Failed to read variant metadata from `{0}`")]
     LockedWheelVariant(String, #[source] Box<uv_metadata::Error>),
     #[error("Building source distributions is disabled")]
@@ -317,6 +324,7 @@ impl Error {
             | Self::IncompatibleWheelVariant { .. }
             | Self::VariantProvider { .. }
             | Self::VariantProviderDependency(_)
+            | Self::VariantWheelDependencies { .. }
             | Self::NoBuild
             | Self::NoBuildPackage(_)
             | Self::InvalidUrl(_)
