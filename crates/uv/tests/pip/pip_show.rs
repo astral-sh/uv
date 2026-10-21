@@ -1,7 +1,8 @@
 use anyhow::Result;
 use assert_cmd::prelude::*;
-use assert_fs::fixture::FileWriteStr;
-use assert_fs::fixture::PathChild;
+#[cfg(feature = "test-python")]
+use assert_fs::fixture::{ChildPath, PathCreateDir};
+use assert_fs::fixture::{FileWriteStr, PathChild};
 use indoc::indoc;
 
 use uv_static::EnvVars;
@@ -20,6 +21,50 @@ fn show_empty() {
     warning: Please provide a package name or names.
     "
     );
+}
+
+/// An installed variant from another installer can have unrelated variant-marked dependencies.
+#[test]
+#[cfg(feature = "test-python")]
+fn show_ignores_unrelated_variant_markers() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let site_packages = ChildPath::new(context.site_packages());
+    let shown = site_packages.child("shown-1.0.0.dist-info");
+    shown.create_dir_all()?;
+    shown.child("METADATA").write_str(indoc! {"
+        Metadata-Version: 2.1
+        Name: shown
+        Version: 1.0.0
+    "})?;
+
+    let variant = site_packages.child("variant-1.0.0.dist-info");
+    variant.create_dir_all()?;
+    variant.child("METADATA").write_str(indoc! {"
+        Metadata-Version: 2.1
+        Name: variant
+        Version: 1.0.0
+        Requires-Dist: shown
+        Requires-Dist: other; 'acme :: feature :: enabled' in variant_properties
+    "})?;
+    variant.child("variant.json").write_str(indoc! {r#"
+        {
+            "$schema": "https://variants-schema.wheelnext.dev/peps/850/v0.2.0.json",
+            "default-priorities": { "namespace": ["acme"] },
+            "providers": { "acme": { "requires": ["acme-provider"] } },
+            "variants": { "accelerated": { "acme": { "feature": ["enabled"] } } }
+        }
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.pip_show().arg("shown"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    Name: shown
+    Version: 1.0.0
+    Location: [SITE_PACKAGES]/
+    Requires:
+    Required-by: variant
+    ");
+    Ok(())
 }
 
 #[test]
