@@ -419,6 +419,94 @@ fn explicit_variant_target_selects_registry_wheel() -> Result<()> {
     Installed 1 package in [TIME]
      + ok==1.0.0
     ");
+    let recorded = context.read(
+        context
+            .site_packages()
+            .join("ok-1.0.0.dist-info/uv_variant.json"),
+    );
+    assert_eq!(
+        serde_json::from_str::<Value>(&recorded)?,
+        json!({"label": "mkl", "properties": {"blas_lapack": {"library": ["mkl"]}}}),
+    );
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--offline")
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("--variant-target")
+        .arg(target.path())
+        .arg("ok==1.0.0"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Checked 1 package in [TIME]
+    ");
+    Ok(())
+}
+
+/// An explicit empty target replaces an installed variant when another package forces resolution.
+#[test]
+fn explicit_variant_target_replaces_installed_wheel_during_resolution() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "explicit-variant-target-replaces-installed-wheel"
+        root = {}
+        expected.satisfiable = true
+
+        [packages.ok.versions."1.0.0"]
+        sdist = false
+
+        [packages.ok.versions."1.0.0".variants]
+        namespaces = ["blas_lapack"]
+
+        [packages.ok.versions."1.0.0".variants.providers.blas_lapack]
+        static-properties.library = ["openblas"]
+
+        [packages.ok.versions."1.0.0".variants.wheels]
+        blas.properties = ["blas_lapack :: library :: openblas"]
+
+        [packages.missing.versions."1.0.0"]
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
+    let installed_variant = context
+        .site_packages()
+        .join("ok-1.0.0.dist-info/variant.json");
+    let target = context.temp_dir.child("empty-target.json");
+    target.write_str("{}")?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--index-url")
+        .arg(server.index_url())
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("ok==1.0.0"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0
+    ");
+    assert!(installed_variant.is_file());
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--index-url")
+        .arg(server.index_url())
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("--variant-target")
+        .arg(target.path())
+        .arg("ok==1.0.0")
+        .arg("missing==1.0.0"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 2 packages in [TIME]
+     + missing==1.0.0
+     ~ ok==1.0.0
+    ");
+    assert!(!installed_variant.exists());
     Ok(())
 }
 

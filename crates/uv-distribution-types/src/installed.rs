@@ -379,11 +379,19 @@ impl InstalledDist {
         let Some(metadata) = self.read_variant()? else {
             return Ok(None);
         };
+        self.read_variant_context_for_metadata(&metadata).map(Some)
+    }
+
+    /// Read the selected properties for an installed wheel with known variant metadata.
+    pub fn read_variant_context_for_metadata(
+        &self,
+        metadata: &VariantsJsonContent,
+    ) -> Result<SelectedVariant, InstalledDistError> {
         match fs::read(self.install_path().join("uv_variant.json")) {
             Ok(contents) => {
                 let selected = serde_json::from_slice(&contents)?;
                 if metadata.validates_selected_variant(&selected) {
-                    Ok(Some(selected))
+                    Ok(selected)
                 } else {
                     Err(InstalledDistError::VariantContextMismatch(
                         self.name().clone(),
@@ -395,7 +403,6 @@ impl InstalledDist {
                 .and_then(|label| {
                     metadata.select_variant(label, &metadata.static_supported_properties())
                 })
-                .map(Some)
                 .ok_or_else(|| InstalledDistError::VariantContextUnavailable(self.name().clone())),
             Err(err) => Err(err.into()),
         }

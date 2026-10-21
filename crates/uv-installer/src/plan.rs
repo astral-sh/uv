@@ -380,6 +380,15 @@ impl<'a> Planner<'a> {
                                 extra_build_variables,
                             }),
                             site_packages.variant_target(),
+                            match dist {
+                                ResolvedDist::Installable { dist, .. } => match dist.as_ref() {
+                                    Dist::Built(wheel) => {
+                                        self.resolution.variant_context(wheel.wheel_filename())
+                                    }
+                                    Dist::Source(_) => None,
+                                },
+                                ResolvedDist::Installed { .. } => None,
+                            },
                         ) {
                             RequirementSatisfaction::Mismatch => {
                                 debug!(

@@ -261,11 +261,12 @@ impl VariantsJsonContent {
                 let (_, supported_values) = supported_features
                     .iter()
                     .find(|(supported_feature, _)| supported_feature == feature)?;
-                let selected_values = values
+                let mut selected_values = values
                     .iter()
                     .filter(|value| supported_values.contains(value))
                     .cloned()
                     .collect::<Vec<_>>();
+                selected_values.sort_unstable();
                 if selected_values.is_empty() {
                     return None;
                 }
@@ -293,10 +294,8 @@ impl VariantsJsonContent {
                 && features.iter().all(|(feature, values)| {
                     let selected_values = &selected_features[feature];
                     !selected_values.is_empty()
-                        && values
-                            .iter()
-                            .filter(|value| selected_values.contains(value))
-                            .eq(selected_values)
+                        && selected_values.windows(2).all(|pair| pair[0] < pair[1])
+                        && selected_values.iter().all(|value| values.contains(value))
                 })
         })
     }
