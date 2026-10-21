@@ -57,6 +57,11 @@ pub enum EnvironmentError {
     )]
     LockedPlatformIncompatibility(String),
 
+    #[error(
+        "This lockfile uses wheel variants; pass `--preview-features wheel-variants` to use it"
+    )]
+    WheelVariantsPreview,
+
     #[error("Project virtual environment directory `{0}` cannot be used because {1}")]
     InvalidProjectEnvironmentDir(PathBuf, String),
 
@@ -224,6 +229,7 @@ impl From<EnvironmentError> for UvError {
             | EnvironmentError::DisjointLockedRequiresPython { .. }
             | EnvironmentError::LockedPythonIncompatibility(..)
             | EnvironmentError::LockedPlatformIncompatibility(..)
+            | EnvironmentError::WheelVariantsPreview
             | EnvironmentError::InvalidProjectEnvironmentDir(..)
             | EnvironmentError::InvalidScriptEnvironmentDir(..)
             | EnvironmentError::MalwareFound
@@ -278,6 +284,7 @@ impl uv_errors::Hinted for EnvironmentError {
             | Self::DisjointLockedRequiresPython { .. }
             | Self::LockedPythonIncompatibility(..)
             | Self::LockedPlatformIncompatibility(..)
+            | Self::WheelVariantsPreview
             | Self::InvalidProjectEnvironmentDir(..)
             | Self::InvalidScriptEnvironmentDir(..)
             | Self::MalwareFound
