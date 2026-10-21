@@ -11,7 +11,7 @@ pub use metadata::{
 };
 pub use reporter::Reporter;
 pub use source::{StaticMetadataDatabase, prune};
-pub use variant::{InstalledWheelVariant, supported_variant_properties};
+pub use variant::InstalledWheelVariant;
 
 mod archive;
 mod diagnostics;

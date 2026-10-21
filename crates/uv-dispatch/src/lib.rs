@@ -590,6 +590,7 @@ impl BuildContext for BuildDispatch<'_> {
                 )
                 .with_build_stack(build_stack),
                 tags.python_platform(),
+                hasher,
             )
             .await
             .map_err(BuildDispatchError::InstallBuildDependencies)?;

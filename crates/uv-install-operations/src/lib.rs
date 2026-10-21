@@ -751,6 +751,7 @@ async fn execute_plan(
                 concurrency.downloads_semaphore.clone(),
             ),
             tags.python_platform(),
+            hasher,
         )
         .await?;
 
