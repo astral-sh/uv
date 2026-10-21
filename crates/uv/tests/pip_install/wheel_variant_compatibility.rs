@@ -67,7 +67,6 @@ fn install_local_variant_wheel() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + ok==1.0.0 (from file://[TEMP_DIR]/ok-1.0.0-py3-none-any-gpu.whl)
     ");
@@ -80,9 +79,8 @@ fn install_local_variant_wheel() -> Result<()> {
         .arg(wheel_path.path()), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies
-      cause: Because only ok==1.0.0 is available and ok==1.0.0 has only unsupported wheel variants, we can conclude that all versions of ok cannot be used.
-             And because you require ok, we can conclude that your requirements are unsatisfiable.
+    error: Failed to read `ok @ file://[TEMP_DIR]/ok-1.0.0-py3-none-any-gpu.whl`
+      cause: Wheel variant `gpu` requires unsupported properties: `nvidia :: cuda_version_lower_bound :: 12` and `nvidia :: sm_arch :: 89_real`
     ");
 
     context
@@ -97,9 +95,8 @@ fn install_local_variant_wheel() -> Result<()> {
         .arg("requirements.in"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies
-      cause: Because only ok==1.0.0 is available and ok==1.0.0 has only unsupported wheel variants, we can conclude that all versions of ok cannot be used.
-             And because you require ok, we can conclude that your requirements are unsatisfiable.
+    error: Failed to read `ok @ file://[TEMP_DIR]/ok-1.0.0-py3-none-any-gpu.whl`
+      cause: Wheel variant `gpu` requires unsupported properties: `nvidia :: cuda_version_lower_bound :: 12` and `nvidia :: sm_arch :: 89_real`
     ");
     Ok(())
 }
@@ -153,9 +150,8 @@ fn install_direct_url_variant_wheel() -> Result<()> {
         .arg(&url), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies
-      cause: Because only ok==1.0.0 is available and ok==1.0.0 has only unsupported wheel variants, we can conclude that all versions of ok cannot be used.
-             And because you require ok, we can conclude that your requirements are unsatisfiable.
+    error: Failed to download `ok @ http://[LOCALHOST]/ok-1.0.0-py3-none-any-gpu.whl`
+      cause: Wheel variant `gpu` requires unsupported properties: `nvidia :: cuda_version_lower_bound :: 12` and `nvidia :: sm_arch :: 89_real`
     ");
 
     // A dependency metadata override still needs the cached wheel's variant requirements.
@@ -177,9 +173,8 @@ fn install_direct_url_variant_wheel() -> Result<()> {
         .arg(&url), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies
-      cause: Because only ok==1.0.0 is available and ok==1.0.0 has only unsupported wheel variants, we can conclude that all versions of ok cannot be used.
-             And because you require ok, we can conclude that your requirements are unsatisfiable.
+    error: Failed to download `ok @ http://[LOCALHOST]/ok-1.0.0-py3-none-any-gpu.whl`
+      cause: Wheel variant `gpu` requires unsupported properties: `nvidia :: cuda_version_lower_bound :: 12` and `nvidia :: sm_arch :: 89_real`
     ");
 
     uv_snapshot!(context.filters(), context.pip_install()
@@ -191,7 +186,6 @@ fn install_direct_url_variant_wheel() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + ok==1.0.0 (from http://[LOCALHOST]/ok-1.0.0-py3-none-any-gpu.whl)
     ");
@@ -224,12 +218,9 @@ fn direct_url_wheel_with_invalid_variant_metadata() -> Result<()> {
         .arg(format!("ok @ {url}")), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies
-      cause: Because only ok==1.0.0 is available and ok==1.0.0 has invalid metadata, we can conclude that all versions of ok cannot be used.
-             And because you require ok, we can conclude that your requirements are unsatisfiable.
-
-    hint: Metadata for `ok` (v1.0.0) could not be parsed:
-      Failed to parse variant metadata `variant.json`: EOF while parsing an object at line 1 column 1
+    error: Failed to download `ok @ http://[LOCALHOST]/ok-1.0.0-py3-none-any-null.whl`
+      cause: Failed to read metadata: [CACHE_DIR]/archive-v0/[HASH]/ok-1.0.0.dist-info/variant.json
+      cause: EOF while parsing an object at line 1 column 1
     ");
     Ok(())
 }
@@ -288,9 +279,8 @@ fn install_git_path_variant_wheel() -> Result<()> {
         .arg(&requirement), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies
-      cause: Because only ok==1.0.0 is available and ok==1.0.0 has only unsupported wheel variants, we can conclude that all versions of ok cannot be used.
-             And because you require ok, we can conclude that your requirements are unsatisfiable.
+    error: Failed to download `ok @ git+file://[TEMP_DIR]/repository/@[COMMIT]#path=ok-1.0.0-py3-none-any-gpu.whl`
+      cause: Wheel variant `gpu` requires unsupported properties: `nvidia :: cuda_version_lower_bound :: 12` and `nvidia :: sm_arch :: 89_real`
     ");
 
     uv_snapshot!(context.filters(), context.pip_install()
@@ -302,7 +292,6 @@ fn install_git_path_variant_wheel() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + ok==1.0.0 (from git+file://[TEMP_DIR]/repository/@[COMMIT]#path=ok-1.0.0-py3-none-any-gpu.whl)
     ");
@@ -317,9 +306,8 @@ fn install_git_path_variant_wheel() -> Result<()> {
         .arg(&requirement), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies
-      cause: Because only ok==1.0.0 is available and ok==1.0.0 has only unsupported wheel variants, we can conclude that all versions of ok cannot be used.
-             And because you require ok, we can conclude that your requirements are unsatisfiable.
+    error: Failed to download `ok @ git+file://[TEMP_DIR]/repository/@[COMMIT]#path=ok-1.0.0-py3-none-any-gpu.whl`
+      cause: Wheel variant `gpu` requires unsupported properties: `nvidia :: cuda_version_lower_bound :: 12` and `nvidia :: sm_arch :: 89_real`
     ");
     Ok(())
 }

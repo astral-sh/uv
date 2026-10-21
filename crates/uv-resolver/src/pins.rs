@@ -24,7 +24,10 @@ enum FilePin<'index> {
         /// The selected wheel properties used for dependency markers.
         variant: Option<SelectedVariant>,
     },
-    Url(RegisteredMetadata<'index>),
+    Url {
+        metadata: RegisteredMetadata<'index>,
+        variant: Option<SelectedVariant>,
+    },
 }
 
 #[derive(Clone, Debug)]
@@ -113,17 +116,18 @@ impl<'index> FilePins<'index> {
         name: &PackageName,
         version: &Version,
         metadata: RegisteredMetadata<'index>,
+        variant: Option<SelectedVariant>,
     ) {
         self.0
             .entry((name.clone(), version.clone()))
-            .or_insert(FilePin::Url(metadata));
+            .or_insert(FilePin::Url { metadata, variant });
     }
 
     /// Return the pinned registry artifact, if one exists.
     pub(crate) fn get(&self, name: &PackageName, version: &Version) -> Option<&ResolvedDist> {
         match self.0.get(&(name.clone(), version.clone()))? {
             FilePin::Registry { dist, .. } => Some(dist),
-            FilePin::Url(_) => None,
+            FilePin::Url { .. } => None,
         }
     }
 
@@ -138,7 +142,7 @@ impl<'index> FilePins<'index> {
                 metadata: PinMetadata::Registered(metadata),
                 ..
             }
-            | FilePin::Url(metadata) => Some(metadata),
+            | FilePin::Url { metadata, .. } => Some(metadata),
             FilePin::Registry {
                 metadata: PinMetadata::Unrequested(_),
                 ..
@@ -154,7 +158,7 @@ impl<'index> FilePins<'index> {
     ) -> Option<&RegisteredVariantsJson<'index>> {
         match self.0.get(&(name.clone(), version.clone()))? {
             FilePin::Registry { variants_json, .. } => variants_json.as_ref(),
-            FilePin::Url(_) => None,
+            FilePin::Url { .. } => None,
         }
     }
 
@@ -164,8 +168,7 @@ impl<'index> FilePins<'index> {
         version: &Version,
     ) -> Option<&SelectedVariant> {
         match self.0.get(&(name.clone(), version.clone()))? {
-            FilePin::Registry { variant, .. } => variant.as_ref(),
-            FilePin::Url(_) => None,
+            FilePin::Registry { variant, .. } | FilePin::Url { variant, .. } => variant.as_ref(),
         }
     }
 
@@ -183,7 +186,7 @@ impl<'index> FilePins<'index> {
                     PinMetadata::Registered(metadata) => metadata.id(),
                 },
             )),
-            FilePin::Url(_) => None,
+            FilePin::Url { .. } => None,
         }
     }
 }
