@@ -69,6 +69,7 @@ impl SelectedDistribution {
         package: &ResolutionPackage,
         version: Version,
         pins: &FilePins<'_>,
+        env: &ResolverEnvironment,
         index: &InMemoryIndex,
         git: &GitResolver,
     ) -> Result<Self, ResolveError> {
@@ -96,13 +97,18 @@ impl SelectedDistribution {
                 pins.dist_and_id(&package.name, &version).ok_or_else(|| {
                     ResolveError::UnregisteredTask(format!("{}=={version}", package.name))
                 })?;
-            let metadata =
-                index.distributions().get(metadata_id).and_then(|response| {
-                    match response.as_ref() {
-                        MetadataResponse::Found(_) => Some(response),
-                        MetadataResponse::Unavailable(_) | MetadataResponse::Error(..) => None,
-                    }
-                });
+            let metadata = if env.marker_environment().is_none()
+                && let ResolvedDist::Installable { dist, .. } = dist
+            {
+                index.variant_dependencies().get(dist)
+            } else {
+                None
+            }
+            .or_else(|| index.distributions().get(metadata_id))
+            .filter(|response| match response.as_ref() {
+                MetadataResponse::Found(_) => true,
+                MetadataResponse::Unavailable(_) | MetadataResponse::Error(..) => false,
+            });
             SelectedSource::Registry {
                 dist: dist.clone(),
                 metadata_id: metadata_id.clone(),
