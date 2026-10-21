@@ -23,18 +23,24 @@ jobs:
     # uv-dev benchmarks pull requests but imports its main-branch measurements from uv.
     if: ${{ github.repository == 'astral-sh/uv' || (github.repository == 'astral-sh/uv-dev' && github.ref != 'refs/heads/main') }}
     timeout-minutes: 30
+    env:
+      RUSTC_BOOTSTRAP: "1"
+      CARGO_UNSTABLE_CHECKSUM_FRESHNESS: "true"
     steps:
       - name: "Checkout Branch"
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-        with:
-          save-if: ${{ inputs.save-rust-cache == 'true' }}
-
       - name: "Install Rust toolchain"
         run: rustup show
+
+      - uses: astral-sh/github-actions/rust-workspace-cache@46b2fc665ea9900d88ddb4fb272c50fb880acb64
+        with:
+          profile: |
+            debug
+            profiling
+          save-if: ${{ inputs.save-rust-cache == 'true' }}
 
       - name: "Install uv"
         uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
@@ -144,18 +150,24 @@ jobs:
     permissions:
       contents: read
       id-token: write # for codspeed authentication
+    env:
+      RUSTC_BOOTSTRAP: "1"
+      CARGO_UNSTABLE_CHECKSUM_FRESHNESS: "true"
     steps:
       - name: "Checkout Branch"
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-        with:
-          save-if: ${{ inputs.save-rust-cache == 'true' }}
-
       - name: "Install Rust toolchain"
         run: rustup show
+
+      - uses: astral-sh/github-actions/rust-workspace-cache@46b2fc665ea9900d88ddb4fb272c50fb880acb64
+        with:
+          profile: |
+            debug
+            profiling
+          save-if: ${{ inputs.save-rust-cache == 'true' }}
 
       - name: "Install uv"
         uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
