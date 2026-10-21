@@ -49,6 +49,13 @@ pub enum VariantsJsonParseError {
 pub type VariantProperties =
     BTreeMap<VariantNamespace, BTreeMap<VariantFeature, Vec<VariantValue>>>;
 
+/// The variant properties used to resolve a wheel's dependencies for an installation target.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SelectedVariant {
+    pub label: VariantLabel,
+    pub properties: VariantProperties,
+}
+
 /// Required variant properties unsupported by the target system.
 #[derive(Debug)]
 pub struct UnsupportedVariantProperties(VariantProperties);
@@ -89,25 +96,18 @@ impl fmt::Display for UnsupportedVariantProperties {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct SupportedVariantProperties {
-    properties: BTreeMap<VariantNamespace, Vec<(VariantFeature, Vec<VariantValue>)>>,
+    properties: BTreeMap<VariantNamespace, Vec<SupportedVariantFeature>>,
+}
+
+impl SupportedVariantProperties {
+    /// Add the ordered compatible features of a provider.
+    pub fn insert(&mut self, namespace: VariantNamespace, features: Vec<SupportedVariantFeature>) {
+        self.properties.insert(namespace, features);
+    }
 }
 
 /// A supported feature and its compatible values, ordered from most to least preferred.
-#[derive(Debug, Clone)]
-pub struct SupportedVariantFeature {
-    pub name: VariantFeature,
-    pub values: Vec<VariantValue>,
-}
-
-/// A non-static provider requested by variant metadata.
-#[derive(Clone, Copy)]
-pub enum VariantProviderRequest<'a> {
-    Plugin {
-        requires: &'a [String],
-        plugin_api: Option<&'a str>,
-    },
-    Builtin(&'a str),
-}
+pub type SupportedVariantFeature = (VariantFeature, Vec<VariantValue>);
 
 /// The priority of a compatible variant. Higher scores are preferred.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -131,12 +131,22 @@ pub struct VariantsJsonContent {
 }
 
 impl VariantsJsonContent {
+    /// Providers declared by the variant metadata.
+    pub fn providers(&self) -> impl Iterator<Item = (&VariantNamespace, &VariantProvider)> {
+        self.providers.iter().flat_map(|providers| providers.iter())
+    }
+
+    /// The label when this metadata describes exactly one wheel variant.
+    pub fn wheel_label(&self) -> Option<&VariantLabel> {
+        self.variants.keys().exactly_one().ok()
+    }
+
     /// The variant label, if this describes a single compatible wheel variant.
     pub fn compatible_wheel_label(
         &self,
         supported_properties: &SupportedVariantProperties,
     ) -> Option<&VariantLabel> {
-        let label = self.variants.keys().exactly_one().ok()?;
+        let label = self.wheel_label()?;
         self.score_variant(label, supported_properties)?;
         Some(label)
     }
@@ -164,7 +174,7 @@ impl VariantsJsonContent {
 
     fn is_abi_dependency(&self, namespace: &VariantNamespace) -> bool {
         let Some(VariantProvider {
-            kind: ProviderKind::Builtin { builtin },
+            kind: VariantProviderKind::Builtin { builtin },
             ..
         }) = self
             .providers
@@ -229,6 +239,60 @@ impl VariantsJsonContent {
         })
     }
 
+    /// Return the wheel properties supported by the installation target.
+    pub fn select_variant(
+        &self,
+        label: &VariantLabel,
+        supported: &SupportedVariantProperties,
+    ) -> Option<SelectedVariant> {
+        let mut properties = BTreeMap::new();
+        for (namespace, features) in self.variants.get(label)? {
+            let supported_features = supported.properties.get(namespace)?;
+            let mut selected_features = BTreeMap::new();
+            for (feature, values) in features {
+                let (_, supported_values) = supported_features
+                    .iter()
+                    .find(|(supported_feature, _)| supported_feature == feature)?;
+                let selected_values = values
+                    .iter()
+                    .filter(|value| supported_values.contains(value))
+                    .cloned()
+                    .collect::<Vec<_>>();
+                if selected_values.is_empty() {
+                    return None;
+                }
+                selected_features.insert(feature.clone(), selected_values);
+            }
+            properties.insert(namespace.clone(), selected_features);
+        }
+        Some(SelectedVariant {
+            label: label.clone(),
+            properties,
+        })
+    }
+
+    /// Verify that selected properties describe a complete supported subset of this wheel.
+    pub fn validates_selected_variant(&self, selected: &SelectedVariant) -> bool {
+        let Some((label, properties)) = self.variants.iter().exactly_one().ok() else {
+            return false;
+        };
+        if label != &selected.label || !properties.keys().eq(selected.properties.keys()) {
+            return false;
+        }
+        properties.iter().all(|(namespace, features)| {
+            let selected_features = &selected.properties[namespace];
+            features.keys().eq(selected_features.keys())
+                && features.iter().all(|(feature, values)| {
+                    let selected_values = &selected_features[feature];
+                    !selected_values.is_empty()
+                        && values
+                            .iter()
+                            .filter(|value| selected_values.contains(value))
+                            .eq(selected_values)
+                })
+        })
+    }
+
     /// Return the unsupported properties for a variant present in this metadata, if any.
     pub fn unsupported_variant_properties(
         &self,
@@ -257,80 +321,15 @@ impl VariantsJsonContent {
 
     /// Collect ordered compatible features and values from enabled static providers.
     pub fn static_supported_properties(&self) -> SupportedVariantProperties {
-        let Some(providers) = &self.providers else {
-            return SupportedVariantProperties::default();
-        };
-        let properties = providers
-            .iter()
-            .filter(|(_, provider)| !provider.optional)
-            .filter_map(|(namespace, provider)| {
-                let ProviderKind::Static {
-                    static_properties,
-                    feature_order,
-                } = &provider.kind
-                else {
-                    return None;
-                };
-                // PEP 850 requires feature-order for multiple features because JSON object keys
-                // are unordered. With at most one feature, the order is unambiguous.
-                let features = match feature_order {
-                    Some(order) => Either::Left(order.iter()),
-                    None => Either::Right(static_properties.keys()),
-                };
-                let supported = features
-                    .map(|feature| (feature.clone(), static_properties[feature].clone()))
-                    .collect();
-                Some((namespace.clone(), supported))
-            })
-            .collect();
-        SupportedVariantProperties { properties }
-    }
-
-    /// Collect compatible features from static and detected providers.
-    pub fn supported_properties<'a>(
-        &self,
-        detected: impl IntoIterator<Item = (&'a VariantNamespace, &'a [SupportedVariantFeature])>,
-    ) -> SupportedVariantProperties {
-        let mut supported = self.static_supported_properties();
-        for (namespace, features) in detected {
-            let features = features
-                .iter()
-                .map(|feature| (feature.name.clone(), feature.values.clone()))
-                .collect();
-            supported.properties.insert(namespace.clone(), features);
+        SupportedVariantProperties {
+            properties: self
+                .providers()
+                .filter(|(_, provider)| !provider.optional)
+                .filter_map(|(namespace, provider)| {
+                    Some((namespace.clone(), provider.static_properties()?))
+                })
+                .collect(),
         }
-        supported
-    }
-
-    /// Return the enabled providers that need properties to be detected.
-    pub fn provider_requests(
-        &self,
-    ) -> impl Iterator<Item = (&VariantNamespace, VariantProviderRequest<'_>)> {
-        self.providers
-            .iter()
-            .flat_map(|providers| providers.iter())
-            .filter_map(|(namespace, provider)| {
-                if provider.optional {
-                    return None;
-                }
-                let request = match &provider.kind {
-                    ProviderKind::Plugin {
-                        requires,
-                        plugin_api,
-                    } => VariantProviderRequest::Plugin {
-                        requires,
-                        plugin_api: plugin_api.as_deref(),
-                    },
-                    ProviderKind::Builtin { builtin } => {
-                        VariantProviderRequest::Builtin(match builtin {
-                            BuiltinProvider::AbiDependency => "abi_dependency",
-                            BuiltinProvider::Unknown(name) => name,
-                        })
-                    }
-                    ProviderKind::Static { .. } => return None,
-                };
-                Some((namespace, request))
-            })
     }
 
     /// Parse and validate the contents of a variant metadata file.
@@ -355,7 +354,7 @@ impl VariantsJsonContent {
 
 /// Return the priority of the first supported value for a feature.
 fn score_feature(
-    supported_features: &[(VariantFeature, Vec<VariantValue>)],
+    supported_features: &[SupportedVariantFeature],
     feature: &VariantFeature,
     values: &[VariantValue],
 ) -> Option<(usize, usize)> {
@@ -382,12 +381,43 @@ pub struct VariantProvider {
     #[serde(default)]
     optional: bool,
     #[serde(flatten)]
-    kind: ProviderKind,
+    kind: VariantProviderKind,
+}
+
+impl VariantProvider {
+    pub fn optional(&self) -> bool {
+        self.optional
+    }
+
+    pub fn kind(&self) -> &VariantProviderKind {
+        &self.kind
+    }
+
+    /// Return the static features in preference order.
+    pub fn static_properties(&self) -> Option<Vec<SupportedVariantFeature>> {
+        let VariantProviderKind::Static {
+            static_properties,
+            feature_order,
+        } = &self.kind
+        else {
+            return None;
+        };
+        // Multiple static features require an explicit order because JSON object keys are unordered.
+        let features = match feature_order {
+            Some(order) => Either::Left(order.iter()),
+            None => Either::Right(static_properties.keys()),
+        };
+        Some(
+            features
+                .map(|feature| (feature.clone(), static_properties[feature].clone()))
+                .collect(),
+        )
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged, rename_all_fields = "kebab-case", deny_unknown_fields)]
-enum ProviderKind {
+pub enum VariantProviderKind {
     Static {
         static_properties: BTreeMap<VariantFeature, Vec<VariantValue>>,
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -405,7 +435,7 @@ enum ProviderKind {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(from = "String", rename_all = "snake_case")]
-enum BuiltinProvider {
+pub enum BuiltinProvider {
     AbiDependency,
     #[serde(untagged)]
     Unknown(String),
@@ -416,6 +446,15 @@ impl From<String> for BuiltinProvider {
         match name.as_str() {
             "abi_dependency" => Self::AbiDependency,
             _ => Self::Unknown(name),
+        }
+    }
+}
+
+impl fmt::Display for BuiltinProvider {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::AbiDependency => f.write_str("abi_dependency"),
+            Self::Unknown(name) => f.write_str(name),
         }
     }
 }
@@ -506,7 +545,7 @@ impl TryFrom<VariantsJsonWire> for VariantsJsonContent {
         }
         if let Some(providers) = &wire.providers {
             for (namespace, provider) in providers {
-                let ProviderKind::Static {
+                let VariantProviderKind::Static {
                     static_properties,
                     feature_order,
                 } = &provider.kind

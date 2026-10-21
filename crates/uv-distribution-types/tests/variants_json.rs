@@ -4,7 +4,7 @@ use serde_json::json;
 
 use uv_distribution_filename::VariantLabel;
 use uv_distribution_types::{
-    PEP_825_SCHEMA, PEP_850_SCHEMA, VariantProviderRequest, VariantsJsonContent,
+    BuiltinProvider, PEP_825_SCHEMA, PEP_850_SCHEMA, VariantProviderKind, VariantsJsonContent,
 };
 
 /// PEP 825 compares the best compatible value for each feature, then the variant label.
@@ -138,8 +138,13 @@ fn parse_abi_dependency_provider() -> Result<(), Box<dyn std::error::Error>> {
     }))?;
 
     assert!(matches!(
-        metadata.provider_requests().next(),
-        Some((_, VariantProviderRequest::Builtin("abi_dependency")))
+        metadata
+            .providers()
+            .next()
+            .map(|(_, provider)| provider.kind()),
+        Some(VariantProviderKind::Builtin {
+            builtin: BuiltinProvider::AbiDependency
+        })
     ));
     let dependencies = metadata.abi_dependencies(&VariantLabel::from_static("valid"))?;
     assert_snapshot!(

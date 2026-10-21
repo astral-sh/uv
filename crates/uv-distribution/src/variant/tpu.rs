@@ -65,10 +65,10 @@ fn detect_properties() -> [SupportedVariantFeature; 1] {
         false
     };
     let value = if present { "true" } else { "false" };
-    [SupportedVariantFeature {
-        name: VariantFeature::from_static("present"),
-        values: vec![VariantValue::from_static(value)],
-    }]
+    [(
+        VariantFeature::from_static("present"),
+        vec![VariantValue::from_static(value)],
+    )]
 }
 
 fn has_tpu_pci_device() -> bool {

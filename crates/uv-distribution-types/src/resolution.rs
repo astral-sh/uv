@@ -1,10 +1,12 @@
-use uv_distribution_filename::DistExtension;
+use rustc_hash::FxHashMap;
+use uv_distribution_filename::{DistExtension, WheelFilename};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pypi_types::{HashDigest, HashDigests};
 use uv_redacted::policy::Raw;
 
 use crate::{
-    BuiltDist, Diagnostic, Dist, IndexMetadata, Name, RequirementSource, ResolvedDist, SourceDist,
+    BuiltDist, Diagnostic, Dist, IndexMetadata, Name, RequirementSource, ResolvedDist,
+    SelectedVariant, SourceDist,
 };
 
 /// A set of packages pinned at specific versions.
@@ -15,6 +17,7 @@ use crate::{
 pub struct Resolution {
     graph: petgraph::graph::DiGraph<Node, Edge>,
     diagnostics: Vec<ResolutionDiagnostic>,
+    variant_contexts: FxHashMap<WheelFilename, SelectedVariant>,
 }
 
 impl Resolution {
@@ -23,6 +26,7 @@ impl Resolution {
         Self {
             graph,
             diagnostics: Vec::new(),
+            variant_contexts: FxHashMap::default(),
         }
     }
 
@@ -36,6 +40,21 @@ impl Resolution {
     pub fn with_diagnostics(mut self, diagnostics: Vec<ResolutionDiagnostic>) -> Self {
         self.diagnostics.extend(diagnostics);
         self
+    }
+
+    /// Retain the selected wheel properties used to evaluate package dependencies.
+    #[must_use]
+    pub fn with_variant_contexts(
+        mut self,
+        variants: impl IntoIterator<Item = (WheelFilename, SelectedVariant)>,
+    ) -> Self {
+        self.variant_contexts.extend(variants);
+        self
+    }
+
+    /// Return the selected properties for a wheel, if they were captured during resolution.
+    pub fn variant_context(&self, filename: &WheelFilename) -> Option<&SelectedVariant> {
+        self.variant_contexts.get(filename)
     }
 
     /// Return the hashes for the given package name, if they exist.
