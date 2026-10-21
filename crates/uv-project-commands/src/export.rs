@@ -677,7 +677,7 @@ async fn render_export<'output>(
                 .as_deref()
                 .and_then(Path::parent)
                 .unwrap_or(&CWD);
-            let mut export = PylockToml::from_lock(
+            let export = PylockToml::from_lock(
                 &target,
                 output_dir,
                 prune,
@@ -686,18 +686,15 @@ async fn render_export<'output>(
                 include_annotations,
                 editable.as_ref(),
                 install_options,
-            )?;
-
-            // Registries don't always provide hashes, but `packages.*.hashes` is a required
-            // key in PEP 751, so we have to download and hash files with missing hashes.
-            if export.has_missing_hashes() {
-                let client = RegistryClientBuilder::new(client_builder.clone(), cache.clone())
-                    .index_locations(settings.index_locations.clone())
-                    .build()?;
-                export
-                    .generate_missing_hashes(&client, concurrency.downloads, output_dir)
-                    .await?;
-            }
+                cache,
+                concurrency.downloads,
+                || {
+                    RegistryClientBuilder::new(client_builder.clone(), cache.clone())
+                        .index_locations(settings.index_locations.clone())
+                        .build()
+                },
+            )
+            .await?;
 
             if include_header {
                 writeln!(
