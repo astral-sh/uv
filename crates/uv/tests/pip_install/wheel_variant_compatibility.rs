@@ -8,7 +8,7 @@ use anyhow::anyhow;
 #[cfg(feature = "test-git")]
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
-use indoc::indoc;
+use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 use serde_json::{Map, Value, json};
 use uv_distribution_types::PEP_850_SCHEMA;
@@ -631,10 +631,9 @@ fn explicit_variant_target_replaces_installed_wheel_during_resolution() -> Resul
     Ok(())
 }
 
-/// Project sync installs the wheel selected by the lockfile even if another compatible variant
-/// is already installed.
+/// Frozen sync selects a variant for one target and replaces it with an ordinary wheel for another.
 #[test]
-fn sync_replaces_compatible_variant_with_selected_wheel() -> Result<()> {
+fn frozen_sync_replaces_compatible_variant_with_selected_wheel() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let scenario = toml::from_str::<Scenario>(indoc! {r#"
         name = "installed-variant-lockfile-selection"
@@ -643,8 +642,9 @@ fn sync_replaces_compatible_variant_with_selected_wheel() -> Result<()> {
 
         [packages.ok.versions."1.0.0"]
         sdist = false
-        variants.namespaces = ["x86_64"]
-        variants.wheels.null.properties = []
+        variants.namespaces = ["blas_lapack"]
+        variants.providers.blas_lapack.static-properties.library = ["openblas"]
+        variants.wheels.blas.properties = ["blas_lapack :: library :: openblas"]
     "#})?;
     let server = PackseServer::from_scenario(&scenario);
     let installed_variant = context
@@ -661,29 +661,60 @@ fn sync_replaces_compatible_variant_with_selected_wheel() -> Result<()> {
             dependencies = ["ok==1.0.0"]
         "#})?;
 
-    uv_snapshot!(context.filters(), context.pip_install()
-        .arg("--index-url")
-        .arg(server.index_url())
-        .arg("--preview-features")
-        .arg("wheel-variants")
-        .arg("ok==1.0.0"), @"
+    let files = server
+        .files()
+        .map(|(name, hash)| {
+            let url = server.file_url(name);
+            (
+                name,
+                format!(r#"{{ url = "{url}", hash = "sha256:{hash}" }}"#),
+            )
+        })
+        .collect::<BTreeMap<_, _>>();
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(&formatdoc! {r#"
+        version = 1
+        revision = 5
+        requires-python = ">=3.12"
+
+        [[package]]
+        name = "example"
+        version = "1.0.0"
+        source = {{ virtual = "." }}
+        dependencies = [{{ name = "ok" }}]
+
+        [[package]]
+        name = "ok"
+        version = "1.0.0"
+        source = {{ registry = "{index}" }}
+        variants-json = {sidecar}
+        wheels = [{wheel}, {variant}]
+    "#,
+            index = server.index_url(),
+            sidecar = files["ok-1.0.0-variants.json"],
+            wheel = files["ok-1.0.0-py3-none-any.whl"],
+            variant = files["ok-1.0.0-py3-none-any-blas.whl"],
+        })?;
+
+    uv_snapshot!(context.filters(), context.sync()
+        .args(["--frozen", "--preview-features", "wheel-variants"]), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + ok==1.0.0
     ");
     assert!(installed_variant.is_file());
 
+    let target = context.temp_dir.child("empty-target.json");
+    target.write_str("{}")?;
     uv_snapshot!(context.filters(), context.sync()
-        .arg("--index-url")
-        .arg(server.index_url())
-        .arg("--preview-features")
-        .arg("wheel-variants"), @"
+        .args(["--frozen", "--preview-features", "wheel-variants", "--variant-target"])
+        .arg(target.path()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -743,7 +774,7 @@ fn sync_replaces_compatible_variant_with_selected_sdist() -> Result<()> {
     ");
     assert!(installed_variant.is_file());
 
-    uv_snapshot!(context.filters(), context.sync(), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--no-binary-package").arg("ok"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]

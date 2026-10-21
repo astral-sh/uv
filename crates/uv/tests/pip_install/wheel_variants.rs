@@ -873,19 +873,59 @@ fn universal_lock_excludes_variant_wheels() -> Result<()> {
         "#);
     });
 
-    // A lockfile containing a variant wheel must not make it installable.
-    let lock = context.read("uv.lock").replace(
-        "ok-1.0.0-py3-none-any.whl",
-        "ok-1.0.0-py3-none-any-null.whl",
-    );
-    context.temp_dir.child("uv.lock").write_str(&lock)?;
+    Ok(())
+}
+
+/// An unselected variant requires preview but does not require loading project indexes.
+#[test]
+fn frozen_sync_with_unselected_variant() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        gpu = ["variant"]
+    "#})?;
+    context.temp_dir.child("uv.lock").write_str(indoc! {r#"
+        version = 1
+        revision = 5
+        requires-python = ">=3.12"
+
+        [[package]]
+        name = "project"
+        version = "1.0.0"
+        source = { virtual = "." }
+
+        [package.optional-dependencies]
+        gpu = [{ name = "variant" }]
+
+        [[package]]
+        name = "variant"
+        version = "1.0.0"
+        source = { registry = "https://example.com/simple" }
+
+        [[package.wheels]]
+        url = "https://example.com/variant-1.0.0-py3-none-any-null.whl"
+        hash = "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+    "#})?;
+
     uv_snapshot!(context.filters(), context.sync()
-        .arg("--frozen")
-        .arg("--preview-features")
-        .arg("wheel-variants"), @"
+        .args(["--frozen", "--find-links", "missing"]), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Distribution `ok==1.0.0 @ registry+[TEMP_DIR]/links` can't be installed because it doesn't have a source distribution or wheel for the current platform
+    error: This lockfile uses wheel variants; pass `--preview-features wheel-variants` to use it
+    ");
+    uv_snapshot!(context.filters(), context.sync()
+        .args(["--frozen", "--find-links", "missing", "--preview-features", "wheel-variants"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Checked in [TIME]
     ");
     Ok(())
 }

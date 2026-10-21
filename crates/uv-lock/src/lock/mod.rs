@@ -10298,6 +10298,8 @@ enum LockErrorKind {
         "Cannot select a wheel variant for `{package_id}` from a lock with conflicting requirements"
     )]
     VariantConflictReachability { package_id: PackageId },
+    #[error("Package `{package_id}` requires wheel variant selection")]
+    VariantSelectionRequired { package_id: PackageId },
     #[error("Failed to fetch wheel variant metadata for `{package_id}`")]
     VariantsJsonFetch {
         package_id: PackageId,
