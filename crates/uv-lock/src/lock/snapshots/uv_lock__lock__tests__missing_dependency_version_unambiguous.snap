@@ -85,6 +85,7 @@ Ok(
                     },
                 ),
                 wheels: [],
+                variants_json: None,
                 fork_markers: [],
                 dependencies: [],
                 optional_dependencies: {},
@@ -132,6 +133,7 @@ Ok(
                     },
                 ),
                 wheels: [],
+                variants_json: None,
                 fork_markers: [],
                 dependencies: [
                     Dependency {
