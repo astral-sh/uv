@@ -20,6 +20,7 @@ use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations, Name,
     NameRequirementSpecification, Origin, PackageConfigSettings, Requirement, Resolution,
+    VariantPolicy,
 };
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
@@ -103,6 +104,7 @@ pub async fn pip_install(
     torch_backend: Option<TorchMode>,
     cuda_driver_version: Option<Version>,
     amd_gpu_architecture: Option<AmdGpuArchitecture>,
+    variant_policy: VariantPolicy,
     dependency_metadata: DependencyMetadata,
     keyring_provider: KeyringProviderType,
     client_builder: &BaseClientBuilder<'_>,
@@ -305,6 +307,7 @@ pub async fn pip_install(
         .ok();
 
     // Determine the markers and tags to use for the resolution.
+    let variant_policy = variant_policy.with_explicit_platform(python_platform.is_some());
     let interpreter = environment.interpreter();
     let marker_env = resolution_markers(
         python_version.as_ref(),
@@ -508,7 +511,8 @@ pub async fn pip_install(
         workspace_cache.clone(),
         concurrency.clone(),
         preview,
-    );
+    )
+    .with_variant_policy(&variant_policy);
 
     let (resolution, hasher) = if let Some(pylock) = pylock {
         let (install_path, lock) = read_pylock_toml(&pylock, &client_builder).await?;
@@ -642,7 +646,8 @@ pub async fn pip_install(
         workspace_cache,
         concurrency.clone(),
         preview,
-    );
+    )
+    .with_variant_policy(&variant_policy);
 
     // Sync the environment.
     let changelog = match uv_install_operations::install(

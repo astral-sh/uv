@@ -52,6 +52,7 @@ pub(super) async fn resolve_names(
 
     // Extract the project settings.
     let ResolverSettings {
+        variant_policy,
         build_options,
         config_setting,
         config_settings_package,
@@ -157,7 +158,8 @@ pub(super) async fn resolve_names(
         workspace_cache.clone(),
         concurrency.clone(),
         preview,
-    );
+    )
+    .with_variant_policy(variant_policy);
 
     // Resolve the unnamed requirements.
     requirements.extend(

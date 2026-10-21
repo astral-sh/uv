@@ -421,6 +421,7 @@ impl ToolLock {
         preview: Preview,
     ) -> Result<ValidatedToolLock, ToolLockError> {
         let ResolverSettings {
+            variant_policy,
             index_locations,
             index_strategy,
             keyring_provider,
@@ -511,7 +512,8 @@ impl ToolLock {
             workspace_cache.clone(),
             concurrency.clone(),
             preview,
-        );
+        )
+        .with_variant_policy(variant_policy);
         let database = DistributionDatabase::new(
             &client,
             &build_dispatch,

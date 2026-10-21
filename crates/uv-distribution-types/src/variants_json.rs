@@ -100,6 +100,59 @@ impl SupportedVariantProperties {
     pub fn insert(&mut self, namespace: VariantNamespace, features: Vec<SupportedVariantFeature>) {
         self.properties.insert(namespace, features);
     }
+
+    /// Validate a user-provided target description.
+    pub fn validate(&self) -> Result<(), VariantMetadataError> {
+        for (namespace, features) in &self.properties {
+            if !features.iter().map(|(name, _)| name).all_unique() {
+                return Err(VariantMetadataError::DuplicateFeatures(namespace.clone()));
+            }
+            for (feature, values) in features {
+                if values.is_empty() {
+                    return Err(VariantMetadataError::EmptyValues(
+                        namespace.clone(),
+                        feature.clone(),
+                    ));
+                }
+                if !values.iter().all_unique() {
+                    return Err(VariantMetadataError::DuplicateValues {
+                        namespace: namespace.clone(),
+                        feature: feature.clone(),
+                        values: values.clone(),
+                    });
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+/// User policy for wheel variant providers.
+#[derive(Debug, Clone, Default)]
+pub struct VariantPolicy {
+    target: Option<SupportedVariantProperties>,
+}
+
+impl VariantPolicy {
+    pub fn new(target: SupportedVariantProperties) -> Self {
+        Self {
+            target: Some(target),
+        }
+    }
+
+    /// An explicit target replaces all detected and metadata-provided properties.
+    pub fn target(&self) -> Option<&SupportedVariantProperties> {
+        self.target.as_ref()
+    }
+
+    /// Suppress host detection for a foreign target without explicit properties.
+    #[must_use]
+    pub fn with_explicit_platform(mut self, explicit: bool) -> Self {
+        if explicit && self.target.is_none() {
+            self.target = Some(SupportedVariantProperties::default());
+        }
+        self
+    }
 }
 
 /// A supported feature and its compatible values, ordered from most to least preferred.
@@ -125,14 +178,14 @@ pub struct VariantsJsonContent {
 }
 
 impl VariantsJsonContent {
-    /// Providers declared by the variant metadata.
-    pub fn providers(&self) -> impl Iterator<Item = (&VariantNamespace, &VariantProvider)> {
-        self.providers.iter().flat_map(|providers| providers.iter())
-    }
-
     /// The label when this metadata describes exactly one wheel variant.
     pub fn wheel_label(&self) -> Option<&VariantLabel> {
         self.variants.keys().exactly_one().ok()
+    }
+
+    /// Providers declared by the variant metadata.
+    pub fn providers(&self) -> impl Iterator<Item = (&VariantNamespace, &VariantProvider)> {
+        self.providers.iter().flat_map(|providers| providers.iter())
     }
 
     /// The variant label, if this describes a single compatible wheel variant.
@@ -174,8 +227,6 @@ impl VariantsJsonContent {
         label: &VariantLabel,
         supported_properties: &SupportedVariantProperties,
     ) -> Option<VariantScore> {
-        // Note(konsti): This implementation doesn't have any optimizations yet, we don't know the
-        // shape that big variant wheels will have so we use the easiest to read form.
         let mut properties = BTreeSet::new();
         for (namespace, features) in self.variants.get(label)? {
             let namespace_priority = self
@@ -445,6 +496,8 @@ pub enum VariantMetadataError {
         feature: VariantFeature,
         values: Vec<VariantValue>,
     },
+    #[error("Variant provider `{0}` returned duplicate features")]
+    DuplicateFeatures(VariantNamespace),
     #[error("The null variant must not have properties")]
     NullProperties,
 }

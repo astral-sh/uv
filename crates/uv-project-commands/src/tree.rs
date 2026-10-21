@@ -309,6 +309,7 @@ pub async fn tree(
                 torch_backend: _,
                 cuda_driver_version: _,
                 amd_gpu_architecture: _,
+                variant_policy: _,
             } = &settings;
 
             let capabilities = IndexCapabilities::default();
