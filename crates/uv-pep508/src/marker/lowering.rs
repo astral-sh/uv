@@ -59,9 +59,26 @@ pub enum CanonicalMarkerValueString {
     PlatformVersion,
     /// `implementation_name`
     ImplementationName,
+    /// `variant_label`
+    VariantLabel,
 }
 
 impl CanonicalMarkerValueString {
+    /// Whether this string marker refers to a selected wheel label.
+    pub(crate) fn is_variant_label(self) -> bool {
+        match self {
+            Self::VariantLabel => true,
+            Self::OsName
+            | Self::SysPlatform
+            | Self::PlatformSystem
+            | Self::PlatformMachine
+            | Self::PlatformPythonImplementation
+            | Self::PlatformRelease
+            | Self::PlatformVersion
+            | Self::ImplementationName => false,
+        }
+    }
+
     /// Returns `true` if the marker is known to be involved in _at least_ one conflicting
     /// marker pair.
     ///
@@ -91,6 +108,7 @@ impl From<MarkerValueString> for CanonicalMarkerValueString {
             MarkerValueString::PlatformVersionDeprecated => Self::PlatformVersion,
             MarkerValueString::SysPlatform => Self::SysPlatform,
             MarkerValueString::SysPlatformDeprecated => Self::SysPlatform,
+            MarkerValueString::VariantLabel => Self::VariantLabel,
         }
     }
 }
@@ -108,6 +126,7 @@ impl From<CanonicalMarkerValueString> for MarkerValueString {
             CanonicalMarkerValueString::PlatformSystem => Self::PlatformSystem,
             CanonicalMarkerValueString::PlatformVersion => Self::PlatformVersion,
             CanonicalMarkerValueString::SysPlatform => Self::SysPlatform,
+            CanonicalMarkerValueString::VariantLabel => Self::VariantLabel,
         }
     }
 }
@@ -124,6 +143,7 @@ impl Display for CanonicalMarkerValueString {
             Self::PlatformSystem => f.write_str("platform_system"),
             Self::PlatformVersion => f.write_str("platform_version"),
             Self::SysPlatform => f.write_str("sys_platform"),
+            Self::VariantLabel => f.write_str("variant_label"),
         }
     }
 }

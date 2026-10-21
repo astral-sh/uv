@@ -10,6 +10,7 @@ use tracing::debug;
 use uv_distribution_filename::VariantLabel;
 use uv_normalize::{InvalidNameError, PackageName};
 use uv_pep440::{Version, VersionParseError, VersionSpecifier};
+use uv_pep508::MarkerVariant;
 pub use uv_pep508::{VariantFeature, VariantNamespace, VariantValue};
 use version_ranges::Ranges;
 
@@ -54,6 +55,18 @@ pub type VariantProperties =
 pub struct SelectedVariant {
     pub label: VariantLabel,
     pub properties: VariantProperties,
+}
+
+impl SelectedVariant {
+    /// Return the selected wheel as seen by dependency markers.
+    pub fn marker_environment(selected: Option<&Self>) -> MarkerVariant<'_> {
+        match selected {
+            Some(selected) => MarkerVariant::Selected {
+                label: selected.label.as_str(),
+            },
+            None => MarkerVariant::Ordinary,
+        }
+    }
 }
 
 /// Required variant properties unsupported by the target system.
