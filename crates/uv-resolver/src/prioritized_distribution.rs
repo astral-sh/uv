@@ -557,15 +557,19 @@ impl PrioritizedDist {
         if !compatibility.is_excluded() {
             self.0.hashes.extend(hashes);
         }
-        // Before checking variant properties, prefer ordinary wheels as metadata sources even
-        // when they cannot be installed (e.g., with `--no-binary`).
+        // Excluded wheels cannot provide metadata. Among the remaining wheels, prefer ordinary
+        // wheels as metadata sources even when they cannot be installed (e.g., with `--no-binary`).
         if let Some((existing_wheel, existing_compatibility)) = self.best_wheel() {
             let is_more_compatible =
-                match (dist.filename.variant(), existing_wheel.filename.variant()) {
-                    (None, Some(_)) => true,
-                    (Some(_), None) => false,
-                    (None, None) | (Some(_), Some(_)) => {
-                        compatibility.is_more_compatible(existing_compatibility)
+                if compatibility.is_excluded() != existing_compatibility.is_excluded() {
+                    existing_compatibility.is_excluded()
+                } else {
+                    match (dist.filename.variant(), existing_wheel.filename.variant()) {
+                        (None, Some(_)) => true,
+                        (Some(_), None) => false,
+                        (None, None) | (Some(_), Some(_)) => {
+                            compatibility.is_more_compatible(existing_compatibility)
+                        }
                     }
                 };
             if is_more_compatible {
