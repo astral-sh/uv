@@ -2547,6 +2547,7 @@ impl Lock {
             {
                 package.metadata = PackageMetadata::from_distribution(metadata, root, dist.role)?;
             }
+            package.wheels.retain(|wheel| wheel.filename.variant().is_none());
 
             if let Some(index) = dist.index()
                 && let Some(route) = index_locations.proxy_route_for(index)
@@ -10941,12 +10942,8 @@ fn is_wheel_unreachable_for_marker(
     marker: &UniversalMarker,
     tags: Option<&Tags>,
 ) -> bool {
-    // TODO(konsti): Include wheel variants in lockfiles when supported.
-    if filename.variant().is_some() {
-        return true;
-    }
     if let Some(tags) = tags
-        && !filename.compatibility(tags).is_compatible()
+        && !filename.tag_compatibility(tags).is_compatible()
     {
         return true;
     }
