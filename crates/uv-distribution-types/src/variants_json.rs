@@ -374,6 +374,11 @@ impl VariantsJsonContent {
         Ok(())
     }
 
+    /// Return the schema URL declared by the metadata.
+    pub fn schema(&self) -> &str {
+        &self.schema
+    }
+
     /// The variant label, if this describes a single compatible wheel variant.
     pub fn compatible_wheel_label(
         &self,
