@@ -10612,7 +10612,8 @@ enum LockErrorKind {
     #[error("Dependency `{name}` has no matching package entry in the lockfile", name = name.cyan())]
     MissingDependencyPackage { name: PackageName },
     #[error(
-        "Cannot select a wheel variant for `{package_id}` from a lock with conflicting requirements"
+        "Cannot safely select a wheel variant for `{package_id}` because \
+         its reachability depends on unresolved conflicting extras"
     )]
     VariantConflictReachability { package_id: PackageId },
     #[error("Package `{package_id}` requires wheel variant selection")]
