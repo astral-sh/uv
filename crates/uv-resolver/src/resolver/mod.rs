@@ -1619,7 +1619,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             // TODO(konsti): Prefetch `variants.json` alongside other candidate metadata so it
             // is likely to be ready by the time we select a wheel.
             let mut pending = Vec::new();
-            for variants_json in dist.variants_json_for_selection() {
+            for variants_json in dist.variants_json_for_selection(requires_python) {
                 let request = requests.request_variants_json(variants_json)?;
                 pending.push(request);
             }
@@ -1659,7 +1659,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             // to the next index.
             if !metadata.is_empty()
                 && let Some((_, variant)) = dist
-                    .scored_variants(&metadata)
+                    .scored_variants(&metadata, requires_python)
                     .max_by(|(left, _), (right, _)| left.cmp(right))
                 && let Some(selected) = dist.select_variant(&variant)
             {
