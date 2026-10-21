@@ -7,8 +7,8 @@ use tracing::debug;
 use uv_distribution_filename::{BuildTag, WheelFilename};
 use uv_distribution_types::{
     File, IndexUrl, InstalledDist, MinimumLibcVersion, Name, RegistryBuiltDist, RegistryBuiltWheel,
-    RegistrySourceDist, RequiresPython, SelectedVariant, SupportedVariantProperties,
-    VariantsJsonContent, VariantsJsonFilename,
+    RegistrySourceDist, RegistryVariantsJson, RequiresPython, SelectedVariant,
+    SupportedVariantProperties, VariantsJsonContent,
 };
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
@@ -24,14 +24,6 @@ use crate::resolved::ResolvedDistRef;
 /// A collection of distributions that have been filtered by relevance.
 #[derive(Debug, Default, Clone)]
 pub struct PrioritizedDist(Box<PrioritizedDistInner>);
-
-/// Variant metadata for a package version on an index.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(crate) struct RegistryVariantsJson {
-    pub(crate) filename: VariantsJsonFilename,
-    pub(crate) file: File,
-    pub(crate) index: IndexUrl,
-}
 
 /// The contents of a [`PrioritizedDist`], boxed to keep the outer type small.
 #[derive(Debug, Clone)]

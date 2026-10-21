@@ -305,6 +305,7 @@ fn add_version(
         version,
         dist,
         metadata,
+        variants_json,
         variant,
     } = selected.into_parts();
 
@@ -354,6 +355,7 @@ fn add_version(
         kind: kind.clone(),
         hashes,
         metadata,
+        variants_json,
         variant,
         role: package_role,
         marker: UniversalMarker::TRUE,

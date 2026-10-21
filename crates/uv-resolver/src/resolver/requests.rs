@@ -4,13 +4,13 @@ use tokio::sync::mpsc::Sender;
 
 use uv_distribution_types::{
     BuiltDist, DerivationChain, Dist, DistErrorKind, DistributionId, Identifier, IndexMetadata,
-    IndexUrl, Name, RequestedDist, ResolutionRecorder, SelectedVariant, SupportedVariantProperties,
+    IndexUrl, Name, RegistryVariantsJson, RequestedDist, ResolutionRecorder, SelectedVariant,
+    SupportedVariantProperties,
 };
 use uv_normalize::PackageName;
 use uv_once_map::Registration;
 use uv_pep440::Version;
 
-use crate::prioritized_distribution::RegistryVariantsJson;
 use crate::pubgrub::Range;
 use crate::resolved::ResolvedDistRef;
 use crate::resolver::index::{FxRegisteredEntry, ParsedVariantsJson, ParsedVariantsJsonResponse};
