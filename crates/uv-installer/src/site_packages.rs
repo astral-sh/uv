@@ -16,6 +16,7 @@ use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, Diagnostic, ExtraBuildRequires, ExtraBuildVariables,
     InstalledDist, InstalledDistKind, Name, NameRequirementSpecification, PackageConfigSettings,
     Requirement, RequiresPython, UnresolvedRequirement, UnresolvedRequirementSpecification,
+    VariantPolicy,
 };
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
@@ -46,6 +47,8 @@ pub struct SitePackages {
     by_name: FxHashMap<PackageName, Vec<usize>>,
     /// The installed editable distributions, keyed by URL.
     by_url: FxHashMap<SafeUrl, Vec<usize>>,
+    /// Provider policy used to check installed wheel variants.
+    variant_policy: Option<VariantPolicy>,
 }
 
 impl SitePackages {
@@ -152,7 +155,19 @@ impl SitePackages {
             distributions,
             by_name,
             by_url,
+            variant_policy: None,
         })
+    }
+
+    /// Set the explicit target properties used when checking installed wheels.
+    #[must_use]
+    pub fn with_variant_policy(mut self, policy: Option<VariantPolicy>) -> Self {
+        self.variant_policy = policy;
+        self
+    }
+
+    pub(crate) fn variant_policy(&self) -> Option<&VariantPolicy> {
+        self.variant_policy.as_ref()
     }
 
     /// Returns the [`Interpreter`] used to install the packages.
@@ -531,6 +546,7 @@ impl SitePackages {
                         installation,
                         tags,
                         build_settings,
+                        self.variant_policy(),
                     ) {
                         RequirementSatisfaction::Mismatch
                         | RequirementSatisfaction::OutOfDate
@@ -551,6 +567,7 @@ impl SitePackages {
                                 installation,
                                 tags,
                                 build_settings,
+                                self.variant_policy(),
                             ) {
                                 RequirementSatisfaction::Mismatch
                                 | RequirementSatisfaction::OutOfDate

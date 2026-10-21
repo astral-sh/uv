@@ -29,8 +29,8 @@ use uv_distribution::{
 use uv_distribution_types::{
     BuiltDist, DerivationChain, Dist, DistErrorKind, Identifier, IndexCapabilities, IndexLocations,
     IndexMetadata, IndexUrl, InstalledDist, Name, RemoteSource, RequestedDist, Requirement,
-    RequiresPython, ResolutionRecorder, ResolvedDist, SourceDist, VariantsJsonContent,
-    VersionOrUrlRef,
+    RequiresPython, ResolutionRecorder, ResolvedDist, SourceDist, SupportedVariantProperties,
+    VariantPolicy, VariantsJsonContent, VersionOrUrlRef,
 };
 use uv_git::GitResolver;
 use uv_normalize::PackageName;
@@ -79,7 +79,7 @@ use crate::resolver::environment::{
 };
 pub(crate) use crate::resolver::fork_map::{ForkMap, ForkSet};
 pub use crate::resolver::index::InMemoryIndex;
-use crate::resolver::index::ParsedVariantsJsonResponse;
+use crate::resolver::index::{ParsedVariantsJson, ParsedVariantsJsonResponse};
 use crate::resolver::indexes::Indexes;
 use crate::resolver::package_source::PackageSource;
 pub use crate::resolver::provider::{
@@ -99,7 +99,7 @@ use crate::{DependencyMode, Exclusions, FlatIndex, Options, ResolutionMode, Vers
 pub(crate) use provider::MetadataUnavailable;
 pub(crate) use resolution::{
     Resolution, ResolutionDependencyEdge, ResolutionNode, ResolutionNodeId, ResolutionPackage,
-    SelectedDistribution,
+    SelectedDistribution, SelectedDistributionParts,
 };
 use uv_configuration::ForkStrategy;
 
@@ -163,6 +163,10 @@ struct ResolverState<InstalledPackages: InstalledPackagesProvider> {
     options: Options,
     /// The reporter to use for this resolver.
     reporter: Option<Arc<dyn Reporter>>,
+    /// Provider environments cannot recursively install variant wheels.
+    is_variant_provider: bool,
+    /// The explicit target used to recheck installed wheel variants.
+    variant_policy: Option<VariantPolicy>,
 }
 
 /// The result of checking a candidate version's wheel variants.
@@ -293,6 +297,8 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
             incomplete_packages: Box::default(),
             options,
             reporter: None,
+            is_variant_provider: provider.is_variant_provider(),
+            variant_policy: provider.variant_policy().cloned(),
         };
         Self { state, provider }
     }
@@ -1430,15 +1436,21 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
         // Universal lockfiles cannot yet record the metadata needed to select a variant.
         let specific_environment = env.marker_environment().is_some();
-        let preview_variants =
-            specific_environment && uv_preview::is_enabled(PreviewFeature::WheelVariants);
+        let preview_variants = specific_environment
+            && !self.is_variant_provider
+            && uv_preview::is_enabled(PreviewFeature::WheelVariants);
 
         // An installed wheel can become incompatible when the system's properties change.
         let candidate = if specific_environment
             && let Some(tags) = &self.tags
             && let CandidateDist::Compatible(CompatibleDist::InstalledDist(installed)) =
                 candidate.dist()
-            && !InstalledWheelVariant::check(installed, tags.python_platform()).is_compatible()
+            && !InstalledWheelVariant::check_with_target(
+                installed,
+                tags.python_platform(),
+                self.variant_policy.as_ref(),
+            )
+            .is_compatible()
         {
             let Some(alternative) = self.selector.select_no_preference(
                 name,
@@ -1600,9 +1612,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         version_maps: &'a [VersionMap],
         requests: &MetadataRequests,
     ) -> Result<WheelVariantSelection<'a>, ResolveError> {
-        let Some(tags) = &self.tags else {
+        if self.tags.is_none() {
             return Ok(WheelVariantSelection::default());
-        };
+        }
         // With unsafe-best-match we know the version, but not necessarily the index: a wheel
         // we passed over can become compatible once we know its variant properties. Revisit the
         // indexes in order, stopping as soon as one has a distribution we can use.
@@ -1612,7 +1624,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             Either::Right(std::iter::once(prioritized))
         };
 
-        let target = tags.python_platform();
         let mut selection = WheelVariantSelection::default();
         for dist in candidates {
             // Queue all metadata requests for this candidate before waiting for any of them.
@@ -1623,30 +1634,39 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             let mut pending = Vec::new();
             for variants_json in dist.variants_json_for_selection() {
                 let request = requests.request_variants_json(variants_json)?;
-                pending.push((&variants_json.index, request));
+                pending.push(request);
             }
-            let responses: Vec<_> = pending
-                .into_iter()
-                .map(|(index, request)| (index, request.wait()))
-                .collect();
-            let mut metadata = Vec::with_capacity(responses.len());
-            for (index, response) in &responses {
+            let responses: Vec<_> = pending.into_iter().map(|request| request.wait()).collect();
+            let mut properties = Vec::with_capacity(responses.len());
+            for response in &responses {
                 match response.as_ref() {
-                    Ok(content) => {
-                        let supported = supported_variant_properties(content, target);
-                        metadata.push((*index, content, supported));
-                    }
+                    Ok(parsed) => properties.push((
+                        parsed.as_ref(),
+                        requests.request_variant_properties(Arc::clone(parsed))?,
+                    )),
                     Err(reason) => {
                         // Keep the first error to report if no distribution works.
                         selection.unavailable.get_or_insert_with(|| reason.clone());
                     }
                 }
             }
+            let properties: Vec<_> = properties
+                .into_iter()
+                .map(|(parsed, request)| (parsed, request.wait_blocking()))
+                .collect();
+            let metadata: Vec<_> = properties
+                .iter()
+                .map(|(parsed, properties)| {
+                    (&parsed.artifact.index, &parsed.content, properties.as_ref())
+                })
+                .collect();
             // Try this index's variants, then its ordinary wheel or sdist, before moving on
             // to the next index.
             if !metadata.is_empty()
-                && let Some((_, index)) = dist.scored_variants(&metadata).max()
-                && let Some(selected) = dist.select_variant(index)
+                && let Some((_, variant)) = dist
+                    .scored_variants(&metadata)
+                    .max_by(|(left, _), (right, _)| left.cmp(right))
+                && let Some(selected) = dist.select_variant(&variant)
             {
                 selection.distribution = Some(Cow::Owned(selected));
                 break;
@@ -1898,7 +1918,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             | CompatibleDist::IncompatibleWheel { sdist, .. } => Some(&sdist.index),
             CompatibleDist::CompatibleWheel { wheel, .. } => Some(&wheel.index),
         };
-        let variants_json = if uv_preview::is_enabled(PreviewFeature::WheelVariants)
+        let variants_json = if !self.is_variant_provider
+            && uv_preview::is_enabled(PreviewFeature::WheelVariants)
             && let Some(index) = index
             && let Some(variants_json) = candidate.prioritized().and_then(|prioritized| {
                 prioritized
@@ -2339,6 +2360,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         .variants_json()
                         .done(variants_json, Arc::new(response));
                 }
+                Some(Response::VariantProperties { parsed, properties }) => {
+                    self.index
+                        .variant_properties()
+                        .done(parsed.artifact.clone(), Arc::new(properties));
+                }
                 None => {}
             }
         }
@@ -2382,6 +2408,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 let _ = response.send(result);
                 Ok(None)
             }
+            Request::VariantProperties(parsed) => {
+                let properties = provider
+                    .supported_variant_properties(&parsed.content)
+                    .await?;
+                Ok(Some(Response::VariantProperties { parsed, properties }))
+            }
             Request::VariantsJson(variants_json) => {
                 let response = provider
                     .fetch_variants_json(
@@ -2394,14 +2426,21 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     .map_err(ResolveError::Client)?;
                 let response = match response {
                     VariantsJsonResponse::Found(contents) => {
-                        VariantsJsonContent::from_slice(&contents).map_err(|source| {
-                            MetadataUnavailable::InvalidVariantMetadata(Arc::new(
-                                VariantsJsonMetadataError::Index {
-                                    filename: variants_json.filename.clone(),
-                                    source,
-                                },
-                            ))
-                        })
+                        VariantsJsonContent::from_slice(&contents)
+                            .map(|content| {
+                                Arc::new(ParsedVariantsJson {
+                                    content,
+                                    artifact: variants_json.clone(),
+                                })
+                            })
+                            .map_err(|source| {
+                                MetadataUnavailable::InvalidVariantMetadata(Arc::new(
+                                    VariantsJsonMetadataError::Index {
+                                        filename: variants_json.filename.clone(),
+                                        source,
+                                    },
+                                ))
+                            })
                     }
                     VariantsJsonResponse::Unavailable(reason) => Err(reason),
                 };
@@ -3641,6 +3680,8 @@ fn widen_to_gap(version: &Version, known_versions: Option<&[Version]>) -> Range<
     }
 }
 
+type WheelVariantResponse = Result<VariantsJsonContent, MetadataUnavailable>;
+
 /// Fetch the metadata for an item
 #[derive(Debug)]
 #[expect(clippy::large_enum_variant)]
@@ -3656,8 +3697,10 @@ pub(crate) enum Request {
     /// A request to read embedded variant metadata from a wheel.
     WheelVariant {
         wheel: BuiltDist,
-        response: oneshot::Sender<Option<ParsedVariantsJsonResponse>>,
+        response: oneshot::Sender<Option<WheelVariantResponse>>,
     },
+    /// A request to discover target-specific properties for verified metadata.
+    VariantProperties(Arc<ParsedVariantsJson>),
     /// A request to pre-fetch the metadata for a package and the best-guess distribution.
     Prefetch(PackageName, Range<Version>, PythonRequirement),
 }
@@ -3717,6 +3760,9 @@ impl Display for Request {
             Self::WheelVariant { wheel, .. } => {
                 write!(f, "Variant metadata `{}`", wheel.wheel_filename())
             }
+            Self::VariantProperties(parsed) => {
+                write!(f, "Variant properties `{}`", parsed.artifact.filename)
+            }
             Self::Prefetch(package_name, range, _) => {
                 write!(f, "Prefetch {package_name} {range}")
             }
@@ -3743,6 +3789,11 @@ enum Response {
     VariantsJson {
         variants_json: RegistryVariantsJson,
         response: ParsedVariantsJsonResponse,
+    },
+    /// The target-specific properties for verified variant metadata.
+    VariantProperties {
+        parsed: Arc<ParsedVariantsJson>,
+        properties: SupportedVariantProperties,
     },
 }
 

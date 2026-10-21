@@ -7,7 +7,7 @@ use tracing::debug;
 use uv_distribution_filename::{BuildTag, WheelFilename};
 use uv_distribution_types::{
     File, IndexUrl, InstalledDist, MinimumLibcVersion, Name, RegistryBuiltDist, RegistryBuiltWheel,
-    RegistrySourceDist, RequiresPython, SupportedVariantProperties, VariantScore,
+    RegistrySourceDist, RequiresPython, SelectedVariant, SupportedVariantProperties, VariantScore,
     VariantsJsonContent, VariantsJsonFilename,
 };
 use uv_normalize::PackageName;
@@ -34,6 +34,13 @@ pub(crate) struct WheelVariantScore<'a> {
     build_tag: Option<&'a BuildTag>,
 }
 
+/// The wheel and index metadata that produced a variant score.
+pub(crate) struct ScoredWheelVariant<'a> {
+    index: usize,
+    metadata: &'a VariantsJsonContent,
+    supported: &'a SupportedVariantProperties,
+}
+
 /// Variant metadata for a package version on an index.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct RegistryVariantsJson {
@@ -54,6 +61,8 @@ struct PrioritizedDistInner {
     wheels: Vec<(RegistryBuiltWheel, WheelCompatibility)>,
     /// Variant metadata files from the indexes contributing files for this version.
     variants_json: Vec<RegistryVariantsJson>,
+    /// The selected wheel's properties supported by this target.
+    selected_variant: Option<SelectedVariant>,
     /// The hashes for each distribution.
     hashes: Vec<HashDigest>,
     /// Python coverage, unioned over compatible wheels independently of their platforms.
@@ -71,6 +80,7 @@ impl Default for PrioritizedDistInner {
             best_wheel_index: None,
             wheels: Vec::new(),
             variants_json: Vec::new(),
+            selected_variant: None,
             hashes: Vec::new(),
             python_markers: MarkerTree::FALSE,
             markers: [MarkerTree::FALSE; 2],
@@ -428,6 +438,10 @@ impl PrioritizedDist {
         &self.0.variants_json
     }
 
+    pub(crate) fn selected_variant(&self) -> Option<&SelectedVariant> {
+        self.0.selected_variant.as_ref()
+    }
+
     /// Return the `variants.json` files we need to check the candidate wheels.
     ///
     /// Match on the index as well as the release: a flat index can include wheels from
@@ -444,10 +458,14 @@ impl PrioritizedDist {
     }
 
     /// Score each compatible variant from the index that supplied its wheel.
-    pub(crate) fn scored_variants(
+    pub(crate) fn scored_variants<'metadata>(
         &self,
-        metadata: &[(&IndexUrl, &VariantsJsonContent, SupportedVariantProperties)],
-    ) -> impl Iterator<Item = (WheelVariantScore<'_>, usize)> {
+        metadata: &[(
+            &IndexUrl,
+            &'metadata VariantsJsonContent,
+            &'metadata SupportedVariantProperties,
+        )],
+    ) -> impl Iterator<Item = (WheelVariantScore<'_>, ScoredWheelVariant<'metadata>)> {
         // Prefer wheels whose advertised hash matches a required hash, followed by wheels with
         // no advertised hash, then mismatches. If no hashes are required, all wheels match.
         // The installer verifies required hashes against the downloaded wheel.
@@ -461,25 +479,36 @@ impl PrioritizedDist {
                     return None;
                 };
                 let label = wheel.filename.variant()?;
-                let score = metadata
+                let (score, metadata, supported) = metadata
                     .iter()
                     .filter(|(source, _, _)| *source == &wheel.index)
-                    .filter_map(|(_, metadata, supported)| metadata.score_variant(label, supported))
-                    .max()?;
+                    .filter_map(|(_, metadata, supported_properties)| {
+                        metadata
+                            .score_variant(label, supported_properties)
+                            .map(|score| (score, *metadata, *supported_properties))
+                    })
+                    .max_by(|left, right| left.0.cmp(&right.0))?;
                 let score = WheelVariantScore {
                     hash: *hash,
                     score,
                     tag_priority: *priority,
                     build_tag: build_tag.as_ref(),
                 };
-                Some((score, index))
+                Some((
+                    score,
+                    ScoredWheelVariant {
+                        index,
+                        metadata,
+                        supported,
+                    },
+                ))
             })
     }
 
     /// Select a scored variant if its hash ranks at least as high as the ordinary wheel's.
-    pub(crate) fn select_variant(&self, index: usize) -> Option<Self> {
-        let (_, WheelCompatibility::Variant(hash, priority, build_tag)) =
-            self.0.wheels.get(index)?
+    pub(crate) fn select_variant(&self, variant: &ScoredWheelVariant<'_>) -> Option<Self> {
+        let (wheel, WheelCompatibility::Variant(hash, priority, build_tag)) =
+            self.0.wheels.get(variant.index)?
         else {
             return None;
         };
@@ -489,9 +518,14 @@ impl PrioritizedDist {
             return None;
         }
         let mut selected = self.clone();
-        selected.0.wheels[index].1 =
+        selected.0.wheels[variant.index].1 =
             WheelCompatibility::Compatible(*hash, *priority, build_tag.clone());
-        selected.0.best_wheel_index = Some(index);
+        selected.0.best_wheel_index = Some(variant.index);
+        selected.0.selected_variant = Some(
+            variant
+                .metadata
+                .select_variant(wheel.filename.variant()?, variant.supported)?,
+        );
         Some(selected)
     }
 
