@@ -421,6 +421,8 @@ mod tests {
         ### `wheel-variants` {#wheel-variants}
 
         Enables experimental support for [wheel variants](https://peps.python.org/pep-0825/).
+        A universal `uv.lock` can contain wheels for several targets. At installation, uv selects
+        a compatible wheel and evaluates its dependency markers using that wheel's properties.
 
         To describe the installation target explicitly, pass `--variant-target target.json`.
         For example, `{"x86_64": [["level", ["v3", "v2", "v1"]]]}` lists compatible x86-64

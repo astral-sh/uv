@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use tokio::sync::mpsc::Sender;
 
+use uv_distribution::ArchiveMetadata;
 use uv_distribution_types::{
     BuiltDist, DerivationChain, Dist, DistErrorKind, DistributionId, Identifier, IndexMetadata,
     IndexUrl, Name, RegistryVariantsJson, RequestedDist, ResolutionRecorder, SelectedVariant,
@@ -278,6 +279,31 @@ impl MetadataRequests {
                 error,
             )
         })
+    }
+
+    /// Request dependency metadata for the wheels declared in verified variant metadata.
+    pub(crate) fn request_variant_dependencies(
+        &self,
+        dist: Arc<Dist>,
+        variants: Arc<ParsedVariantsJson>,
+        baseline: &ArchiveMetadata,
+    ) -> Result<FxRegisteredEntry<'_, Arc<Dist>, Arc<MetadataResponse>>, ResolveError> {
+        let entry = match self
+            .index
+            .variant_dependencies()
+            .register_entry(Arc::clone(&dist))
+        {
+            Registration::New(entry) => {
+                self.sender.blocking_send(Request::VariantDependencies {
+                    dist,
+                    variants,
+                    baseline: Box::new(baseline.clone()),
+                })?;
+                entry
+            }
+            Registration::Existing(entry) => entry,
+        };
+        Ok(entry)
     }
 
     /// Schedule speculative candidate selection using an already-requested package version map.
