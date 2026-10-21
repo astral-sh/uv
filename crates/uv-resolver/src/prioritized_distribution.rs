@@ -617,12 +617,16 @@ impl PrioritizedDist {
         match (&best_wheel, &self.0.source) {
             // If both are compatible, break ties based on the hash outcome. For example, prefer a
             // source distribution with a matching hash over a wheel with a mismatched hash. When
-            // the outcomes are equivalent (e.g., both have a matching hash), prefer the wheel.
+            // the outcomes are equivalent, prefer the wheel unless universal resolution still
+            // needs to check its variant label against the index metadata. In that case the source
+            // distribution provides the baseline, and the declared variants contribute their own
+            // dependencies once the sidecar is available.
             (
-                Some((wheel, WheelCompatibility::Compatible(wheel_hash, ..))),
+                Some((wheel, WheelCompatibility::Compatible(wheel_hash, priority, _))),
                 Some((sdist, SourceDistCompatibility::Compatible(sdist_hash))),
             ) => {
-                if sdist_hash > wheel_hash {
+                let universal_variant = priority.is_none() && wheel.filename.variant().is_some();
+                if sdist_hash > wheel_hash || (sdist_hash == wheel_hash && universal_variant) {
                     Some(CompatibleDist::SourceDist {
                         sdist,
                         prioritized: self,
