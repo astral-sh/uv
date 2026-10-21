@@ -38,6 +38,9 @@ use crate::{BaseClient, Error, ErrorKind, OwnedArchive, ProblemDetails, RetrySta
 /// `rkyvutil::OwnedArchive` mold, then an implementation of `Cacheable` is
 /// already provided for that type.
 pub(crate) trait Cacheable: Sized {
+    /// Maximum size of the encoded payload and its HTTP cache policy.
+    const MAX_CACHE_ENTRY_SIZE: usize = AlignedVec::<16>::MAX_CAPACITY;
+
     /// This associated type permits customizing what the "output" type of
     /// deserialization is. It can be identical to `Self`.
     ///
@@ -517,7 +520,11 @@ impl CachedClient {
             .cache_read_runtime()
             .spawn_blocking(move || {
                 span.in_scope(|| {
-                    let cached = DataWithCachePolicy::from_path_sync(&path).map(|cached| {
+                    let cached = DataWithCachePolicy::from_path_sync(
+                        &path,
+                        Payload::MAX_CACHE_ENTRY_SIZE,
+                    )
+                    .map(|cached| {
                         // Apply the cache control header only when checking an existing entry.
                         if let CacheControl::MustRevalidate = cache_control {
                             req.headers_mut().insert(
@@ -588,13 +595,15 @@ impl CachedClient {
         self.0
             .cache_read_runtime()
             .spawn_blocking(move || {
-                let cached = DataWithCachePolicy::from_path_sync(&path).and_then(|cached| {
-                    if cached.cache_policy().matches_stale_request(&req) {
-                        Payload::from_aligned_bytes(cached.into_data()).map(Some)
-                    } else {
-                        Ok(None)
-                    }
-                });
+                let cached =
+                    DataWithCachePolicy::from_path_sync(&path, Payload::MAX_CACHE_ENTRY_SIZE)
+                        .and_then(|cached| {
+                            if cached.cache_policy().matches_stale_request(&req) {
+                                Payload::from_aligned_bytes(cached.into_data()).map(Some)
+                            } else {
+                                Ok(None)
+                            }
+                        });
                 (req, cached)
             })
             .await
@@ -927,19 +936,18 @@ impl DataWithCachePolicy {
     /// If the given byte buffer is not in a valid format or if reading the
     /// file given fails, then this returns an error.
     #[instrument]
-    fn from_path_sync(path: &Path) -> Result<Self, Error> {
+    fn from_path_sync(path: &Path, max_size: usize) -> Result<Self, Error> {
         let mut file = fs_err::File::open(path).map_err(ErrorKind::Io)?;
         let file_size = file.metadata().map_err(ErrorKind::Io)?.len();
         let file_size = usize::try_from(file_size)
             .ok()
-            .filter(|&file_size| file_size <= AlignedVec::<16>::MAX_CAPACITY)
+            .filter(|&file_size| file_size <= max_size)
             .ok_or_else(|| {
                 ErrorKind::Io(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
                     format!(
                         "cache entry file size of {file_size} bytes exceeds the maximum supported \
-                         size of {} bytes",
-                        AlignedVec::<16>::MAX_CAPACITY,
+                         size of {max_size} bytes",
                     ),
                 ))
             })?;
@@ -1196,11 +1204,11 @@ mod tests {
         let payload = vec![42; 1024 * 1024 + 7];
         let original = DataWithCachePolicy::serialize(&small, &payload)?;
         fs_err::write(&path, &original)?;
-        let cached = DataWithCachePolicy::from_path_sync(&path)?;
+        let cached = DataWithCachePolicy::from_path_sync(&path, AlignedVec::<16>::MAX_CAPACITY)?;
 
         cached.refresh_policy(&path, &large)?;
         assert!(fs_err::metadata(&path)?.len() > original.len() as u64);
-        let grown = DataWithCachePolicy::from_path_sync(&path)?;
+        let grown = DataWithCachePolicy::from_path_sync(&path, AlignedVec::<16>::MAX_CAPACITY)?;
         assert_eq!(&grown.bytes[..grown.data_len], payload);
         assert_eq!(grown.entry_id, cached.entry_id);
         assert_eq!(
