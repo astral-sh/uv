@@ -7,7 +7,10 @@ use tracing::trace;
 
 use uv_configuration::{Constraints, DependencyModifierScope, DependencyModifiers};
 use uv_distribution::{DistributionDatabase, Reporter};
-use uv_distribution_types::{Dist, Identifier, Requirement, RequirementSource};
+use uv_distribution_types::{
+    Dist, Identifier, Requirement, RequirementSource, RequiresPython, SelectedVariant,
+};
+use uv_platform_tags::Tags;
 use uv_resolver::{InMemoryIndex, MetadataResponse, ResolverEnvironment};
 use uv_types::{BuildContext, HashStrategy, HashVerification, RequestedRequirements};
 
@@ -42,6 +45,12 @@ pub struct LookaheadResolver<'a, Context: BuildContext> {
     index: &'a InMemoryIndex,
     /// The database for fetching and building distributions.
     database: DistributionDatabase<'a, Context>,
+}
+
+struct Lookahead {
+    requirements: RequestedRequirements,
+    variant: Option<SelectedVariant>,
+    fixed_variant_label: Option<String>,
 }
 
 impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
@@ -82,6 +91,8 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
     pub async fn resolve(
         self,
         env: &ResolverEnvironment,
+        tags: Option<&Tags>,
+        requires_python: &RequiresPython,
     ) -> Result<(Vec<RequestedRequirements>, HashStrategy), Error> {
         let mut results = Vec::new();
         let mut futures = FuturesUnordered::new();
@@ -103,13 +114,24 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
             while let Some(requirement) = queue.pop_front() {
                 if !matches!(requirement.source, RequirementSource::Registry { .. }) {
                     if seen.insert(requirement.clone()) {
-                        futures.push(self.lookahead(requirement, hasher.clone()));
+                        futures.push(self.lookahead(
+                            requirement,
+                            hasher.clone(),
+                            env.marker_environment().is_some(),
+                            tags,
+                            requires_python,
+                        ));
                     }
                 }
             }
 
             while let Some(result) = futures.next().await {
-                if let Some(lookahead) = result? {
+                if let Some(Lookahead {
+                    requirements: lookahead,
+                    variant,
+                    fixed_variant_label,
+                }) = result?
+                {
                     // User-provided metadata can authorize dependencies even under required hashes.
                     // An override may only match after the source's version has been discovered.
                     // Read its hashes directly; the lookahead requirements may come from the archive.
@@ -141,13 +163,26 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                     } else {
                         hasher.augment_with_metadata_requirements(requirements)?
                     };
-                    for requirement in self.constraints.apply(self.modifiers.apply(
+                    for mut requirement in self.constraints.apply(self.modifiers.apply(
                         DependencyModifierScope::Package(lookahead.package(), lookahead.version()),
                         lookahead.requirements(),
                     )) {
-                        if requirement
-                            .evaluate_markers(env.marker_environment(), lookahead.extras())
-                        {
+                        if let Some(label) = &fixed_variant_label {
+                            let marker = requirement.marker.simplify_variant_label(label);
+                            if marker != requirement.marker {
+                                requirement.to_mut().marker = marker;
+                            }
+                        }
+                        let applicable = if let Some(environment) = env.marker_environment() {
+                            requirement.marker.evaluate_with_variants(
+                                environment,
+                                &SelectedVariant::marker_environment(variant.as_ref()),
+                                lookahead.extras(),
+                            )
+                        } else {
+                            requirement.evaluate_markers(None, lookahead.extras())
+                        };
+                        if applicable {
                             queue.push_back((*requirement).clone());
                         }
                     }
@@ -164,7 +199,10 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
         &self,
         requirement: Requirement,
         hasher: HashStrategy,
-    ) -> Result<Option<RequestedRequirements>, Error> {
+        concrete: bool,
+        tags: Option<&Tags>,
+        requires_python: &RequiresPython,
+    ) -> Result<Option<Lookahead>, Error> {
         trace!("Performing lookahead for {requirement}");
 
         // Determine whether the requirement represents a local distribution and convert to a
@@ -172,6 +210,15 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
         let Some(dist) = required_dist(&requirement)? else {
             return Ok(None);
         };
+        if let (Dist::Built(built), Some(tags)) = (&dist, tags)
+            && built.wheel_filename().variant().is_some()
+            && !built
+                .wheel_filename()
+                .tag_compatibility(tags)
+                .is_compatible()
+        {
+            return Ok(None);
+        }
 
         // Consider the dependencies to be "direct" if the requirement is a local source tree.
         let direct = if let Dist::Source(source_dist) = &dist {
@@ -196,7 +243,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                     .database
                     .get_or_build_wheel_metadata(&dist, hasher.metadata_policy(&dist))
                     .await
-                    .map_err(|err| Error::from_dist(dist, err))?;
+                    .map_err(|err| Error::from_dist(dist.clone(), err))?;
 
                 let metadata = archive.metadata.clone();
 
@@ -207,6 +254,48 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
 
                 metadata
             }
+        };
+
+        let (variant, fixed_variant_label) = if let Dist::Built(built) = &dist {
+            if concrete && built.wheel_filename().variant().is_some() {
+                if metadata
+                    .requires_python
+                    .as_ref()
+                    .is_some_and(|specifiers| !requires_python.is_contained_by(specifiers))
+                {
+                    return Ok(None);
+                }
+                let id = dist.distribution_id();
+                let variants = self.index.direct_variants();
+                let variant = if let Some(variant) = variants.register_or_wait(&id).await {
+                    variant
+                } else {
+                    let variant = self
+                        .database
+                        .select_wheel_variant(built, hasher.archive_policy(&dist))
+                        .await
+                        .map_err(Arc::new);
+                    variants.done(id, variant.clone());
+                    variant
+                }
+                .map_err(|err| Error::from_dist(dist.clone(), err))?;
+                (variant, None)
+            } else if !concrete {
+                (
+                    None,
+                    Some(
+                        built
+                            .wheel_filename()
+                            .variant()
+                            .map_or("", |label| label.as_str())
+                            .to_string(),
+                    ),
+                )
+            } else {
+                (None, None)
+            }
+        } else {
+            (None, None)
         };
 
         // Respect recursive extras by propagating the source extras to the dependencies.
@@ -239,12 +328,16 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
             .collect();
 
         // Return the requirements from the metadata.
-        Ok(Some(RequestedRequirements::new(
-            package,
-            version,
-            requirement.extras,
-            requires_dist,
-            direct,
-        )))
+        Ok(Some(Lookahead {
+            requirements: RequestedRequirements::new(
+                package,
+                version,
+                requirement.extras,
+                requires_dist,
+                direct,
+            ),
+            variant,
+            fixed_variant_label,
+        }))
     }
 }

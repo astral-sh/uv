@@ -3,8 +3,8 @@ use std::sync::Arc;
 use tokio::sync::mpsc::Sender;
 
 use uv_distribution_types::{
-    Dist, DistributionId, Identifier, IndexMetadata, IndexUrl, Name, ResolutionRecorder,
-    SupportedVariantProperties,
+    BuiltDist, DerivationChain, Dist, DistErrorKind, DistributionId, Identifier, IndexMetadata,
+    IndexUrl, Name, RequestedDist, ResolutionRecorder, SelectedVariant, SupportedVariantProperties,
 };
 use uv_normalize::PackageName;
 use uv_once_map::Registration;
@@ -250,6 +250,34 @@ impl MetadataRequests {
             Registration::Existing(entry) => entry,
         };
         Ok(entry)
+    }
+
+    /// Select a direct wheel's variant once, reusing lookahead results when available.
+    pub(crate) fn select_direct_variant(
+        &self,
+        dist: &BuiltDist,
+    ) -> Result<Option<SelectedVariant>, ResolveError> {
+        let entry = match self
+            .index
+            .direct_variants()
+            .register_entry(dist.distribution_id())
+        {
+            Registration::New(entry) => {
+                self.sender
+                    .blocking_send(Request::DirectVariant(dist.clone()))?;
+                entry
+            }
+            Registration::Existing(entry) => entry,
+        };
+        entry.wait_blocking().map_err(|error| {
+            let requested = RequestedDist::Installable(Dist::Built(dist.clone()));
+            ResolveError::Dist(
+                DistErrorKind::from_requested_dist(&requested, error.as_ref()),
+                Box::new(requested),
+                DerivationChain::default(),
+                error,
+            )
+        })
     }
 
     /// Schedule speculative candidate selection using an already-requested package version map.
