@@ -1,5 +1,4 @@
 use std::collections::BTreeMap;
-use std::env;
 use std::io::Write;
 use std::path::Path;
 use std::str::FromStr;
@@ -56,7 +55,7 @@ use uv_workspace::WorkspaceCache;
 use uv_workspace::pyproject::ExtraBuildDependencies;
 
 use uv_command_support::Printer;
-use uv_command_support::{ExitStatus, OutputWriter, UvError};
+use uv_command_support::{ExitStatus, OutputWriter, UvError, command_args_for_header};
 use uv_python_discovery::PythonDownloadReporter;
 use uv_resolve_operations::locked_requirements::{
     LockedRequirements, read_pylock_toml_requirements, read_requirements_txt,
@@ -821,9 +820,7 @@ fn cmd(
     if let Some(cmd_str) = custom_compile_command {
         return cmd_str;
     }
-    let args = env::args_os()
-        .skip(1)
-        .map(|arg| arg.to_string_lossy().to_string())
+    let args = command_args_for_header()
         .scan(None, move |skip_next, arg| {
             if matches!(skip_next, Some(true)) {
                 // Reset state; skip this iteration.

@@ -102,6 +102,25 @@ pub fn elapsed(duration: Duration) -> String {
     }
 }
 
+/// Return command-line arguments suitable for the header of a generated requirements or lock file.
+///
+/// Provider indexes can contain credentials. Omit them even when the header includes the
+/// package indexes used to resolve the requirements.
+pub fn command_args_for_header() -> impl Iterator<Item = String> {
+    let mut skip_value = false;
+    std::env::args_os().skip(1).filter_map(move |arg| {
+        if std::mem::take(&mut skip_value) {
+            return None;
+        }
+        let arg = arg.to_string_lossy();
+        if arg == "--variant-provider-index" {
+            skip_value = true;
+            return None;
+        }
+        (!arg.starts_with("--variant-provider-index=")).then(|| arg.into_owned())
+    })
+}
+
 /// A multicasting writer that writes to both the standard output and an output file, if present.
 pub struct OutputWriter<'a> {
     stdout: Option<Either<anstream::Stdout, BufWriter<anstream::Stdout>>>,

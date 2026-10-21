@@ -679,17 +679,10 @@ impl TypedValueParser for VariantProviderIndexValueParser {
         value
             .to_str()
             .and_then(|value| IndexUrl::from_str(value).ok())
-            .filter(|index| {
-                let url = index.url();
-                url.username().is_empty()
-                    && url.password().is_none()
-                    && url.query_pairs().next().is_none()
-                    && url.fragment().is_none()
-            })
             .ok_or_else(|| {
                 command.clone().error(
                     ErrorKind::InvalidValue,
-                    "expected an index URL or path without credentials for `--variant-provider-index`",
+                    "expected an index URL or path for `--variant-provider-index`",
                 )
             })
     }
