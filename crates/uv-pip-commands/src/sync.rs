@@ -397,7 +397,8 @@ pub async fn pip_sync(
     .with_variant_policy(&variant_policy);
 
     // Determine the set of installed packages.
-    let site_packages = SitePackages::from_environment(&environment)?;
+    let site_packages = SitePackages::from_environment(&environment)?
+        .with_variant_target(variant_policy.target().cloned());
 
     let (resolution, hasher) = if let Some(pylock) = pylock {
         let (install_path, lock) = read_pylock_toml(&pylock, &client_builder).await?;

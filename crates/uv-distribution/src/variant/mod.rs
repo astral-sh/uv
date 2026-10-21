@@ -67,6 +67,14 @@ pub enum InstalledWheelVariant {
 
 impl InstalledWheelVariant {
     pub fn check(installed: &InstalledDist) -> Self {
+        Self::check_with_target(installed, None)
+    }
+
+    /// Reselect an installed variant when resolving for an explicit target.
+    pub fn check_with_target(
+        installed: &InstalledDist,
+        target: Option<&SupportedVariantProperties>,
+    ) -> Self {
         let metadata = match installed.read_variant() {
             Ok(None) => return Self::NonVariant,
             Ok(Some(metadata)) => metadata,
@@ -75,7 +83,8 @@ impl InstalledWheelVariant {
                 return Self::Incompatible;
             }
         };
-        if uv_preview::is_enabled(PreviewFeature::WheelVariants)
+        if target.is_none()
+            && uv_preview::is_enabled(PreviewFeature::WheelVariants)
             && let Some(label) =
                 metadata.compatible_wheel_label(&supported_variant_properties(&metadata))
         {

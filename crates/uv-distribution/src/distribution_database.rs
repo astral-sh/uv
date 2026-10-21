@@ -148,14 +148,19 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         }
     }
 
+    /// Return the explicitly configured variant target, if any.
+    pub fn variant_target(&self) -> Option<&SupportedVariantProperties> {
+        self.build_context
+            .variant_policy()
+            .and_then(|policy| policy.target())
+    }
+
     /// Obtain compatible properties for a release or wheel.
     pub fn supported_variant_properties(
         &self,
         metadata: &VariantsJsonContent,
     ) -> SupportedVariantProperties {
-        self.build_context
-            .variant_policy()
-            .and_then(|policy| policy.target())
+        self.variant_target()
             .cloned()
             .unwrap_or_else(|| crate::variant::supported_variant_properties(metadata))
     }

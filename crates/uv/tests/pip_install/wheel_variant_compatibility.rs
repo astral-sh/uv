@@ -378,6 +378,50 @@ fn replace_incompatible_installed_variant() -> Result<()> {
     Ok(())
 }
 
+/// The only wheel requires a property supplied by the target, absent from the host defaults.
+#[test]
+fn explicit_variant_target_selects_registry_wheel() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "explicit-variant-target-selects-registry-wheel"
+        root = {}
+        expected.satisfiable = true
+
+        [packages.ok.versions."1.0.0"]
+        wheel = false
+        sdist = false
+
+        [packages.ok.versions."1.0.0".variants]
+        namespaces = ["blas_lapack"]
+
+        [packages.ok.versions."1.0.0".variants.providers.blas_lapack]
+        static-properties.library = ["openblas"]
+
+        [packages.ok.versions."1.0.0".variants.wheels]
+        mkl.properties = ["blas_lapack :: library :: mkl"]
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
+    let target = context.temp_dir.child("target.json");
+    target.write_str(r#"{"blas_lapack": [["library", ["mkl"]]]}"#)?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--index-url")
+        .arg(server.index_url())
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("--variant-target")
+        .arg(target.path())
+        .arg("ok==1.0.0"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0
+    ");
+    Ok(())
+}
+
 /// Project sync installs the wheel selected by the lockfile even if another compatible variant
 /// is already installed.
 #[test]

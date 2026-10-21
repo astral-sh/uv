@@ -379,6 +379,7 @@ impl<'a> Planner<'a> {
                                 extra_build_requires,
                                 extra_build_variables,
                             }),
+                            site_packages.variant_target(),
                         ) {
                             RequirementSatisfaction::Mismatch => {
                                 debug!(
