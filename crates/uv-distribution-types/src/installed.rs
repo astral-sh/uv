@@ -18,7 +18,7 @@ use uv_pypi_types::{DirectUrl, DirectUrlError, MetadataError, read_direct_url_js
 use uv_redacted::SafeUrl;
 
 use crate::{
-    BuildInfo, DistributionMetadata, InstalledMetadata, InstalledVersion, Name,
+    BuildInfo, DistributionMetadata, InstalledMetadata, InstalledVersion, Name, SelectedVariant,
     VariantsJsonContent, VariantsJsonParseError, VersionOrUrlRef,
 };
 
@@ -50,6 +50,12 @@ pub enum InstalledDistError {
 
     #[error(transparent)]
     VariantParse(#[from] VariantsJsonParseError),
+
+    #[error("Installed variant properties are unavailable for `{0}`; reinstall the package")]
+    VariantContextUnavailable(PackageName),
+
+    #[error("Installed variant properties for `{0}` do not match the wheel metadata")]
+    VariantContextMismatch(PackageName),
 
     #[error("Invalid `.egg-link` path: {}", _0.user_display())]
     InvalidEggLinkPath(PathBuf),
@@ -361,6 +367,38 @@ impl InstalledDist {
             Err(err) => return Err(err.into()),
         };
         Ok(Some(VariantsJsonContent::from_slice(&contents)?))
+    }
+
+    /// Read the properties used to resolve this wheel's dependencies during installation.
+    ///
+    /// A wheel may declare alternatives that the installation target did not support. The
+    /// recorded properties contain only the selected subset, so inspecting an environment does
+    /// not need to query providers. Static properties can recover this subset for installations
+    /// that predate the recorded metadata.
+    pub fn read_variant_context(&self) -> Result<Option<SelectedVariant>, InstalledDistError> {
+        let Some(metadata) = self.read_variant()? else {
+            return Ok(None);
+        };
+        match fs::read(self.install_path().join("uv_variant.json")) {
+            Ok(contents) => {
+                let selected = serde_json::from_slice(&contents)?;
+                if metadata.validates_selected_variant(&selected) {
+                    Ok(Some(selected))
+                } else {
+                    Err(InstalledDistError::VariantContextMismatch(
+                        self.name().clone(),
+                    ))
+                }
+            }
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => metadata
+                .wheel_label()
+                .and_then(|label| {
+                    metadata.select_variant(label, &metadata.static_supported_properties())
+                })
+                .map(Some)
+                .ok_or_else(|| InstalledDistError::VariantContextUnavailable(self.name().clone())),
+            Err(err) => Err(err.into()),
+        }
     }
 
     /// Return the [`Version`] of the distribution.

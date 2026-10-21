@@ -180,10 +180,7 @@ impl NvidiaVariantProvider {
                     version: cuda_version.clone(),
                 });
             }
-            properties.push(SupportedVariantFeature {
-                name: CUDA_VERSION_LOWER_BOUND,
-                values: lower_bound,
-            });
+            properties.push((CUDA_VERSION_LOWER_BOUND, lower_bound));
         }
         // Add `cuda_version_upper_bound` with values above the effective CUDA version.
         if detected_major <= MAX_CUDA_MAJOR {
@@ -199,10 +196,7 @@ impl NvidiaVariantProvider {
                 .map(VariantValue::try_from)
                 .collect::<Result<Vec<_>, _>>()?;
             if !upper_bound.is_empty() {
-                properties.push(SupportedVariantFeature {
-                    name: CUDA_VERSION_UPPER_BOUND,
-                    values: upper_bound,
-                });
+                properties.push((CUDA_VERSION_UPPER_BOUND, upper_bound));
             }
         }
         if let Some((major, minor)) = compute_capability
@@ -215,10 +209,7 @@ impl NvidiaVariantProvider {
                 .chain([format!("{major}0_virtual")])
                 .map(VariantValue::try_from)
                 .collect::<Result<_, _>>()?;
-            properties.push(SupportedVariantFeature {
-                name: SM_ARCH,
-                values: architectures,
-            });
+            properties.push((SM_ARCH, architectures));
         }
         Ok(properties)
     }

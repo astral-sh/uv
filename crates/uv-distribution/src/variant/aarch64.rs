@@ -21,9 +21,11 @@ const PLATFORM_DEFAULT_VERSION: Aarch64Version = Aarch64Version::V8;
 /// Cached properties indexed by the maximum supported [`Aarch64Version`].
 static VERSION_PROPERTIES: LazyLock<[SupportedVariantFeature; 5]> = LazyLock::new(|| {
     let values = ["8a", "8.1a", "8.2a", "8.3a", "8.4a"].map(VariantValue::from_static);
-    std::array::from_fn(|version| SupportedVariantFeature {
-        name: VariantFeature::from_static("version"),
-        values: values[..=version].iter().rev().cloned().collect(),
+    std::array::from_fn(|version| {
+        (
+            VariantFeature::from_static("version"),
+            values[..=version].iter().rev().cloned().collect(),
+        )
     })
 });
 
