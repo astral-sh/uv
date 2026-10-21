@@ -1,12 +1,10 @@
 use std::sync::Arc;
 
 use tokio::sync::mpsc::Sender;
-use tokio::sync::oneshot;
 
-use uv_distribution_filename::VariantLabel;
 use uv_distribution_types::{
-    Dist, DistributionId, Identifier, IndexMetadata, IndexUrl, Name, PathBuiltDist,
-    ResolutionRecorder, SupportedVariantProperties,
+    BuiltDist, DerivationChain, Dist, DistErrorKind, DistributionId, Identifier, IndexMetadata,
+    IndexUrl, Name, RequestedDist, ResolutionRecorder, SelectedVariant, SupportedVariantProperties,
 };
 use uv_normalize::PackageName;
 use uv_once_map::Registration;
@@ -16,9 +14,7 @@ use crate::prioritized_distribution::RegistryVariantsJson;
 use crate::pubgrub::Range;
 use crate::resolved::ResolvedDistRef;
 use crate::resolver::index::{FxRegisteredEntry, ParsedVariantsJson, ParsedVariantsJsonResponse};
-use crate::resolver::{
-    InMemoryIndex, LocalWheelVariantResponse, MetadataResponse, Request, VersionsResponse,
-};
+use crate::resolver::{InMemoryIndex, MetadataResponse, Request, VersionsResponse};
 use crate::{PythonRequirement, ResolveError};
 
 /// A blocking solver-side handle for requesting metadata from the asynchronous fetcher.
@@ -233,22 +229,6 @@ impl MetadataRequests {
         Ok(RegisteredVariantsJson(entry))
     }
 
-    /// Read the embedded variant metadata for a local wheel being considered by the solver.
-    pub(crate) fn read_local_wheel_variant(
-        &self,
-        wheel: PathBuiltDist,
-        label: VariantLabel,
-    ) -> Result<LocalWheelVariantResponse, ResolveError> {
-        let (send, recv) = oneshot::channel();
-        self.sender.blocking_send(Request::LocalWheelVariant {
-            wheel,
-            label,
-            response: send,
-        })?;
-        recv.blocking_recv()
-            .map_err(|_| ResolveError::ChannelClosed)
-    }
-
     /// Request target-specific properties for verified metadata at most once.
     pub(crate) fn request_variant_properties(
         &self,
@@ -270,6 +250,34 @@ impl MetadataRequests {
             Registration::Existing(entry) => entry,
         };
         Ok(entry)
+    }
+
+    /// Select a direct wheel's variant once, reusing lookahead results when available.
+    pub(crate) fn select_direct_variant(
+        &self,
+        dist: &BuiltDist,
+    ) -> Result<Option<SelectedVariant>, ResolveError> {
+        let entry = match self
+            .index
+            .direct_variants()
+            .register_entry(dist.distribution_id())
+        {
+            Registration::New(entry) => {
+                self.sender
+                    .blocking_send(Request::DirectVariant(dist.clone()))?;
+                entry
+            }
+            Registration::Existing(entry) => entry,
+        };
+        entry.wait_blocking().map_err(|error| {
+            let requested = RequestedDist::Installable(Dist::Built(dist.clone()));
+            ResolveError::Dist(
+                DistErrorKind::from_requested_dist(&requested, error.as_ref()),
+                Box::new(requested),
+                DerivationChain::default(),
+                error,
+            )
+        })
     }
 
     /// Schedule speculative candidate selection using an already-requested package version map.

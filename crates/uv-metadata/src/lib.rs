@@ -8,10 +8,10 @@ use std::path::Path;
 
 use async_zip::base::read::seek::ZipFileReader;
 use futures::executor::block_on;
-use futures::io::{AllowStdIo, AsyncBufRead, AsyncSeek, BufReader};
+use futures::io::{AllowStdIo, AsyncBufRead, AsyncSeek};
 use thiserror::Error;
 use tokio::io::AsyncReadExt;
-use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
+use tokio_util::compat::FuturesAsyncReadCompatExt;
 use uv_distribution_filename::{VariantLabel, WheelFilename};
 use uv_distribution_types::{VariantsJsonContent, VariantsJsonParseError};
 use uv_normalize::InvalidNameError;
@@ -148,7 +148,7 @@ pub fn read_archive_metadata(
         )?;
         if let Some(label) = filename.variant() {
             let path = format!("{dist_info_stem}.dist-info/variant.json");
-            read_archive_variant_entry(&mut zip_reader, &path, label).await?;
+            validate_archive_variant(&mut zip_reader, &path, label).await?;
         }
 
         let mut buffer = Vec::new();
@@ -162,32 +162,12 @@ pub fn read_archive_metadata(
     })
 }
 
-/// Read the variant metadata from a wheel archive.
-pub async fn read_archive_wheel_variant(
-    filename: &WheelFilename,
-    path: &Path,
-    label: &VariantLabel,
-) -> Result<VariantsJsonContent, Error> {
-    let file = fs_err::tokio::File::open(path).await.map_err(Error::Io)?;
-    let mut reader = ZipFileReader::new(BufReader::new(file.compat())).await?;
-    let ((), dist_info_stem) = find_archive_dist_info(
-        filename,
-        reader
-            .file()
-            .entries()
-            .iter()
-            .filter_map(|entry| Some(((), entry.filename().as_str().ok()?))),
-    )?;
-    let path = format!("{dist_info_stem}.dist-info/variant.json");
-    read_archive_variant_entry(&mut reader, &path, label).await
-}
-
-/// Read and validate the `variant.json` next to the wheel's `METADATA`.
-pub async fn read_archive_variant_entry<R: AsyncBufRead + AsyncSeek + Unpin>(
+/// Validate the `variant.json` next to the wheel's `METADATA` before using it for resolution.
+pub async fn validate_archive_variant<R: AsyncBufRead + AsyncSeek + Unpin>(
     reader: &mut ZipFileReader<R>,
     path: &str,
     label: &VariantLabel,
-) -> Result<VariantsJsonContent, Error> {
+) -> Result<(), Error> {
     let index = reader
         .file()
         .entries()
@@ -200,7 +180,8 @@ pub async fn read_archive_variant_entry<R: AsyncBufRead + AsyncSeek + Unpin>(
         .await?
         .read_to_end_checked(&mut contents)
         .await?;
-    Ok(VariantsJsonContent::from_wheel(&contents, label)?)
+    VariantsJsonContent::from_wheel(&contents, label)?;
+    Ok(())
 }
 
 /// Find the `.dist-info` directory in an unzipped wheel.

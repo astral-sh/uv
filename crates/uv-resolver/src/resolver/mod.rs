@@ -22,18 +22,14 @@ use tokio_stream::wrappers::ReceiverStream;
 use tracing::{Level, debug, info, instrument, trace, warn};
 
 use uv_configuration::{Constraints, DependencyModifiers, IndexStrategy};
-use uv_distribution::{
-    ArchiveMetadata, DistributionDatabase, InstalledWheelVariant, supported_variant_properties,
-};
-use uv_distribution_filename::VariantLabel;
+use uv_distribution::{ArchiveMetadata, DistributionDatabase, InstalledWheelVariant};
 use uv_distribution_types::{
     BuiltDist, DerivationChain, Dist, DistErrorKind, Identifier, IndexCapabilities, IndexLocations,
-    IndexMetadata, IndexUrl, InstalledDist, Name, PathBuiltDist, RemoteSource, Requirement,
-    RequiresPython, ResolutionRecorder, ResolvedDist, SourceDist, SupportedVariantProperties,
+    IndexMetadata, IndexUrl, InstalledDist, Name, RemoteSource, Requirement, RequiresPython,
+    ResolutionRecorder, ResolvedDist, SelectedVariant, SourceDist, SupportedVariantProperties,
     VariantsJsonContent, VersionOrUrlRef,
 };
 use uv_git::GitResolver;
-use uv_metadata::read_archive_wheel_variant;
 use uv_normalize::PackageName;
 use uv_pep440::{MIN_VERSION, Version, VersionSpecifiers, release_specifiers_to_ranges};
 use uv_pep508::{
@@ -79,7 +75,7 @@ use crate::resolver::environment::{
     ForkingPossibility, fork_version_by_marker, fork_version_by_python_requirement,
 };
 pub(crate) use crate::resolver::fork_map::{ForkMap, ForkSet};
-pub use crate::resolver::index::InMemoryIndex;
+pub use crate::resolver::index::{DirectWheelVariantIndex, InMemoryIndex};
 use crate::resolver::index::{ParsedVariantsJson, ParsedVariantsJsonResponse};
 use crate::resolver::indexes::Indexes;
 use crate::resolver::package_source::PackageSource;
@@ -1302,8 +1298,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 }
             }
 
-            // TODO(konsti): `pip compile --no-deps` skips lookahead and can emit a variant
-            // wheel requirement even when the wheel variants preview is disabled.
             let incompatible_tag =
                 if filename.variant().is_some() && env.marker_environment().is_none() {
                     // Universal lockfiles cannot yet record wheel variants.
@@ -1345,30 +1339,15 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             }
         }
 
-        if let Dist::Built(BuiltDist::Path(wheel)) = dist
-            && let Some(label) = wheel.filename.variant().cloned()
-            && uv_preview::is_enabled(PreviewFeature::WheelVariants)
+        let variant = if env.marker_environment().is_some()
+            && let Dist::Built(built) = &dist
+            && built.wheel_filename().variant().is_some()
         {
-            let unavailable = match requests.read_local_wheel_variant(wheel, label.clone())? {
-                Ok(variant) => {
-                    let supported = supported_variant_properties(&variant);
-                    // TODO(konsti): Include the unsupported properties in the resolver error.
-                    variant
-                        .unsupported_variant_properties(&label, &supported)
-                        .map(|_| {
-                            UnavailableVersion::IncompatibleDist(IncompatibleDist::Wheel(
-                                IncompatibleWheel::Tag(IncompatibleTag::Variant),
-                            ))
-                        })
-                }
-                Err(reason) => Some(self.record_unavailable_metadata(name, version, &reason)),
-            };
-            if let Some(reason) = unavailable {
-                return Ok(Some(ResolverVersion::Unavailable(version.clone(), reason)));
-            }
-        }
-
-        pins.insert_url(name, version, registered);
+            requests.select_direct_variant(built)?
+        } else {
+            None
+        };
+        pins.insert_url(name, version, registered, variant);
         Ok(Some(ResolverVersion::Unforked(version.clone())))
     }
 
@@ -2357,6 +2336,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         .variant_properties()
                         .done(parsed.artifact.clone(), Arc::new(properties));
                 }
+                Some(Response::DirectVariant { dist, variant }) => {
+                    self.index
+                        .direct_variants()
+                        .done(dist.distribution_id(), variant);
+                }
                 None => {}
             }
         }
@@ -2371,22 +2355,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         provider: &Provider,
     ) -> Result<Option<Response>, ResolveError> {
         match request {
-            // TODO(konsti): This read stands in for a request to evaluate arbitrary providers
-            // off the resolver thread. That request should reuse the `variant.json` parsed with
-            // the wheel's core metadata, reading it here only when an override supplies the
-            // core metadata.
-            Request::LocalWheelVariant {
-                wheel,
-                label,
-                response,
-            } => {
-                let result =
-                    read_archive_wheel_variant(&wheel.filename, &wheel.install_path, &label)
-                        .boxed_local()
-                        .await
-                        .map_err(|err| MetadataUnavailable::InvalidStructure(Arc::new(err)));
-                let _ = response.send(result);
-                Ok(None)
+            Request::DirectVariant(dist) => {
+                let variant = provider.select_wheel_variant(&dist).await.map_err(Arc::new);
+                Ok(Some(Response::DirectVariant { dist, variant }))
             }
             Request::VariantProperties(parsed) => {
                 let properties = provider
@@ -3660,8 +3631,6 @@ fn widen_to_gap(version: &Version, known_versions: Option<&[Version]>) -> Range<
     }
 }
 
-type LocalWheelVariantResponse = Result<VariantsJsonContent, MetadataUnavailable>;
-
 /// Fetch the metadata for an item
 #[derive(Debug)]
 #[expect(clippy::large_enum_variant)]
@@ -3674,14 +3643,10 @@ pub(crate) enum Request {
     Installed(InstalledDist),
     /// A request to fetch variant metadata for a selected version.
     VariantsJson(RegistryVariantsJson),
-    /// A request to read the embedded variant metadata from a local wheel.
-    LocalWheelVariant {
-        wheel: PathBuiltDist,
-        label: VariantLabel,
-        response: oneshot::Sender<LocalWheelVariantResponse>,
-    },
     /// A request to discover target-specific properties for verified metadata.
     VariantProperties(Arc<ParsedVariantsJson>),
+    /// A request to select the supported properties of a direct wheel.
+    DirectVariant(BuiltDist),
     /// A request to pre-fetch the metadata for a package and the best-guess distribution.
     Prefetch(PackageName, Range<Version>, PythonRequirement),
 }
@@ -3738,12 +3703,10 @@ impl Display for Request {
             Self::VariantsJson(variants_json) => {
                 write!(f, "Variant metadata `{}`", variants_json.filename)
             }
-            Self::LocalWheelVariant { wheel, .. } => {
-                write!(f, "Variant metadata `{}`", wheel.filename)
-            }
             Self::VariantProperties(parsed) => {
                 write!(f, "Variant properties `{}`", parsed.artifact.filename)
             }
+            Self::DirectVariant(dist) => write!(f, "Direct wheel variant `{dist}`"),
             Self::Prefetch(package_name, range, _) => {
                 write!(f, "Prefetch {package_name} {range}")
             }
@@ -3775,6 +3738,11 @@ enum Response {
     VariantProperties {
         parsed: Arc<ParsedVariantsJson>,
         properties: SupportedVariantProperties,
+    },
+    /// The selected properties for a direct wheel.
+    DirectVariant {
+        dist: BuiltDist,
+        variant: Result<Option<SelectedVariant>, Arc<uv_distribution::Error>>,
     },
 }
 

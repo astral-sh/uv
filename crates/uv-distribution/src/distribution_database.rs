@@ -26,7 +26,8 @@ use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
     ArchiveHashPolicy, BuildInfo, BuildableSource, BuiltDist, Dist, DistRef, HashCollection,
     HashValidation, Hashed, IndexUrl, InstalledDist, MetadataHashPolicy, Name, ResolutionRecorder,
-    SourceDist, SourceUrl, SupportedVariantProperties, VariantsJsonContent, parse_url_hashes,
+    SelectedVariant, SourceDist, SourceUrl, SupportedVariantProperties, VariantsJsonContent,
+    parse_url_hashes,
 };
 use uv_extract::dirhash::{DirectoryDigest, HashedFile};
 use uv_extract::hash::Hasher;
@@ -244,18 +245,51 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             Dist::Built(built) => {
                 check_supported_wheel_variant(built)?;
                 let wheel = self.get_wheel(built, hashes).await?;
-                if let Some(metadata) =
-                    read_wheel_variant_metadata(&wheel.filename, &wheel.archive)?
-                {
-                    let supported = self.supported_variant_properties(&metadata);
-                    check_wheel_variant_properties(&wheel.filename, &metadata, &supported)?;
-                }
+                self.select_local_wheel_variant(&wheel, hashes)?;
                 Ok(wheel)
             }
             // TODO(konsti): Support source distributions that build variant wheels.
             // For now, `build_wheel` assumes a non-variant wheel compatible with `tags`.
             Dist::Source(source) => self.build_wheel(source, tags, hashes).await,
         }
+    }
+
+    /// Select the properties supported by the target for a direct wheel.
+    pub async fn select_wheel_variant(
+        &self,
+        dist: &BuiltDist,
+        hashes: ArchiveHashPolicy<'_>,
+    ) -> Result<Option<SelectedVariant>, Error> {
+        if dist.wheel_filename().variant().is_none() {
+            return Ok(None);
+        }
+        check_supported_wheel_variant(dist)?;
+        let wheel = self.get_wheel(dist, hashes).await?;
+        self.select_local_wheel_variant(&wheel, hashes)
+    }
+
+    fn select_local_wheel_variant(
+        &self,
+        wheel: &LocalWheel,
+        hashes: ArchiveHashPolicy<'_>,
+    ) -> Result<Option<SelectedVariant>, Error> {
+        let Some(label) = wheel.filename.variant() else {
+            return Ok(None);
+        };
+        // A cached wheel may have been downloaded under a different hash policy.
+        if !wheel.satisfies(hashes) {
+            return Err(Error::hash_mismatch(
+                wheel.dist.to_string(),
+                hashes.digests(),
+                wheel.hashes(),
+            ));
+        }
+        let Some(metadata) = read_wheel_variant_metadata(&wheel.filename, &wheel.archive)? else {
+            return Ok(None);
+        };
+        let supported = self.supported_variant_properties(&metadata);
+        check_wheel_variant_properties(&wheel.filename, &metadata, &supported)?;
+        Ok(metadata.select_variant(label, &supported))
     }
 
     /// Either fetch the only wheel metadata (directly from the index or with range requests) or
