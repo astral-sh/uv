@@ -422,14 +422,14 @@ impl PrioritizedDist {
     ///
     /// Match on the index as well as the release: a flat index can include wheels from
     /// several sources, and each source describes only its own variants.
-    pub(crate) fn variants_json_for_selection(
-        &self,
-    ) -> impl Iterator<Item = &RegistryVariantsJson> {
-        self.0.variants_json.iter().filter(|metadata| {
-            self.0.wheels.iter().any(|(wheel, compatibility)| {
-                wheel.index == metadata.index
-                    && matches!(compatibility, WheelCompatibility::Variant(..))
-            })
+    pub(crate) fn variants_json_for_selection<'a>(
+        &'a self,
+        requires_python: &'a RequiresPython,
+    ) -> impl Iterator<Item = &'a RegistryVariantsJson> {
+        self.0.variants_json.iter().filter(move |metadata| {
+            self.eligible_variant_wheels(&metadata.index, requires_python)
+                .next()
+                .is_some()
         })
     }
 
@@ -469,6 +469,7 @@ impl PrioritizedDist {
     pub(crate) fn prioritize_variants(
         &self,
         metadata: &[(&IndexUrl, &VariantsJsonContent, &SupportedVariantProperties)],
+        requires_python: &RequiresPython,
     ) -> Option<Self> {
         if metadata.is_empty() {
             return None;
@@ -486,6 +487,9 @@ impl PrioritizedDist {
                 let WheelCompatibility::Variant(hash, priority, build_tag) = compatibility else {
                     return None;
                 };
+                if !Self::wheel_supports_python(wheel, requires_python) {
+                    return None;
+                }
                 let label = wheel.filename.variant()?;
                 let (score, metadata, supported) = metadata
                     .iter()
