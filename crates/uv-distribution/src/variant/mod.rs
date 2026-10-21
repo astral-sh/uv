@@ -1,4 +1,6 @@
 mod nvidia;
+#[cfg(target_arch = "x86_64")]
+mod x86_64;
 
 use tracing::debug;
 use uv_distribution_filename::VariantLabel;
@@ -13,9 +15,17 @@ use uv_preview::PreviewFeature;
 use uv_pypi_types::{Identifier, ModuleName};
 
 use crate::variant::nvidia::NvidiaVariantProvider;
+#[cfg(target_arch = "x86_64")]
+use crate::variant::x86_64::X86_64VariantProvider;
 
 static NVIDIA_PROVIDER: NvidiaVariantProvider = NvidiaVariantProvider::new();
-static VENDORED_PROVIDERS: &[&dyn VendoredVariantProvider] = &[&NVIDIA_PROVIDER];
+#[cfg(target_arch = "x86_64")]
+static X86_64_PROVIDER: X86_64VariantProvider = X86_64VariantProvider;
+static VENDORED_PROVIDERS: &[&dyn VendoredVariantProvider] = &[
+    &NVIDIA_PROVIDER,
+    #[cfg(target_arch = "x86_64")]
+    &X86_64_PROVIDER,
+];
 
 /// A Python module and optional path to an object within it, identifying a provider plugin.
 struct PluginApi {
