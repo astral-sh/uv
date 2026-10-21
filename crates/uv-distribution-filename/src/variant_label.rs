@@ -34,6 +34,11 @@ pub enum InvalidVariantLabel {
 pub struct VariantLabel(#[rkyv(with = rkyv::with::AsOwned)] Cow<'static, str>);
 
 impl VariantLabel {
+    /// Return the variant label as a string.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
     /// Create a variant label from a static string.
     ///
     /// An invalid label causes a compilation error in a const context and a panic at runtime.
