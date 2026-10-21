@@ -23,10 +23,8 @@ const PLATFORM_DEFAULT_LEVEL: Level = Level::V2;
 /// Cached properties indexed by the maximum supported [`Level`].
 static LEVEL_PROPERTIES: LazyLock<[SupportedVariantFeature; 4]> = LazyLock::new(|| {
     let values = ["v4", "v3", "v2", "v1"].map(VariantValue::from_static);
-    [&values[3..], &values[2..], &values[1..], &values[..]].map(|values| SupportedVariantFeature {
-        name: VariantFeature::from_static("level"),
-        values: values.to_vec(),
-    })
+    [&values[3..], &values[2..], &values[1..], &values[..]]
+        .map(|values| (VariantFeature::from_static("level"), values.to_vec()))
 });
 
 /// The vendored implementation of `x86_64-variant-provider` 0.2.1.
