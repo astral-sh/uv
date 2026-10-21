@@ -29,14 +29,6 @@ pub(crate) struct Resolution<'index> {
     pub(crate) env: ResolverEnvironment,
 }
 
-/// A completed fork whose selected artifacts and metadata have been recovered.
-#[derive(Debug)]
-pub(crate) struct ResolvedFork {
-    pub(crate) nodes: Vec<(ResolutionPackage, SelectedDistribution)>,
-    pub(crate) edges: Vec<ResolutionDependencyEdge>,
-    pub(crate) env: ResolverEnvironment,
-}
-
 /// A selected package version, retaining both its installation artifact and metadata provenance.
 #[derive(Debug)]
 pub(crate) struct SelectedDistribution {
@@ -60,7 +52,8 @@ enum SelectedSource {
 }
 
 impl SelectedDistribution {
-    fn new(
+    /// Recover the selected artifact and its metadata before releasing a completed fork's pins.
+    pub(crate) fn new(
         package: &ResolutionPackage,
         version: Version,
         pins: &FilePins<'_>,
@@ -137,28 +130,6 @@ impl SelectedDistribution {
 }
 
 impl Resolution<'_> {
-    /// Recover selected artifacts and metadata once before constructing the merged output graph.
-    pub(crate) fn finalize(
-        self,
-        index: &InMemoryIndex,
-        git: &GitResolver,
-    ) -> Result<ResolvedFork, ResolveError> {
-        let nodes = self
-            .nodes
-            .into_iter()
-            .map(|(package, version)| {
-                let selected =
-                    SelectedDistribution::new(&package, version, &self.pins, index, git)?;
-                Ok((package, selected))
-            })
-            .collect::<Result<_, ResolveError>>()?;
-        Ok(ResolvedFork {
-            nodes,
-            edges: self.edges,
-            env: self.env,
-        })
-    }
-
     /// When trace level logging is enabled, we dump the final
     /// set of resolutions, including markers, to help with
     /// debugging. Namely, this tells use precisely the state
@@ -230,8 +201,7 @@ pub(crate) struct ResolutionNode {
 
 /// An index into a single fork's node vector.
 ///
-/// Finalization preserves this order, so the indices remain valid when translated into output
-/// graph positions.
+/// These indices are translated into merged graph positions when the fork completes.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub(crate) struct ResolutionNodeId(pub(crate) usize);
 
