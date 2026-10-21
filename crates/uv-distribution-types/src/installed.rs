@@ -14,6 +14,7 @@ use uv_fs::Simplified;
 use uv_install_wheel::WheelFile;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
+use uv_pep508::MarkerTree;
 use uv_pypi_types::{DirectUrl, DirectUrlError, MetadataError, read_direct_url_json};
 use uv_redacted::SafeUrl;
 
@@ -380,6 +381,18 @@ impl InstalledDist {
             return Ok(None);
         };
         self.read_variant_context_for_metadata(&metadata).map(Some)
+    }
+
+    /// Read selected properties only when the dependency markers need a variant context.
+    pub fn read_variant_context_for_markers<'a>(
+        &self,
+        markers: impl IntoIterator<Item = &'a MarkerTree>,
+    ) -> Result<Option<SelectedVariant>, InstalledDistError> {
+        if markers.into_iter().any(MarkerTree::has_variant_expression) {
+            self.read_variant_context()
+        } else {
+            Ok(None)
+        }
     }
 
     /// Read the selected properties for an installed wheel with known variant metadata.
