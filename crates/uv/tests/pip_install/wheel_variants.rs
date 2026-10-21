@@ -1326,3 +1326,74 @@ fn frozen_sync_authenticates_reachable_variant_metadata() -> Result<()> {
     ");
     Ok(())
 }
+
+/// Requirements files cannot express package inclusion that depends on a selected wheel variant.
+#[test]
+fn requirements_output_rejects_variant_dependent_inclusion() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::from_toml(indoc! {r#"
+        name = "variant-dependent-inclusion"
+        root = {}
+        expected.satisfiable = true
+
+        [packages.parent.versions."1.0.0"]
+        wheel = false
+        sdist = false
+        requires = ["conditional ; variant_label == 'optimized'"]
+
+        [packages.parent.versions."1.0.0".variants]
+        namespaces = ["blas_lapack"]
+
+        [packages.parent.versions."1.0.0".variants.providers.blas_lapack]
+        static-properties.library = ["openblas"]
+
+        [packages.parent.versions."1.0.0".variants.wheels]
+        null.properties = []
+        optimized.properties = ["blas_lapack :: library :: openblas"]
+
+        [packages.conditional.versions."1.0.0"]
+    "#})?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "root"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["parent==1.0.0"]
+        "#})?;
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--index-url")
+        .arg(server.index_url())
+        .arg("--preview-features")
+        .arg("wheel-variants"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--frozen")
+        .arg("--format")
+        .arg("requirements-txt")
+        .arg("--preview-features")
+        .arg("wheel-variants"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Cannot write package `conditional` to a requirements file because its inclusion depends on the selected wheel variant
+    ");
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("pyproject.toml")
+        .arg("--universal")
+        .arg("--index-url")
+        .arg(server.index_url())
+        .arg("--preview-features")
+        .arg("wheel-variants"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: Cannot write package `conditional` to a requirements file because its inclusion depends on the selected wheel variant
+    ");
+    Ok(())
+}
