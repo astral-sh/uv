@@ -312,7 +312,7 @@ impl ResolverOutput {
                     }
                 }
                 MarkerParam::String(value_string) => {
-                    let Some(from_env) = marker_env.get_string(value_string) else {
+                    let Some(from_env) = marker_env.get_string(&value_string) else {
                         continue;
                     };
                     MarkerExpression::String {
