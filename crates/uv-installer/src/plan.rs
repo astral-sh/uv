@@ -429,6 +429,42 @@ impl<'a> Planner<'a> {
                 unreachable!("Installed distribution could not be found in site-packages: {dist}");
             };
 
+            // Check direct wheels even when refreshing skips the cache lookup.
+            match dist.as_ref() {
+                Dist::Built(BuiltDist::DirectUrl(wheel)) => {
+                    if let TagCompatibility::Incompatible(tag) = wheel.filename.compatibility(tags)
+                    {
+                        return Err(incompatible_wheel(
+                            IncompatibleWheelKind::Url(wheel.url.to_url()),
+                            &wheel.filename,
+                            tags,
+                            tag,
+                        ));
+                    }
+                }
+                Dist::Built(BuiltDist::Path(wheel)) => {
+                    if !wheel.install_path.exists() {
+                        return Err(Error::NotFound(wheel.url.to_url()).into());
+                    }
+                    if let TagCompatibility::Incompatible(tag) =
+                        wheel.filename.tag_compatibility(tags)
+                    {
+                        return Err(incompatible_wheel(
+                            IncompatibleWheelKind::Path(wheel.install_path.to_path_buf()),
+                            &wheel.filename,
+                            tags,
+                            tag,
+                        ));
+                    }
+                }
+                Dist::Built(BuiltDist::GitPath(wheel)) => {
+                    if !wheel.filename.is_compatible(tags) {
+                        return Err(PlanError::IncompatibleGitPath(wheel.install_path.clone()));
+                    }
+                }
+                Dist::Built(BuiltDist::Registry(_)) | Dist::Source(_) => {}
+            }
+
             if cache.must_revalidate_package(dist.name())
                 || dist
                     .source_tree()
@@ -449,18 +485,6 @@ impl<'a> Planner<'a> {
                     }
                 }
                 Dist::Built(BuiltDist::DirectUrl(wheel)) => {
-                    if !wheel.filename.is_compatible(tags) {
-                        return Err(PlanError::IncompatibleWheel(Box::new(
-                            IncompatibleWheelError {
-                                kind: IncompatibleWheelKind::Url(wheel.url.to_url()),
-                                compatibility_hint: generate_wheel_compatibility_hint(
-                                    &wheel.filename,
-                                    tags,
-                                ),
-                            },
-                        )));
-                    }
-
                     if no_binary {
                         return Err(PlanError::NoBinaryUrl(wheel.url.clone()));
                     }
@@ -514,23 +538,6 @@ impl<'a> Planner<'a> {
                     }
                 }
                 Dist::Built(BuiltDist::Path(wheel)) => {
-                    // Validate that the path exists.
-                    if !wheel.install_path.exists() {
-                        return Err(Error::NotFound(wheel.url.to_url()).into());
-                    }
-
-                    if !wheel.filename.tag_compatibility(tags).is_compatible() {
-                        return Err(PlanError::IncompatibleWheel(Box::new(
-                            IncompatibleWheelError {
-                                kind: IncompatibleWheelKind::Path(wheel.install_path.to_path_buf()),
-                                compatibility_hint: generate_wheel_compatibility_hint(
-                                    &wheel.filename,
-                                    tags,
-                                ),
-                            },
-                        )));
-                    }
-
                     if no_binary {
                         return Err(PlanError::NoBinaryPath(wheel.url.clone()));
                     }
@@ -591,10 +598,6 @@ impl<'a> Planner<'a> {
                     }
                 }
                 Dist::Built(BuiltDist::GitPath(wheel)) => {
-                    if !wheel.filename.is_compatible(tags) {
-                        return Err(PlanError::IncompatibleGitPath(wheel.install_path.clone()));
-                    }
-
                     if no_binary {
                         return Err(PlanError::NoBinaryGitPath(wheel.url.clone()));
                     }
@@ -825,16 +828,14 @@ fn is_seed_package(dist_info: &InstalledDist, venv: &PythonEnvironment) -> bool 
     }
 }
 
-/// Generate a hint for explaining wheel compatibility issues.
-fn generate_wheel_compatibility_hint(
+/// Report an incompatible wheel from a direct URL or local path.
+fn incompatible_wheel(
+    kind: IncompatibleWheelKind,
     filename: &WheelFilename,
     tags: &Tags,
-) -> Option<IncompatibleWheelHint> {
-    let TagCompatibility::Incompatible(incompatible_tag) = filename.tag_compatibility(tags) else {
-        return None;
-    };
-
-    match incompatible_tag {
+    incompatible_tag: IncompatibleTag,
+) -> PlanError {
+    let compatibility_hint = match incompatible_tag {
         IncompatibleTag::Python => Some(IncompatibleWheelHint::Python {
             wheel_tags: filename.python_tags().to_vec(),
             current: tags.python_tag(),
@@ -851,8 +852,14 @@ fn generate_wheel_compatibility_hint(
             wheel_tags: filename.platform_tags().to_vec(),
             current: tags.platform_tag().cloned(),
         }),
-        _ => None,
-    }
+        IncompatibleTag::Variant | IncompatibleTag::Invalid | IncompatibleTag::AbiPythonVersion => {
+            None
+        }
+    };
+    PlanError::IncompatibleWheel(Box::new(IncompatibleWheelError {
+        kind,
+        compatibility_hint,
+    }))
 }
 
 #[derive(Debug, Default)]
@@ -951,7 +958,17 @@ impl Plan {
 mod tests {
     use super::*;
     use std::str::FromStr;
+    use uv_errors::Hinted;
     use uv_platform_tags::{Arch, Os, Platform, TagsOptions};
+
+    fn wheel_compatibility_hint(filename: &WheelFilename, tags: &Tags) -> Option<String> {
+        let TagCompatibility::Incompatible(tag) = filename.tag_compatibility(tags) else {
+            return None;
+        };
+        let kind = IncompatibleWheelKind::Path(PathBuf::from(filename.to_string()));
+        let error = incompatible_wheel(kind, filename, tags, tag);
+        error.hints().iter().next().map(str::to_owned)
+    }
 
     #[test]
     fn test_abi3_on_free_threaded_python_hint() {
@@ -982,9 +999,8 @@ mod tests {
             WheelFilename::from_str("foo-1.0-cp37-abi3-manylinux_2_17_x86_64.whl").unwrap();
 
         // Generate the hint
-        let hint = generate_wheel_compatibility_hint(&filename, &tags).unwrap();
+        let hint = wheel_compatibility_hint(&filename, &tags).unwrap();
 
-        let hint = hint.to_string();
         let hint = anstream::adapter::strip_str(&hint);
         insta::assert_snapshot!(hint, @"You're using free-threaded CPython 3.14 (`cp314t`), but the wheel was built for the stable ABI (`abi3`), which requires a GIL-enabled interpreter");
     }
@@ -1018,9 +1034,8 @@ mod tests {
             WheelFilename::from_str("foo-1.0-cp314-cp314-manylinux_2_17_x86_64.whl").unwrap();
 
         // Generate the hint
-        let hint = generate_wheel_compatibility_hint(&filename, &tags).unwrap();
+        let hint = wheel_compatibility_hint(&filename, &tags).unwrap();
 
-        let hint = hint.to_string();
         let hint = anstream::adapter::strip_str(&hint);
         insta::assert_snapshot!(hint, @"You're using free-threaded CPython 3.14 (`cp314t`), but the wheel was built for the CPython 3.14 ABI (`cp314`), which requires a GIL-enabled interpreter");
     }
@@ -1054,7 +1069,7 @@ mod tests {
             WheelFilename::from_str("foo-1.0-cp37-abi3-manylinux_2_17_x86_64.whl").unwrap();
 
         // The wheel should be compatible (abi3 works on regular Python)
-        let hint = generate_wheel_compatibility_hint(&filename, &tags);
+        let hint = wheel_compatibility_hint(&filename, &tags);
 
         // No hint should be generated because the wheel is compatible
         assert!(

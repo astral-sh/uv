@@ -77,6 +77,38 @@ fn install_local_variant_wheel() -> Result<()> {
     Ok(())
 }
 
+/// Refreshing a direct wheel must still check its platform tags before preparing it.
+#[test]
+fn refresh_incompatible_variant_wheel() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let variant = null_variant().to_string();
+    let (_, wheel) = WheelBuilder::new(&"ok".parse()?, &"1.0.0".parse()?)
+        .tag("py3-none-win_amd64")
+        .files(&[("ok-1.0.0.dist-info/variant.json", &variant)])
+        .build();
+    let wheel_path = context
+        .temp_dir
+        .child("ok-1.0.0-py3-none-win_amd64-null.whl");
+    wheel_path.write_binary(&wheel)?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("--python-platform")
+        .arg("linux")
+        .arg("--refresh")
+        .arg(wheel_path.path()), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Failed to determine installation plan
+      cause: A path (ok-1.0.0-py3-none-win_amd64-null.whl) dependency is incompatible with the current platform
+
+    hint: The wheel is compatible with Windows (`win_amd64`), but you're on Linux (`manylinux_2_28_x86_64`)
+    ");
+    Ok(())
+}
+
 #[test]
 fn local_variant_wheel_requires_variant_metadata() -> Result<()> {
     let context = uv_test::test_context!("3.12");
