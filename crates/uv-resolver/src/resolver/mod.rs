@@ -29,8 +29,8 @@ use uv_distribution::{
 use uv_distribution_types::{
     BuiltDist, DerivationChain, Dist, DistErrorKind, Identifier, IndexCapabilities, IndexLocations,
     IndexMetadata, IndexUrl, InstalledDist, Name, RemoteSource, RequestedDist, Requirement,
-    RequiresPython, ResolutionRecorder, ResolvedDist, SourceDist, SupportedVariantProperties,
-    VariantPolicy, VariantsJsonContent, VersionOrUrlRef,
+    RequiresPython, ResolutionRecorder, ResolvedDist, SelectedVariant, SourceDist,
+    SupportedVariantProperties, VariantPolicy, VariantsJsonContent, VersionOrUrlRef,
 };
 use uv_git::GitResolver;
 use uv_normalize::PackageName;
@@ -721,6 +721,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     next_package,
                     &version,
                     &state.pins,
+                    &state.fork_urls,
                     &state.env,
                     &state.python_requirement,
                     &state.pubgrub,
@@ -2003,12 +2004,21 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         package: &PubGrubPackage,
         version: &Version,
         pins: &FilePins,
+        fork_urls: &ForkUrls,
         env: &ResolverEnvironment,
         python_requirement: &PythonRequirement,
         pubgrub: &State<UvDependencyProvider>,
     ) -> Result<ForkedDependencies, ResolveError> {
-        let dependencies =
-            self.get_dependencies(id, package, version, pins, env, python_requirement, pubgrub)?;
+        let dependencies = self.get_dependencies(
+            id,
+            package,
+            version,
+            pins,
+            fork_urls,
+            env,
+            python_requirement,
+            pubgrub,
+        )?;
         if env.marker_environment().is_some() {
             Ok(ForkedDependencies::from_dependencies_platform_specific(
                 dependencies,
@@ -2031,6 +2041,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         package: &PubGrubPackage,
         version: &Version,
         pins: &FilePins,
+        fork_urls: &ForkUrls,
         env: &ResolverEnvironment,
         python_requirement: &PythonRequirement,
         pubgrub: &State<UvDependencyProvider>,
@@ -2110,16 +2121,18 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     }
                 };
 
-                return Ok(self.dependencies_from_metadata(
+                return self.dependencies_from_metadata(
                     package,
                     name,
                     version,
                     kind,
                     metadata,
                     index,
+                    pins.variant(name, version),
+                    fork_urls.get(name).map(AsRef::as_ref),
                     env,
                     python_requirement,
-                ));
+                );
             }
 
             PubGrubPackageInner::Python(_) => return Ok(Dependencies::Unforkable(Vec::default())),
@@ -2211,15 +2224,17 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         kind: &PackageNodeKind,
         metadata: &Metadata,
         index: Option<&IndexUrl>,
+        variant: Option<&SelectedVariant>,
+        direct_url: Option<&VerbatimParsedUrl>,
         env: &ResolverEnvironment,
         python_requirement: &PythonRequirement,
-    ) -> Dependencies {
+    ) -> Result<Dependencies, ResolveError> {
         // If there was no requires-python on the index page, we may have an incompatible
         // distribution or need to fork.
         if let Some(requires_python) = &metadata.requires_python
             && !python_requirement.target().is_contained_by(requires_python)
         {
-            return Dependencies::RequiresPython(requires_python.clone());
+            return Ok(Dependencies::RequiresPython(requires_python.clone()));
         }
 
         // Identify any system dependencies based on the index URL.
@@ -2262,8 +2277,27 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 RequirementContext::Package { name, version },
             ),
         };
+        // A direct wheel has the same variant label on every target.
+        let direct_dist = if env.marker_environment().is_none() {
+            direct_url
+                .map(|url| Dist::from_url(name.clone(), url.clone()))
+                .transpose()?
+        } else {
+            None
+        };
+        let fixed_variant_label = if let Some(Dist::Built(built)) = &direct_dist {
+            Some(
+                built
+                    .wheel_filename()
+                    .variant()
+                    .map_or("", |label| label.as_str()),
+            )
+        } else {
+            None
+        };
         let expander =
-            RequirementExpander::new(&self.constraints, &self.modifiers, env, python_requirement);
+            RequirementExpander::new(&self.constraints, &self.modifiers, env, python_requirement)
+                .with_variant_context(variant, fixed_variant_label);
         let requirements = expander.expand(requirements, context);
 
         let dependencies = PubGrubDependency::from_requirements(
@@ -2276,7 +2310,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             dependencies.extend(system_dependencies);
             dependencies
         });
-        Dependencies::from_requirements(dependencies)
+        Ok(Dependencies::from_requirements(dependencies))
     }
 
     fn record_unavailable_metadata(
