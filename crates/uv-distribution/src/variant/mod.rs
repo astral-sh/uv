@@ -1,3 +1,5 @@
+#[cfg(all(target_arch = "aarch64", target_os = "macos"))]
+mod aarch64;
 mod nvidia;
 #[cfg(target_arch = "x86_64")]
 mod x86_64;
@@ -14,14 +16,20 @@ use uv_pep508::{Requirement, VersionOrUrl};
 use uv_preview::PreviewFeature;
 use uv_pypi_types::{Identifier, ModuleName};
 
+#[cfg(all(target_arch = "aarch64", target_os = "macos"))]
+use crate::variant::aarch64::Aarch64VariantProvider;
 use crate::variant::nvidia::NvidiaVariantProvider;
 #[cfg(target_arch = "x86_64")]
 use crate::variant::x86_64::X86_64VariantProvider;
 
+#[cfg(all(target_arch = "aarch64", target_os = "macos"))]
+static AARCH64_PROVIDER: Aarch64VariantProvider = Aarch64VariantProvider;
 static NVIDIA_PROVIDER: NvidiaVariantProvider = NvidiaVariantProvider::new();
 #[cfg(target_arch = "x86_64")]
 static X86_64_PROVIDER: X86_64VariantProvider = X86_64VariantProvider;
 static VENDORED_PROVIDERS: &[&dyn VendoredVariantProvider] = &[
+    #[cfg(all(target_arch = "aarch64", target_os = "macos"))]
+    &AARCH64_PROVIDER,
     &NVIDIA_PROVIDER,
     #[cfg(target_arch = "x86_64")]
     &X86_64_PROVIDER,
