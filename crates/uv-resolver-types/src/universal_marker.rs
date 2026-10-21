@@ -486,6 +486,15 @@ impl UniversalMarker {
     /// conflict expressions. For example, given `sys_platform == 'linux' or extra == 'foo'`, the
     /// conflict marker is always true on Linux but still depends on `foo` elsewhere.
     pub fn conflict_for_environment(self, env: &MarkerEnvironment) -> ConflictMarker {
+        self.conflict_for_environment_with_variants(env, &MarkerVariant::Universal)
+    }
+
+    /// Keep conflict conditions after evaluating environment and selected-wheel markers.
+    pub fn conflict_for_environment_with_variants(
+        self,
+        env: &MarkerEnvironment,
+        variants: &impl MarkerVariantsEnvironment,
+    ) -> ConflictMarker {
         let mut remaining = MarkerTree::FALSE;
 
         'conjunctions: for conjunction in self.marker.to_dnf() {
@@ -496,7 +505,11 @@ impl UniversalMarker {
                         conflict = conflict.and(MarkerTree::expression(expression));
                     }
                     expression => {
-                        if !MarkerTree::expression(expression).evaluate(env, &[]) {
+                        if !MarkerTree::expression(expression).evaluate_with_variants(
+                            env,
+                            variants,
+                            &[],
+                        ) {
                             continue 'conjunctions;
                         }
                     }
