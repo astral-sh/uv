@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use tracing::debug;
 
 use uv_distribution_filename::VariantLabel;
+pub use uv_pep508::{VariantFeature, VariantNamespace, VariantValue};
 
 // TODO(konsti): Standardize on a single schema URL once the variant metadata format is finalized.
 /// The PEP 825 draft schema for variant metadata without providers.
@@ -41,6 +42,13 @@ pub enum VariantsJsonParseError {
 pub type VariantProperties =
     BTreeMap<VariantNamespace, BTreeMap<VariantFeature, Vec<VariantValue>>>;
 
+/// The variant properties used to resolve a wheel's dependencies for an installation target.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SelectedVariant {
+    pub label: VariantLabel,
+    pub properties: VariantProperties,
+}
+
 /// Required variant properties unsupported by the target system.
 #[derive(Debug)]
 pub struct UnsupportedVariantProperties(VariantProperties);
@@ -65,7 +73,7 @@ impl fmt::Display for UnsupportedVariantProperties {
                     if index > 0 {
                         f.write_str(" or ")?;
                     }
-                    write!(f, "`{namespace} :: {} :: {}`", feature.0, value.0)?;
+                    write!(f, "`{namespace} :: {feature} :: {value}`")?;
                 }
                 f.write_str(close)?;
             }
@@ -81,25 +89,18 @@ impl fmt::Display for UnsupportedVariantProperties {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct SupportedVariantProperties {
-    properties: BTreeMap<VariantNamespace, Vec<(VariantFeature, Vec<VariantValue>)>>,
+    properties: BTreeMap<VariantNamespace, Vec<SupportedVariantFeature>>,
+}
+
+impl SupportedVariantProperties {
+    /// Add the ordered compatible features of a provider.
+    pub fn insert(&mut self, namespace: VariantNamespace, features: Vec<SupportedVariantFeature>) {
+        self.properties.insert(namespace, features);
+    }
 }
 
 /// A supported feature and its compatible values, ordered from most to least preferred.
-#[derive(Debug, Clone)]
-pub struct SupportedVariantFeature {
-    pub name: VariantFeature,
-    pub values: Vec<VariantValue>,
-}
-
-/// A non-static provider requested by variant metadata.
-#[derive(Clone, Copy)]
-pub enum VariantProviderRequest<'a> {
-    Plugin {
-        requires: &'a [String],
-        plugin_api: Option<&'a str>,
-    },
-    Builtin(&'a str),
-}
+pub type SupportedVariantFeature = (VariantFeature, Vec<VariantValue>);
 
 /// The priority of a compatible variant. Higher scores are preferred.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -121,12 +122,22 @@ pub struct VariantsJsonContent {
 }
 
 impl VariantsJsonContent {
+    /// Providers declared by the variant metadata.
+    pub fn providers(&self) -> impl Iterator<Item = (&VariantNamespace, &VariantProvider)> {
+        self.providers.iter().flat_map(|providers| providers.iter())
+    }
+
+    /// The label when this metadata describes exactly one wheel variant.
+    pub fn wheel_label(&self) -> Option<&VariantLabel> {
+        self.variants.keys().exactly_one().ok()
+    }
+
     /// The variant label, if this describes a single compatible wheel variant.
     pub fn compatible_wheel_label(
         &self,
         supported_properties: &SupportedVariantProperties,
     ) -> Option<&VariantLabel> {
-        let label = self.variants.keys().exactly_one().ok()?;
+        let label = self.wheel_label()?;
         self.score_variant(label, supported_properties)?;
         Some(label)
     }
@@ -183,6 +194,60 @@ impl VariantsJsonContent {
         })
     }
 
+    /// Return the wheel properties supported by the installation target.
+    pub fn select_variant(
+        &self,
+        label: &VariantLabel,
+        supported: &SupportedVariantProperties,
+    ) -> Option<SelectedVariant> {
+        let mut properties = BTreeMap::new();
+        for (namespace, features) in self.variants.get(label)? {
+            let supported_features = supported.properties.get(namespace)?;
+            let mut selected_features = BTreeMap::new();
+            for (feature, values) in features {
+                let (_, supported_values) = supported_features
+                    .iter()
+                    .find(|(supported_feature, _)| supported_feature == feature)?;
+                let selected_values = values
+                    .iter()
+                    .filter(|value| supported_values.contains(value))
+                    .cloned()
+                    .collect::<Vec<_>>();
+                if selected_values.is_empty() {
+                    return None;
+                }
+                selected_features.insert(feature.clone(), selected_values);
+            }
+            properties.insert(namespace.clone(), selected_features);
+        }
+        Some(SelectedVariant {
+            label: label.clone(),
+            properties,
+        })
+    }
+
+    /// Verify that selected properties describe a complete supported subset of this wheel.
+    pub fn validates_selected_variant(&self, selected: &SelectedVariant) -> bool {
+        let Some((label, properties)) = self.variants.iter().exactly_one().ok() else {
+            return false;
+        };
+        if label != &selected.label || !properties.keys().eq(selected.properties.keys()) {
+            return false;
+        }
+        properties.iter().all(|(namespace, features)| {
+            let selected_features = &selected.properties[namespace];
+            features.keys().eq(selected_features.keys())
+                && features.iter().all(|(feature, values)| {
+                    let selected_values = &selected_features[feature];
+                    !selected_values.is_empty()
+                        && values
+                            .iter()
+                            .filter(|value| selected_values.contains(value))
+                            .eq(selected_values)
+                })
+        })
+    }
+
     /// Return the unsupported properties for a variant present in this metadata, if any.
     pub fn unsupported_variant_properties(
         &self,
@@ -211,75 +276,15 @@ impl VariantsJsonContent {
 
     /// Collect ordered compatible features and values from enabled static providers.
     pub fn static_supported_properties(&self) -> SupportedVariantProperties {
-        let Some(providers) = &self.providers else {
-            return SupportedVariantProperties::default();
-        };
-        let properties = providers
-            .iter()
-            .filter(|(_, provider)| !provider.optional)
-            .filter_map(|(namespace, provider)| {
-                let ProviderKind::Static {
-                    static_properties,
-                    feature_order,
-                } = &provider.kind
-                else {
-                    return None;
-                };
-                // PEP 850 requires feature-order for multiple features because JSON object keys
-                // are unordered. With at most one feature, the order is unambiguous.
-                let features = match feature_order {
-                    Some(order) => Either::Left(order.iter()),
-                    None => Either::Right(static_properties.keys()),
-                };
-                let supported = features
-                    .map(|feature| (feature.clone(), static_properties[feature].clone()))
-                    .collect();
-                Some((namespace.clone(), supported))
-            })
-            .collect();
-        SupportedVariantProperties { properties }
-    }
-
-    /// Collect compatible features from static and detected providers.
-    pub fn supported_properties<'a>(
-        &self,
-        detected: impl IntoIterator<Item = (&'a VariantNamespace, &'a [SupportedVariantFeature])>,
-    ) -> SupportedVariantProperties {
-        let mut supported = self.static_supported_properties();
-        for (namespace, features) in detected {
-            let features = features
-                .iter()
-                .map(|feature| (feature.name.clone(), feature.values.clone()))
-                .collect();
-            supported.properties.insert(namespace.clone(), features);
+        SupportedVariantProperties {
+            properties: self
+                .providers()
+                .filter(|(_, provider)| !provider.optional)
+                .filter_map(|(namespace, provider)| {
+                    Some((namespace.clone(), provider.static_properties()?))
+                })
+                .collect(),
         }
-        supported
-    }
-
-    /// Return the enabled providers that need properties to be detected.
-    pub fn provider_requests(
-        &self,
-    ) -> impl Iterator<Item = (&VariantNamespace, VariantProviderRequest<'_>)> {
-        self.providers
-            .iter()
-            .flat_map(|providers| providers.iter())
-            .filter_map(|(namespace, provider)| {
-                if provider.optional {
-                    return None;
-                }
-                let request = match &provider.kind {
-                    ProviderKind::Plugin {
-                        requires,
-                        plugin_api,
-                    } => VariantProviderRequest::Plugin {
-                        requires,
-                        plugin_api: plugin_api.as_deref(),
-                    },
-                    ProviderKind::Builtin { builtin } => VariantProviderRequest::Builtin(builtin),
-                    ProviderKind::Static { .. } => return None,
-                };
-                Some((namespace, request))
-            })
     }
 
     /// Parse and validate the contents of a variant metadata file.
@@ -304,7 +309,7 @@ impl VariantsJsonContent {
 
 /// Return the priority of the first supported value for a feature.
 fn score_feature(
-    supported_features: &[(VariantFeature, Vec<VariantValue>)],
+    supported_features: &[SupportedVariantFeature],
     feature: &VariantFeature,
     values: &[VariantValue],
 ) -> Option<(usize, usize)> {
@@ -331,12 +336,43 @@ pub struct VariantProvider {
     #[serde(default)]
     optional: bool,
     #[serde(flatten)]
-    kind: ProviderKind,
+    kind: VariantProviderKind,
+}
+
+impl VariantProvider {
+    pub fn optional(&self) -> bool {
+        self.optional
+    }
+
+    pub fn kind(&self) -> &VariantProviderKind {
+        &self.kind
+    }
+
+    /// Return the static features in preference order.
+    pub fn static_properties(&self) -> Option<Vec<SupportedVariantFeature>> {
+        let VariantProviderKind::Static {
+            static_properties,
+            feature_order,
+        } = &self.kind
+        else {
+            return None;
+        };
+        // Multiple static features require an explicit order because JSON object keys are unordered.
+        let features = match feature_order {
+            Some(order) => Either::Left(order.iter()),
+            None => Either::Right(static_properties.keys()),
+        };
+        Some(
+            features
+                .map(|feature| (feature.clone(), static_properties[feature].clone()))
+                .collect(),
+        )
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged, rename_all_fields = "kebab-case", deny_unknown_fields)]
-enum ProviderKind {
+pub enum VariantProviderKind {
     Static {
         static_properties: BTreeMap<VariantFeature, Vec<VariantValue>>,
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -364,12 +400,6 @@ struct VariantsJsonWire {
 
 #[derive(Debug, thiserror::Error)]
 pub enum VariantMetadataError {
-    #[error("Invalid variant namespace: `{0}`")]
-    InvalidNamespace(String),
-    #[error("Invalid variant feature: `{0}`")]
-    InvalidFeature(String),
-    #[error("Invalid variant value: `{0}`")]
-    InvalidValue(String),
     #[error("Variant namespace priorities must be non-empty and unique")]
     NamespacePriorities,
     #[error("Variant namespace `{0}` is missing from default-priorities.namespace")]
@@ -424,20 +454,17 @@ impl TryFrom<VariantsJsonWire> for VariantsJsonContent {
                 .collect::<BTreeSet<_>>();
             if provider_namespaces != namespace_set {
                 return Err(VariantMetadataError::ProviderNamespaces {
-                    expected: namespaces
-                        .iter()
-                        .map(|namespace| namespace.0.clone())
-                        .collect(),
+                    expected: namespaces.iter().map(ToString::to_string).collect(),
                     actual: provider_namespaces
                         .into_iter()
-                        .map(|namespace| namespace.0.clone())
+                        .map(ToString::to_string)
                         .collect(),
                 });
             }
         }
         if let Some(providers) = &wire.providers {
             for (namespace, provider) in providers {
-                let ProviderKind::Static {
+                let VariantProviderKind::Static {
                     static_properties,
                     feature_order,
                 } = &provider.kind
@@ -450,21 +477,15 @@ impl TryFrom<VariantsJsonWire> for VariantsJsonContent {
                             || !order.iter().sorted().eq(static_properties.keys()) =>
                     {
                         return Err(VariantMetadataError::InvalidFeatureOrder {
-                            namespace: namespace.0.clone(),
-                            expected: static_properties
-                                .keys()
-                                .map(|feature| feature.0.clone())
-                                .collect(),
-                            actual: order.iter().map(|feature| feature.0.clone()).collect(),
+                            namespace: namespace.to_string(),
+                            expected: static_properties.keys().map(ToString::to_string).collect(),
+                            actual: order.iter().map(ToString::to_string).collect(),
                         });
                     }
                     None if static_properties.len() > 1 => {
                         return Err(VariantMetadataError::MissingFeatureOrder {
-                            namespace: namespace.0.clone(),
-                            features: static_properties
-                                .keys()
-                                .map(|feature| feature.0.clone())
-                                .collect(),
+                            namespace: namespace.to_string(),
+                            features: static_properties.keys().map(ToString::to_string).collect(),
                         });
                     }
                     Some(_) | None => {}
@@ -472,9 +493,9 @@ impl TryFrom<VariantsJsonWire> for VariantsJsonContent {
                 for (feature, values) in static_properties {
                     if !values.iter().all_unique() {
                         return Err(VariantMetadataError::DuplicateValues(
-                            namespace.0.clone(),
-                            feature.0.clone(),
-                            values.iter().map(|value| value.0.clone()).collect(),
+                            namespace.to_string(),
+                            feature.to_string(),
+                            values.iter().map(ToString::to_string).collect(),
                         ));
                     }
                 }
@@ -484,20 +505,22 @@ impl TryFrom<VariantsJsonWire> for VariantsJsonContent {
         for (label, properties) in &mut wire.variants {
             for (namespace, features) in properties.iter_mut() {
                 if !features.is_empty() && !namespace_set.contains(namespace) {
-                    return Err(VariantMetadataError::MissingNamespace(namespace.0.clone()));
+                    return Err(VariantMetadataError::MissingNamespace(
+                        namespace.to_string(),
+                    ));
                 }
                 for (feature, values) in features {
                     if values.is_empty() {
                         return Err(VariantMetadataError::EmptyValues(
-                            namespace.0.clone(),
-                            feature.0.clone(),
+                            namespace.to_string(),
+                            feature.to_string(),
                         ));
                     }
                     if !values.iter().all_unique() {
                         return Err(VariantMetadataError::DuplicateValues(
-                            namespace.0.clone(),
-                            feature.0.clone(),
-                            values.iter().map(|value| value.0.clone()).collect(),
+                            namespace.to_string(),
+                            feature.to_string(),
+                            values.iter().map(ToString::to_string).collect(),
                         ));
                     }
                     if label.as_str() == "null" {
@@ -528,71 +551,4 @@ impl TryFrom<VariantsJsonWire> for VariantsJsonContent {
 struct VariantsJsonSchema {
     #[serde(rename = "$schema")]
     schema: String,
-}
-
-/// A validated variant namespace.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-#[serde(try_from = "String")]
-pub struct VariantNamespace(String);
-
-impl fmt::Display for VariantNamespace {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl TryFrom<String> for VariantNamespace {
-    type Error = VariantMetadataError;
-
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        if valid_component(&value, false) {
-            Ok(Self(value))
-        } else {
-            Err(VariantMetadataError::InvalidNamespace(value))
-        }
-    }
-}
-
-/// A validated variant feature.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-#[serde(try_from = "String")]
-pub struct VariantFeature(String);
-
-impl TryFrom<String> for VariantFeature {
-    type Error = VariantMetadataError;
-
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        if valid_component(&value, false) {
-            Ok(Self(value))
-        } else {
-            Err(VariantMetadataError::InvalidFeature(value))
-        }
-    }
-}
-
-/// A validated variant value.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-#[serde(try_from = "String")]
-pub struct VariantValue(String);
-
-impl TryFrom<String> for VariantValue {
-    type Error = VariantMetadataError;
-
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        if valid_component(&value, true) {
-            Ok(Self(value))
-        } else {
-            Err(VariantMetadataError::InvalidValue(value))
-        }
-    }
-}
-
-fn valid_component(value: &str, allow_period: bool) -> bool {
-    !value.is_empty()
-        && value.bytes().all(|character| {
-            character.is_ascii_lowercase()
-                || character.is_ascii_digit()
-                || character == b'_'
-                || (allow_period && character == b'.')
-        })
 }

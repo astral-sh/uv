@@ -3,10 +3,11 @@ use std::sync::LazyLock;
 
 use tracing::debug;
 use uv_distribution_types::{
-    SupportedVariantFeature, VariantFeature, VariantMetadataError, VariantNamespace, VariantValue,
+    SupportedVariantFeature, VariantFeature, VariantNamespace, VariantValue,
 };
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionParseError};
+use uv_pep508::VariantParseError;
 use uv_static::EnvVars;
 use uv_torch::NvidiaGpu;
 
@@ -76,7 +77,7 @@ enum NvidiaProviderError {
     )]
     TooManyCudaVersionValues { version: Version },
     #[error(transparent)]
-    InvalidVariantProperty(#[from] VariantMetadataError),
+    InvalidVariantProperty(#[from] VariantParseError),
 }
 
 impl NvidiaVariantProvider {
@@ -176,10 +177,10 @@ impl NvidiaVariantProvider {
                     version: cuda_version.clone(),
                 });
             }
-            properties.push(SupportedVariantFeature {
-                name: VariantFeature::try_from("cuda_version_lower_bound".to_string())?,
-                values: lower_bound,
-            });
+            properties.push((
+                VariantFeature::try_from("cuda_version_lower_bound".to_string())?,
+                lower_bound,
+            ));
         }
         // Add `cuda_version_upper_bound` with values above the effective CUDA version.
         if detected_major <= MAX_CUDA_MAJOR {
@@ -195,10 +196,10 @@ impl NvidiaVariantProvider {
                 .map(VariantValue::try_from)
                 .collect::<Result<Vec<_>, _>>()?;
             if !upper_bound.is_empty() {
-                properties.push(SupportedVariantFeature {
-                    name: VariantFeature::try_from("cuda_version_upper_bound".to_string())?,
-                    values: upper_bound,
-                });
+                properties.push((
+                    VariantFeature::try_from("cuda_version_upper_bound".to_string())?,
+                    upper_bound,
+                ));
             }
         }
         if let Some((major, minor)) = compute_capability
@@ -211,10 +212,10 @@ impl NvidiaVariantProvider {
                 .chain([format!("{major}0_virtual")])
                 .map(VariantValue::try_from)
                 .collect::<Result<_, _>>()?;
-            properties.push(SupportedVariantFeature {
-                name: VariantFeature::try_from("sm_arch".to_string())?,
-                values: architectures,
-            });
+            properties.push((
+                VariantFeature::try_from("sm_arch".to_string())?,
+                architectures,
+            ));
         }
         Ok(properties)
     }
