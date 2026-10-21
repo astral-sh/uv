@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::cmp::Reverse;
 use std::future::Future;
 use std::io;
@@ -27,14 +26,13 @@ use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
     ArchiveHashPolicy, BuildInfo, BuildableSource, BuiltDist, Dist, DistRef, GitPathBuiltDist,
     HashCollection, HashValidation, Hashed, IndexUrl, InstalledDist, MetadataHashPolicy, Name,
-    ResolutionRecorder, SourceDist, SourceUrl, SupportedVariantProperties, VariantPolicy,
-    VariantsJsonContent, parse_url_hashes,
+    ResolutionRecorder, SelectedVariant, SourceDist, SourceUrl, SupportedVariantProperties,
+    VariantPolicy, VariantsJsonContent, parse_url_hashes,
 };
 use uv_extract::dirhash::{DirectoryDigest, HashedFile};
 use uv_extract::hash::Hasher;
 use uv_fs::{LockedFile, write_atomic};
 use uv_git::{Fetch, GIT_LFS, GitError};
-use uv_metadata::read_archive_wheel_variant;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_platform_tags::{Platform, Tags};
@@ -251,20 +249,55 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             Dist::Built(built) => {
                 check_supported_wheel_variant(built)?;
                 let wheel = self.get_wheel(built, hashes).await?;
-                if let Some(metadata) =
-                    read_wheel_variant_metadata(&wheel.filename, &wheel.archive)?
-                {
-                    let supported = self
-                        .supported_variant_properties(&metadata, Some(tags.python_platform()))
-                        .await;
-                    check_wheel_variant_properties(&wheel.filename, &metadata, &supported)?;
-                }
+                self.select_local_wheel_variant(&wheel, Some(tags.python_platform()), hashes)
+                    .await?;
                 Ok(wheel)
             }
             // TODO(konsti): Support source distributions that build variant wheels.
             // For now, `build_wheel` assumes a non-variant wheel compatible with `tags`.
             Dist::Source(source) => self.build_wheel(source, tags, hashes).await,
         }
+    }
+
+    /// Select the properties supported by the target for a direct wheel.
+    pub async fn select_wheel_variant(
+        &self,
+        dist: &BuiltDist,
+        platform: Option<&Platform>,
+        hashes: ArchiveHashPolicy<'_>,
+    ) -> Result<Option<SelectedVariant>, Error> {
+        if dist.wheel_filename().variant().is_none() {
+            return Ok(None);
+        }
+        check_supported_wheel_variant(dist)?;
+        let wheel = self.get_wheel(dist, hashes).await?;
+        self.select_local_wheel_variant(&wheel, platform, hashes)
+            .await
+    }
+
+    async fn select_local_wheel_variant(
+        &self,
+        wheel: &LocalWheel,
+        platform: Option<&Platform>,
+        hashes: ArchiveHashPolicy<'_>,
+    ) -> Result<Option<SelectedVariant>, Error> {
+        let Some(label) = wheel.filename.variant() else {
+            return Ok(None);
+        };
+        // A cached wheel may have been downloaded under a different hash policy.
+        if !wheel.satisfies(hashes) {
+            return Err(Error::hash_mismatch(
+                wheel.dist.to_string(),
+                hashes.digests(),
+                wheel.hashes(),
+            ));
+        }
+        let Some(metadata) = read_wheel_variant_metadata(&wheel.filename, &wheel.archive)? else {
+            return Ok(None);
+        };
+        let supported = self.supported_variant_properties(&metadata, platform).await;
+        check_wheel_variant_properties(&wheel.filename, &metadata, &supported)?;
+        Ok(metadata.select_variant(label, &supported))
     }
 
     /// Either fetch the only wheel metadata (directly from the index or with range requests) or
@@ -306,58 +339,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     .await
             }
         }
-    }
-
-    /// Read embedded variant metadata for a wheel being considered by the solver.
-    #[instrument(skip_all, fields(%wheel))]
-    pub async fn get_wheel_variant_metadata(
-        &self,
-        wheel: &BuiltDist,
-        hashes: ArchiveHashPolicy<'_>,
-    ) -> Result<Option<VariantsJsonContent>, Error> {
-        let filename = wheel.wheel_filename();
-        let Some(label) = filename.variant() else {
-            return Ok(None);
-        };
-        let path = match wheel {
-            BuiltDist::Path(wheel) => Cow::Borrowed(wheel.install_path.as_ref()),
-            BuiltDist::GitPath(wheel) => {
-                let fetch = self.fetch_git_wheel(wheel).await?;
-                Cow::Owned(fetch.path().join(&wheel.install_path))
-            }
-            BuiltDist::DirectUrl(url) => {
-                // Hash generation downloads the full wheel, so skip the metadata request.
-                if hashes != ArchiveHashPolicy::Generate || parse_url_hashes(&url.url).is_some() {
-                    let result = self
-                        .client
-                        .managed(|client| {
-                            client
-                                .direct_url_wheel_variant(url, self.build_context.capabilities())
-                                .boxed_local()
-                        })
-                        .await;
-                    match result {
-                        Ok(variant) => return Ok(Some(variant)),
-                        Err(err)
-                            if err.is_http_streaming_unsupported()
-                                || matches!(err.kind(), uv_client::ErrorKind::Offline(_)) => {}
-                        Err(err) => return Err(err.into()),
-                    }
-                }
-                // TODO(konsti): Read `variant.json` from the same archive that supplied the hash.
-                // With `Cache-Control: no-store`, `pip compile --generate-hashes` can hash one
-                // wheel and check compatibility against a different wheel returned by a second GET.
-                let wheel = Box::pin(self.get_wheel(wheel, hashes)).await?;
-                return read_wheel_variant_metadata(filename, &wheel.archive);
-            }
-            // Registry candidates use index variant metadata.
-            BuiltDist::Registry(_) => return Ok(None),
-        };
-
-        read_archive_wheel_variant(filename, &path, label)
-            .await
-            .map(Some)
-            .map_err(|err| Error::WheelMetadata(path.into_owned(), Box::new(err)))
     }
 
     /// Fetch a wheel from the cache or download it from the index.

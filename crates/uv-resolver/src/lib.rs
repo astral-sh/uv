@@ -8,9 +8,9 @@ pub use pubgrub::PubGrubHint;
 pub use python_requirement::PythonRequirement;
 pub use resolution::{ConflictingDistributionError, DisplayResolutionGraph, ResolverOutput};
 pub use resolver::{
-    DefaultResolverProvider, InMemoryIndex, MetadataResponse, PackageVersionsResult,
-    Reporter as ResolverReporter, Resolver, ResolverEnvironment, ResolverProvider,
-    VariantsJsonResponse, VersionsResponse, WheelMetadataResult,
+    DefaultResolverProvider, DirectWheelVariantIndex, InMemoryIndex, MetadataResponse,
+    PackageVersionsResult, Reporter as ResolverReporter, Resolver, ResolverEnvironment,
+    ResolverProvider, VariantsJsonResponse, VersionsResponse, WheelMetadataResult,
 };
 pub use universal_marker::UniversalMarker;
 pub use upgrade::UpgradePackages;
