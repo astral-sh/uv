@@ -9,8 +9,8 @@ use uv_configuration::BuildOptions;
 use uv_distribution::{DistributionDatabase, Reporter};
 use uv_distribution_types::{
     BuiltDist, Dist, IndexCapabilities, IndexLocations, IndexMetadata, IndexMetadataRef, IndexUrl,
-    InstalledDist, MinimumLibcVersion, RequestedDist, RequiresPython, VariantsJsonContent,
-    VerbatimFile,
+    InstalledDist, MinimumLibcVersion, RequestedDist, RequiresPython, SupportedVariantProperties,
+    VariantPolicy, VariantsJsonContent, VerbatimFile,
 };
 use uv_normalize::PackageName;
 use uv_platform_tags::Tags;
@@ -88,6 +88,22 @@ pub trait ResolverProvider {
         file: &'io VerbatimFile,
         index: &'io IndexUrl,
     ) -> impl Future<Output = Result<VariantsJsonResponse, uv_client::Error>> + 'io;
+
+    /// Discover the target's supported variant properties.
+    fn supported_variant_properties<'io>(
+        &'io self,
+        metadata: &'io VariantsJsonContent,
+    ) -> impl Future<Output = Result<SupportedVariantProperties, uv_distribution::Error>> + 'io;
+
+    /// Whether this resolution installs a variant provider.
+    fn is_variant_provider(&self) -> bool {
+        false
+    }
+
+    /// Return the configured variant provider policy, if any.
+    fn variant_policy(&self) -> Option<&VariantPolicy> {
+        None
+    }
 
     /// Set the [`Reporter`] to use for this installer.
     #[must_use]
@@ -208,6 +224,20 @@ pub(super) fn classify_wheel_metadata_error(error: uv_metadata::Error) -> Metada
 }
 
 impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Context> {
+    fn variant_policy(&self) -> Option<&VariantPolicy> {
+        self.fetcher.variant_policy()
+    }
+
+    async fn supported_variant_properties<'io>(
+        &'io self,
+        metadata: &'io VariantsJsonContent,
+    ) -> Result<SupportedVariantProperties, uv_distribution::Error> {
+        Ok(self
+            .fetcher
+            .supported_variant_properties(metadata, self.tags.as_ref().map(Tags::python_platform))
+            .await)
+    }
+
     /// Make a "Simple API" request for the package and convert the result to a [`VersionMap`].
     async fn get_package_versions<'io>(
         &'io self,

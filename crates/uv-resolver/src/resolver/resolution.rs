@@ -3,7 +3,9 @@ use std::sync::Arc;
 
 use tracing::{Level, trace};
 
-use uv_distribution_types::{Dist, DistributionId, Identifier, IndexUrl, ResolvedDist};
+use uv_distribution_types::{
+    Dist, DistributionId, Identifier, IndexUrl, ResolvedDist, SelectedVariant,
+};
 use uv_git::GitResolver;
 use uv_normalize::PackageName;
 use uv_pep440::{MIN_VERSION, Version};
@@ -34,6 +36,14 @@ pub(crate) struct Resolution<'index> {
 pub(crate) struct SelectedDistribution {
     version: Version,
     source: SelectedSource,
+    variant: Option<SelectedVariant>,
+}
+
+pub(crate) struct SelectedDistributionParts {
+    pub(crate) version: Version,
+    pub(crate) dist: ResolvedDist,
+    pub(crate) metadata: Option<Arc<MetadataResponse>>,
+    pub(crate) variant: Option<SelectedVariant>,
 }
 
 #[derive(Debug)]
@@ -97,7 +107,11 @@ impl SelectedDistribution {
                 metadata,
             }
         };
-        Ok(Self { version, source })
+        Ok(Self {
+            variant: pins.variant(&package.name, &version).cloned(),
+            version,
+            source,
+        })
     }
 
     pub(crate) fn version(&self) -> &Version {
@@ -105,10 +119,16 @@ impl SelectedDistribution {
     }
 
     /// Move the selected artifact and metadata into the output graph.
-    pub(crate) fn into_parts(self) -> (Version, ResolvedDist, Option<Arc<MetadataResponse>>) {
-        match self.source {
-            SelectedSource::Url { dist, metadata, .. } => (self.version, dist, Some(metadata)),
-            SelectedSource::Registry { dist, metadata, .. } => (self.version, dist, metadata),
+    pub(crate) fn into_parts(self) -> SelectedDistributionParts {
+        let (dist, metadata) = match self.source {
+            SelectedSource::Url { dist, metadata, .. } => (dist, Some(metadata)),
+            SelectedSource::Registry { dist, metadata, .. } => (dist, metadata),
+        };
+        SelectedDistributionParts {
+            version: self.version,
+            dist,
+            metadata,
+            variant: self.variant,
         }
     }
 

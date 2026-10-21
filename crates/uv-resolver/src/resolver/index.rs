@@ -2,7 +2,7 @@ use std::hash::BuildHasherDefault;
 use std::sync::Arc;
 
 use rustc_hash::FxHasher;
-use uv_distribution_types::{IndexUrl, VariantsJsonContent};
+use uv_distribution_types::{IndexUrl, SupportedVariantProperties, VariantsJsonContent};
 use uv_normalize::PackageName;
 use uv_once_map::{RegisteredEntry, RegisteredOnceMap};
 use uv_resolver_types::DistributionMetadataIndex;
@@ -27,9 +27,18 @@ struct SharedInMemoryIndex {
 
     /// A map from an index variant metadata file to its parsed contents.
     variants_json: FxOnceMap<RegistryVariantsJson, Arc<ParsedVariantsJsonResponse>>,
+
+    /// Target-specific properties discovered for verified variant metadata.
+    variant_properties: FxOnceMap<RegistryVariantsJson, Arc<SupportedVariantProperties>>,
 }
 
-pub(crate) type ParsedVariantsJsonResponse = Result<VariantsJsonContent, MetadataUnavailable>;
+#[derive(Debug)]
+pub(crate) struct ParsedVariantsJson {
+    pub(crate) content: VariantsJsonContent,
+    pub(crate) artifact: RegistryVariantsJson,
+}
+
+pub(crate) type ParsedVariantsJsonResponse = Result<Arc<ParsedVariantsJson>, MetadataUnavailable>;
 pub(crate) type FxOnceMap<K, V> = RegisteredOnceMap<K, V, BuildHasherDefault<FxHasher>>;
 pub(crate) type FxRegisteredEntry<'a, K, V> =
     RegisteredEntry<'a, K, V, BuildHasherDefault<FxHasher>>;
@@ -54,6 +63,12 @@ impl InMemoryIndex {
         &self,
     ) -> &FxOnceMap<RegistryVariantsJson, Arc<ParsedVariantsJsonResponse>> {
         &self.0.variants_json
+    }
+
+    pub(crate) fn variant_properties(
+        &self,
+    ) -> &FxOnceMap<RegistryVariantsJson, Arc<SupportedVariantProperties>> {
+        &self.0.variant_properties
     }
 
     /// Return exclusive access to distribution metadata when no cloned index can use it.
