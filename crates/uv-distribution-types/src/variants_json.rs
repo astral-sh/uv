@@ -8,7 +8,7 @@ use tracing::debug;
 
 use uv_distribution_filename::VariantLabel;
 use uv_pep508::MarkerVariant;
-pub use uv_pep508::{VariantFeature, VariantNamespace, VariantValue};
+pub use uv_pep508::{VariantFeature, VariantNamespace, VariantProperties, VariantValue};
 
 // TODO(konsti): Standardize on a single schema URL once the variant metadata format is finalized.
 /// The PEP 825 draft schema for variant metadata without providers.
@@ -39,10 +39,6 @@ pub enum VariantsJsonParseError {
     },
 }
 
-/// Variant properties, grouped by namespace and feature.
-pub type VariantProperties =
-    BTreeMap<VariantNamespace, BTreeMap<VariantFeature, Vec<VariantValue>>>;
-
 /// The variant properties used to resolve a wheel's dependencies for an installation target.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SelectedVariant {
@@ -56,6 +52,7 @@ impl SelectedVariant {
         match selected {
             Some(selected) => MarkerVariant::Selected {
                 label: selected.label.as_str(),
+                properties: &selected.properties,
             },
             None => MarkerVariant::Ordinary,
         }

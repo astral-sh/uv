@@ -22,7 +22,7 @@ use crate::cursor::Cursor;
 use crate::marker::lowering::{
     CanonicalMarkerListPair, CanonicalMarkerValueString, CanonicalMarkerValueVersion,
 };
-use crate::marker::parse;
+use crate::marker::{VariantProperties, parse};
 use crate::{CanonicalMarkerValueExtra, MarkerEnvironment, Pep508Error, Reporter, TracingReporter};
 
 /// Ways in which marker evaluation can fail
@@ -34,12 +34,9 @@ pub enum MarkerWarningKind {
     /// Doing an operation other than `==` and `!=` on a quoted string with `extra`, such as
     /// `extra > "perf"` or `extra == os_name`
     ExtraInvalidComparison,
-    /// Doing an operation other than `in` and `not in` on a quoted string with `extra`, such as
-    /// `extras > "perf"` or `extras == os_name`
-    ExtrasInvalidComparison,
-    /// Doing an operation other than `in` and `not in` on a quoted string with `dependency_groups`,
-    /// such as `dependency_groups > "perf"` or `dependency_groups == os_name`
-    DependencyGroupsInvalidComparison,
+    /// Doing an operation other than `in` and `not in` on a list marker, such as
+    /// `extras > "perf"` or `dependency_groups == os_name`
+    ListInvalidComparison,
     /// Comparing a string valued marker and a string lexicographically, such as `"3.9" > "3.10"`
     LexicographicComparison,
     /// Comparing two markers, such as `os_name != sys_implementation`
@@ -131,13 +128,28 @@ impl Display for MarkerValueString {
 
 /// Those markers with exclusively `in` and `not in` operators.
 ///
-/// Contains PEP 751 lockfile markers.
+/// Contains the PEP 751 lockfile marker and the variant markers.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub enum MarkerValueList {
+    /// `variant_namespaces`
+    VariantNamespaces,
+    /// `variant_features`
+    VariantFeatures,
+    /// `variant_properties`
+    VariantProperties,
     /// `extras`. This one is special because it's a list, and user-provided
     Extras,
     /// `dependency_groups`. This one is special because it's a list, and user-provided
     DependencyGroups,
+}
+
+impl MarkerValueList {
+    fn is_variant(self) -> bool {
+        match self {
+            Self::VariantNamespaces | Self::VariantFeatures | Self::VariantProperties => true,
+            Self::Extras | Self::DependencyGroups => false,
+        }
+    }
 }
 
 impl Display for MarkerValueList {
@@ -145,6 +157,9 @@ impl Display for MarkerValueList {
         match self {
             Self::Extras => f.write_str("extras"),
             Self::DependencyGroups => f.write_str("dependency_groups"),
+            Self::VariantNamespaces => f.write_str("variant_namespaces"),
+            Self::VariantFeatures => f.write_str("variant_features"),
+            Self::VariantProperties => f.write_str("variant_properties"),
         }
     }
 }
@@ -203,6 +218,9 @@ impl FromStr for MarkerValue {
             "sys.platform" => Self::MarkerEnvString(MarkerValueString::SysPlatformDeprecated),
             "extras" => Self::MarkerEnvList(MarkerValueList::Extras),
             "dependency_groups" => Self::MarkerEnvList(MarkerValueList::DependencyGroups),
+            "variant_namespaces" => Self::MarkerEnvList(MarkerValueList::VariantNamespaces),
+            "variant_features" => Self::MarkerEnvList(MarkerValueList::VariantFeatures),
+            "variant_properties" => Self::MarkerEnvList(MarkerValueList::VariantProperties),
             "variant_label" => Self::MarkerEnvString(MarkerValueString::VariantLabel),
             "extra" => Self::Extra,
             _ => return Err(format!("Invalid key: {s}")),
@@ -507,7 +525,7 @@ pub enum MarkerExpression {
         operator: MarkerOperator,
         value: ArcStr,
     },
-    /// `'...' in <key>`, a PEP 751 expression.
+    /// `'...' in <key>`, either PEP 751 or a variant expression.
     List {
         pair: CanonicalMarkerListPair,
         operator: ContainerOperator,
@@ -528,7 +546,8 @@ pub(crate) enum MarkerExpressionKind {
     VersionIn(MarkerValueVersion),
     /// A string marker comparison, e.g. `sys_platform == '...'`.
     String(MarkerValueString),
-    /// A list `in` or `not in` expression, e.g. `'...' in dependency_groups`.
+    /// A list `in` or `not in` expression, e.g. `'...' in dependency_groups` or
+    /// `'gpu :: cuda :: cu128' in variant_properties`.
     List(MarkerValueList),
     /// An extra expression, e.g. `extra == '...'`.
     Extra,
@@ -735,6 +754,8 @@ pub enum MarkerVariant<'a> {
     Selected {
         /// The selected wheel's filename label.
         label: &'a str,
+        /// Selected properties of the wheel.
+        properties: &'a VariantProperties,
     },
 }
 
@@ -744,6 +765,14 @@ impl<'a> MarkerVariant<'a> {
             Self::Universal => None,
             Self::Ordinary => Some(""),
             Self::Selected { label, .. } => Some(label),
+        }
+    }
+
+    fn contains(self, predicate: impl FnOnce(&VariantProperties) -> bool) -> Option<bool> {
+        match self {
+            Self::Universal => None,
+            Self::Ordinary => Some(false),
+            Self::Selected { properties, .. } => Some(predicate(properties)),
         }
     }
 }
@@ -1178,23 +1207,52 @@ impl MarkerTree {
                     .evaluate_reporter_impl(env, extras, variants, reporter);
             }
             MarkerTreeKind::List(marker) => {
-                if env.is_none() {
+                if env.is_none() && !marker.pair().key().is_variant() {
                     return marker.children().any(|(_, tree)| {
                         tree.evaluate_reporter_impl(env, extras, variants, reporter)
                     });
                 }
                 let edge = match marker.pair() {
-                    CanonicalMarkerListPair::Extras(extra) => extras.extras().contains(extra),
-                    CanonicalMarkerListPair::DependencyGroup(dependency_group) => {
-                        extras.dependency_groups().contains(dependency_group)
+                    CanonicalMarkerListPair::VariantNamespaces { namespace } => variants
+                        .get()
+                        .contains(|properties| properties.contains_key(namespace)),
+                    CanonicalMarkerListPair::VariantFeatures { namespace, feature } => {
+                        variants.get().contains(|properties| {
+                            properties
+                                .get(namespace)
+                                .is_some_and(|features| features.contains_key(feature))
+                        })
                     }
-                    // Invalid marker expression
-                    CanonicalMarkerListPair::Arbitrary { .. } => return false,
+                    CanonicalMarkerListPair::VariantProperties {
+                        namespace,
+                        feature,
+                        value,
+                    } => variants.get().contains(|properties| {
+                        properties
+                            .get(namespace)
+                            .and_then(|features| features.get(feature))
+                            .is_some_and(|values| values.contains(value))
+                    }),
+                    CanonicalMarkerListPair::Extras(extra) => Some(extras.extras().contains(extra)),
+                    CanonicalMarkerListPair::DependencyGroup(group) => {
+                        Some(extras.dependency_groups().contains(group))
+                    }
+                    CanonicalMarkerListPair::Arbitrary { key, .. } => {
+                        if !key.is_variant() {
+                            return false;
+                        }
+                        Some(false)
+                    }
                 };
-
-                return marker
-                    .edge(edge)
-                    .evaluate_reporter_impl(env, extras, variants, reporter);
+                return if let Some(edge) = edge {
+                    marker
+                        .edge(edge)
+                        .evaluate_reporter_impl(env, extras, variants, reporter)
+                } else {
+                    marker.children().any(|(_, tree)| {
+                        tree.evaluate_reporter_impl(env, extras, variants, reporter)
+                    })
+                };
             }
             MarkerTreeKind::Extra(marker) => {
                 return marker
@@ -1249,7 +1307,8 @@ impl MarkerTree {
                 | Variable::VersionString(key)
                 | Variable::In { key, .. }
                 | Variable::Contains { key, .. } => key.is_variant_label(),
-                Variable::Version(_) | Variable::List(_) | Variable::Extra(_) => false,
+                Variable::List(pair) => pair.key().is_variant(),
+                Variable::Version(_) | Variable::Extra(_) => false,
             };
             if is_variant {
                 return true;
@@ -1381,6 +1440,9 @@ impl MarkerTree {
     }
 
     /// Simplify markers for a wheel with a fixed filename label.
+    ///
+    /// Supported properties remain target-dependent except for ordinary and null wheels,
+    /// whose property sets are always empty.
     #[must_use]
     pub fn simplify_variant_label(self, label: &str) -> Self {
         if !self.has_variant_expression() {
@@ -1403,6 +1465,11 @@ impl MarkerTree {
                         key: CanonicalMarkerValueString::VariantLabel,
                         value,
                     } => Some(label.contains(value.as_str())),
+                    Variable::List(
+                        CanonicalMarkerListPair::VariantNamespaces { .. }
+                        | CanonicalMarkerListPair::VariantFeatures { .. }
+                        | CanonicalMarkerListPair::VariantProperties { .. },
+                    ) if label.is_empty() || label == "null" => Some(false),
                     _ => None,
                 }),
         )
@@ -2009,7 +2076,10 @@ mod test {
     use uv_pep440::Version;
 
     use crate::marker::{MarkerEnvironment, MarkerEnvironmentBuilder};
-    use crate::{MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString, MarkerVariant};
+    use crate::{
+        MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString, MarkerVariant,
+        VariantProperties,
+    };
 
     fn parse_err(input: &str) -> String {
         MarkerTree::from_str(input).unwrap_err().to_string()
@@ -2021,21 +2091,44 @@ mod test {
 
     #[test]
     fn pep825_selected_wheel_markers() {
-        let selected = MarkerVariant::Selected { label: "cuda13" };
-        let marker = m("variant_label == 'cuda13'");
+        let properties = VariantProperties::from([(
+            "nvidia".parse().expect("valid namespace"),
+            [(
+                "sm_arch".parse().expect("valid feature"),
+                vec!["120_real".parse().expect("valid value")],
+            )]
+            .into(),
+        )]);
+        let selected = MarkerVariant::Selected {
+            label: "cuda13",
+            properties: &properties,
+        };
+        let marker = m(
+            "variant_label == 'cuda13' and 'nvidia' in variant_namespaces and \
+             'nvidia:: sm_arch' in variant_features and \
+             'nvidia ::sm_arch:: 120_real' in variant_properties",
+        );
         assert!(marker.has_variant_expression());
         assert!(marker.evaluate_with_variants(&env37(), &selected, &[]));
         assert!(!marker.evaluate_with_variants(&env37(), &MarkerVariant::Ordinary, &[]));
-        assert!(marker.evaluate_optional_environment_with_variants(None, &selected, &[]));
-        assert!(marker.evaluate(&env37(), &[]));
-        assert!(marker.simplify_variant_label("cuda13").is_true());
-        assert!(marker.simplify_variant_label("").is_false());
-
-        assert!(m("variant_label == ''").evaluate_with_variants(
-            &env37(),
-            &MarkerVariant::Ordinary,
-            &[]
-        ));
+        assert!(
+            !m("'nvidia::sm_arch::110_real' in variant_properties")
+                .evaluate_optional_environment_with_variants(None, &selected, &[])
+        );
+        assert!(
+            m("' nvidia' not in variant_namespaces").evaluate_with_variants(
+                &env37(),
+                &selected,
+                &[]
+            )
+        );
+        assert!(
+            m("variant_label == '' and 'nvidia' not in variant_namespaces").evaluate_with_variants(
+                &env37(),
+                &MarkerVariant::Ordinary,
+                &[]
+            )
+        );
     }
 
     /// Every Boolean function of three extras must roundtrip to the same diagram. The cover
