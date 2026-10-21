@@ -1126,6 +1126,24 @@ fn implied_platform_markers<'a>(
                 marker = marker.or(tag_marker);
             }
 
+            // Android
+            //
+            // The tag's API level is not encoded, since no marker exposes it: `platform_release`
+            // reports the Android version.
+            PlatformTag::Android { abi, .. } => {
+                let mut tag_marker = MarkerTree::expression(MarkerExpression::String {
+                    key: MarkerValueString::SysPlatform,
+                    operator: MarkerOperator::Equal,
+                    value: arcstr::literal!("android"),
+                });
+                tag_marker = tag_marker.and(MarkerTree::expression(MarkerExpression::String {
+                    key: MarkerValueString::PlatformMachine,
+                    operator: MarkerOperator::Equal,
+                    value: ArcStr::from(abi.arch().name()),
+                }));
+                marker = marker.or(tag_marker);
+            }
+
             tag => {
                 debug!("Unknown platform tag in wheel tag: {tag}");
             }
@@ -1357,6 +1375,22 @@ mod tests {
         assert_platform_markers(
             "numpy-2.2.1-cp310-cp310-macosx_11_0_arm64.whl",
             "sys_platform == 'darwin' and platform_machine == 'arm64' and platform_release >= '20.0.0'",
+        );
+        assert_platform_markers(
+            "example-1.0-py3-none-android_24_arm64_v8a.whl",
+            "sys_platform == 'android' and platform_machine == 'aarch64'",
+        );
+        assert_platform_markers(
+            "example-1.0-py3-none-android_24_armeabi_v7a.whl",
+            "sys_platform == 'android' and platform_machine == 'armv7l'",
+        );
+        assert_platform_markers(
+            "example-1.0-py3-none-android_24_x86.whl",
+            "sys_platform == 'android' and platform_machine == 'i686'",
+        );
+        assert_platform_markers(
+            "example-1.0-py3-none-android_24_x86_64.whl",
+            "sys_platform == 'android' and platform_machine == 'x86_64'",
         );
     }
 
