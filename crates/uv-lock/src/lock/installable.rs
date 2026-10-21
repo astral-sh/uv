@@ -1513,12 +1513,18 @@ async fn select_variant<Context: BuildContext>(
             let Some(label) = built.wheel_filename().variant() else {
                 return Ok(Some((node, None)));
             };
-            let metadata = read_locked_wheel_variant(client, cache, built, hashes.as_slice())
-                .await
-                .map_err(|error| LockErrorKind::VariantSelection {
-                    package_id: package.id.clone(),
-                    error,
-                })?;
+            let expected_size = package
+                .wheels
+                .iter()
+                .find(|wheel| &wheel.filename == built.wheel_filename())
+                .and_then(|wheel| wheel.size);
+            let metadata =
+                read_locked_wheel_variant(client, cache, built, hashes.as_slice(), expected_size)
+                    .await
+                    .map_err(|error| LockErrorKind::VariantSelection {
+                        package_id: package.id.clone(),
+                        error,
+                    })?;
             let Some(metadata) = metadata else {
                 return Ok(None);
             };
