@@ -40,8 +40,8 @@ pub use crate::marker::{
     ContainsMarkerTree, ExtraMarkerTree, ExtraOperator, InMarkerTree, MarkerEnvironment,
     MarkerEnvironmentBuilder, MarkerExpression, MarkerOperator, MarkerTree, MarkerTreeContents,
     MarkerTreeKind, MarkerValueExtra, MarkerValueList, MarkerValueString, MarkerValueVersion,
-    MarkerWarningKind, StringMarkerTree, StringVersion, VariantFeature, VariantNamespace,
-    VariantParseError, VariantValue, VersionMarkerTree,
+    MarkerVariant, MarkerVariantsEnvironment, MarkerWarningKind, StringMarkerTree, StringVersion,
+    VariantFeature, VariantNamespace, VariantParseError, VariantValue, VersionMarkerTree,
 };
 pub use crate::origin::RequirementOrigin;
 #[cfg(feature = "non-pep508-extensions")]
