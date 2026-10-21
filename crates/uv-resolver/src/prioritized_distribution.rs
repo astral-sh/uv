@@ -7,8 +7,7 @@ use tracing::debug;
 use uv_distribution_filename::{BuildTag, WheelFilename};
 use uv_distribution_types::{
     File, IndexUrl, InstalledDist, MinimumLibcVersion, Name, RegistryBuiltDist, RegistryBuiltWheel,
-    RegistrySourceDist, RequiresPython, SupportedVariantProperties, VariantsJsonContent,
-    VariantsJsonFilename,
+    RegistrySourceDist, RequiresPython, VariantsJsonContent, VariantsJsonFilename,
 };
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
@@ -442,8 +441,11 @@ impl PrioritizedDist {
         if metadata.is_empty() {
             return None;
         }
-        // TODO(konsti): Get the target's supported properties from variant providers.
-        let preferences = SupportedVariantProperties::default();
+        // TODO(konsti): Run provider plugins to determine supported properties.
+        let metadata: Vec<_> = metadata
+            .iter()
+            .map(|(source, metadata)| (*source, *metadata, metadata.static_supported_properties()))
+            .collect();
         // Prefer wheels whose advertised hash matches a required hash, followed by wheels with
         // no advertised hash, then mismatches. If no hashes are required, all wheels match.
         // The installer verifies required hashes against the downloaded wheel.
@@ -460,8 +462,10 @@ impl PrioritizedDist {
                 let label = wheel.filename.variant()?;
                 let score = metadata
                     .iter()
-                    .filter(|(source, _)| *source == &wheel.index)
-                    .filter_map(|(_, metadata)| metadata.score_variant(label, &preferences))
+                    .filter(|(source, _, _)| *source == &wheel.index)
+                    .filter_map(|(_, metadata, supported_properties)| {
+                        metadata.score_variant(label, supported_properties)
+                    })
                     .max()?;
                 Some((index, (*hash, score, *priority, build_tag)))
             })

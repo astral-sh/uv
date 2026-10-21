@@ -1,6 +1,8 @@
 use anyhow::Result;
 use assert_fs::prelude::*;
-use serde_json::{Value, json};
+use insta::assert_snapshot;
+use serde_json::{Map, Value, json};
+use uv_distribution_types::PEP_850_SCHEMA;
 use uv_test::find_links::FindLinksServer;
 use uv_test::packse::WheelBuilder;
 use uv_test::uv_snapshot;
@@ -98,6 +100,61 @@ fn pylock_rejects_selected_wheel_variant() -> Result<()> {
         .temp_dir
         .child("pylock.toml")
         .assert(predicates::path::missing());
+    Ok(())
+}
+
+/// Install the BLAS variant preferred by the static provider, even though its label sorts last.
+#[test]
+fn select_variant_by_static_provider_order() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let links = context.temp_dir.child("links");
+    links.create_dir_all()?;
+
+    let mut metadata = json!({
+        "$schema": PEP_850_SCHEMA,
+        "default-priorities": { "namespace": ["blas_lapack"] },
+        "providers": {
+            "blas_lapack": {
+                "static-properties": { "library": ["openblas", "mkl", "accelerate"] }
+            }
+        },
+    });
+    let mut variants = Map::new();
+    for library in ["accelerate", "mkl", "openblas"] {
+        let properties = json!({ "blas_lapack": { "library": [library] } });
+        metadata["variants"] = json!({ library: &properties });
+        variants.insert(library.to_string(), properties);
+
+        let (_, wheel) = WheelBuilder::new(&"ok".parse()?, &"1.0.0".parse()?)
+            .files(&[
+                ("ok/variant.txt", library),
+                ("ok-1.0.0.dist-info/variant.json", &metadata.to_string()),
+            ])
+            .build();
+        links
+            .child(format!("ok-1.0.0-py3-none-any-{library}.whl"))
+            .write_binary(&wheel)?;
+    }
+    metadata["variants"] = variants.into();
+    links
+        .child("ok-1.0.0-variants.json")
+        .write_str(&metadata.to_string())?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(links.path())
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("ok==1.0.0"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0
+    ");
+    assert_snapshot!(context.read(context.site_packages().join("ok/variant.txt")), @"openblas");
     Ok(())
 }
 

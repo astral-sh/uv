@@ -1,7 +1,7 @@
 use std::cmp::Reverse;
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 
-use itertools::Itertools;
+use itertools::{Either, Itertools};
 use serde::{Deserialize, Serialize};
 use tracing::debug;
 
@@ -69,27 +69,6 @@ pub struct VariantsJsonContent {
 }
 
 impl VariantsJsonContent {
-    /// Whether the properties of a variant are supported by the target system.
-    pub fn is_compatible(
-        &self,
-        label: &VariantLabel,
-        supported: &HashSet<(&str, &str, &str)>,
-    ) -> bool {
-        self.variants.get(label).is_some_and(|properties| {
-            properties.iter().all(|(namespace, features)| {
-                features.iter().all(|(feature, values)| {
-                    values.iter().any(|value| {
-                        supported.contains(&(
-                            namespace.0.as_str(),
-                            feature.0.as_str(),
-                            value.0.as_str(),
-                        ))
-                    })
-                })
-            })
-        })
-    }
-
     /// Parse a wheel's `variant.json`, validating its label against the wheel filename.
     ///
     /// PEP 825 requires a wheel to describe exactly the variant named in its filename.
@@ -117,39 +96,65 @@ impl VariantsJsonContent {
     pub fn score_variant(
         &self,
         label: &VariantLabel,
-        preferences: &SupportedVariantProperties,
+        supported_properties: &SupportedVariantProperties,
     ) -> Option<VariantScore> {
-        let mut properties = Vec::new();
+        // Note(konsti): This implementation doesn't have any optimizations yet, we don't know the
+        // shape that big variant wheels will have so we use the easiest to read form.
+        let mut properties = BTreeSet::new();
         for (namespace, features) in self.variants.get(label)? {
-            if features.is_empty() {
-                continue;
-            }
             let namespace_priority = self
                 .default_priorities
                 .namespace
                 .iter()
                 .position(|name| name == namespace)?;
-            let supported = preferences.properties.get(namespace)?;
+            let supported_features = supported_properties.properties.get(namespace)?;
             for (feature, values) in features {
-                let (feature_priority, (_, supported_values)) = supported
+                let (feature_priority, (_name, supported_values)) = supported_features
                     .iter()
                     .enumerate()
-                    .find(|(_, (name, _))| name == feature)?;
+                    .find(|(_feature_priority, (name, _supported_values))| name == feature)?;
                 let value_priority = supported_values
                     .iter()
                     .position(|value| values.contains(value))?;
-                properties.push(Reverse((
-                    namespace_priority,
-                    feature_priority,
-                    value_priority,
-                )));
+                properties.insert((namespace_priority, feature_priority, value_priority));
             }
         }
-        properties.sort_unstable_by(|left, right| right.cmp(left));
         Some(VariantScore {
-            properties,
+            // Compare properties in priority order while preferring lower indices.
+            properties: properties.into_iter().map(Reverse).collect(),
             label: Reverse(label.clone()),
         })
+    }
+
+    /// Collect ordered compatible features and values from enabled static providers.
+    pub fn static_supported_properties(&self) -> SupportedVariantProperties {
+        let Some(providers) = &self.providers else {
+            return SupportedVariantProperties::default();
+        };
+        let properties = providers
+            .iter()
+            .filter(|(_, provider)| !provider.optional)
+            .filter_map(|(namespace, provider)| {
+                let ProviderKind::Static {
+                    static_properties,
+                    feature_order,
+                } = &provider.kind
+                else {
+                    return None;
+                };
+                // PEP 850 requires feature-order for multiple features because JSON object keys
+                // are unordered. With at most one feature, the order is unambiguous.
+                let features = match feature_order {
+                    Some(order) => Either::Left(order.iter()),
+                    None => Either::Right(static_properties.keys()),
+                };
+                let supported = features
+                    .map(|feature| (feature.clone(), static_properties[feature].clone()))
+                    .collect();
+                Some((namespace.clone(), supported))
+            })
+            .collect();
+        SupportedVariantProperties { properties }
     }
 
     /// Parse and validate the contents of a variant metadata file.
@@ -268,7 +273,8 @@ impl TryFrom<VariantsJsonWire> for VariantsJsonContent {
             return Err(VariantMetadataError::NamespacePriorities);
         }
 
-        // The provider checks below validate metadata only.
+        // The provider checks below validate metadata only. Supported properties are collected
+        // separately and passed to `score_variant` to determine compatibility.
         if wire.providers.is_some() || wire.schema == PEP_850_SCHEMA {
             let provider_namespaces = wire
                 .providers
