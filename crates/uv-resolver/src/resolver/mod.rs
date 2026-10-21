@@ -1609,7 +1609,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             // TODO(konsti): Prefetch `variants.json` alongside other candidate metadata so it
             // is likely to be ready by the time we select a wheel.
             let mut pending = Vec::new();
-            for variants_json in dist.variants_json_for_selection() {
+            for variants_json in dist.variants_json_for_selection(requires_python) {
                 let request = requests.request_variants_json(variants_json)?;
                 pending.push(request);
             }
@@ -1647,7 +1647,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 .collect();
             // Prefer a compatible variant from this index, then its ordinary wheel or sdist,
             // before considering a distribution from the next index.
-            if let Some(variant) = dist.prioritize_variants(&metadata) {
+            if let Some(variant) = dist.prioritize_variants(&metadata, requires_python) {
                 selection.distribution = Some(Cow::Owned(variant));
                 break;
             }
