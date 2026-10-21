@@ -295,6 +295,8 @@ fn pip_compile_baseline() {
             variant_policy: VariantPolicy {
                 target: None,
                 explicit_platform: false,
+                enabled: {},
+                provider_index: None,
             },
             build_isolation: Isolate,
             extra_build_dependencies: ExtraBuildDependencies(
@@ -698,6 +700,8 @@ fn pip_install_baseline() {
             variant_policy: VariantPolicy {
                 target: None,
                 explicit_platform: false,
+                enabled: {},
+                provider_index: None,
             },
             build_isolation: Isolate,
             extra_build_dependencies: ExtraBuildDependencies(
@@ -847,6 +851,8 @@ fn lock_baseline() {
             variant_policy: VariantPolicy {
                 target: None,
                 explicit_platform: false,
+                enabled: {},
+                provider_index: None,
             },
             build_options: BuildOptions {
                 no_binary: None,
@@ -989,6 +995,8 @@ fn version_baseline() {
                 variant_policy: VariantPolicy {
                     target: None,
                     explicit_platform: false,
+                    enabled: {},
+                    provider_index: None,
                 },
                 build_options: BuildOptions {
                     no_binary: None,
@@ -1172,6 +1180,8 @@ fn tool_install_baseline() {
                 variant_policy: VariantPolicy {
                     target: None,
                     explicit_platform: false,
+                    enabled: {},
+                    provider_index: None,
                 },
                 build_options: BuildOptions {
                     no_binary: None,
@@ -5529,8 +5539,8 @@ fn build_isolation_override() -> anyhow::Result<()> {
         .arg("requirements.in")
         .arg("--no-build-isolation-package").arg("numpy"), @r#"
     ...
-                 target: None,
-                 explicit_platform: false,
+                 enabled: {},
+                 provider_index: None,
              },
     -        build_isolation: SharedPackage(
     -            [
@@ -5557,8 +5567,8 @@ fn build_isolation_override() -> anyhow::Result<()> {
             .arg("requirements.in")
             .arg("--no-build-isolation-package").arg("numpy"), @r#"
     ...
-                 target: None,
-                 explicit_platform: false,
+                 enabled: {},
+                 provider_index: None,
              },
     -        build_isolation: Shared,
     +        build_isolation: SharedPackage(

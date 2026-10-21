@@ -520,7 +520,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
         let properties: SupportedVariantProperties = serde_json::from_slice(&contents)
             .with_context(|| format!("Failed to parse variant target `{}`", path.display()))?;
         properties.validate()?;
-        environment.variant_policy = VariantPolicy::new(properties);
+        environment.variant_policy = VariantPolicy::new(Some(properties), [], None);
     }
 
     if global_initialization.needs_initialization() {
