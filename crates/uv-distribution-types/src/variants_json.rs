@@ -1,14 +1,18 @@
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
+use std::str::FromStr;
 
 use itertools::{Either, Itertools};
 use serde::{Deserialize, Serialize};
 use tracing::debug;
 
 use uv_distribution_filename::VariantLabel;
+use uv_normalize::PackageName;
 use uv_pep508::MarkerVariant;
 pub use uv_pep508::{VariantFeature, VariantNamespace, VariantProperties, VariantValue};
+
+use crate::IndexUrl;
 
 // TODO(konsti): Standardize on a single schema URL once the variant metadata format is finalized.
 /// The PEP 825 draft schema for variant metadata without providers.
@@ -141,18 +145,43 @@ impl SupportedVariantProperties {
 #[derive(Debug, Clone, Default)]
 pub struct VariantPolicy {
     target: Option<SupportedVariantProperties>,
+    enabled: BTreeMap<VariantNamespace, VariantProviderOptIn>,
+    provider_index: Option<IndexUrl>,
 }
 
 impl VariantPolicy {
-    pub fn new(target: SupportedVariantProperties) -> Self {
+    pub fn new(
+        target: Option<SupportedVariantProperties>,
+        enabled: impl IntoIterator<Item = VariantProviderOptIn>,
+        provider_index: Option<IndexUrl>,
+    ) -> Self {
         Self {
-            target: Some(target),
+            target,
+            enabled: enabled
+                .into_iter()
+                .map(|opt_in| (opt_in.namespace.clone(), opt_in))
+                .collect(),
+            provider_index,
         }
     }
 
     /// An explicit target replaces all detected and metadata-provided properties.
     pub fn target(&self) -> Option<&SupportedVariantProperties> {
         self.target.as_ref()
+    }
+
+    /// Whether the user explicitly enabled this provider namespace.
+    pub fn enables(&self, namespace: &VariantNamespace) -> bool {
+        self.enabled.contains_key(namespace)
+    }
+
+    pub fn opt_in(&self, namespace: &VariantNamespace) -> Option<&VariantProviderOptIn> {
+        self.enabled.get(namespace)
+    }
+
+    /// The user-authorized index for external provider packages and their dependencies.
+    pub fn provider_index(&self) -> Option<&IndexUrl> {
+        self.provider_index.as_ref()
     }
 
     /// Suppress host detection for a foreign target without explicit properties.
@@ -165,8 +194,109 @@ impl VariantPolicy {
     }
 }
 
+/// Explicit authorization for a variant provider namespace and, optionally, plugin identity.
+#[derive(Debug, Clone)]
+pub struct VariantProviderOptIn {
+    namespace: VariantNamespace,
+    packages: Vec<PackageName>,
+    endpoint: Option<String>,
+}
+
+impl VariantProviderOptIn {
+    pub fn authorizes<'a>(
+        &self,
+        packages: impl IntoIterator<Item = &'a PackageName>,
+        endpoint: &str,
+    ) -> bool {
+        !self.packages.is_empty()
+            && self.packages.iter().eq(packages)
+            && self.endpoint.as_deref() == Some(endpoint)
+    }
+
+    pub fn permits_plugin(&self) -> bool {
+        !self.packages.is_empty()
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error(
+    "Invalid variant provider opt-in `{0}`; expected NAMESPACE[=PACKAGE[,PACKAGE]...[@MODULE[:OBJECT]]]"
+)]
+pub struct VariantProviderOptInError(String);
+
+impl FromStr for VariantProviderOptIn {
+    type Err = VariantProviderOptInError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        let invalid = || VariantProviderOptInError(value.to_string());
+        let (namespace, identity) = value
+            .split_once('=')
+            .map_or((value, None), |(namespace, identity)| {
+                (namespace, Some(identity))
+            });
+        let namespace = VariantNamespace::try_from(namespace.to_string()).map_err(|_| invalid())?;
+        let Some(identity) = identity else {
+            return Ok(Self {
+                namespace,
+                packages: Vec::new(),
+                endpoint: None,
+            });
+        };
+        let (packages, endpoint) = identity
+            .split_once('@')
+            .map_or((identity, None), |(packages, endpoint)| {
+                (packages, Some(endpoint))
+            });
+        let packages = packages
+            .split(',')
+            .map(|package| PackageName::from_str(package).map_err(|_| invalid()))
+            .collect::<Result<Vec<_>, _>>()?;
+        let Some(first) = packages.first() else {
+            return Err(invalid());
+        };
+        if !packages.iter().all_unique() {
+            return Err(invalid());
+        }
+        let endpoint =
+            endpoint.map_or_else(|| first.as_dist_info_name().into_owned(), str::to_string);
+        if !valid_plugin_endpoint(&endpoint) {
+            return Err(invalid());
+        }
+        Ok(Self {
+            namespace,
+            packages,
+            endpoint: Some(endpoint),
+        })
+    }
+}
+
+/// Whether a plugin endpoint is a dotted Python module with an optional dotted object path.
+pub fn valid_plugin_endpoint(endpoint: &str) -> bool {
+    fn valid_path(path: &str) -> bool {
+        path.split('.').all(|part| {
+            let mut bytes = part.bytes();
+            bytes
+                .next()
+                .is_some_and(|byte| byte.is_ascii_alphabetic() || byte == b'_')
+                && bytes.all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+        })
+    }
+    let (module, object) = endpoint
+        .split_once(':')
+        .map_or((endpoint, None), |(module, object)| (module, Some(object)));
+    valid_path(module) && object.is_none_or(valid_path)
+}
+
 /// A supported feature and its compatible values, ordered from most to least preferred.
 pub type SupportedVariantFeature = (VariantFeature, Vec<VariantValue>);
+
+/// A feature returned by a PEP 850 provider plugin.
+#[derive(Debug, Clone, Deserialize)]
+pub struct PluginVariantFeature {
+    pub name: VariantFeature,
+    pub values: Vec<VariantValue>,
+    pub multi_value: bool,
+}
 
 /// The priority of a compatible variant. Higher scores are preferred.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -193,9 +323,54 @@ impl VariantsJsonContent {
         self.variants.keys().exactly_one().ok()
     }
 
+    /// Return whether the metadata describes the given variant label.
+    pub fn contains_variant(&self, label: &VariantLabel) -> bool {
+        self.variants.contains_key(label)
+    }
+
     /// Providers declared by the variant metadata.
     pub fn providers(&self) -> impl Iterator<Item = (&VariantNamespace, &VariantProvider)> {
         self.providers.iter().flat_map(|providers| providers.iter())
+    }
+
+    /// Validate the properties returned by a provider plugin.
+    pub fn validate_plugin_features(
+        &self,
+        namespace: &VariantNamespace,
+        features: &[PluginVariantFeature],
+    ) -> Result<(), VariantMetadataError> {
+        if !features.iter().map(|feature| &feature.name).all_unique() {
+            return Err(VariantMetadataError::DuplicateFeatures(namespace.clone()));
+        }
+        for feature in features {
+            if feature.values.is_empty() {
+                return Err(VariantMetadataError::EmptyValues(
+                    namespace.clone(),
+                    feature.name.clone(),
+                ));
+            }
+            if !feature.values.iter().all_unique() {
+                return Err(VariantMetadataError::DuplicateValues {
+                    namespace: namespace.clone(),
+                    feature: feature.name.clone(),
+                    values: feature.values.clone(),
+                });
+            }
+            if !feature.multi_value
+                && self.variants.values().any(|properties| {
+                    properties
+                        .get(namespace)
+                        .and_then(|features| features.get(&feature.name))
+                        .is_some_and(|values| values.len() > 1)
+                })
+            {
+                return Err(VariantMetadataError::SingleValueFeature(
+                    namespace.clone(),
+                    feature.name.clone(),
+                ));
+            }
+        }
+        Ok(())
     }
 
     /// The variant label, if this describes a single compatible wheel variant.
@@ -507,6 +682,8 @@ pub enum VariantMetadataError {
     },
     #[error("Variant provider `{0}` returned duplicate features")]
     DuplicateFeatures(VariantNamespace),
+    #[error("Variant feature `{0} :: {1}` does not allow multiple values")]
+    SingleValueFeature(VariantNamespace, VariantFeature),
     #[error("The null variant must not have properties")]
     NullProperties,
 }

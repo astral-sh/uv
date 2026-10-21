@@ -441,6 +441,38 @@ impl PrioritizedDist {
         })
     }
 
+    /// Whether this source's metadata describes a wheel eligible for selection.
+    pub(crate) fn has_variant_in_metadata(
+        &self,
+        index: &IndexUrl,
+        metadata: &VariantsJsonContent,
+        requires_python: &RequiresPython,
+    ) -> bool {
+        self.eligible_variant_wheels(index, requires_python)
+            .filter_map(|wheel| wheel.filename.variant())
+            .any(|label| metadata.contains_variant(label))
+    }
+
+    fn eligible_variant_wheels<'a>(
+        &'a self,
+        index: &'a IndexUrl,
+        requires_python: &'a RequiresPython,
+    ) -> impl Iterator<Item = &'a RegistryBuiltWheel> {
+        self.0
+            .wheels
+            .iter()
+            .filter_map(move |(wheel, compatibility)| {
+                if let WheelCompatibility::Variant(..) = compatibility
+                    && &wheel.index == index
+                    && Self::wheel_supports_python(wheel, requires_python)
+                {
+                    Some(wheel)
+                } else {
+                    None
+                }
+            })
+    }
+
     /// Choose the best compatible variant, or return `None` to use the ordinary wheel or sdist.
     pub(crate) fn prioritize_variants(
         &self,
@@ -497,6 +529,14 @@ impl PrioritizedDist {
             supported,
         )?);
         Some(prioritized)
+    }
+
+    fn wheel_supports_python(wheel: &RegistryBuiltWheel, requires_python: &RequiresPython) -> bool {
+        wheel
+            .file
+            .requires_python
+            .as_deref()
+            .is_none_or(|specifiers| requires_python.is_contained_by(specifiers))
     }
 
     /// Insert the given built distribution into the [`PrioritizedDist`].
