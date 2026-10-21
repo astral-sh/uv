@@ -1448,7 +1448,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
         // Check variant properties now that we have chosen a version.
         let variant = if preview_variants && let Some(prioritized) = candidate.prioritized() {
-            self.select_wheel_variant(candidate.version(), prioritized, version_maps, requests)?
+            self.select_wheel_variant(
+                candidate.version(),
+                prioritized,
+                version_maps,
+                python_requirement.target(),
+                requests,
+            )?
         } else {
             WheelVariantSelection::default()
         };
@@ -1586,6 +1592,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         version: &Version,
         prioritized: &'a PrioritizedDist,
         version_maps: &'a [VersionMap],
+        requires_python: &RequiresPython,
         requests: &MetadataRequests,
     ) -> Result<WheelVariantSelection<'a>, ResolveError> {
         // With unsafe-best-match we know the version, but not necessarily the index: a wheel
@@ -1613,10 +1620,18 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             let mut properties = Vec::with_capacity(responses.len());
             for response in &responses {
                 match response.as_ref() {
-                    Ok(parsed) => properties.push((
-                        parsed.as_ref(),
-                        requests.request_variant_properties(Arc::clone(parsed))?,
-                    )),
+                    Ok(parsed) => {
+                        if dist.has_variant_in_metadata(
+                            &parsed.artifact.index,
+                            &parsed.content,
+                            requires_python,
+                        ) {
+                            properties.push((
+                                parsed.as_ref(),
+                                requests.request_variant_properties(Arc::clone(parsed))?,
+                            ));
+                        }
+                    }
                     Err(reason) => {
                         // Keep the first error to report if no distribution works.
                         selection.unavailable.get_or_insert_with(|| reason.clone());
