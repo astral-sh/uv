@@ -3,6 +3,23 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.13.5
+
+Released on 2026-10-21.
+
+### Performance
+
+- Deserialize cache keys and Git patterns directly ([#22749](https://github.com/astral-sh/uv/pull/22749))
+- Keep additional error Debug formatters out of line ([#22775](https://github.com/astral-sh/uv/pull/22775))
+- Resolve export extra activation globally ([#22751](https://github.com/astral-sh/uv/pull/22751))
+
+### Other changes
+
+- Pin Codex workflows to the merged output-protection fix ([#22772](https://github.com/astral-sh/uv/pull/22772))
+- Pin security review to the merged shared workflow commit ([#22766](https://github.com/astral-sh/uv/pull/22766))
+- Sync latest Python releases ([#22786](https://github.com/astral-sh/uv/pull/22786))
+- Update Codex workflows to protect workflow command output ([#22764](https://github.com/astral-sh/uv/pull/22764))
+
 ## 0.13.4
 
 Released on 2026-10-20.
