@@ -13,6 +13,7 @@ use uv_git_types::GitReference;
 use uv_normalize::PackageName;
 use uv_pypi_types::{ParsedArchiveUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl};
 use uv_redacted::SafeUrl;
+use uv_resolver_types::RequirementsTxtVariantMarkerError;
 
 use crate::lock::export::{ExportableRequirement, ExportableRequirements, VirtualPackages};
 use crate::lock::{Package, PackageId, Source};
@@ -52,6 +53,13 @@ impl<'lock> RequirementsTxtExport<'lock> {
         nodes.sort_unstable_by(|a, b| {
             RequirementComparator::from(a.package).cmp(&RequirementComparator::from(b.package))
         });
+
+        if let Some(node) = nodes
+            .iter()
+            .find(|node| node.marker.has_variant_expression())
+        {
+            return Err(RequirementsTxtVariantMarkerError(node.package.id.name.clone()).into());
+        }
 
         Ok(Self {
             nodes,
