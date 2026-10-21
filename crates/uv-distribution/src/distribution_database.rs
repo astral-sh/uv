@@ -168,18 +168,22 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         &self,
         metadata: &VariantsJsonContent,
         platform: Option<&Platform>,
-    ) -> SupportedVariantProperties {
+        require_hashes: bool,
+    ) -> Result<SupportedVariantProperties, Error> {
         if self.is_variant_provider() {
-            return SupportedVariantProperties::default();
-        }
-        if let Some(target) = self.variant_policy().and_then(|policy| policy.target()) {
-            return target.clone();
+            return Ok(SupportedVariantProperties::default());
         }
         let platform = match platform {
             Some(platform) => platform,
             None => self.build_context.interpreter().await.platform(),
         };
-        crate::variant::supported_variant_properties(metadata, platform)
+        crate::variant::query_supported_variant_properties(
+            metadata,
+            self.build_context,
+            platform,
+            require_hashes,
+        )
+        .await
     }
 
     fn check_provider_dependency(&self, dist: &Dist) -> Result<(), Error> {
@@ -323,7 +327,9 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         let Some(metadata) = read_wheel_variant_metadata(&wheel.filename, &wheel.archive)? else {
             return Ok(None);
         };
-        let supported = self.supported_variant_properties(&metadata, platform).await;
+        let supported = self
+            .supported_variant_properties(&metadata, platform, hashes.requires_validation())
+            .await?;
         check_wheel_variant_properties(&wheel.filename, &metadata, &supported)?;
         Ok(metadata.select_variant(label, &supported))
     }
