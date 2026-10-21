@@ -226,7 +226,7 @@ percent-encoding = { version = "2.3.1", default-features = false, features = ["s
 petgraph = { version = "0.8.0", default-features = false, features = ["std"] }
 proc-macro2 = { version = "1.0.86", default-features = false, features = ["proc-macro"] }
 procfs = { version = "0.18.0", default-features = false }
-pubgrub = { version = "0.7.0", package = "astral-pubgrub", default-features = false, features = ["unstable-state-api"] }
+pubgrub = { version = "0.7.0", git = "https://github.com/astral-sh/pubgrub", rev = "3a849bab8f60d4685afae62ce73cd741bb9d30b9", package = "astral-pubgrub", default-features = false, features = ["unstable-state-api"] }
 quote = { version = "1.0.37", default-features = false, features = ["proc-macro"] }
 rand = { version = "0.10.2", default-features = false, features = ["thread_rng"] }
 rayon = { version = "1.10.0", default-features = false }
@@ -361,7 +361,7 @@ unicode-width = { version = "0.2.0", default-features = false }
 unscanny = { version = "0.1.0", default-features = false }
 url = { version = "2.5.2", default-features = false, features = ["serde", "std"] }
 uuid = { version = "1.24.0", default-features = false }
-version-ranges = { version = "0.2.3", package = "astral-version-ranges", default-features = false }
+version-ranges = { version = "0.2.3", git = "https://github.com/astral-sh/pubgrub", rev = "3a849bab8f60d4685afae62ce73cd741bb9d30b9", package = "astral-version-ranges", default-features = false }
 walkdir = { version = "2.5.0", default-features = false }
 webpki-root-certs = { version = "1", default-features = false }
 which = { version = "8.0.0", default-features = false, features = ["real-sys"] }
