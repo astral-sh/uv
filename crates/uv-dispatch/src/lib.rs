@@ -493,7 +493,8 @@ impl BuildContext for BuildDispatch<'_> {
         let tags = self.interpreter.tags()?;
 
         // Determine the set of installed packages.
-        let site_packages = SitePackages::from_environment(venv)?;
+        let site_packages =
+            SitePackages::from_environment(venv)?.with_variant_policy(self.variant_policy.cloned());
 
         let Plan {
             cached,

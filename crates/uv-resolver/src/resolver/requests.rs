@@ -5,6 +5,7 @@ use tokio::sync::oneshot;
 
 use uv_distribution_types::{
     BuiltDist, Dist, DistributionId, Identifier, IndexMetadata, IndexUrl, Name, ResolutionRecorder,
+    SupportedVariantProperties,
 };
 use uv_normalize::PackageName;
 use uv_once_map::Registration;
@@ -13,8 +14,10 @@ use uv_pep440::Version;
 use crate::prioritized_distribution::RegistryVariantsJson;
 use crate::pubgrub::Range;
 use crate::resolved::ResolvedDistRef;
-use crate::resolver::index::{FxRegisteredEntry, ParsedVariantsJsonResponse};
-use crate::resolver::{InMemoryIndex, MetadataResponse, Request, VersionsResponse};
+use crate::resolver::index::{FxRegisteredEntry, ParsedVariantsJson, ParsedVariantsJsonResponse};
+use crate::resolver::{
+    InMemoryIndex, MetadataResponse, Request, VersionsResponse, WheelVariantResponse,
+};
 use crate::{PythonRequirement, ResolveError};
 
 /// A blocking solver-side handle for requesting metadata from the asynchronous fetcher.
@@ -233,7 +236,7 @@ impl MetadataRequests {
     pub(crate) fn read_wheel_variant(
         &self,
         wheel: BuiltDist,
-    ) -> Result<Option<ParsedVariantsJsonResponse>, ResolveError> {
+    ) -> Result<Option<WheelVariantResponse>, ResolveError> {
         let (send, recv) = oneshot::channel();
         self.sender.blocking_send(Request::WheelVariant {
             wheel,
@@ -241,6 +244,29 @@ impl MetadataRequests {
         })?;
         recv.blocking_recv()
             .map_err(|_| ResolveError::ChannelClosed)
+    }
+
+    /// Request target-specific properties for verified metadata at most once.
+    pub(crate) fn request_variant_properties(
+        &self,
+        parsed: Arc<ParsedVariantsJson>,
+    ) -> Result<
+        FxRegisteredEntry<'_, RegistryVariantsJson, Arc<SupportedVariantProperties>>,
+        ResolveError,
+    > {
+        let entry = match self
+            .index
+            .variant_properties()
+            .register_entry(parsed.artifact.clone())
+        {
+            Registration::New(entry) => {
+                self.sender
+                    .blocking_send(Request::VariantProperties(parsed))?;
+                entry
+            }
+            Registration::Existing(entry) => entry,
+        };
+        Ok(entry)
     }
 
     /// Schedule speculative candidate selection using an already-requested package version map.

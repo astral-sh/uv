@@ -7,7 +7,7 @@ use tracing::debug;
 use uv_distribution_filename::VariantLabel;
 use uv_distribution_types::{
     InstalledDist, SupportedVariantFeature, SupportedVariantProperties, VariantNamespace,
-    VariantProvider, VariantProviderKind, VariantsJsonContent,
+    VariantPolicy, VariantProvider, VariantProviderKind, VariantsJsonContent,
 };
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -60,7 +60,12 @@ pub enum InstalledWheelVariant {
 }
 
 impl InstalledWheelVariant {
-    pub fn check(installed: &InstalledDist, target: &Platform) -> Self {
+    /// Reselect an installed variant when resolving for an explicit target.
+    pub fn check_with_target(
+        installed: &InstalledDist,
+        platform: &Platform,
+        policy: Option<&VariantPolicy>,
+    ) -> Self {
         let metadata = match installed.read_variant() {
             Ok(None) => return Self::NonVariant,
             Ok(Some(metadata)) => metadata,
@@ -69,9 +74,14 @@ impl InstalledWheelVariant {
                 return Self::Incompatible;
             }
         };
-        if uv_preview::is_enabled(PreviewFeature::WheelVariants)
+        if policy.and_then(VariantPolicy::target).is_none()
+            && uv_preview::is_enabled(PreviewFeature::WheelVariants)
             && let Some(label) =
-                metadata.compatible_wheel_label(&supported_variant_properties(&metadata, target))
+                metadata.compatible_wheel_label(&supported_variant_properties_for_platform(
+                    &metadata,
+                    platform,
+                    policy.is_some_and(VariantPolicy::explicit_platform),
+                ))
         {
             return Self::Compatible(label.clone());
         }

@@ -27,8 +27,8 @@ use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
     ArchiveHashPolicy, BuildInfo, BuildableSource, BuiltDist, Dist, DistRef, GitPathBuiltDist,
     HashCollection, HashValidation, Hashed, IndexUrl, InstalledDist, MetadataHashPolicy, Name,
-    ResolutionRecorder, SourceDist, SourceUrl, SupportedVariantProperties, VariantsJsonContent,
-    parse_url_hashes,
+    ResolutionRecorder, SourceDist, SourceUrl, SupportedVariantProperties, VariantPolicy,
+    VariantsJsonContent, parse_url_hashes,
 };
 use uv_extract::dirhash::{DirectoryDigest, HashedFile};
 use uv_extract::hash::Hasher;
@@ -151,17 +151,18 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         }
     }
 
+    /// Return the configured variant provider policy, if any.
+    pub fn variant_policy(&self) -> Option<&VariantPolicy> {
+        self.build_context.variant_policy()
+    }
+
     /// Obtain compatible properties for a release or wheel.
     pub async fn supported_variant_properties(
         &self,
         metadata: &VariantsJsonContent,
         platform: Option<&Platform>,
     ) -> SupportedVariantProperties {
-        if let Some(target) = self
-            .build_context
-            .variant_policy()
-            .and_then(|policy| policy.target())
-        {
+        if let Some(target) = self.variant_policy().and_then(|policy| policy.target()) {
             return target.clone();
         }
         let platform = match platform {

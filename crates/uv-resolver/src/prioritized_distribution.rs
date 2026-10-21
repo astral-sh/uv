@@ -7,8 +7,8 @@ use tracing::debug;
 use uv_distribution_filename::{BuildTag, WheelFilename};
 use uv_distribution_types::{
     File, IndexUrl, InstalledDist, MinimumLibcVersion, Name, RegistryBuiltDist, RegistryBuiltWheel,
-    RegistrySourceDist, RequiresPython, SupportedVariantProperties, VariantsJsonContent,
-    VariantsJsonFilename,
+    RegistrySourceDist, RequiresPython, SelectedVariant, SupportedVariantProperties,
+    VariantsJsonContent, VariantsJsonFilename,
 };
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
@@ -45,6 +45,8 @@ struct PrioritizedDistInner {
     wheels: Vec<(RegistryBuiltWheel, WheelCompatibility)>,
     /// Variant metadata files from the indexes contributing files for this version.
     variants_json: Vec<RegistryVariantsJson>,
+    /// The selected wheel's properties supported by this target.
+    selected_variant: Option<SelectedVariant>,
     /// The hashes for each distribution.
     hashes: Vec<HashDigest>,
     /// Python coverage, unioned over compatible wheels independently of their platforms.
@@ -62,6 +64,7 @@ impl Default for PrioritizedDistInner {
             best_wheel_index: None,
             wheels: Vec::new(),
             variants_json: Vec::new(),
+            selected_variant: None,
             hashes: Vec::new(),
             python_markers: MarkerTree::FALSE,
             markers: [MarkerTree::FALSE; 2],
@@ -419,6 +422,10 @@ impl PrioritizedDist {
         &self.0.variants_json
     }
 
+    pub(crate) fn selected_variant(&self) -> Option<&SelectedVariant> {
+        self.0.selected_variant.as_ref()
+    }
+
     /// Return the `variants.json` files we need to check the candidate wheels.
     ///
     /// Match on the index as well as the release: a flat index can include wheels from
@@ -437,7 +444,7 @@ impl PrioritizedDist {
     /// Choose the best compatible variant, or return `None` to use the ordinary wheel or sdist.
     pub(crate) fn prioritize_variants(
         &self,
-        metadata: &[(&IndexUrl, &VariantsJsonContent, SupportedVariantProperties)],
+        metadata: &[(&IndexUrl, &VariantsJsonContent, &SupportedVariantProperties)],
     ) -> Option<Self> {
         if metadata.is_empty() {
             return None;
@@ -446,7 +453,7 @@ impl PrioritizedDist {
         // no advertised hash, then mismatches. If no hashes are required, all wheels match.
         // The installer verifies required hashes against the downloaded wheel.
         // Break ties by variant rank, platform tags, then build tag.
-        let (best_index, (hash, _, priority, build_tag)) = self
+        let (best_index, (hash, _, priority, build_tag), metadata, supported) = self
             .0
             .wheels
             .iter()
@@ -456,16 +463,23 @@ impl PrioritizedDist {
                     return None;
                 };
                 let label = wheel.filename.variant()?;
-                let score = metadata
+                let (score, metadata, supported) = metadata
                     .iter()
                     .filter(|(source, _, _)| *source == &wheel.index)
                     .filter_map(|(_, metadata, supported_properties)| {
-                        metadata.score_variant(label, supported_properties)
+                        metadata
+                            .score_variant(label, supported_properties)
+                            .map(|score| (score, *metadata, *supported_properties))
                     })
-                    .max()?;
-                Some((index, (*hash, score, *priority, build_tag)))
+                    .max_by(|left, right| left.0.cmp(&right.0))?;
+                Some((
+                    index,
+                    (*hash, score, *priority, build_tag),
+                    metadata,
+                    supported,
+                ))
             })
-            .max_by(|(_, left), (_, right)| left.cmp(right))?;
+            .max_by(|(_, left, ..), (_, right, ..)| left.cmp(right))?;
 
         // Keep the ordinary wheel if its advertised hash ranks higher.
         if let Some((_, WheelCompatibility::Compatible(existing_hash, ..))) = self.best_wheel()
@@ -478,6 +492,10 @@ impl PrioritizedDist {
         prioritized.0.wheels[best_index].1 =
             WheelCompatibility::Compatible(hash, priority, build_tag.clone());
         prioritized.0.best_wheel_index = Some(best_index);
+        prioritized.0.selected_variant = Some(metadata.select_variant(
+            prioritized.0.wheels[best_index].0.filename.variant()?,
+            supported,
+        )?);
         Some(prioritized)
     }
 
