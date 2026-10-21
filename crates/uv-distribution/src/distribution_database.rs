@@ -74,6 +74,7 @@ pub struct DistributionDatabase<'a, Context: BuildContext> {
     reporter: Option<Arc<dyn Reporter>>,
     content_addressed_cache: bool,
     first_party_packages: Option<&'a FirstPartyPackages>,
+    build_stack: Option<&'a BuildStack>,
 }
 
 impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
@@ -95,6 +96,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             reporter: None,
             content_addressed_cache,
             first_party_packages: None,
+            build_stack: None,
         }
     }
 
@@ -145,8 +147,15 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     pub fn with_build_stack(self, build_stack: &'a BuildStack) -> Self {
         Self {
             builder: self.builder.with_build_stack(build_stack),
+            build_stack: Some(build_stack),
             ..self
         }
+    }
+
+    /// Whether this database is resolving a wheel variant provider's dependencies.
+    pub fn is_variant_provider(&self) -> bool {
+        self.build_stack
+            .is_some_and(BuildStack::is_variant_provider)
     }
 
     /// Return the explicitly configured variant target, if any.
@@ -161,9 +170,24 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         &self,
         metadata: &VariantsJsonContent,
     ) -> SupportedVariantProperties {
+        if self.is_variant_provider() {
+            return SupportedVariantProperties::default();
+        }
         self.variant_target()
             .cloned()
             .unwrap_or_else(|| crate::variant::supported_variant_properties(metadata))
+    }
+
+    fn check_provider_dependency(&self, dist: &Dist) -> Result<(), Error> {
+        if self.is_variant_provider()
+            && match dist {
+                Dist::Built(built) => built.wheel_filename().variant().is_some(),
+                Dist::Source(_) => true,
+            }
+        {
+            return Err(Error::VariantProviderDependency(dist.to_string()));
+        }
+        Ok(())
     }
 
     /// Set the [`Reporter`] to use for the [`DistributionDatabase`].
@@ -241,6 +265,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         tags: &Tags,
         hashes: ArchiveHashPolicy<'_>,
     ) -> Result<LocalWheel, Error> {
+        self.check_provider_dependency(dist)?;
         match dist {
             Dist::Built(built) => {
                 check_supported_wheel_variant(built)?;
@@ -262,6 +287,9 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     ) -> Result<Option<SelectedVariant>, Error> {
         if dist.wheel_filename().variant().is_none() {
             return Ok(None);
+        }
+        if self.is_variant_provider() {
+            return Err(Error::VariantProviderDependency(dist.to_string()));
         }
         check_supported_wheel_variant(dist)?;
         let wheel = self.get_wheel(dist, hashes).await?;
@@ -324,6 +352,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         dist: &Dist,
         hashes: MetadataHashPolicy<'_>,
     ) -> Result<ArchiveMetadata, Error> {
+        self.check_provider_dependency(dist)?;
         match dist {
             Dist::Built(built) => self.get_wheel_metadata(built, hashes).await,
             Dist::Source(source) => {

@@ -207,6 +207,10 @@ impl<'a, Context: BuildContext> DefaultResolverProvider<'a, Context> {
 }
 
 impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Context> {
+    fn is_variant_provider(&self) -> bool {
+        self.fetcher.is_variant_provider()
+    }
+
     fn variant_target(&self) -> Option<&SupportedVariantProperties> {
         self.fetcher.variant_target()
     }

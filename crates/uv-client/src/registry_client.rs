@@ -275,6 +275,16 @@ pub enum MetadataFormat {
 }
 
 impl RegistryClient {
+    /// Restrict package discovery to the supplied index locations.
+    #[must_use]
+    pub fn with_index_locations(mut self, indexes: IndexLocations) -> Self {
+        self.indexes = indexes;
+        self.index_strategy = IndexStrategy::default();
+        self.torch_backend = None;
+        self.flat_indexes = Arc::default();
+        self
+    }
+
     /// Return the [`CachedClient`] used by this client.
     pub fn cached_client(&self) -> &CachedClient {
         &self.client
