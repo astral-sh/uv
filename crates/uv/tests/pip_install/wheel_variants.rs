@@ -4,7 +4,7 @@ use indoc::{formatdoc, indoc};
 use predicates::prelude::predicate;
 use serde_json::json;
 use sha2::{Digest, Sha256};
-use uv_distribution_types::PEP_825_SCHEMA;
+use uv_distribution_types::{PEP_825_SCHEMA, PEP_850_SCHEMA};
 use uv_static::EnvVars;
 use uv_test::archive::generate_source_archive;
 use uv_test::packse::{PackseServer, WheelBuilder};
@@ -150,6 +150,68 @@ async fn selected_variant_metadata_is_cached() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
+    ");
+    Ok(())
+}
+
+/// The sidecar lists only a wheel excluded by `Requires-Python` and omits the eligible wheel.
+#[tokio::test]
+async fn ineligible_variant_labels_do_not_query_provider() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let provider_index = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/simple/variant-provider/"))
+        .respond_with(ResponseTemplate::new(500))
+        .expect(0)
+        .mount(&provider_index)
+        .await;
+    let links = context.temp_dir.child("links");
+    links.create_dir_all()?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-1.0.0-py3-none-any.whl"),
+        links.child("ok-1.0.0-py3-none-any.whl"),
+    )?;
+    links.child("index.html").write_str(
+        r#"<a href="ok-1.0.0-py3-none-any.whl">ok-1.0.0-py3-none-any.whl</a>
+<a href="ok-1.0.0-py3-none-any-accelerated.whl">ok-1.0.0-py3-none-any-accelerated.whl</a>
+<a href="ok-1.0.0-py3-none-any-different.whl"
+   data-requires-python="&gt;=4">ok-1.0.0-py3-none-any-different.whl</a>
+<a href="ok-1.0.0-variants.json">ok-1.0.0-variants.json</a>"#,
+    )?;
+    links.child("ok-1.0.0-variants.json").write_str(
+        &json!({
+            "$schema": PEP_850_SCHEMA,
+            "default-priorities": { "namespace": ["example"] },
+            "providers": {
+                "example": {
+                    "requires": ["variant-provider==1.0.0"],
+                    "plugin-api": "variant_provider.plugin:Provider"
+                }
+            },
+            "variants": { "different": { "example": { "acceleration": ["enabled"] } } }
+        })
+        .to_string(),
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(links.child("index.html").path())
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("--variant-provider")
+        .arg("example=variant-provider@variant_provider.plugin:Provider")
+        .arg("--variant-provider-index")
+        .arg(format!("{}/simple/", provider_index.uri()))
+        .arg("ok==1.0.0"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0
     ");
     Ok(())
 }
