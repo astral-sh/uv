@@ -7,18 +7,20 @@
 
 Released on 2026-10-21.
 
+### Python
+
+- Update managed CPython builds to include pip 26.2.2, whose CA bundle removes the compromised eMudhra root ([#22786](https://github.com/astral-sh/uv/pull/22786))
+
 ### Performance
 
-- Deserialize cache keys and Git patterns directly ([#22749](https://github.com/astral-sh/uv/pull/22749))
-- Keep additional error Debug formatters out of line ([#22775](https://github.com/astral-sh/uv/pull/22775))
-- Resolve export extra activation globally ([#22751](https://github.com/astral-sh/uv/pull/22751))
+- Speed up exports with complex transitive extras by resolving activation across the dependency graph ([#22751](https://github.com/astral-sh/uv/pull/22751))
+- Reduce uv's binary size by keeping additional error formatters out of line ([#22775](https://github.com/astral-sh/uv/pull/22775))
+- Reduce overhead when parsing custom build cache keys ([#22749](https://github.com/astral-sh/uv/pull/22749))
 
-### Other changes
+### Bug fixes
 
-- Pin Codex workflows to the merged output-protection fix ([#22772](https://github.com/astral-sh/uv/pull/22772))
-- Pin security review to the merged shared workflow commit ([#22766](https://github.com/astral-sh/uv/pull/22766))
-- Sync latest Python releases ([#22786](https://github.com/astral-sh/uv/pull/22786))
-- Update Codex workflows to protect workflow command output ([#22764](https://github.com/astral-sh/uv/pull/22764))
+- Export optional dependencies correctly when transitive extras are activated through different or incompatible environment paths ([#22751](https://github.com/astral-sh/uv/pull/22751))
+- Reject invalid custom build cache keys instead of silently falling back to the defaults ([#22749](https://github.com/astral-sh/uv/pull/22749))
 
 ## 0.13.4
 
