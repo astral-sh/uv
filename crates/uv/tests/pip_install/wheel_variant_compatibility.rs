@@ -807,18 +807,24 @@ fn incompatible_installed_variant_without_replacement() -> Result<()> {
     Ok(())
 }
 
-/// A variant-only release cannot be represented as an installable package in `pylock.toml`.
+/// The exported lockfile embeds the metadata for every variant wheel it includes.
 #[test]
-fn pylock_rejects_selected_wheel_variant() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+fn pylock_embeds_wheel_variant_metadata() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filter((r"[a-f0-9]{64}", "[HASH]"));
     let links = context.temp_dir.child("links");
     links.create_dir_all()?;
-    let variant = null_variant().to_string();
+    let variant = json!({
+        "$schema": PEP_850_SCHEMA,
+        "default-priorities": { "namespace": ["blas"] },
+        "providers": { "blas": { "static-properties": { "library": ["openblas"] } } },
+        "variants": { "openblas": { "blas": { "library": ["openblas"] } } },
+    })
+    .to_string();
     let (_, wheel) = WheelBuilder::new(&"ok".parse()?, &"1.0.0".parse()?)
         .files(&[("ok-1.0.0.dist-info/variant.json", &variant)])
         .build();
     links
-        .child("ok-1.0.0-py3-none-any-null.whl")
+        .child("ok-1.0.0-py3-none-any-openblas.whl")
         .write_binary(&wheel)?;
     links.child("ok-1.0.0-variants.json").write_str(&variant)?;
     context
@@ -835,16 +841,27 @@ fn pylock_rejects_selected_wheel_variant() -> Result<()> {
         .arg("wheel-variants")
         .arg("--no-header")
         .arg("-o")
-        .arg("pylock.toml"), @"
-    exit_code: 2 (failure)
+        .arg("pylock.toml"), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    lock-version = "1.0"
+    created-by = "uv"
+    requires-python = ">=3.12.[X]"
+
+    [[packages]]
+    name = "ok"
+    version = "1.0.0"
+    wheels = [{ url = "file://[TEMP_DIR]/links/ok-1.0.0-py3-none-any-openblas.whl", hashes = { sha256 = "[HASH]" } }]
+
+    [packages.variants-json]
+    "$schema" = "https://variants-schema.wheelnext.dev/peps/850/v0.2.0.json"
+    default-priorities = { namespace = ["blas"] }
+    providers = { blas = { optional = false, static-properties = { library = ["openblas"] } } }
+    variants = { openblas = { blas = { library = ["openblas"] } } }
+
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Package `ok` resolved to a wheel variant, which pylock.toml export does not support
-    ");
-    context
-        .temp_dir
-        .child("pylock.toml")
-        .assert(predicates::path::missing());
+    "#);
     Ok(())
 }
 

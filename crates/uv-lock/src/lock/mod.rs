@@ -2545,12 +2545,13 @@ impl Lock {
             }
             let wheels = &mut package.wheels;
             wheels.retain(|wheel| {
-                !is_wheel_unreachable_for_marker(
-                    &wheel.filename,
-                    &requires_python,
-                    &wheel_marker,
-                    None,
-                )
+                wheel.filename.variant().is_none()
+                    && !is_wheel_unreachable_for_marker(
+                        &wheel.filename,
+                        &requires_python,
+                        &wheel_marker,
+                        None,
+                    )
             });
 
             package.add_dependencies(
@@ -10626,12 +10627,8 @@ fn is_wheel_unreachable_for_marker(
     marker: &UniversalMarker,
     tags: Option<&Tags>,
 ) -> bool {
-    // TODO(konsti): Include wheel variants in lockfiles when supported.
-    if filename.variant().is_some() {
-        return true;
-    }
     if let Some(tags) = tags
-        && !filename.compatibility(tags).is_compatible()
+        && !filename.tag_compatibility(tags).is_compatible()
     {
         return true;
     }
