@@ -16,6 +16,7 @@ use owo_colors::OwoColorize;
 use petgraph::graph::NodeIndex;
 use petgraph::visit::EdgeRef;
 use rustc_hash::{FxHashMap, FxHashSet};
+use toml_edit::{InlineTable, Value};
 use tracing::{debug, instrument, trace};
 
 use uv_cache_key::RepositoryUrl;
@@ -35,13 +36,14 @@ use uv_distribution_filename::{
 };
 use uv_distribution_types::{
     ArchiveHashPolicy, BuiltDist, DependencyMetadata, DirectUrlBuiltDist, DirectUrlSourceDist,
-    DirectorySourceDist, Dist, ExcludeNewerOverride, ExcludeNewerSpan, ExcludeNewerValue,
+    DirectorySourceDist, Dist, ExcludeNewerOverride, ExcludeNewerSpan, ExcludeNewerValue, File,
     FileLocation, FirstParty, GitDirectorySourceDist, GitPathBuiltDist, GitPathSourceDist,
     HashValidation, Identifier, IndexLocations, IndexMetadata, IndexUrl, MetadataHashPolicy,
     MinimumLibcVersion, Name, NameRequirementSpecification, PYPI_URL, PathBuiltDist,
-    PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, RemoteSource,
-    Requirement, RequirementSource, RequiresPython, ResolvedDist, SimplifiedMarkerTree,
-    StaticMetadata, ToUrlError, UrlString, VersionId,
+    PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist,
+    RegistryVariantsJson, RemoteSource, Requirement, RequirementSource, RequiresPython,
+    ResolvedDist, SimplifiedMarkerTree, StaticMetadata, ToUrlError, UrlString,
+    VariantsJsonFilename, VersionId,
 };
 use uv_fs::{PortablePath, PortablePathBuf, Simplified, normalize_path, try_relative_to_if};
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
@@ -6615,6 +6617,10 @@ pub struct Package {
     id: PackageId,
     sdist: Option<SourceDist>,
     wheels: Vec<Wheel>,
+    /// The variants JSON file for the package version, if available.
+    ///
+    /// Named `variants-json` in `uv.lock`.
+    variants_json: Option<VariantsJsonEntry>,
     /// If there are multiple versions or sources for the same package name, we add the markers of
     /// the fork(s) that contained this version or source, so we can set the correct preferences in
     /// the next resolution.
@@ -6647,6 +6653,7 @@ impl Package {
         index_locations: &IndexLocations,
     ) -> Result<Self, LockError> {
         let id = PackageId::from_annotated_dist(annotated_dist, root)?;
+        let variants_json = VariantsJsonEntry::from_annotated_dist(annotated_dist)?;
         let sdist = SourceDist::from_annotated_dist(&id, annotated_dist, index_locations)?;
         let wheels = Wheel::from_annotated_dist(annotated_dist, index_locations)?;
         let metadata = if id.source.is_immutable() {
@@ -6659,6 +6666,7 @@ impl Package {
             id,
             sdist,
             wheels,
+            variants_json,
             fork_markers,
             dependencies: vec![],
             optional_dependencies: BTreeMap::default(),
@@ -7210,6 +7218,81 @@ impl Package {
         Ok(Some(sdist))
     }
 
+    /// Convert to a [`RegistryVariantsJson`] for installation.
+    pub fn to_registry_variants_json(
+        &self,
+        workspace_root: &Path,
+    ) -> Result<Option<RegistryVariantsJson>, LockError> {
+        let Some(variants_json) = &self.variants_json else {
+            return Ok(None);
+        };
+
+        let name = &self.id.name;
+        let Source::Registry(source) = &self.id.source else {
+            return Err(LockErrorKind::VariantsJsonNonRegistry { name: name.clone() }.into());
+        };
+        let version = self
+            .id
+            .version
+            .as_ref()
+            .ok_or_else(|| LockErrorKind::MissingPackageVersion { name: name.clone() })?;
+        let (file_url, index) = match source {
+            RegistrySource::Url(url) => {
+                let VariantsJsonSource::Url { url: file_url } = &variants_json.url else {
+                    return Err(LockErrorKind::MissingUrl {
+                        name: name.clone(),
+                        version: version.clone(),
+                    }
+                    .into());
+                };
+                let index = IndexUrl::from(VerbatimUrl::from_url(
+                    url.to_url().map_err(LockErrorKind::InvalidUrl)?,
+                ));
+                (FileLocation::AbsoluteUrl(file_url.clone()), index)
+            }
+            RegistrySource::Path(path) => {
+                let index = IndexUrl::from(
+                    VerbatimUrl::from_absolute_path(workspace_root.join(path))
+                        .map_err(LockErrorKind::RegistryVerbatimUrl)?,
+                );
+                match &variants_json.url {
+                    VariantsJsonSource::Url { url: file_url } => {
+                        (FileLocation::AbsoluteUrl(file_url.clone()), index)
+                    }
+                    VariantsJsonSource::Path { path: file_path } => {
+                        let file_path = workspace_root.join(path).join(file_path);
+                        let file_url = SafeUrl::from_file_path(&file_path).map_err(|()| {
+                            LockErrorKind::PathToUrl {
+                                path: file_path.into_boxed_path(),
+                            }
+                        })?;
+                        (FileLocation::AbsoluteUrl(UrlString::from(file_url)), index)
+                    }
+                }
+            }
+        };
+
+        let filename = format!("{name}-{version}-variants.json");
+        let file = File {
+            dist_info_metadata: None,
+            filename: SmallString::from(filename),
+            hashes: [variants_json.hash.clone()].into_iter().collect(),
+            requires_python: None,
+            size: None,
+            upload_time_utc_ms: None,
+            url: file_url,
+            yanked: None,
+        };
+        Ok(Some(RegistryVariantsJson {
+            filename: VariantsJsonFilename {
+                name: self.name().clone(),
+                version: version.clone(),
+            },
+            file: Box::new(file),
+            index,
+        }))
+    }
+
     fn find_best_wheel(&self, tag_policy: TagPolicy<'_>) -> Option<usize> {
         type WheelPriority<'lock> = (TagPriority, Option<&'lock BuildTag>);
 
@@ -7415,6 +7498,8 @@ struct PackageWire {
     sdist: Option<SourceDist>,
     #[serde(default)]
     wheels: Vec<Wheel>,
+    #[serde(default, rename = "variants-json")]
+    variants_json: Option<VariantsJsonEntry>,
     #[serde(default, rename = "resolution-markers")]
     fork_markers: Vec<SimplifiedMarkerTree>,
     #[serde(default)]
@@ -7557,6 +7642,12 @@ impl PackageWire {
             }
             .into());
         }
+        if self.variants_json.is_some() && !matches!(self.id.source, Source::Registry(_)) {
+            return Err(LockErrorKind::VariantsJsonNonRegistry {
+                name: self.id.name.clone(),
+            }
+            .into());
+        }
 
         // A Git `path` points to a wheel or source archive within the repository.
         if let Source::Git(_, git) = &self.id.source
@@ -7589,6 +7680,7 @@ impl PackageWire {
             group_requires_python: self.group_requires_python,
             sdist: self.sdist,
             wheels: self.wheels,
+            variants_json: self.variants_json,
             fork_markers: self
                 .fork_markers
                 .into_iter()
@@ -8829,6 +8921,97 @@ fn locked_git_url(git: &GitUrl, subdirectory: Option<&Path>, path: Option<&Path>
     url.set_fragment(git.precise().as_ref().map(GitOid::to_string).as_deref());
 
     url
+}
+
+#[derive(Clone, Debug, serde::Deserialize, PartialEq, Eq)]
+struct VariantsJsonEntry {
+    #[serde(flatten)]
+    url: VariantsJsonSource,
+    #[serde(deserialize_with = "deserialize_sha256_hash_digest")]
+    hash: HashDigest,
+}
+
+#[derive(Clone, Debug, serde::Deserialize, PartialEq, Eq)]
+#[serde(untagged)]
+enum VariantsJsonSource {
+    Url { url: UrlString },
+    Path { path: Box<Path> },
+}
+
+impl VariantsJsonEntry {
+    fn from_annotated_dist(annotated_dist: &AnnotatedDist) -> Result<Option<Self>, LockError> {
+        let Some(variants_json) = &annotated_dist.variants_json else {
+            return Ok(None);
+        };
+        let hash = variants_json
+            .file
+            .hashes
+            .iter()
+            .find(|hash| hash.algorithm() == HashAlgorithm::Sha256)
+            .cloned()
+            .ok_or_else(|| LockErrorKind::VariantsJsonMissingHash {
+                name: annotated_dist.name.clone(),
+            })?;
+        let url = match &variants_json.index {
+            IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
+                let url = normalize_file_location(&variants_json.file.url)
+                    .map_err(LockErrorKind::InvalidUrl)?;
+                VariantsJsonSource::Url { url }
+            }
+            IndexUrl::Path(path) => {
+                let index_path = path.to_file_path().map_err(|()| LockErrorKind::UrlToPath {
+                    url: path.to_url().into_url(),
+                })?;
+                let url = variants_json
+                    .file
+                    .url
+                    .to_url()
+                    .map_err(LockErrorKind::InvalidUrl)?;
+                if url.scheme() == "file" {
+                    let file_path = url
+                        .to_file_path()
+                        .map_err(|()| LockErrorKind::UrlToPath { url })?;
+                    let path = try_relative_to_if(&file_path, index_path, path.prefers_relative())
+                        .map_err(LockErrorKind::DistributionRelativePath)?
+                        .into_boxed_path();
+                    VariantsJsonSource::Path { path }
+                } else {
+                    VariantsJsonSource::Url {
+                        url: normalize_url(url),
+                    }
+                }
+            }
+        };
+        Ok(Some(Self { url, hash }))
+    }
+
+    fn to_toml(&self) -> InlineTable {
+        let mut table = InlineTable::new();
+        match &self.url {
+            VariantsJsonSource::Url { url } => {
+                table.insert("url", Value::from(url.as_ref()));
+            }
+            VariantsJsonSource::Path { path } => {
+                table.insert("path", Value::from(PortablePath::from(path).to_string()));
+            }
+        }
+        table.insert("hash", Value::from(self.hash.to_string()));
+        table
+    }
+}
+
+fn deserialize_sha256_hash_digest<'de, D>(deserializer: D) -> Result<HashDigest, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = <String as serde::Deserialize>::deserialize(deserializer)?;
+    let hash = HashDigest::from_str(&value).map_err(serde::de::Error::custom)?;
+    if hash.algorithm() != HashAlgorithm::Sha256 {
+        return Err(serde::de::Error::custom(
+            "variants-json hash must use SHA-256",
+        ));
+    }
+    Ok(hash)
 }
 
 /// Inspired by: <https://discuss.python.org/t/lock-files-again-but-this-time-w-sdists/46593>
@@ -10116,6 +10299,11 @@ enum LockErrorKind {
         /// The name of the package that is missing a `version` field.
         name: PackageName,
     },
+    /// Variant metadata files are associated with registry packages.
+    #[error("Package `{name}` has variant metadata but does not use a registry source", name = name.cyan())]
+    VariantsJsonNonRegistry { name: PackageName },
+    #[error("Package `{name}` has variant metadata without a SHA-256 hash", name = name.cyan())]
+    VariantsJsonMissingHash { name: PackageName },
     /// An error that occurs when an ambiguous `package.dependency` is
     /// missing a `source` field.
     #[error("Dependency `{name}` has missing `source` field but has more than one matching package", name = name.cyan())]
