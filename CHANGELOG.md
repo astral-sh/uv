@@ -7,6 +7,8 @@
 
 Released on 2026-10-21.
 
+Following [uv 0.13.4](https://github.com/astral-sh/uv/releases/tag/0.13.4), which removed the affected eMudhra/emSign root from uv's own certificate store, this release updates uv-managed Python distributions to [python-build-standalone 20261020](https://github.com/astral-sh/python-build-standalone/releases/tag/20261020). These distributions install [pip 26.2.2](https://pip.pypa.io/en/stable/news/#v26-2-2) and bundle the same wheel with `ensurepip`, ensuring both paths use certifi 2026.10.19, which removes the affected root. After upgrading uv, run `uv python upgrade` to replace existing uv-managed Python distributions built from older python-build-standalone releases.
+
 ### Python
 
 - Update managed CPython builds to include pip 26.2.2, whose CA bundle removes the compromised eMudhra root ([#22786](https://github.com/astral-sh/uv/pull/22786))
