@@ -8,6 +8,7 @@ use uv_distribution_filename::{VariantLabel, WheelFilename};
 use uv_distribution_types::{
     BuiltDist, Dist, Name, RegistryBuiltDist, RegistryBuiltWheel, Requirement, SourceDist,
 };
+use uv_normalize::ExtraName;
 use uv_pep508::{MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString};
 
 use crate::ResolveError;
@@ -51,20 +52,11 @@ pub(super) async fn combine(
     }))
     .buffered(MAX_CONCURRENT_METADATA_REQUESTS);
     while let Some((wheel, response)) = pending.next().await {
-        let metadata = match response? {
+        let mut metadata = match response? {
             MetadataResponse::Found(metadata) => metadata,
             response => return Ok(response),
         };
-        let Metadata {
-            requires_dist,
-            provides_extra,
-            ..
-        } = metadata.metadata;
-        extras.extend(provides_extra.into_vec());
-        let requirements = requires_dist
-            .into_vec()
-            .into_iter()
-            .collect::<BTreeSet<_>>();
+        let requirements = take_dependencies(&mut metadata.metadata, &mut extras);
         let label = wheel.filename.variant().map_or("", VariantLabel::as_str);
         if let Some((first, previous)) = labels.get(label) {
             if previous != &requirements {
@@ -82,9 +74,36 @@ pub(super) async fn combine(
         }
     }
 
-    let selections = labels.len();
+    // Ordinary wheels and source distributions share the empty label. If a variant wheel had
+    // a preferred hash, the baseline came from that wheel and we still need the source metadata.
+    let fallback = if labels.contains_key("") {
+        None
+    } else if let Dist::Source(SourceDist::Registry(_)) = dist {
+        Some(take_dependencies(&mut baseline.metadata, &mut extras))
+    } else if let Dist::Built(BuiltDist::Registry(registry)) = dist
+        && let Some(sdist) = registry
+            .sdist
+            .as_ref()
+            .filter(|sdist| &sdist.index == index)
+    {
+        let sdist = Dist::Source(SourceDist::Registry(sdist.clone()));
+        match fetch_metadata(provider, &sdist).await? {
+            MetadataResponse::Found(mut metadata) => {
+                Some(take_dependencies(&mut metadata.metadata, &mut extras))
+            }
+            response => return Ok(response),
+        }
+    } else {
+        None
+    };
+
+    let selections = labels.len() + usize::from(fallback.is_some());
+    let labels = labels
+        .into_iter()
+        .map(|(label, (_, dependencies))| (label, dependencies))
+        .chain(fallback.map(|dependencies| ("", dependencies)));
     let mut requirements = BTreeMap::<Requirement, Vec<&str>>::new();
-    for (label, (_, dependencies)) in labels {
+    for (label, dependencies) in labels {
         for requirement in dependencies {
             requirements.entry(requirement).or_default().push(label);
         }
@@ -107,6 +126,15 @@ pub(super) async fn combine(
         .collect();
     baseline.metadata.provides_extra = extras.into_iter().collect();
     Ok(MetadataResponse::Found(baseline))
+}
+
+/// Collect a distribution's extras and count each of its requirements only once.
+fn take_dependencies(
+    metadata: &mut Metadata,
+    extras: &mut BTreeSet<ExtraName>,
+) -> BTreeSet<Requirement> {
+    extras.extend(Box::into_iter(std::mem::take(&mut metadata.provides_extra)));
+    Box::into_iter(std::mem::take(&mut metadata.requires_dist)).collect()
 }
 
 fn registry_wheels(dist: &Dist) -> Option<&[RegistryBuiltWheel]> {
