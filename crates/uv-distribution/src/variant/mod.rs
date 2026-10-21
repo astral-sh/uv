@@ -6,8 +6,8 @@ mod x86_64;
 use tracing::debug;
 use uv_distribution_filename::VariantLabel;
 use uv_distribution_types::{
-    InstalledDist, SupportedVariantFeature, SupportedVariantProperties, VariantNamespace,
-    VariantPolicy, VariantProvider, VariantProviderKind, VariantsJsonContent,
+    InstalledDist, SelectedVariant, SupportedVariantFeature, SupportedVariantProperties,
+    VariantNamespace, VariantPolicy, VariantProvider, VariantProviderKind, VariantsJsonContent,
 };
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -60,11 +60,36 @@ pub enum InstalledWheelVariant {
 }
 
 impl InstalledWheelVariant {
-    /// Reselect an installed variant when resolving for an explicit target.
+    /// Check the installed properties against the target platform and provider policy.
     pub fn check_with_target(
         installed: &InstalledDist,
         platform: &Platform,
         policy: Option<&VariantPolicy>,
+    ) -> Self {
+        Self::check_using(installed, |metadata, recorded| {
+            match policy.and_then(VariantPolicy::target) {
+                Some(target) => metadata.select_variant(&recorded.label, target),
+                None => metadata.select_variant(
+                    &recorded.label,
+                    &recheckable_installed_properties(
+                        metadata,
+                        recorded,
+                        platform,
+                        policy.is_some_and(VariantPolicy::explicit_platform),
+                    ),
+                ),
+            }
+        })
+    }
+
+    /// Check an installed wheel against properties already selected during resolution.
+    pub fn check_with_selected(installed: &InstalledDist, selected: &SelectedVariant) -> Self {
+        Self::check_using(installed, |_, _| Some(selected.clone()))
+    }
+
+    fn check_using(
+        installed: &InstalledDist,
+        select: impl FnOnce(&VariantsJsonContent, &SelectedVariant) -> Option<SelectedVariant>,
     ) -> Self {
         let metadata = match installed.read_variant() {
             Ok(None) => return Self::NonVariant,
@@ -74,16 +99,12 @@ impl InstalledWheelVariant {
                 return Self::Incompatible;
             }
         };
-        if policy.and_then(VariantPolicy::target).is_none()
-            && uv_preview::is_enabled(PreviewFeature::WheelVariants)
-            && let Some(label) =
-                metadata.compatible_wheel_label(&supported_variant_properties_for_platform(
-                    &metadata,
-                    platform,
-                    policy.is_some_and(VariantPolicy::explicit_platform),
-                ))
+        if uv_preview::is_enabled(PreviewFeature::WheelVariants)
+            && let Ok(recorded) = installed.read_variant_context_for_metadata(&metadata)
+            && let Some(selected) = select(&metadata, &recorded)
+            && recorded == selected
         {
-            return Self::Compatible(label.clone());
+            return Self::Compatible(selected.label);
         }
         Self::Incompatible
     }
@@ -105,6 +126,23 @@ impl InstalledWheelVariant {
             Self::Incompatible => false,
         }
     }
+}
+
+/// Check properties uv can detect directly. A required external provider leaves a namespace
+/// missing, forcing policy-aware resolution before the installed wheel can be reused.
+fn recheckable_installed_properties(
+    metadata: &VariantsJsonContent,
+    recorded: &SelectedVariant,
+    platform: &Platform,
+    explicit_platform: bool,
+) -> SupportedVariantProperties {
+    trusted_variant_properties(
+        metadata
+            .providers()
+            .filter(|(namespace, _)| recorded.properties.contains_key(*namespace)),
+        platform,
+        explicit_platform,
+    )
 }
 
 /// A vendored wheel variant provider.
