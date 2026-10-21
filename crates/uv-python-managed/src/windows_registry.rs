@@ -8,8 +8,8 @@ use tracing::debug;
 use uv_platform::Arch;
 use uv_warnings::{warn_user, warn_user_once};
 use windows::Win32::Foundation::{ERROR_FILE_NOT_FOUND, ERROR_KEY_DELETED};
-use windows::core::HRESULT;
 use windows_registry::{CURRENT_USER, HSTRING, Value};
+use windows_result::WIN32_ERROR;
 
 use crate::managed::ManagedPythonInstallation;
 use uv_python_types::PythonInstallationKey;
@@ -22,12 +22,12 @@ pub enum ManagedPep514Error {
     #[error("Windows has an unknown pointer width for arch: `{_0}`")]
     InvalidPointerSize(Arch),
     #[error("Failed to write registry entry: {0}")]
-    WriteError(#[from] windows::core::Error),
+    WriteError(#[from] windows_result::Error),
     #[error("Failed to clear registry entries under HKCU:\\{key}: {source}")]
     RemoveError {
         key: String,
         #[source]
-        source: windows::core::Error,
+        source: windows_result::Error,
     },
 }
 
@@ -124,9 +124,7 @@ pub fn remove_registry_entry<'a>(
     if all {
         debug!("Removing registry key HKCU:\\{}", astral_key);
         if let Err(err) = CURRENT_USER.remove_tree(&astral_key) {
-            if err.code() == HRESULT::from(ERROR_FILE_NOT_FOUND)
-                || err.code() == HRESULT::from(ERROR_KEY_DELETED)
-            {
+            if registry_key_is_missing(&err) {
                 debug!("No registry entries to remove, no registry key {astral_key}");
             } else {
                 warn_user!("Failed to clear registry entries under {astral_key}: {err}");
@@ -140,9 +138,7 @@ pub fn remove_registry_entry<'a>(
         let python_entry = format!("{astral_key}\\{python_tag}");
         debug!("Removing registry key HKCU:\\{}", python_entry);
         if let Err(err) = CURRENT_USER.remove_tree(&python_entry) {
-            if err.code() == HRESULT::from(ERROR_FILE_NOT_FOUND)
-                || err.code() == HRESULT::from(ERROR_KEY_DELETED)
-            {
+            if registry_key_is_missing(&err) {
                 debug!(
                     "No registry entries to remove for {}, no registry key {}",
                     installation.key(),
@@ -172,10 +168,7 @@ pub fn remove_orphan_registry_entries(installations: &[ManagedPythonInstallation
     let astral_key = format!("Software\\Python\\{COMPANY_KEY}");
     let key = match CURRENT_USER.open(&astral_key) {
         Ok(subkeys) => subkeys,
-        Err(err)
-            if err.code() == HRESULT::from(ERROR_FILE_NOT_FOUND)
-                || err.code() == HRESULT::from(ERROR_KEY_DELETED) =>
-        {
+        Err(err) if registry_key_is_missing(&err) => {
             return;
         }
         Err(err) => {
@@ -187,10 +180,7 @@ pub fn remove_orphan_registry_entries(installations: &[ManagedPythonInstallation
     // Separate assignment since `keys()` creates a borrow.
     let subkeys = match key.keys() {
         Ok(subkeys) => subkeys,
-        Err(err)
-            if err.code() == HRESULT::from(ERROR_FILE_NOT_FOUND)
-                || err.code() == HRESULT::from(ERROR_KEY_DELETED) =>
-        {
+        Err(err) if registry_key_is_missing(&err) => {
             return;
         }
         Err(err) => {
@@ -206,13 +196,16 @@ pub fn remove_orphan_registry_entries(installations: &[ManagedPythonInstallation
         let python_entry = format!("{astral_key}\\{subkey}");
         debug!("Removing orphan registry key HKCU:\\{}", python_entry);
         if let Err(err) = CURRENT_USER.remove_tree(&python_entry) {
-            if err.code() == HRESULT::from(ERROR_FILE_NOT_FOUND)
-                || err.code() == HRESULT::from(ERROR_KEY_DELETED)
-            {
+            if registry_key_is_missing(&err) {
                 continue;
             }
             // TODO(konsti): We don't have an installation key here.
             warn_user_once!("Failed to remove orphan registry key HKCU:\\{python_entry}: {err}");
         }
     }
+}
+
+fn registry_key_is_missing(error: &windows_result::Error) -> bool {
+    error.code() == WIN32_ERROR(ERROR_FILE_NOT_FOUND.0).to_hresult()
+        || error.code() == WIN32_ERROR(ERROR_KEY_DELETED.0).to_hresult()
 }

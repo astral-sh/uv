@@ -385,6 +385,7 @@ windows = { version = "0.61.0", default-features = false, features = [
   "Win32_UI_WindowsAndMessaging",
 ] }
 windows-registry = { version = "0.100.0", default-features = false, features = ["std"] }
+windows-result = { version = "0.100.0", default-features = false }
 windows-version = { version = "0.100.0", default-features = false }
 wiremock = { version = "0.6.4", default-features = false }
 zerocopy = { version = "0.8.56", default-features = false, features = ["derive"] }

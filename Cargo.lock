@@ -7524,6 +7524,7 @@ dependencies = [
  "which",
  "windows",
  "windows-registry 0.100.0",
+ "windows-result 0.100.0",
 ]
 
 [[package]]
@@ -7608,6 +7609,7 @@ dependencies = [
  "uv-warnings",
  "windows",
  "windows-registry 0.100.0",
+ "windows-result 0.100.0",
  "zstd 0.13.3",
 ]
 
@@ -7908,6 +7910,7 @@ dependencies = [
  "uv-static",
  "windows",
  "windows-registry 0.100.0",
+ "windows-result 0.100.0",
 ]
 
 [[package]]
