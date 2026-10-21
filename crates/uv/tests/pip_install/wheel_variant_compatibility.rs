@@ -15,6 +15,7 @@ use uv_distribution_types::PEP_850_SCHEMA;
 #[cfg(feature = "test-git")]
 use uv_redacted::SafeUrl;
 use uv_static::EnvVars;
+use uv_test::archive::generate_source_archive;
 use uv_test::find_links::FindLinksServer;
 use uv_test::packse::{PackseServer, WheelBuilder, scenario::Scenario};
 use uv_test::uv_snapshot;
@@ -427,6 +428,69 @@ fn sync_replaces_compatible_variant_with_selected_wheel() -> Result<()> {
         .arg(server.index_url())
         .arg("--preview-features")
         .arg("wheel-variants"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ ok==1.0.0
+    ");
+    assert!(!installed_variant.exists());
+    Ok(())
+}
+
+/// A lock that selects an sdist must replace a compatible variant of the same version.
+#[test]
+fn sync_replaces_compatible_variant_with_selected_sdist() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let links = context.temp_dir.child("links");
+    links.create_dir_all()?;
+    let name = "ok".parse()?;
+    let version = "1.0.0".parse()?;
+    let variant = null_variant().to_string();
+    let (_, wheel) = WheelBuilder::new(&name, &version)
+        .files(&[("ok-1.0.0.dist-info/variant.json", &variant)])
+        .build();
+    links
+        .child("ok-1.0.0-py3-none-any-null.whl")
+        .write_binary(&wheel)?;
+    links.child("ok-1.0.0-variants.json").write_str(&variant)?;
+    links
+        .child("ok-1.0.0.tar.gz")
+        .write_binary(&generate_source_archive(&name, &version, "", None)?)?;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "example"
+            version = "1.0.0"
+            requires-python = ">=3.12"
+            dependencies = ["ok==1.0.0"]
+
+            [tool.uv]
+            no-index = true
+            find-links = ["links"]
+            preview-features = ["wheel-variants"]
+        "#})?;
+
+    let installed_variant = context
+        .site_packages()
+        .join("ok-1.0.0.dist-info/variant.json");
+
+    uv_snapshot!(context.filters(), context.pip_install().arg("ok==1.0.0"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0
+    ");
+    assert!(installed_variant.is_file());
+
+    uv_snapshot!(context.filters(), context.sync(), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
