@@ -387,8 +387,10 @@ impl<'a> Planner<'a> {
                             }
                             RequirementSatisfaction::Satisfied(variant) => {
                                 if let ResolvedDist::Installable { dist, .. } = dist
-                                    && let Dist::Built(wheel) = dist.as_ref()
-                                    && !variant.matches(wheel.wheel_filename().variant())
+                                    && !variant.matches(match dist.as_ref() {
+                                        Dist::Built(wheel) => wheel.wheel_filename().variant(),
+                                        Dist::Source(_) => None,
+                                    })
                                 {
                                     debug!(
                                         "Installed wheel variant differs from the resolved distribution: {installed}"
