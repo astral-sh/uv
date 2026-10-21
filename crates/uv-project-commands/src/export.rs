@@ -1,4 +1,3 @@
-use std::env;
 use std::ffi::OsStr;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -12,7 +11,7 @@ use serde::Deserialize;
 
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
-use uv_command_support::{ExitStatus, OutputWriter, Printer, UvError};
+use uv_command_support::{ExitStatus, OutputWriter, Printer, UvError, command_args_for_header};
 use uv_configuration::{
     ActiveEnvironment, Concurrency, DependencyGroups, DependencyGroupsWithDefaults, EditableMode,
     ExportFormat, ExtrasSpecification, ExtrasSpecificationWithDefaults, InstallOptions,
@@ -729,9 +728,7 @@ async fn render_export<'output>(
 
 /// Format the uv command used to generate the output file.
 fn cmd() -> String {
-    let args = env::args_os()
-        .skip(1)
-        .map(|arg| arg.to_string_lossy().to_string())
+    let args = command_args_for_header()
         .scan(None, move |skip_next, arg| {
             if matches!(skip_next, Some(true)) {
                 // Reset state; skip this iteration.
