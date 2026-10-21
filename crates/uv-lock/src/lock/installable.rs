@@ -421,6 +421,12 @@ trait InstallableExt<'lock>: Installable<'lock> {
                     return Ok(None);
                 }
             } else if install {
+                if package_has_variants(package) {
+                    return Err(LockErrorKind::VariantSelectionRequired {
+                        package_id: package.id.clone(),
+                    }
+                    .into());
+                }
                 self.package_to_node(package, tags, build_options, install_options, marker_env)?
             } else {
                 self.non_installable_node(package, tags, marker_env)?
