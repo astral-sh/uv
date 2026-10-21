@@ -2,7 +2,9 @@ use std::hash::BuildHasherDefault;
 use std::sync::Arc;
 
 use rustc_hash::FxHasher;
-use uv_distribution_types::{IndexUrl, SupportedVariantProperties, VariantsJsonContent};
+use uv_distribution_types::{
+    DistributionId, IndexUrl, SelectedVariant, SupportedVariantProperties, VariantsJsonContent,
+};
 use uv_normalize::PackageName;
 use uv_once_map::{RegisteredEntry, RegisteredOnceMap};
 use uv_resolver_types::DistributionMetadataIndex;
@@ -30,6 +32,9 @@ struct SharedInMemoryIndex {
 
     /// Target-specific properties discovered for verified variant metadata.
     variant_properties: FxOnceMap<RegistryVariantsJson, Arc<SupportedVariantProperties>>,
+
+    /// Target-specific variant selections for direct wheels.
+    direct_variants: DirectWheelVariantIndex,
 }
 
 #[derive(Debug)]
@@ -42,6 +47,10 @@ pub(crate) type ParsedVariantsJsonResponse = Result<Arc<ParsedVariantsJson>, Met
 pub(crate) type FxOnceMap<K, V> = RegisteredOnceMap<K, V, BuildHasherDefault<FxHasher>>;
 pub(crate) type FxRegisteredEntry<'a, K, V> =
     RegisteredEntry<'a, K, V, BuildHasherDefault<FxHasher>>;
+
+/// Selected variant properties shared between direct-wheel lookahead and resolution.
+pub type DirectWheelVariantIndex =
+    FxOnceMap<DistributionId, Result<Option<SelectedVariant>, Arc<uv_distribution::Error>>>;
 
 impl InMemoryIndex {
     /// Returns a reference to the package metadata map.
@@ -57,6 +66,11 @@ impl InMemoryIndex {
     /// Returns a reference to the distribution metadata map.
     pub fn distributions(&self) -> &DistributionMetadataIndex {
         &self.0.distributions
+    }
+
+    /// Returns the selected variants for direct wheels.
+    pub fn direct_variants(&self) -> &DirectWheelVariantIndex {
+        &self.0.direct_variants
     }
 
     pub(crate) fn variants_json(
