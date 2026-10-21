@@ -857,14 +857,16 @@ impl<'a> CompatibleDist<'a> {
 }
 
 impl WheelCompatibility {
-    /// Record platform compatibility, deferring the property check for a variant wheel.
+    /// Record platform compatibility, deferring variant properties for a concrete target.
+    ///
+    /// Universal resolution has no tag priority and includes variants for every target.
     pub(crate) fn from_tag_priority(
         filename: &WheelFilename,
         hash: HashComparison,
         priority: Option<TagPriority>,
     ) -> Self {
         let build_tag = filename.build_tag().cloned();
-        if filename.variant().is_some() {
+        if filename.variant().is_some() && priority.is_some() {
             Self::Variant(hash, priority, build_tag)
         } else {
             Self::Compatible(hash, priority, build_tag)
