@@ -15,7 +15,8 @@ use uv_distribution_filename::EggInfoFilename;
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, Diagnostic, ExtraBuildRequires, ExtraBuildVariables,
     InstalledDist, InstalledDistKind, Name, NameRequirementSpecification, PackageConfigSettings,
-    Requirement, RequiresPython, UnresolvedRequirement, UnresolvedRequirementSpecification,
+    Requirement, RequiresPython, SupportedVariantProperties, UnresolvedRequirement,
+    UnresolvedRequirementSpecification,
 };
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
@@ -46,6 +47,8 @@ pub struct SitePackages {
     by_name: FxHashMap<PackageName, Vec<usize>>,
     /// The installed editable distributions, keyed by URL.
     by_url: FxHashMap<SafeUrl, Vec<usize>>,
+    /// Explicit target properties used to check installed wheel variants.
+    variant_target: Option<SupportedVariantProperties>,
 }
 
 impl SitePackages {
@@ -152,7 +155,19 @@ impl SitePackages {
             distributions,
             by_name,
             by_url,
+            variant_target: None,
         })
+    }
+
+    /// Set the explicit target properties used when checking installed wheels.
+    #[must_use]
+    pub fn with_variant_target(mut self, target: Option<SupportedVariantProperties>) -> Self {
+        self.variant_target = target;
+        self
+    }
+
+    pub(crate) fn variant_target(&self) -> Option<&SupportedVariantProperties> {
+        self.variant_target.as_ref()
     }
 
     /// Returns the [`Interpreter`] used to install the packages.
@@ -531,6 +546,7 @@ impl SitePackages {
                         installation,
                         tags,
                         build_settings,
+                        self.variant_target(),
                     ) {
                         RequirementSatisfaction::Mismatch
                         | RequirementSatisfaction::OutOfDate
@@ -551,6 +567,7 @@ impl SitePackages {
                                 installation,
                                 tags,
                                 build_settings,
+                                self.variant_target(),
                             ) {
                                 RequirementSatisfaction::Mismatch
                                 | RequirementSatisfaction::OutOfDate

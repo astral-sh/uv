@@ -25,6 +25,7 @@ use crate::resolution::{AnnotatedDist, ResolutionGraphNode, ResolverOutput};
 use crate::resolution_mode::ResolutionStrategy;
 use crate::resolver::{
     Resolution, ResolutionDependencyEdge, ResolutionNode, ResolutionPackage, SelectedDistribution,
+    SelectedDistributionParts,
 };
 use crate::universal_marker::{ConflictMarker, UniversalMarker};
 use crate::{InMemoryIndex, MetadataResponse, Options, ResolveError, VersionsResponse};
@@ -300,7 +301,12 @@ fn add_version(
         hasher,
         in_memory,
     );
-    let (version, dist, metadata) = selected.into_parts();
+    let SelectedDistributionParts {
+        version,
+        dist,
+        metadata,
+        variant,
+    } = selected.into_parts();
 
     // Track yanks for registry distributions.
     match dist.yanked() {
@@ -348,6 +354,7 @@ fn add_version(
         kind: kind.clone(),
         hashes,
         metadata,
+        variant,
         role: package_role,
         marker: UniversalMarker::TRUE,
     }))

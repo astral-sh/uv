@@ -331,7 +331,10 @@ pub async fn pip_install(
     let site_packages = if defer_site_packages {
         None
     } else {
-        Some(SitePackages::from_environment(&environment)?)
+        Some(
+            SitePackages::from_environment(&environment)?
+                .with_variant_target(variant_policy.target().cloned()),
+        )
     };
 
     // Check if the current environment satisfies the requirements.
@@ -614,7 +617,8 @@ pub async fn pip_install(
         None => SitePackages::from_environment_for_packages(
             &environment,
             resolution.distributions().map(Name::name),
-        )?,
+        )?
+        .with_variant_target(variant_policy.target().cloned()),
         Some(site_packages) => site_packages,
     };
 
