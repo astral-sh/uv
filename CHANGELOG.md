@@ -3,6 +3,27 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.13.5
+
+Released on 2026-10-21.
+
+Following [uv 0.13.4](https://github.com/astral-sh/uv/releases/tag/0.13.4), which removed the affected eMudhra/emSign root from uv's own certificate store, this release updates uv-managed Python distributions to [python-build-standalone 20261020](https://github.com/astral-sh/python-build-standalone/releases/tag/20261020). These distributions install [pip 26.2.2](https://pip.pypa.io/en/stable/news/#v26-2-2) and bundle the same wheel with `ensurepip`, ensuring both paths use certifi 2026.10.19, which removes the affected root. After upgrading uv, run `uv python upgrade` to replace existing uv-managed Python distributions built from older python-build-standalone releases.
+
+### Python
+
+- Update managed CPython builds to include pip 26.2.2, whose CA bundle removes the compromised eMudhra root ([#22786](https://github.com/astral-sh/uv/pull/22786))
+
+### Performance
+
+- Speed up exports with complex transitive extras by resolving activation across the dependency graph ([#22751](https://github.com/astral-sh/uv/pull/22751))
+- Reduce uv's binary size by keeping additional error formatters out of line ([#22775](https://github.com/astral-sh/uv/pull/22775))
+- Reduce overhead when parsing custom build cache keys ([#22749](https://github.com/astral-sh/uv/pull/22749))
+
+### Bug fixes
+
+- Export optional dependencies correctly when transitive extras are activated through different or incompatible environment paths ([#22751](https://github.com/astral-sh/uv/pull/22751))
+- Reject invalid custom build cache keys instead of silently falling back to the defaults ([#22749](https://github.com/astral-sh/uv/pull/22749))
+
 ## 0.13.4
 
 Released on 2026-10-20.
