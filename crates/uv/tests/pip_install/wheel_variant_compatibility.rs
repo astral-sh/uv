@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 #[cfg(feature = "test-git")]
 use std::process::Command;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 #[cfg(feature = "test-git")]
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
@@ -50,7 +50,7 @@ fn gpu_variant() -> Value {
     })
 }
 
-/// Install the provider separately from the wheel selected using its properties.
+/// Provider authorization must not let project-configured sources replace the trusted package.
 #[test]
 fn install_authorized_variant_provider_from_trusted_index() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -74,11 +74,13 @@ fn install_authorized_variant_provider_from_trusted_index() -> Result<()> {
         accelerated.properties = ["example :: acceleration :: enabled"]
     "#})?;
     let provider = indoc! {r#"
+        import os
         from types import SimpleNamespace
 
         class Provider:
             @classmethod
             def get_supported_configs(cls):
+                assert "UV_VARIANT_PROVIDER_INDEX" not in os.environ
                 return [SimpleNamespace(name="acceleration", values=["enabled"], multi_value=False)]
     "#};
     let (filename, wheel) = WheelBuilder::new(&"variant-provider".parse()?, &"1.0.0".parse()?)
@@ -92,15 +94,36 @@ fn install_authorized_variant_provider_from_trusted_index() -> Result<()> {
         .child("index.html")
         .write_str(&format!(r#"<a href="{filename}">{filename}</a>"#))?;
 
+    let shadow_provider = indoc! {r#"
+        import os
+        from pathlib import Path
+        Path(os.environ["UV_TEST_PROVIDER_SENTINEL"]).touch()
+    "#};
+    let (shadow_filename, shadow_wheel) =
+        WheelBuilder::new(&"variant-provider".parse()?, &"2.0.0".parse()?)
+            .files(&[("variant_provider/plugin.py", shadow_provider)])
+            .build();
+    let shadow = context.temp_dir.child("shadow");
+    shadow.create_dir_all()?;
+    shadow.child(shadow_filename).write_binary(&shadow_wheel)?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [tool.uv]
+            find-links = ["shadow"]
+        "#})?;
+    let sentinel = context.temp_dir.child("shadow-provider-ran");
+
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--preview-features")
         .arg("wheel-variants")
         .arg("--variant-provider")
         .arg("example=variant-provider@variant_provider.plugin:Provider")
-        .arg("--variant-provider-index")
-        .arg(trusted_index.path())
+        .env(EnvVars::UV_VARIANT_PROVIDER_INDEX, trusted_index.path())
         .arg("--index-url")
         .arg(server.index_url())
+        .env("UV_TEST_PROVIDER_SENTINEL", sentinel.path())
         .arg("ok==1.0.0"), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -109,7 +132,147 @@ fn install_authorized_variant_provider_from_trusted_index() -> Result<()> {
     Installed 1 package in [TIME]
      + ok==1.0.0
     ");
+    assert!(!sentinel.path().exists());
     assert!(!context.site_packages().join("variant_provider").exists());
+    Ok(())
+}
+
+/// A hash for a variant wheel does not authorize an unhashed provider installation.
+#[test]
+fn require_hashes_prevents_variant_provider_installation() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::from_toml(indoc! {r#"
+        name = "require-hashes-prevents-provider-installation"
+        root = {}
+        expected.satisfiable = true
+
+        [packages.ok.versions."1.0.0"]
+        wheel = false
+        sdist = false
+
+        [packages.ok.versions."1.0.0".variants]
+        namespaces = ["example"]
+
+        [packages.ok.versions."1.0.0".variants.providers.example]
+        requires = ["variant-provider"]
+
+        [packages.ok.versions."1.0.0".variants.wheels]
+        accelerated.properties = ["example :: acceleration :: enabled"]
+    "#})?;
+    let (_, hash) = server
+        .files()
+        .find(|(filename, _)| filename.ends_with("-accelerated.whl"))
+        .context("missing test variant wheel")?;
+    context
+        .temp_dir
+        .child("requirements.txt")
+        .write_str(&format!("ok==1.0.0 --hash=sha256:{hash}\n"))?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--index-url")
+        .arg(server.index_url())
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("--variant-provider")
+        .arg("example=variant-provider")
+        .arg("--variant-provider-index")
+        .arg(server.index_url())
+        .arg("--require-hashes")
+        .arg("-r").arg("requirements.txt"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to query wheel variant provider for namespace `example`
+      cause: wheel variant provider packages cannot be installed when hashes are required; provide static target properties
+    ");
+    Ok(())
+}
+
+/// A provider index can contain credentials even when the URL fails to parse.
+#[test]
+fn invalid_variant_provider_index_does_not_expose_credentials() {
+    let context = uv_test::test_context_with_versions!(&[]);
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--variant-provider")
+        .arg("example=example-provider")
+        .env(
+            EnvVars::UV_VARIANT_PROVIDER_INDEX,
+            "https://user:password@providers.example:bad-port/simple/",
+        )
+        .arg("ok==1.0.0"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: expected an index URL or path for `--variant-provider-index`
+
+    Usage: uv pip install [OPTIONS] <PACKAGE|--requirements <REQUIREMENTS>|--editable <EDITABLE>|--group <GROUP>>
+
+    For more information, try '--help'.
+    ");
+}
+
+/// Emitting package index URLs must not publish the credentials used to fetch a provider.
+#[test]
+fn pip_compile_omits_variant_provider_index_from_header() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("requirements.in")
+        .write_str("ok==1.0.0")?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in")
+        .arg("--emit-index-url")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links"))
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("--variant-provider")
+        .arg("example=example-provider")
+        .arg("--variant-provider-index")
+        .arg("https://user:password@providers.example/simple/"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in --emit-index-url --no-index --preview-features wheel-variants --variant-provider example=example-provider
+    ok==1.0.0
+        # via -r requirements.in
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    Ok(())
+}
+
+/// Project exports omit the provider index when its URL is supplied in the same argument.
+#[test]
+fn export_omits_variant_provider_index_from_header() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--no-index")
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("--variant-provider")
+        .arg("example=example-provider")
+        .arg("--variant-provider-index=https://user:password@providers.example/simple/"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv export --cache-dir [CACHE_DIR] --no-index --preview-features wheel-variants --variant-provider example=example-provider
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
     Ok(())
 }
 

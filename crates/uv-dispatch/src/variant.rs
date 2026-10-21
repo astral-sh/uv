@@ -253,6 +253,7 @@ with open(sys.argv[2], 'w', encoding='utf-8') as stream:
         .env_remove(EnvVars::UV_API_KEY)
         .env_remove(EnvVars::PYX_AUTH_TOKEN)
         .env_remove(EnvVars::UV_AUTH_TOKEN)
+        .env_remove(EnvVars::UV_VARIANT_PROVIDER_INDEX)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::inherit())
