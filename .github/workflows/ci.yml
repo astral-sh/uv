@@ -40,6 +40,7 @@ jobs:
       # Keep the environment outside the checkout when switching to the PR head.
       setup-command: |
         export UV_PROJECT_ENVIRONMENT="$RUNNER_TEMP/pull-request-review-tools"
+        export UV_PYTHON_DOWNLOADS_JSON_URL="$GITHUB_WORKSPACE/crates/uv-python-managed/download-metadata.json"
         uv sync --locked --only-dev
         echo "$UV_PROJECT_ENVIRONMENT/bin" >> "$GITHUB_PATH"
     secrets: inherit
