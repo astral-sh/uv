@@ -42,7 +42,7 @@ type VariantProperties = BTreeMap<VariantNamespace, BTreeMap<VariantFeature, Vec
 /// and doesn't need to be captured here.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct VariantPreferences {
+pub struct SupportedVariantProperties {
     properties: BTreeMap<VariantNamespace, Vec<(VariantFeature, Vec<VariantValue>)>>,
 }
 
@@ -112,7 +112,7 @@ impl VariantsJsonContent {
     pub fn score_variant(
         &self,
         label: &VariantLabel,
-        preferences: &VariantPreferences,
+        preferences: &SupportedVariantProperties,
     ) -> Option<VariantScore> {
         let mut properties = Vec::new();
         for (namespace, features) in self.variants.get(label)? {
@@ -311,9 +311,9 @@ impl TryFrom<String> for VariantValue {
 fn valid_component(value: &str, allow_period: bool) -> bool {
     !value.is_empty()
         && value.bytes().all(|character| {
-        character.is_ascii_lowercase()
-            || character.is_ascii_digit()
-            || character == b'_'
-            || (allow_period && character == b'.')
-    })
+            character.is_ascii_lowercase()
+                || character.is_ascii_digit()
+                || character == b'_'
+                || (allow_period && character == b'.')
+        })
 }

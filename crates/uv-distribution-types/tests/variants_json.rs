@@ -1,7 +1,7 @@
 use insta::{assert_json_snapshot, assert_snapshot};
 use serde_json::json;
 
-use uv_distribution_types::{VariantPreferences, VariantsJsonContent};
+use uv_distribution_types::{SupportedVariantProperties, VariantsJsonContent};
 
 /// PEP 825 compares the best compatible value for each feature, then the variant label.
 #[test]
@@ -23,7 +23,7 @@ fn rank_variants() -> Result<(), Box<dyn std::error::Error>> {
             "null": {}
         }
     }))?;
-    let preferences: VariantPreferences = serde_json::from_value(json!({
+    let preferences: SupportedVariantProperties = serde_json::from_value(json!({
         "nvidia": [["cuda", ["13.0", "12.0"]], ["arch", ["sm120"]]],
         "x86_64": [["level", ["v4", "v3", "v2"]]]
     }))?;

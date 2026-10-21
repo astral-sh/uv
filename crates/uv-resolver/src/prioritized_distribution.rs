@@ -7,7 +7,7 @@ use tracing::debug;
 use uv_distribution_filename::{BuildTag, WheelFilename};
 use uv_distribution_types::{
     File, IndexUrl, InstalledDist, MinimumLibcVersion, Name, RegistryBuiltDist, RegistryBuiltWheel,
-    RegistrySourceDist, RequiresPython, VariantPreferences, VariantsJsonContent,
+    RegistrySourceDist, RequiresPython, SupportedVariantProperties, VariantsJsonContent,
     VariantsJsonFilename,
 };
 use uv_normalize::PackageName;
@@ -443,7 +443,7 @@ impl PrioritizedDist {
             return None;
         }
         // TODO(konsti): Get the target's supported properties from variant providers.
-        let preferences = VariantPreferences::default();
+        let preferences = SupportedVariantProperties::default();
         // Prefer wheels whose advertised hash matches a required hash, followed by wheels with
         // no advertised hash, then mismatches. If no hashes are required, all wheels match.
         // The installer verifies required hashes against the downloaded wheel.
