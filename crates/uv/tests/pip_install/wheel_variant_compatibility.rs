@@ -351,6 +351,55 @@ fn replace_incompatible_installed_variant() -> Result<()> {
     Ok(())
 }
 
+/// Dependency markers use only the selected wheel properties supported by the target.
+#[test]
+fn selected_variant_properties_filter_dependencies() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::from_toml(indoc! {r#"
+        name = "selected-variant-properties"
+        root = {}
+        expected.satisfiable = true
+
+        [packages.ok.versions."1.0.0"]
+        wheel = false
+        sdist = false
+        requires = [
+            "chosen ; 'blas_lapack :: library :: openblas' in variant_properties",
+            "unsupported ; 'blas_lapack :: library :: mkl' in variant_properties",
+        ]
+
+        [packages.ok.versions."1.0.0".variants]
+        namespaces = ["blas_lapack"]
+
+        [packages.ok.versions."1.0.0".variants.providers.blas_lapack]
+        static-properties.library = ["openblas"]
+
+        [packages.ok.versions."1.0.0".variants.wheels]
+        blas.properties = [
+            "blas_lapack :: library :: openblas",
+            "blas_lapack :: library :: mkl",
+        ]
+
+        [packages.chosen.versions."1.0.0"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--index-url")
+        .arg(server.index_url())
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("ok==1.0.0"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + chosen==1.0.0
+     + ok==1.0.0
+    ");
+    Ok(())
+}
+
 /// The only wheel requires a property supplied by the target, absent from the host defaults.
 #[test]
 fn explicit_variant_target_selects_registry_wheel() -> Result<()> {
