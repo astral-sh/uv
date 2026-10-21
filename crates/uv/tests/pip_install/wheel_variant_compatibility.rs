@@ -47,6 +47,69 @@ fn gpu_variant() -> Value {
     })
 }
 
+/// Install the provider separately from the wheel selected using its properties.
+#[test]
+fn install_authorized_variant_provider_from_trusted_index() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::from_toml(indoc! {r#"
+        name = "authorized-variant-provider"
+        root = {}
+        expected.satisfiable = true
+
+        [packages.ok.versions."1.0.0"]
+        wheel = false
+        sdist = false
+
+        [packages.ok.versions."1.0.0".variants]
+        namespaces = ["example"]
+
+        [packages.ok.versions."1.0.0".variants.providers.example]
+        requires = ["variant-provider>=1.0.0"]
+        plugin-api = "variant_provider.plugin:Provider"
+
+        [packages.ok.versions."1.0.0".variants.wheels]
+        accelerated.properties = ["example :: acceleration :: enabled"]
+    "#})?;
+    let provider = indoc! {r#"
+        from types import SimpleNamespace
+
+        class Provider:
+            @classmethod
+            def get_supported_configs(cls):
+                return [SimpleNamespace(name="acceleration", values=["enabled"], multi_value=False)]
+    "#};
+    let (filename, wheel) = WheelBuilder::new(&"variant-provider".parse()?, &"1.0.0".parse()?)
+        .files(&[("variant_provider/plugin.py", provider)])
+        .build();
+    let trusted_index = context.temp_dir.child("trusted-index");
+    let trusted_package = trusted_index.child("variant-provider");
+    trusted_package.create_dir_all()?;
+    trusted_package.child(&filename).write_binary(&wheel)?;
+    trusted_package
+        .child("index.html")
+        .write_str(&format!(r#"<a href="{filename}">{filename}</a>"#))?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("--variant-provider")
+        .arg("example=variant-provider@variant_provider.plugin:Provider")
+        .arg("--variant-provider-index")
+        .arg(trusted_index.path())
+        .arg("--index-url")
+        .arg(server.index_url())
+        .arg("ok==1.0.0"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0
+    ");
+    assert!(!context.site_packages().join("variant_provider").exists());
+    Ok(())
+}
+
 /// Recheck a local wheel's hardware requirements on install and compile after a driver change.
 #[test]
 fn install_local_variant_wheel() -> Result<()> {
