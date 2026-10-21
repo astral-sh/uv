@@ -114,15 +114,19 @@ jobs:
     timeout-minutes: 10
     if: ${{ inputs.code-changed == 'true' || github.ref == 'refs/heads/main' }}
     runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
+    env:
+      RUSTC_BOOTSTRAP: "1"
+      CARGO_UNSTABLE_CHECKSUM_FRESHNESS: "true"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-        with:
-          save-if: ${{ inputs.save-rust-cache == 'true' }}
       - name: "Install Rust toolchain"
         run: rustup component add clippy
+
+      - uses: astral-sh/github-actions/rust-workspace-cache@35adb34286434a5d7173d37bc521fc75c17c251f
+        with:
+          save-if: ${{ inputs.save-rust-cache == 'true' }}
       - name: "Clippy"
         env:
           CARGO_BUILD_WARNINGS: deny
@@ -133,6 +137,9 @@ jobs:
     timeout-minutes: 15
     if: ${{ inputs.code-changed == 'true' || github.ref == 'refs/heads/main' }}
     runs-on: namespace-profile-windows-2022-x86-64-4
+    env:
+      RUSTC_BOOTSTRAP: "1"
+      CARGO_UNSTABLE_CHECKSUM_FRESHNESS: "true"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -146,13 +153,13 @@ jobs:
         run: |
           Copy-Item -Path "${{ github.workspace }}" -Destination "$Env:UV_WORKSPACE" -Recurse
 
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-        with:
-          workspaces: ${{ env.UV_WORKSPACE }}
-          save-if: ${{ inputs.save-rust-cache == 'true' }}
-
       - name: "Install Rust toolchain"
         run: rustup component add clippy
+
+      - uses: astral-sh/github-actions/rust-workspace-cache@35adb34286434a5d7173d37bc521fc75c17c251f
+        with:
+          workspace: ${{ env.UV_WORKSPACE }}
+          save-if: ${{ inputs.save-rust-cache == 'true' }}
 
       - name: "Clippy"
         working-directory: ${{ env.UV_WORKSPACE }}
