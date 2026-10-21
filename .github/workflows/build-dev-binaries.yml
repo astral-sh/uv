@@ -295,7 +295,7 @@ jobs:
 
   build-binary-windows-aarch64:
     name: "windows aarch64"
-    timeout-minutes: 10
+    timeout-minutes: 15
     runs-on: windows-11-arm
     env:
       RUSTC_BOOTSTRAP: 1
