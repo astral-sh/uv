@@ -58,6 +58,7 @@ pub async fn sync_from_lock(
 ) -> Result<Changelog, EnvironmentError> {
     // Extract the project settings.
     let InstallerSettingsRef {
+        variant_policy,
         index_locations,
         index_strategy,
         keyring_provider,
@@ -326,7 +327,8 @@ pub async fn sync_from_lock(
         workspace_cache.clone(),
         concurrency.clone(),
         preview,
-    );
+    )
+    .with_variant_policy(variant_policy);
 
     // Run a malware check against OSV before installing.
     maybe_check_malware(

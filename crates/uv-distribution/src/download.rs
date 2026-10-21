@@ -2,7 +2,9 @@ use std::path::Path;
 
 use uv_cache_info::CacheInfo;
 use uv_distribution_filename::WheelFilename;
-use uv_distribution_types::{BuildInfo, BuiltDist, CachedDist, Dist, Hashed};
+use uv_distribution_types::{
+    BuildInfo, BuiltDist, CachedDist, Dist, Hashed, SupportedVariantProperties, VariantsJsonContent,
+};
 use uv_metadata::{find_flat_dist_info, read_flat_wheel_metadata, read_wheel_variant};
 use uv_preview::PreviewFeature;
 use uv_pypi_types::{HashDigest, HashDigests, ResolutionMetadata};
@@ -25,8 +27,23 @@ pub fn check_wheel_variant_compatibility(
     filename: &WheelFilename,
     archive: &Path,
 ) -> Result<(), Error> {
-    let Some(label) = filename.variant() else {
+    let Some(metadata) = read_wheel_variant_metadata(filename, archive)? else {
         return Ok(());
+    };
+    check_wheel_variant_properties(
+        filename,
+        &metadata,
+        &supported_variant_properties(&metadata),
+    )
+}
+
+/// Read an extracted wheel's variant metadata, if present.
+pub fn read_wheel_variant_metadata(
+    filename: &WheelFilename,
+    archive: &Path,
+) -> Result<Option<VariantsJsonContent>, Error> {
+    let Some(label) = filename.variant() else {
+        return Ok(None);
     };
     if !uv_preview::is_enabled(PreviewFeature::WheelVariants) {
         return Err(Error::UnsupportedWheelVariant(Box::new(filename.clone())));
@@ -35,11 +52,20 @@ pub fn check_wheel_variant_compatibility(
     let dist_info = find_flat_dist_info(filename, archive)
         .map_err(|err| Error::WheelMetadata(archive.to_path_buf(), Box::new(err)))?;
     let path = archive.join(format!("{dist_info}.dist-info/variant.json"));
-    let metadata = read_wheel_variant(&path, label)
-        .map_err(|err| Error::WheelMetadata(path, Box::new(err)))?;
-    if let Some(properties) =
-        metadata.unsupported_variant_properties(label, &supported_variant_properties(&metadata))
-    {
+    read_wheel_variant(&path, label)
+        .map(Some)
+        .map_err(|err| Error::WheelMetadata(path, Box::new(err)))
+}
+
+pub(crate) fn check_wheel_variant_properties(
+    filename: &WheelFilename,
+    metadata: &VariantsJsonContent,
+    supported: &SupportedVariantProperties,
+) -> Result<(), Error> {
+    let Some(label) = filename.variant() else {
+        return Ok(());
+    };
+    if let Some(properties) = metadata.unsupported_variant_properties(label, supported) {
         return Err(Error::IncompatibleWheelVariant {
             label: label.clone(),
             properties,

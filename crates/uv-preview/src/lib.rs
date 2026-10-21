@@ -461,6 +461,11 @@ pub enum PreviewFeature {
     /// hashes](./projects/build.md#project-build-dependency-hashes) for configuration and exceptions.
     BuildDependencyHashes,
     /// Enables experimental support for [wheel variants](https://peps.python.org/pep-0825/).
+    ///
+    /// To describe the installation target explicitly, pass `--variant-target target.json`.
+    /// For example, `{"x86_64": [["level", ["v3", "v2", "v1"]]]}` lists compatible x86-64
+    /// levels in preference order. An empty object describes a target with no variant properties.
+    /// When `--python-platform` is set, uv does not infer the target's properties from the host.
     WheelVariants,
 }
 

@@ -291,6 +291,20 @@ pub struct GlobalArgs {
     )]
     pub preview_features: Vec<MaybePreviewFeature>,
 
+    /// Use the wheel variant properties in this JSON file instead of detecting them.
+    ///
+    /// The file describes the installation target. An empty object selects a target that
+    /// supports no variant properties. Requires the `wheel-variants` preview feature.
+    #[arg(
+        global = true,
+        long,
+        env = EnvVars::UV_VARIANT_TARGET,
+        value_name = "FILE",
+        value_hint = ValueHint::FilePath,
+        hide = true,
+    )]
+    pub variant_target: Option<PathBuf>,
+
     /// Avoid discovering a `pyproject.toml` or `uv.toml` file [env: UV_ISOLATED=]
     ///
     /// Normally, configuration files are discovered in the current directory,

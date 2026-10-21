@@ -12,7 +12,7 @@ use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
     CachedDist, ConfigSettings, DependencyMetadata, DistributionId, ExtraBuildRequires,
     ExtraBuildVariables, IndexCapabilities, IndexLocations, InstalledDist, IsBuildBackendError,
-    PackageConfigSettings, Requirement, SourceDist,
+    PackageConfigSettings, Requirement, SourceDist, VariantPolicy,
 };
 use uv_git::GitResolver;
 use uv_normalize::PackageName;
@@ -102,6 +102,9 @@ pub trait BuildContext {
 
     /// Return a reference to the cache.
     fn cache(&self) -> &Cache;
+
+    /// User policy for wheel variant providers.
+    fn variant_policy(&self) -> Option<&VariantPolicy>;
 
     /// Return a reference to the Git resolver.
     fn git(&self) -> &GitResolver;

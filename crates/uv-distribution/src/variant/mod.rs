@@ -88,7 +88,9 @@ impl InstalledWheelVariant {
 /// A vendored wheel variant provider.
 trait VendoredVariantProvider: Sync {
     /// The API endpoint, or `None` to use the default derived from the package name.
-    fn plugin_api(&self) -> Option<&PluginApi>;
+    fn plugin_api(&self) -> Option<&PluginApi> {
+        None
+    }
     /// The name of the vendored provider package.
     fn package_name(&self) -> &PackageName;
     /// The version of the provider package that was vendored.

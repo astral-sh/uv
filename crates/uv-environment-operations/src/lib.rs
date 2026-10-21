@@ -1369,6 +1369,7 @@ pub async fn resolve_environment(
     warn_on_requirements_txt_setting(&spec.requirements, settings);
 
     let ResolverSettings {
+        variant_policy,
         index_locations,
         index_strategy,
         keyring_provider,
@@ -1566,7 +1567,8 @@ pub async fn resolve_environment(
         workspace_cache.clone(),
         concurrency.clone(),
         preview,
-    );
+    )
+    .with_variant_policy(variant_policy);
 
     // Resolve the requirements.
     Ok(uv_resolve_operations::resolve(
@@ -1622,6 +1624,7 @@ pub async fn sync_environment(
     preview: Preview,
 ) -> Result<PythonEnvironment, EnvironmentError> {
     let InstallerSettingsRef {
+        variant_policy,
         index_locations,
         index_strategy,
         keyring_provider,
@@ -1708,7 +1711,8 @@ pub async fn sync_environment(
         workspace_cache,
         concurrency.clone(),
         preview,
-    );
+    )
+    .with_variant_policy(variant_policy);
 
     // Sync the environment.
     uv_install_operations::install(
@@ -1778,6 +1782,7 @@ pub async fn update_environment(
     let ResolverInstallerSettings {
         resolver:
             ResolverSettings {
+                variant_policy,
                 build_options,
                 config_setting,
                 config_settings_package,
@@ -1959,7 +1964,8 @@ pub async fn update_environment(
         workspace_cache.clone(),
         concurrency.clone(),
         preview,
-    );
+    )
+    .with_variant_policy(variant_policy);
 
     // Resolve the requirements.
     let (resolution, hasher) = match uv_resolve_operations::resolve(

@@ -520,7 +520,8 @@ pub async fn add(
                 WorkspaceCache::default(),
                 concurrency.clone(),
                 preview,
-            );
+            )
+            .with_variant_policy(&settings.resolver.variant_policy);
 
             requirements.extend(
                 NamedRequirementsResolver::new(
