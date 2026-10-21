@@ -346,6 +346,89 @@ async fn variant_metadata_hashes_are_verified() -> Result<()> {
     Ok(())
 }
 
+/// A variant uploaded before the cutoff remains eligible when the ordinary wheel is newer.
+#[tokio::test]
+async fn variant_wheel_before_exclude_newer() -> Result<()> {
+    let server = MockServer::start().await;
+    let context = uv_test::test_context!("3.12").with_filter((server.uri(), "http://[LOCALHOST]"));
+    context
+        .temp_dir
+        .child("requirements.in")
+        .write_str("ok==1.0.0")?;
+    Mock::given(method("GET"))
+        .and(path("/simple/ok/"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_raw(
+                json!({
+                    "meta": { "api-version": "1.0" },
+                    "name": "ok",
+                    "files": [
+                        {
+                            "filename": "ok-1.0.0-py3-none-any.whl",
+                            "url": format!("{}/files/ok-1.0.0-py3-none-any.whl", server.uri()),
+                            "hashes": {},
+                            "upload-time": "2025-01-03T00:00:00Z",
+                        },
+                        {
+                            "filename": "ok-1.0.0-py3-none-any-null.whl",
+                            "url": format!("{}/files/ok-1.0.0-py3-none-any-null.whl", server.uri()),
+                            "hashes": {},
+                            "upload-time": "2025-01-01T00:00:00Z",
+                            "core-metadata": true,
+                        },
+                        {
+                            "filename": "ok-1.0.0-variants.json",
+                            "url": format!("{}/files/ok-1.0.0-variants.json", server.uri()),
+                            "hashes": {},
+                            "upload-time": "2025-01-01T00:00:00Z",
+                        },
+                    ],
+                })
+                .to_string(),
+                "application/vnd.pypi.simple.v1+json",
+            ),
+        )
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/files/ok-1.0.0-py3-none-any-null.whl.metadata"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_string("Metadata-Version: 2.3\nName: ok\nVersion: 1.0.0\n"),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/files/ok-1.0.0-variants.json"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "$schema": PEP_825_SCHEMA,
+            "default-priorities": { "namespace": ["cpu"] },
+            "variants": { "null": {} },
+        })))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in")
+        .arg("--no-header")
+        .arg("--index-url")
+        .arg(format!("{}/simple/", server.uri()))
+        .arg("--exclude-newer")
+        .arg("2025-01-02T00:00:00Z")
+        .arg("--preview-features")
+        .arg("wheel-variants"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    ok==1.0.0
+        # via -r requirements.in
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    Ok(())
+}
+
 /// A retryable HTTP error while fetching variant metadata is reported to the user.
 #[tokio::test]
 async fn unavailable_variant_metadata_is_an_error() -> Result<()> {
