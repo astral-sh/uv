@@ -32,6 +32,7 @@ import urllib.request
 from collections.abc import Mapping
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from typing import cast
 
 UPLOAD_URL = "https://api.codspeed.io/upload"
 SOURCE_REPOSITORY = "astral-sh/uv"
@@ -163,8 +164,6 @@ class CaptureServer(ThreadingHTTPServer):
 
 
 class CaptureHandler(BaseHTTPRequestHandler):
-    server: CaptureServer
-
     def log_message(self, format, *args):
         # HTTP paths contain the relay nonce; never log requests or headers.
         pass
@@ -178,45 +177,47 @@ class CaptureHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_POST(self):
+        server = cast(CaptureServer, self.server)
         try:
-            if self.path == f"/{self.server.nonce}/finish":
-                self.respond(200, {"complete": self.server.complete})
-                threading.Thread(target=self.server.shutdown, daemon=True).start()
+            if self.path == f"/{server.nonce}/finish":
+                self.respond(200, {"complete": server.complete})
+                threading.Thread(target=server.shutdown, daemon=True).start()
                 return
-            if self.path != f"/{self.server.nonce}/upload":
+            if self.path != f"/{server.nonce}/upload":
                 self.respond(404, {})
                 return
             length = int(self.headers.get("Content-Length", "0"))
-            if not 0 < length <= 1024 * 1024 or self.server.complete:
+            if not 0 < length <= 1024 * 1024 or server.complete:
                 raise ValueError("Unexpected metadata upload")
             metadata = json.loads(self.rfile.read(length))
             verify_recording(
                 metadata,
-                self.server.sha,
-                self.server.run_id,
-                self.server.mode,
-                self.server.ref,
-                self.server.event,
+                server.sha,
+                server.run_id,
+                server.mode,
+                server.ref,
+                server.event,
             )
             token = self.headers.get("Authorization")
             response = upload_request(metadata, token)
-            self.server.pending = metadata, response["uploadUrl"]
-            response["uploadUrl"] = f"{self.server.endpoint}/profile"
+            server.pending = metadata, response["uploadUrl"]
+            response["uploadUrl"] = f"{server.endpoint}/profile"
             self.respond(200, response)
         except (KeyError, OSError, RuntimeError, ValueError) as error:
             print(f"CodSpeed capture failed: {type(error).__name__}", flush=True)
             self.respond(502, {"error": "Could not prepare CodSpeed profile capture"})
 
     def do_PUT(self):
+        server = cast(CaptureServer, self.server)
         try:
-            if self.path != f"/{self.server.nonce}/profile" or not self.server.pending:
+            if self.path != f"/{server.nonce}/profile" or not server.pending:
                 self.respond(404, {})
                 return
-            metadata, upload_url = self.server.pending
+            metadata, upload_url = server.pending
             length = int(self.headers.get("Content-Length", "0"))
             if length <= 0:
                 raise ValueError("Empty profile upload")
-            partial = self.server.directory / "profile.partial"
+            partial = server.directory / "profile.partial"
             with partial.open("wb") as output:
                 remaining = length
                 while remaining:
@@ -227,11 +228,11 @@ class CaptureHandler(BaseHTTPRequestHandler):
                     remaining -= len(chunk)
             verify_profile(partial, metadata)
             upload_profile(upload_url, partial, metadata)
-            partial.replace(self.server.directory / "profile.tar")
-            (self.server.directory / "metadata.json").write_text(
+            partial.replace(server.directory / "profile.tar")
+            (server.directory / "metadata.json").write_text(
                 json.dumps(metadata) + "\n", encoding="utf-8"
             )
-            self.server.complete = True
+            server.complete = True
             self.respond(200, {})
         except (KeyError, OSError, RuntimeError, ValueError) as error:
             print(f"CodSpeed capture failed: {type(error).__name__}", flush=True)
