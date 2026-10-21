@@ -100,15 +100,35 @@ impl InstalledWheelVariant {
 /// A vendored wheel variant provider.
 trait VendoredVariantProvider: Sync {
     /// The API endpoint, or `None` to use the default derived from the package name.
-    fn plugin_api(&self) -> Option<&PluginApi>;
+    fn plugin_api(&self) -> Option<&PluginApi> {
+        None
+    }
     /// The name of the vendored provider package.
     fn package_name(&self) -> &PackageName;
     /// The version of the provider package that was vendored.
     fn package_version(&self) -> Version;
     /// The namespace of the emitted properties.
     fn namespace(&self) -> &VariantNamespace;
+    /// Whether the provider can supply properties for an explicit platform without probing the host.
+    fn supports_explicit_platform(&self) -> bool {
+        false
+    }
     /// Return compatible properties in preference order.
     fn properties(&self, target: &Platform) -> Option<&[SupportedVariantFeature]>;
+
+    fn properties_for_target(
+        &self,
+        target: &Platform,
+        explicit_platform: bool,
+    ) -> Option<&[SupportedVariantFeature]> {
+        if explicit_platform {
+            self.supports_explicit_platform()
+                .then(|| self.properties(&Platform::new(target.os().clone(), target.arch())))
+                .flatten()
+        } else {
+            self.properties(target)
+        }
+    }
 }
 
 /// Collect the variant properties supported by enabled static and vendored providers.
@@ -116,25 +136,37 @@ pub fn supported_variant_properties(
     metadata: &VariantsJsonContent,
     target: &Platform,
 ) -> SupportedVariantProperties {
+    supported_variant_properties_for_platform(metadata, target, false)
+}
+
+pub(crate) fn supported_variant_properties_for_platform(
+    metadata: &VariantsJsonContent,
+    platform: &Platform,
+    explicit_platform: bool,
+) -> SupportedVariantProperties {
     trusted_variant_properties(
         metadata
             .providers()
             .filter(|(_, provider)| !provider.optional()),
-        target,
+        platform,
+        explicit_platform,
     )
 }
 
 fn trusted_variant_properties<'a>(
     providers: impl Iterator<Item = (&'a VariantNamespace, &'a VariantProvider)>,
-    target: &Platform,
+    platform: &Platform,
+    explicit_platform: bool,
 ) -> SupportedVariantProperties {
     let mut supported = SupportedVariantProperties::default();
     for (namespace, provider) in providers {
-        let features = provider.static_properties().or_else(|| {
+        let features = if !explicit_platform && let Some(features) = provider.static_properties() {
+            Some(features)
+        } else {
             find_vendored_provider(namespace, provider.kind())
-                .and_then(|provider| provider.properties(target))
+                .and_then(|provider| provider.properties_for_target(platform, explicit_platform))
                 .map(<[_]>::to_vec)
-        });
+        };
         if let Some(features) = features {
             supported.insert(namespace.clone(), features);
         }

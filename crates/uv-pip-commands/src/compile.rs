@@ -23,7 +23,7 @@ use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExtraBuildVariables, HashCollection, Index, IndexLocations,
     MinimumLibcVersion, NameRequirementSpecification, Origin, PackageConfigSettings, Requirement,
-    RequiresPython, Verbatim,
+    RequiresPython, VariantPolicy, Verbatim,
 };
 use uv_fs::{CWD, Simplified};
 use uv_git::ResolvedRepositoryReference;
@@ -106,6 +106,7 @@ pub async fn pip_compile(
     torch_backend: Option<TorchMode>,
     cuda_driver_version: Option<Version>,
     amd_gpu_architecture: Option<AmdGpuArchitecture>,
+    variant_policy: VariantPolicy,
     dependency_metadata: DependencyMetadata,
     keyring_provider: KeyringProviderType,
     client_builder: &BaseClientBuilder<'_>,
@@ -395,6 +396,7 @@ pub async fn pip_compile(
     };
 
     // Determine the environment for the resolution.
+    let variant_policy = variant_policy.with_explicit_platform(python_platform.is_some());
     let (tags, resolver_env) = if universal {
         (
             None,
@@ -540,7 +542,8 @@ pub async fn pip_compile(
         workspace_cache,
         concurrency.clone(),
         preview,
-    );
+    )
+    .with_variant_policy(&variant_policy);
 
     if universal
         && minimum_libc_version.is_some()

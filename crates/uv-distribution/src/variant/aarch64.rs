@@ -80,6 +80,10 @@ impl VendoredVariantProvider for Aarch64VariantProvider {
         Version::new([0, 2, 0])
     }
 
+    fn supports_explicit_platform(&self) -> bool {
+        true
+    }
+
     fn properties(&self, target: &Platform) -> Option<&[SupportedVariantFeature]> {
         if target.arch() != Arch::Aarch64 {
             return Some(&[]);

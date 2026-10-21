@@ -27,7 +27,7 @@ use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
     CachedDist, ConfigSettings, DependencyMetadata, ExtraBuildRequires, ExtraBuildVariables,
     Identifier, IndexCapabilities, IndexLocations, IsBuildBackendError, Name,
-    PackageConfigSettings, Requirement, Resolution, SourceDist, VersionOrUrlRef,
+    PackageConfigSettings, Requirement, Resolution, SourceDist, VariantPolicy, VersionOrUrlRef,
 };
 use uv_git::GitResolver;
 use uv_installer::{InstallationStrategy, Installer, Plan, Planner, Preparer, SitePackages};
@@ -178,6 +178,7 @@ pub struct BuildDispatch<'a> {
     concurrency: Concurrency,
     preview: Preview,
     tar_backend: TarBackend,
+    variant_policy: Option<&'a VariantPolicy>,
 }
 
 impl<'a> BuildDispatch<'a> {
@@ -241,6 +242,7 @@ impl<'a> BuildDispatch<'a> {
             concurrency,
             preview,
             tar_backend: TarBackend::from_env(),
+            variant_policy: None,
         }
     }
 
@@ -287,6 +289,13 @@ impl<'a> BuildDispatch<'a> {
         self
     }
 
+    /// Set the user policy for wheel variant providers.
+    #[must_use]
+    pub fn with_variant_policy(mut self, policy: &'a VariantPolicy) -> Self {
+        self.variant_policy = Some(policy);
+        self
+    }
+
     fn require_build_hashes(&self) -> bool {
         self.build_hash_checking.is_require()
     }
@@ -306,6 +315,10 @@ impl BuildContext for BuildDispatch<'_> {
 
     fn cache(&self) -> &Cache {
         self.cache
+    }
+
+    fn variant_policy(&self) -> Option<&VariantPolicy> {
+        self.variant_policy
     }
 
     fn git(&self) -> &GitResolver {

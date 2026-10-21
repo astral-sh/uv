@@ -308,6 +308,7 @@ async fn do_lock(
 
     // Extract the project settings.
     let ResolverSettings {
+        variant_policy,
         index_locations,
         index_strategy,
         keyring_provider,
@@ -768,7 +769,8 @@ async fn do_lock(
         workspace_cache.clone(),
         concurrency.clone(),
         preview,
-    );
+    )
+    .with_variant_policy(variant_policy);
 
     // If any of the resolution-determining settings changed, invalidate the lock.
     let existing_lock = if let Some(existing_lock) = existing_lock {

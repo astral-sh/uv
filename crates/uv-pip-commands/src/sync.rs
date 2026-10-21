@@ -17,7 +17,7 @@ use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations, Name, Origin,
-    PackageConfigSettings, Resolution,
+    PackageConfigSettings, Resolution, VariantPolicy,
 };
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
@@ -75,6 +75,7 @@ pub async fn pip_sync(
     torch_backend: Option<TorchMode>,
     cuda_driver_version: Option<Version>,
     amd_gpu_architecture: Option<AmdGpuArchitecture>,
+    variant_policy: VariantPolicy,
     dependency_metadata: DependencyMetadata,
     keyring_provider: KeyringProviderType,
     client_builder: &BaseClientBuilder<'_>,
@@ -270,6 +271,7 @@ pub async fn pip_sync(
     };
 
     // Determine the markers and tags to use for resolution.
+    let variant_policy = variant_policy.with_explicit_platform(python_platform.is_some());
     let marker_env = resolution_markers(
         python_version.as_ref(),
         python_platform.as_ref(),
@@ -391,7 +393,8 @@ pub async fn pip_sync(
         workspace_cache.clone(),
         concurrency.clone(),
         preview,
-    );
+    )
+    .with_variant_policy(&variant_policy);
 
     // Determine the set of installed packages.
     let site_packages = SitePackages::from_environment(&environment)?;
@@ -515,7 +518,8 @@ pub async fn pip_sync(
         workspace_cache,
         concurrency.clone(),
         preview,
-    );
+    )
+    .with_variant_policy(&variant_policy);
 
     // Sync the environment.
     let changelog = match uv_install_operations::install(
