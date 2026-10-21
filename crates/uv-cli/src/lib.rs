@@ -25,6 +25,7 @@ use uv_configuration::{
 use uv_distribution_types::{
     ConfigSettingEntry, ConfigSettingPackageEntry, ExcludeNewerOverride, Index, IndexName,
     IndexSourceError, IndexUrl, Origin, PipExtraIndex, PipFindLinks, PipIndex,
+    VariantProviderOptIn,
 };
 use uv_normalize::{ExtraName, GroupName, PackageName, PipGroupName};
 use uv_pep508::{MarkerTree, Requirement, VerbatimUrl};
@@ -304,6 +305,41 @@ pub struct GlobalArgs {
         hide = true,
     )]
     pub variant_target: Option<PathBuf>,
+
+    /// Enable a wheel variant provider. Requires the `wheel-variants` preview feature.
+    ///
+    /// A namespace alone enables an optional provider built into uv or declared with static
+    /// properties. To allow uv to install and run a Python provider, also name its packages and,
+    /// if needed, its entry point, e.g., `cpu=cpu-provider@cpu_provider.plugin:Provider`. Python
+    /// providers also require `--variant-provider-index`.
+    ///
+    /// Repeat this option to enable more than one provider. A project or lockfile cannot grant
+    /// permission to run a provider.
+    #[arg(
+        global = true,
+        long,
+        env = EnvVars::UV_VARIANT_PROVIDER,
+        value_name = "NAMESPACE[=PACKAGE[,PACKAGE]...[@MODULE[:OBJECT]]]",
+        value_delimiter = ' ',
+        conflicts_with = "variant_target",
+        hide = true,
+    )]
+    pub variant_provider: Vec<VariantProviderOptIn>,
+
+    /// Index authorized to supply wheel variant provider packages and their dependencies.
+    ///
+    /// Provider packages can execute arbitrary Python code. Their versions are selected from this
+    /// index according to the requirements declared in the wheel variant metadata.
+    #[arg(
+        global = true,
+        long,
+        env = EnvVars::UV_VARIANT_PROVIDER_INDEX,
+        hide_env_values = true,
+        value_name = "URL",
+        value_parser = VariantProviderIndexValueParser,
+        hide = true,
+    )]
+    pub variant_provider_index: Option<IndexUrl>,
 
     /// Avoid discovering a `pyproject.toml` or `uv.toml` file [env: UV_ISOLATED=]
     ///
@@ -625,6 +661,38 @@ pub struct VersionArgs {
         value_hint = ValueHint::Other,
     )]
     python: Option<Maybe<String>>,
+}
+
+/// Parse a provider index without including a rejected URL or its credentials in the error.
+#[derive(Clone, Debug)]
+struct VariantProviderIndexValueParser;
+
+impl TypedValueParser for VariantProviderIndexValueParser {
+    type Value = IndexUrl;
+
+    fn parse_ref(
+        &self,
+        command: &clap::Command,
+        _arg: Option<&clap::Arg>,
+        value: &std::ffi::OsStr,
+    ) -> Result<Self::Value, clap::Error> {
+        value
+            .to_str()
+            .and_then(|value| IndexUrl::from_str(value).ok())
+            .filter(|index| {
+                let url = index.url();
+                url.username().is_empty()
+                    && url.password().is_none()
+                    && url.query_pairs().next().is_none()
+                    && url.fragment().is_none()
+            })
+            .ok_or_else(|| {
+                command.clone().error(
+                    ErrorKind::InvalidValue,
+                    "expected an index URL or path without credentials for `--variant-provider-index`",
+                )
+            })
+    }
 }
 
 #[derive(Clone, Debug)]

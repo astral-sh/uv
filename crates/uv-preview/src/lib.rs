@@ -466,6 +466,11 @@ pub enum PreviewFeature {
     /// For example, `{"x86_64": [["level", ["v3", "v2", "v1"]]]}` lists compatible x86-64
     /// levels in preference order. An empty object describes a target with no variant properties.
     /// When `--python-platform` is set, uv does not infer the target's properties from the host.
+    ///
+    /// A wheel or project cannot authorize uv to run a Python provider. To allow one, specify its
+    /// namespace, package and entry point with `--variant-provider`, and the index that supplies its
+    /// packages with `--variant-provider-index`. The provider runs with your account's permissions,
+    /// in a separate Python environment.
     WheelVariants,
 }
 

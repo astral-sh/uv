@@ -2377,8 +2377,15 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 Ok(Some(Response::DirectVariant { dist, variant }))
             }
             Request::VariantProperties(parsed) => {
+                let require_hashes = self
+                    .hasher
+                    .archive_policy_for_package(
+                        &parsed.artifact.filename.name,
+                        &parsed.artifact.filename.version,
+                    )
+                    .requires_validation();
                 let properties = provider
-                    .supported_variant_properties(&parsed.content)
+                    .supported_variant_properties(&parsed.content, require_hashes)
                     .await?;
                 Ok(Some(Response::VariantProperties { parsed, properties }))
             }

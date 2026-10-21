@@ -427,6 +427,11 @@ mod tests {
         levels in preference order. An empty object describes a target with no variant properties.
         When `--python-platform` is set, uv does not infer the target's properties from the host.
 
+        A wheel or project cannot authorize uv to run a Python provider. To allow one, specify its
+        namespace, package and entry point with `--variant-provider`, and the index that supplies its
+        packages with `--variant-provider-index`. The provider runs with your account's permissions,
+        in a separate Python environment.
+
         ### `workspace-dir` {#workspace-dir}
 
         The `uv workspace dir` command prints the path to the workspace root. Use `--package` to

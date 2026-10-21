@@ -585,7 +585,9 @@ impl BuildContext for BuildDispatch<'_> {
                     self.concurrency.downloads_semaphore.clone(),
                 )
                 .with_build_stack(build_stack),
+                hasher,
             )
+            .await
             .map_err(BuildDispatchError::InstallBuildDependencies)?;
 
         // Remove any unnecessary packages.

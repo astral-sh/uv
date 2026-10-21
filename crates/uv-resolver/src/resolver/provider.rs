@@ -86,6 +86,7 @@ pub trait ResolverProvider {
     fn supported_variant_properties<'io>(
         &'io self,
         metadata: &'io VariantsJsonContent,
+        require_hashes: bool,
     ) -> impl Future<Output = Result<SupportedVariantProperties, uv_distribution::Error>> + 'io;
 
     /// Select a direct wheel's supported properties after verifying the wheel.
@@ -227,8 +228,11 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
     async fn supported_variant_properties<'io>(
         &'io self,
         metadata: &'io VariantsJsonContent,
+        require_hashes: bool,
     ) -> Result<SupportedVariantProperties, uv_distribution::Error> {
-        Ok(self.fetcher.supported_variant_properties(metadata))
+        self.fetcher
+            .supported_variant_properties(metadata, require_hashes)
+            .await
     }
 
     /// Make a "Simple API" request for the package and convert the result to a [`VersionMap`].

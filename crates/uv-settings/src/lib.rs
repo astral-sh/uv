@@ -761,7 +761,7 @@ pub struct EnvironmentOptions {
     pub lfs: Option<bool>,
     pub cuda_driver_version: Option<Version>,
     pub amd_gpu_architecture: Option<AmdGpuArchitecture>,
-    /// Wheel variant target supplied by the user.
+    /// Wheel variant target and provider permissions supplied by the user.
     pub variant_policy: VariantPolicy,
     pub http_connect_timeout: Duration,
     pub http_read_timeout: Duration,

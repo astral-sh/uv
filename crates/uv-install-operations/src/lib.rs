@@ -753,7 +753,9 @@ async fn execute_plan(
                 build_dispatch,
                 concurrency.downloads_semaphore.clone(),
             ),
-        )?;
+            hasher,
+        )
+        .await?;
 
     // Remove any upgraded or extraneous installations.
     let uninstalls = extraneous.into_iter().chain(reinstalls).collect::<Vec<_>>();

@@ -10,6 +10,7 @@ use uv_client::WrappedReqwestError;
 use uv_distribution_filename::{VariantLabel, WheelFilename, WheelFilenameError};
 use uv_distribution_types::{
     InstalledDist, InstalledDistError, IsBuildBackendError, UnsupportedVariantProperties,
+    VariantNamespace,
 };
 use uv_fs::Simplified;
 use uv_git::GitError;
@@ -43,6 +44,12 @@ pub enum Error {
     IncompatibleWheelVariant {
         label: VariantLabel,
         properties: UnsupportedVariantProperties,
+    },
+    #[error("Failed to query wheel variant provider for namespace `{namespace}`")]
+    VariantProvider {
+        namespace: VariantNamespace,
+        #[source]
+        source: anyhow::Error,
     },
     #[error("Wheel variant provider dependencies must use non-variant wheels: `{0}`")]
     VariantProviderDependency(String),
@@ -306,6 +313,7 @@ impl Error {
         match self {
             Self::UnsupportedWheelVariant(_)
             | Self::IncompatibleWheelVariant { .. }
+            | Self::VariantProvider { .. }
             | Self::VariantProviderDependency(_)
             | Self::NoBuild
             | Self::NoBuildPackage(_)
