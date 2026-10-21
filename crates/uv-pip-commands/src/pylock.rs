@@ -8,6 +8,7 @@ use tracing::info_span;
 
 use uv_client::BaseClientBuilder;
 use uv_configuration::{BuildOptions, HashCheckingMode, RequirementsInput, TargetTriple};
+use uv_distribution::DistributionDatabase;
 use uv_distribution_types::{RequiresPython, Resolution};
 use uv_lock::{PylockToml, PylockTomlError};
 use uv_normalize::{ExtraName, GroupName};
@@ -15,7 +16,7 @@ use uv_pep440::Version;
 use uv_platform_tags::TagsError;
 use uv_python_interpreter::Interpreter;
 use uv_python_types::PythonVersion;
-use uv_types::{HashStrategy, HashStrategyError};
+use uv_types::{BuildContext, HashStrategy, HashStrategyError};
 
 use uv_resolve_operations::{resolution_markers, resolution_tags};
 
@@ -90,7 +91,7 @@ pub(crate) async fn read_pylock_toml(
 
 /// Verify Python compatibility and convert a parsed [`PylockToml`] into a [`Resolution`] with its
 /// [`HashStrategy`].
-pub(crate) fn resolve_pylock_toml(
+pub(crate) async fn resolve_pylock_toml<Context: BuildContext>(
     lock: PylockToml,
     install_path: &Path,
     interpreter: &Interpreter,
@@ -100,6 +101,7 @@ pub(crate) fn resolve_pylock_toml(
     groups: &[GroupName],
     build_options: &BuildOptions,
     hash_checking: Option<HashCheckingMode>,
+    database: &DistributionDatabase<'_, Context>,
 ) -> Result<(Resolution, HashStrategy), PylockResolutionError> {
     if let Some(requires_python) = lock.requires_python.as_ref() {
         if !requires_python.contains(interpreter.python_version()) {
@@ -113,14 +115,18 @@ pub(crate) fn resolve_pylock_toml(
     let tags = resolution_tags(python_version, python_platform, interpreter)?;
     let marker_env = resolution_markers(python_version, python_platform, interpreter);
 
-    let resolution = lock.to_resolution(
-        install_path,
-        marker_env.markers(),
-        extras,
-        groups,
-        &tags,
-        build_options,
-    )?;
+    let resolution = lock
+        .to_resolution(
+            install_path,
+            marker_env.markers(),
+            extras,
+            groups,
+            &tags,
+            build_options,
+            database,
+            hash_checking.is_some_and(|mode| mode.is_require()),
+        )
+        .await?;
     let hasher = if let Some(hash_checking) = hash_checking {
         HashStrategy::from_resolution(&resolution, hash_checking)?
     } else {
