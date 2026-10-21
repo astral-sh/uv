@@ -17,6 +17,7 @@ use uv_normalize::PackageName;
 use uv_platform_tags::Tags;
 use uv_types::HashStrategy;
 
+use crate::download::variant_compatible;
 use crate::index::cached_wheel::{CachedWheel, ResolvedWheel};
 use crate::source::{HTTP_REVISION, HttpRevisionPointer, LOCAL_REVISION, LocalRevisionPointer};
 
@@ -63,8 +64,10 @@ impl IndexEntry<'_> {
     }
 
     fn matches_source(&self, source: &RegistrySourceDist) -> bool {
+        // We currently assume that source distributions build wheels without a variant label.
         self.built
             && self.index.url() == &source.index
+            && self.dist.filename.variant().is_none()
             && self.dist.filename.name == source.name
             && self.dist.filename.version == source.version
     }
@@ -169,7 +172,13 @@ impl<'a> RegistryWheelIndex<'a> {
     ///
     /// If the package is not yet indexed, this will index the package by reading from the cache.
     pub fn get(&mut self, name: &'a PackageName) -> impl Iterator<Item = &IndexEntry<'_>> {
-        self.get_impl(name).iter().rev()
+        self.get_impl(name)
+            .iter()
+            .rev()
+            // A cached wheel with invalid variant metadata cannot satisfy the resolution.
+            .filter(|entry| {
+                variant_compatible(&entry.dist.filename, &entry.dist.path).unwrap_or(false)
+            })
     }
 
     /// Get an entry in the index.
@@ -229,7 +238,7 @@ impl<'a> RegistryWheelIndex<'a> {
                             if let Some(wheel) =
                                 CachedWheel::from_http_pointer(wheel_dir.join(file), cache)
                             {
-                                if wheel.filename.compatibility(tags).is_compatible() {
+                                if wheel.filename.tag_compatibility(tags).is_compatible() {
                                     // Enforce hash-checking based on the built distribution.
                                     if wheel.satisfies(hasher.archive_policy_for_package(
                                         &wheel.filename.name,
@@ -255,7 +264,7 @@ impl<'a> RegistryWheelIndex<'a> {
                             if let Some(wheel) =
                                 CachedWheel::from_local_pointer(wheel_dir.join(file), cache)
                             {
-                                if wheel.filename.compatibility(tags).is_compatible() {
+                                if wheel.filename.tag_compatibility(tags).is_compatible() {
                                     // Enforce hash-checking based on the built distribution.
                                     if wheel.satisfies(hasher.archive_policy_for_package(
                                         &wheel.filename.name,

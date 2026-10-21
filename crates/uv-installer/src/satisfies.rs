@@ -454,6 +454,9 @@ impl RequirementSatisfaction {
             }
         }
 
+        // TODO(konsti): Check the installed wheel's variant against the current system properties.
+        // Those can change even when the wheel and its platform tags stay the same.
+
         // If a resolved version is provided, check that it matches the installed version.
         // This is needed for sources that don't include explicit version specifiers (e.g.,
         // directory dependencies with dynamic versioning), where the resolver may have determined

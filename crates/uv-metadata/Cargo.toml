@@ -14,6 +14,7 @@ doctest = false
 
 [dependencies]
 uv-distribution-filename = { workspace = true }
+uv-distribution-types = { workspace = true }
 uv-normalize = { workspace = true }
 uv-pypi-types = { workspace = true }
 

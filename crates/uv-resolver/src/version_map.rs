@@ -17,6 +17,7 @@ use uv_distribution_types::{
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_platform_tags::{IncompatibleTag, TagCompatibility, Tags};
+use uv_preview::PreviewFeature;
 use uv_pypi_types::{HashDigest, ResolutionMetadata, Yanked};
 use uv_types::HashStrategy;
 use uv_warnings::warn_user_once;
@@ -838,9 +839,7 @@ impl VersionMapLazy {
             }
         }
 
-        // Variant wheels cannot be selected, including during universal resolution.
-        // TODO(konsti): Support wheel variants during resolution.
-        if filename.variant().is_some() {
+        if filename.variant().is_some() && !uv_preview::is_enabled(PreviewFeature::WheelVariants) {
             return WheelCompatibility::Incompatible(IncompatibleWheel::Tag(
                 IncompatibleTag::Variant,
             ));
@@ -880,10 +879,7 @@ impl VersionMapLazy {
             }
         };
 
-        // Break ties with the build tag.
-        let build_tag = filename.build_tag().cloned();
-
-        WheelCompatibility::Compatible(hash, priority, build_tag)
+        WheelCompatibility::from_tag_priority(filename, hash, priority)
     }
 }
 

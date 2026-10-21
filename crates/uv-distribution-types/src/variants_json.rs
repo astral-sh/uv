@@ -22,6 +22,14 @@ pub enum VariantsJsonParseError {
     /// The metadata is not valid JSON or cannot be deserialized.
     #[error(transparent)]
     Json(#[from] serde_json::Error),
+    /// A wheel's variant metadata does not describe exactly the variant named in its filename.
+    #[error(
+        "Expected `variant.json` to describe only the variant `{expected}` from the wheel filename, found {labels:?}"
+    )]
+    WheelLabels {
+        expected: VariantLabel,
+        labels: Vec<String>,
+    },
 }
 
 /// Variant properties, grouped by namespace and feature.
@@ -38,6 +46,48 @@ pub struct VariantsJsonContent {
 }
 
 impl VariantsJsonContent {
+    /// Whether the properties of a variant are supported by the target system.
+    pub fn is_compatible(
+        &self,
+        label: &VariantLabel,
+        supported: &HashSet<(&str, &str, &str)>,
+    ) -> bool {
+        self.variants.get(label).is_some_and(|properties| {
+            properties.iter().all(|(namespace, features)| {
+                features.iter().all(|(feature, values)| {
+                    values.iter().any(|value| {
+                        supported.contains(&(
+                            namespace.0.as_str(),
+                            feature.0.as_str(),
+                            value.0.as_str(),
+                        ))
+                    })
+                })
+            })
+        })
+    }
+
+    /// Parse a wheel's `variant.json`, validating its label against the wheel filename.
+    ///
+    /// PEP 825 requires a wheel to describe exactly the variant named in its filename.
+    /// The index's `variants.json` lists every variant of the release.
+    pub fn from_wheel(
+        contents: &[u8],
+        label: &VariantLabel,
+    ) -> Result<Self, VariantsJsonParseError> {
+        let metadata = Self::from_slice(contents)?;
+        // TODO(konsti): Check that this label has the same set of properties in the wheel's
+        // `variant.json` and the index's `variants.json`.
+        if metadata.variants.keys().eq(std::iter::once(label)) {
+            Ok(metadata)
+        } else {
+            Err(VariantsJsonParseError::WheelLabels {
+                expected: label.clone(),
+                labels: metadata.variants.keys().map(ToString::to_string).collect(),
+            })
+        }
+    }
+
     /// Parse and validate the contents of a variant metadata file.
     pub fn from_slice(contents: &[u8]) -> Result<Self, VariantsJsonParseError> {
         match serde_json::from_slice(contents) {

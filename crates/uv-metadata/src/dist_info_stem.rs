@@ -31,7 +31,6 @@ impl<'a> DistInfoStem<'a> {
     }
 
     /// Return the original directory stem, without the `.dist-info` suffix.
-    #[cfg(test)]
     pub(crate) fn as_str(&self) -> &str {
         &self.0
     }
