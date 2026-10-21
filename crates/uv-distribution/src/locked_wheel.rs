@@ -2,7 +2,7 @@ use std::io;
 use std::path::PathBuf;
 
 use futures::TryStreamExt;
-use tokio::io::{AsyncRead, AsyncWriteExt};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 
 use uv_cache::{Cache, CacheBucket, CacheEntry, WheelCache};
@@ -16,7 +16,8 @@ use uv_redacted::SafeUrl;
 
 use crate::archive::Archive;
 use crate::distribution_database::{
-    WheelCacheEntry, cache_seekable_wheel, lock_wheel, validate_hashes,
+    RegistryArtifactRequest, WheelCacheEntry, cache_seekable_wheel, lock_wheel, validate_hashes,
+    validate_wheel_size, wheel_index_hashes,
 };
 use crate::hash::{ArtifactHashPolicy, HTTP_DEFAULT_HASH_ALGORITHMS};
 use crate::{Error, HttpArchivePointer, PathArchivePointer};
@@ -29,12 +30,14 @@ enum WheelLocation {
 /// Read the variant metadata from a locked wheel after authenticating it against the lockfile.
 ///
 /// Uses the same wheel cache as installation. A downloaded wheel is hashed in full before any ZIP
-/// entry is parsed. This function does not query variant providers.
+/// entry is parsed, and its download is bounded by the locked size when available. This function
+/// does not query variant providers.
 pub async fn read_locked_wheel_variant(
     client: &RegistryClient,
     cache: &Cache,
     dist: &BuiltDist,
     hashes: &[HashDigest],
+    expected_size: Option<u64>,
 ) -> Result<Option<VariantsJsonContent>, Error> {
     let filename = dist.wheel_filename();
     let Some(label) = filename.variant() else {
@@ -46,10 +49,15 @@ pub async fn read_locked_wheel_variant(
         });
     }
     let policy = ArchiveHashPolicy::All(hashes);
-    let (wheel_cache, location) = match dist {
+    let (wheel_cache, location, hash_policy) = match dist {
         BuiltDist::Registry(wheels) => {
             let wheel = wheels.best_wheel();
-            let url = wheel.file.location.to_url()?;
+            let request = RegistryArtifactRequest::new(
+                &wheel.index,
+                &wheel.file.location,
+                client.index_locations(),
+            )?;
+            let url = request.url;
             let location = if url.scheme() == "file" {
                 WheelLocation::Path(
                     url.to_file_path()
@@ -58,15 +66,22 @@ pub async fn read_locked_wheel_variant(
             } else {
                 WheelLocation::Url(url)
             };
-            (WheelCache::Index(&wheel.index), location)
+            let hash_policy = ArtifactHashPolicy::for_registry(
+                policy,
+                request.is_proxy,
+                wheel.file.hashes.as_slice(),
+            );
+            (WheelCache::Index(request.index), location, hash_policy)
         }
         BuiltDist::DirectUrl(wheel) => (
             WheelCache::Url(&wheel.url),
             WheelLocation::Url(wheel.url.raw().clone()),
+            ArtifactHashPolicy::required(policy),
         ),
         BuiltDist::Path(wheel) => (
             WheelCache::Url(&wheel.url),
             WheelLocation::Path(wheel.install_path.to_path_buf()),
+            ArtifactHashPolicy::required(policy),
         ),
         BuiltDist::GitPath(_) => return Err(Error::HashesNotSupportedGit(dist.to_string())),
     };
@@ -76,13 +91,7 @@ pub async fn read_locked_wheel_variant(
         filename.cache_key(),
     );
     let _lock = lock_wheel(&wheel_entry, filename).await?;
-    let cached = WheelCacheEntry::new(
-        cache,
-        &wheel_entry,
-        dist,
-        ArtifactHashPolicy::required(policy),
-        None,
-    );
+    let cached = WheelCacheEntry::new(cache, &wheel_entry, dist, hash_policy, expected_size);
 
     let archive = if let Some(archive) =
         cached_fragment_wheel(client, cache, dist, policy, &cached)?
@@ -103,8 +112,15 @@ pub async fn read_locked_wheel_variant(
                     let file = fs_err::tokio::File::open(&path)
                         .await
                         .map_err(Error::CacheRead)?;
-                    let archive =
-                        cache_authenticated_wheel(file, cache, &wheel_entry, dist, policy).await?;
+                    let archive = cache_authenticated_wheel(
+                        file,
+                        cache,
+                        &wheel_entry,
+                        dist,
+                        hash_policy,
+                        expected_size,
+                    )
+                    .await?;
                     PathArchivePointer::new(modified, archive.clone())
                         .write_to(&pointer_entry)
                         .await?;
@@ -118,13 +134,31 @@ pub async fn read_locked_wheel_variant(
                         .map_err(io::Error::other)
                         .into_async_read()
                         .compat();
-                    cache_authenticated_wheel(reader, cache, &wheel_entry, dist, policy)
+                    cache_authenticated_wheel(
+                        reader,
+                        cache,
+                        &wheel_entry,
+                        dist,
+                        hash_policy,
+                        expected_size,
+                    )
                 };
-                cached.get_http(client, &url, None, download).await?
+                let cache_control = if let WheelCache::Index(index) = wheel_cache {
+                    client
+                        .index_locations()
+                        .request_policy(index)
+                        .artifact_cache_control()
+                } else {
+                    None
+                };
+                cached
+                    .get_http(client, &url, cache_control, download)
+                    .await?
             }
         }
     };
-    ArtifactHashPolicy::required(policy).verify_required(dist, archive.hashes.as_slice())?;
+    hash_policy.verify_required(dist, archive.hashes.as_slice())?;
+    validate_wheel_size(dist, expected_size, archive.size)?;
     let path = cache.archive(&archive.id);
     let stem = uv_metadata::find_flat_dist_info(filename, &path)
         .map_err(|err| Error::LockedWheelVariant(dist.to_string(), Box::new(err)))?;
@@ -169,27 +203,30 @@ fn cached_fragment_wheel(
 }
 
 /// Authenticate a stable copy before opening the archive, then publish it to the wheel cache.
-async fn cache_authenticated_wheel(
+pub(crate) async fn cache_authenticated_wheel(
     reader: impl AsyncRead + Unpin,
     cache: &Cache,
     wheel_entry: &CacheEntry,
     dist: &BuiltDist,
-    policy: ArchiveHashPolicy<'_>,
+    policy: ArtifactHashPolicy<'_>,
+    expected_size: Option<u64>,
 ) -> Result<Archive, Error> {
     let file = tempfile::tempfile_in(cache.root()).map_err(Error::CacheWrite)?;
     let mut file = tokio::io::BufWriter::new(fs_err::tokio::File::from_std(
         fs_err::File::from_parts(file, cache.root()),
     ));
-    let verifier = ArtifactHashPolicy::required(policy).for_download(&[]);
+    let verifier = policy.for_download(wheel_index_hashes(dist));
     let mut hashers = verifier
         .algorithms(HTTP_DEFAULT_HASH_ALGORITHMS)
         .into_iter()
         .map(Hasher::from)
         .collect::<Vec<_>>();
-    let mut reader = HashReader::new(reader, &mut hashers);
+    let limit = expected_size.map_or(u64::MAX, |size| size.saturating_add(1));
+    let mut reader = HashReader::new(reader.take(limit), &mut hashers);
     let size = tokio::io::copy(&mut reader, &mut file)
         .await
         .map_err(Error::HashExhaustion)?;
+    validate_wheel_size(dist, expected_size, Some(size))?;
     file.flush().await.map_err(Error::CacheWrite)?;
     let hashes = validate_hashes(dist, verifier, hashers)?;
     let content_addressed = uv_preview::is_enabled(PreviewFeature::ContentAddressedCache)
