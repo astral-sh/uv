@@ -21,7 +21,7 @@ use uv_distribution_types::{
     SelectedVariant, VariantsJsonContent,
 };
 use uv_normalize::{DefaultExtras, ExtraName, GroupName, PackageName};
-use uv_pep508::{MarkerVariant, MarkerVariantsEnvironment};
+use uv_pep508::{MarkerTree, MarkerVariant, MarkerVariantsEnvironment};
 use uv_platform_tags::Tags;
 use uv_pypi_types::{ConflictKind, ConflictSet, ResolverMarkerEnvironment};
 use uv_types::BuildContext;
@@ -393,7 +393,7 @@ trait InstallableExt<'lock>: Installable<'lock> {
             let install = install
                 || matches!(
                     *state,
-                    Some(TraversalNode::PendingVariant { install: true })
+                    Some(TraversalNode::PendingVariant { install: true, .. })
                 );
             let node = if let Some(selections) = selections
                 && package_has_variants(package)
@@ -417,7 +417,10 @@ trait InstallableExt<'lock>: Installable<'lock> {
                         install,
                     }
                 } else {
-                    *state = Some(TraversalNode::PendingVariant { install });
+                    *state = Some(TraversalNode::PendingVariant {
+                        install,
+                        reachable: false,
+                    });
                     return Ok(None);
                 }
             } else if install {
@@ -452,6 +455,18 @@ trait InstallableExt<'lock>: Installable<'lock> {
         let mut activated_extras: Vec<(&PackageName, &ExtraName)> = vec![];
         let mut activated_groups: Vec<(&PackageName, &GroupName)> = vec![];
         let has_conflicts = !self.lock().conflicts().is_empty();
+        let track_variant_conflicts = has_conflicts && selections.is_some();
+        // A variant expression belongs to the package declaring the dependency. Evaluate it before
+        // propagating the remaining conflict condition to the dependency's package.
+        let variant_conflict = |marker: UniversalMarker, package: &Package| {
+            UniversalMarker::new(
+                MarkerTree::TRUE,
+                marker.conflict_for_environment_with_variants(
+                    marker_env,
+                    &variant_environment(package),
+                ),
+            )
+        };
         let validate_conflicts = !include_manifest && has_conflicts;
         let mut dependencies_for_conflict_validation = vec![];
 
@@ -545,6 +560,11 @@ trait InstallableExt<'lock>: Installable<'lock> {
         for (dist, package_index, index, root_kind) in initialized_roots {
             let Some(index) = index else {
                 queue.push_back((package_index, None));
+                add_reachability(
+                    &mut conflict_reachability,
+                    (package_index, None),
+                    UniversalMarker::TRUE,
+                );
                 continue;
             };
             if root_kind == InstallableRootKind::Production && groups.prod() {
@@ -618,10 +638,15 @@ trait InstallableExt<'lock>: Installable<'lock> {
                 }
 
                 // Push its dependencies on the queue.
+                let dependency_reachability = if track_variant_conflicts {
+                    variant_conflict(dep.complexified_marker, dist)
+                } else {
+                    dep.complexified_marker
+                };
                 add_reachability(
                     &mut conflict_reachability,
                     (dep.index, None),
-                    dep.complexified_marker,
+                    dependency_reachability,
                 );
                 if seen.insert((dep.index, None)) {
                     queue.push_back((dep.index, None));
@@ -630,7 +655,7 @@ trait InstallableExt<'lock>: Installable<'lock> {
                     add_reachability(
                         &mut conflict_reachability,
                         (dep.index, Some(extra)),
-                        dep.complexified_marker,
+                        dependency_reachability,
                     );
                     if seen.insert((dep.index, Some(extra))) {
                         queue.push_back((dep.index, Some(extra)));
@@ -798,20 +823,39 @@ trait InstallableExt<'lock>: Installable<'lock> {
             let mut activated_extras_set: BTreeSet<(&PackageName, &ExtraName)> =
                 activated_extras.iter().copied().collect();
             let mut queue = queue.clone();
-            let mut reachability = conflict_reachability;
+            let mut reachability = if track_variant_conflicts {
+                conflict_reachability.clone()
+            } else {
+                std::mem::take(&mut conflict_reachability)
+            };
             while let Some((package_index, extra)) = queue.pop_front() {
                 let package = self.lock().package(package_index);
+                if selections.is_some_and(|selections| {
+                    package_has_variants(package)
+                        && (!selections.selected.contains_key(&package_index)
+                            || matches!(
+                                inverse[package_index.0],
+                                Some(TraversalNode::PendingVariant { .. })
+                            ))
+                }) {
+                    continue;
+                }
                 let Some(parent_reachability) = reachability.get(&(package_index, extra)).copied()
                 else {
                     continue;
                 };
                 for dep in package_dependencies(package, extra) {
-                    let mut dep_reachability = dep.complexified_marker;
+                    let mut dep_reachability = if track_variant_conflicts {
+                        variant_conflict(dep.complexified_marker, package)
+                    } else {
+                        dep.complexified_marker
+                    };
                     dep_reachability.and(parent_reachability);
                     let additional_activated_extras =
                         newly_activated_extras(dep, &activated_extras);
-                    if !dep_reachability.evaluate(
+                    if !dep_reachability.evaluate_with_variants(
                         marker_env,
+                        &variant_environment(package),
                         activated_projects.iter().copied(),
                         activated_extras
                             .iter()
@@ -884,11 +928,30 @@ trait InstallableExt<'lock>: Installable<'lock> {
             activated_groups.iter().copied(),
         );
 
+        let mut unresolved = FxHashSet::default();
         while let Some((package_index, extra)) = queue.pop_front() {
             let package = self.lock().package(package_index);
             let Some(TraversalNode::Ready(index)) = inverse[package_index.0] else {
+                unresolved.insert((package_index, extra));
                 continue;
             };
+            let reachability = if track_variant_conflicts {
+                conflict_reachability
+                    .get(&(package_index, extra))
+                    .copied()
+                    .unwrap_or(UniversalMarker::TRUE)
+            } else {
+                UniversalMarker::TRUE
+            };
+            if track_variant_conflicts
+                && !reachability.evaluate_activated_with_variants(
+                    marker_env,
+                    &variant_environment(package),
+                    &activated,
+                )
+            {
+                continue;
+            }
             for dep in package_dependencies(package, extra) {
                 if validate_conflicts && dep.complexified_marker.has_conflict_marker() {
                     dependencies_for_conflict_validation.push((package, dep));
@@ -922,14 +985,52 @@ trait InstallableExt<'lock>: Installable<'lock> {
                 }
 
                 // Push its dependencies on the queue.
+                let dependency_reachability = track_variant_conflicts.then(|| {
+                    let mut dependency_reachability = reachability;
+                    dependency_reachability.and(variant_conflict(dep.complexified_marker, package));
+                    dependency_reachability
+                });
+                if let Some(dependency_reachability) = dependency_reachability {
+                    add_reachability(
+                        &mut conflict_reachability,
+                        (dep.index, None),
+                        dependency_reachability,
+                    );
+                }
                 if seen.insert((dep.index, None)) || (update && dep_index.is_none()) {
                     queue.push_back((dep.index, None));
                 }
                 for extra in &dep.extra {
+                    if let Some(dependency_reachability) = dependency_reachability {
+                        add_reachability(
+                            &mut conflict_reachability,
+                            (dep.index, Some(extra)),
+                            dependency_reachability,
+                        );
+                    }
                     if seen.insert((dep.index, Some(extra))) {
                         queue.push_back((dep.index, Some(extra)));
                     }
                 }
+            }
+        }
+
+        for (package_index, extra) in unresolved {
+            if track_variant_conflicts {
+                let package = self.lock().package(package_index);
+                let reachability = conflict_reachability[&(package_index, extra)];
+                if !reachability.evaluate_activated_with_variants(
+                    marker_env,
+                    &variant_environment(package),
+                    &activated,
+                ) {
+                    continue;
+                }
+            }
+            if let Some(TraversalNode::PendingVariant { reachable, .. }) =
+                &mut inverse[package_index.0]
+            {
+                *reachable = true;
             }
         }
 
@@ -1211,14 +1312,18 @@ struct Traversal {
 #[derive(Clone, Copy)]
 enum TraversalNode {
     Ready(NodeIndex),
-    PendingVariant { install: bool },
+    PendingVariant {
+        install: bool,
+        /// Whether a path remains reachable after conflict evaluation.
+        reachable: bool,
+    },
 }
 
 impl TraversalNode {
     fn is_omitted(self, graph: &Graph<Node, Edge>) -> bool {
         match self {
             Self::Ready(index) => matches!(graph[index], Node::Dist { install: false, .. }),
-            Self::PendingVariant { install } => !install,
+            Self::PendingVariant { install, .. } => !install,
         }
     }
 }
@@ -1232,8 +1337,17 @@ fn pending_variants(
         .copied()
         .enumerate()
         .filter_map(|(index, state)| match state {
-            Some(TraversalNode::PendingVariant { install }) => Some((PackageIndex(index), install)),
-            Some(TraversalNode::Ready(_)) | None => None,
+            Some(TraversalNode::PendingVariant {
+                install,
+                reachable: true,
+            }) => Some((PackageIndex(index), install)),
+            Some(
+                TraversalNode::Ready(_)
+                | TraversalNode::PendingVariant {
+                    reachable: false, ..
+                },
+            )
+            | None => None,
         })
 }
 
@@ -2039,6 +2153,93 @@ provides-extras = ["cli"]
         )
         "#);
         });
+    }
+
+    /// An unselected extra and a dependency for another platform can contain activators for a
+    /// conflicting extra. Neither should make its variant reachable on this platform.
+    #[test]
+    fn schedules_only_reachable_variants_with_unselected_activators() {
+        let lock = Lock::from_toml(
+            r#"
+version = 1
+revision = 3
+requires-python = ">=3.11"
+conflicts = [[
+    { package = "project", extra = "cpu" },
+    { package = "project", extra = "gpu" },
+]]
+
+[[package]]
+name = "excluded"
+version = "1.0.0"
+source = { registry = "https://example.com/simple" }
+[[package.wheels]]
+url = "https://example.com/excluded-1.0.0-py3-none-any-null.whl"
+hash = "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+
+[[package]]
+name = "platform-excluded"
+version = "1.0.0"
+source = { virtual = "platform-excluded" }
+dependencies = [{ name = "project", extra = ["gpu"] }]
+
+[[package]]
+name = "project"
+version = "1.0.0"
+source = { virtual = "." }
+dependencies = [
+    { name = "excluded", marker = "extra == 'extra-7-project-gpu'" },
+    { name = "platform-excluded", marker = "sys_platform == 'linux'" },
+    { name = "selected", marker = "extra != 'extra-7-project-gpu'" },
+]
+
+[package.optional-dependencies]
+cpu = []
+gpu = []
+unselected = [{ name = "project", extra = ["gpu"] }]
+
+[package.metadata]
+provides-extras = ["cpu", "gpu", "unselected"]
+
+[[package]]
+name = "selected"
+version = "1.0.0"
+source = { registry = "https://example.com/simple" }
+[[package.wheels]]
+url = "https://example.com/selected-1.0.0-py3-none-any-null.whl"
+hash = "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+"#,
+        )
+        .expect("valid lock");
+        let root = package(&lock, "project", "1.0.0");
+        let target = LockedPackages {
+            lock: &lock,
+            install_path: Path::new(env!("CARGO_MANIFEST_DIR")),
+            project_name: Some(root.name()),
+        };
+        let build_options = BuildOptions::default();
+        let install_options = InstallOptions::default();
+        let selections = VariantSelections::default();
+        let extras = ExtrasSpecification::default().with_defaults(DefaultExtras::default());
+        let traversal = target
+            .traverse_packages(
+                &[root],
+                None,
+                true,
+                DependencySelectionContext::None,
+                &DARWIN_MARKERS,
+                &extras,
+                &DependencyGroupsWithDefaults::none(),
+                &TAGS,
+                &build_options,
+                &install_options,
+                Some(&selections),
+            )
+            .expect("valid traversal");
+
+        let pending = pending_variants(&traversal.inverse).collect::<Vec<_>>();
+        let selected = package(&lock, "selected", "1.0.0");
+        assert_eq!(pending, [(lock.by_id[&selected.id], true)]);
     }
 
     #[test]
