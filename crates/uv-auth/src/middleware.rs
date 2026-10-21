@@ -931,6 +931,8 @@ mod tests {
 
     type Error = Box<dyn std::error::Error>;
 
+    static RETRY_PROMPTS: AtomicUsize = AtomicUsize::new(0);
+
     async fn start_test_server(username: &'static str, password: &'static str) -> MockServer {
         let server = MockServer::start().await;
 
@@ -987,8 +989,6 @@ mod tests {
     /// Prompted credentials survive a failed request without prompting again on retry.
     #[test(tokio::test)]
     async fn test_credentials_prompt_retry() -> Result<(), Error> {
-        static PROMPTS: AtomicUsize = AtomicUsize::new(0);
-
         let server = start_test_server("user", "password").await;
         let cache = CredentialsCache::new();
         // A username discovered at another path in the same realm still needs a password.
@@ -1013,7 +1013,7 @@ mod tests {
                     .with_cache(cache)
                     .with_only_authenticated(true)
                     .with_credentials_prompt(Some(CredentialsPrompt::new(|| {
-                        PROMPTS.fetch_add(1, Ordering::SeqCst);
+                        RETRY_PROMPTS.fetch_add(1, Ordering::SeqCst);
                         Ok(Some(Credentials::basic(
                             Some("user".to_string()),
                             Some("password".to_string()),
@@ -1031,7 +1031,7 @@ mod tests {
             503
         );
         assert_eq!(client.get(server.uri()).send().await?.status(), 200);
-        assert_eq!(PROMPTS.load(Ordering::SeqCst), 1);
+        assert_eq!(RETRY_PROMPTS.load(Ordering::SeqCst), 1);
 
         Ok(())
     }
