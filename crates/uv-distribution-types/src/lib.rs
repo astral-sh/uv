@@ -57,8 +57,8 @@ use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pep508::{Pep508Url, VerbatimUrl};
 use uv_pypi_types::{
-    ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl, ParsedPathUrl,
-    ParsedUrl, VerbatimParsedUrl,
+    ArchiveUrlFilename, ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitDirectoryUrl,
+    ParsedGitPathUrl, ParsedPathUrl, ParsedUrl, VerbatimParsedUrl,
 };
 use uv_redacted::SafeUrl;
 use uv_redacted::policy::SerializationPolicy;
@@ -277,9 +277,10 @@ pub struct RegistryBuiltDist {
 /// A built distribution (wheel) that exists at an arbitrary URL.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct DirectUrlBuiltDist {
-    /// We require that wheel urls end in the full wheel filename, e.g.
-    /// `https://example.org/packages/flask-3.0.0-py3-none-any.whl`
+    /// The filename used to identify the wheel's name, version, and compatibility tags.
     pub filename: WheelFilename,
+    /// The server-provided filename when the URL does not identify an archive.
+    pub header_filename: Option<Box<str>>,
     /// The URL without the subdirectory fragment.
     pub location: Box<SafeUrl>,
     /// The URL as it was provided by the user.
@@ -343,6 +344,8 @@ pub struct DirectUrlSourceDist {
     pub subdirectory: Option<Box<Path>>,
     /// The file extension, e.g. `tar.gz`, `zip`, etc.
     pub ext: SourceDistExtension,
+    /// The server-provided filename when the URL does not identify an archive.
+    pub header_filename: Option<Box<str>>,
     /// The URL as it was provided by the user, including the subdirectory fragment.
     pub url: VerbatimUrl,
     /// The expected size of the archive, if provided by a lockfile.
@@ -420,12 +423,21 @@ impl Dist {
         url: VerbatimUrl,
         location: SafeUrl,
         subdirectory: Option<Box<Path>>,
-        ext: DistExtension,
+        archive: ArchiveUrlFilename,
     ) -> Result<Self, Error> {
+        let (ext, header_filename) = match archive {
+            ArchiveUrlFilename::Url(ext) => (ext, None),
+            ArchiveUrlFilename::Header { filename, ext } => (ext, Some(filename)),
+            ArchiveUrlFilename::Unknown => return Err(Error::UnresolvedUrl(location)),
+        };
         match ext {
             DistExtension::Wheel => {
                 // Validate that the name in the wheel matches that of the requirement.
-                let filename = WheelFilename::from_str(&url.filename()?)?;
+                let filename = if let Some(filename) = header_filename.as_deref() {
+                    WheelFilename::from_str(filename)?
+                } else {
+                    WheelFilename::from_str(&url.filename()?)?
+                };
                 if filename.name != name {
                     return Err(Error::PackageNameMismatch(
                         name,
@@ -436,6 +448,7 @@ impl Dist {
 
                 Ok(Self::Built(BuiltDist::DirectUrl(DirectUrlBuiltDist {
                     filename,
+                    header_filename,
                     location: Box::new(location),
                     url,
                     size: None,
@@ -450,6 +463,7 @@ impl Dist {
                     location: Box::new(location),
                     subdirectory,
                     ext,
+                    header_filename,
                     url,
                     size: None,
                 })))
@@ -620,7 +634,7 @@ impl Dist {
                 url.verbatim,
                 archive.url,
                 archive.subdirectory,
-                archive.ext,
+                archive.archive,
             ),
             ParsedUrl::Path(file) => {
                 Self::from_file_url(name, url.verbatim, &file.install_path, file.ext)
@@ -863,7 +877,13 @@ impl DirectUrlBuiltDist {
         ParsedUrl::Archive(ParsedArchiveUrl::from_source(
             (*self.location).clone(),
             None,
-            DistExtension::Wheel,
+            self.header_filename.as_ref().map_or(
+                ArchiveUrlFilename::Url(DistExtension::Wheel),
+                |filename| ArchiveUrlFilename::Header {
+                    filename: filename.clone(),
+                    ext: DistExtension::Wheel,
+                },
+            ),
         ))
     }
 }
@@ -896,7 +916,13 @@ impl DirectUrlSourceDist {
         ParsedUrl::Archive(ParsedArchiveUrl::from_source(
             (*self.location).clone(),
             self.subdirectory.clone(),
-            DistExtension::Source(self.ext),
+            self.header_filename.as_ref().map_or(
+                ArchiveUrlFilename::Url(DistExtension::Source(self.ext)),
+                |filename| ArchiveUrlFilename::Header {
+                    filename: filename.clone(),
+                    ext: DistExtension::Source(self.ext),
+                },
+            ),
         ))
     }
 }
@@ -1293,7 +1319,11 @@ impl RemoteSource for RegistrySourceDist {
 
 impl RemoteSource for DirectUrlBuiltDist {
     fn filename(&self) -> Result<Cow<'_, str>, Error> {
-        self.url.filename()
+        if let Some(filename) = self.header_filename.as_deref() {
+            Ok(Cow::Borrowed(filename))
+        } else {
+            self.url.filename()
+        }
     }
 
     fn size(&self) -> Option<u64> {
@@ -1303,7 +1333,11 @@ impl RemoteSource for DirectUrlBuiltDist {
 
 impl RemoteSource for DirectUrlSourceDist {
     fn filename(&self) -> Result<Cow<'_, str>, Error> {
-        self.url.filename()
+        if let Some(filename) = self.header_filename.as_deref() {
+            Ok(Cow::Borrowed(filename))
+        } else {
+            self.url.filename()
+        }
     }
 
     fn size(&self) -> Option<u64> {
@@ -1777,7 +1811,11 @@ impl Identifier for BuildableSource<'_> {
 
 #[cfg(test)]
 mod test {
-    use crate::{BuiltDist, Dist, RemoteSource, SourceDist, UrlString};
+    use std::path::Path;
+
+    use crate::{BuiltDist, Dist, RemoteSource, RequirementSource, SourceDist, UrlString};
+    use uv_pep508::VerbatimUrl;
+    use uv_pypi_types::{ArchiveUrlFilename, VerbatimParsedUrl};
     use uv_redacted::SafeUrl;
     use uv_redacted::policy::{Raw, Stripped};
 
@@ -1791,6 +1829,51 @@ mod test {
             "{}",
             size_of::<SourceDist>()
         );
+    }
+
+    #[test]
+    fn header_wheel_filename_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
+        let location = SafeUrl::parse("https://example.com/download?id=1")?;
+        let url = VerbatimUrl::from_url(location.clone());
+        let dist = Dist::from_http_url(
+            "example".parse()?,
+            url.clone(),
+            location,
+            None,
+            ArchiveUrlFilename::from_header("example-1.0-py3-none-any.whl")?,
+        )?;
+        assert_eq!(dist.filename()?, "example-1.0-py3-none-any.whl");
+        let Dist::Built(BuiltDist::DirectUrl(wheel)) = &dist else {
+            return Err("expected a direct wheel".into());
+        };
+        let source = RequirementSource::from_parsed_url(wheel.to_parsed_url(), url.clone());
+        let parsed = source.to_verbatim_parsed_url().ok_or("missing URL")?;
+        assert_eq!(parsed.verbatim, url);
+        assert_eq!(Dist::from_url("example".parse()?, parsed)?, dist);
+        Ok(())
+    }
+
+    #[test]
+    fn header_source_filename_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
+        let location = SafeUrl::parse("https://example.com/download?id=2")?;
+        let url = VerbatimUrl::from_url(location.clone());
+        let dist = Dist::from_http_url(
+            "example".parse()?,
+            url.clone(),
+            location,
+            Some(Path::new("package").into()),
+            ArchiveUrlFilename::from_header("generated-source.tar.gz")?,
+        )?;
+        assert_eq!(dist.filename()?, "generated-source.tar.gz");
+        let Dist::Source(SourceDist::DirectUrl(source)) = &dist else {
+            return Err("expected a direct source archive".into());
+        };
+        let parsed = VerbatimParsedUrl {
+            parsed_url: source.to_parsed_url(),
+            verbatim: url,
+        };
+        assert_eq!(Dist::from_url("example".parse()?, parsed)?, dist);
+        Ok(())
     }
 
     #[test]

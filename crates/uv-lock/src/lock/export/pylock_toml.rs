@@ -1935,6 +1935,7 @@ impl PylockTomlArchive {
                     let filename = WheelFilename::from_str(&filename)?;
                     validate_wheel_filename(&filename, name, version)?;
                     Ok(Dist::Built(BuiltDist::DirectUrl(DirectUrlBuiltDist {
+                        header_filename: None,
                         filename,
                         location: Box::new(url.clone()),
                         url: VerbatimUrl::from_url(url.clone()),
@@ -1943,6 +1944,7 @@ impl PylockTomlArchive {
                 }
                 DistExtension::Source(ext) => {
                     Ok(Dist::Source(SourceDist::DirectUrl(DirectUrlSourceDist {
+                        header_filename: None,
                         name: name.clone(),
                         location: Box::new(url.clone()),
                         subdirectory: self.subdirectory.clone().map(Box::<Path>::from),

@@ -11,8 +11,9 @@ use url::Host;
 use uv_distribution::{DistributionDatabase, Reporter};
 use uv_distribution_filename::{DistExtension, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
-    BuildableSource, DirectSourceUrl, DirectorySourceUrl, GitDirectorySourceUrl, GitPathSourceUrl,
-    Identifier, PathSourceUrl, RemoteSource, Requirement, SourceUrl,
+    BuildableSource, DirectSourceUrl, DirectorySourceUrl, Error as DistributionTypesError,
+    GitDirectorySourceUrl, GitPathSourceUrl, Identifier, PathSourceUrl, RemoteSource, Requirement,
+    SourceUrl,
 };
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
@@ -248,7 +249,9 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
                 })
             }
             ParsedUrl::Archive(parsed_archive_url) => {
-                let ext = match parsed_archive_url.ext {
+                let ext = match parsed_archive_url.archive.extension().ok_or_else(|| {
+                    DistributionTypesError::UnresolvedUrl(parsed_archive_url.url.clone())
+                })? {
                     DistExtension::Source(ext) => ext,
                     DistExtension::Wheel => unreachable!(),
                 };
@@ -256,6 +259,7 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
                     url: &requirement.url.verbatim,
                     subdirectory: parsed_archive_url.subdirectory.as_deref(),
                     ext,
+                    header_filename: parsed_archive_url.archive.header_filename(),
                 })
             }
             ParsedUrl::GitDirectory(parsed_git_url) => {
