@@ -6,11 +6,10 @@ use uv_distribution_types::{
     BuildInfo, BuiltDist, CachedDist, Dist, Hashed, SupportedVariantProperties, VariantsJsonContent,
 };
 use uv_metadata::{find_flat_dist_info, read_flat_wheel_metadata, read_wheel_variant};
-use uv_platform_tags::Platform;
 use uv_preview::PreviewFeature;
 use uv_pypi_types::{HashDigest, HashDigests, ResolutionMetadata};
 
-use crate::{Error, supported_variant_properties};
+use crate::Error;
 
 /// Allow variant wheels when the wheel variants preview is enabled.
 ///
@@ -58,19 +57,6 @@ pub(crate) fn check_wheel_variant_properties(
         });
     }
     Ok(())
-}
-
-/// Check that an extracted wheel's variant properties are supported by the target system.
-pub fn check_wheel_variant_compatibility(
-    filename: &WheelFilename,
-    archive: &Path,
-    target: &Platform,
-) -> Result<(), Error> {
-    let Some(metadata) = read_wheel_variant_metadata(filename, archive)? else {
-        return Ok(());
-    };
-    let supported = supported_variant_properties(&metadata, target);
-    check_wheel_variant_properties(filename, &metadata, &supported)
 }
 
 /// A locally available wheel.
