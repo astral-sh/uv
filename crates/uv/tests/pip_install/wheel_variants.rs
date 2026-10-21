@@ -408,6 +408,66 @@ async fn variant_metadata_hashes_are_verified() -> Result<()> {
     Ok(())
 }
 
+/// An index sidecar must be bounded before its contents are buffered or parsed.
+#[tokio::test]
+async fn oversized_variant_metadata_is_rejected() -> Result<()> {
+    let server = MockServer::start().await;
+    let context = uv_test::test_context!("3.12").with_filter((server.uri(), "http://[LOCALHOST]"));
+    Mock::given(method("GET"))
+        .and(path("/simple/ok/"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_raw(
+                json!({
+                    "meta": { "api-version": "1.0" },
+                    "name": "ok",
+                    "files": [
+                        {
+                            "filename": "ok-1.0.0-py3-none-any-null.whl",
+                            "url": format!("{}/files/ok-1.0.0-py3-none-any-null.whl", server.uri()),
+                            "hashes": {},
+                            "core-metadata": true,
+                        },
+                        {
+                            "filename": "ok-1.0.0-variants.json",
+                            "url": format!("{}/files/ok-1.0.0-variants.json", server.uri()),
+                            "hashes": {},
+                        },
+                    ],
+                })
+                .to_string(),
+                "application/vnd.pypi.simple.v1+json",
+            ),
+        )
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/files/ok-1.0.0-py3-none-any-null.whl.metadata"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_string("Metadata-Version: 2.3\nName: ok\nVersion: 1.0.0\n"),
+        )
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/files/ok-1.0.0-variants.json"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(vec![b' '; 9 * 1024 * 1024]))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("ok==1.0.0")
+        .arg("--index-url")
+        .arg(format!("{}/simple/", server.uri()))
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Variant metadata at `http://[LOCALHOST]/files/ok-1.0.0-variants.json` exceeds the maximum size of 8388608 bytes
+    ");
+    Ok(())
+}
+
 /// A variant uploaded before the cutoff remains eligible when the ordinary wheel is newer.
 #[tokio::test]
 async fn variant_wheel_before_exclude_newer() -> Result<()> {
