@@ -19,22 +19,16 @@ theme:
     - content.code.copy
     - content.tabs.link
   palette:
-    # Note: Using the system theme works with the insiders version
-    # https://squidfunk.github.io/mkdocs-material/setup/changing-the-colors/#automatic-light-dark-mode
-    - media: "(prefers-color-scheme)"
-      toggle:
-        icon: material/brightness-auto
-        name: Switch to light mode
     - media: "(prefers-color-scheme: light)"
       scheme: astral-light
       toggle:
-        icon: material/brightness-7
+        icon: astral/moon
         name: Switch to dark mode
     - media: "(prefers-color-scheme: dark)"
       scheme: astral-dark
       toggle:
-        icon: material/brightness-4
-        name: Switch to system preference
+        icon: astral/sun
+        name: Switch to light mode
   custom_dir: docs/.overrides
 repo_url: https://github.com/astral-sh/uv
 repo_name: uv
