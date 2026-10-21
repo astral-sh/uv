@@ -717,6 +717,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     next_package,
                     &version,
                     &state.pins,
+                    &state.fork_urls,
                     &state.env,
                     &state.python_requirement,
                     &state.pubgrub,
@@ -1955,12 +1956,21 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         package: &PubGrubPackage,
         version: &Version,
         pins: &FilePins,
+        fork_urls: &ForkUrls,
         env: &ResolverEnvironment,
         python_requirement: &PythonRequirement,
         pubgrub: &State<UvDependencyProvider>,
     ) -> Result<ForkedDependencies, ResolveError> {
-        let dependencies =
-            self.get_dependencies(id, package, version, pins, env, python_requirement, pubgrub)?;
+        let dependencies = self.get_dependencies(
+            id,
+            package,
+            version,
+            pins,
+            fork_urls,
+            env,
+            python_requirement,
+            pubgrub,
+        )?;
         if env.marker_environment().is_some() {
             Ok(ForkedDependencies::from_dependencies_platform_specific(
                 dependencies,
@@ -1983,6 +1993,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         package: &PubGrubPackage,
         version: &Version,
         pins: &FilePins,
+        fork_urls: &ForkUrls,
         env: &ResolverEnvironment,
         python_requirement: &PythonRequirement,
         pubgrub: &State<UvDependencyProvider>,
@@ -2106,6 +2117,27 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         RequirementContext::Package { name, version },
                     ),
                 };
+                // A direct wheel has the same variant label on every target.
+                let direct_dist = if env.marker_environment().is_none() {
+                    fork_urls
+                        .get(name)
+                        .map(|url| Dist::from_url(name.clone(), url.clone()))
+                        .transpose()?
+                } else {
+                    None
+                };
+                let fixed_variant_label = if let Some(Dist::Built(built)) = &direct_dist {
+                    Some(
+                        built
+                            .wheel_filename()
+                            .variant()
+                            .map_or("", |label| label.as_str()),
+                    )
+                } else {
+                    None
+                };
+                let expander =
+                    expander.with_variant_context(pins.variant(name, version), fixed_variant_label);
                 let requirements = expander.expand(requirements, context);
 
                 PubGrubDependency::from_requirements(
