@@ -1,8 +1,13 @@
 use std::borrow::Cow;
+use std::collections::BTreeMap;
 use std::fmt::{self, Display};
 use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
+
+/// Variant properties, grouped by namespace and feature.
+pub type VariantProperties =
+    BTreeMap<VariantNamespace, BTreeMap<VariantFeature, Vec<VariantValue>>>;
 
 /// An invalid component of a wheel variant property.
 #[derive(Debug, thiserror::Error)]
@@ -48,7 +53,7 @@ impl FromStr for VariantNamespace {
     type Err = VariantParseError;
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
-        Self::try_from(value.trim().to_owned())
+        Self::try_from(value.to_owned())
     }
 }
 
@@ -94,7 +99,7 @@ impl FromStr for VariantFeature {
     type Err = VariantParseError;
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
-        Self::try_from(value.trim().to_owned())
+        Self::try_from(value.to_owned())
     }
 }
 
@@ -140,7 +145,7 @@ impl FromStr for VariantValue {
     type Err = VariantParseError;
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
-        Self::try_from(value.trim().to_owned())
+        Self::try_from(value.to_owned())
     }
 }
 

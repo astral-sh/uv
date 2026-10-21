@@ -29,7 +29,9 @@ pub use tree::{
     MarkerVariantsEnvironment, MarkerWarningKind, StringMarkerTree, StringVersion,
     VersionMarkerTree,
 };
-pub use variants::{VariantFeature, VariantNamespace, VariantParseError, VariantValue};
+pub use variants::{
+    VariantFeature, VariantNamespace, VariantParseError, VariantProperties, VariantValue,
+};
 
 /// `serde` helpers for [`MarkerTree`].
 pub mod ser {
