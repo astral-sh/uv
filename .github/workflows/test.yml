@@ -42,17 +42,12 @@ jobs:
       - name: "Install Rust toolchain"
         run: rustup toolchain install --profile minimal
 
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-        id: rust-cache
+      - uses: astral-sh/github-actions/rust-workspace-cache@35adb34286434a5d7173d37bc521fc75c17c251f
         with:
           prefix-key: v1-rust-workspace
           key: ${{ hashFiles('Cargo.toml') }}
-          cache-workspace-crates: "true"
+          profile: fast-build-nightly
           save-if: ${{ inputs.save-rust-cache == 'true' }}
-
-      - name: "Record Cargo cache freshness"
-        if: ${{ inputs.save-rust-cache == 'true' && steps.rust-cache.outputs.cache-hit != 'true' }}
-        run: touch "$RUNNER_TEMP/uv-cargo-cache-marker"
 
       - name: "Configure Python archive cache"
         # Share archives downloaded during setup with the tests.
@@ -117,7 +112,6 @@ jobs:
           # Retry more than default to reduce flakes in CI
           UV_HTTP_RETRIES: 5
           RUST_BACKTRACE: 1
-          CARGO_UNSTABLE_MTIME_ON_USE: ${{ inputs.save-rust-cache == 'true' && steps.rust-cache.outputs.cache-hit != 'true' }}
           UV_INTERNAL__TEST_COW_FS: /btrfs
           UV_INTERNAL__TEST_NOCOW_FS: /tmpfs
           UV_INTERNAL__TEST_ALT_FS: /tmpfs
@@ -133,10 +127,6 @@ jobs:
             --features test-python-patch,test-universal,native-auth,secret-service \
             --workspace \
             --profile ci-linux
-
-      - name: "Prune superseded workspace artifacts"
-        if: ${{ inputs.save-rust-cache == 'true' && steps.rust-cache.outputs.cache-hit != 'true' }}
-        run: python3 scripts/prune_cargo_workspace_cache.py target/fast-build-nightly "$RUNNER_TEMP/uv-cargo-cache-marker"
 
       - name: "Upload pending snapshots"
         if: ${{ failure() }}
@@ -171,17 +161,12 @@ jobs:
       - name: "Install Rust toolchain"
         run: rustup toolchain install --profile minimal
 
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-        id: rust-cache
+      - uses: astral-sh/github-actions/rust-workspace-cache@35adb34286434a5d7173d37bc521fc75c17c251f
         with:
           prefix-key: v1-rust-workspace
           key: ${{ hashFiles('Cargo.toml') }}
-          cache-workspace-crates: "true"
+          profile: fast-build-nightly
           save-if: ${{ inputs.save-rust-cache == 'true' }}
-
-      - name: "Record Cargo cache freshness"
-        if: ${{ inputs.save-rust-cache == 'true' && steps.rust-cache.outputs.cache-hit != 'true' }}
-        run: touch "$RUNNER_TEMP/uv-cargo-cache-marker"
 
       - name: "Create HFS+ disk image (no reflink support)"
         run: |
@@ -221,7 +206,6 @@ jobs:
           # Retry more than default to reduce flakes in CI
           UV_HTTP_RETRIES: 5
           RUST_BACKTRACE: 1
-          CARGO_UNSTABLE_MTIME_ON_USE: ${{ inputs.save-rust-cache == 'true' && steps.rust-cache.outputs.cache-hit != 'true' }}
           # macOS tmpdir is on APFS which supports reflink
           UV_INTERNAL__TEST_COW_FS: ${{ runner.temp }}
           # HFS+ RAM disk does not support copy-on-write and is on a different device
@@ -239,10 +223,6 @@ jobs:
             --features test-python,test-python-managed,test-pypi,test-git,test-git-lfs,performance,test-crates-io,native-auth,apple-native \
             --workspace \
             --profile ci-macos
-
-      - name: "Prune superseded workspace artifacts"
-        if: ${{ inputs.save-rust-cache == 'true' && steps.rust-cache.outputs.cache-hit != 'true' }}
-        run: python3 scripts/prune_cargo_workspace_cache.py target/fast-build-nightly "$RUNNER_TEMP/uv-cargo-cache-marker"
 
       - name: "Upload pending snapshots"
         if: ${{ failure() }}
@@ -299,20 +279,15 @@ jobs:
         working-directory: ${{ env.UV_WORKSPACE }}
         run: rustup toolchain install --profile minimal
 
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-        id: rust-cache
+      - uses: astral-sh/github-actions/rust-workspace-cache@35adb34286434a5d7173d37bc521fc75c17c251f
         with:
           prefix-key: v1-rust-workspace
           key: ${{ hashFiles('Cargo.toml') }}
-          workspaces: ${{ env.UV_WORKSPACE }}
-          cache-workspace-crates: "true"
+          workspace: ${{ env.UV_WORKSPACE }}
+          profile: fast-build-nightly
           # Use the same cache entry across the partitions
           add-job-id-key: false
           save-if: ${{ inputs.save-rust-cache == 'true' }}
-
-      - name: "Record Cargo cache freshness"
-        if: ${{ inputs.save-rust-cache == 'true' && steps.rust-cache.outputs.cache-hit != 'true' }}
-        run: New-Item -ItemType File -Path "$env:RUNNER_TEMP/uv-cargo-cache-marker"
 
       - name: "Create NTFS test directory (low hardlink limit)"
         run: New-Item -Path "C:\uv" -ItemType Directory -Force
@@ -331,7 +306,6 @@ jobs:
           # See https://github.com/astral-sh/uv/issues/6940
           UV_LINK_MODE: copy
           RUST_BACKTRACE: 1
-          CARGO_UNSTABLE_MTIME_ON_USE: ${{ inputs.save-rust-cache == 'true' && steps.rust-cache.outputs.cache-hit != 'true' }}
           UV_INTERNAL__TEST_ALT_FS: "\\\\localhost\\uv-alt-fs"
           UV_INTERNAL__TEST_SMB_FS: "\\\\localhost\\uv-alt-fs"
           UV_INTERNAL__TEST_LOWLINKS_FS: "C:\\uv"
@@ -349,11 +323,6 @@ jobs:
             --workspace \
             --profile ci-windows \
             --partition hash:${{ matrix.partition }}/3
-
-      - name: "Prune superseded workspace artifacts"
-        if: ${{ inputs.save-rust-cache == 'true' && steps.rust-cache.outputs.cache-hit != 'true' }}
-        working-directory: ${{ env.UV_WORKSPACE }}
-        run: python scripts/prune_cargo_workspace_cache.py target/fast-build-nightly "$env:RUNNER_TEMP/uv-cargo-cache-marker"
 
       - name: "Upload pending snapshots"
         if: ${{ failure() }}
