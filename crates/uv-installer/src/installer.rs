@@ -13,7 +13,7 @@ use uv_install_wheel::{Layout, LinkMode};
 use uv_preview::Preview;
 use uv_python_interpreter::PythonEnvironment;
 use uv_threads::initialize_rayon_once;
-use uv_types::BuildContext;
+use uv_types::{BuildContext, HashStrategy, HashVerification};
 
 /// A failure while installing wheels into a Python environment.
 #[derive(Debug, thiserror::Error)]
@@ -111,12 +111,17 @@ impl<'a> Installer<'a> {
     }
 
     /// Validate and capture the selected properties before replacing installed distributions.
-    pub fn with_variant_contexts(
+    pub async fn with_variant_contexts(
         mut self,
         wheels: &[CachedDist],
         resolution: &Resolution,
         database: &DistributionDatabase<'_, impl BuildContext>,
+        hasher: &HashStrategy,
     ) -> Result<Self, InstallError> {
+        let require_hashes = match hasher.verification() {
+            HashVerification::Required(_) => true,
+            HashVerification::Unspecified | HashVerification::IfPresent(_) => false,
+        };
         for wheel in wheels {
             let Some(label) = wheel.filename().variant() else {
                 continue;
@@ -133,7 +138,9 @@ impl<'a> Installer<'a> {
                 }
                 selected.clone()
             } else {
-                let supported = database.supported_variant_properties(&metadata);
+                let supported = database
+                    .supported_variant_properties(&metadata, require_hashes)
+                    .await?;
                 metadata.select_variant(label, &supported).ok_or_else(|| {
                     match metadata.unsupported_variant_properties(label, &supported) {
                         Some(properties) => uv_distribution::Error::IncompatibleWheelVariant {

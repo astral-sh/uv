@@ -166,16 +166,20 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     }
 
     /// Obtain compatible properties for a release or wheel.
-    pub fn supported_variant_properties(
+    pub async fn supported_variant_properties(
         &self,
         metadata: &VariantsJsonContent,
-    ) -> SupportedVariantProperties {
+        require_hashes: bool,
+    ) -> Result<SupportedVariantProperties, Error> {
         if self.is_variant_provider() {
-            return SupportedVariantProperties::default();
+            return Ok(SupportedVariantProperties::default());
         }
-        self.variant_target()
-            .cloned()
-            .unwrap_or_else(|| crate::variant::supported_variant_properties(metadata))
+        crate::variant::query_supported_variant_properties(
+            metadata,
+            self.build_context,
+            require_hashes,
+        )
+        .await
     }
 
     fn check_provider_dependency(&self, dist: &Dist) -> Result<(), Error> {
@@ -270,7 +274,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             Dist::Built(built) => {
                 check_supported_wheel_variant(built)?;
                 let wheel = self.get_wheel(built, hashes).await?;
-                self.select_local_wheel_variant(&wheel, hashes)?;
+                self.select_local_wheel_variant(&wheel, hashes).await?;
                 Ok(wheel)
             }
             // TODO(konsti): Support source distributions that build variant wheels.
@@ -293,10 +297,10 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         }
         check_supported_wheel_variant(dist)?;
         let wheel = self.get_wheel(dist, hashes).await?;
-        self.select_local_wheel_variant(&wheel, hashes)
+        self.select_local_wheel_variant(&wheel, hashes).await
     }
 
-    fn select_local_wheel_variant(
+    async fn select_local_wheel_variant(
         &self,
         wheel: &LocalWheel,
         hashes: ArchiveHashPolicy<'_>,
@@ -315,7 +319,9 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         let Some(metadata) = read_wheel_variant_metadata(&wheel.filename, &wheel.archive)? else {
             return Ok(None);
         };
-        let supported = self.supported_variant_properties(&metadata);
+        let supported = self
+            .supported_variant_properties(&metadata, hashes.requires_validation())
+            .await?;
         check_wheel_variant_properties(&wheel.filename, &metadata, &supported)?;
         Ok(metadata.select_variant(label, &supported))
     }
