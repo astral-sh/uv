@@ -53,6 +53,8 @@ pub enum Error {
     },
     #[error("Wheel variant provider dependencies must use non-variant wheels: `{0}`")]
     VariantProviderDependency(String),
+    #[error("Failed to read variant metadata from `{0}`")]
+    LockedWheelVariant(String, #[source] Box<uv_metadata::Error>),
     #[error("Building source distributions is disabled")]
     NoBuild,
     #[error("Building source distributions for `{0}` is disabled")]
@@ -347,7 +349,8 @@ impl Error {
             | Self::MissingActualHashes { .. }
             | Self::MissingExpectedHashes { .. }
             | Self::HashesNotSupportedSourceTree(_)
-            | Self::HashesNotSupportedGit(_) => true,
+            | Self::HashesNotSupportedGit(_)
+            | Self::LockedWheelVariant(..) => true,
             Self::Build(error) => error.is_user_failure(),
             Self::InstallWheelError(error) => error.is_user_failure(),
             Self::Git(error) => error.is_user_failure(),
