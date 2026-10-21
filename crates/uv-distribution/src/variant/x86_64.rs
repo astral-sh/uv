@@ -68,6 +68,10 @@ impl VendoredVariantProvider for X86_64VariantProvider {
         Version::new([0, 2, 1])
     }
 
+    fn supports_explicit_platform(&self) -> bool {
+        true
+    }
+
     fn properties(&self, target: &Platform) -> Option<&[SupportedVariantFeature]> {
         if target.arch() != Arch::X86_64 {
             return Some(&[]);

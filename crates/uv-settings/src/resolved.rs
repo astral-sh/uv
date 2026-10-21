@@ -5,6 +5,7 @@ use uv_configuration::{
 };
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExtraBuildVariables, IndexLocations, PackageConfigSettings,
+    VariantPolicy,
 };
 use uv_install_wheel::LinkMode;
 use uv_pep440::Version;
@@ -123,6 +124,7 @@ pub enum PythonListKinds {
 /// Borrows the resolved installer options shared by commands.
 #[derive(Debug, Clone)]
 pub struct InstallerSettingsRef<'a> {
+    pub variant_policy: &'a VariantPolicy,
     pub index_locations: &'a IndexLocations,
     pub index_strategy: IndexStrategy,
     pub keyring_provider: KeyringProviderType,
@@ -146,6 +148,7 @@ pub struct InstallerSettingsRef<'a> {
 /// Constructed from the combined [`ResolverOptions`] for an invocation.
 #[derive(Debug, Clone, Default)]
 pub struct ResolverSettings {
+    pub variant_policy: VariantPolicy,
     pub build_options: BuildOptions,
     pub config_setting: ConfigSettings,
     pub config_settings_package: PackageConfigSettings,
@@ -197,6 +200,7 @@ pub fn resolve_prerelease(global: PrereleaseMode, mut package: PrereleasePackage
 impl From<ResolverOptions> for ResolverSettings {
     fn from(value: ResolverOptions) -> Self {
         Self {
+            variant_policy: VariantPolicy::default(),
             index_locations: value.indexes.into(),
             resolution: value.resolution.unwrap_or_default(),
             prerelease: resolve_prerelease(
@@ -258,6 +262,7 @@ impl From<ResolverInstallerOptions> for ResolverInstallerSettings {
         let index_locations = value.indexes.into();
         Self {
             resolver: ResolverSettings {
+                variant_policy: VariantPolicy::default(),
                 build_options: BuildOptions::new(
                     NoBinary::from_args(
                         value.no_binary,
@@ -311,6 +316,7 @@ impl From<ResolverInstallerOptions> for ResolverInstallerSettings {
 impl<'a> From<&'a ResolverInstallerSettings> for InstallerSettingsRef<'a> {
     fn from(settings: &'a ResolverInstallerSettings) -> Self {
         Self {
+            variant_policy: &settings.resolver.variant_policy,
             index_locations: &settings.resolver.index_locations,
             index_strategy: settings.resolver.index_strategy,
             keyring_provider: settings.resolver.keyring_provider,

@@ -11,7 +11,7 @@ use uv_configuration::{
     ProjectBuildBackend, RequiredVersion, RequirementsInput, RequirementsInputError,
 };
 use uv_dirs::{system_config_file, user_config_dir};
-use uv_distribution_types::{IndexUrlError, Origin};
+use uv_distribution_types::{IndexUrlError, Origin, VariantPolicy};
 use uv_flags::EnvironmentFlags;
 use uv_fs::Simplified;
 use uv_normalize::{GroupName, PackageName};
@@ -765,6 +765,8 @@ pub struct EnvironmentOptions {
     pub lfs: Option<bool>,
     pub cuda_driver_version: Option<Version>,
     pub amd_gpu_architecture: Option<AmdGpuArchitecture>,
+    /// Wheel variant target supplied by the user.
+    pub variant_policy: VariantPolicy,
     pub http_connect_timeout: Duration,
     pub http_read_timeout: Duration,
     /// There's no upload timeout in reqwest, instead we have to use a read timeout as upload
@@ -939,6 +941,7 @@ impl EnvironmentOptions {
             native_tls,
             system_certs,
             preview: EnvFlag::new(EnvVars::UV_PREVIEW)?,
+            variant_policy: VariantPolicy::default(),
             isolated: EnvFlag::new(EnvVars::UV_ISOLATED)?,
             no_progress: EnvFlag::new(EnvVars::UV_NO_PROGRESS)?,
             no_installer_metadata: EnvFlag::new(EnvVars::UV_NO_INSTALLER_METADATA)?,
