@@ -969,6 +969,44 @@ async fn sdist_metadata_ignores_variant_wheels() -> Result<()> {
     Ok(())
 }
 
+/// Without an ordinary wheel or variant metadata, the source distribution supplies dependencies.
+#[test]
+fn universal_lock_uses_sdist_instead_of_unlisted_variant() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let links = context.temp_dir.child("links");
+    links.create_dir_all()?;
+    links
+        .child("ok-1.0.0-py3-none-any-unlisted.whl")
+        .write_str("invalid wheel")?;
+    let backend = context.temp_dir.child("backend-executed");
+    let sdist =
+        generate_source_archive(&"ok".parse()?, &"1.0.0".parse()?, "", Some(backend.path()))?;
+    links.child("ok-1.0.0.tar.gz").write_binary(&sdist)?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["ok==1.0.0"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(links.path())
+        .arg("--preview-features")
+        .arg("wheel-variants"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    backend.assert(predicate::path::exists());
+    Ok(())
+}
+
 #[test]
 fn universal_lock_preserves_variant_wheels() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -999,6 +1037,11 @@ fn universal_lock_preserves_variant_wheels() -> Result<()> {
         .child("ok-1.0.0-py3-none-any-null.whl")
         .write_binary(&wheel)?;
     links.child("ok-1.0.0-variants.json").write_str(&metadata)?;
+    // The lock retains all wheels, but only variants declared in the sidecar can contribute
+    // dependencies. Reading metadata from this unlisted variant would fail the resolution.
+    links
+        .child("ok-1.0.0-py3-none-any-unlisted.whl")
+        .write_str("invalid wheel")?;
     context
         .temp_dir
         .child("pyproject.toml")
@@ -1053,6 +1096,7 @@ fn universal_lock_preserves_variant_wheels() -> Result<()> {
         wheels = [
             { path = "[TEMP_DIR]/links/ok-1.0.0-py3-none-any.whl" },
             { path = "[TEMP_DIR]/links/ok-1.0.0-py3-none-any-null.whl" },
+            { path = "[TEMP_DIR]/links/ok-1.0.0-py3-none-any-unlisted.whl" },
         ]
         "#);
     });
