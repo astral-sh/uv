@@ -547,6 +547,7 @@ impl SitePackages {
                         tags,
                         build_settings,
                         self.variant_target(),
+                        None,
                     ) {
                         RequirementSatisfaction::Mismatch
                         | RequirementSatisfaction::OutOfDate
@@ -568,6 +569,7 @@ impl SitePackages {
                                 tags,
                                 build_settings,
                                 self.variant_target(),
+                                None,
                             ) {
                                 RequirementSatisfaction::Mismatch
                                 | RequirementSatisfaction::OutOfDate

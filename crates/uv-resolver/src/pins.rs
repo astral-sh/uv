@@ -5,6 +5,7 @@ use rustc_hash::FxHashMap;
 use uv_distribution_types::{DistributionId, Identifier, ResolvedDist, SelectedVariant};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
+use uv_preview::PreviewFeature;
 
 use crate::ResolveError;
 use crate::candidate_selector::Candidate;
@@ -78,6 +79,16 @@ impl<'index> FilePins<'index> {
                     PinMetadata::Unrequested(dist.for_resolution().distribution_id())
                 };
                 let variant = match dist {
+                    CompatibleDist::InstalledDist(installed)
+                        if uv_preview::is_enabled(PreviewFeature::WheelVariants) =>
+                    {
+                        installed.read_variant_context().map_err(|error| {
+                            uv_distribution::Error::ReadInstalled(
+                                Box::new((*installed).clone()),
+                                error,
+                            )
+                        })?
+                    }
                     CompatibleDist::InstalledDist(_)
                     | CompatibleDist::SourceDist { .. }
                     | CompatibleDist::IncompatibleWheel { .. } => None,
