@@ -193,6 +193,8 @@ jobs:
           # cargo-codspeed resolves metadata before passing --locked to Cargo.
           cargo metadata --locked --format-version 1 > /dev/null
           uv run --only-dev cargo codspeed build --locked --profile profiling -p uv-bench
+          # Run workspace discovery only in walltime because allocator-dependent copies skew simulation.
+          rm target/codspeed/analysis/uv-bench/workspace_discovery
 
       - name: "Retain benchmark profiles"
         id: profiles
