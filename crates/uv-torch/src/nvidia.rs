@@ -35,6 +35,7 @@ impl NvidiaGpu {
         }) else {
             return Ok(None);
         };
+        // TODO(konsti): Filter GPUs by `CUDA_VISIBLE_DEVICES` before choosing compute capability.
         let compute_capability = query_gpu("compute_cap")?.and_then(|output| {
             output
                 .lines()
