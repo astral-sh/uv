@@ -72,8 +72,9 @@ impl NvidiaVariantProvider {
                 None
             }
         });
-        let cuda_version = if let Some(value) =
-            Self::read_override(EnvVars::NV_VARIANT_PROVIDER_FORCE_CUDA_DRIVER_VERSION)
+        let cuda_version = if let Ok(value) =
+            std::env::var(EnvVars::NV_VARIANT_PROVIDER_FORCE_CUDA_DRIVER_VERSION)
+            && !value.is_empty()
         {
             value
                 .parse::<Version>()
@@ -95,23 +96,21 @@ impl NvidiaVariantProvider {
             }
             gpu.cuda_version.clone()
         };
-        let compute_capability =
-            if let Some(value) = Self::read_override(EnvVars::NV_VARIANT_PROVIDER_FORCE_SM_ARCH) {
-                Some(
-                    NvidiaGpu::parse_compute_capability(&value)
-                        .ok_or(NvidiaProviderError::InvalidComputeCapability { value })?,
-                )
-            } else {
-                gpu.as_ref().and_then(|gpu| gpu.compute_capability)
-            };
+        let compute_capability = if let Ok(value) =
+            std::env::var(EnvVars::NV_VARIANT_PROVIDER_FORCE_SM_ARCH)
+            && !value.is_empty()
+        {
+            Some(
+                NvidiaGpu::parse_compute_capability(&value)
+                    .ok_or(NvidiaProviderError::InvalidComputeCapability { value })?,
+            )
+        } else {
+            gpu.as_ref().and_then(|gpu| gpu.compute_capability)
+        };
         Ok(Some(Self::properties_for_capabilities(
             &cuda_version,
             compute_capability,
         )?))
-    }
-
-    fn read_override(name: &str) -> Option<String> {
-        std::env::var(name).ok().filter(|value| !value.is_empty())
     }
 
     /// Implement the ordered properties of `nvidia-variant-provider` 0.0.1.
