@@ -35,6 +35,7 @@ jobs:
       - name: "Prepare review configuration"
         env:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          UV_PYTHON_DOWNLOADS_JSON_URL: ${{ github.workspace }}/crates/uv-python-managed/download-metadata.json
         run: |
           export REVIEW_CONFIG="$RUNNER_TEMP/pull-request-code-quality-review"
           mkdir -p "$REVIEW_CONFIG/codex" "$RUNNER_TEMP/codex-code-quality-review"
