@@ -37,12 +37,17 @@ pub fn supported_variant_properties(metadata: &VariantsJsonContent) -> Supported
                 let provider_name = match request {
                     VariantProviderRequest::Plugin { plugin_api, .. } => plugin_api,
                     VariantProviderRequest::Builtin(name) => Some(name),
+                };
+                if let Some(provider_name) = provider_name {
+                    debug!(
+                        "Skipping unsupported wheel variant provider `{provider_name}` for \
+                         namespace `{namespace}`"
+                    );
+                } else {
+                    debug!(
+                        "Skipping unsupported wheel variant provider for namespace `{namespace}`"
+                    );
                 }
-                .unwrap_or("<default>");
-                debug!(
-                    "Skipping unsupported wheel variant provider `{provider_name}` for namespace \
-                     `{namespace}`"
-                );
                 return None;
             };
             Some((namespace, provider.properties()?))
