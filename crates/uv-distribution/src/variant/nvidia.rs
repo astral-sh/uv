@@ -131,7 +131,8 @@ impl NvidiaVariantProvider {
                 .chain([major.to_string()])
         };
         let mut properties = Vec::new();
-        // The provider allows forced CUDA versions outside the automatic detection range.
+        // Add `cuda_version_lower_bound` with values at or below the effective CUDA version, which
+        // may be forced outside the automatic detection range.
         if detected_major >= MIN_CUDA_MAJOR {
             let lower_bound = versions_for_major(detected_major, detected_minor)
                 .chain(
