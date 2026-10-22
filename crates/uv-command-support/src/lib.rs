@@ -7,6 +7,8 @@ use std::path::Path;
 use std::process::ExitCode;
 use std::time::Duration;
 
+use either::Either;
+
 pub mod child;
 mod printer;
 pub mod progress;
@@ -102,7 +104,7 @@ pub fn elapsed(duration: Duration) -> String {
 
 /// A multicasting writer that writes to both the standard output and an output file, if present.
 pub struct OutputWriter<'a> {
-    stdout: Option<BufWriter<anstream::Stdout>>,
+    stdout: Option<Either<anstream::Stdout, BufWriter<anstream::Stdout>>>,
     output_file: Option<&'a Path>,
     buffer: Vec<u8>,
 }
@@ -113,10 +115,9 @@ impl<'a> OutputWriter<'a> {
         let stdout = include_stdout.then(|| {
             let stdout = anstream::stdout();
             if stdout.is_terminal() {
-                // Let the terminal's line buffer decide when to display output.
-                BufWriter::with_capacity(0, stdout)
+                Either::Left(stdout)
             } else {
-                BufWriter::new(stdout)
+                Either::Right(BufWriter::new(stdout))
             }
         });
         Self {

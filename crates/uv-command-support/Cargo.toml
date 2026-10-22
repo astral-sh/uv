@@ -27,6 +27,7 @@ uv-warnings = { workspace = true }
 anstream = { workspace = true }
 anyhow = { workspace = true }
 dotenvy = { workspace = true }
+either = { workspace = true }
 fs-err = { workspace = true }
 indicatif = { workspace = true }
 owo-colors = { workspace = true }
