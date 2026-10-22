@@ -1,10 +1,11 @@
 use std::cell::LazyCell;
 use std::sync::LazyLock;
 
-use anyhow::{Context, ensure};
 use tracing::debug;
-use uv_distribution_types::{SupportedVariantFeature, VariantFeature, VariantValue};
-use uv_pep440::Version;
+use uv_distribution_types::{
+    SupportedVariantFeature, VariantFeature, VariantMetadataError, VariantValue,
+};
+use uv_pep440::{Version, VersionParseError};
 use uv_static::EnvVars;
 use uv_torch::NvidiaGpu;
 
@@ -25,6 +26,31 @@ pub(super) struct NvidiaVariantProvider {
     properties: LazyLock<Option<Vec<SupportedVariantFeature>>>,
 }
 
+#[derive(Debug, thiserror::Error)]
+enum NvidiaProviderError {
+    #[error(
+        "Invalid value for `{variable}`: `{value}`",
+        variable = EnvVars::NV_VARIANT_PROVIDER_FORCE_CUDA_DRIVER_VERSION
+    )]
+    InvalidCudaVersion {
+        value: String,
+        #[source]
+        source: VersionParseError,
+    },
+    #[error(
+        "Invalid value for `{variable}`: `{value}`",
+        variable = EnvVars::NV_VARIANT_PROVIDER_FORCE_SM_ARCH
+    )]
+    InvalidComputeCapability { value: String },
+    #[error(
+        "CUDA version `{version}` exceeds the limit of {limit} variant values",
+        limit = MAX_CUDA_VERSION_VALUES
+    )]
+    TooManyCudaVersionValues { version: Version },
+    #[error(transparent)]
+    InvalidVariantProperty(#[from] VariantMetadataError),
+}
+
 impl NvidiaVariantProvider {
     pub(super) const fn new() -> Self {
         Self {
@@ -38,7 +64,7 @@ impl NvidiaVariantProvider {
         }
     }
 
-    fn detect_properties() -> anyhow::Result<Option<Vec<SupportedVariantFeature>>> {
+    fn detect_properties() -> Result<Option<Vec<SupportedVariantFeature>>, NvidiaProviderError> {
         let gpu = LazyCell::new(|| match NvidiaGpu::detect() {
             Ok(gpu) => gpu,
             Err(err) => {
@@ -46,11 +72,12 @@ impl NvidiaVariantProvider {
                 None
             }
         });
-        let cuda_version_variable = EnvVars::NV_VARIANT_PROVIDER_FORCE_CUDA_DRIVER_VERSION;
-        let cuda_version = if let Some(value) = Self::read_override(cuda_version_variable) {
-            value.parse::<Version>().context(format!(
-                "Invalid value for `{cuda_version_variable}`: `{value}`"
-            ))?
+        let cuda_version = if let Some(value) =
+            Self::read_override(EnvVars::NV_VARIANT_PROVIDER_FORCE_CUDA_DRIVER_VERSION)
+        {
+            value
+                .parse::<Version>()
+                .map_err(|source| NvidiaProviderError::InvalidCudaVersion { value, source })?
         } else {
             let Some(gpu) = gpu.as_ref() else {
                 return Ok(None);
@@ -68,12 +95,12 @@ impl NvidiaVariantProvider {
             }
             gpu.cuda_version.clone()
         };
-        let compute_capability_variable = EnvVars::NV_VARIANT_PROVIDER_FORCE_SM_ARCH;
         let compute_capability =
-            if let Some(value) = Self::read_override(compute_capability_variable) {
-                Some(NvidiaGpu::parse_compute_capability(&value).context(format!(
-                    "Invalid value for `{compute_capability_variable}`: `{value}`"
-                ))?)
+            if let Some(value) = Self::read_override(EnvVars::NV_VARIANT_PROVIDER_FORCE_SM_ARCH) {
+                Some(
+                    NvidiaGpu::parse_compute_capability(&value)
+                        .ok_or(NvidiaProviderError::InvalidComputeCapability { value })?,
+                )
             } else {
                 gpu.as_ref().and_then(|gpu| gpu.compute_capability)
             };
@@ -94,7 +121,7 @@ impl NvidiaVariantProvider {
     fn properties_for_capabilities(
         cuda_version: &Version,
         compute_capability: Option<(u8, u8)>,
-    ) -> anyhow::Result<Vec<SupportedVariantFeature>> {
+    ) -> Result<Vec<SupportedVariantFeature>, NvidiaProviderError> {
         let release = cuda_version.release();
         let detected_major = release[0];
         // `packaging.version.Version.minor` treats a missing minor release as zero.
@@ -117,11 +144,11 @@ impl NvidiaVariantProvider {
                 .take(MAX_CUDA_VERSION_VALUES + 1)
                 .map(VariantValue::try_from)
                 .collect::<Result<Vec<_>, _>>()?;
-            ensure!(
-                lower_bound.len() <= MAX_CUDA_VERSION_VALUES,
-                "CUDA version `{cuda_version}` exceeds the limit of \
-                 {MAX_CUDA_VERSION_VALUES} variant values"
-            );
+            if lower_bound.len() > MAX_CUDA_VERSION_VALUES {
+                return Err(NvidiaProviderError::TooManyCudaVersionValues {
+                    version: cuda_version.clone(),
+                });
+            }
             properties.push(SupportedVariantFeature {
                 name: VariantFeature::try_from("cuda_version_lower_bound".to_string())?,
                 values: lower_bound,
