@@ -29,9 +29,6 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: "Install mold"
-        run: ./scripts/install-mold.sh
-
       - name: "Install Rust toolchain"
         run: rustup toolchain install --profile minimal
 
@@ -98,9 +95,6 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: "Install mold"
-        run: ./scripts/install-mold.sh
-
       - name: "Setup armv7"
         run: |
           # Try the next configured mirror after the first failed download.
@@ -144,13 +138,12 @@ jobs:
     runs-on: github-ubuntu-24.04-x86_64-8
     env:
       RUSTC_BOOTSTRAP: 1
+      # Use `rustc`'s bundled `lld` instead of the system linker.
+      RUSTFLAGS: -Z unstable-options -C linker-features=+lld -C link-self-contained=+linker
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-
-      - name: "Install mold"
-        run: ./scripts/install-mold.sh
 
       - name: "Setup musl"
         run: sudo apt-get install musl-tools
@@ -352,8 +345,6 @@ jobs:
         run: rustup default ${MSRV}
         env:
           MSRV: ${{ steps.msrv.outputs.value }}
-      - name: "Install mold"
-        run: ./scripts/install-mold.sh
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           save-if: ${{ inputs.save-rust-cache == 'true' }}
