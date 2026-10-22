@@ -3,13 +3,14 @@ use std::sync::LazyLock;
 
 use tracing::debug;
 use uv_distribution_types::{
-    SupportedVariantFeature, VariantFeature, VariantMetadataError, VariantValue,
+    SupportedVariantFeature, VariantFeature, VariantMetadataError, VariantNamespace, VariantValue,
 };
+use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionParseError};
 use uv_static::EnvVars;
 use uv_torch::NvidiaGpu;
 
-use crate::variant::VendoredVariantProvider;
+use crate::variant::{PluginApi, VendoredVariantProvider};
 
 const MIN_CUDA_MAJOR: u64 = 11;
 const MAX_CUDA_MAJOR: u64 = 15;
@@ -22,6 +23,9 @@ const MAX_CUDA_VERSION_VALUES: usize = 1_024;
 // TODO(konsti): Move the NVIDIA variant provider into its own crate.
 /// The vendored implementation of `nvidia-variant-provider` 0.0.1.
 pub(super) struct NvidiaVariantProvider {
+    plugin_api: PluginApi,
+    package_name: PackageName,
+    namespace: VariantNamespace,
     /// Cache capabilities so every package and installation stage uses the same result.
     properties: LazyLock<Option<Vec<SupportedVariantFeature>>>,
 }
@@ -52,8 +56,23 @@ enum NvidiaProviderError {
 }
 
 impl NvidiaVariantProvider {
-    pub(super) const fn new() -> Self {
+    pub(super) fn new() -> Self {
         Self {
+            plugin_api: PluginApi {
+                module: "nvidia_variant_provider.plugin"
+                    .parse()
+                    .expect("valid Python module name"),
+                attributes: vec![
+                    "NvidiaVariantPlugin"
+                        .parse()
+                        .expect("valid Python identifier"),
+                ],
+            },
+            package_name: "nvidia-variant-provider"
+                .parse()
+                .expect("valid package name"),
+            namespace: VariantNamespace::try_from("nvidia".to_string())
+                .expect("valid variant namespace"),
             properties: LazyLock::new(|| match Self::detect_properties() {
                 Ok(properties) => properties,
                 Err(err) => {
@@ -192,16 +211,16 @@ impl NvidiaVariantProvider {
 }
 
 impl VendoredVariantProvider for NvidiaVariantProvider {
-    fn namespace(&self) -> &'static str {
-        "nvidia"
+    fn namespace(&self) -> &VariantNamespace {
+        &self.namespace
     }
 
-    fn plugin_api(&self) -> Option<&'static str> {
-        Some("nvidia_variant_provider.plugin:NvidiaVariantPlugin")
+    fn plugin_api(&self) -> Option<&PluginApi> {
+        Some(&self.plugin_api)
     }
 
-    fn package_name(&self) -> &'static str {
-        "nvidia-variant-provider"
+    fn package_name(&self) -> &PackageName {
+        &self.package_name
     }
 
     fn package_version(&self) -> Version {

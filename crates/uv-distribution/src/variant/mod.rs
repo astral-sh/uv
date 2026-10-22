@@ -1,28 +1,54 @@
 mod nvidia;
 
+use std::sync::LazyLock;
+
 use tracing::debug;
 use uv_distribution_types::{
     SupportedVariantFeature, SupportedVariantProperties, VariantNamespace, VariantProviderRequest,
     VariantsJsonContent,
 };
+use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pep508::{Requirement, VersionOrUrl};
+use uv_pypi_types::{Identifier, ModuleName};
 
 use crate::variant::nvidia::NvidiaVariantProvider;
 
-static NVIDIA_PROVIDER: NvidiaVariantProvider = NvidiaVariantProvider::new();
-static VENDORED_PROVIDERS: &[&dyn VendoredVariantProvider] = &[&NVIDIA_PROVIDER];
+static VENDORED_PROVIDERS: LazyLock<Vec<Box<dyn VendoredVariantProvider>>> =
+    LazyLock::new(|| vec![Box::new(NvidiaVariantProvider::new())]);
+
+/// A Python module and optional attribute path identifying a provider plugin.
+struct PluginApi {
+    module: ModuleName,
+    attributes: Vec<Identifier>,
+}
+
+impl PluginApi {
+    fn matches(&self, value: &str) -> bool {
+        match value.split_once(':') {
+            Some((module, attributes)) => {
+                self.module.as_ref() == module
+                    && self
+                        .attributes
+                        .iter()
+                        .map(AsRef::as_ref)
+                        .eq(attributes.split('.'))
+            }
+            None => self.module.as_ref() == value && self.attributes.is_empty(),
+        }
+    }
+}
 
 /// A vendored wheel variant provider.
-trait VendoredVariantProvider: Sync {
+trait VendoredVariantProvider: Send + Sync {
     /// The API endpoint, or `None` to use the default derived from the package name.
-    fn plugin_api(&self) -> Option<&str>;
+    fn plugin_api(&self) -> Option<&PluginApi>;
     /// The name of the vendored provider package.
-    fn package_name(&self) -> &str;
+    fn package_name(&self) -> &PackageName;
     /// The version of the provider package that was vendored.
     fn package_version(&self) -> Version;
     /// The namespace of the emitted properties.
-    fn namespace(&self) -> &str;
+    fn namespace(&self) -> &VariantNamespace;
     /// Query the host for the compatible properties and their order.
     fn properties(&self) -> Option<&[SupportedVariantFeature]>;
 }
@@ -82,10 +108,16 @@ fn find_vendored_provider(
     };
     let default_plugin_api = requirement.name.as_dist_info_name();
     let plugin_api = plugin_api.unwrap_or(default_plugin_api.as_ref());
-    VENDORED_PROVIDERS.iter().copied().find(|provider| {
-        provider.namespace() == namespace.as_str()
-            && provider.package_name() == requirement.name.as_str()
-            && provider.plugin_api().unwrap_or(default_plugin_api.as_ref()) == plugin_api
+    VENDORED_PROVIDERS.iter().map(Box::as_ref).find(|provider| {
+        if provider.namespace() != namespace || provider.package_name() != &requirement.name {
+            return false;
+        }
+        let matches_plugin_api = if let Some(provider_plugin_api) = provider.plugin_api() {
+            provider_plugin_api.matches(plugin_api)
+        } else {
+            default_plugin_api.as_ref() == plugin_api
+        };
+        matches_plugin_api
             && specifiers
                 .as_ref()
                 .is_none_or(|specifiers| specifiers.contains(&provider.package_version()))
