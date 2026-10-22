@@ -9141,3 +9141,5 @@ dependencies = [
  "syn 2.0.118",
  "winnow",
 ]
+
+# Exercise Cargo Vet in CI
