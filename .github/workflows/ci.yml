@@ -124,6 +124,7 @@ jobs:
       - name: "Check Cargo lockfile changes"
         env:
           GH_REPOSITORY: ${{ github.repository }}
+          UV_PYTHON_DOWNLOADS_JSON_URL: ${{ github.workspace }}/crates/uv-python-managed/download-metadata.json
         run: uv run --script scripts/check-cargo-lock-changes.py HEAD^1 HEAD
 
   check-lock:
