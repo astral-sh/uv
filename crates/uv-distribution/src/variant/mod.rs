@@ -1,4 +1,4 @@
-#[cfg(all(target_arch = "aarch64", target_os = "macos"))]
+#[cfg(all(target_arch = "aarch64", any(target_os = "linux", target_os = "macos")))]
 mod aarch64;
 mod nvidia;
 mod x86_64;
@@ -20,7 +20,7 @@ static NVIDIA_PROVIDER: NvidiaVariantProvider = NvidiaVariantProvider::new();
 static VENDORED_PROVIDERS: &[&dyn VendoredVariantProvider] = &[
     &NVIDIA_PROVIDER,
     &x86_64::X86_64VariantProvider,
-    #[cfg(all(target_arch = "aarch64", target_os = "macos"))]
+    #[cfg(all(target_arch = "aarch64", any(target_os = "linux", target_os = "macos")))]
     &aarch64::Aarch64VariantProvider,
 ];
 

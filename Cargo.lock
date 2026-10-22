@@ -6487,6 +6487,7 @@ dependencies = [
  "indoc",
  "insta",
  "owo-colors",
+ "procfs",
  "rayon",
  "reqwest",
  "rmp-serde",

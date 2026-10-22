@@ -1,4 +1,9 @@
+#[cfg(target_os = "linux")]
+mod linux;
+#[cfg(target_os = "macos")]
 mod macos;
+#[cfg(target_os = "linux")]
+mod profiles;
 
 use std::sync::LazyLock;
 
@@ -9,8 +14,18 @@ use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_platform_tags::{Arch, Platform};
 
-use self::macos::{BASELINE, FEATURE, values};
+#[cfg(target_os = "linux")]
+use self::linux::values;
+#[cfg(target_os = "macos")]
+use self::macos::values;
 use super::{PluginApi, VendoredVariantProvider};
+
+const FEATURE: &str = "version";
+const BASELINE: &str = "8a";
+
+const M1: &[&str] = &["8.4a", "8.3a", "8.2a", "8.1a", "8a"];
+const M2: &[&str] = &["8.5a", "8.4a", "8.3a", "8.2a", "8.1a", "8a"];
+const M3: &[&str] = &["8.6a", "8.5a", "8.4a", "8.3a", "8.2a", "8.1a", "8a"];
 
 const NAMESPACE: &VariantNamespace = &VariantNamespace::from_static("aarch64");
 static PACKAGE_NAME: LazyLock<PackageName> = LazyLock::new(|| {
