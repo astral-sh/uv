@@ -430,14 +430,17 @@ async fn perform_install(
 
     let requested_minor_versions = requests
         .iter()
-        .filter_map(|request| {
-            if let PythonRequest::Version(VersionRequest::MajorMinor(major, minor, ..)) =
-                request.python_request()
-            {
-                Some((*major, *minor))
-            } else {
-                None
+        .filter_map(|request| match request.python_request() {
+            PythonRequest::Version(VersionRequest::MajorMinor(major, minor, variant)) => {
+                Some((*major, *minor, *variant))
             }
+            PythonRequest::Key(download_request) => match download_request.version() {
+                Some(VersionRequest::MajorMinor(major, minor, variant)) => {
+                    Some((*major, *minor, *variant))
+                }
+                _ => None,
+            },
+            _ => None,
         })
         .collect::<IndexSet<_>>();
 
@@ -676,8 +679,11 @@ async fn perform_install(
         }
 
         let upgradeable = (default || is_default_install)
-            || requested_minor_versions
-                .contains(&(installation.key().major(), installation.key().minor()));
+            || requested_minor_versions.contains(&(
+                installation.key().major(),
+                installation.key().minor(),
+                *installation.key().variant(),
+            ));
 
         if let Some(bin_dir) = bin_dir.as_ref() {
             create_bin_links(
