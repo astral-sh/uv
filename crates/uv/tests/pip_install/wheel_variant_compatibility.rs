@@ -236,6 +236,8 @@ fn backtrack_to_compatible_nvidia_variant() -> Result<()> {
 }
 
 /// Skip the NVIDIA provider when a forced CUDA version would require too many variant values.
+///
+/// This is inherited from the Python implementation of the variant provider.
 #[test]
 fn skip_excessive_nvidia_cuda_override() -> Result<()> {
     let context = uv_test::test_context!("3.12");

@@ -15,12 +15,15 @@ static VENDORED_PROVIDERS: &[&dyn VendoredVariantProvider] = &[&NVIDIA_PROVIDER]
 
 /// A vendored wheel variant provider.
 trait VendoredVariantProvider: Sync {
-    fn namespace(&self) -> &str;
     /// The API endpoint, or `None` to use the default derived from the package name.
     fn plugin_api(&self) -> Option<&str>;
-    /// The normalized name of the provider package.
+    /// The name of the vendored provider package.
     fn package_name(&self) -> &str;
+    /// The version of the provider package that was vendored.
     fn package_version(&self) -> Version;
+    /// The namespace of the emitted properties.
+    fn namespace(&self) -> &str;
+    /// Query the host for the compatible properties and their order.
     fn properties(&self) -> Option<&[SupportedVariantFeature]>;
 }
 
