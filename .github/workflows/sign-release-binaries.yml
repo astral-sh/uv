@@ -225,6 +225,8 @@ jobs:
     name: "assemble signed release artifacts"
     needs: [prepare, sign-macos, sign-windows]
     runs-on: depot-ubuntu-24.04-4
+    env:
+      UV_PYTHON_DOWNLOADS_JSON_URL: ${{ github.workspace }}/crates/uv-python-managed/download-metadata.json
     permissions:
       contents: read
     outputs:

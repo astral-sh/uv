@@ -1396,6 +1396,8 @@ jobs:
   check-wheels:
     name: "check wheel contents"
     runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-2' || 'ubuntu-slim' }}
+    env:
+      UV_PYTHON_DOWNLOADS_JSON_URL: ${{ github.workspace }}/crates/uv-python-managed/download-metadata.json
     needs:
       - macos-x86_64
       - macos-aarch64
