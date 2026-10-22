@@ -7438,7 +7438,11 @@ struct PackageMetadata {
 }
 
 #[derive(serde::Deserialize)]
-#[serde(rename_all = "kebab-case")]
+#[serde(
+    rename = "PackageMetadata",
+    rename_all = "kebab-case",
+    expecting = "struct PackageMetadata"
+)]
 struct PackageMetadataWire {
     #[serde(default)]
     requires_dist: BTreeSet<Requirement>,
