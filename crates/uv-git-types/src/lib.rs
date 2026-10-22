@@ -2,7 +2,7 @@ pub use crate::github::GitHubRepository;
 pub use crate::oid::{GitOid, OidParseError};
 pub use crate::reference::GitReference;
 use std::cmp::Ordering;
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock};
 
 use percent_encoding::percent_decode_str;
 use thiserror::Error;
@@ -95,8 +95,14 @@ pub enum GitUrlParseError {
 }
 
 /// A URL reference to a Git repository.
+///
+/// Store the Git-specific fields out of line so ordinary registry and path requirements do
+/// not reserve space for both URLs, a Git reference, and a resolved commit.
+#[derive(Debug, Clone, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct GitUrl(Arc<GitUrlInner>);
+
 #[derive(Debug, Clone)]
-pub struct GitUrl {
+struct GitUrlInner {
     /// The URL of the Git repository, with any query parameters, fragments, and leading `git+`
     /// removed.
     url: SafeUrl,
@@ -148,13 +154,13 @@ impl GitUrl {
             }
         }
 
-        let git = Self {
+        let git = Self(Arc::new(GitUrlInner {
             repository: RepositoryUrl::new(url.clone()),
             url,
             reference,
             resolved: None,
             lfs,
-        };
+        }));
         match precise {
             Some(precise) => git.with_precise(precise),
             None => Ok(git),
@@ -163,17 +169,17 @@ impl GitUrl {
 
     /// Set the precise [`GitOid`] to use for this Git URL.
     pub fn with_precise(mut self, precise: GitOid) -> Result<Self, GitUrlParseError> {
-        match self.reference.as_commit() {
+        match self.0.reference.as_commit() {
             Some(commit) => {
                 if commit != precise {
                     return Err(GitUrlParseError::MismatchedRevision {
                         revision: commit.to_string(),
                         precise,
-                        url: Box::new(self.url.clone()),
+                        url: Box::new(self.0.url.clone()),
                     });
                 }
             }
-            None => self.resolved = Some(precise),
+            None => Arc::make_mut(&mut self.0).resolved = Some(precise),
         }
 
         Ok(self)
@@ -182,54 +188,57 @@ impl GitUrl {
     /// Set the [`GitReference`] to use for this Git URL, clearing any resolved commit if it changes.
     #[must_use]
     pub fn with_reference(mut self, reference: GitReference) -> Self {
-        if self.reference != reference {
-            self.resolved = None;
-            self.reference = reference;
+        if self.0.reference != reference {
+            let inner = Arc::make_mut(&mut self.0);
+            inner.resolved = None;
+            inner.reference = reference;
         }
         self
     }
 
     /// Return the [`Url`] of the Git repository.
     pub fn url(&self) -> &SafeUrl {
-        &self.url
+        &self.0.url
     }
 
     /// Return the canonical repository identity for this Git URL.
     pub fn repository(&self) -> &RepositoryUrl {
-        &self.repository
+        &self.0.repository
     }
 
     /// Return the reference to the commit to use, which could be a branch, tag or revision.
     pub fn reference(&self) -> &GitReference {
-        &self.reference
+        &self.0.reference
     }
 
     /// Return the precise commit, whether requested directly or resolved from a named reference.
     pub fn precise(&self) -> Option<GitOid> {
-        self.reference.as_commit().or(self.resolved_commit())
+        self.0.reference.as_commit().or(self.resolved_commit())
     }
 
     /// Return the commit obtained by resolving a reference, if known.
     ///
     /// Returns `None` when the reference is itself a full commit.
     pub fn resolved_commit(&self) -> Option<GitOid> {
-        self.resolved
+        self.0.resolved
     }
 
     /// Return the Git LFS configuration.
     pub fn lfs(&self) -> GitLfs {
-        self.lfs
+        self.0.lfs
     }
 
     /// Set the Git LFS configuration.
     #[must_use]
     pub fn with_lfs(mut self, lfs: GitLfs) -> Self {
-        self.lfs = lfs;
+        if self.0.lfs != lfs {
+            Arc::make_mut(&mut self.0).lfs = lfs;
+        }
         self
     }
 }
 
-impl PartialEq for GitUrl {
+impl PartialEq for GitUrlInner {
     fn eq(&self, other: &Self) -> bool {
         self.repository == other.repository
             && self.reference == other.reference
@@ -238,15 +247,15 @@ impl PartialEq for GitUrl {
     }
 }
 
-impl Eq for GitUrl {}
+impl Eq for GitUrlInner {}
 
-impl PartialOrd for GitUrl {
+impl PartialOrd for GitUrlInner {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl Ord for GitUrl {
+impl Ord for GitUrlInner {
     fn cmp(&self, other: &Self) -> Ordering {
         self.repository
             .cmp(&other.repository)
@@ -256,7 +265,7 @@ impl Ord for GitUrl {
     }
 }
 
-impl std::hash::Hash for GitUrl {
+impl std::hash::Hash for GitUrlInner {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.repository.hash(state);
         self.reference.hash(state);
@@ -299,6 +308,7 @@ impl TryFrom<SafeUrl> for GitUrl {
 impl From<GitUrl> for SafeUrl {
     fn from(git: GitUrl) -> Self {
         let precise = git.precise();
+        let git = Arc::unwrap_or_clone(git.0);
         let mut url = git.url;
 
         // If we have a precise commit, add `@` and the commit hash to the URL.
@@ -316,7 +326,7 @@ impl From<GitUrl> for SafeUrl {
 
 impl std::fmt::Display for GitUrl {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.url)
+        write!(f, "{}", self.url())
     }
 }
 

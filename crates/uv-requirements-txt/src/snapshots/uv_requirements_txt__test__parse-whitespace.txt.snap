@@ -38,24 +38,9 @@ RequirementsTxt {
                             VerbatimParsedUrl {
                                 parsed_url: GitDirectory(
                                     ParsedGitDirectoryUrl {
-                                        url: GitUrl {
-                                            url: SafeUrl {
-                                                scheme: "https",
-                                                cannot_be_a_base: false,
-                                                username: "",
-                                                password: None,
-                                                host: Some(
-                                                    Domain(
-                                                        "github.com",
-                                                    ),
-                                                ),
-                                                port: None,
-                                                path: "/pandas-dev/pandas.git",
-                                                query: None,
-                                                fragment: None,
-                                            },
-                                            repository: RepositoryUrl {
-                                                repo_url: SafeUrl {
+                                        url: GitUrl(
+                                            GitUrlInner {
+                                                url: SafeUrl {
                                                     scheme: "https",
                                                     cannot_be_a_base: false,
                                                     username: "",
@@ -66,16 +51,33 @@ RequirementsTxt {
                                                         ),
                                                     ),
                                                     port: None,
-                                                    path: "/pandas-dev/pandas",
+                                                    path: "/pandas-dev/pandas.git",
                                                     query: None,
                                                     fragment: None,
                                                 },
-                                                with_lfs: None,
+                                                repository: RepositoryUrl {
+                                                    repo_url: SafeUrl {
+                                                        scheme: "https",
+                                                        cannot_be_a_base: false,
+                                                        username: "",
+                                                        password: None,
+                                                        host: Some(
+                                                            Domain(
+                                                                "github.com",
+                                                            ),
+                                                        ),
+                                                        port: None,
+                                                        path: "/pandas-dev/pandas",
+                                                        query: None,
+                                                        fragment: None,
+                                                    },
+                                                    with_lfs: None,
+                                                },
+                                                reference: DefaultBranch,
+                                                resolved: None,
+                                                lfs: Disabled,
                                             },
-                                            reference: DefaultBranch,
-                                            resolved: None,
-                                            lfs: Disabled,
-                                        },
+                                        ),
                                         subdirectory: None,
                                     },
                                 ),
