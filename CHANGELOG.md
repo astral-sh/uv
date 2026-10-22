@@ -7,9 +7,7 @@
 
 Released on 2026-10-21.
 
-This release adds the CPython [3.15.1](https://www.python.org/downloads/release/python-3151/), [3.14.9](https://www.python.org/downloads/release/python-3149/), and [3.13.17](https://www.python.org/downloads/release/python-31317/) security patch releases to its managed Python downloads.
-
-Following [uv 0.13.4](https://github.com/astral-sh/uv/releases/tag/0.13.4), which removed the affected eMudhra/emSign root from uv's own certificate store, this release updates the latest managed CPython builds for 3.11 and newer to [python-build-standalone 20261021](https://github.com/astral-sh/python-build-standalone/releases/tag/20261021). These distributions install [pip 26.2.2](https://pip.pypa.io/en/stable/news/#v26-2-2) and bundle the same wheel with `ensurepip`, so both use certifi 2026.10.19, which removes the affected root. After upgrading uv, run `uv python upgrade` to install the updated managed CPython builds. Virtual environments pinned to an older patch version are not upgraded automatically.
+Following [uv 0.13.4](https://github.com/astral-sh/uv/releases/tag/0.13.4), which removed the affected eMudhra/emSign root from uv's own certificate store, this release updates the latest managed CPython builds for 3.11 and newer to [python-build-standalone 20261021](https://github.com/astral-sh/python-build-standalone/releases/tag/20261021), including the CPython [3.15.1](https://www.python.org/downloads/release/python-3151/), [3.14.9](https://www.python.org/downloads/release/python-3149/), and [3.13.17](https://www.python.org/downloads/release/python-31317/) security patch releases. These builds install [pip 26.2.2](https://pip.pypa.io/en/stable/news/#v26-2-2) and bundle it with `ensurepip`, so both copies use certifi 2026.10.19, which removes the same affected root. After upgrading uv, run `uv python upgrade` to install the updated builds. Virtual environments pinned to an older patch version are not upgraded automatically.
 
 ### Enhancements
 
