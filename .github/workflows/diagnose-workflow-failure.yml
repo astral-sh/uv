@@ -23,7 +23,9 @@ jobs:
   diagnose:
     if: github.repository == 'astral-sh/uv' || github.repository == 'astral-sh/uv-dev'
     runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
-    environment: automations
+    environment:
+      name: automations
+      deployment: false
     timeout-minutes: 20
     permissions:
       actions: read
@@ -138,7 +140,9 @@ jobs:
       needs.diagnose.outputs.result != '' &&
       fromJSON(needs.diagnose.outputs.result).failure_kind == 'flaky'
     runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
-    environment: automations
+    environment:
+      name: automations
+      deployment: false
     timeout-minutes: 5
     concurrency:
       group: workflow-failure-retry-${{ github.repository }}-${{ inputs.run }}
@@ -230,7 +234,9 @@ jobs:
       (fromJSON(needs.diagnose.outputs.result).decision == 'create' ||
       fromJSON(needs.diagnose.outputs.result).decision == 'duplicate')
     runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
-    environment: automations
+    environment:
+      name: automations
+      deployment: false
     timeout-minutes: 5
     permissions:
       id-token: write # for the credential broker

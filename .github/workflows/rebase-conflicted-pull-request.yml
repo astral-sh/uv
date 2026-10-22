@@ -32,7 +32,9 @@ jobs:
   rebase:
     name: "Rebase pull request #${{ inputs.number }}"
     runs-on: depot-ubuntu-24.04-4
-    environment: automations
+    environment:
+      name: automations
+      deployment: false
     timeout-minutes: 30
     permissions:
       contents: read
@@ -161,7 +163,9 @@ jobs:
     name: "Push rebased pull request #${{ inputs.number }}"
     needs: rebase
     runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-2' || 'ubuntu-slim' }}
-    environment: automations
+    environment:
+      name: automations
+      deployment: false
     timeout-minutes: 10
     permissions:
       contents: read

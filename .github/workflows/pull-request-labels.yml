@@ -26,7 +26,9 @@ jobs:
   labels:
     if: github.repository == 'astral-sh/uv' || github.repository == 'astral-sh/uv-dev'
     runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
-    environment: automations
+    environment:
+      name: automations
+      deployment: false
     timeout-minutes: 15
     permissions:
       contents: read
@@ -137,7 +139,9 @@ jobs:
       needs.validate.outputs.labels != '' &&
       fromJSON(needs.validate.outputs.labels)[0] != null
     runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-2' || 'ubuntu-slim' }}
-    environment: automations
+    environment:
+      name: automations
+      deployment: false
     timeout-minutes: 5
     permissions:
       id-token: write # for the repository label credential broker
