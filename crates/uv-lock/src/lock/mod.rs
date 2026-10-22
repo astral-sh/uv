@@ -7514,12 +7514,11 @@ impl PackageMetadata {
             })
             .collect::<Result<_, _>>()?;
 
-        Ok(PackageMetadataWire {
+        Ok(Self::from(PackageMetadataWire {
             requires_dist,
             provides_extra: metadata.provides_extra.clone(),
             dependency_groups,
-        }
-        .into())
+        }))
     }
 }
 
