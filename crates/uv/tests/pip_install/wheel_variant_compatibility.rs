@@ -212,6 +212,68 @@ fn x86_64_target_uses_platform_defaults() -> Result<()> {
     Ok(())
 }
 
+/// Check the target architecture even when the Armv8-A variant has an `any` platform tag.
+#[test]
+#[cfg(all(target_arch = "aarch64", target_os = "macos"))]
+fn aarch64_variant_respects_target_architecture() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_python_names()
+        .with_filtered_virtualenv_bin()
+        .with_filtered_exe_suffix();
+    let links = context.temp_dir.child("links");
+    links.create_dir_all()?;
+    let metadata = json!({
+        "$schema": PEP_850_SCHEMA,
+        "default-priorities": { "namespace": ["aarch64"] },
+        "providers": {
+            "aarch64": { "requires": ["aarch64-variant-provider==0.2.0"] }
+        },
+        "variants": { "armv8a": { "aarch64": { "version": ["8a"] } } }
+    })
+    .to_string();
+    let (_, wheel) = WheelBuilder::new(&"ok".parse()?, &"1.0.0".parse()?)
+        .files(&[("ok-1.0.0.dist-info/variant.json", &metadata)])
+        .build();
+    links
+        .child("ok-1.0.0-py3-none-any-armv8a.whl")
+        .write_binary(&wheel)?;
+    links.child("ok-1.0.0-variants.json").write_str(&metadata)?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(links.path())
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("ok==1.0.0"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0
+    ");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(links.path())
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("--python-platform")
+        .arg("x86_64-unknown-linux-gnu")
+        .arg("--target")
+        .arg(context.temp_dir.child("x86_64").path())
+        .arg("ok==1.0.0"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
+    error: No solution found when resolving dependencies
+      cause: Because ok==1.0.0 has only unsupported wheel variants and you require ok==1.0.0, we can conclude that your requirements are unsatisfiable.
+    ");
+    Ok(())
+}
+
 /// Fall back to an older release and reject its otherwise preferred incompatible NVIDIA variant.
 #[test]
 fn backtrack_to_compatible_nvidia_variant() -> Result<()> {

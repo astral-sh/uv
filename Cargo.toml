@@ -313,6 +313,7 @@ syn = { version = "3.0.0", default-features = false, features = [
   "printing",
   "proc-macro",
 ] }
+sysctl = { version = "0.7.1", default-features = false }
 tar-codec = { version = "0.0.15", default-features = false }
 target-lexicon = { version = "0.13.0", default-features = false }
 tempfile = { version = "3.14.0", default-features = false, features = ["getrandom"] }

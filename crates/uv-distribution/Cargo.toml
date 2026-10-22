@@ -69,6 +69,9 @@ tracing = { workspace = true }
 version-ranges = { workspace = true }
 walkdir = { workspace = true }
 
+[target.'cfg(all(target_arch = "aarch64", target_os = "macos"))'.dependencies]
+sysctl = { workspace = true }
+
 [dev-dependencies]
 uv-preview = { workspace = true, features = ["testing"] }
 
