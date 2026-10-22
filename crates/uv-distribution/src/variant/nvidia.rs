@@ -123,7 +123,8 @@ impl NvidiaVariantProvider {
     ) -> Result<Vec<SupportedVariantFeature>, NvidiaProviderError> {
         let release = cuda_version.release();
         let detected_major = release[0];
-        // `packaging.version.Version.minor` treats a missing minor release as zero.
+        // PEP 440 compares zero-padded release segments, so `12` and `12.0` yield the same
+        // CUDA compatibility bounds.
         let detected_minor = release.get(1).copied().unwrap_or(0);
         let versions_for_major = |major: u64, max_minor: u64| {
             (0..=max_minor)
