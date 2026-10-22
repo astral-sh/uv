@@ -44,30 +44,16 @@ jobs:
         run: uv run --script scripts/cargo-vet-workspaces.py >> "$GITHUB_OUTPUT"
 
   check-vet:
-    name: "Cargo Vet (${{ matrix.workspace }})"
+    name: "Cargo Vet"
     needs: detect-vet-workspaces
-    timeout-minutes: 10
-    runs-on: ubuntu-slim
-    strategy:
-      fail-fast: false
-      matrix:
-        workspace: ${{ fromJSON(fromJSON(needs.detect-vet-workspaces.outputs.workspaces)[0] != null && needs.detect-vet-workspaces.outputs.workspaces || '["."]') }}
-    environment: ${{ fromJSON(needs.detect-vet-workspaces.outputs.workspaces)[0] != null && 'automations' || '' }}
+    uses: astral-sh/github-actions/.github/workflows/cargo-vet.yml@47ef561fb62ac6c7cd971cd36427691e793a3bba
+    with:
+      workspaces: ${{ needs.detect-vet-workspaces.outputs.workspaces }}
+      uv-version: "0.13.4"
+    secrets: inherit
     permissions:
       contents: read
       id-token: write
-    steps:
-      - name: "Skip Cargo Vet"
-        if: ${{ fromJSON(needs.detect-vet-workspaces.outputs.workspaces)[0] == null }}
-        run: echo "Cargo Vet is not required"
-      - name: "Run cargo-vet"
-        if: ${{ fromJSON(needs.detect-vet-workspaces.outputs.workspaces)[0] != null }}
-        uses: astral-sh/github-actions/cargo-vet@47ef561fb62ac6c7cd971cd36427691e793a3bba
-        with:
-          workspace: ${{ matrix.workspace }}
-          workspaces: ${{ needs.detect-vet-workspaces.outputs.workspaces }}
-          uv-version: "0.13.4"
-          sts-api-url: ${{ secrets.STS_API_URL }}
 
   plan:
     needs: check-vet
