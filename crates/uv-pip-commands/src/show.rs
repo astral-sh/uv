@@ -1,4 +1,5 @@
 use std::fmt::Write;
+use std::io::IsTerminal;
 
 use anyhow::Result;
 use fs_err::File;
@@ -20,7 +21,7 @@ use uv_python_types::{
 
 use crate::reporters::report_target_environment;
 use uv_command_support::ExitStatus;
-use uv_command_support::Printer;
+use uv_command_support::{Printer, Stdout};
 
 /// Show information about one or more installed packages.
 pub fn pip_show(
@@ -218,9 +219,19 @@ pub fn pip_show(
         if files {
             let path = distribution.install_path().join("RECORD");
             let record = read_record(&mut File::open(path)?)?;
-            writeln!(printer.stdout(), "Files:")?;
-            for entry in record {
-                writeln!(printer.stdout(), "  {}", entry.path)?;
+            let mut stdout = printer.stdout();
+            writeln!(stdout, "Files:")?;
+            let batch_rows = stdout == Stdout::Enabled && !std::io::stdout().is_terminal();
+            for rows in record.chunks(128) {
+                // An escape sequence in one filename must not consume the next.
+                if batch_rows && rows.iter().all(|row| !row.path.contains(char::is_control)) {
+                    let paths = rows.iter().map(|row| &row.path).join("\n  ");
+                    writeln!(stdout, "  {paths}")?;
+                } else {
+                    for row in rows {
+                        writeln!(stdout, "  {}", row.path)?;
+                    }
+                }
             }
         }
     }

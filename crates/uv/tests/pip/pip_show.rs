@@ -1,5 +1,6 @@
 use anyhow::Result;
 use assert_cmd::prelude::*;
+use assert_fs::fixture::ChildPath;
 use assert_fs::fixture::FileWriteStr;
 use assert_fs::fixture::PathChild;
 use indoc::indoc;
@@ -474,6 +475,36 @@ fn show_files() {
       requests/structures.py
       requests/utils.py
     ");
+}
+
+/// An unterminated ANSI escape in a RECORD path must not hide the files that follow it.
+#[test]
+fn show_files_with_unterminated_escape() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let dist_info = ChildPath::new(context.site_packages()).child("example-1.0.0.dist-info");
+    dist_info.child("METADATA").write_str(indoc! {"
+        Metadata-Version: 2.1
+        Name: example
+        Version: 1.0.0
+    "})?;
+    dist_info
+        .child("RECORD")
+        .write_str("first.py\x1b]0;title,,\nsecond.py,,\n")?;
+
+    uv_snapshot!(context.filters(), context.pip_show().arg("--files").arg("example"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    Name: example
+    Version: 1.0.0
+    Location: [SITE_PACKAGES]/
+    Requires:
+    Required-by:
+    Files:
+      first.py
+      second.py
+    ");
+
+    Ok(())
 }
 
 #[test]
