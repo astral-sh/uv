@@ -200,6 +200,7 @@ impl NvidiaVariantProvider {
             let architectures = (0..=minor)
                 .rev()
                 .map(|minor| format!("{major}{minor}_real"))
+                // TODO(konsti): Ask NVIDIA about `_virtual` values; use upstream values for now.
                 .chain([format!("{major}0_virtual")])
                 .map(VariantValue::try_from)
                 .collect::<Result<_, _>>()?;

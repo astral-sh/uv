@@ -179,6 +179,7 @@ fn backtrack_to_compatible_nvidia_variant() -> Result<()> {
     });
     let mut variants_by_version = BTreeMap::new();
     for (version, label, lower_bound, upper_bound, sm_arch) in [
+        // The major-only CUDA bound `12` is supported but ranks below `12.0`.
         ("1.0.0", "gpu88", "12", "12.1", "88_real"),
         ("1.0.0", "gpu90", "12.0", "12.2", "90_real"),
         ("2.0.0", "gpu90", "12.0", "12.2", "90_real"),
