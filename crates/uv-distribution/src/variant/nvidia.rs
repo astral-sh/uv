@@ -152,8 +152,7 @@ impl NvidiaVariantProvider {
                 values: lower_bound,
             });
         }
-        // A wheel's CUDA upper bound is exclusive, so compatible bounds exceed the effective
-        // CUDA version. Emit them from highest to lowest, matching the provider's preference order.
+        // Add `cuda_version_upper_bound` with values above the effective CUDA version.
         if detected_major <= MAX_CUDA_MAJOR {
             let upper_bound = (detected_major + 1..=MAX_CUDA_MAJOR)
                 .rev()
