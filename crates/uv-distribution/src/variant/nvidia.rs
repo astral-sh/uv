@@ -111,8 +111,7 @@ impl NvidiaVariantProvider {
     }
 
     fn read_override(name: &str) -> Option<String> {
-        let value = std::env::var(name).ok()?;
-        (!value.is_empty()).then_some(value)
+        std::env::var(name).ok().filter(|value| !value.is_empty())
     }
 
     /// Implement the ordered properties of `nvidia-variant-provider` 0.0.1.
