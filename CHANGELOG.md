@@ -37,7 +37,7 @@ Following [uv 0.13.4](https://github.com/astral-sh/uv/releases/tag/0.13.4), whic
 ### Security
 
 - Reject certificate chains containing compromised eMudhra intermediate keys via `rustls-webpki` 0.103.16 ([#22777](https://github.com/astral-sh/uv/pull/22777))
-- Stop publishing uv Docker images based on Python 3.9 and 3.10 images that no longer receive upstream updates. Upstream CPython 3.9 and 3.10 still bundle pip releases whose certificate bundles trust the affected eMudhra/emSign root ([#22773](https://github.com/astral-sh/uv/pull/22773))
+- Stop publishing uv Docker images based on Python 3.9 and 3.10 images that no longer receive upstream updates ([#22773](https://github.com/astral-sh/uv/pull/22773))
 
 ## 0.13.4
 
