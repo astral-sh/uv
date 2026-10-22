@@ -63,8 +63,8 @@ jobs:
         uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           # renovate: datasource=github-release-attachments depName=astral-sh/uv
-          version: "0.13.4"
-          checksum: "2b428396f12572d4429cf210ca234dd599a33b3af0958a4d5ed569d63e3f344f"
+          version: "0.13.5"
+          checksum: "f68d291c75783122dad58ab77def0e13f3233f358731db5d6d7e8715603b928f"
 
       - name: "Install cargo nextest"
         env:

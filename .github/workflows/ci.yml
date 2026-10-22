@@ -34,8 +34,8 @@ jobs:
       runner: depot-ubuntu-24.04-16
       helper-runner: github-ubuntu-24.04-x86_64-4
       # renovate: datasource=github-release-attachments depName=astral-sh/uv
-      uv-version: "0.13.4"
-      uv-checksum: "2b428396f12572d4429cf210ca234dd599a33b3af0958a4d5ed569d63e3f344f"
+      uv-version: "0.13.5"
+      uv-checksum: "f68d291c75783122dad58ab77def0e13f3233f358731db5d6d7e8715603b928f"
       # Install Rust tools such as cargo-nextest so the reviewer can test PR code.
       # Keep the environment outside the checkout when switching to the PR head.
       setup-command: |
@@ -119,8 +119,8 @@ jobs:
         uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           # renovate: datasource=github-release-attachments depName=astral-sh/uv
-          version: "0.13.0"
-          checksum: "1468ebd5a5541121837c5a2817b9972ba6090fa6caa3d142620850a47fb75154"
+          version: "0.13.5"
+          checksum: "f68d291c75783122dad58ab77def0e13f3233f358731db5d6d7e8715603b928f"
       - name: "Check Cargo lockfile changes"
         env:
           GH_REPOSITORY: ${{ github.repository }}
