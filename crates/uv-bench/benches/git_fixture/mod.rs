@@ -26,14 +26,10 @@ impl GitFixture {
                 &["-c", "init.templateDir=", "init", "--bare", "--quiet"],
             )?;
 
-            // Unpack the upstream packfile so its object order and deltas cannot affect
-            // the pack served during the benchmark. Use one thread for the delta search.
             let reference = format!("+{}:{}", self.commit, self.reference);
             git(
                 repository,
                 &[
-                    "-c",
-                    "fetch.unpackLimit=2147483647",
                     "fetch",
                     "--no-auto-maintenance",
                     "--quiet",
@@ -46,7 +42,11 @@ impl GitFixture {
                 repository,
                 &["update-ref", "--no-deref", "HEAD", self.commit],
             )?;
-            git(repository, &["-c", "pack.threads=1", "repack", "-adq"])?;
+            // A delta represents one object as changes to a similar object. Git splits the
+            // search for similar objects across threads, so scheduling can change which base
+            // objects it compares and hence the pack used by the benchmark. Use one thread for
+            // the delta search and -F to recompute compressed objects and deltas from scratch.
+            git(repository, &["-c", "pack.threads=1", "repack", "-adqF"])?;
 
             // Local fetches must support the same object filtering as the upstream host.
             git(repository, &["config", "uploadpack.allowFilter", "true"])?;
