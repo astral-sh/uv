@@ -31,9 +31,9 @@ pub struct HashStrategy {
 /// The trusted hashes to enforce when retrieving distributions.
 #[derive(Debug, Default, Clone)]
 pub enum HashVerification {
-    /// Hashes do not need to be validated.
+    /// No resolution-wide hash verification policy is configured.
     #[default]
-    None,
+    Unspecified,
     /// Validate known hashes, without requiring hashes for other distributions.
     IfPresent(Arc<FxHashMap<VersionId, Vec<HashDigest>>>),
     /// Every distribution must have a matching trusted hash.
@@ -72,14 +72,14 @@ impl HashStrategy {
     /// for identities absent from this strategy remain available for newly resolved dependencies.
     pub fn with_constraint_hashes(mut self, constraints: &Self) -> Result<Self, HashStrategyError> {
         let (requirement_hashes, mode) = match &self.verification {
-            HashVerification::None => {
+            HashVerification::Unspecified => {
                 self.verification = constraints.verification.clone();
                 return Ok(self);
             }
             HashVerification::IfPresent(hashes) => {
                 let mode = match &constraints.verification {
                     HashVerification::Required(_) => HashCheckingMode::Require,
-                    HashVerification::None | HashVerification::IfPresent(_) => {
+                    HashVerification::Unspecified | HashVerification::IfPresent(_) => {
                         HashCheckingMode::Verify
                     }
                 };
@@ -90,7 +90,7 @@ impl HashStrategy {
 
         let mut constraints = constraints.clone();
         let constraint_hashes = match &mut constraints.verification {
-            HashVerification::None => return Ok(self),
+            HashVerification::Unspecified => return Ok(self),
             HashVerification::IfPresent(hashes) | HashVerification::Required(hashes) => {
                 Arc::make_mut(hashes)
             }
@@ -204,7 +204,7 @@ impl HashStrategy {
                     hashes.get(&id).map(Vec::as_slice).unwrap_or_default(),
                 );
             }
-            HashVerification::None => {}
+            HashVerification::Unspecified => {}
         }
         HashValidation::None
     }
@@ -212,7 +212,7 @@ impl HashStrategy {
     /// Look up supplied hashes, including public-version pins in verification mode.
     fn hashes_for_id(&self, id: &VersionId) -> Option<&[HashDigest]> {
         match &self.verification {
-            HashVerification::None => None,
+            HashVerification::Unspecified => None,
             HashVerification::IfPresent(hashes) => hashes
                 .get(id)
                 .or_else(|| {
@@ -240,7 +240,7 @@ impl HashStrategy {
             HashVerification::Required(hashes) => {
                 hashes.contains_key(&VersionId::from_registry(name.clone(), version.clone()))
             }
-            HashVerification::None | HashVerification::IfPresent(_) => true,
+            HashVerification::Unspecified | HashVerification::IfPresent(_) => true,
         }
     }
 
@@ -248,7 +248,7 @@ impl HashStrategy {
     pub fn allows_url(&self, url: &SafeUrl) -> bool {
         match &self.verification {
             HashVerification::Required(hashes) => hashes.contains_key(&VersionId::from_url(url)),
-            HashVerification::None | HashVerification::IfPresent(_) => true,
+            HashVerification::Unspecified | HashVerification::IfPresent(_) => true,
         }
     }
 
@@ -259,7 +259,7 @@ impl HashStrategy {
         requirements: impl Iterator<Item = &'a Requirement>,
     ) -> Result<Self, HashStrategyError> {
         match &mut self.verification {
-            HashVerification::None => {}
+            HashVerification::Unspecified => {}
             HashVerification::IfPresent(existing) | HashVerification::Required(existing) => {
                 if let Some(hashes) = Self::augment_hashes(existing, requirements)? {
                     *existing = Arc::new(hashes);

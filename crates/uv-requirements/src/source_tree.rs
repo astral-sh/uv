@@ -216,7 +216,7 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
                 HashCollection::None => HashCollection::All,
                 collection @ (HashCollection::Url | HashCollection::All) => collection,
             },
-            HashVerification::None => self.hasher.collection(),
+            HashVerification::Unspecified => self.hasher.collection(),
         };
         let hashes = MetadataHashPolicy {
             collection,
