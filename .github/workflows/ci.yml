@@ -20,7 +20,7 @@ jobs:
   detect-vet-workspaces:
     # CI on main is redundant in the security repository.
     if: ${{ github.repository != 'astral-sh/uv-security' || github.ref != 'refs/heads/main' }}
-    runs-on: ubuntu-slim
+    runs-on: github-ubuntu-24.04-x86_64-2
     outputs:
       workspaces: ${{ steps.detect.outputs.workspaces }}
     steps:
@@ -47,7 +47,7 @@ jobs:
     name: "Cargo Vet (${{ matrix.workspace }})"
     needs: detect-vet-workspaces
     timeout-minutes: 10
-    runs-on: ubuntu-slim
+    runs-on: github-ubuntu-24.04-x86_64-4
     strategy:
       fail-fast: false
       matrix:
