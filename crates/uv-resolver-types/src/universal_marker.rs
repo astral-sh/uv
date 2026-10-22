@@ -2,7 +2,6 @@ use std::borrow::Borrow;
 use std::collections::BTreeSet;
 use std::str::FromStr;
 
-#[cfg(test)]
 use rustc_hash::FxHashMap;
 
 use uv_normalize::{ExtraName, GroupName, InvalidNameError, PackageName};
@@ -836,8 +835,7 @@ impl<'a> ParsedRawExtra<'a> {
 /// When `scope_package` is set, unencoded package extras like `extra == 'cpu'` are interpreted
 /// relative to that package. Conflict-encoded extras and groups are resolved independent of
 /// `scope_package`.
-#[cfg(test)]
-fn resolve_activated_extras(
+pub fn resolve_activated_extras(
     marker: MarkerTree,
     scope_package: Option<&PackageName>,
     known_conflicts: &FxHashMap<ConflictItem, MarkerTree>,
