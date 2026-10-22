@@ -214,7 +214,7 @@ fn x86_64_target_uses_platform_defaults() -> Result<()> {
 
 /// Check the target architecture even when the Armv8-A variant has an `any` platform tag.
 #[test]
-#[cfg(all(target_arch = "aarch64", target_os = "macos"))]
+#[cfg(all(target_arch = "aarch64", any(target_os = "linux", target_os = "macos")))]
 fn aarch64_variant_respects_target_architecture() -> Result<()> {
     let context = uv_test::test_context!("3.12")
         .with_filtered_python_names()
