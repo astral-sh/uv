@@ -1,3 +1,5 @@
+#[cfg(all(target_arch = "aarch64", target_os = "macos"))]
+mod aarch64;
 mod nvidia;
 mod x86_64;
 
@@ -15,8 +17,12 @@ use uv_pypi_types::{Identifier, ModuleName};
 use crate::variant::nvidia::NvidiaVariantProvider;
 
 static NVIDIA_PROVIDER: NvidiaVariantProvider = NvidiaVariantProvider::new();
-static VENDORED_PROVIDERS: &[&dyn VendoredVariantProvider] =
-    &[&NVIDIA_PROVIDER, &x86_64::X86_64VariantProvider];
+static VENDORED_PROVIDERS: &[&dyn VendoredVariantProvider] = &[
+    &NVIDIA_PROVIDER,
+    &x86_64::X86_64VariantProvider,
+    #[cfg(all(target_arch = "aarch64", target_os = "macos"))]
+    &aarch64::Aarch64VariantProvider,
+];
 
 /// A Python module and optional path to an object within it, identifying a provider plugin.
 struct PluginApi {
