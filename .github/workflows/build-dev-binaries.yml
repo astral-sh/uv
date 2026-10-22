@@ -35,7 +35,7 @@ jobs:
       - name: "Install Rust toolchain"
         run: rustup toolchain install --profile minimal
 
-      - uses: astral-sh/github-actions/rust-workspace-cache@7eaa7b9d1a13059d7b5305c2dab921fdc2c9cad3
+      - uses: astral-sh/github-actions/rust-workspace-cache@374b3d54bd4be0644dd1bb437decde17acd776b8
         with:
           prefix-key: v1-rust-workspace
           profile: no-debug-nightly
