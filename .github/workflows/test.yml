@@ -67,7 +67,7 @@ jobs:
           # Warm the cache for Unix-only tests
           uv python install 3.12d 3.13d 3.13t 3.13td
 
-      - name: "Install secret service"
+      - name: "Install Linux test dependencies"
         run: |
           # Try the next configured mirror after the first failed download.
           cat /etc/apt/apt-mirrors.txt
@@ -76,7 +76,10 @@ jobs:
             'Acquire::http::Timeout "10";' \
             'Acquire::https::Timeout "10";' \
             | sudo tee /etc/apt/apt.conf.d/80-retries > /dev/null
-          sudo apt install -y --no-install-recommends gnome-keyring
+          # Use Ubuntu's Git and libcurl together. Some runner versions lose the URL username
+          # when fetching private repositories (https://github.com/astral-sh/uv/issues/22584).
+          sudo apt install -y --no-install-recommends --allow-downgrades \
+            git/noble-updates git-man/noble-updates libcurl3t64-gnutls/noble-updates gnome-keyring
 
       - name: "Start gnome-keyring"
         # run gnome-keyring with 'foobar' as password for the login keyring
