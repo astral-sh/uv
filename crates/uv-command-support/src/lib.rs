@@ -2,12 +2,10 @@
 
 use std::borrow::Cow;
 use std::fs::Metadata;
-use std::io::stdout;
+use std::io::{BufWriter, Write};
 use std::path::Path;
 use std::process::ExitCode;
 use std::time::Duration;
-
-use anstream::AutoStream;
 
 pub mod child;
 mod printer;
@@ -104,7 +102,7 @@ pub fn elapsed(duration: Duration) -> String {
 
 /// A multicasting writer that writes to both the standard output and an output file, if present.
 pub struct OutputWriter<'a> {
-    stdout: Option<AutoStream<std::io::Stdout>>,
+    stdout: Option<BufWriter<anstream::Stdout>>,
     output_file: Option<&'a Path>,
     buffer: Vec<u8>,
 }
@@ -112,7 +110,15 @@ pub struct OutputWriter<'a> {
 impl<'a> OutputWriter<'a> {
     /// Create a new output writer.
     pub fn new(include_stdout: bool, output_file: Option<&'a Path>) -> Self {
-        let stdout = include_stdout.then(|| AutoStream::<std::io::Stdout>::auto(stdout()));
+        let stdout = include_stdout.then(|| {
+            let stdout = anstream::stdout();
+            if stdout.is_terminal() {
+                // Let the terminal's line buffer decide when to display output.
+                BufWriter::with_capacity(0, stdout)
+            } else {
+                BufWriter::new(stdout)
+            }
+        });
         Self {
             stdout,
             output_file,
@@ -120,8 +126,10 @@ impl<'a> OutputWriter<'a> {
         }
     }
 
-    /// Commit the buffer to the output file.
-    pub async fn commit(self) -> std::io::Result<()> {
+    /// Flush standard output and commit the buffer to the output file.
+    pub async fn commit(mut self) -> std::io::Result<()> {
+        self.flush()?;
+
         if let Some(output_file) = self.output_file {
             let stream = anstream::adapter::strip_bytes(&self.buffer).into_vec();
 
@@ -159,7 +167,7 @@ impl<'a> OutputWriter<'a> {
     }
 }
 
-impl std::io::Write for OutputWriter<'_> {
+impl Write for OutputWriter<'_> {
     /// Write to both standard output and the output buffer, if present.
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         // Write to the buffer.

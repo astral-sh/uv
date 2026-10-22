@@ -1,11 +1,11 @@
 use std::env;
 use std::ffi::OsStr;
-use std::io::{self, BufWriter, IsTerminal, Write};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, anyhow, bail};
 use clap::ValueEnum;
-use itertools::{Either, Itertools};
+use itertools::Itertools;
 use owo_colors::OwoColorize;
 use rustc_hash::FxHashSet;
 use serde::Deserialize;
@@ -563,13 +563,7 @@ async fn render_export<'output>(
     }
 
     // Write the resolved dependencies to the output channel.
-    let include_stdout = !quiet || output_file.is_none();
-    let mut output = OutputWriter::new(include_stdout, output_file);
-    let mut writer = if include_stdout && !io::stdout().is_terminal() {
-        Either::Left(BufWriter::new(&mut output))
-    } else {
-        Either::Right(&mut output)
-    };
+    let mut writer = OutputWriter::new(!quiet || output_file.is_none(), output_file);
 
     // Determine the output format.
     let format = format.unwrap_or_else(|| {
@@ -733,9 +727,7 @@ async fn render_export<'output>(
         }
     }
 
-    writer.flush()?;
-    drop(writer);
-    Ok(output)
+    Ok(writer)
 }
 
 /// Format the uv command used to generate the output file.
