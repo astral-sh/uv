@@ -12,6 +12,25 @@ use uv_torch::NvidiaGpu;
 
 use crate::variant::{PluginApi, VendoredVariantProvider};
 
+static PLUGIN_API: LazyLock<PluginApi> = LazyLock::new(|| PluginApi {
+    module: "nvidia_variant_provider.plugin"
+        .parse()
+        .expect("valid Python module name"),
+    object_path: vec![
+        "NvidiaVariantPlugin"
+            .parse()
+            .expect("valid Python identifier"),
+    ],
+});
+static PACKAGE_NAME: LazyLock<PackageName> = LazyLock::new(|| {
+    "nvidia-variant-provider"
+        .parse()
+        .expect("valid package name")
+});
+static NAMESPACE: LazyLock<VariantNamespace> = LazyLock::new(|| {
+    VariantNamespace::try_from("nvidia".to_string()).expect("valid variant namespace")
+});
+
 const MIN_CUDA_MAJOR: u64 = 11;
 const MIN_CUDA_MINOR: u64 = 0;
 const MAX_CUDA_MAJOR: u64 = 15;
@@ -24,9 +43,6 @@ const MAX_CUDA_VERSION_VALUES: usize = 1_024;
 // TODO(konsti): Move the NVIDIA variant provider into its own crate.
 /// The vendored implementation of `nvidia-variant-provider` 0.0.1.
 pub(super) struct NvidiaVariantProvider {
-    plugin_api: PluginApi,
-    package_name: PackageName,
-    namespace: VariantNamespace,
     /// Cache capabilities so every package and installation stage uses the same result.
     properties: LazyLock<Option<Vec<SupportedVariantFeature>>>,
 }
@@ -57,23 +73,8 @@ enum NvidiaProviderError {
 }
 
 impl NvidiaVariantProvider {
-    pub(super) fn new() -> Self {
+    pub(super) const fn new() -> Self {
         Self {
-            plugin_api: PluginApi {
-                module: "nvidia_variant_provider.plugin"
-                    .parse()
-                    .expect("valid Python module name"),
-                object_path: vec![
-                    "NvidiaVariantPlugin"
-                        .parse()
-                        .expect("valid Python identifier"),
-                ],
-            },
-            package_name: "nvidia-variant-provider"
-                .parse()
-                .expect("valid package name"),
-            namespace: VariantNamespace::try_from("nvidia".to_string())
-                .expect("valid variant namespace"),
             properties: LazyLock::new(|| match Self::detect_properties() {
                 Ok(properties) => properties,
                 Err(err) => {
@@ -213,15 +214,15 @@ impl NvidiaVariantProvider {
 
 impl VendoredVariantProvider for NvidiaVariantProvider {
     fn namespace(&self) -> &VariantNamespace {
-        &self.namespace
+        &NAMESPACE
     }
 
     fn plugin_api(&self) -> Option<&PluginApi> {
-        Some(&self.plugin_api)
+        Some(&PLUGIN_API)
     }
 
     fn package_name(&self) -> &PackageName {
-        &self.package_name
+        &PACKAGE_NAME
     }
 
     fn package_version(&self) -> Version {

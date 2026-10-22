@@ -1,7 +1,5 @@
 mod nvidia;
 
-use std::sync::LazyLock;
-
 use tracing::debug;
 use uv_distribution_types::{
     SupportedVariantFeature, SupportedVariantProperties, VariantNamespace, VariantProviderRequest,
@@ -14,8 +12,8 @@ use uv_pypi_types::{Identifier, ModuleName};
 
 use crate::variant::nvidia::NvidiaVariantProvider;
 
-static VENDORED_PROVIDERS: LazyLock<Vec<Box<dyn VendoredVariantProvider>>> =
-    LazyLock::new(|| vec![Box::new(NvidiaVariantProvider::new())]);
+static NVIDIA_PROVIDER: NvidiaVariantProvider = NvidiaVariantProvider::new();
+static VENDORED_PROVIDERS: &[&dyn VendoredVariantProvider] = &[&NVIDIA_PROVIDER];
 
 /// A Python module and optional path to an object within it, identifying a provider plugin.
 struct PluginApi {
@@ -40,7 +38,7 @@ impl PluginApi {
 }
 
 /// A vendored wheel variant provider.
-trait VendoredVariantProvider: Send + Sync {
+trait VendoredVariantProvider: Sync {
     /// The API endpoint, or `None` to use the default derived from the package name.
     fn plugin_api(&self) -> Option<&PluginApi>;
     /// The name of the vendored provider package.
@@ -108,7 +106,7 @@ fn find_vendored_provider(
     };
     let default_plugin_api = requirement.name.as_dist_info_name();
     let plugin_api = plugin_api.unwrap_or(default_plugin_api.as_ref());
-    VENDORED_PROVIDERS.iter().map(Box::as_ref).find(|provider| {
+    VENDORED_PROVIDERS.iter().copied().find(|provider| {
         if provider.namespace() != namespace || provider.package_name() != &requirement.name {
             return false;
         }
