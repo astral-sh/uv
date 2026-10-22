@@ -1692,6 +1692,8 @@ impl EdgeBuilder {
     fn from_versions(versions: Vec<Version>, operator: ContainerOperator) -> Self {
         let mut range: Ranges<Version> = versions
             .into_iter()
+            // Containment uses release-only versions, just like comparison specifiers.
+            .map(|version| version.only_release())
             .map(|version| (Bound::Included(version.clone()), Bound::Included(version)))
             .collect();
 
