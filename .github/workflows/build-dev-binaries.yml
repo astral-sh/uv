@@ -56,12 +56,13 @@ jobs:
     runs-on: github-ubuntu-24.04-aarch64-4
     env:
       RUSTC_BOOTSTRAP: 1
-      # Use `rustc`'s bundled `lld` instead of the system linker.
-      RUSTFLAGS: -Z unstable-options -C linker-features=+lld -C link-self-contained=+linker
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      - name: "Install mold"
+        run: ./scripts/install-mold.sh
 
       - name: "Install Rust toolchain"
         run: rustup toolchain install --profile minimal
