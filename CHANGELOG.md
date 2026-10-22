@@ -16,7 +16,6 @@ Following [uv 0.13.4](https://github.com/astral-sh/uv/releases/tag/0.13.4), whic
 ### Python
 
 - Add CPython 3.15.1, 3.14.9, and 3.13.17 ([#22802](https://github.com/astral-sh/uv/pull/22802))
-- Update the latest managed CPython builds for 3.11 and newer to include pip 26.2.2, whose CA bundle removes the affected eMudhra/emSign root ([#22802](https://github.com/astral-sh/uv/pull/22802))
 
 ### Preview features
 
