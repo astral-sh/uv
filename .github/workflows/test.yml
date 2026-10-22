@@ -42,7 +42,7 @@ jobs:
       - name: "Install Rust toolchain"
         run: rustup toolchain install --profile minimal
 
-      - uses: astral-sh/github-actions/rust-workspace-cache@35adb34286434a5d7173d37bc521fc75c17c251f
+      - uses: astral-sh/github-actions/rust-workspace-cache@3c9fe5db47e144ea224b57565e3ab1ab769ef41d
         with:
           prefix-key: v1-rust-workspace
           key: ${{ hashFiles('Cargo.toml') }}
@@ -161,7 +161,7 @@ jobs:
       - name: "Install Rust toolchain"
         run: rustup toolchain install --profile minimal
 
-      - uses: astral-sh/github-actions/rust-workspace-cache@35adb34286434a5d7173d37bc521fc75c17c251f
+      - uses: astral-sh/github-actions/rust-workspace-cache@3c9fe5db47e144ea224b57565e3ab1ab769ef41d
         with:
           prefix-key: v1-rust-workspace
           key: ${{ hashFiles('Cargo.toml') }}
@@ -279,7 +279,7 @@ jobs:
         working-directory: ${{ env.UV_WORKSPACE }}
         run: rustup toolchain install --profile minimal
 
-      - uses: astral-sh/github-actions/rust-workspace-cache@35adb34286434a5d7173d37bc521fc75c17c251f
+      - uses: astral-sh/github-actions/rust-workspace-cache@3c9fe5db47e144ea224b57565e3ab1ab769ef41d
         with:
           prefix-key: v1-rust-workspace
           key: ${{ hashFiles('Cargo.toml') }}

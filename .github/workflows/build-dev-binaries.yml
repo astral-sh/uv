@@ -35,7 +35,7 @@ jobs:
       - name: "Install Rust toolchain"
         run: rustup toolchain install --profile minimal
 
-      - uses: astral-sh/github-actions/rust-workspace-cache@84a2c337d854dbc1ce9bc416e7cd58f56413fbf6
+      - uses: astral-sh/github-actions/rust-workspace-cache@3c9fe5db47e144ea224b57565e3ab1ab769ef41d
         with:
           prefix-key: v1-rust-workspace
           profile: no-debug-nightly
@@ -70,7 +70,7 @@ jobs:
       - name: "Install Rust toolchain"
         run: rustup toolchain install --profile minimal
 
-      - uses: astral-sh/github-actions/rust-workspace-cache@84a2c337d854dbc1ce9bc416e7cd58f56413fbf6
+      - uses: astral-sh/github-actions/rust-workspace-cache@3c9fe5db47e144ea224b57565e3ab1ab769ef41d
         with:
           prefix-key: v1-rust-workspace
           profile: no-debug-nightly
@@ -119,7 +119,7 @@ jobs:
           rustup toolchain install --profile minimal
           rustup target add armv7-unknown-linux-gnueabihf
 
-      - uses: astral-sh/github-actions/rust-workspace-cache@84a2c337d854dbc1ce9bc416e7cd58f56413fbf6
+      - uses: astral-sh/github-actions/rust-workspace-cache@3c9fe5db47e144ea224b57565e3ab1ab769ef41d
         with:
           prefix-key: v1-rust-workspace
           profile: armv7-unknown-linux-gnueabihf/no-debug-nightly
@@ -161,7 +161,7 @@ jobs:
           rustup toolchain install --profile minimal
           rustup target add x86_64-unknown-linux-musl
 
-      - uses: astral-sh/github-actions/rust-workspace-cache@84a2c337d854dbc1ce9bc416e7cd58f56413fbf6
+      - uses: astral-sh/github-actions/rust-workspace-cache@3c9fe5db47e144ea224b57565e3ab1ab769ef41d
         with:
           prefix-key: v1-rust-workspace
           profile: x86_64-unknown-linux-musl/no-debug-nightly
@@ -193,7 +193,7 @@ jobs:
       - name: "Install Rust toolchain"
         run: rustup toolchain install --profile minimal
 
-      - uses: astral-sh/github-actions/rust-workspace-cache@84a2c337d854dbc1ce9bc416e7cd58f56413fbf6
+      - uses: astral-sh/github-actions/rust-workspace-cache@3c9fe5db47e144ea224b57565e3ab1ab769ef41d
         with:
           prefix-key: v1-rust-workspace
           profile: no-debug-nightly
@@ -227,7 +227,7 @@ jobs:
           rustup toolchain install --profile minimal
           rustup target add x86_64-apple-darwin
 
-      - uses: astral-sh/github-actions/rust-workspace-cache@84a2c337d854dbc1ce9bc416e7cd58f56413fbf6
+      - uses: astral-sh/github-actions/rust-workspace-cache@3c9fe5db47e144ea224b57565e3ab1ab769ef41d
         with:
           prefix-key: v1-rust-workspace
           profile: x86_64-apple-darwin/no-debug-nightly
@@ -273,7 +273,7 @@ jobs:
         working-directory: ${{ env.UV_WORKSPACE }}
         run: rustup toolchain install --profile minimal
 
-      - uses: astral-sh/github-actions/rust-workspace-cache@84a2c337d854dbc1ce9bc416e7cd58f56413fbf6
+      - uses: astral-sh/github-actions/rust-workspace-cache@3c9fe5db47e144ea224b57565e3ab1ab769ef41d
         with:
           prefix-key: v1-rust-workspace
           workspace: ${{ env.UV_WORKSPACE }}
@@ -316,7 +316,7 @@ jobs:
         working-directory: ${{ env.UV_WORKSPACE }}
         run: rustup toolchain install --profile minimal
 
-      - uses: astral-sh/github-actions/rust-workspace-cache@84a2c337d854dbc1ce9bc416e7cd58f56413fbf6
+      - uses: astral-sh/github-actions/rust-workspace-cache@3c9fe5db47e144ea224b57565e3ab1ab769ef41d
         with:
           prefix-key: v1-rust-workspace
           workspace: ${{ env.UV_WORKSPACE }}
@@ -402,7 +402,7 @@ jobs:
           rustup toolchain install --profile minimal
           rustup target add aarch64-linux-android
 
-      - uses: astral-sh/github-actions/rust-workspace-cache@84a2c337d854dbc1ce9bc416e7cd58f56413fbf6
+      - uses: astral-sh/github-actions/rust-workspace-cache@3c9fe5db47e144ea224b57565e3ab1ab769ef41d
         with:
           prefix-key: v1-rust-workspace
           profile: aarch64-linux-android/no-debug-nightly
