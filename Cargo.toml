@@ -226,7 +226,7 @@ percent-encoding = { version = "2.3.1", default-features = false, features = ["s
 petgraph = { version = "0.8.0", default-features = false, features = ["std"] }
 proc-macro2 = { version = "1.0.86", default-features = false, features = ["proc-macro"] }
 procfs = { version = "0.18.0", default-features = false }
-pubgrub = { version = "0.7.1", package = "astral-pubgrub", default-features = false, features = ["unstable-state-api"] }
+pubgrub = { version = "0.7.1", git = "https://github.com/astral-sh/pubgrub", rev = "2c72ef878706ead7eaa430323b099e4013f93029", package = "astral-pubgrub", default-features = false, features = ["unstable-state-api"] }
 quote = { version = "1.0.37", default-features = false, features = ["proc-macro"] }
 rand = { version = "0.10.2", default-features = false, features = ["thread_rng"] }
 rayon = { version = "1.10.0", default-features = false }
@@ -475,6 +475,10 @@ use_self = "warn"
 
 # Diagnostics are not actionable: Enable once https://github.com/rust-lang/rust-clippy/issues/13774 is resolved.
 large_stack_arrays = "allow"
+
+# Keep version-ranges on the registry while PubGrub is pinned to Git.
+[patch."https://github.com/astral-sh/pubgrub"]
+astral-version-ranges = { version = "=0.2.3" }
 
 # Skip type and variable debug information to speed up local builds while retaining
 # file names and line numbers for backtraces. This reduced total time by 20% versus
