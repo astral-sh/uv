@@ -13,6 +13,7 @@ use uv_torch::NvidiaGpu;
 use crate::variant::{PluginApi, VendoredVariantProvider};
 
 const MIN_CUDA_MAJOR: u64 = 11;
+const MIN_CUDA_MINOR: u64 = 0;
 const MAX_CUDA_MAJOR: u64 = 15;
 const MAX_CUDA_MINOR: u64 = 20;
 const MIN_COMPUTE_CAPABILITY: (u8, u8) = (5, 0);
@@ -102,12 +103,12 @@ impl NvidiaVariantProvider {
             let Some(gpu) = gpu.as_ref() else {
                 return Ok(None);
             };
-            if gpu.cuda_version < Version::new([MIN_CUDA_MAJOR, 0])
+            if gpu.cuda_version < Version::new([MIN_CUDA_MAJOR, MIN_CUDA_MINOR])
                 || gpu.cuda_version > Version::new([MAX_CUDA_MAJOR, MAX_CUDA_MINOR])
             {
                 debug!(
                     "Skipping NVIDIA variant provider: CUDA user-mode driver version {} is \
-                     outside the supported range {MIN_CUDA_MAJOR}.0 to \
+                     outside the supported range {MIN_CUDA_MAJOR}.{MIN_CUDA_MINOR} to \
                      {MAX_CUDA_MAJOR}.{MAX_CUDA_MINOR}",
                     gpu.cuda_version
                 );
