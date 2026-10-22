@@ -8119,7 +8119,6 @@ dependencies = [
  "uv-pep440",
  "uv-platform-tags",
  "uv-redacted",
- "uv-static",
  "windows",
 ]
 
