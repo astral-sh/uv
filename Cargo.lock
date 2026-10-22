@@ -5876,7 +5876,6 @@ dependencies = [
  "fs-err",
  "futures",
  "jiff",
- "rustc-hash",
  "serde_json",
  "sha2 0.11.0",
  "tar-codec",
