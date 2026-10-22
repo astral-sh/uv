@@ -62,7 +62,7 @@ impl NvidiaVariantProvider {
                 module: "nvidia_variant_provider.plugin"
                     .parse()
                     .expect("valid Python module name"),
-                attributes: vec![
+                object_path: vec![
                     "NvidiaVariantPlugin"
                         .parse()
                         .expect("valid Python identifier"),

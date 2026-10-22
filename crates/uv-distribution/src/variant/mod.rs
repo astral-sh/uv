@@ -17,24 +17,24 @@ use crate::variant::nvidia::NvidiaVariantProvider;
 static VENDORED_PROVIDERS: LazyLock<Vec<Box<dyn VendoredVariantProvider>>> =
     LazyLock::new(|| vec![Box::new(NvidiaVariantProvider::new())]);
 
-/// A Python module and optional attribute path identifying a provider plugin.
+/// A Python module and optional path to an object within it, identifying a provider plugin.
 struct PluginApi {
     module: ModuleName,
-    attributes: Vec<Identifier>,
+    object_path: Vec<Identifier>,
 }
 
 impl PluginApi {
     fn matches(&self, value: &str) -> bool {
         match value.split_once(':') {
-            Some((module, attributes)) => {
+            Some((module, object_path)) => {
                 self.module.as_ref() == module
                     && self
-                        .attributes
+                        .object_path
                         .iter()
                         .map(AsRef::as_ref)
-                        .eq(attributes.split('.'))
+                        .eq(object_path.split('.'))
             }
-            None => self.module.as_ref() == value && self.attributes.is_empty(),
+            None => self.module.as_ref() == value && self.object_path.is_empty(),
         }
     }
 }
