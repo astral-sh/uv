@@ -263,8 +263,7 @@ dependencies = [
 [[package]]
 name = "astral-pubgrub"
 version = "0.7.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "73b349cbc6c24307c261a3cedb2ac126b247cc04e122090981e04daadd2d9295"
+source = "git+https://github.com/astral-sh/pubgrub?rev=2c72ef878706ead7eaa430323b099e4013f93029#2c72ef878706ead7eaa430323b099e4013f93029"
 dependencies = [
  "astral-version-ranges",
  "indexmap",

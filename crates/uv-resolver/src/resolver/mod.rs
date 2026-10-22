@@ -3285,17 +3285,17 @@ impl<'index> ForkState<'index> {
     /// Returns the URL or index for a package and version.
     ///
     /// In practice, exactly one of the returned values will be `Some`.
-    fn source(
-        &self,
+    fn source<'a>(
+        fork_urls: &'a ForkUrls,
+        pins: &'a FilePins<'index>,
         name: &PackageName,
         version: &Version,
-    ) -> (Option<&VerbatimParsedUrl>, Option<&IndexUrl>) {
-        let url = self.fork_urls.get(name);
+    ) -> (Option<&'a VerbatimParsedUrl>, Option<&'a IndexUrl>) {
+        let url = fork_urls.get(name);
         let index = url
             .is_none()
             .then(|| {
-                self.pins
-                    .get(name, version)
+                pins.get(name, version)
                     .expect("Every package should be pinned")
                     .index()
             })
@@ -3310,6 +3310,20 @@ impl<'index> ForkState<'index> {
         IncompatibilityArena<UvDependencyProvider>,
     ) {
         let solution: FxHashMap<_, _> = self.pubgrub.partial_solution.extract_solution().collect();
+        // Release the completed solver's working data before allocating the result graph.
+        self.pubgrub.discard_solver_state();
+        drop((
+            self.continuation,
+            self.fork_indexes,
+            self.priorities,
+            self.added_dependencies,
+            self.pre_visited,
+            self.selected_versions,
+            self.known_versions,
+            self.python_requirement,
+            self.conflict_tracker,
+            self.prefetcher,
+        ));
         // Node order can affect diagnostic order and which artifact hashes `requirements.txt`
         // emits when it merges the same package version from different sources.
         let nodes: FxHashMap<_, _> = solution
@@ -3321,7 +3335,7 @@ impl<'index> ForkState<'index> {
                     marker: MarkerTree::TRUE,
                 } = &*self.pubgrub.package_store[package]
                 {
-                    let (url, index) = self.source(name, version);
+                    let (url, index) = Self::source(&self.fork_urls, &self.pins, name, version);
                     Some((
                         ResolutionPackage {
                             name: name.clone(),
@@ -3370,7 +3384,7 @@ impl<'index> ForkState<'index> {
                 | PubGrubPackageInner::Group { .. } => continue,
             };
             let from = self_name.map(|name| {
-                let (url, index) = self.source(name, self_version);
+                let (url, index) = Self::source(&self.fork_urls, &self.pins, name, self_version);
                 node_indices[&(name, self_kind, url, index, self_version)]
             });
             for dependency in self.pubgrub.dependencies(*package) {
@@ -3431,7 +3445,8 @@ impl<'index> ForkState<'index> {
                     | PubGrubPackageInner::Python(_)
                     | PubGrubPackageInner::System(_) => continue,
                 };
-                let (url, index) = self.source(name, dependency_version);
+                let (url, index) =
+                    Self::source(&self.fork_urls, &self.pins, name, dependency_version);
                 edges.push(ResolutionDependencyEdge {
                     from,
                     to: node_indices[&(name, &kind, url, index, dependency_version)],
