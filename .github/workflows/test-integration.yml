@@ -1032,6 +1032,7 @@ jobs:
           UV_TEST_PYTORCH_URL: https://download.pytorch.org/whl/cpu
 
   integration-test-registries:
+    cache-mode: none
     name: "registries"
     timeout-minutes: 10
     runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
