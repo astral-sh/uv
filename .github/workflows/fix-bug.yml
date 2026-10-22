@@ -54,7 +54,9 @@ jobs:
   fix:
     if: github.repository == 'astral-sh/uv'
     runs-on: ${{ inputs.runner }}
-    environment: automations
+    environment:
+      name: automations
+      deployment: false
     timeout-minutes: 60
     permissions:
       actions: read
@@ -473,7 +475,9 @@ jobs:
     needs: fix
     if: needs.fix.outputs.publish == 'true'
     runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-2' || 'ubuntu-slim' }}
-    environment: automations
+    environment:
+      name: automations
+      deployment: false
     timeout-minutes: 10
     permissions:
       contents: read
@@ -699,7 +703,9 @@ jobs:
       needs.fix.outputs.result != '' &&
       (needs.publish.result == 'success' || needs.publish.result == 'skipped')
     runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
-    environment: automations
+    environment:
+      name: automations
+      deployment: false
     timeout-minutes: 10
     concurrency:
       group: issue-context-${{ inputs.issue-number }}

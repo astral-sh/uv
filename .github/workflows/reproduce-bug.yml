@@ -64,7 +64,9 @@ jobs:
   reproduce:
     if: github.repository == 'astral-sh/uv'
     runs-on: ${{ inputs.runner }}
-    environment: automations
+    environment:
+      name: automations
+      deployment: false
     timeout-minutes: 15
     permissions:
       contents: read
@@ -171,7 +173,9 @@ jobs:
     needs: reproduce
     if: needs.reproduce.outputs.result != ''
     runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
-    environment: automations
+    environment:
+      name: automations
+      deployment: false
     timeout-minutes: 10
     concurrency:
       group: issue-context-${{ needs.reproduce.outputs.issue-number }}
@@ -243,7 +247,9 @@ jobs:
       needs.reproduce.outputs.result != '' &&
       fromJSON(needs.reproduce.outputs.result).reproduction == 'reproducible'
     runs-on: ${{ inputs.runner }}
-    environment: automations
+    environment:
+      name: automations
+      deployment: false
     timeout-minutes: 60
     permissions:
       contents: read
@@ -383,7 +389,9 @@ jobs:
     needs: [reproduce, create-integration-test]
     if: needs.create-integration-test.outputs.created == 'true'
     runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-2' || 'ubuntu-slim' }}
-    environment: automations
+    environment:
+      name: automations
+      deployment: false
     timeout-minutes: 10
     permissions:
       contents: read

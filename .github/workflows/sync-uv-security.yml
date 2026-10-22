@@ -19,7 +19,9 @@ jobs:
     name: Sync uv-security
     if: github.repository == 'astral-sh/uv' && github.ref == 'refs/heads/main'
     runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-2' || 'ubuntu-slim' }}
-    environment: automations
+    environment:
+      name: automations
+      deployment: false
     permissions:
       id-token: write # for the credential broker
     defaults:

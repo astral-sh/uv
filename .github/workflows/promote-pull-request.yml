@@ -37,7 +37,9 @@ jobs:
     name: "Prepare promotion of pull request #${{ inputs.pull_request }}"
     if: github.repository == 'astral-sh/uv-dev' || github.repository == 'astral-sh/uv-security'
     runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-2' || 'ubuntu-slim' }}
-    environment: automations
+    environment:
+      name: automations
+      deployment: false
     timeout-minutes: 10
     permissions:
       id-token: write
@@ -396,7 +398,9 @@ jobs:
     needs: [prepare, update-pull-request-parent]
     if: always() && needs.prepare.result == 'success' && (needs.prepare.outputs.action == 'promote' || needs.update-pull-request-parent.outputs.outcome == 'clean')
     runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-2' || 'ubuntu-slim' }}
-    environment: automations
+    environment:
+      name: automations
+      deployment: false
     timeout-minutes: 10
     permissions:
       contents: read
@@ -764,7 +768,9 @@ jobs:
     needs: [prepare, update-pull-request-parent, promote]
     if: always() && needs.prepare.outputs.approval_id != '' && (needs.prepare.outputs.rejection_reason != '' || needs.prepare.outputs.changed_head != '' || needs.promote.outputs.rejection_reason != '' || needs.promote.outputs.changed_head != '' || needs.update-pull-request-parent.outputs.rejection_reason != '' || needs.update-pull-request-parent.outputs.outcome == 'conflicts' || needs.update-pull-request-parent.outputs.outcome == 'empty')
     runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-2' || 'ubuntu-slim' }}
-    environment: automations
+    environment:
+      name: automations
+      deployment: false
     timeout-minutes: 10
     permissions:
       id-token: write

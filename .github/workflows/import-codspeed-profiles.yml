@@ -25,7 +25,9 @@ jobs:
     if: ${{ github.repository == 'astral-sh/uv-dev' && github.ref == 'refs/heads/main' }}
     runs-on: github-ubuntu-24.04-x86_64-2
     timeout-minutes: 15
-    environment: automations
+    environment:
+      name: automations
+      deployment: false
     permissions:
       contents: read
       id-token: write # for the credential broker and CodSpeed
