@@ -65,12 +65,9 @@ fn find_vendored_provider(
     let [requirement] = requires else {
         return None;
     };
-    // Reject unsupported markers before the requirement parser recurses into them.
-    if requirement.contains(';') {
-        return None;
-    }
     let requirement = requirement.parse::<Requirement>().ok()?;
-    if !requirement.extras.is_empty() {
+    // TODO(konsti): Support markers?
+    if !requirement.extras.is_empty() || !requirement.marker.is_true() {
         return None;
     }
     let specifiers = match requirement.version_or_url {
