@@ -6497,6 +6497,7 @@ dependencies = [
  "uv-redacted",
  "uv-static",
  "uv-threads",
+ "uv-torch",
  "uv-types",
  "uv-workspace",
  "walkdir",

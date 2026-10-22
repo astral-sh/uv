@@ -4,6 +4,7 @@ use arcstr::ArcStr;
 use owo_colors::OwoColorize;
 use tracing::debug;
 
+use uv_distribution::supported_variant_properties;
 use uv_distribution_filename::{BuildTag, WheelFilename};
 use uv_distribution_types::{
     File, IndexUrl, InstalledDist, MinimumLibcVersion, Name, RegistryBuiltDist, RegistryBuiltWheel,
@@ -441,10 +442,9 @@ impl PrioritizedDist {
         if metadata.is_empty() {
             return None;
         }
-        // TODO(konsti): Run provider plugins to determine supported properties.
         let metadata: Vec<_> = metadata
             .iter()
-            .map(|(source, metadata)| (*source, *metadata, metadata.static_supported_properties()))
+            .map(|(source, metadata)| (*source, *metadata, supported_variant_properties(metadata)))
             .collect();
         // Prefer wheels whose advertised hash matches a required hash, followed by wheels with
         // no advertised hash, then mismatches. If no hashes are required, all wheels match.

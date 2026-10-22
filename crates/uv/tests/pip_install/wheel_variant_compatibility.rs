@@ -1,8 +1,11 @@
+use std::collections::BTreeMap;
+
 use anyhow::Result;
 use assert_fs::prelude::*;
 use insta::assert_snapshot;
 use serde_json::{Map, Value, json};
 use uv_distribution_types::PEP_850_SCHEMA;
+use uv_static::EnvVars;
 use uv_test::find_links::FindLinksServer;
 use uv_test::packse::WheelBuilder;
 use uv_test::uv_snapshot;
@@ -155,6 +158,136 @@ fn select_variant_by_static_provider_order() -> Result<()> {
      + ok==1.0.0
     ");
     assert_snapshot!(context.read(context.site_packages().join("ok/variant.txt")), @"openblas");
+    Ok(())
+}
+
+/// Fall back to an older release and reject its otherwise preferred incompatible NVIDIA variant.
+#[test]
+fn backtrack_to_compatible_nvidia_variant() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let links = context.temp_dir.child("links");
+    links.create_dir_all()?;
+    let mut metadata = json!({
+        "$schema": PEP_850_SCHEMA,
+        "default-priorities": { "namespace": ["nvidia"] },
+        "providers": {
+            "nvidia": {
+                "requires": ["nvidia-variant-provider>=0.0.1,<1.0.0"],
+                "plugin-api": "nvidia_variant_provider.plugin:NvidiaVariantPlugin"
+            }
+        }
+    });
+    let mut variants_by_version = BTreeMap::new();
+    for (version, label, lower_bound, upper_bound, sm_arch) in [
+        // The major-only CUDA bound `12` is supported but ranks below `12.0`.
+        ("1.0.0", "gpu88", "12", "12.1", "88_real"),
+        ("1.0.0", "gpu90", "12.0", "12.2", "90_real"),
+        ("2.0.0", "gpu90", "12.0", "12.2", "90_real"),
+    ] {
+        let properties = json!({
+            "nvidia": {
+                "cuda_version_lower_bound": [lower_bound],
+                "cuda_version_upper_bound": [upper_bound],
+                "sm_arch": [sm_arch]
+            }
+        });
+        metadata["variants"] = json!({ label: &properties });
+        variants_by_version
+            .entry(version)
+            .or_insert_with(Map::new)
+            .insert(label.to_string(), properties);
+        let (_, wheel) = WheelBuilder::new(&"ok".parse()?, &version.parse()?)
+            .files(&[
+                ("ok/variant.txt", label),
+                (
+                    &format!("ok-{version}.dist-info/variant.json"),
+                    &metadata.to_string(),
+                ),
+            ])
+            .build();
+        links
+            .child(format!("ok-{version}-py3-none-any-{label}.whl"))
+            .write_binary(&wheel)?;
+    }
+    for (version, variants) in variants_by_version {
+        metadata["variants"] = variants.into();
+        links
+            .child(format!("ok-{version}-variants.json"))
+            .write_str(&metadata.to_string())?;
+    }
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .env(EnvVars::NV_VARIANT_PROVIDER_FORCE_CUDA_DRIVER_VERSION, "12")
+        .env(EnvVars::NV_VARIANT_PROVIDER_FORCE_SM_ARCH, "8.9")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(links.path())
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("ok"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0
+    ");
+    assert_snapshot!(context.read(context.site_packages().join("ok/variant.txt")), @"gpu88");
+    Ok(())
+}
+
+/// Skip the NVIDIA provider when a forced CUDA version would require too many variant values.
+///
+/// This is inherited from the Python implementation of the variant provider.
+#[test]
+fn skip_excessive_nvidia_cuda_override() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let links = context.temp_dir.child("links");
+    links.create_dir_all()?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-1.0.0-py3-none-any.whl"),
+        links.child("ok-1.0.0-py3-none-any.whl"),
+    )?;
+    let metadata = json!({
+        "$schema": PEP_850_SCHEMA,
+        "default-priorities": { "namespace": ["nvidia"] },
+        "providers": {
+            "nvidia": {
+                "requires": ["nvidia-variant-provider==0.0.1"],
+                "plugin-api": "nvidia_variant_provider.plugin:NvidiaVariantPlugin"
+            }
+        },
+        "variants": {
+            "gpu": { "nvidia": { "cuda_version_lower_bound": ["12.2000"] } }
+        }
+    })
+    .to_string();
+    let (_, wheel) = WheelBuilder::new(&"ok".parse()?, &"2.0.0".parse()?)
+        .files(&[("ok-2.0.0.dist-info/variant.json", &metadata)])
+        .build();
+    links
+        .child("ok-2.0.0-py3-none-any-gpu.whl")
+        .write_binary(&wheel)?;
+    links.child("ok-2.0.0-variants.json").write_str(&metadata)?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .env(EnvVars::NV_VARIANT_PROVIDER_FORCE_CUDA_DRIVER_VERSION, "12.2000")
+        .env(EnvVars::NV_VARIANT_PROVIDER_FORCE_SM_ARCH, "8.9")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(links.path())
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("ok"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0
+    ");
     Ok(())
 }
 
