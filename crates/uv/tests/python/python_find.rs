@@ -1,7 +1,11 @@
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
+#[cfg(unix)]
+use std::time::Duration;
 
 use anyhow::Result;
+#[cfg(unix)]
+use assert_cmd::Command;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::{FileTouch, PathChild};
 use assert_fs::{fixture::FileWriteStr, prelude::PathCreateDir};
@@ -634,6 +638,89 @@ fn virtual_dependency_group() {
     ----- stdout -----
     [PYTHON-3.12]
     ");
+}
+
+/// A cached project environment takes precedence over a stale `.venv` and the current directory.
+#[test]
+fn python_find_centralized_project_environment() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"])
+        .with_filtered_python_names()
+        .with_filtered_virtualenv_bin();
+    context.venv().args(["--python", "3.11"]).assert().success();
+    let project = context.temp_dir.child("project");
+    project.create_dir_all()?;
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+
+        [tool.uv.workspace]
+        members = ["member"]
+    "#})?;
+    let member = project.child("member");
+    member.create_dir_all()?;
+    member.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "member"
+        version = "0.1.0"
+    "#})?;
+    context
+        .sync()
+        .current_dir(&project)
+        .args([
+            "--preview-features",
+            "centralized-project-envs",
+            "--python",
+            "3.12",
+        ])
+        .assert()
+        .success();
+    uv_fs::replace_symlink(context.temp_dir.child(".venv"), project.child(".venv"))?;
+    uv_fs::replace_symlink(context.temp_dir.child(".venv"), member.child(".venv"))?;
+
+    uv_snapshot!(context.filters(), context.python_find()
+        .args(["--preview-features", "centralized-project-envs", "--project"])
+        .arg(member.path()), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [CACHE_DIR]/environments-v2/project-cp3.12.[X]-[HASH]/[BIN]/[PYTHON]
+    "#);
+    uv_snapshot!(context.filters(), context.python_find().current_dir(&project)
+        .args(["--preview-features", "centralized-project-envs", "3.11"]), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [PYTHON-3.11]
+    "#);
+    Ok(())
+}
+
+/// A `.venv` symlink to a named pipe must not block discovery while waiting for a writer.
+#[cfg(unix)]
+#[test]
+fn python_find_centralized_project_environment_fifo() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    pyproject.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+    "#})?;
+    context
+        .assert_command("import os; os.mkfifo('pipe')")
+        .success();
+    fs_err::os::unix::fs::symlink("pipe", context.temp_dir.child(".venv"))?;
+
+    let result = Command::from_std(context.python_find())
+        .args(["--preview-features", "centralized-project-envs"])
+        .timeout(Duration::from_secs(10))
+        .assert()
+        .success();
+    let stdout = str::from_utf8(&result.get_output().stdout)?;
+    insta::with_settings!({ filters => context.filters() }, {
+        insta::assert_snapshot!(stdout, @"[PYTHON-3.12]");
+    });
+    Ok(())
 }
 
 #[test]

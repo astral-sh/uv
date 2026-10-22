@@ -8,9 +8,36 @@ use uv_cache_key::{cache_digest, cache_name};
 use uv_python_interpreter::{Interpreter, virtualenv_python_executable};
 use uv_python_managed::{PythonMinorVersionLink, UpgradePolicy};
 use uv_python_types::{LenientImplementationName, PythonSource};
+use uv_workspace::Workspace;
 
 use crate::discovery::{Error as DiscoveryError, python_installation_from_executable};
 use crate::installation::PythonInstallation;
+
+/// A centralized project environment to consider when discovering Python.
+pub struct ProjectEnvironmentDiscovery<'a> {
+    pub(crate) cache: ProjectEnvironmentCache<'a>,
+    pub(crate) start: &'a Path,
+    pub(crate) workspace_root: &'a Path,
+}
+
+impl<'a> ProjectEnvironmentDiscovery<'a> {
+    /// Discover the workspace's environment while searching upward from `start`.
+    pub fn new(workspace: &'a Workspace, start: &'a Path, cache: &'a Cache) -> Self {
+        Self {
+            cache: ProjectEnvironmentCache::new(
+                workspace.install_path(),
+                workspace
+                    .pyproject_toml()
+                    .project
+                    .as_ref()
+                    .map(|project| project.name.as_ref()),
+                cache,
+            ),
+            start,
+            workspace_root: workspace.install_path(),
+        }
+    }
+}
 
 /// The cache entries for a project's centralized environments.
 pub struct ProjectEnvironmentCache<'a> {

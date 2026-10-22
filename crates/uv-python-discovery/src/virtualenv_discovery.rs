@@ -96,13 +96,31 @@ pub(crate) fn conda_environment_from_env(kind: CondaEnvironmentKind) -> Option<P
     Some(path)
 }
 
+/// Locate the virtual environment containing `start`, without searching above `boundary`.
+pub(crate) fn virtualenv_containing_directory<'a>(
+    start: &'a Path,
+    boundary: &Path,
+) -> Option<&'a Path> {
+    for directory in start.ancestors() {
+        if uv_fs::is_virtualenv_base(directory) {
+            return Some(directory);
+        }
+        if uv_fs::is_same_file_allow_missing(directory, boundary) == Some(true) {
+            break;
+        }
+    }
+    None
+}
+
 /// Locate a virtual environment by searching the file system.
 ///
-/// Searches for a `.venv` directory, directory link, or redirect file in the current or any parent
-/// directory. If the current directory is itself a virtual environment (or a subdirectory of a
-/// virtual environment), the containing virtual environment is returned.
-pub(crate) fn virtualenv_from_working_dir() -> Result<Option<PathBuf>, Error> {
-    let current_dir = crate::current_dir()?;
+/// Searches for a `.venv` directory, directory link, or redirect file in the starting directory
+/// and its parents. If the starting directory is inside a virtual environment, returns that environment.
+pub(crate) fn virtualenv_from_working_dir(start: Option<&Path>) -> Result<Option<PathBuf>, Error> {
+    let current_dir = match start {
+        Some(start) => start.to_path_buf(),
+        None => crate::current_dir()?,
+    };
 
     for dir in current_dir.ancestors() {
         // If we're _within_ a virtualenv, return it.
@@ -110,35 +128,40 @@ pub(crate) fn virtualenv_from_working_dir() -> Result<Option<PathBuf>, Error> {
             return Ok(Some(dir.to_path_buf()));
         }
 
-        // Otherwise, search for a `.venv` directory.
-        let dot_venv = dir.join(".venv");
-        let metadata = match fs::symlink_metadata(&dot_venv) {
-            Ok(metadata) => metadata,
-            Err(err) if err.kind() == io::ErrorKind::NotFound => continue,
-            Err(err) => return Err(err.into()),
-        };
-        let redirect = metadata.is_file()
-            || metadata.file_type().is_symlink()
-                && fs::metadata(&dot_venv).is_ok_and(|metadata| metadata.is_file());
-        let root = if redirect {
-            read_venv_redirect(&dot_venv)?
-        } else if metadata.is_dir() || metadata.file_type().is_symlink() {
-            dot_venv
-        } else {
-            continue;
-        };
-        if !uv_fs::is_virtualenv_base(&root) {
-            return Err(Error::MissingPyVenvCfg(root));
+        if let Some(root) = virtualenv_from_dot_venv(dir)? {
+            return Ok(Some(root));
         }
-        if redirect && !uv_preview::is_enabled(PreviewFeature::VenvRedirectFiles) {
-            warn_user_once!(
-                "Using `.venv` redirect files is experimental and may change without warning. Pass `--preview-features venv-redirect-files` to disable this warning."
-            );
-        }
-        return Ok(Some(root));
     }
-
     Ok(None)
+}
+
+/// Locate the environment referenced by a directory's `.venv` entry.
+pub(crate) fn virtualenv_from_dot_venv(dir: &Path) -> Result<Option<PathBuf>, Error> {
+    let dot_venv = dir.join(".venv");
+    let metadata = match fs::symlink_metadata(&dot_venv) {
+        Ok(metadata) => metadata,
+        Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(None),
+        Err(err) => return Err(err.into()),
+    };
+    let redirect = metadata.is_file()
+        || metadata.file_type().is_symlink()
+            && fs::metadata(&dot_venv).is_ok_and(|metadata| metadata.is_file());
+    let root = if redirect {
+        read_venv_redirect(&dot_venv)?
+    } else if metadata.is_dir() || metadata.file_type().is_symlink() {
+        dot_venv
+    } else {
+        return Ok(None);
+    };
+    if !uv_fs::is_virtualenv_base(&root) {
+        return Err(Error::MissingPyVenvCfg(root));
+    }
+    if redirect && !uv_preview::is_enabled(PreviewFeature::VenvRedirectFiles) {
+        warn_user_once!(
+            "Using `.venv` redirect files is experimental and may change without warning. Pass `--preview-features venv-redirect-files` to disable this warning."
+        );
+    }
+    Ok(Some(root))
 }
 
 #[cfg(test)]
