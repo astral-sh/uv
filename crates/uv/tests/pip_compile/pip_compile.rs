@@ -4,6 +4,8 @@ use std::collections::BTreeMap;
 use std::env::current_dir;
 use std::fs;
 #[cfg(unix)]
+use std::io::pipe;
+#[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
 #[cfg(unix)]
 use std::os::unix::net::UnixListener;
@@ -15708,6 +15710,35 @@ fn invalid_extra() -> Result<()> {
     Resolved 1 package in [TIME]
     warning: The package `project @ file://[TEMP_DIR]/` does not have an extra named `anyio`
     ");
+
+    Ok(())
+}
+
+/// Report a stdout error before replacing the output file.
+#[test]
+#[cfg(unix)]
+fn output_file_broken_stdout() -> Result<()> {
+    let context = uv_test::test_context!(DEFAULT_PYTHON_VERSION);
+    context.temp_dir.child("requirements.in").touch()?;
+    context
+        .temp_dir
+        .child("requirements.txt")
+        .write_str("# original\n")?;
+    let (reader, writer) = pipe()?;
+    drop(reader);
+
+    uv_snapshot!(context.pip_compile()
+        .arg("requirements.in")
+        .arg("--output-file")
+        .arg("requirements.txt")
+        .stdout(writer), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    warning: Requirements file `requirements.in` does not contain any dependencies
+    Resolved in [TIME]
+    error: Broken pipe (os error 32)
+    ");
+    assert_eq!(context.read("requirements.txt"), "# original\n");
 
     Ok(())
 }

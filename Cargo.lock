@@ -6274,6 +6274,7 @@ dependencies = [
  "anstream",
  "anyhow",
  "dotenvy",
+ "either",
  "fs-err",
  "indicatif",
  "nix 0.31.3",
