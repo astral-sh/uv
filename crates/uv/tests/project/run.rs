@@ -5,7 +5,7 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::{fixture::ChildPath, prelude::*};
 use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
-use predicates::{prelude::predicate, str::contains};
+use predicates::{prelude::PredicateBooleanExt, prelude::predicate, str::contains};
 use serde_json::json;
 use std::io;
 use std::path::Path;
@@ -2883,6 +2883,95 @@ fn run_no_sync_env_var() -> Result<()> {
     ----- stdout -----
     anyio
     ");
+
+    Ok(())
+}
+
+#[test]
+fn run_no_sync_warning_only_for_cli_flag() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+        "#})?;
+    context
+        .temp_dir
+        .child("main.py")
+        .write_str("print('hello')\n")?;
+
+    let warning = "`--no-sync`";
+
+    context
+        .run()
+        .arg("--no-project")
+        .arg("--no-sync")
+        .arg("main.py")
+        .assert()
+        .success()
+        .stderr(contains(warning));
+
+    context
+        .run()
+        .env(EnvVars::UV_NO_SYNC, "1")
+        .arg("--no-project")
+        .arg("main.py")
+        .assert()
+        .success()
+        .stderr(contains(warning).not());
+
+    let outside_project = uv_test::test_context!("3.12");
+    outside_project
+        .temp_dir
+        .child("main.py")
+        .write_str("print('hello')\n")?;
+
+    outside_project
+        .run()
+        .arg("--no-sync")
+        .arg("main.py")
+        .assert()
+        .success()
+        .stderr(contains(warning));
+
+    outside_project
+        .run()
+        .env(EnvVars::UV_NO_SYNC, "1")
+        .arg("main.py")
+        .assert()
+        .success()
+        .stderr(contains(warning).not());
+
+    let script = context.temp_dir.child("script.py");
+    script.write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = []
+        # ///
+
+        print("hello")
+    "#})?;
+
+    context
+        .run()
+        .arg("--no-sync")
+        .arg("script.py")
+        .assert()
+        .success()
+        .stderr(contains(warning));
+
+    context
+        .run()
+        .env(EnvVars::UV_NO_SYNC, "1")
+        .arg("script.py")
+        .assert()
+        .success()
+        .stderr(contains(warning).not());
 
     Ok(())
 }
