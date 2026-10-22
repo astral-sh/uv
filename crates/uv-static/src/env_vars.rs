@@ -1448,13 +1448,13 @@ impl EnvVars {
     /// Override the CUDA user-mode driver version for the NVIDIA wheel variant provider
     /// (e.g., `12.7`).
     #[attr_hidden]
-    #[attr_added_in("0.13.1")]
+    #[attr_added_in("next release")]
     pub const NV_VARIANT_PROVIDER_FORCE_CUDA_DRIVER_VERSION: &'static str =
         "NV_VARIANT_PROVIDER_FORCE_CUDA_DRIVER_VERSION";
 
     /// Override the GPU compute capability for the NVIDIA wheel variant provider (e.g., `8.9`).
     #[attr_hidden]
-    #[attr_added_in("0.13.1")]
+    #[attr_added_in("next release")]
     pub const NV_VARIANT_PROVIDER_FORCE_SM_ARCH: &'static str = "NV_VARIANT_PROVIDER_FORCE_SM_ARCH";
 
     /// The AMD GPU architecture to assume when inferring the PyTorch backend (e.g., `gfx1100`).
