@@ -1,6 +1,7 @@
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
 use std::ops::{Bound, Deref, RangeBounds};
+use std::sync::{Arc, LazyLock};
 
 use pubgrub::{Ranges, SetRelation, VersionSet};
 
@@ -16,7 +17,10 @@ use uv_pep440::{
 /// onto their least valid successors. PubGrub uses the canonical representation for equality,
 /// hashing, and set relations.
 #[derive(Clone, Debug)]
-pub struct Range<T> {
+pub struct Range<T>(Arc<RangeData<T>>);
+
+#[derive(Debug)]
+struct RangeData<T> {
     encoded_versions: Ranges<T>,
     canonical_versions: Option<Box<Ranges<T>>>,
 }
@@ -26,9 +30,10 @@ impl<T> Range<T> {
     ///
     /// Ranges that do not need canonicalization reuse their encoded representation.
     fn logical_versions(&self) -> &Ranges<T> {
-        self.canonical_versions
+        self.0
+            .canonical_versions
             .as_deref()
-            .unwrap_or(&self.encoded_versions)
+            .unwrap_or(&self.0.encoded_versions)
     }
 }
 
@@ -50,7 +55,7 @@ impl<T> Deref for Range<T> {
     type Target = Ranges<T>;
 
     fn deref(&self) -> &Self::Target {
-        &self.encoded_versions
+        &self.0.encoded_versions
     }
 }
 
@@ -63,18 +68,18 @@ impl Range<Version> {
         let canonical_versions = canonical_versions
             .filter(|canonical| canonical != &encoded_versions)
             .map(Box::new);
-        Self {
+        Self(Arc::new(RangeData {
             encoded_versions,
             canonical_versions,
-        }
+        }))
     }
 
     /// Construct a [`Range`] whose encoded representation is already canonical.
     fn from_canonical_versions(versions: Ranges<Version>) -> Self {
-        Self {
+        Self(Arc::new(RangeData {
             encoded_versions: versions,
             canonical_versions: None,
-        }
+        }))
     }
 
     /// Create a range from its internal PEP 440 encoding.
@@ -84,11 +89,15 @@ impl Range<Version> {
     }
 
     pub(crate) fn empty() -> Self {
-        Self::from_canonical_versions(Ranges::empty())
+        static EMPTY: LazyLock<Range<Version>> =
+            LazyLock::new(|| Range::from_canonical_versions(Ranges::empty()));
+        EMPTY.clone()
     }
 
     pub(crate) fn full() -> Self {
-        Self::from_canonical_versions(Ranges::full())
+        static FULL: LazyLock<Range<Version>> =
+            LazyLock::new(|| Range::from_canonical_versions(Ranges::full()));
+        FULL.clone()
     }
 
     pub(crate) fn singleton(version: Version) -> Self {
@@ -109,17 +118,17 @@ impl Range<Version> {
 
     /// Widen this range across gaps in the known versions while preserving canonical identity.
     pub(crate) fn widen_versions(&self, versions: &[Version]) -> Self {
-        Self::from_versions(self.encoded_versions.widen_versions(versions))
+        Self::from_versions(self.0.encoded_versions.widen_versions(versions))
     }
 
     /// Narrow this range onto the known versions while preserving canonical identity.
     pub(crate) fn narrow_versions(&self, versions: &[Version]) -> Self {
-        Self::from_versions(self.encoded_versions.narrow_versions(versions))
+        Self::from_versions(self.0.encoded_versions.narrow_versions(versions))
     }
 
     /// Return the internal PEP 440 bounds used for candidate iteration.
     pub(crate) fn encoded_versions(&self) -> &Ranges<Version> {
-        &self.encoded_versions
+        &self.0.encoded_versions
     }
 
     /// Return `true` if this range represents a single PEP 440 version constraint.
@@ -128,13 +137,13 @@ impl Range<Version> {
     /// is not a singleton even though it should be prioritized like a pinned requirement.
     #[inline]
     pub(crate) fn is_singleton_constraint(&self) -> bool {
-        self.encoded_versions.as_singleton().is_some() || self.is_local_version_sentinel()
+        self.0.encoded_versions.as_singleton().is_some() || self.is_local_version_sentinel()
     }
 
     /// Return `true` if this range represents one or more exact public-version constraints.
     #[inline]
     fn is_local_version_sentinel(&self) -> bool {
-        self.encoded_versions.iter().all(|(lower, upper)| {
+        self.0.encoded_versions.iter().all(|(lower, upper)| {
             let (Bound::Included(lower), Bound::Excluded(upper)) = (lower, upper) else {
                 return false;
             };
@@ -150,7 +159,7 @@ impl Range<Version> {
 
     /// Return `true` if this range contains only local versions of the same public version.
     pub(crate) fn is_local_version_complement(&self) -> bool {
-        self.encoded_versions.iter().all(|(lower, upper)| {
+        self.0.encoded_versions.iter().all(|(lower, upper)| {
             let (Bound::Excluded(lower), Bound::Excluded(upper)) = (lower, upper) else {
                 return false;
             };
@@ -162,13 +171,13 @@ impl Range<Version> {
 
     /// Rewrite internal local-version sentinels into bounds suitable for diagnostics.
     pub(crate) fn without_local_version_sentinels(&self) -> Self {
-        Self::from_versions(strip_local_version_sentinels(&self.encoded_versions))
+        Self::from_versions(strip_local_version_sentinels(&self.0.encoded_versions))
     }
 
     pub(crate) fn complement(&self) -> Self {
         Self::from_parts(
-            self.encoded_versions.complement(),
-            self.canonical_versions.as_deref().map(Ranges::complement),
+            self.0.encoded_versions.complement(),
+            self.0.canonical_versions.as_deref().map(Ranges::complement),
         )
     }
 
@@ -194,9 +203,9 @@ impl Range<Version> {
         other: &Self,
         operation: impl Fn(&Ranges<Version>, &Ranges<Version>) -> Ranges<Version>,
     ) -> Self {
-        let encoded_versions = operation(&self.encoded_versions, &other.encoded_versions);
-        let canonical_versions = (self.canonical_versions.is_some()
-            || other.canonical_versions.is_some())
+        let encoded_versions = operation(&self.0.encoded_versions, &other.0.encoded_versions);
+        let canonical_versions = (self.0.canonical_versions.is_some()
+            || other.0.canonical_versions.is_some())
         .then(|| operation(self.logical_versions(), other.logical_versions()));
         Self::from_parts(encoded_versions, canonical_versions)
     }
@@ -244,7 +253,7 @@ impl VersionSet for Range<Version> {
     }
 
     fn contains(&self, version: &Self::V) -> bool {
-        self.encoded_versions.contains(version)
+        self.0.encoded_versions.contains(version)
     }
 
     fn full() -> Self {
@@ -271,7 +280,7 @@ impl VersionSet for Range<Version> {
 
 impl<T: Debug + Display + Clone + Eq + Ord> Display for Range<T> {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
-        Display::fmt(&self.encoded_versions, formatter)
+        Display::fmt(&self.0.encoded_versions, formatter)
     }
 }
 
@@ -411,8 +420,8 @@ mod tests {
     }
 
     fn assert_matches_recanonicalized(range: &Range<Version>) {
-        let canonical_versions = canonicalize_version_ranges(&range.encoded_versions)
-            .unwrap_or_else(|| range.encoded_versions.clone());
+        let canonical_versions = canonicalize_version_ranges(&range.0.encoded_versions)
+            .unwrap_or_else(|| range.0.encoded_versions.clone());
         assert_eq!(range.logical_versions(), &canonical_versions);
     }
 
