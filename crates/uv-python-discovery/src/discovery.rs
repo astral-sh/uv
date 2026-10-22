@@ -681,7 +681,7 @@ fn python_installations<'a>(
 }
 
 /// Query a single Python executable, returning a [`PythonInstallation`] on success.
-fn python_installation_from_executable(
+pub(crate) fn python_installation_from_executable(
     source: PythonSource,
     path: PathBuf,
     cache: &Cache,

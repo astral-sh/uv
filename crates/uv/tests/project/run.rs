@@ -8,7 +8,8 @@ use insta::assert_snapshot;
 use predicates::{prelude::predicate, str::contains};
 use serde_json::json;
 use std::path::Path;
-use uv_python_discovery::PYTHON_VERSION_FILENAME;
+use uv_cache::Cache;
+use uv_python_discovery::{PYTHON_VERSION_FILENAME, ProjectEnvironmentCache};
 use uv_static::EnvVars;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -7891,6 +7892,12 @@ fn run_centralized_environment_path_file() -> Result<()> {
         .arg("3.12")
         .assert()
         .success();
+
+    // Exercise the redirect fallback used by projects without a recorded cache selection.
+    let cache = Cache::from_path(context.cache_dir.path());
+    let current =
+        ProjectEnvironmentCache::new(context.temp_dir.path(), Some("project"), &cache).current();
+    fs_err::remove_file(current.path())?;
 
     // Point the path file at an environment outside the centralized store.
     let environment = context.temp_dir.child(".venv");

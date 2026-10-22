@@ -1070,6 +1070,8 @@ fn workspace_metadata_sync_centralized_environment() -> Result<()> {
         Some(context.cache_dir.child("environments-v2").path())
     );
 
+    // Metadata discovery should use the selected cached environment without a project link.
+    fs_err::remove_dir_all(context.temp_dir.child(".venv"))?;
     let assert = context
         .workspace_metadata()
         .arg("--preview-features")

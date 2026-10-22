@@ -12,7 +12,11 @@ use std::process::Command;
 #[cfg(unix)]
 use std::time::Duration;
 
+use uv_cache::Cache;
 use uv_fs::Simplified;
+use uv_python_discovery::ProjectEnvironmentCache;
+#[cfg(unix)]
+use uv_python_interpreter::virtualenv_python_executable;
 use uv_static::EnvVars;
 #[cfg(unix)]
 use uv_test::ReadOnlyDirectoryGuard;
@@ -104,6 +108,19 @@ fn sync_centralized_env_switch_python() -> Result<()> {
         assert_snapshot!(link_312.portable_display(), @"[CACHE_DIR]/environments-v2/project-cp3.12.[X]-[HASH]");
     });
 
+    // Without `.venv`, an implicit request should still select 3.12 instead of the first Python
+    // on the search path (3.11).
+    fs_err::remove_dir_all(context.temp_dir.child(".venv"))?;
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--preview-features")
+        .arg("centralized-project-envs"), @r#"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Checked in [TIME]
+    "#);
+    assert_link_target(context.temp_dir.child(".venv"), &link_312);
+
     context
         .sync()
         .arg("--preview-features")
@@ -117,6 +134,21 @@ fn sync_centralized_env_switch_python() -> Result<()> {
         assert_snapshot!(link_311.portable_display(), @"[CACHE_DIR]/environments-v2/project-cp3.11.[X]-[HASH]");
     });
 
+    // The selected cache entry takes precedence over a stale project link.
+    uv_fs::replace_symlink(&link_312, context.temp_dir.child(".venv"))?;
+    uv_snapshot!(context.filters(), context.run()
+        .args(["--preview-features", "centralized-project-envs", "python", "--version"])
+        .env(EnvVars::VIRTUAL_ENV, &link_311), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    Python 3.11.[X]
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Checked in [TIME]
+    "#);
+    assert_link_target(context.temp_dir.child(".venv"), &link_311);
+
     // The original environment is reused, not recreated.
     uv_snapshot!(context.filters(), context.sync()
         .arg("--preview-features")
@@ -128,6 +160,130 @@ fn sync_centralized_env_switch_python() -> Result<()> {
     Resolved 1 package in [TIME]
     Checked in [TIME]
     "#);
+    Ok(())
+}
+
+/// A cached selection changed by the queried interpreter must not be written back by sync.
+#[cfg(unix)]
+#[test]
+fn sync_centralized_env_current_changed_during_discovery() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+    write_project(&context, ">=3.12", &[])?;
+    context
+        .sync()
+        .args(["--preview-features", "centralized-project-envs"])
+        .assert()
+        .success();
+
+    let cache = Cache::from_path(context.cache_dir.path());
+    let current =
+        ProjectEnvironmentCache::new(context.temp_dir.path(), Some("project"), &cache).current();
+    let environment = fs_err::read_link(context.temp_dir.child(".venv"))?;
+    let python = environment.join("bin/python");
+    fs_err::rename(&python, environment.join("bin/python-real"))?;
+    fs_err::write(
+        &python,
+        indoc! {r#"
+        #!/bin/sh
+        rm "$UV_TEST_CURRENT_REFERENCE"
+        exec "${0%/*}/python-real" "$@"
+    "#},
+    )?;
+    fs_err::set_permissions(&python, PermissionsExt::from_mode(0o755))?;
+
+    uv_snapshot!(context.filters(), context.sync()
+        .args(["--preview-features", "centralized-project-envs"])
+        .env("UV_TEST_CURRENT_REFERENCE", current.path()), @r#"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Project virtual environment directory `[CACHE_DIR]/environments-v2/project-current-[HASH]` cannot be used because the environment reference changed or could not be read; retry the command
+    "#);
+    assert_path_missing(current.path());
+    Ok(())
+}
+
+/// An unexecutable Python in the selected environment must not hide a working project link.
+#[cfg(unix)]
+#[test]
+fn sync_centralized_env_unusable_current_falls_back_to_dot_venv() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"]);
+    write_project(&context, ">=3.11", &[])?;
+    context
+        .sync()
+        .args([
+            "--preview-features",
+            "centralized-project-envs",
+            "--python",
+            "3.12",
+        ])
+        .assert()
+        .success();
+    let fallback = fs_err::read_link(context.temp_dir.child(".venv"))?;
+
+    context
+        .sync()
+        .args([
+            "--preview-features",
+            "centralized-project-envs",
+            "--python",
+            "3.11",
+        ])
+        .assert()
+        .success();
+    let selected = fs_err::read_link(context.temp_dir.child(".venv"))?;
+    let executable = virtualenv_python_executable(&selected);
+    fs_err::remove_file(&executable)?;
+    fs_err::write(&executable, "")?;
+    uv_fs::replace_symlink(&fallback, context.temp_dir.child(".venv"))?;
+
+    uv_snapshot!(context.filters(), context.sync()
+        .args(["--preview-features", "centralized-project-envs"])
+        .env(EnvVars::VIRTUAL_ENV, context.temp_dir.child(".venv").path()), @r#"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Checked in [TIME]
+    "#);
+    assert_link_target(context.temp_dir.child(".venv"), &fallback);
+    Ok(())
+}
+
+/// A script and a later project at the same path must not share a cache entry.
+#[test]
+fn centralized_project_environment_does_not_collide_with_script_environment() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"])
+        .with_filtered_centralized_environment_hashes();
+    let path = context.temp_dir.child("project-current.py");
+    path.write_str("# /// script\n# dependencies = []\n# ///\n")?;
+    context.run().arg(path.path()).assert().success();
+
+    fs_err::remove_file(path.path())?;
+    path.create_dir_all()?;
+    path.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        "#,
+    )?;
+    uv_snapshot!(context.filters(), context.sync()
+        .current_dir(path.path())
+        .args(["--preview-features", "centralized-project-envs"]), @r#"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment `project-cp3.12.[X]-[HASH]`
+    Resolved 1 package in [TIME]
+    Checked in [TIME]
+    "#);
+    let cache = Cache::from_path(context.cache_dir.path());
+    let current =
+        ProjectEnvironmentCache::new(path.path(), Some("project"), &cache).resolve_current()?;
+    assert_eq!(
+        fs_err::canonicalize(path.child(".venv"))?,
+        fs_err::canonicalize(current)?,
+    );
     Ok(())
 }
 
@@ -1004,6 +1160,39 @@ fn sync_centralized_env_local_environment_removal_failure_is_not_fatal() -> Resu
 
     assert!(pyvenv_cfg.is_file());
     assert!(context.cache_dir.child("environments-v2").is_dir());
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn sync_centralized_env_read_only_cache_bucket() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"])
+        .with_filter((r"-[a-f0-9]{16}\b", "-[HASH]"));
+    write_project(&context, ">=3.11", &[])?;
+    context
+        .sync()
+        .args([
+            "--preview-features",
+            "centralized-project-envs",
+            "--python",
+            "3.12",
+        ])
+        .assert()
+        .success();
+
+    let cache = Cache::from_path(context.cache_dir.path());
+    let current =
+        ProjectEnvironmentCache::new(context.temp_dir.path(), Some("project"), &cache).current();
+    fs_err::remove_file(current.path())?;
+    let _guard = ReadOnlyDirectoryGuard::new(context.cache_dir.child("environments-v2").path())?;
+    uv_snapshot!(context.filters(), context.sync()
+        .args(["--preview-features", "centralized-project-envs"]), @r#"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to record the selected project environment at `[CACHE_DIR]/environments-v2/project-current-[HASH]`
+      cause: failed to symlink file from [CACHE_DIR]/environments-v2/project-current-[HASH] to project-cp3.12.[X]-[HASH]: Permission denied (os error 13)
+    "#);
+    assert_path_missing(current.path());
     Ok(())
 }
 

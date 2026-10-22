@@ -276,14 +276,19 @@ pub async fn metadata(
     } else {
         match &source {
             MetadataSource::Manifest(LockTarget::Workspace(workspace)) => {
-                ProjectInterpreter::discover_existing(workspace.install_path(), active, cache)?
+                ProjectInterpreter::discover_existing((*workspace).into(), active, cache)?
             }
             MetadataSource::Manifest(LockTarget::Script(script)) => {
                 ScriptInterpreter::discover_existing((*script).into(), active, cache)
             }
-            MetadataSource::Lockfile(workspace) => {
-                ProjectInterpreter::discover_existing(workspace.root(), active, cache)?
-            }
+            MetadataSource::Lockfile(workspace) => ProjectInterpreter::discover_existing(
+                ProjectEnvironmentTarget::Lockfile {
+                    root: workspace.root(),
+                    lock,
+                },
+                active,
+                cache,
+            )?,
         }
     };
 

@@ -42,7 +42,7 @@ use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceEr
 use uv_environment_operations::{
     LinkErrorReporting, ProjectEnvironmentTarget, centralized_environment_root,
     centralized_environments_enabled, is_centralized_environment_reference,
-    lock_project_environment, update_project_environment_link,
+    lock_project_environment, update_project_environment,
 };
 use uv_install_operations::Changelog;
 use uv_install_operations::loggers::{DefaultInstallLogger, InstallLogger};
@@ -374,11 +374,12 @@ pub(crate) async fn venv(
 
     // Determine the appropriate environment path.
     let scripts = if let Some(workspace) = centralized_workspace
-        && update_project_environment_link(
+        && update_project_environment(
             &venv,
             ProjectEnvironmentTarget::from(workspace),
             LinkErrorReporting::User,
-        )
+            cache,
+        )?
         && let Ok(suffix) = venv.scripts().strip_prefix(&path)
     {
         workspace.install_path().join(".venv").join(suffix)
