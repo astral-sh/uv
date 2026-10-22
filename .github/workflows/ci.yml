@@ -101,6 +101,31 @@ jobs:
       contents: read
       id-token: write
 
+  check-cargo-lock-changes:
+    name: "Cargo lockfile changes"
+    if: >-
+      ${{
+        github.event_name == 'pull_request' &&
+        github.repository_owner == 'astral-sh' &&
+        github.event.pull_request.head.repo.full_name != github.repository
+      }}
+    runs-on: github-ubuntu-24.04-x86_64-2
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          # renovate: datasource=github-release-attachments depName=astral-sh/uv
+          version: "0.13.0"
+          checksum: "1468ebd5a5541121837c5a2817b9972ba6090fa6caa3d142620850a47fb75154"
+      - name: "Check Cargo lockfile changes"
+        env:
+          GH_REPOSITORY: ${{ github.repository }}
+        run: uv run --script scripts/check-cargo-lock-changes.py HEAD^1 HEAD
+
   check-lock:
     needs: plan
     if: ${{ needs.plan.outputs.run-checks == 'true' }}
@@ -331,6 +356,7 @@ jobs:
     if: ${{ always() && github.ref != 'refs/heads/main' }}
     needs:
       - plan
+      - check-cargo-lock-changes
       - check-fmt
       - check-lint
       - check-docs
