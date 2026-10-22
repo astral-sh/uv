@@ -13,6 +13,9 @@ jobs:
     timeout-minutes: 10
     name: "mkdocs"
     runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
+    env:
+      RUSTC_BOOTSTRAP: "1"
+      CARGO_UNSTABLE_CHECKSUM_FRESHNESS: "true"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -27,7 +30,10 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.14"
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - name: "Install Rust toolchain"
+        run: rustup toolchain install --profile minimal
+
+      - uses: astral-sh/github-actions/rust-workspace-cache@35adb34286434a5d7173d37bc521fc75c17c251f
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: "Generate reference documentation"
