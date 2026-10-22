@@ -98,10 +98,10 @@ pub enum GitUrlParseError {
 ///
 /// Store the Git-specific fields out of line so ordinary registry and path requirements do
 /// not reserve space for both URLs, a Git reference, and a resolved commit.
-#[derive(Clone, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct GitUrl(Arc<GitUrlInner>);
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 struct GitUrlInner {
     /// The URL of the Git repository, with any query parameters, fragments, and leading `git+`
     /// removed.
@@ -327,18 +327,6 @@ impl From<GitUrl> for SafeUrl {
 impl std::fmt::Display for GitUrl {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.url())
-    }
-}
-
-impl std::fmt::Debug for GitUrl {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("GitUrl")
-            .field("url", &self.0.url)
-            .field("repository", &self.0.repository)
-            .field("reference", &self.0.reference)
-            .field("resolved", &self.0.resolved)
-            .field("lfs", &self.0.lfs)
-            .finish()
     }
 }
 
