@@ -1,3 +1,5 @@
+use std::process::Command;
+
 use tracing::debug;
 use uv_pep440::Version;
 
@@ -120,7 +122,7 @@ fn query_gpu(field: &str) -> Result<Option<String>, AcceleratorError> {
 }
 
 fn run_nvidia_smi(args: &[&str]) -> Result<Option<String>, AcceleratorError> {
-    let Ok(output) = std::process::Command::new("nvidia-smi").args(args).output() else {
+    let Ok(output) = Command::new("nvidia-smi").args(args).output() else {
         return Ok(None);
     };
     if output.status.success() {
