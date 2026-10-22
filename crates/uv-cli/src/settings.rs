@@ -706,6 +706,7 @@ pub struct RunSettings {
     pub refresh: Refresh,
     pub settings: ResolverInstallerSettings,
     pub env_file: EnvFile,
+    pub recursion_depth: u32,
     pub max_recursion_depth: u32,
     pub malware_settings: MalwareCheckSettings,
     #[cfg(unix)]
@@ -875,6 +876,7 @@ impl RunSettings {
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
+            recursion_depth: environment.run_recursion_depth.unwrap_or_default(),
             max_recursion_depth: max_recursion_depth.unwrap_or(Self::DEFAULT_MAX_RECURSION_DEPTH),
             malware_settings,
             #[cfg(unix)]
