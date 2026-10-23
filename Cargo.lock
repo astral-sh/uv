@@ -7987,6 +7987,7 @@ dependencies = [
  "uv-configuration",
  "uv-distribution-filename",
  "uv-fs",
+ "uv-macros",
  "uv-normalize",
  "uv-pep440",
  "uv-pep508",
