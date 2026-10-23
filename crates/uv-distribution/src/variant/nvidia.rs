@@ -7,6 +7,7 @@ use uv_distribution_types::{
 };
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionParseError};
+use uv_platform_tags::Platform;
 use uv_static::EnvVars;
 use uv_torch::NvidiaGpu;
 
@@ -240,7 +241,7 @@ impl VendoredVariantProvider for NvidiaVariantProvider {
         Version::new([0, 0, 1])
     }
 
-    fn properties(&self) -> Option<&[SupportedVariantFeature]> {
+    fn properties(&self, _cross_platform: Option<&Platform>) -> Option<&[SupportedVariantFeature]> {
         self.properties.as_deref()
     }
 }

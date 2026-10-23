@@ -273,7 +273,7 @@ impl Interpreter {
                     manylinux_compatible: self.manylinux_compatible,
                     gil_disabled: self.gil_disabled,
                     debug_enabled: self.debug_enabled,
-                    is_cross: false,
+                    target_override: None,
                 },
             )?;
             self.tags.set(tags).expect("tags should not be set");

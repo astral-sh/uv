@@ -14,7 +14,7 @@ use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
 use uv_pep508::{MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString};
 use uv_platform_tags::{
-    AbiTag, BinaryFormat, IncompatibleTag, LanguageTag, PlatformTag, TagPriority, Tags,
+    AbiTag, BinaryFormat, IncompatibleTag, LanguageTag, Platform, PlatformTag, TagPriority, Tags,
 };
 use uv_pypi_types::{HashDigest, Yanked};
 
@@ -438,13 +438,20 @@ impl PrioritizedDist {
     pub(crate) fn prioritize_variants(
         &self,
         metadata: &[(&IndexUrl, &VariantsJsonContent)],
+        cross_platform: Option<&Platform>,
     ) -> Option<Self> {
         if metadata.is_empty() {
             return None;
         }
         let metadata: Vec<_> = metadata
             .iter()
-            .map(|(source, metadata)| (*source, *metadata, supported_variant_properties(metadata)))
+            .map(|(source, metadata)| {
+                (
+                    *source,
+                    *metadata,
+                    supported_variant_properties(metadata, cross_platform),
+                )
+            })
             .collect();
         // Prefer wheels whose advertised hash matches a required hash, followed by wheels with
         // no advertised hash, then mismatches. If no hashes are required, all wheels match.
