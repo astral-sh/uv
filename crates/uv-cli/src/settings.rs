@@ -2595,7 +2595,8 @@ pub struct VersionSettings {
     pub frozen: Option<FrozenSource>,
     pub active: ActiveEnvironment,
     pub no_sync: bool,
-    pub package: Option<PackageName>,
+    pub package: Vec<PackageName>,
+    pub all_packages: bool,
     pub python: Option<String>,
     pub install_mirrors: PythonInstallMirrors,
     pub refresh: Refresh,
@@ -2627,6 +2628,7 @@ impl VersionSettings {
             build,
             refresh,
             package,
+            all_packages,
             python,
         } = args;
 
@@ -2658,6 +2660,7 @@ impl VersionSettings {
             active: flag(active, no_active, "active")?.into(),
             no_sync: no_sync.is_enabled(),
             package,
+            all_packages,
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::try_from(refresh)?,
             settings: resolve_resolver_installer_settings(
