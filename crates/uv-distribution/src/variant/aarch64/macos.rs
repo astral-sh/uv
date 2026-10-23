@@ -8,12 +8,7 @@
 
 use sysctl::{Ctl, Sysctl};
 
-pub(super) const FEATURE: &str = "version";
-pub(super) const BASELINE: &str = "8a";
-
-const M1: &[&str] = &["8.4a", "8.3a", "8.2a", "8.1a", "8a"];
-const M2: &[&str] = &["8.5a", "8.4a", "8.3a", "8.2a", "8.1a", "8a"];
-const M3: &[&str] = &["8.6a", "8.5a", "8.4a", "8.3a", "8.2a", "8.1a", "8a"];
+use super::{BASELINE, M1, M2, M3};
 
 pub(super) fn values() -> impl Iterator<Item = String> {
     host_versions()
