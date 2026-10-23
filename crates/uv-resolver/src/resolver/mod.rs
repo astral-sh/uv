@@ -3289,7 +3289,7 @@ impl<'index> ForkState<'index> {
         &self,
         name: &PackageName,
         version: &Version,
-    ) -> (Option<&VerbatimParsedUrl>, Option<&IndexUrl>) {
+    ) -> (Option<&Arc<VerbatimParsedUrl>>, Option<&IndexUrl>) {
         let url = self.fork_urls.get(name);
         let index = url
             .is_none()
