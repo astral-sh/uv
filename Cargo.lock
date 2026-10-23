@@ -6322,6 +6322,7 @@ dependencies = [
  "uv-distribution-types",
  "uv-fs",
  "uv-git",
+ "uv-macros",
  "uv-normalize",
  "uv-pep440",
  "uv-pep508",

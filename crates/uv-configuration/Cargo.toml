@@ -22,6 +22,7 @@ uv-cache-info = { workspace = true }
 uv-distribution-types = { workspace = true }
 uv-fs = { workspace = true }
 uv-git = { workspace = true }
+uv-macros = { workspace = true }
 uv-normalize = { workspace = true }
 uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
