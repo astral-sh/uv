@@ -603,12 +603,7 @@ impl<'lock> InstallTarget<'lock> {
                 )
             }
             Self::Script { script, .. } => Either::Right(Either::Left(
-                script
-                    .metadata
-                    .dependencies
-                    .iter()
-                    .flatten()
-                    .map(Cow::Borrowed),
+                script.metadata.dependencies.iter().map(Cow::Borrowed),
             )),
             Self::Lockfile { .. } => Either::Right(Either::Right(std::iter::empty())),
         }

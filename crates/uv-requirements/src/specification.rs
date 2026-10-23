@@ -108,18 +108,11 @@ impl RequirementsSpecification {
     fn from_pep723_metadata(metadata: &Pep723Metadata) -> Self {
         let requirements = metadata
             .dependencies
-            .as_ref()
-            .map(|dependencies| {
-                dependencies
-                    .iter()
-                    .map(|dependency| {
-                        UnresolvedRequirementSpecification::from(Requirement::from(
-                            dependency.to_owned(),
-                        ))
-                    })
-                    .collect::<Vec<UnresolvedRequirementSpecification>>()
+            .iter()
+            .map(|dependency| {
+                UnresolvedRequirementSpecification::from(Requirement::from(dependency.to_owned()))
             })
-            .unwrap_or_default();
+            .collect::<Vec<_>>();
 
         if let Some(tool_uv) = metadata.tool.as_ref().and_then(|tool| tool.uv.as_ref()) {
             let constraints = tool_uv

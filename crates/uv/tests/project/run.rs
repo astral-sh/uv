@@ -382,12 +382,14 @@ fn run_pep723_script() -> Result<()> {
     Checked 4 packages in [TIME]
     ");
 
-    // If the script contains a PEP 723 tag, it can omit the dependencies field.
+    // Omitting dependencies reuses the script environment and retains previously installed packages.
     let test_script = context.temp_dir.child("main.py");
     test_script.write_str(indoc! { r#"
         # /// script
         # requires-python = ">=3.11"
         # ///
+
+        import iniconfig
 
         print("Hello, world!")
        "#
@@ -4707,6 +4709,32 @@ fn run_active_script_environment() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn run_active_script_environment_without_dependencies() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("main.py").write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # ///
+
+        import sys
+
+        print(sys.prefix)
+        "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--active")
+        .arg("main.py")
+        .env(EnvVars::VIRTUAL_ENV, "active"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [TEMP_DIR]/active
+    ");
+
+    Ok(())
+}
+
 /// Regression test for <https://github.com/astral-sh/uv/issues/21364>.
 #[test]
 fn run_active_script_environment_non_virtualenv() -> Result<()> {
@@ -4716,7 +4744,6 @@ fn run_active_script_environment_non_virtualenv() -> Result<()> {
     test_script.write_str(indoc! { r#"
         # /// script
         # requires-python = ">=3.12"
-        # dependencies = []
         # ///
 
         print("Hello, world!")

@@ -56,7 +56,7 @@ impl<'lock> LockTarget<'lock> {
     pub(crate) fn requirements(self) -> Vec<uv_pep508::Requirement<VerbatimParsedUrl>> {
         match self {
             Self::Workspace(workspace) => workspace.requirements(),
-            Self::Script(script) => script.metadata.dependencies.clone().unwrap_or_default(),
+            Self::Script(script) => script.metadata.dependencies.clone(),
         }
     }
 
