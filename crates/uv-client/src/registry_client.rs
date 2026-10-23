@@ -47,7 +47,7 @@ use crate::remote_metadata::wheel_metadata_from_remote_zip;
 use crate::rkyvutil::OwnedArchive;
 use crate::{
     BaseClient, CachedClient, Error, ErrorKind, FlatIndexClient, RedirectClientWithMiddleware,
-    RetryState,
+    RetryState, content_disposition_filename,
 };
 
 /// A builder for an [`RegistryClient`].
@@ -275,6 +275,60 @@ pub enum MetadataFormat {
 }
 
 impl RegistryClient {
+    /// Discover an archive filename from the final response to a URL request.
+    ///
+    /// The response body is not consumed. The filename is cached with the response's HTTP cache
+    /// policy, so resolving the same URL offline does not require another request.
+    pub async fn archive_filename(
+        &self,
+        location: &SafeUrl,
+        package_hint: Option<&PackageName>,
+    ) -> Result<String, Error> {
+        let mut url = location.clone();
+        url.set_fragment(None);
+        let cache_entry = self.cache.entry(
+            CacheBucket::ArchiveFilenames,
+            "url",
+            format!("{}.msgpack", cache_digest(&url)),
+        );
+        let cache_control = match self.connectivity {
+            Connectivity::Online => CacheControl::from(
+                self.cache
+                    .freshness(&cache_entry, package_hint, None)
+                    .map_err(ErrorKind::Io)?,
+            ),
+            Connectivity::Offline => CacheControl::AllowStale,
+        };
+        let request = self
+            .uncached_client(&url)
+            .get(url.clone())
+            .header(reqwest::header::ACCEPT_ENCODING, "identity")
+            .build()
+            .map_err(|error| {
+                ErrorKind::from_reqwest(url, error, self.client.certificate_source())
+            })?;
+        self.cached_client()
+            .get_serde_with_retry(
+                request,
+                &cache_entry,
+                cache_control,
+                async |response: Response, _: &mut RetryState| {
+                    content_disposition_filename(response.headers())
+                        .map_err(|error| {
+                            Error::from(ErrorKind::InvalidContentDisposition(
+                                location.clone(),
+                                error,
+                            ))
+                        })?
+                        .ok_or_else(|| {
+                            Error::from(ErrorKind::MissingArchiveFilename(location.clone()))
+                        })
+                },
+            )
+            .await
+            .map_err(Error::from)
+    }
+
     /// Return the [`CachedClient`] used by this client.
     pub fn cached_client(&self) -> &CachedClient {
         &self.client
@@ -1930,16 +1984,155 @@ mod tests {
         BaseClientBuilder, Connectivity, OwnedArchive, RegistryClient, RegistryClientBuilder,
         SimpleDetailMetadata, SimpleDetailMetadatum, html::SimpleDetailHTML,
     };
-    use uv_cache::Cache;
+    use uv_cache::{Cache, Refresh};
     use uv_distribution_types::{
         FileLocation, Index, IndexCapabilities, IndexFormat, IndexLocations, IndexMetadataRef,
         IndexUrl, ToUrlError, VariantsJsonFilename,
     };
     use uv_small_str::SmallString;
-    use wiremock::matchers::{basic_auth, method, path_regex};
+    use wiremock::matchers::{basic_auth, header, method, path, path_regex};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     type Error = Box<dyn std::error::Error>;
+
+    #[tokio::test]
+    async fn archive_filename_redirect() -> Result<(), Error> {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/download"))
+            .respond_with(
+                ResponseTemplate::new(302)
+                    .insert_header("location", "/archive")
+                    .insert_header("content-disposition", "attachment; filename=redirect.zip"),
+            )
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/archive"))
+            .and(header("accept-encoding", "identity"))
+            .respond_with(ResponseTemplate::new(200).insert_header(
+                "content-disposition",
+                "attachment; filename=example-1.0.tar.gz",
+            ))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let client =
+            RegistryClientBuilder::new(BaseClientBuilder::default(), Cache::temp()?).build()?;
+        let location = SafeUrl::parse(&format!("{}/download", server.uri()))?;
+
+        assert_snapshot!(client.archive_filename(&location, None).await?, @"example-1.0.tar.gz");
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn archive_filename_offline_cache() -> Result<(), Error> {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("cache-control", "max-age=0")
+                    .insert_header(
+                        "content-disposition",
+                        "attachment; filename=example-1.0.tar.gz",
+                    ),
+            )
+            .expect(1)
+            .mount(&server)
+            .await;
+        let cache = Cache::temp()?;
+        let client =
+            RegistryClientBuilder::new(BaseClientBuilder::default(), cache.clone()).build()?;
+        let location = SafeUrl::parse(&format!("{}/download", server.uri()))?;
+        assert_snapshot!(client.archive_filename(&location, None).await?, @"example-1.0.tar.gz");
+
+        let offline = RegistryClientBuilder::new(
+            BaseClientBuilder::default().connectivity(Connectivity::Offline),
+            cache,
+        )
+        .build()?;
+        let location = SafeUrl::parse(&format!("{}/download#subdirectory=src", server.uri()))?;
+        assert_snapshot!(offline.archive_filename(&location, None).await?, @"example-1.0.tar.gz");
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn archive_filename_refresh() -> Result<(), Error> {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("cache-control", "max-age=3600")
+                    .insert_header(
+                        "content-disposition",
+                        "attachment; filename=example-1.0.tar.gz",
+                    ),
+            )
+            .expect(1)
+            .mount(&server)
+            .await;
+        let cache = Cache::temp()?;
+        let client =
+            RegistryClientBuilder::new(BaseClientBuilder::default(), cache.clone()).build()?;
+        let location = SafeUrl::parse(&format!("{}/download", server.uri()))?;
+        assert_snapshot!(client.archive_filename(&location, None).await?, @"example-1.0.tar.gz");
+        assert_snapshot!(client.archive_filename(&location, None).await?, @"example-1.0.tar.gz");
+
+        server.verify().await;
+        server.reset().await;
+        Mock::given(method("GET"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("cache-control", "max-age=3600")
+                    .insert_header(
+                        "content-disposition",
+                        "attachment; filename=example-2.0.zip",
+                    ),
+            )
+            .expect(1)
+            .mount(&server)
+            .await;
+        let package = PackageName::from_str("example")?;
+        let cache = cache.with_refresh(Refresh::from_args(None, vec![package.clone()]));
+        let client = RegistryClientBuilder::new(BaseClientBuilder::default(), cache).build()?;
+        assert_snapshot!(client.archive_filename(&location, Some(&package)).await?, @"example-2.0.zip");
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn archive_filename_no_store() -> Result<(), Error> {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("cache-control", "no-store")
+                    .insert_header(
+                        "content-disposition",
+                        "attachment; filename=example-1.0.tar.gz",
+                    ),
+            )
+            .expect(1)
+            .mount(&server)
+            .await;
+        let cache = Cache::temp()?;
+        let client =
+            RegistryClientBuilder::new(BaseClientBuilder::default(), cache.clone()).build()?;
+        let location = SafeUrl::parse(&format!("{}/download", server.uri()))?;
+        assert_snapshot!(client.archive_filename(&location, None).await?, @"example-1.0.tar.gz");
+
+        let offline = RegistryClientBuilder::new(
+            BaseClientBuilder::default().connectivity(Connectivity::Offline),
+            cache,
+        )
+        .build()?;
+        let error = offline
+            .archive_filename(&location, None)
+            .await
+            .expect_err("no-store responses must not be cached");
+        assert!(error.is_offline());
+        Ok(())
+    }
 
     async fn start_test_server(username: &'static str, password: &'static str) -> MockServer {
         let server = MockServer::start().await;

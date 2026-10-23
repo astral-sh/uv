@@ -1221,6 +1221,10 @@ pub enum CacheBucket {
     ///
     /// The response is stored as `Vec<File>`.
     FlatIndex,
+    /// Filenames advertised by archive URLs in `Content-Disposition` response headers.
+    ///
+    /// Cache structure: `archive-filenames-v0/url/<digest(url)>.msgpack`.
+    ArchiveFilenames,
     /// Git repositories.
     Git,
     /// Information about an interpreter at a path.
@@ -1302,6 +1306,7 @@ impl CacheBucket {
             // Note that when bumping this, you'll also need to bump it
             // in `crates/uv/tests/lock/lock.rs`.
             Self::FlatIndex => "flat-index-v7",
+            Self::ArchiveFilenames => "archive-filenames-v0",
             Self::Git => "git-v1",
             Self::Interpreter => "interpreter-v4",
             // Note that when bumping this, you'll also need to bump it
@@ -1432,9 +1437,8 @@ impl CacheBucket {
                     summary += cache.remove_path(directory.join(format!("{name}.rkyv")))?;
                 }
             }
-            Self::FlatIndex => {
-                // We can't know if the flat index includes a package, so we just remove the entire
-                // cache entry.
+            Self::FlatIndex | Self::ArchiveFilenames => {
+                // These responses can be cached before their package names are known.
                 let root = cache.bucket(self);
                 summary += cache.remove_path(root)?;
             }
@@ -1459,6 +1463,7 @@ impl CacheBucket {
             Self::Wheels,
             Self::SourceDistributions,
             Self::FlatIndex,
+            Self::ArchiveFilenames,
             Self::Git,
             Self::Interpreter,
             Self::Simple,

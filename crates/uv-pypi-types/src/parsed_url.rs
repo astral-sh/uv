@@ -10,7 +10,7 @@ use uv_macros::DebugNoInline;
 use uv_pep508::{
     Pep508Url, UnnamedRequirementUrl, VerbatimUrl, VerbatimUrlError, looks_like_git_repository,
 };
-use uv_redacted::policy::Stripped;
+use uv_redacted::policy::{SerializationPolicy, Stripped};
 use uv_redacted::{SafeUrl, SafeUrlError};
 
 use crate::{ArchiveInfo, DirInfo, DirectUrl, VcsUrl};
@@ -434,6 +434,15 @@ pub enum ArchiveUrlFilename {
 }
 
 impl ArchiveUrlFilename {
+    /// Infer the archive format from a URL, deferring opaque HTTP URLs to the server.
+    pub fn from_url<P: SerializationPolicy>(url: &SafeUrl<P>) -> Result<Self, ExtensionError> {
+        match DistExtension::from_path(url.path()) {
+            Ok(ext) => Ok(Self::Url(ext)),
+            Err(_) if matches!(url.scheme(), "http" | "https") => Ok(Self::Unknown),
+            Err(err) => Err(err),
+        }
+    }
+
     /// Validate the extension of a server-provided filename.
     pub fn from_header(filename: impl Into<Box<str>>) -> Result<Self, ExtensionError> {
         let filename = filename.into();

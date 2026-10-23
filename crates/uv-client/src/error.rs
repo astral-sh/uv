@@ -12,7 +12,7 @@ use tracing::warn;
 
 use crate::base_client::CertificateSource;
 use crate::middleware::OfflineError;
-use crate::{FlatIndexError, html};
+use crate::{ContentDispositionError, FlatIndexError, html};
 use uv_cache::Error as CacheError;
 use uv_distribution_filename::{WheelFilename, WheelFilenameError};
 use uv_distribution_types::IndexUrl;
@@ -182,6 +182,8 @@ impl Error {
             | ErrorKind::Zip(..)
             | ErrorKind::MissingContentType(_)
             | ErrorKind::InvalidContentTypeHeader(..)
+            | ErrorKind::MissingArchiveFilename(_)
+            | ErrorKind::InvalidContentDisposition(..)
             | ErrorKind::UnsupportedMediaType(..)
             | ErrorKind::Offline(_) => true,
             ErrorKind::Git(error) => error.is_user_failure(),
@@ -548,6 +550,12 @@ pub enum ErrorKind {
 
     #[error("Invalid `Content-Type` header for `{0}`")]
     InvalidContentTypeHeader(SafeUrl, #[source] http::header::ToStrError),
+
+    #[error("Missing filename in `Content-Disposition` header for `{0}`")]
+    MissingArchiveFilename(SafeUrl),
+
+    #[error("Invalid `Content-Disposition` header for `{0}`")]
+    InvalidContentDisposition(SafeUrl, #[source] ContentDispositionError),
 
     #[error("Unsupported `Content-Type` \"{1}\" for `{0}`. Expected JSON or HTML.")]
     UnsupportedMediaType(SafeUrl, String),
