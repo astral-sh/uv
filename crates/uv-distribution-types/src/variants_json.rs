@@ -16,6 +16,8 @@ pub const PEP_825_SCHEMA: &str = "https://variants-schema.wheelnext.dev/peps/825
 /// The PEP 850 draft schema, which adds providers to the variant metadata.
 pub const PEP_850_SCHEMA: &str = "https://variants-schema.wheelnext.dev/peps/850/v0.2.0.json";
 
+const NULL_VARIANT_LABEL: VariantLabel = VariantLabel::from_static("null");
+
 /// An error parsing a variant metadata file.
 #[derive(Debug, thiserror::Error)]
 pub enum VariantsJsonParseError {
@@ -492,7 +494,7 @@ impl TryFrom<VariantsJsonWire> for VariantsJsonContent {
                             values: values.clone(),
                         });
                     }
-                    if label.as_str() == "null" {
+                    if label == &NULL_VARIANT_LABEL {
                         return Err(VariantMetadataError::NullProperties);
                     }
                 }
