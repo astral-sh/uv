@@ -1,4 +1,5 @@
 mod debug_no_inline;
+mod deserialize_untagged;
 mod options_metadata;
 
 use proc_macro::TokenStream;
@@ -14,6 +15,58 @@ pub fn derive_debug_no_inline(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
 
     debug_no_inline::derive_impl(input)
+        .unwrap_or_else(syn::Error::into_compile_error)
+        .into()
+}
+
+/// Deserialize an untagged enum whose variants have distinct Serde input shapes.
+///
+/// Annotate each newtype variant with `#[untagged(string)]`, `#[untagged(bool)]`,
+/// `#[untagged(seq)]`, or `#[untagged(map)]`. A struct variant takes the map shape.
+/// The selected variant consumes the input directly and returns its own errors.
+/// This requires a format that supports `Deserializer::deserialize_any`, such as TOML or JSON.
+///
+/// Struct variants support Serde field attributes, variant-level `rename_all`, and
+/// enum-level `deny_unknown_fields`. Use `#[serde(expecting = "...")]` on the enum
+/// to describe the accepted input in type errors. Use the enum's name for recursive
+/// fields in a struct variant.
+///
+/// Pair this with `#[derive(Serialize)]` and `#[serde(untagged)]` for serialization.
+///
+/// ```
+/// use serde::Serialize;
+/// use uv_macros::DeserializeUntagged;
+///
+/// #[derive(Debug, PartialEq, Serialize, DeserializeUntagged)]
+/// #[serde(untagged)]
+/// enum ModuleName {
+///     #[untagged(string)]
+///     Name(String),
+///     #[untagged(seq)]
+///     Names(Vec<String>),
+/// }
+///
+/// let names = serde_json::from_str::<ModuleName>(r#"["uv", "uv_build"]"#)?;
+/// assert_eq!(names, ModuleName::Names(vec!["uv".into(), "uv_build".into()]));
+/// # Ok::<(), serde_json::Error>(())
+/// ```
+///
+/// Two struct variants both claim the map shape. Disambiguating them requires inspecting
+/// their contents. A single `#[untagged(map)]` variant can delegate that choice to a
+/// payload with its own `Deserialize` implementation.
+///
+/// ```compile_fail
+/// #[derive(uv_macros::DeserializeUntagged)]
+/// enum Source {
+///     Git { git: String },
+///     Url { url: String },
+/// }
+/// ```
+#[proc_macro_derive(DeserializeUntagged, attributes(untagged, serde))]
+pub fn derive_deserialize_untagged(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+
+    deserialize_untagged::derive_impl(input)
         .unwrap_or_else(syn::Error::into_compile_error)
         .into()
 }

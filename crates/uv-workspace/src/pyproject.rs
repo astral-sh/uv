@@ -15,8 +15,7 @@ use std::str::FromStr;
 
 use glob::Pattern;
 use rustc_hash::{FxBuildHasher, FxHashSet};
-use serde::de::value::MapAccessDeserializer;
-use serde::de::{MapAccess, SeqAccess, Visitor};
+use serde::de::SeqAccess;
 use serde::{Deserialize, Deserializer, Serialize};
 use thiserror::Error;
 use tracing::instrument;
@@ -26,7 +25,7 @@ use uv_distribution_types::{
     Index, IndexName, MinimumLibcVersion, NameRequirementSpecification, RequirementSource,
 };
 use uv_fs::{PortablePathBuf, try_relative_to_if};
-use uv_macros::OptionsMetadata;
+use uv_macros::{DeserializeUntagged, OptionsMetadata};
 use uv_normalize::{DEV_DEPENDENCIES, DefaultGroups, ExtraName, GroupName, PackageName};
 use uv_options_metadata::{OptionSet, OptionsMetadata, Visit};
 use uv_pep440::{Version, VersionSpecifiers};
@@ -332,70 +331,21 @@ where
 pub type OverrideDependency = Override<uv_pep508::Requirement<VerbatimParsedUrl>>;
 
 /// A build constraint, optionally accompanied by archive hashes.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(untagged)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, DeserializeUntagged)]
+#[serde(
+    untagged,
+    expecting = "a requirement string or a table with requirement and hashes"
+)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub enum BuildConstraintDependency {
     /// A PEP 508 requirement without additional hashes.
+    #[untagged(string)]
     Requirement(uv_pep508::Requirement<VerbatimParsedUrl>),
     /// A PEP 508 requirement and its archive hashes.
     WithHashes {
         requirement: uv_pep508::Requirement<VerbatimParsedUrl>,
         hashes: Vec<String>,
     },
-}
-
-impl<'de> Deserialize<'de> for BuildConstraintDependency {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        #[derive(Deserialize)]
-        struct WithHashes {
-            requirement: uv_pep508::Requirement<VerbatimParsedUrl>,
-            hashes: Vec<String>,
-        }
-
-        impl From<WithHashes> for BuildConstraintDependency {
-            fn from(value: WithHashes) -> Self {
-                Self::WithHashes {
-                    requirement: value.requirement,
-                    hashes: value.hashes,
-                }
-            }
-        }
-
-        struct BuildConstraintVisitor;
-
-        impl<'de> Visitor<'de> for BuildConstraintVisitor {
-            type Value = BuildConstraintDependency;
-
-            fn expecting(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
-                formatter.write_str("a requirement string or a table with requirement and hashes")
-            }
-
-            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
-            where
-                E: serde::de::Error,
-            {
-                value
-                    .parse()
-                    .map(BuildConstraintDependency::Requirement)
-                    .map_err(serde::de::Error::custom)
-            }
-
-            // Share table parsing across configuration readers without outlining string parsing.
-            #[inline(never)]
-            fn visit_map<A>(self, map: A) -> Result<Self::Value, A::Error>
-            where
-                A: MapAccess<'de>,
-            {
-                WithHashes::deserialize(MapAccessDeserializer::new(map)).map(Into::into)
-            }
-        }
-
-        deserializer.deserialize_any(BuildConstraintVisitor)
-    }
 }
 
 impl BuildConstraintDependency {
@@ -972,71 +922,20 @@ pub(crate) struct DependencyGroupSettings {
     pub(crate) requires_python: Option<VersionSpecifiers>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(untagged, rename_all = "kebab-case")]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, DeserializeUntagged)]
+#[serde(
+    untagged,
+    expecting = "a requirement string or a table with requirement and match-runtime"
+)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 enum ExtraBuildDependencyWire {
+    #[untagged(string)]
     Unannotated(uv_pep508::Requirement<VerbatimParsedUrl>),
     #[serde(rename_all = "kebab-case")]
     Annotated {
         requirement: uv_pep508::Requirement<VerbatimParsedUrl>,
         match_runtime: bool,
     },
-}
-
-impl<'de> Deserialize<'de> for ExtraBuildDependencyWire {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        #[derive(Deserialize)]
-        #[serde(rename_all = "kebab-case")]
-        struct Annotated {
-            requirement: uv_pep508::Requirement<VerbatimParsedUrl>,
-            match_runtime: bool,
-        }
-
-        impl From<Annotated> for ExtraBuildDependencyWire {
-            fn from(value: Annotated) -> Self {
-                Self::Annotated {
-                    requirement: value.requirement,
-                    match_runtime: value.match_runtime,
-                }
-            }
-        }
-
-        struct ExtraBuildDependencyVisitor;
-
-        impl<'de> Visitor<'de> for ExtraBuildDependencyVisitor {
-            type Value = ExtraBuildDependencyWire;
-
-            fn expecting(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
-                formatter
-                    .write_str("a requirement string or a table with requirement and match-runtime")
-            }
-
-            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
-            where
-                E: serde::de::Error,
-            {
-                value
-                    .parse()
-                    .map(ExtraBuildDependencyWire::Unannotated)
-                    .map_err(serde::de::Error::custom)
-            }
-
-            // Share table parsing across configuration readers without outlining string parsing.
-            #[inline(never)]
-            fn visit_map<A>(self, map: A) -> Result<Self::Value, A::Error>
-            where
-                A: MapAccess<'de>,
-            {
-                Annotated::deserialize(MapAccessDeserializer::new(map)).map(Into::into)
-            }
-        }
-
-        deserializer.deserialize_any(ExtraBuildDependencyVisitor)
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
