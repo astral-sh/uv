@@ -1,6 +1,7 @@
 //! Abstractions for understanding the current platform (operating system and architecture).
 
 use std::str::FromStr;
+use std::sync::Arc;
 use std::{fmt, io};
 
 use thiserror::Error;
@@ -27,16 +28,56 @@ pub enum PlatformError {
     InvalidIosDeviceArch(Arch),
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
+/// Raw CPU data reported by the interpreter and retained in its cache so providers can
+/// interpret additional features without querying it again.
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum CpuInfo {
+    /// Feature names exposed by Linux through `/proc/cpuinfo` or macOS through `sysctl`.
+    Flags { flags: Box<str> },
+    /// Raw CPUID registers and OS-enabled register state (XCR0), queried directly on Windows.
+    Cpuid { leaves: Vec<CpuidLeaf>, xstate: u64 },
+}
+
+/// Raw CPUID output for an input leaf and subleaf.
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+pub struct CpuidLeaf {
+    pub leaf: u32,
+    pub subleaf: u32,
+    /// EAX, EBX, ECX, and EDX, in that order.
+    pub registers: [u32; 4],
+}
+
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub struct Platform {
     os: Os,
     arch: Arch,
+    /// CPU capabilities reported by the interpreter, if this platform came from a probe.
+    cpu_info: Option<Arc<CpuInfo>>,
 }
 
 impl Platform {
     /// Create a new platform from the given operating system and architecture.
     pub const fn new(os: Os, arch: Arch) -> Self {
-        Self { os, arch }
+        Self {
+            os,
+            arch,
+            cpu_info: None,
+        }
+    }
+
+    /// Create a platform from the operating system, architecture, and CPU data of an interpreter.
+    pub fn from_interpreter(os: Os, arch: Arch, cpu_info: Option<CpuInfo>) -> Self {
+        Self {
+            os,
+            arch,
+            cpu_info: cpu_info.map(Arc::new),
+        }
+    }
+
+    /// The CPU capabilities reported by the interpreter, if available.
+    pub fn cpu_info(&self) -> Option<&CpuInfo> {
+        self.cpu_info.as_deref()
     }
 
     /// Return the platform's operating system.

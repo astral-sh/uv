@@ -6,6 +6,7 @@ use uv_distribution_types::{
 };
 use uv_normalize::PackageName;
 use uv_pep440::Version;
+use uv_platform_tags::Platform;
 use uv_static::EnvVars;
 
 use super::{PluginApi, VendoredVariantProvider};
@@ -49,7 +50,7 @@ impl VendoredVariantProvider for TpuVariantProvider {
         Version::new([0, 1, 0])
     }
 
-    fn properties(&self) -> Option<&[SupportedVariantFeature]> {
+    fn properties(&self, _target: &Platform) -> Option<&[SupportedVariantFeature]> {
         Some(PROPERTIES.as_slice())
     }
 }
