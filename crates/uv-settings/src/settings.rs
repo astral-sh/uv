@@ -1,14 +1,8 @@
 #[cfg(feature = "schemars")]
 use std::borrow::Cow;
-use std::{
-    fmt::{self, Debug},
-    num::NonZeroUsize,
-    path::Path,
-    path::PathBuf,
-};
+use std::{fmt::Debug, num::NonZeroUsize, path::Path, path::PathBuf};
 
-use serde::de::{Error, SeqAccess, Visitor, value::SeqAccessDeserializer};
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 
 use uv_cache_info::CacheKey;
 use uv_configuration::{
@@ -23,7 +17,7 @@ use uv_distribution_types::{
     PackageConfigSettings, PipExtraIndex, PipFindLinks, PipIndex, StaticMetadata,
 };
 use uv_install_wheel::LinkMode;
-use uv_macros::{CombineOptions, OptionsMetadata};
+use uv_macros::{CombineOptions, DeserializeUntagged, OptionsMetadata};
 use uv_normalize::{ExtraName, PackageName, PipGroupName};
 use uv_pep508::Requirement;
 use uv_preview::{MaybePreviewFeature, Preview};
@@ -3094,46 +3088,15 @@ impl MalwareCheckSettings {
 }
 
 /// Represents the `preview-features` configuration option.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, DeserializeUntagged)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[cfg_attr(feature = "schemars", schemars(untagged))]
+#[serde(expecting = "a boolean or a list of preview feature names")]
 pub enum PreviewFeaturesOption {
+    #[untagged(bool)]
     Toggle(bool),
+    #[untagged(seq)]
     Features(Vec<MaybePreviewFeature>),
-}
-
-// Dispatch by input type so invalid list elements retain their detailed diagnostics.
-struct PreviewFeaturesVisitor;
-
-impl<'de> Visitor<'de> for PreviewFeaturesVisitor {
-    type Value = PreviewFeaturesOption;
-
-    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str("a boolean or a list of preview feature names")
-    }
-
-    fn visit_bool<E>(self, value: bool) -> Result<Self::Value, E>
-    where
-        E: Error,
-    {
-        Ok(PreviewFeaturesOption::Toggle(value))
-    }
-
-    fn visit_seq<S>(self, sequence: S) -> Result<Self::Value, S::Error>
-    where
-        S: SeqAccess<'de>,
-    {
-        Vec::deserialize(SeqAccessDeserializer::new(sequence)).map(PreviewFeaturesOption::Features)
-    }
-}
-
-impl<'de> Deserialize<'de> for PreviewFeaturesOption {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        deserializer.deserialize_any(PreviewFeaturesVisitor)
-    }
 }
 
 #[expect(
