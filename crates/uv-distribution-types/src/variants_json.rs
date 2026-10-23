@@ -43,8 +43,8 @@ pub enum VariantsJsonParseError {
 }
 
 /// Variant properties, grouped by namespace and feature.
-pub type VariantProperties =
-    BTreeMap<VariantNamespace, BTreeMap<VariantFeature, Vec<VariantValue>>>;
+pub type VariantProperties = BTreeMap<VariantNamespace, VariantFeatures>;
+type VariantFeatures = BTreeMap<VariantFeature, Vec<VariantValue>>;
 
 /// Required variant properties unsupported by the target system.
 #[derive(Debug)]
@@ -87,6 +87,21 @@ impl fmt::Display for UnsupportedVariantProperties {
 #[serde(transparent)]
 pub struct SupportedVariantProperties {
     properties: BTreeMap<VariantNamespace, Vec<(VariantFeature, Vec<VariantValue>)>>,
+}
+
+impl SupportedVariantProperties {
+    fn unsupported_features<'a>(
+        &'a self,
+        namespace: &VariantNamespace,
+        features: &'a VariantFeatures,
+    ) -> impl Iterator<Item = (&'a VariantFeature, &'a Vec<VariantValue>)> {
+        let supported = self.properties.get(namespace);
+        features.iter().filter(move |(feature, values)| {
+            supported
+                .and_then(|supported| score_feature(supported, feature, values))
+                .is_none()
+        })
+    }
 }
 
 /// A supported feature and its compatible values, ordered from most to least preferred.
@@ -187,14 +202,8 @@ impl VariantsJsonContent {
         let properties = self.variants.get(label)?;
         let mut unsupported = BTreeMap::new();
         for (namespace, features) in properties {
-            let supported_features = supported_properties.properties.get(namespace);
-            let unsupported_features = features
-                .iter()
-                .filter(|(feature, values)| {
-                    supported_features
-                        .and_then(|supported| score_feature(supported, feature, values))
-                        .is_none()
-                })
+            let unsupported_features = supported_properties
+                .unsupported_features(namespace, features)
                 .map(|(feature, values)| (feature.clone(), values.clone()))
                 .collect::<BTreeMap<_, _>>();
             if !unsupported_features.is_empty() {
@@ -202,6 +211,24 @@ impl VariantsJsonContent {
             }
         }
         (!unsupported.is_empty()).then_some(UnsupportedVariantProperties(unsupported))
+    }
+
+    /// Return whether a variant has unsupported properties in a namespace.
+    pub fn is_variant_namespace_unsupported(
+        &self,
+        label: &VariantLabel,
+        namespace: &VariantNamespace,
+        supported_properties: &SupportedVariantProperties,
+    ) -> bool {
+        self.variants
+            .get(label)
+            .and_then(|properties| properties.get(namespace))
+            .is_some_and(|features| {
+                supported_properties
+                    .unsupported_features(namespace, features)
+                    .next()
+                    .is_some()
+            })
     }
 
     /// Collect ordered compatible features and values from enabled static providers.

@@ -293,6 +293,43 @@ fn skip_excessive_nvidia_cuda_override() -> Result<()> {
     Ok(())
 }
 
+/// A failed provider explains why its wheel variant could not be selected.
+#[test]
+fn provider_detection_error_hint() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::from_toml(indoc! {r#"
+        name = "provider-detection-error-hint"
+        root.requires = ["ok==1.0.0"]
+        expected.satisfiable = false
+
+        [packages.ok.versions."1.0.0"]
+        wheel = false
+        sdist = false
+
+        [packages.ok.versions."1.0.0".variants]
+        namespaces = ["nvidia"]
+        providers.nvidia.requires = ["nvidia-variant-provider==0.0.1"]
+        providers.nvidia.plugin-api = "nvidia_variant_provider.plugin:NvidiaVariantPlugin"
+        wheels.gpu.properties = ["nvidia :: cuda_version_lower_bound :: 12.0"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .env(EnvVars::NV_VARIANT_PROVIDER_FORCE_CUDA_DRIVER_VERSION, "invalid")
+        .arg("--index-url")
+        .arg(server.index_url())
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("ok==1.0.0"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies
+      cause: Because ok==1.0.0 has only unsupported wheel variants and you require ok==1.0.0, we can conclude that your requirements are unsatisfiable.
+
+    hint: The `nvidia` wheel variant provider failed to detect compatible properties: Invalid value for `NV_VARIANT_PROVIDER_FORCE_CUDA_DRIVER_VERSION`: `invalid`
+    ");
+    Ok(())
+}
+
 /// Streaming metadata must not combine files from two different `.dist-info` directories.
 #[test]
 fn streamed_variant_metadata_requires_one_dist_info_directory() -> Result<()> {

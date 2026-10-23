@@ -22,7 +22,7 @@ use tokio_stream::wrappers::ReceiverStream;
 use tracing::{Level, debug, info, instrument, trace, warn};
 
 use uv_configuration::{Constraints, DependencyModifiers, IndexStrategy};
-use uv_distribution::{ArchiveMetadata, DistributionDatabase};
+use uv_distribution::{ArchiveMetadata, DistributionDatabase, VariantProviderError};
 use uv_distribution_types::{
     BuiltDist, DerivationChain, Dist, DistErrorKind, Identifier, IndexCapabilities, IndexLocations,
     IndexMetadata, IndexUrl, InstalledDist, Name, RemoteSource, Requirement, RequiresPython,
@@ -167,6 +167,8 @@ struct WheelVariantSelection<'a> {
     distribution: Option<Cow<'a, PrioritizedDist>>,
     /// Why we couldn't check all the variants, even if we found a usable distribution.
     unavailable: Option<MetadataUnavailable>,
+    /// Detection failures for providers required by otherwise eligible variants.
+    provider_errors: BTreeSet<VariantProviderError>,
 }
 
 impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
@@ -1418,12 +1420,19 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 incompatible_dist: incompatibility,
                 prioritized_dist: _,
             } => {
+                let incompatibility = if let IncompatibleDist::Wheel(IncompatibleWheel::Tag(
+                    IncompatibleTag::Variant,
+                )) = incompatibility
+                    && !variant.provider_errors.is_empty()
+                {
+                    IncompatibleDist::WheelVariant(variant.provider_errors)
+                } else {
+                    incompatibility.clone()
+                };
                 // If the version is incompatible because no distributions are compatible, exit early.
                 return Ok(Some(ResolverVersion::Unavailable(
                     candidate.version().clone(),
-                    // TODO(charlie): We can avoid this clone; the candidate is dropped here and
-                    // owns the incompatibility.
-                    UnavailableVersion::IncompatibleDist(incompatibility.clone()),
+                    UnavailableVersion::IncompatibleDist(incompatibility),
                 )));
             }
         };
@@ -1574,9 +1583,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             }
             // Prefer a compatible variant from this index, then its ordinary wheel or sdist,
             // before considering a distribution from the next index.
-            if let Some(variant) = dist.prioritize_variants(&metadata) {
-                selection.distribution = Some(Cow::Owned(variant));
-                break;
+            match dist.prioritize_variants(&metadata) {
+                Ok(Some(variant)) => {
+                    selection.distribution = Some(Cow::Owned(variant));
+                    break;
+                }
+                Ok(None) => {}
+                Err(errors) => selection.provider_errors.extend(errors),
             }
             if dist.get().is_some() {
                 selection.distribution = Some(Cow::Borrowed(dist));
