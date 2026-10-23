@@ -91,7 +91,15 @@ impl<'a> Trie<'a> {
     ) {
         // collect all patterns beneath and including this node
         for pattern in &self.patterns {
-            patterns.push(pattern_prefix.join(pattern));
+            // Basename patterns match recursively. Keep that behavior when moving a pattern
+            // beneath a parent group, where the added slash would otherwise anchor it.
+            let prefix =
+                if !pattern_prefix.as_os_str().is_empty() && pattern.components().count() == 1 {
+                    pattern_prefix.join("**")
+                } else {
+                    pattern_prefix.clone()
+                };
+            patterns.push(prefix.join(pattern));
         }
         for (part, child) in &self.children {
             if let Component::Normal(_) = part {
@@ -242,7 +250,7 @@ mod tests {
         check(&[], &[]);
         check(
             &["./*", "a/*", "../foo/*.png"],
-            &[("", &["*", "a/*"]), ("../foo", &["*.png"])],
+            &[("", &["*", "a/**/*"]), ("../foo", &["*.png"])],
         );
         check(
             &[
@@ -254,7 +262,7 @@ mod tests {
             ],
             &[
                 ("", &["?"]),
-                ("/foo", &["?", "bar/*"]),
+                ("/foo", &["?", "bar/**/*"]),
                 ("../bar", &["*.png"]),
                 ("../bar/../baz", &["*.jpg"]),
             ],
@@ -271,9 +279,9 @@ mod tests {
                 "docs/important/very/*",
             ],
             &[
-                ("../shared/a", &["[abc].png", "b/*"]),
+                ("../shared/a", &["[abc].png", "b/**/*"]),
                 ("../shared/b/c", &["?x/d"]),
-                ("docs/important", &["*.{doc,xls}", "very/*"]),
+                ("docs/important", &["*.{doc,xls}", "very/**/*"]),
             ],
         );
         check(&["file.txt"], &[("", &["file.txt"])]);
@@ -290,7 +298,7 @@ mod tests {
         check(
             &["*", "a/b/*", "a/../c/*.jpg", "a/../c/*.png", "/a/*", "/b/*"],
             &[
-                ("", &["*", "a/b/*"]),
+                ("", &["*", "a/b/**/*"]),
                 ("a/../c", &["*.jpg", "*.png"]),
                 ("/a", &["*"]),
                 ("/b", &["*"]),
@@ -307,9 +315,9 @@ mod tests {
                     r"D:\docs/important/very/*",
                 ],
                 &[
-                    (r"\\foo\bar\shared\a", &["[abc].png", r"b\*"]),
+                    (r"\\foo\bar\shared\a", &["[abc].png", r"b\**\*"]),
                     (r"\\foo\bar\shared\b\c", &[r"?x\d"]),
-                    (r"D:\docs\important", &["*.{doc,xls}", r"very\*"]),
+                    (r"D:\docs\important", &["*.{doc,xls}", r"very\**\*"]),
                 ],
             );
         }
