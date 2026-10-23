@@ -1,14 +1,15 @@
+use std::collections::BTreeSet;
 use std::fmt::{Display, Formatter};
 
 use arcstr::ArcStr;
 use owo_colors::OwoColorize;
 use tracing::debug;
 
+use uv_distribution::{VariantDetection, VariantProviderError};
 use uv_distribution_filename::{BuildTag, WheelFilename};
 use uv_distribution_types::{
     File, IndexUrl, InstalledDist, MinimumLibcVersion, Name, RegistryBuiltDist, RegistryBuiltWheel,
-    RegistrySourceDist, RequiresPython, SupportedVariantProperties, VariantScore,
-    VariantsJsonContent, VariantsJsonFilename,
+    RegistrySourceDist, RequiresPython, VariantScore, VariantsJsonContent, VariantsJsonFilename,
 };
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
@@ -180,6 +181,8 @@ impl<'a> CompatibleDist<'a> {
 pub enum IncompatibleDist {
     /// An incompatible wheel is available.
     Wheel(IncompatibleWheel),
+    /// Only unsupported wheel variants are available, and required providers failed detection.
+    WheelVariant(BTreeSet<VariantProviderError>),
     /// An incompatible source distribution is available.
     Source(IncompatibleSource),
     /// No distributions are available
@@ -212,7 +215,7 @@ impl IncompatibleDist {
                 }
                 IncompatibleSource::NotPep625Filename => format!("has {self}"),
             },
-            Self::Unavailable => format!("has {self}"),
+            Self::WheelVariant(_) | Self::Unavailable => format!("has {self}"),
         }
     }
 
@@ -241,7 +244,7 @@ impl IncompatibleDist {
                 }
                 IncompatibleSource::NotPep625Filename => format!("have {self}"),
             },
-            Self::Unavailable => format!("have {self}"),
+            Self::WheelVariant(_) | Self::Unavailable => format!("have {self}"),
         }
     }
 
@@ -278,7 +281,7 @@ impl IncompatibleDist {
                 IncompatibleWheel::MissingPlatform(..) => None,
             },
             Self::Source(..) => None,
-            Self::Unavailable => None,
+            Self::WheelVariant(_) | Self::Unavailable => None,
         }
     }
 }
@@ -351,6 +354,9 @@ impl Display for IncompatibleDist {
                     f.write_str("a non-PEP 625-compliant source distribution filename")
                 }
             },
+            Self::WheelVariant(_) => {
+                Self::Wheel(IncompatibleWheel::Tag(IncompatibleTag::Variant)).fmt(f)
+            }
             Self::Unavailable => f.write_str("no available distributions"),
         }
     }
@@ -444,9 +450,11 @@ impl PrioritizedDist {
     }
 
     /// Score each compatible variant from the index that supplied its wheel.
+    /// Record provider errors for variants with unsupported properties.
     pub(crate) fn scored_variants(
         &self,
-        metadata: &[(&IndexUrl, &VariantsJsonContent, SupportedVariantProperties)],
+        metadata: &[(&IndexUrl, &VariantsJsonContent, VariantDetection)],
+        provider_errors: &mut BTreeSet<VariantProviderError>,
     ) -> impl Iterator<Item = (WheelVariantScore<'_>, usize)> {
         // Prefer wheels whose advertised hash matches a required hash, followed by wheels with
         // no advertised hash, then mismatches. If no hashes are required, all wheels match.
@@ -464,7 +472,13 @@ impl PrioritizedDist {
                 let score = metadata
                     .iter()
                     .filter(|(source, _, _)| *source == &wheel.index)
-                    .filter_map(|(_, metadata, supported)| metadata.score_variant(label, supported))
+                    .filter_map(|(_, metadata, detection)| {
+                        let score = metadata.score_variant(label, detection.supported());
+                        if score.is_none() {
+                            provider_errors.extend(detection.errors_for(metadata, label).cloned());
+                        }
+                        score
+                    })
                     .max()?;
                 let score = WheelVariantScore {
                     hash: *hash,
