@@ -35,8 +35,13 @@ RUN apt install -y --update ca-certificates && \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Rust nightly toolchain with Windows targets
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
-    sh -s -- -y --default-toolchain=${RUST_NIGHTLY} --profile=minimal
+ARG RUSTUP_VERSION=1.29.2
+RUN curl --proto '=https' --tlsv1.2 -sSf \
+    "https://static.rust-lang.org/rustup/archive/${RUSTUP_VERSION}/$(uname -m)-unknown-linux-gnu/rustup-init" \
+    -o rustup-init \
+    && chmod +x rustup-init \
+    && ./rustup-init -y --default-toolchain=${RUST_NIGHTLY} --profile=minimal \
+    && rm rustup-init
 
 ENV PATH="${CARGO_HOME}/bin:${PATH}"
 
@@ -49,7 +54,7 @@ RUN rustup component add rust-src --toolchain ${RUST_NIGHTLY}-x86_64-unknown-lin
 # Install cargo-xwin
 FROM base AS cargo-xwin
 
-COPY --from=ghcr.io/astral-sh/uv:0.13.0@sha256:cdc6093146eb3ff6a40107b38f008b789e050e77ad87865e381d9917da55a168 /uv /usr/local/bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.13.5@sha256:32a7bb39b496babbd997b0a39a4d66c126bdaf5661b302bf6f06abda8deca6ff /uv /usr/local/bin/uv
 
 COPY toolchain/pyproject.toml toolchain/uv.lock ./
 RUN uv sync --locked --no-dev --python /usr/bin/python3

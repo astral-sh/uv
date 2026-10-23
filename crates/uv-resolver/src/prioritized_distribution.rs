@@ -4,10 +4,11 @@ use arcstr::ArcStr;
 use owo_colors::OwoColorize;
 use tracing::debug;
 
+use uv_distribution::supported_variant_properties;
 use uv_distribution_filename::{BuildTag, WheelFilename};
 use uv_distribution_types::{
     File, IndexUrl, InstalledDist, MinimumLibcVersion, Name, RegistryBuiltDist, RegistryBuiltWheel,
-    RegistrySourceDist, RequiresPython, VariantsJsonFilename,
+    RegistrySourceDist, RequiresPython, VariantsJsonContent, VariantsJsonFilename,
 };
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
@@ -120,7 +121,7 @@ impl Name for CompatibleDist<'_> {
     }
 }
 
-impl CompatibleDist<'_> {
+impl<'a> CompatibleDist<'a> {
     /// Return whether a usable source distribution or a wheel matching [`RequiresPython`] exists.
     ///
     /// Wheel compatibility must be checked against the current Python range when a resolver fork
@@ -145,7 +146,7 @@ impl CompatibleDist<'_> {
     }
 
     // For installable distributions, return the prioritized distribution it was derived from.
-    pub(crate) fn prioritized(&self) -> Option<&PrioritizedDist> {
+    pub(crate) fn prioritized(&self) -> Option<&'a PrioritizedDist> {
         match self {
             Self::InstalledDist(_) => None,
             Self::SourceDist { prioritized, .. }
@@ -359,6 +360,8 @@ pub enum PythonRequirementKind {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum WheelCompatibility {
     Incompatible(IncompatibleWheel),
+    /// The wheel matches the platform tags, but its variant properties have not been checked.
+    Variant(HashComparison, Option<TagPriority>, Option<BuildTag>),
     Compatible(HashComparison, Option<TagPriority>, Option<BuildTag>),
 }
 
@@ -416,6 +419,72 @@ impl PrioritizedDist {
         &self.0.variants_json
     }
 
+    /// Return the `variants.json` files we need to check the candidate wheels.
+    ///
+    /// Match on the index as well as the release: a flat index can include wheels from
+    /// several sources, and each source describes only its own variants.
+    pub(crate) fn variants_json_for_selection(
+        &self,
+    ) -> impl Iterator<Item = &RegistryVariantsJson> {
+        self.0.variants_json.iter().filter(|metadata| {
+            self.0.wheels.iter().any(|(wheel, compatibility)| {
+                wheel.index == metadata.index
+                    && matches!(compatibility, WheelCompatibility::Variant(..))
+            })
+        })
+    }
+
+    /// Choose the best compatible variant, or return `None` to use the ordinary wheel or sdist.
+    pub(crate) fn prioritize_variants(
+        &self,
+        metadata: &[(&IndexUrl, &VariantsJsonContent)],
+    ) -> Option<Self> {
+        if metadata.is_empty() {
+            return None;
+        }
+        let metadata: Vec<_> = metadata
+            .iter()
+            .map(|(source, metadata)| (*source, *metadata, supported_variant_properties(metadata)))
+            .collect();
+        // Prefer wheels whose advertised hash matches a required hash, followed by wheels with
+        // no advertised hash, then mismatches. If no hashes are required, all wheels match.
+        // The installer verifies required hashes against the downloaded wheel.
+        // Break ties by variant rank, platform tags, then build tag.
+        let (best_index, (hash, _, priority, build_tag)) = self
+            .0
+            .wheels
+            .iter()
+            .enumerate()
+            .filter_map(|(index, (wheel, compatibility))| {
+                let WheelCompatibility::Variant(hash, priority, build_tag) = compatibility else {
+                    return None;
+                };
+                let label = wheel.filename.variant()?;
+                let score = metadata
+                    .iter()
+                    .filter(|(source, _, _)| *source == &wheel.index)
+                    .filter_map(|(_, metadata, supported_properties)| {
+                        metadata.score_variant(label, supported_properties)
+                    })
+                    .max()?;
+                Some((index, (*hash, score, *priority, build_tag)))
+            })
+            .max_by(|(_, left), (_, right)| left.cmp(right))?;
+
+        // Keep the ordinary wheel if its advertised hash ranks higher.
+        if let Some((_, WheelCompatibility::Compatible(existing_hash, ..))) = self.best_wheel()
+            && *existing_hash > hash
+        {
+            return None;
+        }
+
+        let mut prioritized = self.clone();
+        prioritized.0.wheels[best_index].1 =
+            WheelCompatibility::Compatible(hash, priority, build_tag.clone());
+        prioritized.0.best_wheel_index = Some(best_index);
+        Some(prioritized)
+    }
+
     /// Insert the given built distribution into the [`PrioritizedDist`].
     pub(crate) fn insert_built(
         &mut self,
@@ -442,8 +511,8 @@ impl PrioritizedDist {
         if !compatibility.is_excluded() {
             self.0.hashes.extend(hashes);
         }
-        // Track the highest-priority wheel. Variant wheels cannot provide metadata, so prefer
-        // ordinary wheels even when they cannot be installed (e.g., with `--no-binary`).
+        // Before checking variant properties, prefer ordinary wheels as metadata sources even
+        // when they cannot be installed (e.g., with `--no-binary`).
         if let Some((existing_wheel, existing_compatibility)) = self.best_wheel() {
             let is_more_compatible =
                 match (dist.filename.variant(), existing_wheel.filename.variant()) {
@@ -524,7 +593,8 @@ impl PrioritizedDist {
             // using the wheel is faster.
             //
             // (If the incompatible wheel should actually be ignored entirely, fall through to
-            // using the source distribution. Variant wheels are not supported yet.)
+            // using the source distribution. Variant wheels need their properties checked before
+            // they can provide metadata.)
             (
                 Some((wheel, compatibility @ WheelCompatibility::Incompatible(_))),
                 Some((sdist, SourceDistCompatibility::Compatible(_))),
@@ -565,6 +635,9 @@ impl PrioritizedDist {
             .and_then(|(_, compatibility)| match compatibility {
                 WheelCompatibility::Compatible(_, _, _) => None,
                 WheelCompatibility::Incompatible(incompatibility) => Some(incompatibility),
+                WheelCompatibility::Variant(..) => {
+                    Some(&IncompatibleWheel::Tag(IncompatibleTag::Variant))
+                }
             })
     }
 
@@ -738,6 +811,20 @@ impl<'a> CompatibleDist<'a> {
 }
 
 impl WheelCompatibility {
+    /// Record platform compatibility, deferring the property check for a variant wheel.
+    pub(crate) fn from_tag_priority(
+        filename: &WheelFilename,
+        hash: HashComparison,
+        priority: Option<TagPriority>,
+    ) -> Self {
+        let build_tag = filename.build_tag().cloned();
+        if filename.variant().is_some() {
+            Self::Variant(hash, priority, build_tag)
+        } else {
+            Self::Compatible(hash, priority, build_tag)
+        }
+    }
+
     /// Return `true` if the distribution is compatible.
     fn is_compatible(&self) -> bool {
         matches!(self, Self::Compatible(_, _, _))
@@ -754,17 +841,23 @@ impl WheelCompatibility {
     /// Compatible wheel ordering is determined by tag priority.
     fn is_more_compatible(&self, other: &Self) -> bool {
         match (self, other) {
-            (Self::Compatible(_, _, _), Self::Incompatible(_)) => true,
+            (Self::Compatible(_, _, _), Self::Incompatible(_) | Self::Variant(..)) => true,
             (
                 Self::Compatible(hash, tag_priority, build_tag),
                 Self::Compatible(other_hash, other_tag_priority, other_build_tag),
             ) => {
                 (hash, tag_priority, build_tag) > (other_hash, other_tag_priority, other_build_tag)
             }
-            (Self::Incompatible(_), Self::Compatible(_, _, _)) => false,
+            (Self::Incompatible(_) | Self::Variant(..), Self::Compatible(_, _, _)) => false,
             (Self::Incompatible(incompatibility), Self::Incompatible(other_incompatibility)) => {
                 incompatibility.is_more_compatible(other_incompatibility)
             }
+            (Self::Variant(..), Self::Incompatible(other)) => {
+                IncompatibleWheel::Tag(IncompatibleTag::Variant).is_more_compatible(other)
+            }
+            (Self::Incompatible(incompatibility), Self::Variant(..)) => incompatibility
+                .is_more_compatible(&IncompatibleWheel::Tag(IncompatibleTag::Variant)),
+            (Self::Variant(..), Self::Variant(..)) => false,
         }
     }
 }
@@ -1033,6 +1126,24 @@ fn implied_platform_markers<'a>(
                 marker = marker.or(tag_marker);
             }
 
+            // Android
+            //
+            // The tag's API level is not encoded, since no marker exposes it: `platform_release`
+            // reports the Android version.
+            PlatformTag::Android { abi, .. } => {
+                let mut tag_marker = MarkerTree::expression(MarkerExpression::String {
+                    key: MarkerValueString::SysPlatform,
+                    operator: MarkerOperator::Equal,
+                    value: arcstr::literal!("android"),
+                });
+                tag_marker = tag_marker.and(MarkerTree::expression(MarkerExpression::String {
+                    key: MarkerValueString::PlatformMachine,
+                    operator: MarkerOperator::Equal,
+                    value: ArcStr::from(abi.arch().name()),
+                }));
+                marker = marker.or(tag_marker);
+            }
+
             tag => {
                 debug!("Unknown platform tag in wheel tag: {tag}");
             }
@@ -1264,6 +1375,22 @@ mod tests {
         assert_platform_markers(
             "numpy-2.2.1-cp310-cp310-macosx_11_0_arm64.whl",
             "sys_platform == 'darwin' and platform_machine == 'arm64' and platform_release >= '20.0.0'",
+        );
+        assert_platform_markers(
+            "example-1.0-py3-none-android_24_arm64_v8a.whl",
+            "sys_platform == 'android' and platform_machine == 'aarch64'",
+        );
+        assert_platform_markers(
+            "example-1.0-py3-none-android_24_armeabi_v7a.whl",
+            "sys_platform == 'android' and platform_machine == 'armv7l'",
+        );
+        assert_platform_markers(
+            "example-1.0-py3-none-android_24_x86.whl",
+            "sys_platform == 'android' and platform_machine == 'i686'",
+        );
+        assert_platform_markers(
+            "example-1.0-py3-none-android_24_x86_64.whl",
+            "sys_platform == 'android' and platform_machine == 'x86_64'",
         );
     }
 

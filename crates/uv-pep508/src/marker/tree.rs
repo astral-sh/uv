@@ -1395,6 +1395,34 @@ impl MarkerTree {
         Self(INTERNER.lock().resolve_extras(self.0, &known_extras))
     }
 
+    /// Bound the result of replacing extras with their activation conditions.
+    ///
+    /// Each extra has a lower and upper bound, and its lower bound must imply its upper bound.
+    /// The returned markers describe where this marker definitely and possibly holds,
+    /// respectively. Extras absent from `known_extras` are false.
+    ///
+    /// Substitution is simultaneous: extras in replacement bounds are not themselves replaced.
+    /// Shared subgraphs are transformed once, without expanding disjunctive normal form.
+    /// `known_extras` is iterated only when this marker contains an `extra` expression.
+    #[must_use]
+    pub fn resolve_extras_with_bounds(
+        self,
+        known_extras: impl IntoIterator<Item = (ExtraName, (Self, Self))>,
+    ) -> (Self, Self) {
+        if self.is_true() || self.is_false() || !INTERNER.shared.contains_extras(self.0) {
+            return (self, self);
+        }
+
+        let known_extras: FxHashMap<_, _> = known_extras
+            .into_iter()
+            .map(|(name, (lower, upper))| (name, (lower.0, upper.0)))
+            .collect();
+        let (lower, upper) = INTERNER
+            .lock()
+            .resolve_extras_with_bounds(self.0, &known_extras);
+        (Self(lower), Self(upper))
+    }
+
     /// Returns a new `MarkerTree` where only `extra` expressions are removed.
     ///
     /// If the marker did not contain any `extra` expressions, then a marker
@@ -2353,6 +2381,213 @@ mod test {
         assert_eq!(marker.resolve_extras(known), condition);
     }
 
+    /// An unknown decision cannot hide a condition guaranteed by both branches.
+    #[test]
+    fn resolve_extras_with_bounds_consensus() {
+        assert_eq!(
+            m("extra == 'x' or extra == 'y'").resolve_extras_with_bounds([
+                (
+                    "x".parse().expect("valid extra name"),
+                    (MarkerTree::FALSE, MarkerTree::TRUE),
+                ),
+                (
+                    "y".parse().expect("valid extra name"),
+                    (MarkerTree::TRUE, MarkerTree::TRUE),
+                ),
+            ]),
+            (MarkerTree::TRUE, MarkerTree::TRUE)
+        );
+
+        let linux = m("sys_platform == 'linux'");
+
+        assert_eq!(
+            m("(extra == 'x' and extra == 'y') or (extra != 'x' and extra == 'z')")
+                .resolve_extras_with_bounds([
+                    (
+                        "x".parse().expect("valid extra name"),
+                        (MarkerTree::FALSE, MarkerTree::TRUE),
+                    ),
+                    (
+                        "y".parse().expect("valid extra name"),
+                        (linux, MarkerTree::TRUE),
+                    ),
+                    (
+                        "z".parse().expect("valid extra name"),
+                        (
+                            linux,
+                            m("sys_platform == 'linux' or sys_platform == 'darwin'")
+                        ),
+                    ),
+                ]),
+            (linux, MarkerTree::TRUE)
+        );
+    }
+
+    /// Negation exchanges the complemented upper and lower bounds.
+    #[test]
+    fn resolve_extras_with_bounds_negation() {
+        let known = [(
+            "a".parse().expect("valid extra name"),
+            (
+                m("sys_platform == 'linux'"),
+                m("sys_platform == 'linux' or sys_platform == 'darwin'"),
+            ),
+        )];
+
+        assert_eq!(
+            m("extra != 'a'").resolve_extras_with_bounds(known.clone()),
+            (
+                m("sys_platform != 'linux' and sys_platform != 'darwin'"),
+                m("sys_platform != 'linux'"),
+            )
+        );
+
+        // Missing extras are inactive, including in negated expressions.
+        assert_eq!(
+            m("extra == 'missing'").resolve_extras_with_bounds(known.clone()),
+            (MarkerTree::FALSE, MarkerTree::FALSE)
+        );
+        assert_eq!(
+            m("extra != 'missing'").resolve_extras_with_bounds(known),
+            (MarkerTree::TRUE, MarkerTree::TRUE)
+        );
+    }
+
+    /// Both bounds retain environment conditions and can introduce earlier decision variables.
+    #[test]
+    fn resolve_extras_with_bounds_environment_conditions() {
+        let marker = m("platform_release >= '24' and (extra == 'x' or extra == 'y')");
+
+        assert_eq!(
+            marker.resolve_extras_with_bounds([
+                (
+                    "x".parse().expect("valid extra name"),
+                    (
+                        m("sys_platform == 'linux'"),
+                        m("sys_platform == 'linux' or sys_platform == 'darwin'"),
+                    ),
+                ),
+                (
+                    "y".parse().expect("valid extra name"),
+                    (
+                        m("sys_platform == 'darwin'"),
+                        m("sys_platform == 'darwin' or sys_platform == 'win32'"),
+                    ),
+                ),
+            ]),
+            (
+                m(
+                    "platform_release >= '24' and (sys_platform == 'linux' or sys_platform == 'darwin')"
+                ),
+                m(
+                    "platform_release >= '24' and (sys_platform == 'linux' or sys_platform == 'darwin' or sys_platform == 'win32')"
+                ),
+            )
+        );
+    }
+
+    /// Exact substitution retains each environment decision kind and leaves replacement extras alone.
+    #[test]
+    fn resolve_extras_with_bounds_substitutes_simultaneously() {
+        let condition = m("sys_platform == 'darwin' or extra == 'b'");
+        let known = [
+            (
+                "a".parse().expect("valid extra name"),
+                (condition, condition),
+            ),
+            (
+                "b".parse().expect("valid extra name"),
+                (MarkerTree::FALSE, MarkerTree::FALSE),
+            ),
+        ];
+        let marker = m("python_version >= '3.10'
+            and implementation_name == 'cpython'
+            and platform_release >= '24'
+            and platform_machine in 'x86_64,aarch64'
+            and 'beta' in platform_version
+            and 'dev' in dependency_groups
+            and extra == 'a'");
+        let expected = m("python_version >= '3.10'
+            and implementation_name == 'cpython'
+            and platform_release >= '24'
+            and platform_machine in 'x86_64,aarch64'
+            and 'beta' in platform_version
+            and 'dev' in dependency_groups
+            and (sys_platform == 'darwin' or extra == 'b')");
+
+        assert_eq!(
+            marker.resolve_extras_with_bounds(known),
+            (expected, expected)
+        );
+    }
+
+    /// Replacement iterators can acquire the interner lock, and are unnecessary without extras.
+    #[test]
+    fn resolve_extras_with_bounds_collects_replacements_before_locking() {
+        let replacements_built = Cell::new(0);
+        let replacements = iter::once_with(|| {
+            replacements_built.set(replacements_built.get() + 1);
+            (
+                "a".parse().expect("valid extra name"),
+                (m("sys_platform == 'darwin'"), MarkerTree::TRUE),
+            )
+        });
+        let environment = m("python_version >= '3.10'");
+
+        assert_eq!(
+            environment.resolve_extras_with_bounds(replacements.clone()),
+            (environment, environment)
+        );
+        assert_eq!(replacements_built.get(), 0);
+
+        assert_eq!(
+            m("python_version >= '3.10' and extra == 'a'").resolve_extras_with_bounds(replacements),
+            (
+                m("python_version >= '3.10' and sys_platform == 'darwin'"),
+                environment,
+            )
+        );
+        assert_eq!(replacements_built.get(), 1);
+    }
+
+    /// Shared subgraphs and their complements must retain distinct activation bounds.
+    #[test]
+    fn resolve_extras_with_bounds_shared_subgraphs() {
+        let condition = m("sys_platform == 'darwin'");
+        let known = [
+            (
+                "a".parse().expect("valid extra name"),
+                (MarkerTree::FALSE, MarkerTree::TRUE),
+            ),
+            (
+                "b".parse().expect("valid extra name"),
+                (condition, condition),
+            ),
+            (
+                "c".parse().expect("valid extra name"),
+                (MarkerTree::FALSE, MarkerTree::TRUE),
+            ),
+            (
+                "d".parse().expect("valid extra name"),
+                (condition, condition),
+            ),
+        ];
+        let marker = m("(implementation_name == 'cpython'
+                and (extra == 'a' or extra == 'b')
+                and (extra == 'c' or extra == 'd'))
+            or (implementation_name != 'cpython'
+                and ((extra != 'a' and extra != 'b')
+                    or (extra != 'c' and extra != 'd')))");
+
+        assert_eq!(
+            marker.resolve_extras_with_bounds(known),
+            (
+                m("implementation_name == 'cpython' and sys_platform == 'darwin'"),
+                m("implementation_name == 'cpython' or sys_platform != 'darwin'"),
+            )
+        );
+    }
+
     #[test]
     fn restrict() {
         let environment = m(
@@ -2899,6 +3134,29 @@ mod test {
         let expected =
             MarkerTree::from_str(r#"os_name == "nt" or python_version == "3.7""#).unwrap();
         assert_eq!(simplified, expected);
+    }
+
+    /// Render a local-version exclusion combined with an upper bound.
+    #[test]
+    fn local_version_exclusion() {
+        assert_simplifies(
+            "python_full_version not in '3.20+x' and python_full_version < '4'",
+            "python_full_version < '3.20' or (python_full_version > '3.20' and python_full_version < '4')",
+        );
+    }
+
+    /// Local-version containment markers must produce equivalent marker trees after rendering
+    /// and reparsing.
+    #[test]
+    fn local_version_containment_roundtrip() {
+        assert_simplifies(
+            "python_full_version in '3.20+x'",
+            "python_full_version == '3.20'",
+        );
+        assert_simplifies(
+            "python_full_version not in '3.20+x'",
+            "python_full_version != '3.20'",
+        );
     }
 
     #[test]

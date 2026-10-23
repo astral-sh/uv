@@ -7351,7 +7351,7 @@ impl Package {
     }
 
     /// Returns the dependency groups the package provides, if any.
-    pub fn dependency_groups(&self) -> &BTreeMap<GroupName, BTreeSet<Requirement>> {
+    pub fn dependency_groups(&self) -> &BTreeMap<GroupName, Box<[Requirement]>> {
         &self.metadata.dependency_groups
     }
 
@@ -7430,14 +7430,42 @@ struct PackageWire {
 }
 
 #[derive(Clone, Default, Debug, Eq, PartialEq, serde::Deserialize)]
-#[serde(rename_all = "kebab-case")]
+#[serde(from = "PackageMetadataWire")]
 struct PackageMetadata {
+    requires_dist: Box<[Requirement]>,
+    provides_extra: Box<[ExtraName]>,
+    dependency_groups: BTreeMap<GroupName, Box<[Requirement]>>,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(
+    rename = "PackageMetadata",
+    rename_all = "kebab-case",
+    expecting = "struct PackageMetadata"
+)]
+struct PackageMetadataWire {
     #[serde(default)]
     requires_dist: BTreeSet<Requirement>,
     #[serde(default, rename = "provides-extras")]
     provides_extra: Box<[ExtraName]>,
     #[serde(default, rename = "requires-dev", alias = "dependency-groups")]
     dependency_groups: BTreeMap<GroupName, BTreeSet<Requirement>>,
+}
+
+impl From<PackageMetadataWire> for PackageMetadata {
+    fn from(wire: PackageMetadataWire) -> Self {
+        // The lock only reads these sets. Keep their canonical order without retaining spare
+        // B-tree slots for each package and dependency group.
+        Self {
+            requires_dist: wire.requires_dist.into_iter().collect(),
+            provides_extra: wire.provides_extra,
+            dependency_groups: wire
+                .dependency_groups
+                .into_iter()
+                .map(|(group, requirements)| (group, requirements.into_iter().collect()))
+                .collect(),
+        }
+    }
 }
 
 impl PackageMetadata {
@@ -7486,11 +7514,11 @@ impl PackageMetadata {
             })
             .collect::<Result<_, _>>()?;
 
-        Ok(Self {
+        Ok(Self::from(PackageMetadataWire {
             requires_dist,
             provides_extra: metadata.provides_extra.clone(),
             dependency_groups,
-        })
+        }))
     }
 }
 
@@ -10152,6 +10180,15 @@ enum LockErrorKind {
         package: PackageId,
         /// The ID of the dependency whose inclusion is ambiguous.
         dependency: PackageId,
+    },
+    /// Recursive extra conditions leave a package's export marker undetermined.
+    #[error(
+        "Cannot determine whether to export `{package}` because its dependency markers contain recursive extra conditions",
+        package = package.cyan()
+    )]
+    UnresolvedExportConflict {
+        /// The package whose inclusion remains undetermined.
+        package: PackageId,
     },
     /// An error that occurs when resolving metadata for a package.
     #[error("Failed to generate package metadata for `{id}`", id = id.cyan())]

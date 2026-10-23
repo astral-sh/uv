@@ -1,4 +1,3 @@
-use std::collections::BTreeSet;
 use std::fmt;
 
 use rustc_hash::FxHashMap;
@@ -605,9 +604,10 @@ fn write_dependency_inline(
 fn write_serialized_non_empty_array<T: Serialize>(
     writer: &mut LockWriter,
     key: &str,
-    values: &BTreeSet<T>,
+    values: impl IntoIterator<Item = T, IntoIter: ExactSizeIterator>,
 ) -> Result<(), WriteError> {
-    if values.is_empty() {
+    let values = values.into_iter();
+    if values.len() == 0 {
         return Ok(());
     }
     write_serialized_array(writer, key, values)
@@ -620,11 +620,12 @@ fn write_serialized_non_empty_array<T: Serialize>(
 fn write_serialized_array<T: Serialize>(
     writer: &mut LockWriter,
     key: &str,
-    values: &BTreeSet<T>,
+    values: impl IntoIterator<Item = T, IntoIter: ExactSizeIterator>,
 ) -> Result<(), WriteError> {
+    let values = values.into_iter();
     writer.key_start(key)?;
-    let write_value = |writer: &mut LockWriter, value: &T| {
-        let value = serialize_value(value)?;
+    let write_value = |writer: &mut LockWriter, value: T| {
+        let value = serialize_value(&value)?;
         writer.value(value)
     };
     if values.len() <= 1 {

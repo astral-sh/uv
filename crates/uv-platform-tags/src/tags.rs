@@ -1088,6 +1088,18 @@ impl AndroidAbi {
         }
     }
 
+    /// Return the architecture that the ABI targets.
+    ///
+    /// This is the inverse of [`AndroidAbi::from_arch`].
+    pub fn arch(self) -> Arch {
+        match self {
+            Self::ArmeabiV7a => Arch::Armv7L,
+            Self::Arm64V8a => Arch::Aarch64,
+            Self::X86 => Arch::X86,
+            Self::X86_64 => Arch::X86_64,
+        }
+    }
+
     /// Return the canonical name of the binary format.
     pub fn name(self) -> &'static str {
         match self {

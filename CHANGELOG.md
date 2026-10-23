@@ -3,6 +3,56 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.13.5
+
+Released on 2026-10-21.
+
+Following [uv 0.13.4](https://github.com/astral-sh/uv/releases/tag/0.13.4), which removed the affected eMudhra/emSign root from uv's own certificate store, this release updates the latest managed CPython builds for 3.11 and newer to [python-build-standalone 20261021](https://github.com/astral-sh/python-build-standalone/releases/tag/20261021), including the CPython [3.15.1](https://www.python.org/downloads/release/python-3151/), [3.14.9](https://www.python.org/downloads/release/python-3149/), and [3.13.17](https://www.python.org/downloads/release/python-31317/) security patch releases. These builds include [pip 26.2.2](https://pip.pypa.io/en/stable/news/#v26-2-2) both preinstalled in the managed interpreter and bundled with `ensurepip`, which installs pip by default when you run `python -m venv`. Both copies use certifi 2026.10.19, which removes the same affected root. After upgrading uv, run `uv python upgrade` to install the updated builds. Virtual environments pinned to an older Python patch version do not switch to the updated interpreter automatically. Upgrade pip separately in existing virtual environments.
+
+Please note upstream CPython 3.9 and 3.10 still bundle pip releases whose certificate bundles trust the affected eMudhra/emSign root. We recommend migrating off of those versions and will no longer be releasing Docker images with uv installed for EOL Python versions.
+
+### Enhancements
+
+- Report incompatible self-dependencies directly in resolution errors ([#21845](https://github.com/astral-sh/uv/pull/21845))
+
+### Python
+
+- Add CPython 3.15.1, 3.14.9, and 3.13.17 ([#22802](https://github.com/astral-sh/uv/pull/22802))
+
+### Preview features
+
+- Select and rank wheel variants with no required properties or properties from PEP 850 static providers in platform-specific resolutions with `wheel-variants` ([#22535](https://github.com/astral-sh/uv/pull/22535), [#22536](https://github.com/astral-sh/uv/pull/22536), [#22687](https://github.com/astral-sh/uv/pull/22687), [#22688](https://github.com/astral-sh/uv/pull/22688))
+
+### Performance
+
+- Reduce peak memory use when resolving dependencies across multiple environments ([#22769](https://github.com/astral-sh/uv/pull/22769), [#22770](https://github.com/astral-sh/uv/pull/22770), [#22784](https://github.com/astral-sh/uv/pull/22784))
+- Speed up exports with complex transitive extras by resolving activation across the dependency graph ([#22751](https://github.com/astral-sh/uv/pull/22751))
+- Reduce uv's binary size by keeping additional error formatters out of line ([#22775](https://github.com/astral-sh/uv/pull/22775))
+- Reduce overhead when parsing custom build cache keys ([#22749](https://github.com/astral-sh/uv/pull/22749))
+
+### Bug fixes
+
+- Lock packages distributed only as Android wheels without a source distribution ([#22806](https://github.com/astral-sh/uv/pull/22806))
+- Export optional dependencies correctly when transitive extras are activated through different or incompatible environment paths ([#22751](https://github.com/astral-sh/uv/pull/22751))
+- Reject invalid custom build cache keys instead of silently falling back to the defaults ([#22749](https://github.com/astral-sh/uv/pull/22749))
+
+### Security
+
+- Reject certificate chains containing compromised eMudhra intermediate keys via `rustls-webpki` 0.103.16 ([#22777](https://github.com/astral-sh/uv/pull/22777))
+- Stop publishing uv Docker images based on Python 3.9 and 3.10 images that no longer receive upstream updates ([#22773](https://github.com/astral-sh/uv/pull/22773))
+
+## 0.13.4
+
+Released on 2026-10-20.
+
+### Preview features
+
+- Validate PEP 825 variant metadata and treat package versions with invalid metadata as unavailable under `wheel-variants` ([#22512](https://github.com/astral-sh/uv/pull/22512))
+
+### Other changes
+
+- Update the bundled Mozilla root certificates via `webpki-root-certs` 1.0.10 ([#22760](https://github.com/astral-sh/uv/pull/22760))
+
 ## 0.13.3
 
 Released on 2026-10-20.

@@ -115,13 +115,10 @@ integrity, credentials, execution, and filesystem destinations while handling th
   reach. Material impact includes private-data access, writes, publication, trusted execution,
   lateral movement, or privilege escalation. A credential has negligible impact only if it is
   single-purpose and its effective authority is read-only and limited to inert test infrastructure.
-- **Availability:** Local input and authenticated metadata accepted during initial resolution or a
-  lock update are trusted for that operation. Resource exhaustion from them is a performance bug,
-  not a security issue. Under an existing lockfile, changed remote state has no authority;
-  processing it is a security issue if it reliably causes excessive recursion, stack growth, or
-  decompression, or exhausts memory, CPU, disk, or network resources. Unauthenticated remote
-  protocol data remains attacker-controlled. A one-shot parser panic is a correctness bug, not a
-  security issue.
+- **Availability:** When using an existing lockfile, uv must check that the downloaded artifacts
+  match their recorded sizes. Remote denial of service in all operations, including initial
+  resolution and lock updates, is outside the threat model. Any resource exhaustion is a performance
+  bug. A one-shot parser panic is a correctness bug, not a security issue.
 
 ## Severity calibration
 
@@ -136,8 +133,7 @@ integrity, credentials, execution, and filesystem destinations while handling th
   instead of a documented full 40-hex immutable Git pin. A hash bypass that meets these criteria can
   qualify as High without a separate privileged consumer or credential.
 - **Medium:** A real but limited boundary crossing, an uncommon realistic setup, limited credential
-  or filesystem effect, reliable resource exhaustion from remote data that has no authority under a
-  locked operation, or premature execution that violates an effective explicit policy. Examples:
+  or filesystem effect, or premature execution that violates an effective explicit policy. Examples:
   collision between an abbreviated or undocumented legacy Git pin and a mutable ref; or shell
   injection that waits for explicit activation-script sourcing. These become High only when a
   separate privileged consumer, credential, or authoritative output materially increases impact.

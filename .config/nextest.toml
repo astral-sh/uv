@@ -37,6 +37,12 @@ test-group = 'serial'
 filter = 'package(uv-keyring)'
 test-group = 'serial'
 
+# Managed Python tests may download several interpreter archives.
+[[profile.ci-macos.overrides]]
+platform = 'cfg(target_os = "macos")'
+filter = 'test(/^python_(find|install|upgrade)::/)'
+slow-timeout = { period = "10s", terminate-after = 24 }
+
 [[profile.ci-windows.overrides]]
 platform = 'cfg(target_os = "windows")'
 filter = 'test(/^python_install::/) + test(/^python_update::/) + test(/^python_find::/)'

@@ -43,12 +43,15 @@ use uv_threads::initialize_rayon_once;
 use uv_types::{BuildContext, BuildStack};
 
 use crate::archive::Archive;
+use crate::download::check_wheel_variant_compatibility;
 use crate::error::PythonVersion;
 use crate::extracted_wheel::{ExtractedWheel, HashedWheel, WheelExtractor};
 use crate::hash::http_hash_algorithms;
 use crate::metadata::{ArchiveMetadata, Metadata};
 use crate::source::SourceDistributionBuilder;
-use crate::{Error, FirstPartyPackages, LocalWheel, Reporter, RequiresDist};
+use crate::{
+    Error, FirstPartyPackages, LocalWheel, Reporter, RequiresDist, check_supported_wheel_variant,
+};
 
 /// A cached high-level interface to convert distributions (a requirement resolved to a location)
 /// to a wheel or wheel metadata.
@@ -220,16 +223,15 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         tags: &Tags,
         hashes: ArchiveHashPolicy<'_>,
     ) -> Result<LocalWheel, Error> {
-        // TODO(konsti): Support fetching wheel variants.
-        if let Dist::Built(built) = dist
-            && built.wheel_filename().variant().is_some()
-        {
-            return Err(Error::UnsupportedWheelVariant(Box::new(
-                built.wheel_filename().clone(),
-            )));
-        }
         match dist {
-            Dist::Built(built) => self.get_wheel(built, hashes).await,
+            Dist::Built(built) => {
+                check_supported_wheel_variant(built)?;
+                let wheel = self.get_wheel(built, hashes).await?;
+                check_wheel_variant_compatibility(&wheel.filename, &wheel.archive)?;
+                Ok(wheel)
+            }
+            // TODO(konsti): Support source distributions that build variant wheels.
+            // For now, `build_wheel` assumes a non-variant wheel compatible with `tags`.
             Dist::Source(source) => self.build_wheel(source, tags, hashes).await,
         }
     }
@@ -266,14 +268,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         dist: &Dist,
         hashes: MetadataHashPolicy<'_>,
     ) -> Result<ArchiveMetadata, Error> {
-        // TODO(konsti): Support reading metadata from wheel variants.
-        if let Dist::Built(built) = dist
-            && built.wheel_filename().variant().is_some()
-        {
-            return Err(Error::UnsupportedWheelVariant(Box::new(
-                built.wheel_filename().clone(),
-            )));
-        }
         match dist {
             Dist::Built(built) => self.get_wheel_metadata(built, hashes).await,
             Dist::Source(source) => {
@@ -644,10 +638,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             HashValidation::Any(_) | HashValidation::All(_) => hashes.validation.into(),
         };
 
+        // Box the full-wheel futures to keep their state out of metadata-only requests.
         // Fetch the entire wheel only when we need to compute a hash for resolution.
         // TODO(charlie): Request the hashes via a separate method, to reduce the coupling in this API.
         if hash_policy == ArchiveHashPolicy::Generate {
-            let wheel = self.get_wheel(dist, hash_policy).await?;
+            let wheel = Box::pin(self.get_wheel(dist, hash_policy)).await?;
             // If the metadata was provided by the user directly, prefer it.
             let metadata = if let Some(metadata) =
                 self.dependency_metadata(dist.name(), Some(dist.version()))
@@ -691,7 +686,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
                 // If the request failed due to an error that could be resolved by
                 // downloading the wheel directly, try that.
-                let wheel = self.get_wheel(dist, hash_policy).await?;
+                let wheel = Box::pin(self.get_wheel(dist, hash_policy)).await?;
                 let metadata = wheel.metadata()?;
                 let hashes = wheel.hashes;
                 Ok(ArchiveMetadata {

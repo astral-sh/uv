@@ -2,7 +2,8 @@ use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use serde::Deserialize;
+use serde::de::{IgnoredAny, MapAccess, Visitor, value::MapAccessDeserializer};
+use serde::{Deserialize, Deserializer};
 use tracing::{debug, info_span, warn};
 
 use uv_fs::{Simplified, created_time};
@@ -13,6 +14,8 @@ use crate::timestamp::Timestamp;
 
 #[derive(Debug, thiserror::Error)]
 pub enum CacheInfoError {
+    #[error("Failed to parse cache keys in `{}`", _0.user_display())]
+    PyprojectToml(PathBuf, #[source] Box<toml::de::Error>),
     #[error("Failed to parse glob patterns for `cache-keys`: {0}")]
     Glob(#[from] globwalk::GlobError),
     #[error(transparent)]
@@ -71,16 +74,14 @@ impl CacheInfo {
         // Read the cache keys.
         let pyproject_path = directory.join("pyproject.toml");
         let cache_keys = if let Ok(contents) = fs_err::read_to_string(&pyproject_path) {
-            let result = info_span!("toml::from_str cache keys", path = %pyproject_path.display())
-                .in_scope(|| toml::from_str::<PyProjectToml>(&contents));
-            if let Ok(pyproject_toml) = result {
-                pyproject_toml
-                    .tool
-                    .and_then(|tool| tool.uv)
-                    .and_then(|tool_uv| tool_uv.cache_keys)
-            } else {
-                None
-            }
+            let pyproject_toml =
+                info_span!("toml::from_str cache keys", path = %pyproject_path.display())
+                    .in_scope(|| toml::from_str::<PyProjectToml>(&contents))
+                    .map_err(|err| CacheInfoError::PyprojectToml(pyproject_path, Box::new(err)))?;
+            pyproject_toml
+                .tool
+                .and_then(|tool| tool.uv)
+                .and_then(|tool_uv| tool_uv.cache_keys)
         } else {
             None
         };
@@ -337,9 +338,12 @@ struct ToolUv {
     cache_keys: Option<Vec<CacheKey>>,
 }
 
-#[derive(Debug, Clone, serde::Deserialize)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-#[serde(untagged, rename_all = "kebab-case", deny_unknown_fields)]
+#[cfg_attr(
+    feature = "schemars",
+    schemars(untagged, rename_all = "kebab-case", deny_unknown_fields)
+)]
 pub enum CacheKey {
     /// Ex) `"Cargo.lock"` or `"**/*.toml"`
     Path(Cow<'static, str>),
@@ -353,12 +357,115 @@ pub enum CacheKey {
     Environment { env: String },
 }
 
-#[derive(Debug, Clone, serde::Deserialize)]
+impl<'de> Deserialize<'de> for CacheKey {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(field_identifier, rename_all = "lowercase")]
+        enum Field {
+            File,
+            Dir,
+            Git,
+            Env,
+        }
+
+        struct CacheKeyVisitor;
+
+        impl<'de> Visitor<'de> for CacheKeyVisitor {
+            type Value = CacheKey;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                formatter.write_str("a path or a cache key table")
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                Ok(CacheKey::Path(Cow::Owned(value.to_owned())))
+            }
+
+            fn visit_string<E>(self, value: String) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                Ok(CacheKey::Path(Cow::Owned(value)))
+            }
+
+            fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
+            where
+                A: MapAccess<'de>,
+            {
+                let value = match map.next_key()? {
+                    Some(Field::File) => CacheKey::File {
+                        file: map.next_value()?,
+                    },
+                    Some(Field::Dir) => CacheKey::Directory {
+                        dir: map.next_value()?,
+                    },
+                    Some(Field::Git) => CacheKey::Git {
+                        git: map.next_value()?,
+                    },
+                    Some(Field::Env) => CacheKey::Environment {
+                        env: map.next_value()?,
+                    },
+                    None => return Err(serde::de::Error::custom("empty cache key table")),
+                };
+                if map.next_key::<IgnoredAny>()?.is_some() {
+                    return Err(serde::de::Error::custom("extra cache key field"));
+                }
+                Ok(value)
+            }
+        }
+
+        deserializer.deserialize_any(CacheKeyVisitor)
+    }
+}
+
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-#[serde(untagged, rename_all = "kebab-case", deny_unknown_fields)]
+#[cfg_attr(
+    feature = "schemars",
+    schemars(untagged, rename_all = "kebab-case", deny_unknown_fields)
+)]
 pub enum GitPattern {
     Bool(bool),
     Set(GitSet),
+}
+
+impl<'de> Deserialize<'de> for GitPattern {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct GitPatternVisitor;
+
+        impl<'de> Visitor<'de> for GitPatternVisitor {
+            type Value = GitPattern;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                formatter.write_str("a boolean or a Git cache key table")
+            }
+
+            fn visit_bool<E>(self, value: bool) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                Ok(GitPattern::Bool(value))
+            }
+
+            fn visit_map<A>(self, map: A) -> Result<Self::Value, A::Error>
+            where
+                A: MapAccess<'de>,
+            {
+                GitSet::deserialize(MapAccessDeserializer::new(map)).map(GitPattern::Set)
+            }
+        }
+
+        deserializer.deserialize_any(GitPatternVisitor)
+    }
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -375,6 +482,85 @@ pub struct GitSet {
 enum DirectoryTimestamp {
     Timestamp(Timestamp),
     Inode(u64),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{CacheKey, ToolUv};
+
+    #[test]
+    fn cache_key_forms() -> Result<(), toml::de::Error> {
+        let settings: ToolUv = toml::from_str(
+            r#"
+            cache-keys = [
+                "Cargo.lock",
+                { file = "**/*.toml" },
+                { dir = "src" },
+                { git = true },
+                { git = { commit = true, tags = false } },
+                { git = {} },
+                { env = "UV_CACHE_INFO" },
+            ]
+        "#,
+        )?;
+        insta::assert_debug_snapshot!(settings.cache_keys, @r#"
+        Some(
+            [
+                Path(
+                    "Cargo.lock",
+                ),
+                File {
+                    file: "**/*.toml",
+                },
+                Directory {
+                    dir: "src",
+                },
+                Git {
+                    git: Bool(
+                        true,
+                    ),
+                },
+                Git {
+                    git: Set(
+                        GitSet {
+                            commit: Some(
+                                true,
+                            ),
+                            tags: Some(
+                                false,
+                            ),
+                        },
+                    ),
+                },
+                Git {
+                    git: Set(
+                        GitSet {
+                            commit: None,
+                            tags: None,
+                        },
+                    ),
+                },
+                Environment {
+                    env: "UV_CACHE_INFO",
+                },
+            ],
+        )
+        "#);
+        Ok(())
+    }
+
+    #[test]
+    fn cache_key_extra_field() {
+        insta::assert_snapshot!(toml::from_str::<CacheKey>(r#"file = "Cargo.lock"
+            env = "UV_CACHE_INFO"
+        "#).unwrap_err(), @r#"
+        TOML parse error at line 1, column 1
+          |
+        1 | file = "Cargo.lock"
+          | ^
+        extra cache key field
+        "#);
+    }
 }
 
 #[cfg(all(test, unix))]

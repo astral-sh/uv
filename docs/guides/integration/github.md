@@ -47,7 +47,7 @@ jobs:
         uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
           # Install a specific version of uv.
-          version: "0.13.3"
+          version: "0.13.5"
 ```
 
 ## Setting up Python
@@ -425,7 +425,7 @@ jobs:
           path: dist/
 
       - name: Generate PEP 740 attestations
-        uses: astral-sh/attest-action@f589a42a7efb6fe400b4f400de60b4bc90390027 # v0.0.6
+        uses: astral-sh/attest-action@39b6ce43875c196a579e31635b11aa2a2036384a # v0.0.7
 
       - name: Publish
         run: uv publish

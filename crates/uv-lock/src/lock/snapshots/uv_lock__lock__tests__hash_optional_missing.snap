@@ -102,7 +102,7 @@ Ok(
                 default_groups: None,
                 group_requires_python: {},
                 metadata: PackageMetadata {
-                    requires_dist: {},
+                    requires_dist: [],
                     provides_extra: [],
                     dependency_groups: {},
                 },

@@ -4,6 +4,8 @@ use std::collections::BTreeMap;
 use std::env::current_dir;
 use std::fs;
 #[cfg(unix)]
+use std::io::pipe;
+#[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
 #[cfg(unix)]
 use std::os::unix::net::UnixListener;
@@ -15712,6 +15714,35 @@ fn invalid_extra() -> Result<()> {
     Ok(())
 }
 
+/// Report a stdout error before replacing the output file.
+#[test]
+#[cfg(unix)]
+fn output_file_broken_stdout() -> Result<()> {
+    let context = uv_test::test_context!(DEFAULT_PYTHON_VERSION);
+    context.temp_dir.child("requirements.in").touch()?;
+    context
+        .temp_dir
+        .child("requirements.txt")
+        .write_str("# original\n")?;
+    let (reader, writer) = pipe()?;
+    drop(reader);
+
+    uv_snapshot!(context.pip_compile()
+        .arg("requirements.in")
+        .arg("--output-file")
+        .arg("requirements.txt")
+        .stdout(writer), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    warning: Requirements file `requirements.in` does not contain any dependencies
+    Resolved in [TIME]
+    error: Broken pipe (os error 32)
+    ");
+    assert_eq!(context.read("requirements.txt"), "# original\n");
+
+    Ok(())
+}
+
 /// A FIFO is an output stream, not a source of pinned versions or a file to replace.
 #[test]
 #[cfg(unix)]
@@ -19652,6 +19683,37 @@ fn compile_broken_active_venv() -> Result<()> {
       cause: Broken symlink at `.venv/bin/python`, was the underlying Python interpreter removed?
 
     hint: Consider recreating the environment (e.g., with `uv venv`)
+    ");
+
+    Ok(())
+}
+
+/// Report an incompatible self-dependency without displaying an empty version range.
+#[test]
+fn pubgrub_incompatible_self_dependency() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "incompatible-self-dependency"
+
+        [root]
+        requires = ["a"]
+
+        [expected]
+        satisfiable = false
+
+        [packages.a.versions."1.0.0"]
+        requires = ["a>=2.0.0"]
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
+    context.temp_dir.child("requirements.in").write_str("a")?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in")
+        .arg("--index-url").arg(server.index_url()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies
+      cause: Because all versions of a have incompatible dependencies on themselves and you require a, we can conclude that your requirements are unsatisfiable.
     ");
 
     Ok(())

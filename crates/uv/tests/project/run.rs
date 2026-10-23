@@ -5936,6 +5936,75 @@ fn detect_infinite_recursion() -> Result<()> {
 }
 
 #[test]
+fn run_recursion_depth() {
+    let context = uv_test::test_context!("3.12");
+
+    // The current depth is allowed at the limit and incremented for the child.
+    uv_snapshot!(
+        context.filters(),
+        context.run()
+            .env(EnvVars::UV_RUN_RECURSION_DEPTH, "5")
+            .env(EnvVars::UV_RUN_MAX_RECURSION_DEPTH, "5")
+            .arg("python")
+            .arg("-c")
+            .arg("import os; print(os.environ['UV_RUN_RECURSION_DEPTH'])"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    6
+    "
+    );
+
+    // The next invocation exceeds the limit.
+    uv_snapshot!(
+        context.filters(),
+        context.run()
+            .env(EnvVars::UV_RUN_RECURSION_DEPTH, "6")
+            .env(EnvVars::UV_RUN_MAX_RECURSION_DEPTH, "5")
+            .arg("python"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: `uv run` was recursively invoked 6 times which exceeds the limit of 5
+
+    hint: If you are running a script with `uv run` in the shebang, you may need to include the `--script` flag
+    "
+    );
+}
+
+#[test]
+fn run_recursion_depth_empty() {
+    let context = uv_test::test_context!("3.12");
+
+    uv_snapshot!(
+        context.filters(),
+        context.run()
+            .env(EnvVars::UV_RUN_RECURSION_DEPTH, "")
+            .arg("python")
+            .arg("-c")
+            .arg("import os; print(os.environ['UV_RUN_RECURSION_DEPTH'])"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    1
+    "
+    );
+}
+
+#[test]
+fn run_recursion_depth_invalid() {
+    let context = uv_test::test_context_with_versions!(&[]);
+
+    uv_snapshot!(
+        context.filters(),
+        context.run()
+            .env(EnvVars::UV_RUN_RECURSION_DEPTH, "invalid")
+            .arg("python"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to parse environment variable `UV_RUN_RECURSION_DEPTH` with invalid value `invalid`: invalid digit found in string
+    "
+    );
+}
+
+#[test]
 fn run_uv_variable() {
     let context = uv_test::test_context!("3.12");
 

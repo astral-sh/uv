@@ -808,6 +808,7 @@ pub struct EnvironmentOptions {
     pub init_bare: EnvFlag,
     pub malware_check: EnvFlag,
     pub malware_check_url: Option<SafeUrl>,
+    pub run_recursion_depth: Option<u32>,
     #[cfg(unix)]
     pub run_rlimit_nofile: Option<u32>,
 }
@@ -973,6 +974,10 @@ impl EnvironmentOptions {
                     })
                 })
                 .transpose()?,
+            run_recursion_depth: parse_integer_environment_variable(
+                EnvVars::UV_RUN_RECURSION_DEPTH,
+                None,
+            )?,
             #[cfg(unix)]
             run_rlimit_nofile: parse_integer_environment_variable(
                 EnvVars::UV_RUN_RLIMIT_NOFILE,

@@ -4,6 +4,7 @@ use indoc::{formatdoc, indoc};
 use predicates::prelude::predicate;
 use serde_json::json;
 use sha2::{Digest, Sha256};
+use uv_distribution_types::PEP_825_SCHEMA;
 use uv_static::EnvVars;
 use uv_test::archive::generate_source_archive;
 use uv_test::uv_snapshot;
@@ -109,7 +110,7 @@ async fn selected_variant_metadata_is_cached() -> Result<()> {
         .respond_with(
             ResponseTemplate::new(200)
                 .set_body_json(json!({
-                    "$schema": "https://variants-schema.wheelnext.dev/peps/825/v0.1.1.json",
+                    "$schema": PEP_825_SCHEMA,
                     "default-priorities": { "namespace": ["x86_64"] },
                     "variants": { "null": {} },
                 }))
@@ -162,7 +163,7 @@ async fn variant_metadata_hashes_are_verified() -> Result<()> {
         .child("requirements.in")
         .write_str("ok==1.0.0")?;
     let first_sidecar = json!({
-        "$schema": "https://variants-schema.wheelnext.dev/peps/825/v0.1.1.json",
+        "$schema": PEP_825_SCHEMA,
         "default-priorities": { "namespace": ["x86_64"] },
         "variants": { "null": {} },
     })
@@ -490,6 +491,114 @@ async fn unavailable_variant_metadata_backtracks() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
+    ");
+    Ok(())
+}
+
+/// A pinned version with invalid variant metadata cannot be used.
+#[test]
+fn invalid_variant_metadata() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let links = context.temp_dir.child("links");
+    links.create_dir_all()?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-1.0.0-py3-none-any.whl"),
+        links.child("ok-1.0.0-py3-none-any.whl"),
+    )?;
+    links.child("ok-1.0.0-variants.json").write_str(
+        &json!({
+            "$schema": PEP_825_SCHEMA,
+            "default-priorities": { "namespace": ["cuda"] },
+            "variants": { "null": { "cuda": { "version": ["12"] } } },
+        })
+        .to_string(),
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(links.path())
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("ok==1.0.0"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies
+      cause: Because ok==1.0.0 has invalid metadata and you require ok==1.0.0, we can conclude that your requirements are unsatisfiable.
+
+    hint: Metadata for `ok` (v1.0.0) could not be parsed:
+      Failed to parse variant metadata `ok-1.0.0-variants.json`: The null variant must not have properties
+    ");
+
+    Ok(())
+}
+
+/// The resolver backtracks to an older version when the latest has invalid variant metadata.
+#[test]
+fn invalid_variant_metadata_backtrack() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let links = context.temp_dir.child("links");
+    links.create_dir_all()?;
+    let fixtures = context.workspace_root.join("test/links");
+    for wheel in ["ok-1.0.0-py3-none-any.whl", "ok-2.0.0-py3-none-any.whl"] {
+        fs_err::copy(fixtures.join(wheel), links.child(wheel))?;
+    }
+    links.child("ok-2.0.0-variants.json").write_str("{}")?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(links.path())
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("ok"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0
+    ");
+    Ok(())
+}
+
+/// An unreadable unknown schema is reported alongside the parsing error.
+#[test]
+fn invalid_variant_metadata_unknown_schema() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-1.0.0-py3-none-any.whl"),
+        context.temp_dir.child("ok-1.0.0-py3-none-any.whl"),
+    )?;
+    context.temp_dir.child("ok-1.0.0-variants.json").write_str(
+        &json!({
+            "$schema": "https://variants-schema.wheelnext.dev/peps/825/v0.2.0.json",
+            "default-priorities": { "namespace": 42 },
+            "variants": { "null": {} },
+        })
+        .to_string(),
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(context.temp_dir.path())
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("ok==1.0.0"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies
+      cause: Because ok==1.0.0 has invalid metadata and you require ok==1.0.0, we can conclude that your requirements are unsatisfiable.
+
+    hint: Metadata for `ok` (v1.0.0) could not be parsed:
+      Failed to parse variant metadata `ok-1.0.0-variants.json`: Unknown variant metadata schema:
+        `https://variants-schema.wheelnext.dev/peps/825/v0.2.0.json`:
+          invalid type: integer `42`, expected a sequence at line 1 column 108
     ");
     Ok(())
 }

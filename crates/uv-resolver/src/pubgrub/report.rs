@@ -342,6 +342,15 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
                 }
             }
             External::FromDependencyOf(package, package_set, dependency, dependency_set) => {
+                if package == dependency {
+                    let range = self.compatible_range(package, package_set);
+                    return if range.plural() {
+                        format!("{range} have incompatible dependencies on themselves")
+                    } else {
+                        format!("{range} has an incompatible dependency on itself")
+                    };
+                }
+
                 if package.name_no_root() == dependency.name_no_root() {
                     if let Some(member) = self.format_workspace_member(package) {
                         return format!(
@@ -1219,6 +1228,7 @@ impl PubGrubReportFormatter<'_> {
             }
             Some(
                 reason @ (UnavailablePackage::InvalidMetadata(_)
+                | UnavailablePackage::InvalidVariantMetadata(_)
                 | UnavailablePackage::InconsistentMetadata(_)),
             ) => {
                 hints.insert(PubGrubHint::InvalidPackageMetadata {
@@ -1251,6 +1261,13 @@ impl PubGrubReportFormatter<'_> {
                             hints.insert(PubGrubHint::Offline);
                         }
                         MetadataUnavailable::InvalidMetadata(reason) => {
+                            hints.insert(PubGrubHint::InvalidVersionMetadata {
+                                package: name.clone(),
+                                version: version.clone(),
+                                reason: reason.to_string(),
+                            });
+                        }
+                        MetadataUnavailable::InvalidVariantMetadata(reason) => {
                             hints.insert(PubGrubHint::InvalidVersionMetadata {
                                 package: name.clone(),
                                 version: version.clone(),

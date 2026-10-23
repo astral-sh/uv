@@ -5,11 +5,12 @@ use uv_command_support::UvError;
 use uv_distribution::dist_hints;
 use uv_distribution_types::{DerivationChain, Name};
 use uv_fs::Simplified;
+use uv_macros::DebugNoInline;
 use uv_normalize::{ExtraName, GroupName};
 use uv_resolver::{NoSolutionError, NoSolutionHeader, ResolveError};
 
 /// An error while reading requirements or resolving dependencies.
-#[derive(thiserror::Error, Debug)]
+#[derive(thiserror::Error, DebugNoInline)]
 pub enum Error {
     #[error("{header}")]
     NoSolution {

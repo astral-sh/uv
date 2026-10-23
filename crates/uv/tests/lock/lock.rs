@@ -23180,7 +23180,7 @@ fn lock_regenerates_incompatible_self_requirement() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: No solution found when resolving dependencies
-      cause: Because your project depends on itself at an incompatible version (project>=2.0.0), we can conclude that your project's requirements are unsatisfiable.
+      cause: Because your project has an incompatible dependency on itself, we can conclude that your project's requirements are unsatisfiable.
 
     hint: The project `project` depends on itself at an incompatible version. This is likely a mistake. If you intended to depend on a third-party package named `project`, consider renaming the project `project` to avoid creating a conflict.
     ");
@@ -37285,7 +37285,7 @@ fn lock_self_incompatible() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: No solution found when resolving dependencies
-      cause: Because your project depends on itself at an incompatible version (project==0.2.0), we can conclude that your project's requirements are unsatisfiable.
+      cause: Because your project has an incompatible dependency on itself, we can conclude that your project's requirements are unsatisfiable.
 
     hint: The project `project` depends on itself at an incompatible version. This is likely a mistake. If you intended to depend on a third-party package named `project`, consider renaming the project `project` to avoid creating a conflict.
     ");
@@ -41109,7 +41109,7 @@ fn lock_conflict_for_disjoint_python_version() -> Result<()> {
 #[test]
 fn lock_requires_python_empty_lock_file() -> Result<()> {
     // Use two patch versions from `.python-versions` to exercise disjoint requirements.
-    let (v1, v2) = ("3.13.0", "3.13.16");
+    let (v1, v2) = ("3.13.0", "3.13.17");
     let context = uv_test::test_context_with_versions!(&[v1, v2]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -41198,8 +41198,8 @@ fn lock_requires_python_empty_lock_file() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock().arg("--upgrade-package=python"), @r"
     exit_code: 0 (success)
     ----- stderr -----
-    Using CPython 3.13.16 interpreter at: [PYTHON-3.13.16]
-    warning: Resolving despite existing lockfile due to fork markers being disjoint with `requires-python`: `python_full_version == '3.13.0'` vs `python_full_version == '3.13.16'`
+    Using CPython 3.13.17 interpreter at: [PYTHON-3.13.17]
+    warning: Resolving despite existing lockfile due to fork markers being disjoint with `requires-python`: `python_full_version == '3.13.0'` vs `python_full_version == '3.13.17'`
     Resolved 3 packages in [TIME]
     ");
 
@@ -41211,7 +41211,7 @@ fn lock_requires_python_empty_lock_file() -> Result<()> {
             lock, @r#"
         version = 1
         revision = 5
-        requires-python = "==3.13.16"
+        requires-python = "==3.13.17"
         resolution-markers = [
             "sys_platform == 'darwin'",
             "platform_machine == 'aarch64' and sys_platform == 'linux'",
@@ -43420,6 +43420,79 @@ fn lock_android() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     ");
+
+    Ok(())
+}
+
+/// Android wheels satisfy an Android environment when the package has no source distribution.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_android_no_sdist() -> Result<()> {
+    let server = PackseServer::new("wheels/android-no-sdist.toml");
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-06-01T00:00:00Z");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a"]
+
+        [tool.uv]
+        environments = ["sys_platform == 'android'"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 5
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "sys_platform == 'android'",
+        ]
+        supported-markers = [
+            "sys_platform == 'android'",
+        ]
+
+        [options]
+        exclude-newer = "2025-06-01T00:00:00Z"
+
+        [[package]]
+        name = "a"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-1.0.0-py3-none-android_24_arm64_v8a.whl", hash = "sha256:0ca4362b6fd0e0c4044748dadb03809fa79d45c6da46d3954342ee8713d8b304", upload-time = "2024-03-24T00:00:00Z" },
+            { url = "http://[LOCALHOST]/files/a-1.0.0-py3-none-android_24_x86_64.whl", hash = "sha256:71fe9d1ad3501930e6b78d222dace8d8e007e5a8e506702080549f4b5d711d12", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "a" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "a" }]
+        "#
+        );
+    });
 
     Ok(())
 }

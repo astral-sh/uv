@@ -15,6 +15,7 @@ use uv_distribution_types::{
 };
 use uv_fs::{Simplified, normalize_absolute_path, normalize_path};
 use uv_git_types::{GitLfs, GitReference, GitUrl, GitUrlParseError};
+use uv_macros::DebugNoInline;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::{MarkerTree, VerbatimUrl, VersionOrUrl, looks_like_git_repository};
@@ -555,7 +556,7 @@ impl LoweredRequirement {
 
 /// An error parsing and merging `tool.uv.sources` with
 /// `project.{dependencies,optional-dependencies}`.
-#[derive(Debug, Error)]
+#[derive(DebugNoInline, Error)]
 pub enum LoweringError {
     #[error(
         "`{0}` is included as a workspace member, but is missing an entry in `tool.uv.sources` (e.g., `{0} = {{ workspace = true }}`)"

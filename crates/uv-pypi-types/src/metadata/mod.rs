@@ -11,6 +11,7 @@ use std::str::Utf8Error;
 use astral_mail_headers::{DecodeError, Message};
 use thiserror::Error;
 
+use uv_macros::DebugNoInline;
 use uv_normalize::InvalidNameError;
 use uv_pep440::{VersionParseError, VersionSpecifiersParseError};
 use uv_pep508::Pep508Error;
@@ -27,7 +28,7 @@ pub use requires_dist::RequiresDist;
 /// <https://github.com/PyO3/python-pkginfo-rs/blob/d719988323a0cfea86d4737116d7917f30e819e2/src/error.rs>
 ///
 /// The error type
-#[derive(Error, Debug)]
+#[derive(Error, DebugNoInline)]
 pub enum MetadataError {
     #[error(transparent)]
     Decode(#[from] DecodeError),

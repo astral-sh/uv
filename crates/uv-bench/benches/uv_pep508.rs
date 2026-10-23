@@ -13,27 +13,10 @@ use uv_pypi_types::{ConflictItem, ConflictSet, Conflicts};
 use uv_resolver_types::universal_marker::resolve_activated_extras;
 use uv_resolver_types::{ConflictMarker, UniversalMarker};
 
-/// Build the diagrams before timing conversion and simplification. Include small markers and
-/// sparse clauses as well as conflict guards, which add a clause for every pair of extras.
+/// Build the diagrams before timing conversion and simplification. Conflict guards add a clause
+/// for every pair of extras.
 fn to_dnf(criterion: &mut Criterion<WallTime>) {
     let mut group = criterion.benchmark_group("marker/to_dnf");
-    for (name, expression) in [
-        ("marker_to_dnf_single_clause", "python_version >= '3.10'"),
-        (
-            "marker_to_dnf_two_clauses",
-            "python_version >= '3.10' or sys_platform == 'linux'",
-        ),
-        (
-            "marker_to_dnf_platform_specific_python_versions",
-            "(sys_platform == 'linux' and python_version >= '3.10') or (sys_platform == 'win32' and python_version >= '3.11')",
-        ),
-    ] {
-        let marker: MarkerTree = expression.parse().expect("valid marker");
-        group.bench_function(name, |benchmark| {
-            benchmark.iter(|| black_box(marker).to_dnf());
-        });
-    }
-
     for count in [128, 512] {
         let mut marker = MarkerTree::FALSE;
         for index in 0..count {
@@ -50,7 +33,7 @@ fn to_dnf(criterion: &mut Criterion<WallTime>) {
         );
     }
 
-    for count in [4, 16, 32] {
+    for count in [16, 32] {
         let extras: Vec<MarkerTree> = (0..count)
             .map(|index| {
                 format!("extra == 'e{index:03}'")
@@ -87,37 +70,36 @@ fn resolve_extras(criterion: &mut Criterion<WallTime>) {
     let condition: MarkerTree = "sys_platform == 'darwin'"
         .parse()
         .expect("valid environment marker");
-    for pairs in [2, 4, 8] {
-        let mut marker = MarkerTree::TRUE;
-        let mut known_conflicts = FxHashMap::default();
-        for index in 0..pairs {
-            let pair = format!("extra == 'pair-{index:02}-a' or extra == 'pair-{index:02}-b'")
-                .parse()
-                .expect("valid extra markers");
-            marker = marker.and(pair);
-            let extra: ExtraName = format!("pair-{index:02}-a")
-                .parse()
-                .expect("valid extra name");
-            known_conflicts.insert(ConflictItem::from((package.clone(), extra)), condition);
-        }
-        assert_eq!(
-            resolve_activated_extras(marker, Some(&package), &known_conflicts),
-            condition
-        );
-
-        group.bench_function(
-            BenchmarkId::new("resolve_activated_extras_independent_pairs", pairs),
-            |benchmark| {
-                benchmark.iter(|| {
-                    resolve_activated_extras(
-                        black_box(marker),
-                        Some(black_box(&package)),
-                        black_box(&known_conflicts),
-                    )
-                });
-            },
-        );
+    let pairs = 8;
+    let mut marker = MarkerTree::TRUE;
+    let mut known_conflicts = FxHashMap::default();
+    for index in 0..pairs {
+        let pair = format!("extra == 'pair-{index:02}-a' or extra == 'pair-{index:02}-b'")
+            .parse()
+            .expect("valid extra markers");
+        marker = marker.and(pair);
+        let extra: ExtraName = format!("pair-{index:02}-a")
+            .parse()
+            .expect("valid extra name");
+        known_conflicts.insert(ConflictItem::from((package.clone(), extra)), condition);
     }
+    assert_eq!(
+        resolve_activated_extras(marker, Some(&package), &known_conflicts),
+        condition
+    );
+
+    group.bench_function(
+        BenchmarkId::new("resolve_activated_extras_independent_pairs", pairs),
+        |benchmark| {
+            benchmark.iter(|| {
+                resolve_activated_extras(
+                    black_box(marker),
+                    Some(black_box(&package)),
+                    black_box(&known_conflicts),
+                )
+            });
+        },
+    );
     group.finish();
 }
 
@@ -129,13 +111,9 @@ fn imbibe(criterion: &mut Criterion<WallTime>) {
     let environment: MarkerTree = "python_full_version < '3.11'"
         .parse()
         .expect("valid environment marker");
-    let mut inputs = vec![(
-        "no_conflicts",
-        0,
-        UniversalMarker::from_combined(environment),
-        ConflictMarker::TRUE,
-    )];
-    for count in [4, 16, 32] {
+    let mut environment_inputs = Vec::new();
+    let mut format_inputs = Vec::new();
+    for count in [16, 32] {
         let items: Vec<ConflictItem> = (0..count)
             .map(|index| {
                 let extra: ExtraName = format!("e{index:03}").parse().expect("valid extra name");
@@ -146,13 +124,12 @@ fn imbibe(criterion: &mut Criterion<WallTime>) {
         let mut conflicts = Conflicts::empty();
         conflicts.push(ConflictSet::try_from(items).expect("valid conflicts"));
         let conflicts = ConflictMarker::from_conflicts(&conflicts);
-        inputs.push((
-            "environment_only",
-            count,
-            UniversalMarker::new(environment, conflicts),
-            conflicts,
-        ));
-        inputs.push((
+        let environment_only = UniversalMarker::new(environment, conflicts);
+        environment_inputs.push((count, environment_only, conflicts));
+        if count == 32 {
+            format_inputs.push(("environment_only", count, environment_only, conflicts));
+        }
+        format_inputs.push((
             "conflict_dependent",
             count,
             UniversalMarker::new(environment, conflicts.and(selected)),
@@ -161,9 +138,9 @@ fn imbibe(criterion: &mut Criterion<WallTime>) {
     }
 
     let mut group = criterion.benchmark_group("marker/imbibe");
-    for &(name, count, marker, conflicts) in &inputs {
+    for (count, marker, conflicts) in environment_inputs {
         group.bench_function(
-            BenchmarkId::new(format!("imbibe_marker_{name}"), count),
+            BenchmarkId::new("imbibe_marker_environment_only", count),
             |benchmark| {
                 benchmark.iter(|| {
                     let mut marker = black_box(marker);
@@ -176,7 +153,7 @@ fn imbibe(criterion: &mut Criterion<WallTime>) {
     group.finish();
 
     let mut group = criterion.benchmark_group("marker/imbibe_and_format");
-    for &(name, count, marker, conflicts) in &inputs {
+    for (name, count, marker, conflicts) in format_inputs {
         group.bench_function(
             BenchmarkId::new(format!("imbibe_and_format_marker_{name}"), count),
             |benchmark| {

@@ -15,49 +15,53 @@ pub(super) struct GitFixture {
 impl GitFixture {
     /// Fetch the pinned history before entering a benchmark's timed loop.
     pub(super) fn prepare(&self) -> Result<SafeUrl> {
-        let directory = std::path::absolute(
-            Path::new("../../target/bench-git").join(format!("{}.git", self.name)),
-        )?;
-        fs_err::create_dir_all(&directory)?;
-        if !directory.join("HEAD").is_file() {
+        let cache = std::path::absolute(Path::new("../../target/bench-git"))?;
+        let directory = cache.join(format!("{}-{}.git", self.name, self.commit));
+        if !directory.is_dir() {
+            fs_err::create_dir_all(&cache)?;
+            let staging = tempfile::tempdir_in(&cache)?;
+            let repository = staging.path();
             git(
-                &directory,
+                repository,
                 &["-c", "init.templateDir=", "init", "--bare", "--quiet"],
             )?;
-        }
 
-        // Local fetches must support the same object filtering as the upstream host.
-        git(&directory, &["config", "uploadpack.allowFilter", "true"])?;
-        git(
-            &directory,
-            &["config", "uploadpack.allowAnySHA1InWant", "true"],
-        )?;
-        let present = git(
-            &directory,
-            &["rev-parse", "--verify", "--quiet", self.reference],
-        )
-        .is_ok_and(|commit| commit == self.commit);
-        let shallow = git(&directory, &["rev-parse", "--is-shallow-repository"])? == "true";
-        if !present || shallow {
             let reference = format!("+{}:{}", self.commit, self.reference);
-            let mut arguments = vec!["fetch", "--quiet", "--no-tags"];
-            if shallow {
-                arguments.push("--unshallow");
-            }
-            arguments.extend([self.repository, &reference]);
-            git(&directory, &arguments)?;
+            git(
+                repository,
+                &[
+                    "fetch",
+                    "--no-auto-maintenance",
+                    "--quiet",
+                    "--no-tags",
+                    self.repository,
+                    &reference,
+                ],
+            )?;
+            git(
+                repository,
+                &["update-ref", "--no-deref", "HEAD", self.commit],
+            )?;
+            // A delta represents one object as changes to a similar object. Git splits the
+            // search for similar objects across threads, so scheduling can change which base
+            // objects it compares and hence the pack used by the benchmark. Use one thread for
+            // the delta search and -F to recompute compressed objects and deltas from scratch.
+            git(repository, &["-c", "pack.threads=1", "repack", "-adqF"])?;
+
+            // Local fetches must support the same object filtering as the upstream host.
+            git(repository, &["config", "uploadpack.allowFilter", "true"])?;
+            git(
+                repository,
+                &["config", "uploadpack.allowAnySHA1InWant", "true"],
+            )?;
+            fs_err::rename(repository, &directory)?;
         }
-        git(
-            &directory,
-            &["update-ref", "--no-deref", "HEAD", self.commit],
-        )?;
         SafeUrl::from_file_path(directory).map_err(|()| anyhow!("Invalid Git repository URL"))
     }
 }
 
-fn git(directory: &Path, arguments: &[&str]) -> Result<String> {
-    let output = GIT
-        .as_ref()
+fn git(directory: &Path, arguments: &[&str]) -> Result<()> {
+    GIT.as_ref()
         .cloned()?
         .arg("-C")
         .arg(directory)
@@ -70,7 +74,7 @@ fn git(directory: &Path, arguments: &[&str]) -> Result<String> {
         .env("GIT_TERMINAL_PROMPT", "0")
         .exec_with_output()
         .with_context(|| format!("Failed to run Git in {}", directory.display()))?;
-    Ok(String::from_utf8(output.stdout)?.trim().to_owned())
+    Ok(())
 }
 
 pub(super) const GIT_FIXTURES: &[GitFixture] = &[

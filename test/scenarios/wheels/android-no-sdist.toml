@@ -1,0 +1,21 @@
+name = "android-no-sdist"
+description = "Android wheels satisfy an Android environment when the package has no source distribution."
+
+[root]
+requires = ["a"]
+
+[expected]
+satisfiable = true
+
+[packages.a.versions."1.0.0"]
+wheel_tags = [
+  "py3-none-android_24_arm64_v8a",
+  "py3-none-android_24_x86_64",
+  "py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64",
+  "py3-none-macosx_11_0_arm64",
+  "py3-none-win_amd64",
+]
+sdist = false
+
+[testgen]
+disable = true

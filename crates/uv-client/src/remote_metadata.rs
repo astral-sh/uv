@@ -3,11 +3,10 @@ use async_http_range_reader::AsyncHttpRangeReader;
 use futures::io::BufReader;
 use tokio_util::compat::TokioAsyncReadCompatExt;
 use uv_distribution_filename::WheelFilename;
-use uv_metadata::find_archive_dist_info;
+use uv_metadata::{find_archive_dist_info, validate_archive_variant};
 use uv_redacted::SafeUrl;
 
-/// Read the `.dist-info/METADATA` file from a async remote zip reader, so we avoid downloading the
-/// entire wheel just for the one file.
+/// Read `METADATA` and, for a variant wheel, validate `variant.json` using HTTP range requests.
 ///
 /// This method is derived from `prefix-dev/rip`, which is available under the following BSD-3
 /// Clause license:
@@ -66,7 +65,7 @@ pub(crate) async fn wheel_metadata_from_remote_zip(
         .await
         .map_err(|err| ErrorKind::Zip(filename.clone(), err))?;
 
-    let ((metadata_idx, metadata_entry), _dist_info_stem) = find_archive_dist_info(
+    let ((metadata_idx, metadata_entry), dist_info_stem) = find_archive_dist_info(
         filename,
         reader
             .file()
@@ -76,6 +75,9 @@ pub(crate) async fn wheel_metadata_from_remote_zip(
             .filter_map(|(idx, e)| Some(((idx, e), e.filename().as_str().ok()?))),
     )
     .map_err(|err| ErrorKind::Metadata(debug_name.to_string(), err))?;
+    let variant = filename
+        .variant()
+        .map(|label| (label, format!("{dist_info_stem}.dist-info/variant.json")));
 
     let offset = metadata_entry.header_offset();
 
@@ -109,5 +111,12 @@ pub(crate) async fn wheel_metadata_from_remote_zip(
         .await
         .map_err(|err| ErrorKind::Zip(filename.clone(), err))?;
 
+    // Check that `variant.json` describes the variant named in the filename, so the resolver
+    // can mark the version unavailable if the wheel is malformed.
+    if let Some((label, path)) = variant {
+        validate_archive_variant(&mut reader, &path, label)
+            .await
+            .map_err(|err| ErrorKind::Metadata(debug_name.to_string(), err))?;
+    }
     Ok(contents)
 }

@@ -29,17 +29,18 @@ jobs:
   review:
     needs: plan
     if: ${{ github.event_name == 'pull_request' && github.repository == 'astral-sh/uv' && github.event.pull_request.head.repo.full_name == github.repository && needs.plan.outputs.review-security == 'true' }}
-    uses: astral-sh/github-actions/.github/workflows/pull-request-security-review.yml@7eddba65d699c0288e55f721b76ee59d969d5ceb
+    uses: astral-sh/github-actions/.github/workflows/pull-request-security-review.yml@f11dbff15181b71f2cc5e8487b1ac7d7bb03ea7d
     with:
       runner: depot-ubuntu-24.04-16
       helper-runner: github-ubuntu-24.04-x86_64-4
       # renovate: datasource=github-release-attachments depName=astral-sh/uv
-      uv-version: "0.13.1"
-      uv-checksum: "eadd9d27c134ab5ac1ffd4473b97a741407f3ea238288f03121fc4deddf90220"
+      uv-version: "0.13.5"
+      uv-checksum: "f68d291c75783122dad58ab77def0e13f3233f358731db5d6d7e8715603b928f"
       # Install Rust tools such as cargo-nextest so the reviewer can test PR code.
       # Keep the environment outside the checkout when switching to the PR head.
       setup-command: |
         export UV_PROJECT_ENVIRONMENT="$RUNNER_TEMP/pull-request-review-tools"
+        export UV_PYTHON_DOWNLOADS_JSON_URL="$GITHUB_WORKSPACE/crates/uv-python-managed/download-metadata.json"
         uv sync --locked --only-dev
         echo "$UV_PROJECT_ENVIRONMENT/bin" >> "$GITHUB_PATH"
     secrets: inherit
@@ -99,6 +100,32 @@ jobs:
     permissions:
       contents: read
       id-token: write
+
+  check-cargo-lock-changes:
+    name: "Cargo lockfile changes"
+    if: >-
+      ${{
+        github.event_name == 'pull_request' &&
+        github.repository_owner == 'astral-sh' &&
+        github.event.pull_request.head.repo.full_name != github.repository
+      }}
+    runs-on: github-ubuntu-24.04-x86_64-2
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          # renovate: datasource=github-release-attachments depName=astral-sh/uv
+          version: "0.13.5"
+          checksum: "f68d291c75783122dad58ab77def0e13f3233f358731db5d6d7e8715603b928f"
+      - name: "Check Cargo lockfile changes"
+        env:
+          GH_REPOSITORY: ${{ github.repository }}
+          UV_PYTHON_DOWNLOADS_JSON_URL: ${{ github.workspace }}/crates/uv-python-managed/download-metadata.json
+        run: uv run --script scripts/check-cargo-lock-changes.py HEAD^1 HEAD
 
   check-lock:
     needs: plan
@@ -220,6 +247,7 @@ jobs:
   # This job cannot be moved into a reusable workflow because it includes coverage for uploading
   # attestations and PyPI does not support attestations in reusable workflows.
   test-publish:
+    cache-mode: none
     name: "test uv publish"
     timeout-minutes: 20
     needs:
@@ -268,7 +296,7 @@ jobs:
           ../uv build
 
       - name: "Publish astral-test-pypa-gh-action"
-        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
         with:
           # With this GitHub action, we can't do as rigid checks as with our custom Python script, so we publish more
           # leniently
@@ -330,6 +358,7 @@ jobs:
     if: ${{ always() && github.ref != 'refs/heads/main' }}
     needs:
       - plan
+      - check-cargo-lock-changes
       - check-fmt
       - check-lint
       - check-docs

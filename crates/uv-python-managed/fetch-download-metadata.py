@@ -240,6 +240,11 @@ class CPythonFinder(Finder):
             version = Version.from_str(version_str)
             release = int(date_str)
 
+            # Linux x86-64 builds in this release can crash when perf trampolines are enabled.
+            # See https://github.com/astral-sh/python-build-standalone/pull/1356.
+            if release == 20261020:
+                continue
+
             # Sort artifacts to ensure deterministic results
             for artifact in sorted(record["artifacts"], key=lambda a: a["url"]):
                 download = self._parse_ndjson_artifact(version, release, artifact)

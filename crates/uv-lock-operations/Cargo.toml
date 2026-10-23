@@ -1,6 +1,6 @@
 [package]
 name = "uv-lock-operations"
-version = "0.0.95"
+version = "0.0.97"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -29,6 +29,7 @@ uv-errors = { workspace = true }
 uv-fs = { workspace = true }
 uv-git = { workspace = true }
 uv-lock = { workspace = true }
+uv-macros = { workspace = true }
 uv-normalize = { workspace = true }
 uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
