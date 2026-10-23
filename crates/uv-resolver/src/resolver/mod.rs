@@ -1290,14 +1290,15 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 }
             }
 
-            let incompatible_tag = if filename.variant().is_some() {
-                // Selecting a wheel variant requires variant metadata from the index.
-                Some(IncompatibleTag::Variant)
-            } else if !python_requirement.target().matches_wheel_tag(filename) {
-                Some(IncompatibleTag::AbiPythonVersion)
-            } else {
-                None
-            };
+            let incompatible_tag =
+                if filename.variant().is_some() && env.marker_environment().is_none() {
+                    // Universal lockfiles cannot yet record wheel variants.
+                    Some(IncompatibleTag::Variant)
+                } else if !python_requirement.target().matches_wheel_tag(filename) {
+                    Some(IncompatibleTag::AbiPythonVersion)
+                } else {
+                    None
+                };
             if let Some(tag) = incompatible_tag {
                 return Ok(Some(ResolverVersion::Unavailable(
                     filename.version.clone(),
