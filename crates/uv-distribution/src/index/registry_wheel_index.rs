@@ -17,7 +17,7 @@ use uv_normalize::PackageName;
 use uv_platform_tags::Tags;
 use uv_types::HashStrategy;
 
-use crate::download::variant_compatible;
+use crate::download::check_wheel_variant_compatibility;
 use crate::index::cached_wheel::{CachedWheel, ResolvedWheel};
 use crate::source::{HTTP_REVISION, HttpRevisionPointer, LOCAL_REVISION, LocalRevisionPointer};
 
@@ -177,7 +177,7 @@ impl<'a> RegistryWheelIndex<'a> {
             .rev()
             // A cached wheel with invalid variant metadata cannot satisfy the resolution.
             .filter(|entry| {
-                variant_compatible(&entry.dist.filename, &entry.dist.path).unwrap_or(false)
+                check_wheel_variant_compatibility(&entry.dist.filename, &entry.dist.path).is_ok()
             })
     }
 

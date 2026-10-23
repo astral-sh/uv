@@ -20,13 +20,16 @@ pub fn check_supported_wheel_variant(dist: &BuiltDist) -> Result<(), Error> {
     Ok(())
 }
 
-/// Whether an extracted wheel's variant properties are supported by the target system.
-pub(crate) fn variant_compatible(filename: &WheelFilename, archive: &Path) -> Result<bool, Error> {
+/// Check that an extracted wheel's variant properties are supported by the target system.
+pub(crate) fn check_wheel_variant_compatibility(
+    filename: &WheelFilename,
+    archive: &Path,
+) -> Result<(), Error> {
     let Some(label) = filename.variant() else {
-        return Ok(true);
+        return Ok(());
     };
     if !uv_preview::is_enabled(PreviewFeature::WheelVariants) {
-        return Ok(false);
+        return Err(Error::UnsupportedWheelVariant(Box::new(filename.clone())));
     }
 
     let dist_info = find_flat_dist_info(filename, archive)
@@ -34,9 +37,15 @@ pub(crate) fn variant_compatible(filename: &WheelFilename, archive: &Path) -> Re
     let path = archive.join(format!("{dist_info}.dist-info/variant.json"));
     let metadata = read_wheel_variant(&path, label)
         .map_err(|err| Error::WheelMetadata(path, Box::new(err)))?;
-    Ok(metadata
-        .score_variant(label, &supported_variant_properties(&metadata))
-        .is_some())
+    if let Some(properties) =
+        metadata.unsupported_variant_properties(label, &supported_variant_properties(&metadata))
+    {
+        return Err(Error::IncompatibleWheelVariant {
+            label: label.clone(),
+            properties,
+        });
+    }
+    Ok(())
 }
 
 /// A locally available wheel.
