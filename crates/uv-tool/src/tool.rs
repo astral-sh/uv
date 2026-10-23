@@ -7,6 +7,7 @@ use toml_edit::{Array, Item, Table, Value, value};
 use uv_configuration::ExcludeDependency;
 use uv_distribution_types::{NameRequirementSpecification, Requirement};
 use uv_fs::{PortablePath, Simplified};
+use uv_macros::DeserializeUntagged;
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_python_types::PythonRequest;
 use uv_settings::{ToolOptions, ToolOptionsWire};
@@ -55,13 +56,14 @@ struct ToolWire {
     options: ToolOptionsWire,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
-#[serde(untagged)]
+#[derive(Debug, Clone, PartialEq, Eq, DeserializeUntagged)]
 enum RequirementWire {
     /// A [`Requirement`] following our uv-specific schema.
+    #[untagged(map)]
     Requirement(Requirement),
     /// A PEP 508-compatible requirement. We no longer write these, but there might be receipts out
     /// there that still use them.
+    #[untagged(string)]
     Deprecated(uv_pep508::Requirement<VerbatimParsedUrl>),
 }
 
