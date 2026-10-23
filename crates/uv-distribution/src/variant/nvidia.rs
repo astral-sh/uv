@@ -42,6 +42,13 @@ const MAX_CUDA_VERSION_VALUES: usize = 1_024;
 
 // TODO(konsti): Move the NVIDIA variant provider into its own crate.
 /// The vendored implementation of `nvidia-variant-provider` 0.0.1.
+///
+/// # Variant properties
+///
+/// - `nvidia::cuda_version_lower_bound` lists bounds at or below the effective CUDA driver version.
+/// - `nvidia::cuda_version_upper_bound` lists bounds above the effective CUDA driver version.
+/// - `nvidia::sm_arch` lists compatible real and virtual GPU architectures for compute
+///   capabilities of 5.0 or higher.
 pub(super) struct NvidiaVariantProvider {
     /// Cache capabilities so every package and installation stage uses the same result.
     properties: LazyLock<Option<Vec<SupportedVariantFeature>>>,
