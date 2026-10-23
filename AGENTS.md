@@ -23,6 +23,9 @@
 - PREFER patterns like `if let` to handle fallibility
 - PREFER exhaustive `match` expressions without wildcard (`_`) arms over `matches!`, so new enum
   variants require explicit handling
+- PREFER `uv_macros::DeserializeUntagged` for untagged enums when each variant accepts a distinct
+  Serde input shape (string, boolean, sequence, or map). Serde's `#[serde(untagged)]` buffers the
+  input to try variants in declaration order
 - ALWAYS write `SAFETY` comments following our usual style when writing `unsafe` code
 - PREFER `#[expect()]` over `[allow()]` if clippy must be disabled
 - PREFER let chains (`if let` combined with `&&`) over nested `if let` statements
