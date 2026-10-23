@@ -122,6 +122,22 @@ fn python_upgrade_without_version() {
     ----- stderr -----
     All versions already on latest supported patch release
     ");
+
+    // Install an earlier free-threaded patch version alongside the upgraded standard version
+    uv_snapshot!(context.filters(), context.python_install().arg("3.13.1t"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Installed Python 3.13.1 in [TIME]
+     + cpython-3.13.1+freethreaded-[PLATFORM] (python3.13t)
+    ");
+
+    // `uv python upgrade` without arguments should upgrade the free-threaded version too
+    uv_snapshot!(context.filters(), context.python_upgrade(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Installed Python 3.13.[LATEST] in [TIME]
+     + cpython-3.13.[LATEST]+freethreaded-[PLATFORM] (python3.13t)
+    ");
 }
 
 #[test]

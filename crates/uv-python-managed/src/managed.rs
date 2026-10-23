@@ -1096,7 +1096,7 @@ impl From<&ManagedPythonInstallation> for PythonDownloadRequest {
                 key.minor,
                 key.patch,
                 key.prerelease,
-                PythonVariant::Default,
+                key.variant,
             )),
             Some(installation.key_implementation()),
             Some(ArchRequest::Explicit(*key.arch())),
@@ -1266,6 +1266,31 @@ mod tests {
         // Different variants should not be upgrades
         assert!(!freethreaded.is_upgrade_of(&default));
         assert!(!default.is_upgrade_of(&freethreaded));
+    }
+
+    #[test]
+    fn test_download_request_from_installation_preserves_variant() {
+        for variant in [
+            PythonVariant::Default,
+            PythonVariant::Freethreaded,
+            PythonVariant::Debug,
+            PythonVariant::FreethreadedDebug,
+        ] {
+            let installation = create_test_installation(
+                ImplementationName::CPython,
+                3,
+                14,
+                7,
+                None,
+                variant,
+                None,
+            );
+            let request = PythonDownloadRequest::from(&installation);
+            assert_eq!(
+                request.version(),
+                Some(&VersionRequest::MajorMinorPatch(3, 14, 7, variant))
+            );
+        }
     }
 
     #[test]
