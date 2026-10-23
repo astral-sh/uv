@@ -97,8 +97,10 @@ jobs:
 
       - name: "Setup armv7"
         run: |
-          # Try the next configured mirror after the first failed download.
+          # Slow downloads from the Azure mirror can exhaust the job timeout.
+          sudo sed -i '/azure\.archive\.ubuntu\.com/d' /etc/apt/apt-mirrors.txt
           cat /etc/apt/apt-mirrors.txt
+          # Try the next configured mirror after the first failed download.
           printf '%s\n' \
             'Acquire::Retries "0";' \
             'Acquire::http::Timeout "10";' \
