@@ -1318,11 +1318,13 @@ pub enum Source {
 }
 
 /// A reference to either the current workspace or a workspace discovered from a path.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, DeserializeUntagged, Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema), schemars(untagged))]
 #[serde(untagged)]
 pub enum WorkspaceReference {
+    #[untagged(bool)]
     Bool(bool),
+    #[untagged(string)]
     Path(PortablePathBuf),
 }
 
