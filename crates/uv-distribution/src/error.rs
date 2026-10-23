@@ -5,6 +5,7 @@ use owo_colors::OwoColorize;
 use tokio::task::JoinError;
 
 use crate::metadata::MetadataError;
+use crate::variant::VariantProviderError;
 use uv_cache::Error as CacheError;
 use uv_client::WrappedReqwestError;
 use uv_distribution_filename::{VariantLabel, WheelFilename, WheelFilenameError};
@@ -43,6 +44,7 @@ pub enum Error {
     IncompatibleWheelVariant {
         label: VariantLabel,
         properties: UnsupportedVariantProperties,
+        provider_errors: Vec<VariantProviderError>,
     },
     #[error("Building source distributions is disabled")]
     NoBuild,
@@ -280,6 +282,9 @@ impl uv_errors::Hinted for Error {
             Self::Build(err) => err.hints(),
             Self::Client(err) => uv_errors::Hinted::hints(err),
             Self::MetadataLowering(err) => err.hints(),
+            Self::IncompatibleWheelVariant {
+                provider_errors, ..
+            } => provider_errors.iter().map(ToString::to_string).collect(),
             _ => uv_errors::Hints::none(),
         }
     }

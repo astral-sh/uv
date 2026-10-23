@@ -1,4 +1,3 @@
-use std::cell::LazyCell;
 use std::sync::LazyLock;
 
 use tracing::debug;
@@ -8,9 +7,9 @@ use uv_distribution_types::{
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionParseError};
 use uv_static::EnvVars;
-use uv_torch::NvidiaGpu;
+use uv_torch::{AcceleratorError, NvidiaGpu};
 
-use crate::variant::{PluginApi, VendoredVariantProvider};
+use crate::variant::{PluginApi, ProviderDetection, VendoredVariantProvider};
 
 static PLUGIN_API: LazyLock<PluginApi> = LazyLock::new(|| PluginApi {
     module: "nvidia_variant_provider.plugin"
@@ -51,11 +50,18 @@ const MAX_CUDA_VERSION_VALUES: usize = 1_024;
 ///   capabilities of 5.0 or higher.
 pub(super) struct NvidiaVariantProvider {
     /// Cache capabilities so every package and installation stage uses the same result.
-    properties: LazyLock<Option<Vec<SupportedVariantFeature>>>,
+    detection: LazyLock<ProviderDetection>,
 }
 
 #[derive(Debug, thiserror::Error)]
 enum NvidiaProviderError {
+    #[error("Failed to detect NVIDIA GPU capabilities: {0}")]
+    Detection(#[from] AcceleratorError),
+    #[error(
+        "CUDA user-mode driver version {version} is outside the supported range \
+         {MIN_CUDA_MAJOR}.{MIN_CUDA_MINOR} to {MAX_CUDA_MAJOR}.{MAX_CUDA_MINOR}"
+    )]
+    UnsupportedCudaVersion { version: Version },
     #[error(
         "Invalid value for `{variable}`: `{value}`",
         variable = EnvVars::NV_VARIANT_PROVIDER_FORCE_CUDA_DRIVER_VERSION
@@ -82,52 +88,58 @@ enum NvidiaProviderError {
 impl NvidiaVariantProvider {
     pub(super) const fn new() -> Self {
         Self {
-            properties: LazyLock::new(|| match Self::detect_properties() {
-                Ok(properties) => properties,
-                Err(err) => {
-                    debug!("Skipping NVIDIA variant provider: {err}");
-                    None
+            detection: LazyLock::new(|| {
+                let detection = Self::detect_properties().unwrap_or_else(ProviderDetection::failed);
+                if let Some(error) = &detection.error {
+                    debug!("NVIDIA variant provider detection failed: {error}");
                 }
+                detection
             }),
         }
     }
 
-    fn detect_properties() -> Result<Option<Vec<SupportedVariantFeature>>, NvidiaProviderError> {
-        let gpu = LazyCell::new(|| match NvidiaGpu::detect() {
-            Ok(gpu) => gpu,
-            Err(err) => {
-                debug!("Failed to detect NVIDIA GPU capabilities: {err}");
-                None
-            }
-        });
-        let cuda_version = if let Ok(value) =
+    fn detect_properties() -> Result<ProviderDetection, NvidiaProviderError> {
+        let forced_cuda_version =
             std::env::var(EnvVars::NV_VARIANT_PROVIDER_FORCE_CUDA_DRIVER_VERSION)
-            && !value.is_empty()
-        {
-            value
-                .parse::<Version>()
-                .map_err(|source| NvidiaProviderError::InvalidCudaVersion { value, source })?
+                .ok()
+                .filter(|value| !value.is_empty())
+                .map(|value| {
+                    value
+                        .parse::<Version>()
+                        .map_err(|source| NvidiaProviderError::InvalidCudaVersion { value, source })
+                })
+                .transpose()?;
+        let forced_compute_capability = std::env::var(EnvVars::NV_VARIANT_PROVIDER_FORCE_SM_ARCH)
+            .ok()
+            .filter(|value| !value.is_empty());
+        let gpu = if forced_cuda_version.is_none() || forced_compute_capability.is_none() {
+            NvidiaGpu::detect()
+        } else {
+            Ok(None)
+        };
+        let (gpu, mut detection) = match gpu {
+            Ok(gpu) => (gpu, ProviderDetection::default()),
+            Err(error) => (
+                None,
+                ProviderDetection::failed(NvidiaProviderError::Detection(error)),
+            ),
+        };
+        let cuda_version = if let Some(version) = forced_cuda_version {
+            version
         } else {
             let Some(gpu) = gpu.as_ref() else {
-                return Ok(None);
+                return Ok(detection);
             };
             if gpu.cuda_version < Version::new([MIN_CUDA_MAJOR, MIN_CUDA_MINOR])
                 || gpu.cuda_version > Version::new([MAX_CUDA_MAJOR, MAX_CUDA_MINOR])
             {
-                debug!(
-                    "Skipping NVIDIA variant provider: CUDA user-mode driver version {} is \
-                     outside the supported range {MIN_CUDA_MAJOR}.{MIN_CUDA_MINOR} to \
-                     {MAX_CUDA_MAJOR}.{MAX_CUDA_MINOR}",
-                    gpu.cuda_version
-                );
-                return Ok(None);
+                return Err(NvidiaProviderError::UnsupportedCudaVersion {
+                    version: gpu.cuda_version.clone(),
+                });
             }
             gpu.cuda_version.clone()
         };
-        let compute_capability = if let Ok(value) =
-            std::env::var(EnvVars::NV_VARIANT_PROVIDER_FORCE_SM_ARCH)
-            && !value.is_empty()
-        {
+        let compute_capability = if let Some(value) = forced_compute_capability {
             Some(
                 NvidiaGpu::parse_compute_capability(&value)
                     .ok_or(NvidiaProviderError::InvalidComputeCapability { value })?,
@@ -135,10 +147,9 @@ impl NvidiaVariantProvider {
         } else {
             gpu.as_ref().and_then(|gpu| gpu.compute_capability)
         };
-        Ok(Some(Self::properties_for_capabilities(
-            &cuda_version,
-            compute_capability,
-        )?))
+        detection.properties =
+            Self::properties_for_capabilities(&cuda_version, compute_capability)?;
+        Ok(detection)
     }
 
     /// Implement the ordered properties of `nvidia-variant-provider` 0.0.1.
@@ -237,7 +248,7 @@ impl VendoredVariantProvider for NvidiaVariantProvider {
         Version::new([0, 0, 1])
     }
 
-    fn properties(&self) -> Option<&[SupportedVariantFeature]> {
-        self.properties.as_deref()
+    fn detect(&self) -> &ProviderDetection {
+        &self.detection
     }
 }
