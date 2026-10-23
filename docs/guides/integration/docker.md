@@ -142,8 +142,7 @@ COPY --from=ghcr.io/astral-sh/uv:0.13.5 /uv /uvx /bin/
     be moved across different commit SHAs.
 
     ```Dockerfile
-    # e.g., using a hash from a previous release
-    COPY --from=ghcr.io/astral-sh/uv@sha256:2381d6aa60c326b71fd40023f921a0a3b8f91b14d5db6b90402e65a635053709 /uv /uvx /bin/
+    COPY --from=ghcr.io/astral-sh/uv@sha256:32a7bb39b496babbd997b0a39a4d66c126bdaf5661b302bf6f06abda8deca6ff /uv /uvx /bin/
     ```
 
 Or, with the installer:
@@ -613,4 +612,4 @@ Verified OK
 
     These examples use `latest`, but best practice is to verify the attestation for a specific
     version tag, e.g., `ghcr.io/astral-sh/uv:0.13.5`, or (even better) the specific image digest,
-    such as `ghcr.io/astral-sh/uv:0.5.27@sha256:5adf09a5a526f380237408032a9308000d14d5947eafa687ad6c6a2476787b4f`.
+    such as `ghcr.io/astral-sh/uv@sha256:32a7bb39b496babbd997b0a39a4d66c126bdaf5661b302bf6f06abda8deca6ff`.
