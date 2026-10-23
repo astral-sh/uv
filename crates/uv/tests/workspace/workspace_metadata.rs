@@ -81,6 +81,16 @@ fn workspace_metadata_simple() {
 
     let workspace = context.temp_dir.child("foo");
 
+    // The lockfile hint retains the full command, including the workspace namespace.
+    uv_snapshot!(context.filters(), context.workspace_metadata().current_dir(&workspace).arg("--frozen"), @r#"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    warning: The `uv workspace metadata` command is experimental and may change without warning. Pass `--preview-features workspace-metadata` to disable this warning.
+    error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided.
+
+    hint: To create a lockfile, run `uv workspace metadata --no-frozen`.
+    "#);
+
     uv_snapshot!(context.filters(), context.workspace_metadata().current_dir(&workspace), @r#"
     exit_code: 0 (success)
     ----- stdout -----
@@ -401,13 +411,17 @@ fn workspace_metadata_lockfile() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     warning: The `uv workspace metadata` command is experimental and may change without warning. Pass `--preview-features workspace-metadata` to disable this warning.
-    error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
+    error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided.
+
+    hint: To create a lockfile, run `uv workspace metadata --no-frozen`.
     ");
     uv_snapshot!(context.filters(), context.workspace_metadata().arg("--locked"), @"
     exit_code: 1 (failure)
     ----- stderr -----
     warning: The `uv workspace metadata` command is experimental and may change without warning. Pass `--preview-features workspace-metadata` to disable this warning.
-    error: Unable to find lockfile at `uv.lock`, but `--locked` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
+    error: Unable to find lockfile at `uv.lock`, but `--locked` was provided.
+
+    hint: To create a lockfile, run `uv workspace metadata --no-locked`.
     ");
 
     context

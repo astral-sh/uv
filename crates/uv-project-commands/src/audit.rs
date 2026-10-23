@@ -15,7 +15,7 @@ use uv_dispatch::UniversalState;
 use uv_environment_operations::{
     ProjectEnvironmentPolicy, ProjectEnvironmentTarget, ProjectInterpreter,
 };
-use uv_lock_operations::{LockMode, LockOperation, LockTarget};
+use uv_lock_operations::{LockCommand, LockMode, LockOperation, LockTarget};
 use uv_normalize::{DefaultExtras, DefaultGroups};
 use uv_preview::{Preview, PreviewFeature};
 use uv_python_discovery::ConfigDiscovery;
@@ -175,6 +175,7 @@ pub async fn audit(
     // Update the lockfile, if necessary.
     let lock = match Box::pin(
         LockOperation::new(
+            LockCommand::Audit,
             mode,
             &settings,
             &client_builder,
