@@ -916,7 +916,7 @@ impl Display for RequirementSource {
 }
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
-#[serde(untagged)]
+#[serde(untagged, from = "RequirementSourceFields")]
 enum RequirementSourceWire {
     /// Ex) `source = { git = "<https://github.com/astral-test/uv-public-pypackage?rev=0.0.1#0dacfd662c64cb4ceb16e6cf65a157a8b715b979>" }`
     Git { git: String },
@@ -935,11 +935,54 @@ enum RequirementSourceWire {
     Virtual { r#virtual: PortablePathBuf },
     /// Ex) `source = { specifier = "foo >1,<2" }`
     Registry {
-        #[serde(skip_serializing_if = "VersionSpecifiers::is_empty", default)]
+        #[serde(skip_serializing_if = "VersionSpecifiers::is_empty")]
         specifier: VersionSpecifiers,
         index: Option<SafeUrl<Stripped>>,
         conflict: Option<ConflictItem>,
     },
+}
+
+/// Read the flattened source fields once. A requirement can omit all of them to use the registry.
+#[derive(serde::Deserialize)]
+struct RequirementSourceFields {
+    git: Option<String>,
+    url: Option<SafeUrl<Raw>>,
+    subdirectory: Option<PortablePathBuf>,
+    path: Option<PortablePathBuf>,
+    directory: Option<PortablePathBuf>,
+    editable: Option<PortablePathBuf>,
+    r#virtual: Option<PortablePathBuf>,
+    #[serde(default)]
+    specifier: VersionSpecifiers,
+    index: Option<SafeUrl<Stripped>>,
+    conflict: Option<ConflictItem>,
+}
+
+impl From<RequirementSourceFields> for RequirementSourceWire {
+    fn from(fields: RequirementSourceFields) -> Self {
+        if let Some(git) = fields.git {
+            Self::Git { git }
+        } else if let Some(url) = fields.url {
+            Self::Direct {
+                url,
+                subdirectory: fields.subdirectory,
+            }
+        } else if let Some(path) = fields.path {
+            Self::Path { path }
+        } else if let Some(directory) = fields.directory {
+            Self::Directory { directory }
+        } else if let Some(editable) = fields.editable {
+            Self::Editable { editable }
+        } else if let Some(r#virtual) = fields.r#virtual {
+            Self::Virtual { r#virtual }
+        } else {
+            Self::Registry {
+                specifier: fields.specifier,
+                index: fields.index,
+                conflict: fields.conflict,
+            }
+        }
+    }
 }
 
 impl From<RequirementSource> for RequirementSourceWire {
@@ -1313,6 +1356,14 @@ mod tests {
         let raw = toml::to_string(&requirement).unwrap();
         let deserialized: Requirement = toml::from_str(&raw).unwrap();
         assert_eq!(requirement, deserialized);
+    }
+
+    /// Falling back after a Git type error would turn this into an unrestricted registry requirement.
+    #[test]
+    fn invalid_git_source_is_rejected() {
+        let error = toml::from_str::<Requirement>("name = 'example'\ngit = false")
+            .expect_err("a Git source must be a string");
+        insta::assert_snapshot!(error.message(), @"invalid type: boolean `false`, expected a string");
     }
 
     #[test]
