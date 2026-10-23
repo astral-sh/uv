@@ -20,8 +20,8 @@ use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::{MarkerTree, VerbatimUrl, VersionOrUrl, looks_like_git_repository};
 use uv_pypi_types::{
-    ConflictItem, ParsedGitDirectoryUrl, ParsedGitPathUrl, ParsedUrl, ParsedUrlError,
-    VerbatimParsedUrl,
+    ArchiveUrlFilename, ConflictItem, ParsedGitDirectoryUrl, ParsedGitPathUrl, ParsedUrl,
+    ParsedUrlError, VerbatimParsedUrl,
 };
 use uv_redacted::policy::Raw;
 use uv_redacted::{SafeUrl, SafeUrlError};
@@ -785,7 +785,7 @@ fn url_source(
     Ok(RequirementSource::Url {
         location: url,
         subdirectory,
-        ext,
+        archive: ArchiveUrlFilename::Url(ext),
         url: verbatim_url,
     })
 }

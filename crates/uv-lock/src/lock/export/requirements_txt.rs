@@ -11,7 +11,9 @@ use uv_distribution_filename::{DistExtension, SourceDistExtension};
 use uv_fs::Simplified;
 use uv_git_types::GitReference;
 use uv_normalize::PackageName;
-use uv_pypi_types::{ParsedArchiveUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl};
+use uv_pypi_types::{
+    ArchiveUrlFilename, ParsedArchiveUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl,
+};
 use uv_redacted::SafeUrl;
 
 use crate::lock::export::{ExportableRequirement, ExportableRequirements, VirtualPackages};
@@ -117,7 +119,9 @@ impl std::fmt::Display for RequirementsTxtExport<'_> {
                     let url = SafeUrl::from(ParsedArchiveUrl {
                         url: url.to_url().map_err(|_| std::fmt::Error)?,
                         subdirectory: direct.subdirectory.clone(),
-                        ext: DistExtension::Source(SourceDistExtension::TarGz),
+                        archive: ArchiveUrlFilename::Url(DistExtension::Source(
+                            SourceDistExtension::TarGz,
+                        )),
                     });
                     write!(
                         f,

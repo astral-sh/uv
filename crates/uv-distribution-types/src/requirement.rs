@@ -19,8 +19,9 @@ use uv_redacted::{SafeUrl, SafeUrlError};
 use crate::{IndexMetadata, IndexUrl};
 
 use uv_pypi_types::{
-    ConflictItem, HashError, Hashes, ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitDirectoryUrl,
-    ParsedGitPathUrl, ParsedPathUrl, ParsedUrl, ParsedUrlError, VerbatimParsedUrl,
+    ArchiveUrlFilename, ConflictItem, HashError, Hashes, ParsedArchiveUrl, ParsedDirectoryUrl,
+    ParsedGitDirectoryUrl, ParsedGitPathUrl, ParsedPathUrl, ParsedUrl, ParsedUrlError,
+    VerbatimParsedUrl,
 };
 
 #[derive(Debug, Error)]
@@ -274,13 +275,13 @@ impl From<Requirement> for uv_pep508::Requirement<VerbatimParsedUrl> {
                 RequirementSource::Url {
                     location,
                     subdirectory,
-                    ext,
+                    archive,
                     url,
                 } => Some(VersionOrUrl::Url(VerbatimParsedUrl {
                     parsed_url: ParsedUrl::Archive(ParsedArchiveUrl {
                         url: location.into_url(),
                         subdirectory,
-                        ext,
+                        archive,
                     }),
                     verbatim: url,
                 })),
@@ -492,7 +493,7 @@ impl CacheKey for Requirement {
             RequirementSource::Url {
                 location,
                 subdirectory,
-                ext,
+                archive,
                 url,
             } => {
                 1u8.cache_key(state);
@@ -503,7 +504,10 @@ impl CacheKey for Requirement {
                 } else {
                     0u8.cache_key(state);
                 }
-                ext.name().cache_key(state);
+                archive
+                    .extension()
+                    .map_or("", |ext| ext.name())
+                    .cache_key(state);
                 url.cache_key(state);
             }
             RequirementSource::GitDirectory {
@@ -597,8 +601,8 @@ pub enum RequirementSource {
         /// For source distributions, the path to the distribution if it is not in the archive
         /// root.
         subdirectory: Option<Box<Path>>,
-        /// The file extension, e.g. `tar.gz`, `zip`, etc.
-        ext: DistExtension,
+        /// The filename and format of the remote archive, if known.
+        archive: ArchiveUrlFilename,
         /// The PEP 508 style URL in the format
         /// `<scheme>://<domain>/<path>#subdirectory=<subdirectory>`.
         url: VerbatimUrl,
@@ -683,7 +687,7 @@ impl RequirementSource {
                 url,
                 location: archive.url.with_policy(Raw),
                 subdirectory: archive.subdirectory,
-                ext: archive.ext,
+                archive: archive.archive,
             },
         }
     }
@@ -695,13 +699,13 @@ impl RequirementSource {
             Self::Url {
                 location,
                 subdirectory,
-                ext,
+                archive,
                 url,
             } => Some(VerbatimParsedUrl {
                 parsed_url: ParsedUrl::Archive(ParsedArchiveUrl::from_source(
                     location.as_url().clone(),
                     subdirectory.clone(),
-                    *ext,
+                    archive.clone(),
                 )),
                 verbatim: url.clone(),
             }),
@@ -960,7 +964,7 @@ impl From<RequirementSource> for RequirementSourceWire {
             RequirementSource::Url {
                 subdirectory,
                 location,
-                ext: _,
+                archive: _,
                 url: _,
             } => Self::Direct {
                 url: location,
@@ -1207,8 +1211,11 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
                 Ok(Self::Url {
                     location,
                     subdirectory: subdirectory.map(Box::<Path>::from),
-                    ext: DistExtension::from_path(url.path())
-                        .map_err(|err| ParsedUrlError::MissingExtensionUrl(url.to_string(), err))?,
+                    archive: ArchiveUrlFilename::Url(
+                        DistExtension::from_path(url.path()).map_err(|err| {
+                            ParsedUrlError::MissingExtensionUrl(url.to_string(), err)
+                        })?,
+                    ),
                     url: VerbatimUrl::from_url(url),
                 })
             }

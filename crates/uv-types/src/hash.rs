@@ -719,7 +719,7 @@ mod tests {
     };
     use uv_normalize::PackageName;
     use uv_pep440::Version;
-    use uv_pypi_types::HashDigest;
+    use uv_pypi_types::{ArchiveUrlFilename, HashDigest};
     use uv_redacted::SafeUrl;
     use uv_redacted::policy::Raw;
 
@@ -737,7 +737,7 @@ mod tests {
                     .unwrap()
                     .with_policy(Raw),
                 subdirectory: None,
-                ext: DistExtension::Wheel,
+                archive: ArchiveUrlFilename::Url(DistExtension::Wheel),
                 url: url.parse().unwrap(),
             },
             scope: RequirementScope::Global,
