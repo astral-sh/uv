@@ -15,7 +15,8 @@ use std::str::FromStr;
 
 use glob::Pattern;
 use rustc_hash::{FxBuildHasher, FxHashSet};
-use serde::de::SeqAccess;
+use serde::de::value::MapAccessDeserializer;
+use serde::de::{MapAccess, SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer, Serialize};
 use thiserror::Error;
 use tracing::instrument;
@@ -331,7 +332,7 @@ where
 pub type OverrideDependency = Override<uv_pep508::Requirement<VerbatimParsedUrl>>;
 
 /// A build constraint, optionally accompanied by archive hashes.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(untagged)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub enum BuildConstraintDependency {
@@ -342,6 +343,59 @@ pub enum BuildConstraintDependency {
         requirement: uv_pep508::Requirement<VerbatimParsedUrl>,
         hashes: Vec<String>,
     },
+}
+
+impl<'de> Deserialize<'de> for BuildConstraintDependency {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct WithHashes {
+            requirement: uv_pep508::Requirement<VerbatimParsedUrl>,
+            hashes: Vec<String>,
+        }
+
+        impl From<WithHashes> for BuildConstraintDependency {
+            fn from(value: WithHashes) -> Self {
+                Self::WithHashes {
+                    requirement: value.requirement,
+                    hashes: value.hashes,
+                }
+            }
+        }
+
+        struct BuildConstraintVisitor;
+
+        impl<'de> Visitor<'de> for BuildConstraintVisitor {
+            type Value = BuildConstraintDependency;
+
+            fn expecting(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+                formatter.write_str("a requirement string or a table with requirement and hashes")
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                value
+                    .parse()
+                    .map(BuildConstraintDependency::Requirement)
+                    .map_err(serde::de::Error::custom)
+            }
+
+            // Share table parsing across configuration readers without outlining string parsing.
+            #[inline(never)]
+            fn visit_map<A>(self, map: A) -> Result<Self::Value, A::Error>
+            where
+                A: MapAccess<'de>,
+            {
+                WithHashes::deserialize(MapAccessDeserializer::new(map)).map(Into::into)
+            }
+        }
+
+        deserializer.deserialize_any(BuildConstraintVisitor)
+    }
 }
 
 impl BuildConstraintDependency {
@@ -918,7 +972,7 @@ pub(crate) struct DependencyGroupSettings {
     pub(crate) requires_python: Option<VersionSpecifiers>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(untagged, rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 enum ExtraBuildDependencyWire {
@@ -928,6 +982,61 @@ enum ExtraBuildDependencyWire {
         requirement: uv_pep508::Requirement<VerbatimParsedUrl>,
         match_runtime: bool,
     },
+}
+
+impl<'de> Deserialize<'de> for ExtraBuildDependencyWire {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(rename_all = "kebab-case")]
+        struct Annotated {
+            requirement: uv_pep508::Requirement<VerbatimParsedUrl>,
+            match_runtime: bool,
+        }
+
+        impl From<Annotated> for ExtraBuildDependencyWire {
+            fn from(value: Annotated) -> Self {
+                Self::Annotated {
+                    requirement: value.requirement,
+                    match_runtime: value.match_runtime,
+                }
+            }
+        }
+
+        struct ExtraBuildDependencyVisitor;
+
+        impl<'de> Visitor<'de> for ExtraBuildDependencyVisitor {
+            type Value = ExtraBuildDependencyWire;
+
+            fn expecting(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+                formatter
+                    .write_str("a requirement string or a table with requirement and match-runtime")
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                value
+                    .parse()
+                    .map(ExtraBuildDependencyWire::Unannotated)
+                    .map_err(serde::de::Error::custom)
+            }
+
+            // Share table parsing across configuration readers without outlining string parsing.
+            #[inline(never)]
+            fn visit_map<A>(self, map: A) -> Result<Self::Value, A::Error>
+            where
+                A: MapAccess<'de>,
+            {
+                Annotated::deserialize(MapAccessDeserializer::new(map)).map(Into::into)
+            }
+        }
+
+        deserializer.deserialize_any(ExtraBuildDependencyVisitor)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -2087,5 +2196,114 @@ impl OptionsMetadata for BuildBackendSettingsSchema {
         Self: Sized + 'static,
     {
         BuildBackendSettings::metadata()
+    }
+}
+
+#[cfg(test)]
+mod deserialization_tests {
+    use std::io::{self, Read};
+
+    use serde::Deserialize;
+
+    use super::{BuildConstraintDependency, ExtraBuildDependency};
+
+    #[derive(Debug, Deserialize)]
+    struct BuildConstraint {
+        dependency: BuildConstraintDependency,
+    }
+
+    #[derive(Debug, Deserialize)]
+    struct ExtraBuild {
+        dependency: ExtraBuildDependency,
+    }
+
+    #[test]
+    fn build_dependency_retains_read_errors() {
+        struct FailedRead;
+
+        impl Read for FailedRead {
+            fn read(&mut self, _buffer: &mut [u8]) -> io::Result<usize> {
+                Err(io::Error::other("metadata read failed"))
+            }
+        }
+
+        let reader = br#"{"requirement":"setuptools","hashes":["#
+            .as_slice()
+            .chain(FailedRead);
+        assert!(
+            serde_json::from_reader::<_, BuildConstraintDependency>(reader)
+                .unwrap_err()
+                .is_io()
+        );
+        let reader = br#"{"requirement":"torch","match-runtime":"#
+            .as_slice()
+            .chain(FailedRead);
+        assert!(
+            serde_json::from_reader::<_, ExtraBuildDependency>(reader)
+                .unwrap_err()
+                .is_io()
+        );
+    }
+
+    #[test]
+    fn build_constraint_representations() -> anyhow::Result<()> {
+        let bare: BuildConstraint = toml::from_str(r#"dependency = "setuptools>=75""#)?;
+        let annotated: BuildConstraint = toml::from_str(
+            r#"dependency = { requirement = "setuptools>=75", hashes = ["sha256:abc"], ignored = true }"#,
+        )?;
+        assert!(
+            toml::from_str::<BuildConstraint>(r#"dependency = ["setuptools>=75", ["sha256:abc"]]"#)
+                .is_err()
+        );
+        let (bare_requirement, bare_hashes) = bare.dependency.into_parts();
+        let (requirement, hashes) = annotated.dependency.into_parts();
+        assert_eq!(bare_requirement, requirement);
+        assert!(bare_hashes.is_empty());
+        assert_eq!(hashes, ["sha256:abc"]);
+        Ok(())
+    }
+
+    #[test]
+    fn extra_build_dependency_representations() -> anyhow::Result<()> {
+        let bare: ExtraBuild = toml::from_str(r#"dependency = "torch>=2""#)?;
+        let annotated: ExtraBuild = toml::from_str(
+            r#"dependency = { requirement = "torch>=2", match-runtime = true, ignored = true }"#,
+        )?;
+        assert!(toml::from_str::<ExtraBuild>(r#"dependency = ["torch>=2", true]"#).is_err());
+        assert_eq!(
+            bare.dependency.requirement,
+            annotated.dependency.requirement
+        );
+        assert!(!bare.dependency.match_runtime);
+        assert!(annotated.dependency.match_runtime);
+        Ok(())
+    }
+
+    #[test]
+    fn build_constraint_requires_hashes() {
+        insta::assert_snapshot!(
+            toml::from_str::<BuildConstraint>(r#"dependency = { requirement = "setuptools>=75" }"#).unwrap_err(),
+            @r#"
+        TOML parse error at line 1, column 14
+          |
+        1 | dependency = { requirement = "setuptools>=75" }
+          |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        missing field `hashes`
+        "#
+        );
+    }
+
+    #[test]
+    fn extra_build_dependency_requires_match_runtime() {
+        insta::assert_snapshot!(
+            toml::from_str::<ExtraBuild>(r#"dependency = { requirement = "torch>=2" }"#).unwrap_err(),
+            @r#"
+        TOML parse error at line 1, column 14
+          |
+        1 | dependency = { requirement = "torch>=2" }
+          |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        missing field `match-runtime`
+        "#
+        );
     }
 }
