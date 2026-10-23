@@ -34,6 +34,68 @@ fn missing_requirements_txt() {
     requirements_txt.assert(predicates::path::missing());
 }
 
+/// Apply per-requirement build settings when synchronizing a requirements file.
+#[test]
+fn requirements_config_settings() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(&format!(
+        "-e {} --config-settings=editable_mode=compat",
+        context
+            .workspace_root
+            .join("test/packages/setuptools_editable")
+            .display()
+    ))?;
+
+    uv_snapshot!(context.filters(), context.pip_sync().arg("requirements.txt"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + setuptools-editable==0.1.0 (from file://[WORKSPACE]/test/packages/setuptools_editable)
+    ");
+
+    let finder = context
+        .site_packages()
+        .join("__editable___setuptools_editable_0_1_0_finder.py");
+    assert!(!finder.exists());
+
+    Ok(())
+}
+
+/// Settings from requirements with non-matching markers do not affect other requirements.
+#[test]
+fn requirements_config_settings_with_marker() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(&format!(
+        "-e {}\nsetuptools-editable ; python_version < '3.0' --config-settings=editable_mode=compat",
+        context
+            .workspace_root
+            .join("test/packages/setuptools_editable")
+            .display()
+    ))?;
+
+    uv_snapshot!(context.filters(), context.pip_sync().arg("requirements.txt"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + setuptools-editable==0.1.0 (from file://[WORKSPACE]/test/packages/setuptools_editable)
+    ");
+
+    let finder = context
+        .site_packages()
+        .join("__editable___setuptools_editable_0_1_0_finder.py");
+    assert!(finder.exists());
+
+    Ok(())
+}
+
 /// `--cert` is forwarded to the HTTP client rather than silently ignored.
 #[test]
 fn cert() -> Result<()> {
