@@ -4,6 +4,7 @@ use std::{
     str::FromStr,
 };
 use uv_cache_key::CacheKeyHasher;
+use uv_macros::DeserializeUntagged;
 use uv_normalize::PackageName;
 
 #[derive(Debug, Clone)]
@@ -56,12 +57,15 @@ impl FromStr for ConfigSettingPackageEntry {
     }
 }
 
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, DeserializeUntagged)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema), schemars(untagged))]
+#[serde(expecting = "a string or list of strings")]
 enum ConfigSettingValue {
     /// The value consists of a single string.
+    #[untagged(string)]
     String(String),
     /// The value consists of a list of strings.
+    #[untagged(seq)]
     List(Vec<String>),
 }
 
@@ -71,41 +75,6 @@ impl serde::Serialize for ConfigSettingValue {
             Self::String(value) => serializer.serialize_str(value),
             Self::List(values) => serializer.collect_seq(values.iter()),
         }
-    }
-}
-
-impl<'de> serde::Deserialize<'de> for ConfigSettingValue {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        struct Visitor;
-
-        impl<'de> serde::de::Visitor<'de> for Visitor {
-            type Value = ConfigSettingValue;
-
-            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-                formatter.write_str("a string or list of strings")
-            }
-
-            fn visit_str<E: serde::de::Error>(self, value: &str) -> Result<Self::Value, E> {
-                Ok(ConfigSettingValue::String(value.to_string()))
-            }
-
-            fn visit_string<E: serde::de::Error>(self, value: String) -> Result<Self::Value, E> {
-                Ok(ConfigSettingValue::String(value))
-            }
-
-            fn visit_seq<A: serde::de::SeqAccess<'de>>(
-                self,
-                mut seq: A,
-            ) -> Result<Self::Value, A::Error> {
-                let mut values = Vec::new();
-                while let Some(value) = seq.next_element()? {
-                    values.push(value);
-                }
-                Ok(ConfigSettingValue::List(values))
-            }
-        }
-
-        deserializer.deserialize_any(Visitor)
     }
 }
 
