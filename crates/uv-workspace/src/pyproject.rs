@@ -290,7 +290,7 @@ impl TryFrom<ProjectWire> for Project {
 #[cfg_attr(test, derive(Serialize))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct Tool {
-    pub uv: Option<ToolUv>,
+    pub uv: Option<Box<ToolUv>>,
 }
 
 /// Validates the `tool.uv.index` field.
