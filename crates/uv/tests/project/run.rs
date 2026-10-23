@@ -4664,7 +4664,8 @@ fn run_active_script_environment() -> Result<()> {
         .child("foo")
         .assert(predicate::path::missing());
 
-    // Using `--active` should create the environment
+    // Using `--active` should initialize an empty directory.
+    context.temp_dir.child("foo").create_dir_all()?;
     uv_snapshot!(context.filters(), context.run()
         .arg("--active")
         .arg("--script")
@@ -4683,7 +4684,8 @@ fn run_active_script_environment() -> Result<()> {
     context
         .temp_dir
         .child("foo")
-        .assert(predicate::path::is_dir());
+        .child("pyvenv.cfg")
+        .assert(predicate::path::is_file());
 
     // Requesting a different Python version should invalidate the environment
     uv_snapshot!(context.filters(), context.run()
@@ -4726,20 +4728,67 @@ fn run_active_script_environment_non_virtualenv() -> Result<()> {
     active_environment
         .child("important.txt")
         .write_str("important data")?;
+    // A directory named `pyvenv.cfg` does not make this a virtual environment.
+    active_environment.child("pyvenv.cfg").create_dir_all()?;
 
-    context
-        .run()
+    uv_snapshot!(context.filters(), context.run()
         .arg("--active")
         .arg("--script")
         .arg("main.py")
-        .env(EnvVars::VIRTUAL_ENV, "foo")
-        .assert()
-        .success();
+        .env(EnvVars::VIRTUAL_ENV, "foo"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Script environment at `[TEMP_DIR]/foo` cannot be replaced because it is a non-empty directory that is not a virtual environment
+    ");
 
-    active_environment.assert(predicate::path::is_dir());
-    // Silently deleting user data outside a virtual environment is undesirable.
     active_environment
         .child("important.txt")
+        .assert("important data");
+
+    Ok(())
+}
+
+/// A damaged script environment in uv's cache can be replaced even without a virtualenv marker.
+#[test]
+fn run_script_environment_cache_repair() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("main.py").write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = []
+        # ///
+
+        import sys
+
+        print(sys.prefix)
+        "#
+    })?;
+
+    let output = uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [CACHE_DIR]/environments-v2/main-[HASH]
+    ");
+
+    let environment = ChildPath::new(String::from_utf8(output.stdout)?.trim());
+    assert!(environment.path().starts_with(context.cache_dir.path()));
+    fs_err::remove_dir_all(&environment)?;
+    environment.create_dir_all()?;
+    environment
+        .child("stale.txt")
+        .write_str("stale cache data")?;
+
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [CACHE_DIR]/environments-v2/main-[HASH]
+    ");
+
+    environment
+        .child("pyvenv.cfg")
+        .assert(predicate::path::is_file());
+    environment
+        .child("stale.txt")
         .assert(predicate::path::missing());
 
     Ok(())
