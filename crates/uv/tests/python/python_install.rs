@@ -3688,6 +3688,7 @@ fn python_install_pyodide() {
     ");
 }
 
+#[cfg(target_os = "linux")]
 #[test]
 fn python_install_build_version() {
     use uv_python_managed::platform_key_from_env;
@@ -3755,6 +3756,7 @@ fn python_install_build_version() {
     ");
 }
 
+#[cfg(target_os = "linux")]
 #[test]
 fn python_install_build_version_pypy() {
     use uv_python_managed::platform_key_from_env;
