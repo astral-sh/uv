@@ -1,4 +1,4 @@
-use std::{collections::VecDeque, sync::Arc};
+use std::{borrow::Cow, collections::VecDeque, sync::Arc};
 
 use futures::StreamExt;
 use futures::stream::FuturesUnordered;
@@ -95,16 +95,17 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                 self.modifiers
                     .apply(DependencyModifierScope::Global, self.requirements),
             )
-            .filter(|requirement| requirement.evaluate_markers(env.marker_environment(), &[]))
-            .map(|requirement| (*requirement).clone())
+            .filter(|requirement| {
+                !matches!(requirement.source, RequirementSource::Registry { .. })
+                    && requirement.evaluate_markers(env.marker_environment(), &[])
+            })
+            .map(Cow::into_owned)
             .collect();
 
         while !queue.is_empty() || !futures.is_empty() {
             while let Some(requirement) = queue.pop_front() {
-                if !matches!(requirement.source, RequirementSource::Registry { .. }) {
-                    if seen.insert(requirement.clone()) {
-                        futures.push(self.lookahead(requirement, hasher.clone()));
-                    }
+                if seen.insert(requirement.clone()) {
+                    futures.push(self.lookahead(requirement, hasher.clone()));
                 }
             }
 
@@ -145,10 +146,11 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                         DependencyModifierScope::Package(lookahead.package(), lookahead.version()),
                         lookahead.requirements(),
                     )) {
-                        if requirement
-                            .evaluate_markers(env.marker_environment(), lookahead.extras())
+                        if !matches!(requirement.source, RequirementSource::Registry { .. })
+                            && requirement
+                                .evaluate_markers(env.marker_environment(), lookahead.extras())
                         {
-                            queue.push_back((*requirement).clone());
+                            queue.push_back(requirement.into_owned());
                         }
                     }
                     results.push(lookahead);
