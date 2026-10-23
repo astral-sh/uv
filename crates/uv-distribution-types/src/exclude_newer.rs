@@ -4,6 +4,7 @@ use std::str::FromStr;
 use jiff::{Span, Timestamp, ToSpan, Unit, tz::TimeZone};
 use serde::Deserialize;
 use serde::de::value::MapAccessDeserializer;
+use uv_macros::DeserializeUntagged;
 
 #[derive(Debug, Copy, Clone)]
 pub struct ExcludeNewerSpan(Span);
@@ -133,24 +134,21 @@ impl<'de> serde::Deserialize<'de> for ExcludeNewerValue {
     where
         D: serde::Deserializer<'de>,
     {
-        #[derive(serde::Deserialize)]
-        struct TableForm {
-            timestamp: Timestamp,
-            span: Option<ExcludeNewerSpan>,
-        }
-
-        #[derive(serde::Deserialize)]
-        #[serde(untagged)]
-        enum Helper {
+        #[derive(DeserializeUntagged)]
+        enum Cutoff {
+            #[untagged(string)]
             String(String),
-            Table(Box<TableForm>),
+            Table {
+                timestamp: Timestamp,
+                span: Option<ExcludeNewerSpan>,
+            },
         }
 
-        match Helper::deserialize(deserializer)? {
-            Helper::String(s) => Self::from_str(&s).map_err(serde::de::Error::custom),
-            Helper::Table(table) => Ok(match table.span {
+        match Cutoff::deserialize(deserializer)? {
+            Cutoff::String(value) => Self::from_str(&value).map_err(serde::de::Error::custom),
+            Cutoff::Table { timestamp, span } => Ok(match span {
                 Some(span) => Self::relative(span),
-                None => Self::absolute(table.timestamp),
+                None => Self::absolute(timestamp),
             }),
         }
     }
