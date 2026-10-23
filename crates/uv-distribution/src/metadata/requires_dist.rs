@@ -547,7 +547,7 @@ mod test {
         "#};
 
         assert_snapshot!(format_err(input).await, @"
-        error: Failed to parse: `[PATH]/pyproject.toml`
+        error: Failed to parse: [PATH]/pyproject.toml
           Caused by: TOML parse error at line 8, column 8
           |
         8 | tqdm = true
@@ -570,7 +570,7 @@ mod test {
         "#};
 
         assert_snapshot!(format_err(input).await, @r#"
-        error: Failed to parse: `[PATH]/pyproject.toml`
+        error: Failed to parse: [PATH]/pyproject.toml
           Caused by: TOML parse error at line 8, column 8
           |
         8 | tqdm = { git = "https://github.com/tqdm/tqdm", rev = "baaaaaab", tag = "v1.0.0" }
@@ -593,7 +593,7 @@ mod test {
         "#};
 
         assert_snapshot!(format_err(input).await, @r#"
-        error: Failed to parse: `[PATH]/pyproject.toml`
+        error: Failed to parse: [PATH]/pyproject.toml
           Caused by: TOML parse error at line 8, column 48
           |
         8 | tqdm = { git = "https://github.com/tqdm/tqdm", ref = "baaaaaab" }
@@ -615,7 +615,7 @@ mod test {
         "#};
 
         assert_snapshot!(format_err(input).await, @r#"
-        error: Failed to parse: `[PATH]/pyproject.toml`
+        error: Failed to parse: [PATH]/pyproject.toml
           Caused by: TOML parse error at line 7, column 8
           |
         7 | tqdm = { git = "https://github.com/tqdm/tqdm", extra = "torch", group = "dev" }
@@ -638,7 +638,7 @@ mod test {
         "#};
 
         assert_snapshot!(format_err(input).await, @r#"
-        error: Failed to parse: `[PATH]/pyproject.toml`
+        error: Failed to parse: [PATH]/pyproject.toml
           Caused by: TOML parse error at line 8, column 8
           |
         8 | tqdm = { path = "tqdm", index = "torch" }
@@ -679,7 +679,7 @@ mod test {
         "#};
 
         assert_snapshot!(format_err(input).await, @r#"
-        error: Failed to parse: `[PATH]/pyproject.toml`
+        error: Failed to parse: [PATH]/pyproject.toml
           Caused by: TOML parse error at line 8, column 16
           |
         8 | tqdm = { url = invalid url to tqdm-4.66.0-py3-none-any.whl" }
@@ -702,7 +702,7 @@ mod test {
         "#};
 
         assert_snapshot!(format_err(input).await, @r#"
-        error: Failed to parse: `[PATH]/pyproject.toml`
+        error: Failed to parse: [PATH]/pyproject.toml
           Caused by: TOML parse error at line 8, column 16
           |
         8 | tqdm = { url = "§invalid#+#*Ä" }

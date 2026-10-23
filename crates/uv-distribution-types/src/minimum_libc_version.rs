@@ -20,7 +20,7 @@ impl MinimumLibcVersion {
     ///
     /// Unconfigured baselines accept any platform. Generic Linux tags do not constrain libc,
     /// matching installation behavior. Non-Linux tags are unaffected.
-    pub(crate) fn platform_coverage(self, platform: &PlatformTag) -> [bool; 2] {
+    pub fn platform_coverage(self, platform: &PlatformTag) -> [bool; 2] {
         let glibc = match platform {
             PlatformTag::Manylinux { major, minor, .. } => LibcVersion::new(*major, *minor),
             PlatformTag::Manylinux1 { .. } => LibcVersion::new(2, 5),

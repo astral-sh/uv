@@ -173,13 +173,14 @@ docker run --rm -v .:/src/ -w /src/ node:alpine npx prettier@3.9.0 --write .
 
 ## Linting
 
-Linting requires [shellcheck](https://github.com/koalaman/shellcheck) to be installed separately.
-Validating `pyproject.toml` against the checked-in uv schema also requires
-[jq](https://jqlang.org/).
+Linting requires [shellcheck](https://github.com/koalaman/shellcheck) and
+[hawk](https://github.com/astral-sh/hawk/) to be installed separately. Validating `pyproject.toml`
+against the checked-in uv schema also requires [jq](https://jqlang.org/).
 
 ```shell
 # Rust
-cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+CARGO_BUILD_WARNINGS=deny cargo clippy --workspace --all-targets --all-features --locked
+cargo +1.99.0 hawk check --target-dir target/hawk -D warnings
 
 # Python
 uv run --only-group=check ruff check .
@@ -214,7 +215,7 @@ targets:
 rustup target add x86_64-pc-windows-msvc
 
 # Run clippy for Windows
-uv run --only-dev cargo xwin clippy --workspace --all-targets --all-features --locked -- -D warnings
+CARGO_BUILD_WARNINGS=deny uv run --only-dev cargo xwin clippy --workspace --all-targets --all-features --locked
 ```
 
 ## Crate structure
@@ -264,6 +265,12 @@ uv run resolver \
     resolve-cold \
     ../test/requirements/trio.in
 ```
+
+### CI benchmarks
+
+In `astral-sh/uv-dev`, add `test:benchmarks` to a pull request to enable the simulated and walltime
+benchmarks on subsequent pushes. The label also applies to draft pull requests. `test:skip` takes
+precedence. Remove `test:benchmarks` to disable benchmarks on future pushes.
 
 ### Analyzing concurrency
 
@@ -374,6 +381,7 @@ Then, open a pull request, e.g., `Bump version to ...`.
 Binary builds will automatically be tested for the release.
 
 After merging the pull request, run the
-[release workflow](https://github.com/astral-sh/uv/actions/workflows/release.yml) with the version
-tag. **Do not include a leading `v`**. The release will automatically be created on GitHub after
-everything else publishes.
+[release workflow](https://github.com/astral-sh/uv/actions/workflows/release.yml). The workflow
+reads the version from project metadata and rejects versions that already have a GitHub release.
+Enable `dry-run` to build artifacts without publishing. Otherwise, the release will automatically be
+created on GitHub after everything else publishes.

@@ -78,7 +78,7 @@ dependencies and virtual environment, such that `import pydantic` will work imme
 further configuration or a server restart.
 
 However, since the Jupyter server is the "active" environment, `!uv pip install` will install
-package's into _Jupyter's_ environment, not the project environment. Such dependencies will persist
+packages into _Jupyter's_ environment, not the project environment. Such dependencies will persist
 for the lifetime of the Jupyter server, but may disappear on subsequent `jupyter` invocations.
 
 If you're working with a notebook that relies on pip (e.g., via the `%pip` magic), you can include

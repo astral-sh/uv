@@ -3,6 +3,24 @@ use std::str::FromStr;
 
 use rustc_hash::FxHashMap;
 use uv_normalize::PackageName;
+use uv_pep440::{Operator, VersionSpecifier};
+
+/// Return whether a specifier opts into prereleases under the explicit prerelease policy.
+///
+/// Excluding a prerelease, as in `!=1.0a1`, does not opt in.
+pub fn specifier_opts_into_prereleases(specifier: &VersionSpecifier) -> bool {
+    match specifier.operator() {
+        Operator::NotEqual | Operator::NotEqualStar => false,
+        Operator::Equal
+        | Operator::EqualStar
+        | Operator::ExactEqual
+        | Operator::TildeEqual
+        | Operator::LessThan
+        | Operator::LessThanEqual
+        | Operator::GreaterThan
+        | Operator::GreaterThanEqual => specifier.any_prerelease(),
+    }
+}
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]

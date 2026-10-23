@@ -19,7 +19,6 @@ use futures::{FutureExt, TryStreamExt};
 use reqwest::{Response, StatusCode};
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::{Instrument, debug, info_span, instrument, warn};
-use url::Url;
 
 use uv_auth::CredentialsCache;
 use uv_cache::{Cache, CacheBucket, CacheEntry, CacheShard, Removal, WheelCache};
@@ -44,7 +43,7 @@ use uv_normalize::PackageName;
 use uv_pep440::{Version, release_specifiers_to_ranges};
 use uv_platform_tags::Tags;
 use uv_pypi_types::{HashAlgorithm, HashDigest, HashDigests, PyProjectToml, ResolutionMetadata};
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 use uv_types::{BuildContext, BuildKey, BuildStack, SourceBuildTrait};
 use uv_workspace::pyproject::ToolUvSources;
 
@@ -175,7 +174,7 @@ impl<'a, 'client> StaticMetadataDatabase<'a, 'client> {
 async fn fetch_git_source_tree(
     git_resolver: &GitResolver,
     git: &GitUrl,
-    url: DisplaySafeUrl,
+    url: SafeUrl,
     subdirectory: Option<&Path>,
     http_settings: GitHttpSettings,
     cache: &Cache,
@@ -649,7 +648,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     async fn url<'data>(
         &self,
         source: &BuildableSource<'data>,
-        url: &'data DisplaySafeUrl,
+        url: &'data SafeUrl,
         index: Option<&'data IndexUrl>,
         cache_shard: &CacheShard,
         subdirectory: Option<&'data Path>,
@@ -783,7 +782,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     async fn url_metadata<'data>(
         &self,
         source: &BuildableSource<'data>,
-        url: &'data DisplaySafeUrl,
+        url: &'data SafeUrl,
         index: Option<&'data IndexUrl>,
         cache_shard: &CacheShard,
         subdirectory: Option<&'data Path>,
@@ -824,6 +823,20 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 StaticMetadata::Dynamic => true,
                 StaticMetadata::None => false,
             };
+
+        // Dynamic metadata and wheels must use the same build settings.
+        let config_settings = self.config_settings_for(source.name());
+        let extra_build_deps = self.extra_build_dependencies_for(source.name());
+        let extra_build_variables = self.extra_build_variables_for(source.name());
+        let build_info = BuildInfo::from_settings(
+            config_settings.into_owned(),
+            extra_build_deps.to_vec(),
+            extra_build_variables.cloned(),
+        );
+        let cache_shard = build_info
+            .cache_shard()
+            .map(|digest| cache_shard.shard(digest))
+            .unwrap_or(cache_shard);
 
         // If the cache contains compatible metadata, return it.
         let metadata_entry = cache_shard.entry(METADATA);
@@ -907,20 +920,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             });
         }
 
-        // If there are build settings or extra build dependencies, we need to scope to a cache shard.
-        let config_settings = self.config_settings_for(source.name());
-        let extra_build_deps = self.extra_build_dependencies_for(source.name());
-        let extra_build_variables = self.extra_build_variables_for(source.name());
-        let build_info = BuildInfo::from_settings(
-            config_settings.into_owned(),
-            extra_build_deps.to_vec(),
-            extra_build_variables.cloned(),
-        );
-        let cache_shard = build_info
-            .cache_shard()
-            .map(|digest| cache_shard.shard(digest))
-            .unwrap_or(cache_shard);
-
         let task = self
             .reporter
             .as_ref()
@@ -969,7 +968,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         &self,
         source: &BuildableSource<'_>,
         ext: SourceDistExtension,
-        url: &DisplaySafeUrl,
+        url: &SafeUrl,
         index: Option<&IndexUrl>,
         cache_shard: &CacheShard,
         hashes: ArchiveHashPolicy<'_>,
@@ -1224,6 +1223,20 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             StaticMetadata::None => false,
         };
 
+        // Dynamic metadata and wheels must use the same build settings.
+        let config_settings = self.config_settings_for(source.name());
+        let extra_build_deps = self.extra_build_dependencies_for(source.name());
+        let extra_build_variables = self.extra_build_variables_for(source.name());
+        let build_info = BuildInfo::from_settings(
+            config_settings.into_owned(),
+            extra_build_deps.to_vec(),
+            extra_build_variables.cloned(),
+        );
+        let cache_shard = build_info
+            .cache_shard()
+            .map(|digest| cache_shard.shard(digest))
+            .unwrap_or(cache_shard);
+
         // If the cache contains compatible metadata, return it.
         let metadata_entry = cache_shard.entry(METADATA);
         match CachedMetadata::read(&metadata_entry).await {
@@ -1280,20 +1293,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 hashes: revision.into_hashes(),
             });
         }
-
-        // If there are build settings or extra build dependencies, we need to scope to a cache shard.
-        let config_settings = self.config_settings_for(source.name());
-        let extra_build_deps = self.extra_build_dependencies_for(source.name());
-        let extra_build_variables = self.extra_build_variables_for(source.name());
-        let build_info = BuildInfo::from_settings(
-            config_settings.into_owned(),
-            extra_build_deps.to_vec(),
-            extra_build_variables.cloned(),
-        );
-        let cache_shard = build_info
-            .cache_shard()
-            .map(|digest| cache_shard.shard(digest))
-            .unwrap_or(cache_shard);
 
         // Otherwise, we need to build a wheel.
         let task = self
@@ -1570,6 +1569,20 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // freshness, since entries have to be fresher than the revision itself.
         let cache_shard = cache_shard.shard(revision.id());
 
+        // Dynamic metadata and wheels must use the same build settings.
+        let config_settings = self.config_settings_for(source.name());
+        let extra_build_deps = self.extra_build_dependencies_for(source.name());
+        let extra_build_variables = self.extra_build_variables_for(source.name());
+        let build_info = BuildInfo::from_settings(
+            config_settings.into_owned(),
+            extra_build_deps.to_vec(),
+            extra_build_variables.cloned(),
+        );
+        let cache_shard = build_info
+            .cache_shard()
+            .map(|digest| cache_shard.shard(digest))
+            .unwrap_or(cache_shard);
+
         // If the cache contains compatible metadata, return it.
         let metadata_entry = cache_shard.entry(METADATA);
         match CachedMetadata::read(&metadata_entry).await {
@@ -1655,20 +1668,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .await?,
             ));
         }
-
-        // If there are build settings or extra build dependencies, we need to scope to a cache shard.
-        let config_settings = self.config_settings_for(source.name());
-        let extra_build_deps = self.extra_build_dependencies_for(source.name());
-        let extra_build_variables = self.extra_build_variables_for(source.name());
-        let build_info = BuildInfo::from_settings(
-            config_settings.into_owned(),
-            extra_build_deps.to_vec(),
-            extra_build_variables.cloned(),
-        );
-        let cache_shard = build_info
-            .cache_shard()
-            .map(|digest| cache_shard.shard(digest))
-            .unwrap_or(cache_shard);
 
         // Otherwise, we need to build a wheel.
         let task = self
@@ -2048,6 +2047,20 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             StaticMetadata::None => false,
         };
 
+        // Dynamic metadata and wheels must use the same build settings.
+        let config_settings = self.config_settings_for(source.name());
+        let extra_build_deps = self.extra_build_dependencies_for(source.name());
+        let extra_build_variables = self.extra_build_variables_for(source.name());
+        let build_info = BuildInfo::from_settings(
+            config_settings.into_owned(),
+            extra_build_deps.to_vec(),
+            extra_build_variables.cloned(),
+        );
+        let cache_shard = build_info
+            .cache_shard()
+            .map(|digest| cache_shard.shard(digest))
+            .unwrap_or(cache_shard);
+
         // If the cache contains compatible metadata, return it.
         let metadata_entry = cache_shard.entry(METADATA);
         match CachedMetadata::read(&metadata_entry).await {
@@ -2096,20 +2109,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 hashes: revision.into_hashes(),
             });
         }
-
-        // If there are build settings or extra build dependencies, we need to scope to a cache shard.
-        let config_settings = self.config_settings_for(source.name());
-        let extra_build_deps = self.extra_build_dependencies_for(source.name());
-        let extra_build_variables = self.extra_build_variables_for(source.name());
-        let build_info = BuildInfo::from_settings(
-            config_settings.into_owned(),
-            extra_build_deps.to_vec(),
-            extra_build_variables.cloned(),
-        );
-        let cache_shard = build_info
-            .cache_shard()
-            .map(|digest| cache_shard.shard(digest))
-            .unwrap_or(cache_shard);
 
         // Otherwise, we need to build a wheel.
         let task = self
@@ -2186,7 +2185,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             CacheBucket::SourceDistributions,
             WheelCache::Git(resource.url, git_sha.as_short_str()).root(),
         );
-        let metadata_entry = cache_shard.entry(METADATA);
 
         // Acquire the advisory lock.
         let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
@@ -2246,6 +2244,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         }
 
         // Store the metadata.
+        let metadata_entry = cache_shard.entry(METADATA);
         write_atomic(metadata_entry.path(), rmp_serde::to_vec(&metadata)?)
             .await
             .map_err(Error::CacheWrite)?;
@@ -2277,19 +2276,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             return Err(Error::HashesNotSupportedGit(source.to_string()));
         }
 
-        // If the reference appears to be a commit, and we've already checked it out, avoid taking
-        // the GitHub fast path.
-        let cache_shard = resource
-            .git
-            .reference()
-            .as_str()
-            .and_then(|reference| GitOid::from_str(reference).ok())
-            .map(|oid| {
-                self.build_context.cache().shard(
-                    CacheBucket::SourceDistributions,
-                    WheelCache::Git(resource.url, oid.as_short_str()).root(),
-                )
-            });
+        // If the commit is known and we've already checked it out, avoid taking the GitHub fast path.
+        let cache_shard = resource.git.precise().map(|oid| {
+            self.build_context.cache().shard(
+                CacheBucket::SourceDistributions,
+                WheelCache::Git(resource.url, oid.as_short_str()).root(),
+            )
+        });
         if cache_shard
             .as_ref()
             .is_some_and(|cache_shard| cache_shard.is_dir())
@@ -2336,7 +2329,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                                 }
                                 Err(err) => {
                                     debug!(
-                                        "Ignoring `pyproject.toml` from GitHub for {source}: {err}"
+                                        "Ignoring `pyproject.toml` from GitHub for `{source}`: {err}"
                                     );
                                 }
                             }
@@ -2378,7 +2371,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             CacheBucket::SourceDistributions,
             WheelCache::Git(resource.url, git_sha.as_short_str()).root(),
         );
-        let metadata_entry = cache_shard.entry(METADATA);
 
         // Acquire the advisory lock.
         let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
@@ -2420,7 +2412,22 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 StaticMetadata::None => false,
             };
 
+        // Dynamic metadata and wheels must use the same build settings.
+        let config_settings = self.config_settings_for(source.name());
+        let extra_build_deps = self.extra_build_dependencies_for(source.name());
+        let extra_build_variables = self.extra_build_variables_for(source.name());
+        let build_info = BuildInfo::from_settings(
+            config_settings.into_owned(),
+            extra_build_deps.to_vec(),
+            extra_build_variables.cloned(),
+        );
+        let cache_shard = build_info
+            .cache_shard()
+            .map(|digest| cache_shard.shard(digest))
+            .unwrap_or(cache_shard);
+
         // If the cache contains compatible metadata, return it.
+        let metadata_entry = cache_shard.entry(METADATA);
         if self
             .build_context
             .cache()
@@ -2513,20 +2520,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .await?,
             ));
         }
-
-        // If there are build settings or extra build dependencies, we need to scope to a cache shard.
-        let config_settings = self.config_settings_for(source.name());
-        let extra_build_deps = self.extra_build_dependencies_for(source.name());
-        let extra_build_variables = self.extra_build_variables_for(source.name());
-        let build_info = BuildInfo::from_settings(
-            config_settings.into_owned(),
-            extra_build_deps.to_vec(),
-            extra_build_variables.cloned(),
-        );
-        let cache_shard = build_info
-            .cache_shard()
-            .map(|digest| cache_shard.shard(digest))
-            .unwrap_or(cache_shard);
 
         // Otherwise, we need to build a wheel.
         let task = self
@@ -2664,14 +2657,20 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         };
 
         // Fetch the `pyproject.toml` from the resolved commit.
-        let url =
-            format!("https://raw.githubusercontent.com/{owner}/{repo}/{commit}/pyproject.toml");
+        let url = SafeUrl::parse_relaxed(&format!(
+            "https://raw.githubusercontent.com/{owner}/{repo}/{commit}/pyproject.toml"
+        ))
+        .map_err(anyhow::Error::from)?;
 
         debug!("Attempting to fetch `pyproject.toml` from: {url}");
 
         let content = client
             .managed(async |client| {
-                let response = client.uncached_client(git.url()).get(&url).send().await?;
+                let response = client
+                    .uncached_client(git.url())
+                    .get(url.clone())
+                    .send()
+                    .await?;
 
                 // If the `pyproject.toml` does not exist, the GitHub API will return a 404.
                 if response.status() == StatusCode::NOT_FOUND {
@@ -2770,7 +2769,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         &self,
         source: &BuildableSource<'_>,
         ext: SourceDistExtension,
-        url: &DisplaySafeUrl,
+        url: &SafeUrl,
         index: Option<&IndexUrl>,
         entry: &CacheEntry,
         revision: Revision,
@@ -2866,6 +2865,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             source,
             ext,
             self.build_context.cache(),
+            self.build_context.tar_backend(),
             ArchiveValidation {
                 extra_algorithms: &[HashAlgorithm::Sha256],
                 hash_policy,
@@ -2898,6 +2898,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             source,
             ext,
             self.build_context.cache(),
+            self.build_context.tar_backend(),
             ArchiveValidation {
                 extra_algorithms: &[],
                 hash_policy,
@@ -3225,13 +3226,10 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     }
 
     /// Returns a GET [`reqwest::Request`] for the given URL.
-    fn request(
-        url: DisplaySafeUrl,
-        client: &RegistryClient,
-    ) -> Result<reqwest::Request, reqwest::Error> {
+    fn request(url: SafeUrl, client: &RegistryClient) -> Result<reqwest::Request, reqwest::Error> {
         client
             .uncached_client(&url)
-            .get(Url::from(url))
+            .get(url)
             .header(
                 // `reqwest` defaults to accepting compressed responses.
                 // Specify identity encoding to get consistent .whl downloading
@@ -3359,7 +3357,7 @@ impl StaticMetadata {
                             return Ok(Self::Some(metadata));
                         }
                         Err(err) => {
-                            debug!("Ignoring `pyproject.toml` for {source}: {err}");
+                            debug!("Ignoring `pyproject.toml` for `{source}`: {err}");
                         }
                     }
                 }
@@ -3401,7 +3399,7 @@ impl StaticMetadata {
                         return Ok(Self::Some(metadata));
                     }
                     Err(err) => {
-                        debug!("Ignoring `PKG-INFO` for {source}: {err}");
+                        debug!("Ignoring `PKG-INFO` for `{source}`: {err}");
                     }
                 }
             }
@@ -3513,7 +3511,7 @@ impl HttpRevisionPointer {
     pub(crate) fn read_from(path: impl AsRef<Path>) -> Result<Option<Self>, Error> {
         match fs_err::File::open(path.as_ref()) {
             Ok(file) => {
-                let data = DataWithCachePolicy::from_reader(file)?.data;
+                let data = DataWithCachePolicy::from_reader(file)?.into_data();
                 let revision = rmp_serde::from_slice::<Revision>(&data)?;
                 Ok(Some(Self { revision }))
             }

@@ -40,7 +40,7 @@ default = true
 
     `uv.toml` files take precedence over `pyproject.toml` files, so if both `uv.toml` and
     `pyproject.toml` files are present in a directory, configuration will be read from `uv.toml`, and
-    `[tool.uv]` section in the accompanying `pyproject.toml` will be ignored.
+    the `[tool.uv]` section in the accompanying `pyproject.toml` will be ignored.
 
 uv will also discover `uv.toml` configuration files in the user- and system-level
 [configuration directories](../reference/storage.md#configuration-directories), e.g., user-level
@@ -98,7 +98,7 @@ defined in previous files. To provide multiple files via the `UV_ENV_FILE` envir
 separate the paths with a space (e.g., `UV_ENV_FILE="/path/to/file1 /path/to/file2"`).
 
 To disable dotenv loading (e.g., to override `UV_ENV_FILE` or the `--env-file` command-line
-argument), set the `UV_NO_ENV_FILE` environment variable to `1`, or pass the`--no-env-file` flag to
+argument), set the `UV_NO_ENV_FILE` environment variable to `1`, or pass the `--no-env-file` flag to
 `uv run`.
 
 If the same variable is defined in the environment and in a `.env` file, the value from the

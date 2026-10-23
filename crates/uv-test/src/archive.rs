@@ -1,6 +1,5 @@
 //! Helpers for constructing test archives.
 
-use std::collections::BTreeMap;
 use std::io::Write;
 use std::path::Path;
 
@@ -16,7 +15,7 @@ use uv_fs::PythonExt;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 
-use crate::packse::generate_wheel;
+use crate::packse::WheelBuilder;
 
 /// Write the given files to a gzip-compressed tar archive.
 pub fn write_tar_gz(writer: impl Write, entries: &[(&str, impl AsRef<[u8]>)]) -> Result<()> {
@@ -43,15 +42,7 @@ pub fn generate_source_archive(
     subdirectory: &str,
     marker_path: Option<&Path>,
 ) -> Result<Vec<u8>> {
-    let (filename, wheel) = generate_wheel(
-        name,
-        version,
-        &[],
-        &BTreeMap::new(),
-        None,
-        "py3-none-any",
-        &[],
-    );
+    let (filename, wheel) = WheelBuilder::new(name, version).build();
     let pkg_info = formatdoc! {r"
         Metadata-Version: 2.2
         Name: {name}

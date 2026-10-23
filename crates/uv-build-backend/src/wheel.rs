@@ -23,13 +23,14 @@ use uv_fs::{Simplified, normalize_path};
 use uv_globfilter::{GlobDirFilter, PortableGlobParser};
 use uv_platform_tags::{AbiTag, LanguageTag, PlatformTag};
 use uv_preview::PreviewFeature;
-use uv_pypi_types::BuildKind;
+use uv_pypi_types::{BuildKind, Metadata23};
 use uv_warnings::warn_user_once;
 
 use crate::metadata::DEFAULT_EXCLUDES;
 use crate::{
     BuildBackendSettings, DirectoryWriter, Error, FileList, ListWriter, PyProjectToml,
-    error_on_venv, find_roots, write_directory_once, write_file_with_directories,
+    compare_build_entries, error_on_venv, find_roots, write_directory_once,
+    write_file_with_directories,
 };
 
 // Files at or below this size are buffered and written with `write_entry_whole`,
@@ -51,9 +52,7 @@ pub fn build_wheel(
     show_warnings: bool,
 ) -> Result<WheelFilename, Error> {
     let pyproject_toml = PyProjectToml::parse(&source_tree.join("pyproject.toml"))?;
-    for warning in pyproject_toml.check_build_system(uv_version, BuildKind::Wheel) {
-        warn_user_once!("{warning}");
-    }
+    pyproject_toml.warn_build_system(uv_version, BuildKind::Wheel);
     crate::check_metadata_directory(source_tree, metadata_directory, &pyproject_toml)?;
 
     let filename = WheelFilename::new(
@@ -68,7 +67,7 @@ pub fn build_wheel(
     );
 
     let wheel_path = wheel_dir.join(filename.to_string());
-    debug!("Writing wheel at {}", wheel_path.user_display());
+    debug!("Writing wheel at `{}`", wheel_path.user_display());
 
     if wheel_path.exists() {
         fs_err::remove_file(&wheel_path)?;
@@ -100,9 +99,7 @@ pub fn list_wheel(
     show_warnings: bool,
 ) -> Result<(WheelFilename, FileList), Error> {
     let pyproject_toml = PyProjectToml::parse(&source_tree.join("pyproject.toml"))?;
-    for warning in pyproject_toml.check_build_system(uv_version, BuildKind::Wheel) {
-        warn_user_once!("{warning}");
-    }
+    pyproject_toml.warn_build_system(uv_version, BuildKind::Wheel);
 
     let filename = WheelFilename::new(
         pyproject_toml.name().clone(),
@@ -136,10 +133,7 @@ fn write_wheel(
     mut wheel_writer: impl DirectoryWriter,
     show_warnings: bool,
 ) -> Result<(), Error> {
-    let settings = pyproject_toml
-        .settings()
-        .cloned()
-        .unwrap_or_else(BuildBackendSettings::default);
+    let settings = pyproject_toml.settings();
 
     let exclude_matcher = build_wheel_exclude_matcher(&settings)?;
 
@@ -157,7 +151,7 @@ fn write_wheel(
     let mut written_directories = FxHashSet::<PathBuf>::default();
     for module_relative in module_relative {
         for entry in WalkDir::new(src_root.join(module_relative))
-            .sort_by_file_name()
+            .sort_by(compare_build_entries)
             .into_iter()
             .filter_entry(|entry| !exclude_matcher.is_match(entry.path()))
         {
@@ -207,8 +201,10 @@ fn write_wheel(
     }
     debug!("Visited {files_visited} files for wheel build");
 
-    // Add the license files
-    if pyproject_toml.license_files_wheel().next().is_some() {
+    let metadata = pyproject_toml.to_metadata(source_tree)?;
+
+    // Add the license files validated for the metadata.
+    if !metadata.license_files.is_empty() {
         debug!("Adding license files");
         let license_dir = format!(
             "{}-{}.dist-info/licenses/",
@@ -216,14 +212,17 @@ fn write_wheel(
             pyproject_toml.version()
         );
 
-        wheel_subdir_from_globs(
-            source_tree,
-            &license_dir,
-            pyproject_toml.license_files_wheel(),
-            &mut wheel_writer,
-            "project.license-files",
-            None,
-        )?;
+        let license_dir = Path::new(&license_dir);
+        write_directory_once(&mut wheel_writer, &mut written_directories, license_dir)?;
+        for license_file in &metadata.license_files {
+            write_file_with_directories(
+                &mut wheel_writer,
+                &mut written_directories,
+                license_dir,
+                Path::new(license_file),
+                &source_tree.join(license_file),
+            )?;
+        }
     }
 
     write_data_files(
@@ -239,7 +238,7 @@ fn write_wheel(
         &mut wheel_writer,
         pyproject_toml,
         filename,
-        source_tree,
+        &metadata,
         uv_version,
     )?;
     wheel_writer.close(&dist_info_dir)?;
@@ -256,13 +255,8 @@ pub fn build_editable(
     show_warnings: bool,
 ) -> Result<WheelFilename, Error> {
     let pyproject_toml = PyProjectToml::parse(&source_tree.join("pyproject.toml"))?;
-    for warning in pyproject_toml.check_build_system(uv_version, BuildKind::Editable) {
-        warn_user_once!("{warning}");
-    }
-    let settings = pyproject_toml
-        .settings()
-        .cloned()
-        .unwrap_or_else(BuildBackendSettings::default);
+    pyproject_toml.warn_build_system(uv_version, BuildKind::Editable);
+    let settings = pyproject_toml.settings();
     let exclude_matcher = build_wheel_exclude_matcher(&settings)?;
 
     crate::check_metadata_directory(source_tree, metadata_directory, &pyproject_toml)?;
@@ -279,7 +273,7 @@ pub fn build_editable(
     );
 
     let wheel_path = wheel_dir.join(filename.to_string());
-    debug!("Writing wheel at {}", wheel_path.user_display());
+    debug!("Writing wheel at `{}`", wheel_path.user_display());
 
     if wheel_path.exists() {
         fs_err::remove_file(&wheel_path)?;
@@ -288,7 +282,7 @@ pub fn build_editable(
     let temp_file = uv_fs::tempfile_in(wheel_dir)?;
     let mut wheel_writer = ZipDirectoryWriter::new_editable(temp_file.as_file());
 
-    debug!("Adding pth file to {}", wheel_path.user_display());
+    debug!("Adding pth file to `{}`", wheel_path.user_display());
     // Check that a module root exists in the directory we're linking from the `.pth` file
     let (src_root, _module_relative) = find_roots(
         source_tree,
@@ -313,11 +307,12 @@ pub fn build_editable(
     )?;
 
     debug!("Adding metadata files to: {}", wheel_path.user_display());
+    let metadata = pyproject_toml.to_metadata(source_tree)?;
     let dist_info_dir = write_dist_info(
         &mut wheel_writer,
         &pyproject_toml,
         &filename,
-        source_tree,
+        &metadata,
         uv_version,
     )?;
     wheel_writer.close(&dist_info_dir)?;
@@ -413,9 +408,7 @@ pub fn metadata(
     uv_version: &str,
 ) -> Result<String, Error> {
     let pyproject_toml = PyProjectToml::parse(&source_tree.join("pyproject.toml"))?;
-    for warning in pyproject_toml.check_build_system(uv_version, BuildKind::Wheel) {
-        warn_user_once!("{warning}");
-    }
+    pyproject_toml.warn_build_system(uv_version, BuildKind::Wheel);
 
     let filename = WheelFilename::new(
         pyproject_toml.name().clone(),
@@ -429,15 +422,16 @@ pub fn metadata(
     );
 
     debug!(
-        "Writing metadata files to {}",
+        "Writing metadata files to `{}`",
         metadata_directory.user_display()
     );
     let mut wheel_writer = FilesystemWriter::new(metadata_directory);
+    let metadata = pyproject_toml.to_metadata(source_tree)?;
     let dist_info_dir = write_dist_info(
         &mut wheel_writer,
         &pyproject_toml,
         &filename,
-        source_tree,
+        &metadata,
         uv_version,
     )?;
     wheel_writer.close(&dist_info_dir)?;
@@ -601,7 +595,7 @@ fn wheel_subdir_from_globs(
     };
 
     for entry in WalkDir::new(src)
-        .sort_by_file_name()
+        .sort_by(compare_build_entries)
         .into_iter()
         .filter_entry(|entry| {
             // TODO(konsti): This should be prettier.
@@ -632,7 +626,7 @@ fn wheel_subdir_from_globs(
             .strip_prefix(src)
             .expect("walkdir starts with root");
 
-        if !matcher.match_path(relative) || is_excluded(entry.path()) {
+        if !matcher.match_path(relative, &entry) || is_excluded(entry.path()) {
             trace!("Excluding {}: {}", globs_field, relative.user_display());
             continue;
         }
@@ -663,7 +657,7 @@ fn write_dist_info(
     writer: &mut dyn DirectoryWriter,
     pyproject_toml: &PyProjectToml,
     filename: &WheelFilename,
-    root: &Path,
+    metadata: &Metadata23,
     uv_version: &str,
 ) -> Result<String, Error> {
     let dist_info_dir = format!(
@@ -696,7 +690,6 @@ fn write_dist_info(
     }
 
     // Add `METADATA` and `METADATA.json`.
-    let metadata = pyproject_toml.to_metadata(root)?;
     writer.write_bytes(
         &format!("{dist_info_dir}/METADATA"),
         metadata.core_metadata_format().as_bytes(),
@@ -704,7 +697,7 @@ fn write_dist_info(
     if uv_preview::is_enabled(PreviewFeature::MetadataJson) {
         writer.write_bytes(
             &format!("{dist_info_dir}/METADATA.json"),
-            &serde_json::to_vec(&metadata).map_err(Error::Json)?,
+            &serde_json::to_vec(metadata).map_err(Error::Json)?,
         )?;
     }
 
@@ -893,7 +886,7 @@ impl<W: AsyncWrite + AsyncSeek + Unpin> Write for EntryWriter<'_, W> {
 
 impl<W: AsyncWrite + AsyncSeek + Unpin> DirectoryWriter for ZipDirectoryWriter<W> {
     fn write_bytes(&mut self, path: &str, bytes: &[u8]) -> Result<(), Error> {
-        trace!("Adding {}", path);
+        trace!("Adding `{}`", path);
         // Set appropriate permissions for metadata files (644 = rw-r--r--)
         let entry = Self::entry(path, self.compression, Self::REGULAR_FILE_MODE);
         block_on(self.writer.write_entry_whole(entry, bytes))?;
@@ -909,7 +902,7 @@ impl<W: AsyncWrite + AsyncSeek + Unpin> DirectoryWriter for ZipDirectoryWriter<W
     }
 
     fn write_file(&mut self, path: &str, file: &Path) -> Result<(), Error> {
-        trace!("Adding {} from {}", path, file.user_display());
+        trace!("Adding `{}` from `{}`", path, file.user_display());
         let metadata = file.metadata()?;
         // Preserve the executable bit, especially for scripts
         #[cfg(unix)]
@@ -948,7 +941,7 @@ impl<W: AsyncWrite + AsyncSeek + Unpin> DirectoryWriter for ZipDirectoryWriter<W
     }
 
     fn write_directory(&mut self, directory: &str) -> Result<(), Error> {
-        trace!("Adding directory {}", directory);
+        trace!("Adding directory `{}`", directory);
         let directory = if directory.ends_with('/') {
             directory.to_string()
         } else {
@@ -962,7 +955,7 @@ impl<W: AsyncWrite + AsyncSeek + Unpin> DirectoryWriter for ZipDirectoryWriter<W
     /// Write the `RECORD` file and the central directory.
     fn close(mut self, dist_info_dir: &str) -> Result<(), Error> {
         let record_path = format!("{dist_info_dir}/RECORD");
-        trace!("Adding {record_path}");
+        trace!("Adding `{record_path}`");
         let record = mem::take(&mut self.record);
         let mut record_bytes = Vec::new();
         write_record(&mut record_bytes, dist_info_dir, record)?;
@@ -992,7 +985,7 @@ impl FilesystemWriter {
 
     /// Add a file with the given name and return a writer for it.
     fn new_writer<'slf>(&'slf mut self, path: &str) -> Result<Box<dyn Write + 'slf>, Error> {
-        trace!("Adding {}", path);
+        trace!("Adding `{}`", path);
         Ok(Box::new(File::create(self.root.join(path))?))
     }
 }
@@ -1000,7 +993,7 @@ impl FilesystemWriter {
 /// File system writer.
 impl DirectoryWriter for FilesystemWriter {
     fn write_bytes(&mut self, path: &str, bytes: &[u8]) -> Result<(), Error> {
-        trace!("Adding {}", path);
+        trace!("Adding `{}`", path);
         let hash = base64.encode(Sha256::new().chain_update(bytes).finalize());
         self.record.push(RecordEntry {
             path: path.to_string(),
@@ -1011,7 +1004,7 @@ impl DirectoryWriter for FilesystemWriter {
         Ok(fs_err::write(self.root.join(path), bytes)?)
     }
     fn write_file(&mut self, path: &str, file: &Path) -> Result<(), Error> {
-        trace!("Adding {} from {}", path, file.user_display());
+        trace!("Adding `{}` from `{}`", path, file.user_display());
         let mut reader = BufReader::new(File::open(file)?);
         let mut writer = self.new_writer(path)?;
         let record = write_hashed(path, &mut reader, &mut writer)?;
@@ -1021,7 +1014,7 @@ impl DirectoryWriter for FilesystemWriter {
     }
 
     fn write_directory(&mut self, directory: &str) -> Result<(), Error> {
-        trace!("Adding directory {}", directory);
+        trace!("Adding directory `{}`", directory);
         Ok(fs_err::create_dir(self.root.join(directory))?)
     }
 
@@ -1110,7 +1103,7 @@ mod test {
                 wheel-exclude = ["*.wheel", "*.source"]
 
                 [build-system]
-                requires = ["uv_build>=0.12,<0.13"]
+                requires = ["uv_build>=0.12,<0.14"]
                 build-backend = "uv_build"
             "#},
         )?;

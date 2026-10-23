@@ -7,6 +7,7 @@ use owo_colors::OwoColorize;
 use thiserror::Error;
 
 use uv_fs::Simplified;
+use uv_macros::DebugNoInline;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pypi_types::Scheme;
@@ -40,7 +41,7 @@ pub struct Layout {
 }
 
 /// Note: The caller is responsible for adding the path of the wheel we're installing.
-#[derive(Error, Debug)]
+#[derive(Error, DebugNoInline)]
 pub enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),
@@ -52,7 +53,7 @@ pub enum Error {
     WalkDir(#[from] walkdir::Error),
     // This shouldn't be possible anymore, we keep it for better error reporting.
     #[error(
-        "RECORD file doesn't match wheel contents, could not find entry for: {} ({})",
+        "`RECORD` file doesn't match wheel contents, could not find entry for `{}` (`{}`)",
         relative.simplified_display(),
         absolute.simplified_display()
     )]
@@ -60,7 +61,7 @@ pub enum Error {
         relative: PathBuf,
         absolute: PathBuf,
     },
-    #[error("RECORD file is invalid")]
+    #[error("`RECORD` file is invalid")]
     RecordCsv(#[from] csv::Error),
     #[error("Non-UTF8 path in {0}: {1:?}")]
     NonUtf8WheelPath(String, PathBuf),

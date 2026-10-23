@@ -7,7 +7,8 @@ use assert_fs::prelude::*;
 use async_zip::base::write::ZipFileWriter;
 use async_zip::{Compression, ZipEntryBuilder};
 use futures::executor::block_on;
-use insta::{allow_duplicates, assert_snapshot};
+use indoc::indoc;
+use insta::assert_snapshot;
 use predicates::prelude::predicate;
 use sha2::{Digest, Sha256};
 
@@ -34,6 +35,37 @@ fn cache_dir_uses_configured_test_context_path() {
     ----- stdout -----
     [CACHE_DIR]/
     ");
+}
+
+/// Invalid cache keys in a local dependency must fail instead of falling back to the default keys.
+#[test]
+fn cache_key_git_sequence() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let project = context.temp_dir.child("project");
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+
+        [tool.uv]
+        cache-keys = [{ git = [true, false] }]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.pip_install().arg("./project").arg("--offline"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Failed to build `project @ file://[TEMP_DIR]/project`
+      cause: Failed to parse cache keys in `project/pyproject.toml`
+      cause: TOML parse error at line 6, column 23
+               |
+             6 | cache-keys = [{ git = [true, false] }]
+               |                       ^^^^^^^^^^^^^
+             invalid type: sequence, expected a boolean or a Git cache key table
+    ");
+
+    Ok(())
 }
 
 /// When the active cache directory is inside an explicit build source, we should warn and continue
@@ -361,7 +393,7 @@ fn cache_init_failure() -> Result<()> {
 /// Index hashes must be checked before building an sdist or reading its metadata.
 #[tokio::test]
 async fn index_source_hashes() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
     let name = "ok".parse()?;
     let server = PackageServer::new(&name).await;
     let index_url = server.index_url();
@@ -425,113 +457,274 @@ async fn index_source_hashes() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
-async fn binary_payloads_stay_in_archive_without_preview() -> Result<()> {
-    let server = PackageServer::new(&"binary-payload".parse()?).await;
-    let filename = "binary_payload-0.1.0-py3-none-any.whl";
-    for streaming in [false, true] {
-        let context = uv_test::test_context!("3.12")
-            .with_filter((r" \(from (?:file|http)://.*\)", " (from [WHEEL_URL])"));
-        let wheel = binary_payload_wheel(&context)?;
-        let mut command = context.pip_install();
-        if streaming {
-            server.serve(filename, &fs_err::read(&wheel)?, None).await;
-            command.arg(server.file_url(filename));
-        } else {
-            command.arg(&wheel);
-        }
+#[test]
+fn binary_payloads_stay_in_archive_without_preview_local() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let wheel = binary_payload_wheel(&context)?;
 
-        allow_duplicates! {
-            uv_snapshot!(context.filters(), command, @"
-            exit_code: 0 (success)
-            ----- stderr -----
-            Resolved 1 package in [TIME]
-            Prepared 1 package in [TIME]
-            Installed 1 package in [TIME]
-             + binary-payload==0.1.0 (from [WHEEL_URL])
-            ");
-        }
+    uv_snapshot!(context.filters(), context.pip_install().arg(&wheel), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + binary-payload==0.1.0 (from file://[TEMP_DIR]/binary_payload-0.1.0-py3-none-any.whl)
+    ");
 
-        assert!(!context.cache_dir.child("files-v0").exists());
-        let archive_files = context.cache_files(CacheBucket::Archive)?;
-        let archive_binary = archive_files
-            .iter()
-            .find(|path| path.ends_with("binary_payload/native.so"))
-            .context("binary payload is missing from the archive")?;
-        assert_eq!(fs_err::read(archive_binary)?, BINARY_PAYLOAD_CONTENTS);
-        assert_eq!(
-            fs_err::read(context.site_packages().join("binary_payload/native.so"))?,
-            BINARY_PAYLOAD_CONTENTS,
-        );
-    }
+    assert!(!context.cache_dir.child("files-v0").exists());
+    let archive_files = context.cache_files(CacheBucket::Archive)?;
+    let archive_binary = archive_files
+        .iter()
+        .find(|path| path.ends_with("binary_payload/native.so"))
+        .context("binary payload is missing from the archive")?;
+    assert_eq!(context.read_bytes(archive_binary), BINARY_PAYLOAD_CONTENTS);
+    assert_eq!(
+        context.read_bytes(context.site_packages().join("binary_payload/native.so")),
+        BINARY_PAYLOAD_CONTENTS,
+    );
     Ok(())
 }
 
 #[tokio::test]
-async fn all_files_except_record_use_archive_file_store() -> Result<()> {
+async fn binary_payloads_stay_in_archive_without_preview_streaming() -> Result<()> {
     let server = PackageServer::new(&"binary-payload".parse()?).await;
     let filename = "binary_payload-0.1.0-py3-none-any.whl";
-    for (streaming, concurrent_installs) in [(false, "1"), (false, "4"), (true, "1"), (true, "4")] {
-        let context = uv_test::test_context!("3.12")
-            .with_concurrent_installs(concurrent_installs)
-            .with_filter((r" \(from (?:file|http)://.*\)", " (from [WHEEL_URL])"));
-        let wheel = binary_payload_wheel(&context)?;
-        let mut command = context.pip_install();
-        command.args(["--preview-features", "content-addressed-cache"]);
-        if streaming {
-            server.serve(filename, &fs_err::read(&wheel)?, None).await;
-            command.arg(server.file_url(filename));
-        } else {
-            command.arg(&wheel);
-        }
-        allow_duplicates! {
-            uv_snapshot!(context.filters(), command, @"
-            exit_code: 0 (success)
-            ----- stderr -----
-            Resolved 1 package in [TIME]
-            Prepared 1 package in [TIME]
-            Installed 1 package in [TIME]
-             + binary-payload==0.1.0 (from [WHEEL_URL])
-            ");
-        }
+    let context = uv_test::test_context!("3.12");
+    let wheel = binary_payload_wheel(&context)?;
+    server
+        .serve(filename, &context.read_bytes(&wheel), None)
+        .await;
 
-        let objects = context.cache_files(CacheBucket::Files)?;
-        // Identical contents still need separate executable and non-executable objects.
-        let mut snapshot = String::new();
-        for object in &objects {
-            writeln!(
-                snapshot,
-                "{}",
-                PortablePath::from(object.strip_prefix(context.cache_dir.path())?)
-            )?;
-        }
-        allow_duplicates! {
-            assert_snapshot!(snapshot, @"
-            files-v0/0c/0c8d68fa16e023b913e926be9b281c5a133c33291b3e60a54c310376f5602a45
-            files-v0/2f/2f4d468b80be8a639ba0bdcfc738be8d912c35dd686a1eb15272e8f56096358c
-            files-v0/4a/4a3f63865c29c673794f181932bc0e2c4779275f22e03a896d3d6ca3ac447332
-            files-v0/80/8043c55c494befd8bb44cf59c112ae6a944da98d04b550ff4fd055e2ebfabeb8
-            files-v0/92/920a0fbc7cd79a94ab2adabfaa8b93804bf6e3e858c454d45958cc9902554248
-            files-v0/bf/bf13d7b1c373edcb8588b94aae048664a6684f665fa4a7e8cd814360e537a049
-            files-v0/fa/fad1ac6fba02614a6ee120fbb397cd676f48c101afee95ab29d146c76df03596
-            ");
-        }
-        let paths = context.cache_files(CacheBucket::Archive)?;
-        let shared_paths = paths
-            .iter()
-            .filter(|path| {
-                objects
-                    .iter()
-                    .any(|object| uv_fs::is_same_file_allow_missing(path, object) == Some(true))
-            })
-            .cloned()
-            .collect::<Vec<_>>();
-        let paths = paths
-            .into_iter()
-            .filter(|path| !path.ends_with("RECORD"))
-            .collect::<Vec<_>>();
-        assert_eq!(shared_paths, paths);
+    uv_snapshot!(context.filters(), context.pip_install().arg(server.file_url(filename)), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + binary-payload==0.1.0 (from http://[LOCALHOST]/binary_payload-0.1.0-py3-none-any.whl)
+    ");
+
+    assert!(!context.cache_dir.child("files-v0").exists());
+    let archive_files = context.cache_files(CacheBucket::Archive)?;
+    let archive_binary = archive_files
+        .iter()
+        .find(|path| path.ends_with("binary_payload/native.so"))
+        .context("binary payload is missing from the archive")?;
+    assert_eq!(context.read_bytes(archive_binary), BINARY_PAYLOAD_CONTENTS);
+    assert_eq!(
+        context.read_bytes(context.site_packages().join("binary_payload/native.so")),
+        BINARY_PAYLOAD_CONTENTS,
+    );
+    Ok(())
+}
+
+#[test]
+fn all_files_except_record_use_archive_file_store_local_serial() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_concurrent_installs("1");
+    let wheel = binary_payload_wheel(&context)?;
+    uv_snapshot!(context.filters(), context.pip_install().args(["--preview-features", "content-addressed-cache"]).arg(&wheel), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + binary-payload==0.1.0 (from file://[TEMP_DIR]/binary_payload-0.1.0-py3-none-any.whl)
+    ");
+
+    let objects = context.cache_files(CacheBucket::Files)?;
+    // Identical contents still need separate executable and non-executable objects.
+    let mut snapshot = String::new();
+    for object in &objects {
+        writeln!(
+            snapshot,
+            "{}",
+            PortablePath::from(object.strip_prefix(context.cache_dir.path())?)
+        )?;
     }
+    assert_snapshot!(snapshot, @"
+    files-v0/0c/0c8d68fa16e023b913e926be9b281c5a133c33291b3e60a54c310376f5602a45
+    files-v0/2f/2f4d468b80be8a639ba0bdcfc738be8d912c35dd686a1eb15272e8f56096358c
+    files-v0/4a/4a3f63865c29c673794f181932bc0e2c4779275f22e03a896d3d6ca3ac447332
+    files-v0/80/8043c55c494befd8bb44cf59c112ae6a944da98d04b550ff4fd055e2ebfabeb8
+    files-v0/92/920a0fbc7cd79a94ab2adabfaa8b93804bf6e3e858c454d45958cc9902554248
+    files-v0/bf/bf13d7b1c373edcb8588b94aae048664a6684f665fa4a7e8cd814360e537a049
+    files-v0/fa/fad1ac6fba02614a6ee120fbb397cd676f48c101afee95ab29d146c76df03596
+    ");
+    let paths = context.cache_files(CacheBucket::Archive)?;
+    let shared_paths = paths
+        .iter()
+        .filter(|path| {
+            objects
+                .iter()
+                .any(|object| uv_fs::is_same_file_allow_missing(path, object) == Some(true))
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    let paths = paths
+        .into_iter()
+        .filter(|path| !path.ends_with("RECORD"))
+        .collect::<Vec<_>>();
+    assert_eq!(shared_paths, paths);
+    Ok(())
+}
+
+#[test]
+fn all_files_except_record_use_archive_file_store_local_concurrent() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_concurrent_installs("4");
+    let wheel = binary_payload_wheel(&context)?;
+    uv_snapshot!(context.filters(), context.pip_install().args(["--preview-features", "content-addressed-cache"]).arg(&wheel), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + binary-payload==0.1.0 (from file://[TEMP_DIR]/binary_payload-0.1.0-py3-none-any.whl)
+    ");
+
+    let objects = context.cache_files(CacheBucket::Files)?;
+    // Identical contents still need separate executable and non-executable objects.
+    let mut snapshot = String::new();
+    for object in &objects {
+        writeln!(
+            snapshot,
+            "{}",
+            PortablePath::from(object.strip_prefix(context.cache_dir.path())?)
+        )?;
+    }
+    assert_snapshot!(snapshot, @"
+    files-v0/0c/0c8d68fa16e023b913e926be9b281c5a133c33291b3e60a54c310376f5602a45
+    files-v0/2f/2f4d468b80be8a639ba0bdcfc738be8d912c35dd686a1eb15272e8f56096358c
+    files-v0/4a/4a3f63865c29c673794f181932bc0e2c4779275f22e03a896d3d6ca3ac447332
+    files-v0/80/8043c55c494befd8bb44cf59c112ae6a944da98d04b550ff4fd055e2ebfabeb8
+    files-v0/92/920a0fbc7cd79a94ab2adabfaa8b93804bf6e3e858c454d45958cc9902554248
+    files-v0/bf/bf13d7b1c373edcb8588b94aae048664a6684f665fa4a7e8cd814360e537a049
+    files-v0/fa/fad1ac6fba02614a6ee120fbb397cd676f48c101afee95ab29d146c76df03596
+    ");
+    let paths = context.cache_files(CacheBucket::Archive)?;
+    let shared_paths = paths
+        .iter()
+        .filter(|path| {
+            objects
+                .iter()
+                .any(|object| uv_fs::is_same_file_allow_missing(path, object) == Some(true))
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    let paths = paths
+        .into_iter()
+        .filter(|path| !path.ends_with("RECORD"))
+        .collect::<Vec<_>>();
+    assert_eq!(shared_paths, paths);
+    Ok(())
+}
+
+#[tokio::test]
+async fn all_files_except_record_use_archive_file_store_streaming_serial() -> Result<()> {
+    let server = PackageServer::new(&"binary-payload".parse()?).await;
+    let filename = "binary_payload-0.1.0-py3-none-any.whl";
+    let context = uv_test::test_context!("3.12").with_concurrent_installs("1");
+    let wheel = binary_payload_wheel(&context)?;
+    server
+        .serve(filename, &context.read_bytes(&wheel), None)
+        .await;
+    uv_snapshot!(context.filters(), context.pip_install().args(["--preview-features", "content-addressed-cache"]).arg(server.file_url(filename)), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + binary-payload==0.1.0 (from http://[LOCALHOST]/binary_payload-0.1.0-py3-none-any.whl)
+    ");
+
+    let objects = context.cache_files(CacheBucket::Files)?;
+    // Identical contents still need separate executable and non-executable objects.
+    let mut snapshot = String::new();
+    for object in &objects {
+        writeln!(
+            snapshot,
+            "{}",
+            PortablePath::from(object.strip_prefix(context.cache_dir.path())?)
+        )?;
+    }
+    assert_snapshot!(snapshot, @"
+    files-v0/0c/0c8d68fa16e023b913e926be9b281c5a133c33291b3e60a54c310376f5602a45
+    files-v0/2f/2f4d468b80be8a639ba0bdcfc738be8d912c35dd686a1eb15272e8f56096358c
+    files-v0/4a/4a3f63865c29c673794f181932bc0e2c4779275f22e03a896d3d6ca3ac447332
+    files-v0/80/8043c55c494befd8bb44cf59c112ae6a944da98d04b550ff4fd055e2ebfabeb8
+    files-v0/92/920a0fbc7cd79a94ab2adabfaa8b93804bf6e3e858c454d45958cc9902554248
+    files-v0/bf/bf13d7b1c373edcb8588b94aae048664a6684f665fa4a7e8cd814360e537a049
+    files-v0/fa/fad1ac6fba02614a6ee120fbb397cd676f48c101afee95ab29d146c76df03596
+    ");
+    let paths = context.cache_files(CacheBucket::Archive)?;
+    let shared_paths = paths
+        .iter()
+        .filter(|path| {
+            objects
+                .iter()
+                .any(|object| uv_fs::is_same_file_allow_missing(path, object) == Some(true))
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    let paths = paths
+        .into_iter()
+        .filter(|path| !path.ends_with("RECORD"))
+        .collect::<Vec<_>>();
+    assert_eq!(shared_paths, paths);
+    Ok(())
+}
+
+#[tokio::test]
+async fn all_files_except_record_use_archive_file_store_streaming_concurrent() -> Result<()> {
+    let server = PackageServer::new(&"binary-payload".parse()?).await;
+    let filename = "binary_payload-0.1.0-py3-none-any.whl";
+    let context = uv_test::test_context!("3.12").with_concurrent_installs("4");
+    let wheel = binary_payload_wheel(&context)?;
+    server
+        .serve(filename, &context.read_bytes(&wheel), None)
+        .await;
+    uv_snapshot!(context.filters(), context.pip_install().args(["--preview-features", "content-addressed-cache"]).arg(server.file_url(filename)), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + binary-payload==0.1.0 (from http://[LOCALHOST]/binary_payload-0.1.0-py3-none-any.whl)
+    ");
+
+    let objects = context.cache_files(CacheBucket::Files)?;
+    // Identical contents still need separate executable and non-executable objects.
+    let mut snapshot = String::new();
+    for object in &objects {
+        writeln!(
+            snapshot,
+            "{}",
+            PortablePath::from(object.strip_prefix(context.cache_dir.path())?)
+        )?;
+    }
+    assert_snapshot!(snapshot, @"
+    files-v0/0c/0c8d68fa16e023b913e926be9b281c5a133c33291b3e60a54c310376f5602a45
+    files-v0/2f/2f4d468b80be8a639ba0bdcfc738be8d912c35dd686a1eb15272e8f56096358c
+    files-v0/4a/4a3f63865c29c673794f181932bc0e2c4779275f22e03a896d3d6ca3ac447332
+    files-v0/80/8043c55c494befd8bb44cf59c112ae6a944da98d04b550ff4fd055e2ebfabeb8
+    files-v0/92/920a0fbc7cd79a94ab2adabfaa8b93804bf6e3e858c454d45958cc9902554248
+    files-v0/bf/bf13d7b1c373edcb8588b94aae048664a6684f665fa4a7e8cd814360e537a049
+    files-v0/fa/fad1ac6fba02614a6ee120fbb397cd676f48c101afee95ab29d146c76df03596
+    ");
+    let paths = context.cache_files(CacheBucket::Archive)?;
+    let shared_paths = paths
+        .iter()
+        .filter(|path| {
+            objects
+                .iter()
+                .any(|object| uv_fs::is_same_file_allow_missing(path, object) == Some(true))
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    let paths = paths
+        .into_iter()
+        .filter(|path| !path.ends_with("RECORD"))
+        .collect::<Vec<_>>();
+    assert_eq!(shared_paths, paths);
     Ok(())
 }
 
@@ -591,7 +784,7 @@ fn binary_payloads_use_archive_file_store() -> Result<()> {
      + binary-payload==0.1.0 (from file://[TEMP_DIR]/binary_payload-0.1.0-py3-none-any.whl)
     ");
     assert_eq!(
-        fs_err::read(target.join("binary_payload/native.so"))?,
+        context.read_bytes(target.join("binary_payload/native.so")),
         BINARY_PAYLOAD_CONTENTS
     );
     fs_err::hard_link(&archive_binary, object)?;
@@ -609,7 +802,10 @@ fn binary_payloads_use_archive_file_store() -> Result<()> {
         context.cache_files(CacheBucket::Files)?,
         vec![object.clone()]
     );
-    assert_eq!(fs_err::read(&retained_binary)?, BINARY_PAYLOAD_CONTENTS);
+    assert_eq!(
+        context.read_bytes(&retained_binary),
+        BINARY_PAYLOAD_CONTENTS
+    );
 
     fs_err::remove_file(&retained_binary)?;
     uv_snapshot!(context.filters(), context.prune(), @"
@@ -672,7 +868,7 @@ fn binary_payload_copy_fallback_uses_archive_file_store() -> Result<()> {
     ");
 
     assert_eq!(
-        fs_err::read(target.path().join("binary_payload").join("native.so"))?,
+        context.read_bytes(target.path().join("binary_payload").join("native.so")),
         BINARY_PAYLOAD_CONTENTS,
     );
 
@@ -682,24 +878,34 @@ fn binary_payload_copy_fallback_uses_archive_file_store() -> Result<()> {
 const BINARY_PAYLOAD_CONTENTS: &[u8] = b"binary payload contents\n";
 
 fn binary_payload_wheel(context: &TestContext) -> Result<PathBuf> {
-    const METADATA: &[u8] = b"Metadata-Version: 2.1\nName: binary-payload\nVersion: 0.1.0\n";
-    const WHEEL: &[u8] =
-        b"Wheel-Version: 1.0\nGenerator: uv-test\nRoot-Is-Purelib: true\nTag: py3-none-any\n";
-    const RECORD: &[u8] = b"binary_payload/__init__.py,,\n\
-binary_payload/module.py,,\n\
-binary_payload/native.so,,\n\
-binary_payload/plain.so,,\n\
-binary_payload/versioned.so.1,,\n\
-binary_payload/versioned.so.1.2,,\n\
-binary_payload/native.dylib,,\n\
-binary_payload/native.DLL,,\n\
-binary_payload/native.pyd,,\n\
-binary_payload/tool,,\n\
-binary_payload/large.dat,,\n\
-binary_payload-0.1.0.dist-info/ignored.so,,\n\
-binary_payload-0.1.0.dist-info/METADATA,,\n\
-binary_payload-0.1.0.dist-info/WHEEL,,\n\
-binary_payload-0.1.0.dist-info/RECORD,,\n";
+    const METADATA: &[u8] = indoc! {b"
+        Metadata-Version: 2.1
+        Name: binary-payload
+        Version: 0.1.0
+    "};
+    const WHEEL: &[u8] = indoc! {b"
+        Wheel-Version: 1.0
+        Generator: uv-test
+        Root-Is-Purelib: true
+        Tag: py3-none-any
+    "};
+    const RECORD: &[u8] = indoc! {b"
+        binary_payload/__init__.py,,
+        binary_payload/module.py,,
+        binary_payload/native.so,,
+        binary_payload/plain.so,,
+        binary_payload/versioned.so.1,,
+        binary_payload/versioned.so.1.2,,
+        binary_payload/native.dylib,,
+        binary_payload/native.DLL,,
+        binary_payload/native.pyd,,
+        binary_payload/tool,,
+        binary_payload/large.dat,,
+        binary_payload-0.1.0.dist-info/ignored.so,,
+        binary_payload-0.1.0.dist-info/METADATA,,
+        binary_payload-0.1.0.dist-info/WHEEL,,
+        binary_payload-0.1.0.dist-info/RECORD,,
+    "};
 
     let wheel = context
         .temp_dir

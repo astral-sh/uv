@@ -5,11 +5,11 @@ use owo_colors::OwoColorize;
 use tracing::debug;
 
 use uv_cache::{Cache, RemovalAccounting};
+use uv_command_support::{ExitStatus, Printer};
 use uv_fs::Simplified;
 use uv_preview::{Preview, PreviewFeature};
 
-use crate::commands::{ExitStatus, human_readable_bytes};
-use crate::printer::Printer;
+use crate::commands::human_readable_bytes;
 
 /// Prune dangling cache entries and cached environments.
 pub(crate) async fn cache_prune(

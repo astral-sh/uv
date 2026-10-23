@@ -549,7 +549,6 @@ fn tool_upgrade_recomputes_relative_exclude_newer() {
     let context = uv_test::test_context!("3.12")
         .with_filtered_exe_suffix()
         .with_tool_dirs();
-    let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     context
@@ -584,7 +583,7 @@ fn tool_upgrade_recomputes_relative_exclude_newer() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        assert_snapshot!(context.read("tools/black/uv-receipt.toml"), @r#"
         [tool]
         requirements = [{ name = "black" }]
         entrypoints = [
@@ -595,6 +594,54 @@ fn tool_upgrade_recomputes_relative_exclude_newer() {
         [tool.options]
         exclude-newer = "2024-03-25T00:00:00Z"
         exclude-newer-span = "P3W"
+        "#);
+    });
+}
+
+/// An explicit settings override must be saved even when no packages need upgrading.
+#[test]
+fn tool_upgrade_noop_updates_options() {
+    let index = old_tool_index();
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
+    let bin_dir = context.temp_dir.child("bin");
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("python-dotenv")
+        .arg("--index-url")
+        .arg(index.index_url())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + python-dotenv==0.10.2.post2
+    Installed 1 executable: dotenv
+    ");
+
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("python-dotenv")
+        .arg("--exclude-newer")
+        .arg("false")
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Nothing to upgrade
+    ");
+
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(context.read("tools/python-dotenv/uv-receipt.toml"), @r#"
+        [tool]
+        requirements = [{ name = "python-dotenv" }]
+        entrypoints = [
+            { name = "dotenv", install-path = "[TEMP_DIR]/bin/dotenv", from = "python-dotenv" },
+        ]
+
+        [tool.options]
+        index-url = "http://[LOCALHOST]/simple/"
+        exclude-newer = false
         "#);
     });
 }
@@ -818,6 +865,53 @@ fn tool_upgrade_all() -> Result<()> {
     Ok(())
 }
 
+/// With `tool-install-locks`, the installed versions are used as resolver preferences, which must
+/// not prevent the upgrade from selecting newer versions.
+#[test]
+fn tool_upgrade_all_tool_install_locks() {
+    let old_index = old_tool_index();
+    let new_index = new_tool_index();
+
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Install `babel` from the old index.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("babel")
+        .arg("--index-url")
+        .arg(old_index.index_url())
+        .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + babel==2.6.0
+     + pytz==2018.5
+    Installed 1 executable: pybabel
+    ");
+
+    // Upgrade all from the new index.
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("--all")
+        .arg("--index-url")
+        .arg(new_index.index_url())
+        .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Updated babel v2.6.0 -> v2.14.0
+     - babel==2.6.0
+     + babel==2.14.0
+     - pytz==2018.5
+    Installed 1 executable: pybabel
+    ");
+}
+
 #[test]
 fn tool_upgrade_non_existing_package() {
     let context = uv_test::test_context!("3.12")
@@ -970,7 +1064,6 @@ fn tool_upgrade_no_binary_package_env_var() {
     let context = uv_test::test_context!("3.12")
         .with_filtered_exe_suffix()
         .with_tool_dirs();
-    let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     uv_snapshot!(context.filters(), context.tool_install()
@@ -1004,10 +1097,8 @@ fn tool_upgrade_no_binary_package_env_var() {
     Installed 2 executables: black, blackd
     ");
 
-    let receipt: toml::Value = toml::from_str(
-        &fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(),
-    )
-    .unwrap();
+    let receipt: toml::Value =
+        toml::from_str(&context.read("tools/black/uv-receipt.toml")).unwrap();
     assert_snapshot!(
         receipt["tool"]["options"]["no-binary-package"].to_string(),
         @r#"["iniconfig"]"#
@@ -1203,7 +1294,6 @@ fn tool_upgrade_python() {
         .with_filtered_counts()
         .with_filtered_exe_suffix()
         .with_tool_dirs();
-    let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     uv_snapshot!(context.filters(), context.tool_install()
@@ -1241,7 +1331,7 @@ fn tool_upgrade_python() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        let content = fs_err::read_to_string(tool_dir.join("babel").join("pyvenv.cfg")).unwrap();
+        let content = context.read("tools/babel/pyvenv.cfg");
         let lines: Vec<&str> = content.split('\n').collect();
         assert_snapshot!(lines[lines.len() - 3], @"version_info = 3.12.[X]");
     });
@@ -1255,7 +1345,6 @@ fn tool_upgrade_python_with_all() {
         .with_filtered_counts()
         .with_filtered_exe_suffix()
         .with_tool_dirs();
-    let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     uv_snapshot!(context.filters(), context.tool_install()
@@ -1312,7 +1401,7 @@ fn tool_upgrade_python_with_all() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        let content = fs_err::read_to_string(tool_dir.join("babel").join("pyvenv.cfg")).unwrap();
+        let content = context.read("tools/babel/pyvenv.cfg");
         let lines: Vec<&str> = content.split('\n').collect();
         assert_snapshot!(lines[lines.len() - 3], @"version_info = 3.12.[X]");
     });
@@ -1320,7 +1409,7 @@ fn tool_upgrade_python_with_all() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        let content = fs_err::read_to_string(tool_dir.join("python-dotenv").join("pyvenv.cfg")).unwrap();
+        let content = context.read("tools/python-dotenv/pyvenv.cfg");
         let lines: Vec<&str> = content.split('\n').collect();
         assert_snapshot!(lines[lines.len() - 3], @"version_info = 3.12.[X]");
     });
@@ -1460,7 +1549,6 @@ async fn tool_upgrade_index_url_keyring_auth() -> Result<()> {
         .with_exclude_newer("2025-01-18T00:00:00Z")
         .with_filtered_exe_suffix()
         .with_tool_dirs();
-    let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
     let path = std::env::join_paths([venv_bin_path(&keyring_context.venv), bin_dir.to_path_buf()])?;
     let credentials = format!(
@@ -1490,11 +1578,7 @@ async fn tool_upgrade_index_url_keyring_auth() -> Result<()> {
         .assert()
         .success();
 
-    let receipt = fs_err::read_to_string(
-        tool_dir
-            .join("executable-application")
-            .join("uv-receipt.toml"),
-    )?;
+    let receipt = context.read("tools/executable-application/uv-receipt.toml");
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -1541,8 +1625,8 @@ async fn tool_upgrade_invalid_auth() -> Result<()> {
         .with_exclude_newer("2025-01-18T00:00:00Z")
         .with_filtered_counts()
         .with_filtered_exe_suffix()
-        .with_tool_dirs();
-    let tool_dir = context.temp_dir.child("tools");
+        .with_tool_dirs()
+        .with_filtered_http_retries();
     let bin_dir = context.temp_dir.child("bin");
 
     // Install `executable-application` from an authenticated index using `--index`.
@@ -1566,7 +1650,7 @@ async fn tool_upgrade_invalid_auth() -> Result<()> {
     }, {
         // Verify the receipt has `authenticate = "always"` (promoted from "auto" because the
         // original URL had embedded credentials).
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("executable-application").join("uv-receipt.toml")).unwrap(), @r#"
+        assert_snapshot!(context.read("tools/executable-application/uv-receipt.toml"), @r#"
         [tool]
         requirements = [{ name = "executable-application" }]
         entrypoints = [
@@ -1588,8 +1672,8 @@ async fn tool_upgrade_invalid_auth() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to upgrade executable-application
-      cause: Failed to fetch: `http://[LOCALHOST]/basic-auth/simple/executable-application/`
-      cause: Missing credentials for http://[LOCALHOST]/basic-auth/simple/executable-application/
+      cause: Failed to fetch: http://[LOCALHOST]/basic-auth/simple/executable-application/
+      cause: Missing credentials for: http://[LOCALHOST]/basic-auth/simple/executable-application/
     ");
 
     Ok(())
@@ -1624,7 +1708,7 @@ fn tool_upgrade_writes_preview_lock() {
     insta::with_settings!({ filters => context.filters() }, {
         assert_snapshot!(context.read("tools/simple-launcher/uv.lock"), @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
 
         [options]
@@ -1675,11 +1759,11 @@ async fn mount_simple_launcher_index(server: &PackageServer, hash: &str, wheel: 
 async fn tool_upgrade_resolution_hints() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_tool_dirs();
     let bin_dir = context.temp_dir.child("bin");
-    let wheel = fs_err::read(
+    let wheel = context.read_bytes(
         context
             .workspace_root
             .join("test/links/simple_launcher-0.1.0-py3-none-any.whl"),
-    )?;
+    );
     let server = PackageServer::new(&"simple-launcher".parse()?).await;
     mount_simple_launcher_index(
         &server,
@@ -1727,15 +1811,17 @@ async fn tool_upgrade_resolution_hints() -> Result<()> {
 /// source preference remains valid, while the index changes the advertised hash before upgrade.
 #[tokio::test]
 async fn tool_upgrade_lock_verifies_hashes() -> Result<()> {
-    let context = uv_test::test_context!("3.12").with_tool_dirs();
+    let context = uv_test::test_context!("3.12")
+        .with_tool_dirs()
+        .with_filtered_http_retries();
     let bin_dir = context.temp_dir.child("bin");
     let wheel_filename = "simple_launcher-0.1.0-py3-none-any.whl";
-    let wheel = fs_err::read(
+    let wheel = context.read_bytes(
         context
             .workspace_root
             .join("test/links")
             .join(wheel_filename),
-    )?;
+    );
     let server = PackageServer::new(&"simple-launcher".parse()?).await;
     mount_simple_launcher_index(
         &server,
@@ -1792,7 +1878,6 @@ fn tool_upgrade_lock_uses_requested_python() -> Result<()> {
         .with_filtered_counts()
         .with_filtered_exe_suffix()
         .with_tool_dirs();
-    let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
     let local_package = context.temp_dir.child("simple-launcher");
     local_package.create_dir_all()?;
@@ -1835,7 +1920,7 @@ fn tool_upgrade_lock_uses_requested_python() -> Result<()> {
         .assert()
         .success();
 
-    let pyvenv = fs_err::read_to_string(tool_dir.join("simple-launcher").join("pyvenv.cfg"))?;
+    let pyvenv = context.read("tools/simple-launcher/pyvenv.cfg");
     let Some(version_info) = pyvenv
         .lines()
         .find(|line| line.starts_with("version_info = "))

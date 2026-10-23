@@ -253,6 +253,10 @@
         }
       ]
     },
+    "graalpy-install-mirror": {
+      "description": "Mirror URL to use for downloading managed GraalPy installations.\n\nBy default, managed GraalPy installations are downloaded from [GitHub](https://github.com/oracle/graalpython/releases).\nThis variable can be set to a mirror URL to use a different source for GraalPy installations.\nThe provided URL will replace `https://github.com/oracle/graalpython/releases/download` in, e.g., `https://github.com/oracle/graalpython/releases/download/graal-24.2.2/graalpy-24.2.2-macos-aarch64.tar.gz`.\n\nDistributions can be read from a local directory by using the `file://` URL scheme.",
+      "type": ["string", "null"]
+    },
     "http-proxy": {
       "description": "The URL of the HTTP proxy to use.",
       "anyOf": [
@@ -473,12 +477,16 @@
       "description": "The URL for publishing packages to the Python package index (by default:\n<https://upload.pypi.org/legacy/>).",
       "anyOf": [
         {
-          "$ref": "#/definitions/DisplaySafeUrl"
+          "$ref": "#/definitions/SafeUrl"
         },
         {
           "type": "null"
         }
       ]
+    },
+    "pyodide-install-mirror": {
+      "description": "Mirror URL to use for downloading managed Pyodide installations.\n\nBy default, managed Pyodide installations are downloaded from [GitHub](https://github.com/pyodide/pyodide/releases).\nThis variable can be set to a mirror URL to use a different source for Pyodide installations.\nThe provided URL will replace `https://github.com/pyodide/pyodide/releases/download` in, e.g., `https://github.com/pyodide/pyodide/releases/download/0.29.5/xbuildenv-0.29.5.tar.gz`.\n\nDistributions can be read from a local directory by using the `file://` URL scheme.",
+      "type": ["string", "null"]
     },
     "pypy-install-mirror": {
       "description": "Mirror URL to use for downloading managed PyPy installations.\n\nBy default, managed PyPy installations are downloaded from [downloads.python.org](https://downloads.python.org/).\nThis variable can be set to a mirror URL to use a different source for PyPy installations.\nThe provided URL will replace `https://downloads.python.org/pypy` in, e.g., `https://downloads.python.org/pypy/pypy3.8-v7.3.7-osx64.tar.bz2`.\n\nDistributions can be read from a\nlocal directory by using the `file://` URL scheme.",
@@ -524,6 +532,10 @@
       "items": {
         "$ref": "#/definitions/PackageName"
       }
+    },
+    "require-build-hashes": {
+      "description": "Require hashes for all build dependencies.\n\nuv checks hashes provided in `build-constraint-dependencies` when downloading build\ndependencies. Enable this setting to require a hash for every build dependency, including\ntransitive dependencies. You can also provide hashes as URL fragments in\n`build-system.requires`. Hashes returned by a build backend do not count.\n\nHashes are not required for the `uv_build` backend bundled in uv. When build isolation is\ndisabled, build dependencies must already be installed and their hashes are not checked.\nAlready-installed packages and previously built wheels are not checked.\n\nThis setting also applies to `uv pip` commands, where it can be overridden in `[tool.uv.pip]`.",
+      "type": ["boolean", "null"]
     },
     "required-environments": {
       "description": "A list of environment markers, e.g., `sys_platform == 'darwin'.",
@@ -684,7 +696,7 @@
           "description": "The vulnerability service URL to use for automatic malware checks.",
           "anyOf": [
             {
-              "$ref": "#/definitions/DisplaySafeUrl"
+              "$ref": "#/definitions/SafeUrl"
             },
             {
               "type": "null"
@@ -922,11 +934,6 @@
         }
       }
     },
-    "DisplaySafeUrl": {
-      "description": "A [`Url`] wrapper that redacts credentials and sensitive query parameters when displaying the URL.\n\n`DisplaySafeUrl` wraps the standard [`url::Url`] type, providing functionality to mask\nsecrets by default when the URL is displayed or logged. This helps prevent accidental\nexposure of sensitive information in logs and debug output.\n\n# Examples\n\n```\nuse uv_redacted::DisplaySafeUrl;\nuse std::str::FromStr;\n\n// Create a `DisplaySafeUrl` from a `&str`\nlet mut url = DisplaySafeUrl::parse(\"https://user:password@example.com\").unwrap();\n\n// Display will mask secrets\nassert_eq!(url.to_string(), \"https://user:****@example.com/\");\n\n// You can still access the username and password\nassert_eq!(url.username(), \"user\");\nassert_eq!(url.password(), Some(\"password\"));\n\n// And you can still update the username and password\nlet _ = url.set_username(\"new_user\");\nlet _ = url.set_password(Some(\"new_password\"));\nassert_eq!(url.username(), \"new_user\");\nassert_eq!(url.password(), Some(\"new_password\"));\n\n// It is also possible to remove the credentials entirely\nurl.remove_credentials();\nassert_eq!(url.username(), \"\");\nassert_eq!(url.password(), None);\n```",
-      "type": "string",
-      "format": "uri"
-    },
     "ExcludeDependency": {
       "description": "An exclusion, either global or scoped to a specific package version.",
       "anyOf": [
@@ -1128,7 +1135,7 @@
           "description": "The URL of the upload endpoint.\n\nWhen using `uv publish --index <name>`, this URL is used for publishing.\n\nA configuration for the default index PyPI would look as follows:\n\n```toml\n[[tool.uv.index]]\nname = \"pypi\"\nurl = \"https://pypi.org/simple\"\npublish-url = \"https://upload.pypi.org/legacy/\"\n```",
           "anyOf": [
             {
-              "$ref": "#/definitions/DisplaySafeUrl"
+              "$ref": "#/definitions/SafeUrl"
             },
             {
               "type": "null"
@@ -1732,6 +1739,10 @@
             "$ref": "#/definitions/PackageName"
           }
         },
+        "require-build-hashes": {
+          "description": "Require hashes for all build dependencies in `uv pip` commands.\n\nOverrides `require-build-hashes` in `[tool.uv]`. This does not require hashes for runtime\ndependencies; use `require-hashes` for those.",
+          "type": ["boolean", "null"]
+        },
         "require-hashes": {
           "description": "Require a matching hash for each requirement.\n\nHash-checking mode is all or nothing. If enabled, _all_ requirements must be provided\nwith a corresponding hash or set of hashes. Additionally, if enabled, _all_ requirements\nmust either be pinned to exact versions (e.g., `==1.0.0`), or be specified via direct URL.\n\nHash-checking mode introduces a number of additional constraints:\n\n- Git dependencies are not supported.\n- Editable installations are not supported.\n- Local dependencies are not supported, unless they point to a specific wheel (`.whl`) or\n  source archive (`.zip`, `.tar.gz`), as opposed to a directory.",
           "type": ["boolean", "null"]
@@ -1874,20 +1885,22 @@
             "centralized-project-envs",
             "tool-install-locks",
             "workspace-list-scripts",
-            "no-distutils-patch",
             "index-hash-algorithm",
             "lockfile-format-check",
+            "lockfile-normalization",
             "lock-without-metadata",
-            "tar-codec",
             "index-by-name",
             "artifact-hash-filtering",
             "content-addressed-cache",
             "missing-exclude-newer-package-lock",
             "resolution-inputs",
             "batch-export",
+            "frozen-lockfile",
             "minimum-libc-version",
             "build-dependency-check",
-            "build-lazy-imports"
+            "build-lazy-imports",
+            "build-dependency-hashes",
+            "wheel-variants"
           ]
         },
         {
@@ -1989,6 +2002,11 @@
         }
       ]
     },
+    "SafeUrl": {
+      "description": "A URL.",
+      "type": "string",
+      "format": "uri"
+    },
     "SchemaConflictItem": {
       "description": "A single item in a conflicting set.\n\nEach item is a pair of an (optional) package and a corresponding extra or group name for that\npackage.",
       "type": "object",
@@ -2070,7 +2088,7 @@
               "description": "The repository URL (without the `git+` prefix).",
               "allOf": [
                 {
-                  "$ref": "#/definitions/DisplaySafeUrl"
+                  "$ref": "#/definitions/SafeUrl"
                 }
               ]
             },
@@ -2162,7 +2180,7 @@
               ]
             },
             "url": {
-              "$ref": "#/definitions/DisplaySafeUrl"
+              "$ref": "#/definitions/SafeUrl"
             }
           },
           "additionalProperties": false,

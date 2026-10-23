@@ -15,7 +15,6 @@ use tokio::io::{AsyncRead, AsyncSeekExt, AsyncWriteExt, ReadBuf};
 use tokio::sync::Semaphore;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::{Instrument, debug, info_span, instrument, warn};
-use url::Url;
 
 use uv_cache::{ArchiveFileId, ArchiveId, Cache, CacheBucket, CacheEntry, WheelCache};
 use uv_cache_info::{CacheInfo, Timestamp};
@@ -38,18 +37,21 @@ use uv_pep440::Version;
 use uv_platform_tags::Tags;
 use uv_preview::PreviewFeature;
 use uv_pypi_types::{HashDigest, HashDigests, PyProjectToml, ResolutionMetadata};
-use uv_python::PythonVariant;
-use uv_redacted::DisplaySafeUrl;
+use uv_python_types::PythonVariant;
+use uv_redacted::SafeUrl;
 use uv_threads::initialize_rayon_once;
 use uv_types::{BuildContext, BuildStack};
 
 use crate::archive::Archive;
+use crate::download::check_wheel_variant_compatibility;
 use crate::error::PythonVersion;
 use crate::extracted_wheel::{ExtractedWheel, HashedWheel, WheelExtractor};
 use crate::hash::http_hash_algorithms;
 use crate::metadata::{ArchiveMetadata, Metadata};
 use crate::source::SourceDistributionBuilder;
-use crate::{Error, FirstPartyPackages, LocalWheel, Reporter, RequiresDist};
+use crate::{
+    Error, FirstPartyPackages, LocalWheel, Reporter, RequiresDist, check_supported_wheel_variant,
+};
 
 /// A cached high-level interface to convert distributions (a requirement resolved to a location)
 /// to a wheel or wheel metadata.
@@ -184,13 +186,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         wheel_entry: &CacheEntry,
         filename: &WheelFilename,
     ) -> Result<LockedFile, Error> {
-        // For backwards compatibility, we use the full wheel stem on Windows. Local wheel
-        // extraction and older uv versions use the same key, so changing it would prevent them
-        // from coordinating through a shared cache.
-        #[cfg(windows)]
-        let lock_key = filename.stem();
-        // On other platforms, we use the bounded cache key to avoid filesystem filename limits.
-        #[cfg(not(windows))]
+        // Use the bounded cache key to avoid filesystem filename limits.
         let lock_key = filename.cache_key();
 
         let lock_entry = wheel_entry.with_file(format!("{lock_key}.lock"));
@@ -228,7 +224,14 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         hashes: ArchiveHashPolicy<'_>,
     ) -> Result<LocalWheel, Error> {
         match dist {
-            Dist::Built(built) => self.get_wheel(built, hashes).await,
+            Dist::Built(built) => {
+                check_supported_wheel_variant(built)?;
+                let wheel = self.get_wheel(built, hashes).await?;
+                check_wheel_variant_compatibility(&wheel.filename, &wheel.archive)?;
+                Ok(wheel)
+            }
+            // TODO(konsti): Support source distributions that build variant wheels.
+            // For now, `build_wheel` assumes a non-variant wheel compatible with `tags`.
             Dist::Source(source) => self.build_wheel(source, tags, hashes).await,
         }
     }
@@ -335,10 +338,12 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     Err(Error::Extract(name, err)) => {
                         if err.is_http_streaming_unsupported() {
                             warn!(
-                                "Streaming unsupported for {dist}; downloading wheel to disk ({err})"
+                                "Streaming unsupported for `{dist}`; downloading wheel to disk ({err})"
                             );
                         } else if err.is_http_streaming_failed() {
-                            warn!("Streaming failed for {dist}; downloading wheel to disk ({err})");
+                            warn!(
+                                "Streaming failed for `{dist}`; downloading wheel to disk ({err})"
+                            );
                         } else {
                             return Err(Error::Extract(name, err));
                         }
@@ -410,10 +415,12 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     Err(Error::Extract(name, err)) => {
                         if err.is_http_streaming_unsupported() {
                             warn!(
-                                "Streaming unsupported for {dist}; downloading wheel to disk ({err})"
+                                "Streaming unsupported for `{dist}`; downloading wheel to disk ({err})"
                             );
                         } else if err.is_http_streaming_failed() {
-                            warn!("Streaming failed for {dist}; downloading wheel to disk ({err})");
+                            warn!(
+                                "Streaming failed for `{dist}`; downloading wheel to disk ({err})"
+                            );
                         } else {
                             return Err(Error::Extract(name, err));
                         }
@@ -631,10 +638,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             HashValidation::Any(_) | HashValidation::All(_) => hashes.validation.into(),
         };
 
+        // Box the full-wheel futures to keep their state out of metadata-only requests.
         // Fetch the entire wheel only when we need to compute a hash for resolution.
         // TODO(charlie): Request the hashes via a separate method, to reduce the coupling in this API.
         if hash_policy == ArchiveHashPolicy::Generate {
-            let wheel = self.get_wheel(dist, hash_policy).await?;
+            let wheel = Box::pin(self.get_wheel(dist, hash_policy)).await?;
             // If the metadata was provided by the user directly, prefer it.
             let metadata = if let Some(metadata) =
                 self.dependency_metadata(dist.name(), Some(dist.version()))
@@ -673,12 +681,12 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             }
             Err(err) if err.is_http_streaming_unsupported() => {
                 warn!(
-                    "Streaming unsupported when fetching metadata for {dist}; downloading wheel directly ({err})"
+                    "Streaming unsupported when fetching metadata for `{dist}`; downloading wheel directly ({err})"
                 );
 
                 // If the request failed due to an error that could be resolved by
                 // downloading the wheel directly, try that.
-                let wheel = self.get_wheel(dist, hash_policy).await?;
+                let wheel = Box::pin(self.get_wheel(dist, hash_policy)).await?;
                 let metadata = wheel.metadata()?;
                 let hashes = wheel.hashes;
                 Ok(ArchiveMetadata {
@@ -768,7 +776,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     /// origin.
     async fn stream_wheel(
         &self,
-        url: DisplaySafeUrl,
+        url: SafeUrl,
         index: Option<&IndexUrl>,
         filename: &WheelFilename,
         progress_size_hint: Option<u64>,
@@ -963,7 +971,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     /// of the wheel if/when fetched from the origin.
     async fn download_wheel(
         &self,
-        url: DisplaySafeUrl,
+        url: SafeUrl,
         index: Option<&IndexUrl>,
         filename: &WheelFilename,
         progress_size_hint: Option<u64>,
@@ -1094,7 +1102,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     async fn download_wheel_response(
         &self,
         mut response: reqwest::Response,
-        url: &DisplaySafeUrl,
+        url: &SafeUrl,
         retry_state: &mut RetryState,
         filename: &WheelFilename,
         progress_size_hint: Option<u64>,
@@ -1298,7 +1306,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             }
 
             // Finally our resumption, which is a range request.
-            debug!("Resuming download of {url} at byte {offset}");
+            debug!("Resuming download of `{url}` at byte {offset}");
             let resumed_response = retry_state
                 .send(self.request_with_offset(url.clone(), offset))
                 .await?;
@@ -1306,7 +1314,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             // A chunked response can fail after all wheel bytes arrive, leaving no satisfiable
             // range. Return the original error so the outer retry policy can restart in full.
             if resumed_response.status() == reqwest::StatusCode::RANGE_NOT_SATISFIABLE {
-                debug!("Range not satisfiable while resuming {url}; abandoning resumed download");
+                debug!("Range not satisfiable while resuming `{url}`; abandoning resumed download");
                 return Err(err);
             }
             resumed_response.error_for_status_ref()?;
@@ -1589,11 +1597,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     }
 
     /// Returns a GET [`reqwest::Request`] for the given URL.
-    fn request(&self, url: DisplaySafeUrl) -> Result<reqwest::Request, reqwest::Error> {
+    fn request(&self, url: SafeUrl) -> Result<reqwest::Request, reqwest::Error> {
         self.client
             .unmanaged
             .uncached_client(&url)
-            .get(Url::from(url))
+            .get(url)
             .header(
                 // `reqwest` defaults to accepting compressed responses.
                 // Specify identity encoding to get consistent .whl downloading
@@ -1607,11 +1615,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     /// Build a GET request with a `Range: bytes=<offset>-` header.
     ///
     /// Used to resume an interrupted download from `offset` bytes into the file.
-    fn request_with_offset(&self, url: DisplaySafeUrl, offset: u64) -> RequestBuilder<'_> {
+    fn request_with_offset(&self, url: SafeUrl, offset: u64) -> RequestBuilder<'_> {
         self.client
             .unmanaged
             .uncached_client(&url)
-            .get(Url::from(url))
+            .get(url)
             .header(
                 "accept-encoding",
                 reqwest::header::HeaderValue::from_static("identity"),
@@ -1697,7 +1705,7 @@ fn persist_archive_file(src: &Path, dst: &Path) -> io::Result<()> {
 
 /// A wrapper around `RegistryClient` that manages a concurrency limit.
 pub struct ManagedClient<'a> {
-    pub unmanaged: &'a RegistryClient,
+    pub(super) unmanaged: &'a RegistryClient,
     control: Arc<Semaphore>,
 }
 
@@ -1708,6 +1716,11 @@ impl<'a> ManagedClient<'a> {
             unmanaged: client,
             control,
         }
+    }
+
+    /// Return whether the client is configured for offline use.
+    pub fn is_offline(&self) -> bool {
+        self.unmanaged.connectivity().is_offline()
     }
 
     /// Perform a request using the client, respecting the concurrency limit.
@@ -1830,7 +1843,7 @@ impl HttpArchivePointer {
     pub fn read_from(path: impl AsRef<Path>) -> Result<Option<Self>, Error> {
         match fs_err::File::open(path.as_ref()) {
             Ok(file) => {
-                let data = DataWithCachePolicy::from_reader(file)?.data;
+                let data = DataWithCachePolicy::from_reader(file)?.into_data();
                 let archive = rmp_serde::from_slice::<Archive>(&data)?;
                 Ok(Some(Self { archive }))
             }

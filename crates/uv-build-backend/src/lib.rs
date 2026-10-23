@@ -13,6 +13,7 @@ use uv_warnings::warn_user_once;
 pub use wheel::{build_editable, build_wheel, list_wheel, metadata};
 
 use rustc_hash::FxHashSet;
+use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::ffi::OsStr;
 use std::io;
@@ -20,24 +21,26 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use thiserror::Error;
 use tracing::debug;
+use walkdir::DirEntry;
 
 use uv_fs::{Simplified, normalize_path};
 use uv_globfilter::PortableGlobError;
+use uv_macros::DebugNoInline;
 use uv_normalize::PackageName;
 use uv_pypi_types::{Identifier, IdentifierParseError};
 
 use crate::metadata::ValidationError;
 use crate::settings::ModuleName;
 
-#[derive(Debug, Error)]
+#[derive(DebugNoInline, Error)]
 pub enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),
-    #[error("Failed to persist temporary file to {}", _0.user_display())]
+    #[error("Failed to persist temporary file to `{}`", _0.user_display())]
     Persist(PathBuf, #[source] io::Error),
     #[error("Invalid metadata format in: {}", _0.user_display())]
     Toml(PathBuf, #[source] toml::de::Error),
-    #[error("Failed to serialize pyproject.toml")]
+    #[error("Failed to serialize `pyproject.toml`")]
     TomlSerialize(#[source] toml::ser::Error),
     #[error("Invalid project metadata")]
     Validation(#[from] ValidationError),
@@ -66,7 +69,7 @@ pub enum Error {
     },
     #[error("Failed to write wheel zip archive")]
     AsyncZip(#[from] async_zip::error::ZipError),
-    #[error("Failed to write RECORD file")]
+    #[error("Failed to write `RECORD` file")]
     Csv(#[from] csv::Error),
     #[error("Failed to write JSON metadata file")]
     Json(#[source] serde_json::Error),
@@ -84,14 +87,14 @@ pub enum Error {
     VenvInSourceTree(PathBuf),
     #[error("Inconsistent metadata between prepare and build step: {0}")]
     InconsistentSteps(&'static str),
-    #[error("Failed to write tar archive to {}", _0.user_display())]
+    #[error("Failed to write tar archive to `{}`", _0.user_display())]
     TarWrite(PathBuf, #[source] io::Error),
-    #[error("Failed to write tar archive to {}", _0.user_display())]
+    #[error("Failed to write tar archive to `{}`", _0.user_display())]
     TarCodecWrite(
         PathBuf,
         #[source] tar_codec::BuildError<tar_codec::EncodeError>,
     ),
-    #[error("Failed to finish gzip stream for {}", _0.user_display())]
+    #[error("Failed to finish gzip stream for `{}`", _0.user_display())]
     GzipWrite(PathBuf, #[source] io::Error),
 }
 
@@ -207,7 +210,7 @@ fn check_metadata_directory(
     };
 
     debug!(
-        "Checking metadata directory {}",
+        "Checking metadata directory `{}`",
         metadata_directory.user_display()
     );
 
@@ -455,11 +458,22 @@ fn module_path_from_module_name(src_root: &Path, module_name: &str) -> Result<Pa
     Ok(module_relative)
 }
 
+/// Visit virtual environment markers before archiving their contents, then sort by file name.
+pub(crate) fn compare_build_entries(left: &DirEntry, right: &DirEntry) -> Ordering {
+    is_venv_marker(right.file_name())
+        .cmp(&is_venv_marker(left.file_name()))
+        .then_with(|| left.file_name().cmp(right.file_name()))
+}
+
+fn is_venv_marker(file_name: &OsStr) -> bool {
+    file_name == "pyvenv.cfg" || file_name == "lib64"
+}
+
 /// Error if we're adding a venv to a distribution.
 pub(crate) fn error_on_venv(file_name: &OsStr, path: &Path) -> Result<(), Error> {
     // On 64-bit Unix, `lib64` is a (compatibility) symlink to lib. If we traverse `lib64` before
     // `pyvenv.cfg`, we show a generic error for symlink directories instead.
-    if !(file_name == "pyvenv.cfg" || file_name == "lib64") {
+    if !is_venv_marker(file_name) {
         return Ok(());
     }
 
@@ -485,7 +499,7 @@ mod tests {
     use fs_err::File;
     use futures_lite::future::block_on;
     use indoc::indoc;
-    use insta::assert_snapshot;
+    use insta::{allow_duplicates, assert_snapshot};
     use itertools::Itertools;
     use regex::regex;
     use sha2::Digest;
@@ -497,6 +511,7 @@ mod tests {
     use uv_errors::{ErrorWithHints, Hinted};
     use uv_fs::{copy_dir_all, relative_to};
     use uv_preview::PreviewFeature;
+    use uv_static::TarBackend;
 
     use crate::source_dist::SyncReader;
 
@@ -522,7 +537,7 @@ mod tests {
 
         assert_snapshot!(format_err(&err), @r#"
         Unsupported glob expression in: tool.uv.build-backend.source-include
-          Caused by: Invalid character `@` at position 3 in glob: `**/@test`
+          Caused by: Invalid character `@` at position 3 in glob `**/@test`
 
         hint: Characters can be escaped with a backslash
         "#);
@@ -545,6 +560,14 @@ mod tests {
     /// Run both a direct wheel build and an indirect wheel build through a source distribution,
     /// while checking that directly built wheel and indirectly built wheel are the same.
     fn build(source_root: &Path, dist: &Path) -> Result<BuildResults, Error> {
+        build_with_options(source_root, dist, TarBackend::default())
+    }
+
+    fn build_with_options(
+        source_root: &Path,
+        dist: &Path,
+        tar_backend: TarBackend,
+    ) -> Result<BuildResults, Error> {
         // Build a direct wheel, capture all its properties to compare it with the indirect wheel
         // latest and remove it since it has the same filename as the indirect wheel.
         let (_name, direct_wheel_list_files) = list_wheel(source_root, MOCK_UV_VERSION, false)?;
@@ -560,7 +583,8 @@ mod tests {
         // TODO(konsti): This should run in the unpacked source dist tempdir, but we need to
         // normalize the path.
         let (_name, wheel_list_files) = list_wheel(source_root, MOCK_UV_VERSION, false)?;
-        let source_dist_filename = build_source_dist(source_root, dist, MOCK_UV_VERSION, false)?;
+        let source_dist_filename =
+            build_source_dist(source_root, dist, MOCK_UV_VERSION, false, tar_backend)?;
         let source_dist_path = dist.join(source_dist_filename.to_string());
         let source_dist_contents = sdist_contents(&source_dist_path);
 
@@ -714,10 +738,12 @@ mod tests {
     /// platform-independent deterministic builds.
     #[test]
     fn built_by_uv_building() {
-        built_by_uv_building_with_backend(
-            &[],
-            "1d9ce1ce63195fbee07314c0b595ba9e063670da8d10c252c351b21e94e3f508",
-        );
+        allow_duplicates! {
+            built_by_uv_building_with_backend(
+                TarBackend::default(),
+                "88540014e8884fff1d6479c0c7315fcf497ba2a46f6db5c9f6e04f64a8620dcc",
+            );
+        }
     }
 
     #[test]
@@ -749,18 +775,17 @@ mod tests {
     }
 
     #[test]
-    fn built_by_uv_building_tar_codec() {
-        built_by_uv_building_with_backend(
-            &[PreviewFeature::TarCodec],
-            "88540014e8884fff1d6479c0c7315fcf497ba2a46f6db5c9f6e04f64a8620dcc",
-        );
+    fn built_by_uv_building_tokio_tar() {
+        allow_duplicates! {
+            built_by_uv_building_with_backend(
+                TarBackend::TokioTar,
+                "1d9ce1ce63195fbee07314c0b595ba9e063670da8d10c252c351b21e94e3f508",
+            );
+        }
     }
 
-    fn built_by_uv_building_with_backend(
-        preview_features: &[PreviewFeature],
-        expected_source_dist_hash: &str,
-    ) {
-        let _preview = uv_preview::test::with_features(preview_features);
+    fn built_by_uv_building_with_backend(tar_backend: TarBackend, expected_source_dist_hash: &str) {
+        let _preview = uv_preview::test::with_features(&[]);
         let built_by_uv = Path::new("../../test/packages/built-by-uv");
         let src = TempDir::new().unwrap();
         for dir in [
@@ -822,7 +847,7 @@ mod tests {
 
         // Perform both the direct and the indirect build.
         let dist = TempDir::new().unwrap();
-        let build = build(src.path(), dist.path()).unwrap();
+        let build = build_with_options(src.path(), dist.path(), tar_backend).unwrap();
 
         let source_dist_path = dist.path().join(build.source_dist_filename.to_string());
         assert_eq!(
@@ -984,13 +1009,23 @@ mod tests {
         .unwrap();
         fs_err::write(
             src.path().join("license.txt"),
-            "Copy carefully.\nSincerely, the authors",
+            indoc! {"
+                Copy carefully.
+                Sincerely, the authors
+            "},
         )
         .unwrap();
 
         // Build a wheel from a source distribution
         let output_dir = TempDir::new().unwrap();
-        build_source_dist(src.path(), output_dir.path(), "0.5.15", false).unwrap();
+        build_source_dist(
+            src.path(),
+            output_dir.path(),
+            "0.5.15",
+            false,
+            TarBackend::default(),
+        )
+        .unwrap();
         let sdist_tree = TempDir::new().unwrap();
         let source_dist_path = output_dir.path().join("pep_pep639_license-1.0.0.tar.gz");
         unpack_sdist(&source_dist_path, sdist_tree.path()).unwrap();
@@ -1221,7 +1256,13 @@ mod tests {
         let dist = TempDir::new().unwrap();
 
         // Source dist build should fail
-        let sdist_result = build_source_dist(src.path(), dist.path(), MOCK_UV_VERSION, false);
+        let sdist_result = build_source_dist(
+            src.path(),
+            dist.path(),
+            MOCK_UV_VERSION,
+            false,
+            TarBackend::default(),
+        );
         assert!(sdist_result.is_err());
 
         // Wheel build should fail
@@ -1267,7 +1308,13 @@ mod tests {
         fs_err::write(&wheel_path, old_content).unwrap();
 
         // Build should fail and delete existing files
-        let sdist_result = build_source_dist(src.path(), dist.path(), MOCK_UV_VERSION, false);
+        let sdist_result = build_source_dist(
+            src.path(),
+            dist.path(),
+            MOCK_UV_VERSION,
+            false,
+            TarBackend::default(),
+        );
         assert!(sdist_result.is_err());
 
         let wheel_result = build_wheel(src.path(), dist.path(), None, MOCK_UV_VERSION, false);
@@ -1323,7 +1370,14 @@ mod tests {
         fs_err::write(&wheel_path, old_content).unwrap();
 
         // Build should succeed and overwrite existing files
-        build_source_dist(src.path(), dist.path(), MOCK_UV_VERSION, false).unwrap();
+        build_source_dist(
+            src.path(),
+            dist.path(),
+            MOCK_UV_VERSION,
+            false,
+            TarBackend::default(),
+        )
+        .unwrap();
         build_wheel(src.path(), dist.path(), None, MOCK_UV_VERSION, false).unwrap();
 
         // Verify files were overwritten (content should be different)
@@ -1994,8 +2048,14 @@ mod tests {
         .unwrap();
 
         let dist = TempDir::new().unwrap();
-        let source_dist_filename =
-            build_source_dist(tmp_dir.path(), dist.path(), MOCK_UV_VERSION, false).unwrap();
+        let source_dist_filename = build_source_dist(
+            tmp_dir.path(),
+            dist.path(),
+            MOCK_UV_VERSION,
+            false,
+            TarBackend::default(),
+        )
+        .unwrap();
         let source_dist_path = dist.path().join(source_dist_filename.to_string());
         let contents = sdist_contents(&source_dist_path);
 

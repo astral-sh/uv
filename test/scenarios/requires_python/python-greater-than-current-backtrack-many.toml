@@ -1,0 +1,36 @@
+name = "python-greater-than-current-backtrack-many"
+description = "The resolver reaches the backtracking threshold while rejecting newer releases with distinct incompatible Python requirements, then selects an older compatible release."
+
+[root]
+requires = ["a"]
+
+[expected]
+satisfiable = true
+
+[expected.packages]
+a = "1.0.0"
+
+[packages.a.versions]
+"1.0.0" = { requires_python = ">=3.9" }
+"2.0.0" = { requires_python = ">=3.10" }
+"3.0.0" = { requires_python = ">=3.10.1" }
+"4.0.0" = { requires_python = ">=3.10.2" }
+"5.0.0" = { requires_python = ">=3.10.3" }
+"6.0.0" = { requires_python = ">=3.10.4" }
+"7.0.0" = { requires_python = ">=3.10.5" }
+"8.0.0" = { requires_python = ">=3.10.6" }
+"9.0.0" = { requires_python = ">=3.10.7" }
+"10.0.0" = { requires_python = ">=3.10.8" }
+"11.0.0" = { requires_python = ">=3.10.9" }
+"12.0.0" = { requires_python = ">=3.10.10" }
+"13.0.0" = { requires_python = ">=3.10.11" }
+"14.0.0" = { requires_python = ">=3.10.12" }
+"15.0.0" = { requires_python = ">=3.10.13" }
+"16.0.0" = { requires_python = ">=3.10.14" }
+"17.0.0" = { requires_python = ">=3.10.15" }
+"18.0.0" = { requires_python = ">=3.10.16" }
+"19.0.0" = { requires_python = ">=3.10.17" }
+"20.0.0" = { requires_python = ">=3.10.18" }
+
+[environment]
+python = "3.9"

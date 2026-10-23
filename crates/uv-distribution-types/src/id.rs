@@ -8,7 +8,7 @@ use uv_git_types::GitUrl;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pypi_types::{HashDigest, ParsedUrl};
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 
 /// A unique identifier for a package. A package can either be identified by a name (e.g., `black`)
 /// or a URL (e.g., `git+https://github.com/psf/black`).
@@ -27,7 +27,7 @@ impl PackageId {
     }
 
     /// Create a new [`PackageId`] from a URL.
-    pub(crate) fn from_url(url: DisplaySafeUrl) -> Self {
+    pub(crate) fn from_url(url: SafeUrl) -> Self {
         Self::Url(CanonicalUrl::new(url))
     }
 }
@@ -68,7 +68,7 @@ pub enum VersionId {
     /// The identifier consists of a local directory path.
     Directory(PathBuf),
     /// The identifier consists of a URL whose source kind could not be determined.
-    Unknown(DisplaySafeUrl),
+    Unknown(SafeUrl),
 }
 
 impl VersionId {
@@ -99,7 +99,7 @@ impl VersionId {
     }
 
     /// Create a new [`VersionId`] from a URL.
-    pub fn from_url(url: &DisplaySafeUrl) -> Self {
+    pub fn from_url(url: &SafeUrl) -> Self {
         match ParsedUrl::try_from(url.clone()) {
             Ok(parsed) => Self::from_parsed_url(parsed),
             Err(_) => Self::Unknown(url.clone()),
@@ -107,7 +107,7 @@ impl VersionId {
     }
 
     /// Create a new [`VersionId`] from an archive URL.
-    pub fn from_archive(location: DisplaySafeUrl, subdirectory: Option<PathBuf>) -> Self {
+    pub fn from_archive(location: SafeUrl, subdirectory: Option<PathBuf>) -> Self {
         // Use the same lexical normalization as the resolver's source comparison. Equivalent
         // subdirectories must not lose their trusted hashes during lowering or lockfile reads.
         let subdirectory = subdirectory
@@ -146,7 +146,7 @@ impl Display for VersionId {
                 location,
                 subdirectory,
             } => {
-                let mut location = DisplaySafeUrl::from(location.clone());
+                let mut location = SafeUrl::from(location.clone());
                 if let Some(subdirectory) = subdirectory {
                     location
                         .set_fragment(Some(&format!("subdirectory={}", subdirectory.display())));
@@ -154,7 +154,7 @@ impl Display for VersionId {
                 write!(f, "{location}")
             }
             Self::Git { url, subdirectory } => {
-                let mut git_url = DisplaySafeUrl::parse(&format!("git+{}", url.url()))
+                let mut git_url = SafeUrl::parse(&format!("git+{}", url.url()))
                     .expect("Git URLs should be display-safe");
                 if let Some(precise) = url.precise() {
                     let path = format!("{}@{}", git_url.path(), precise);
@@ -178,7 +178,7 @@ impl Display for VersionId {
                 write!(f, "{git_url}")
             }
             Self::Path(path) | Self::Directory(path) => {
-                if let Ok(url) = DisplaySafeUrl::from_file_path(path) {
+                if let Ok(url) = SafeUrl::from_file_path(path) {
                     write!(f, "{url}")
                 } else {
                     write!(f, "{}", path.display())
@@ -250,15 +250,15 @@ mod tests {
     use fs_err as fs;
 
     use super::VersionId;
-    use uv_redacted::DisplaySafeUrl;
+    use uv_redacted::SafeUrl;
 
     #[test]
     fn version_id_ignores_hash_fragments() {
-        let first = DisplaySafeUrl::parse(
+        let first = SafeUrl::parse(
             "https://example.com/pkg-0.1.0.whl#sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         )
         .unwrap();
-        let second = DisplaySafeUrl::parse(
+        let second = SafeUrl::parse(
             "https://example.com/pkg-0.1.0.whl#sha512=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         )
         .unwrap();
@@ -269,20 +269,20 @@ mod tests {
     #[test]
     fn version_id_preserves_non_hash_fragments() {
         let first =
-            DisplaySafeUrl::parse("https://example.com/pkg-0.1.0.tar.gz#subdirectory=foo").unwrap();
+            SafeUrl::parse("https://example.com/pkg-0.1.0.tar.gz#subdirectory=foo").unwrap();
         let second =
-            DisplaySafeUrl::parse("https://example.com/pkg-0.1.0.tar.gz#subdirectory=bar").unwrap();
+            SafeUrl::parse("https://example.com/pkg-0.1.0.tar.gz#subdirectory=bar").unwrap();
 
         assert_ne!(VersionId::from_url(&first), VersionId::from_url(&second));
     }
 
     #[test]
     fn version_id_ignores_hash_fragments_with_subdirectory() {
-        let first = DisplaySafeUrl::parse(
+        let first = SafeUrl::parse(
             "https://example.com/pkg-0.1.0.tar.gz#subdirectory=foo&sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         )
         .unwrap();
-        let second = DisplaySafeUrl::parse(
+        let second = SafeUrl::parse(
             "https://example.com/pkg-0.1.0.tar.gz#sha512=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb&subdirectory=foo",
         )
         .unwrap();
@@ -292,21 +292,18 @@ mod tests {
 
     #[test]
     fn version_id_preserves_non_archive_fragments() {
-        let first =
-            DisplaySafeUrl::parse("git+https://example.com/pkg.git#subdirectory=foo").unwrap();
-        let second =
-            DisplaySafeUrl::parse("git+https://example.com/pkg.git#subdirectory=bar").unwrap();
+        let first = SafeUrl::parse("git+https://example.com/pkg.git#subdirectory=foo").unwrap();
+        let second = SafeUrl::parse("git+https://example.com/pkg.git#subdirectory=bar").unwrap();
 
         assert_ne!(VersionId::from_url(&first), VersionId::from_url(&second));
     }
 
     #[test]
     fn version_id_ignores_irrelevant_git_fragments() {
-        let first =
-            DisplaySafeUrl::parse("git+https://example.com/pkg.git@main#egg=pkg&subdirectory=foo")
-                .unwrap();
+        let first = SafeUrl::parse("git+https://example.com/pkg.git@main#egg=pkg&subdirectory=foo")
+            .unwrap();
         let second =
-            DisplaySafeUrl::parse("git+https://example.com/pkg.git@main#subdirectory=foo").unwrap();
+            SafeUrl::parse("git+https://example.com/pkg.git@main#subdirectory=foo").unwrap();
 
         assert_eq!(VersionId::from_url(&first), VersionId::from_url(&second));
     }
@@ -324,8 +321,8 @@ mod tests {
         fs::create_dir_all(&directory).unwrap();
         fs::write(&file, b"wheel").unwrap();
 
-        let file_url = DisplaySafeUrl::from_file_path(&file).unwrap();
-        let directory_url = DisplaySafeUrl::from_file_path(&directory).unwrap();
+        let file_url = SafeUrl::from_file_path(&file).unwrap();
+        let directory_url = SafeUrl::from_file_path(&directory).unwrap();
 
         assert_matches!(VersionId::from_url(&file_url), VersionId::Path(_));
         assert_matches!(VersionId::from_url(&directory_url), VersionId::Directory(_));
@@ -336,8 +333,7 @@ mod tests {
 
     #[test]
     fn version_id_uses_unknown_for_invalid_git_like_urls() {
-        let url =
-            DisplaySafeUrl::parse("git+ftp://example.com/pkg.git@main#subdirectory=foo").unwrap();
+        let url = SafeUrl::parse("git+ftp://example.com/pkg.git@main#subdirectory=foo").unwrap();
 
         assert_matches!(VersionId::from_url(&url), VersionId::Unknown(_));
     }

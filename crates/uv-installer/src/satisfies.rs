@@ -3,7 +3,6 @@ use std::fmt::Debug;
 
 use same_file::is_same_file;
 use tracing::{debug, trace};
-use url::Url;
 
 use uv_cache_info::CacheInfo;
 use uv_cache_key::{CanonicalUrl, RepositoryUrl};
@@ -13,7 +12,7 @@ use uv_distribution_types::{
     ExtraBuildVariables, InstalledDirectUrlDist, InstalledDist, InstalledDistKind,
     PackageConfigSettings, RequirementSource,
 };
-use uv_git_types::{GitLfs, GitOid};
+use uv_git_types::GitLfs;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_platform_tags::{AbiTag, IncompatibleTag, TagCompatibility, Tags};
@@ -143,9 +142,9 @@ impl RequirementSatisfaction {
                     return Self::Mismatch;
                 }
 
-                if !CanonicalUrl::parse(installed_url).is_ok_and(|installed_url| {
-                    installed_url == CanonicalUrl::new(requested_url.clone())
-                }) {
+                if CanonicalUrl::new(installed_url.as_url().clone())
+                    != CanonicalUrl::new(requested_url.as_url().clone())
+                {
                     return Self::Mismatch;
                 }
 
@@ -182,20 +181,24 @@ impl RequirementSatisfaction {
                     return Self::Mismatch;
                 };
                 let DirectUrl::VcsUrl {
-                    url: installed_url,
-                    vcs_info:
-                        VcsInfo {
-                            vcs: VcsKind::Git,
-                            requested_revision: _,
-                            commit_id: installed_precise,
-                            git_lfs: installed_git_lfs,
-                        },
+                    url: installed_vcs,
                     subdirectory: installed_subdirectory,
                     path: None,
                 } = direct_url.as_ref()
                 else {
                     return Self::Mismatch;
                 };
+
+                let VcsInfo {
+                    vcs: VcsKind::Git,
+                    requested_revision: _,
+                    commit_id: installed_precise,
+                    git_lfs: installed_git_lfs,
+                } = installed_vcs.vcs_info()
+                else {
+                    return Self::Mismatch;
+                };
+                let installed_url = installed_vcs.url();
 
                 if requested_subdirectory != installed_subdirectory {
                     debug!(
@@ -215,7 +218,10 @@ impl RequirementSatisfaction {
                     return Self::Mismatch;
                 }
 
-                if !RepositoryUrl::parse(installed_url)
+                let Some(installed_transport) = installed_url.as_str().strip_prefix("git+") else {
+                    return Self::Mismatch;
+                };
+                if !RepositoryUrl::parse(installed_transport)
                     .is_ok_and(|installed_url| installed_url == *requested_git.repository())
                 {
                     debug!(
@@ -226,10 +232,12 @@ impl RequirementSatisfaction {
                     return Self::Mismatch;
                 }
 
-                // TODO(charlie): It would be more consistent for us to compare the requested
-                // revisions here.
-                if installed_precise.as_deref()
-                    != requested_git.precise().as_ref().map(GitOid::as_str)
+                if !installed_precise
+                    .as_deref()
+                    .zip(requested_git.precise())
+                    .is_some_and(|(installed, requested)| {
+                        installed.eq_ignore_ascii_case(requested.as_str())
+                    })
                 {
                     debug!(
                         "Precise mismatch: {:?} vs. {:?}",
@@ -251,20 +259,24 @@ impl RequirementSatisfaction {
                     return Self::Mismatch;
                 };
                 let DirectUrl::VcsUrl {
-                    url: installed_url,
-                    vcs_info:
-                        VcsInfo {
-                            vcs: VcsKind::Git,
-                            requested_revision: _,
-                            commit_id: installed_precise,
-                            git_lfs: installed_git_lfs,
-                        },
+                    url: installed_vcs,
                     subdirectory: None,
                     path: Some(installed_path),
                 } = direct_url.as_ref()
                 else {
                     return Self::Mismatch;
                 };
+
+                let VcsInfo {
+                    vcs: VcsKind::Git,
+                    requested_revision: _,
+                    commit_id: installed_precise,
+                    git_lfs: installed_git_lfs,
+                } = installed_vcs.vcs_info()
+                else {
+                    return Self::Mismatch;
+                };
+                let installed_url = installed_vcs.url();
 
                 if requested_path != installed_path {
                     debug!(
@@ -284,7 +296,10 @@ impl RequirementSatisfaction {
                     return Self::Mismatch;
                 }
 
-                if !RepositoryUrl::parse(installed_url)
+                let Some(installed_transport) = installed_url.as_str().strip_prefix("git+") else {
+                    return Self::Mismatch;
+                };
+                if !RepositoryUrl::parse(installed_transport)
                     .is_ok_and(|installed_url| installed_url == *requested_git.repository())
                 {
                     debug!(
@@ -295,8 +310,12 @@ impl RequirementSatisfaction {
                     return Self::Mismatch;
                 }
 
-                if installed_precise.as_deref()
-                    != requested_git.precise().as_ref().map(GitOid::as_str)
+                if !installed_precise
+                    .as_deref()
+                    .zip(requested_git.precise())
+                    .is_some_and(|(installed, requested)| {
+                        installed.eq_ignore_ascii_case(requested.as_str())
+                    })
                 {
                     debug!(
                         "Precise mismatch: {:?} vs. {:?}",
@@ -328,10 +347,7 @@ impl RequirementSatisfaction {
                     return Self::Mismatch;
                 };
 
-                let Some(installed_path) = Url::parse(installed_url)
-                    .ok()
-                    .and_then(|url| url.to_file_path().ok())
-                else {
+                let Ok(installed_path) = installed_url.to_file_path() else {
                     return Self::Mismatch;
                 };
 
@@ -395,10 +411,7 @@ impl RequirementSatisfaction {
                     return Self::Mismatch;
                 }
 
-                let Some(installed_path) = Url::parse(installed_url)
-                    .ok()
-                    .and_then(|url| url.to_file_path().ok())
-                else {
+                let Ok(installed_path) = installed_url.to_file_path() else {
                     return Self::Mismatch;
                 };
 
@@ -433,13 +446,16 @@ impl RequirementSatisfaction {
         if let Ok(Some(wheel_tags)) = distribution.read_tags() {
             if !wheel_tags.is_compatible(tags) {
                 if let Some(hint) = generate_dist_compatibility_hint(wheel_tags, tags) {
-                    debug!("Platform tags mismatch for {distribution}: {hint}");
+                    debug!("Platform tags mismatch for `{distribution}`: {hint}");
                 } else {
-                    debug!("Platform tags mismatch for {distribution}");
+                    debug!("Platform tags mismatch for `{distribution}`");
                 }
                 return Self::Mismatch;
             }
         }
+
+        // TODO(konsti): Check the installed wheel's variant against the current system properties.
+        // Those can change even when the wheel and its platform tags stay the same.
 
         // If a resolved version is provided, check that it matches the installed version.
         // This is needed for sources that don't include explicit version specifiers (e.g.,

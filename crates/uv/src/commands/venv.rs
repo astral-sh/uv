@@ -10,22 +10,24 @@ use tracing::warn;
 
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
+use uv_command_support::{ExitStatus, Printer};
 use uv_configuration::{
     ActiveEnvironment, BuildOptions, Concurrency, Constraints, DependencyGroups, DryRun,
     IndexStrategy, KeyringProviderType, NoBinary, NoBuild, NoSources,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution_types::{
-    ConfigSettings, DependencyMetadata, ExtraBuildRequires, IndexLocations, PackageConfigSettings,
-    Requirement,
+    ConfigSettings, DependencyMetadata, ExtraBuildRequires, GitLfs, IndexLocations,
+    PackageConfigSettings, Requirement,
 };
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
 use uv_normalize::DefaultGroups;
 use uv_preview::Preview;
-use uv_python::{
-    ConfigDiscovery, EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference,
-    PythonRequest,
+use uv_python_discovery::ConfigDiscovery;
+use uv_python_discovery::PythonInstallation;
+use uv_python_types::{
+    EnvironmentPreference, PythonArchitecture, PythonDownloads, PythonPreference, PythonRequest,
 };
 use uv_resolver::{ExcludeNewer, FlatIndex};
 use uv_settings::PythonInstallMirrors;
@@ -33,20 +35,20 @@ use uv_shell::{Shell, shlex_posix, shlex_windows};
 use uv_types::{
     AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, HashStrategy, SourceTreeEditablePolicy,
 };
-use uv_virtualenv::{OnExisting, RemovalReason, Seed};
+use uv_virtualenv::{OnExisting, RemovalReason, Seed, UpgradePolicy};
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceErrorKind};
 
-use crate::commands::ExitStatus;
-use crate::commands::pip::loggers::{DefaultInstallLogger, InstallLogger};
-use crate::commands::pip::operations::{Changelog, report_interpreter};
-use crate::commands::project::{
-    LinkErrorReporting, WorkspacePython, centralized_environment_root,
+use uv_environment_operations::{
+    LinkErrorReporting, ProjectEnvironmentTarget, centralized_environment_root,
     centralized_environments_enabled, is_centralized_environment_reference,
-    lock_project_environment, update_project_environment_link, validate_project_requires_python,
+    lock_project_environment, update_project_environment_link,
 };
-use crate::commands::reporters::PythonDownloadReporter;
-use crate::printer::Printer;
+use uv_install_operations::Changelog;
+use uv_install_operations::loggers::{DefaultInstallLogger, InstallLogger};
+use uv_python_discovery::ProjectPythonRequest;
+use uv_python_discovery::PythonDownloadReporter;
+use uv_python_discovery::report_interpreter;
 
 #[derive(Error, Debug)]
 enum VenvError {
@@ -67,12 +69,13 @@ pub(crate) async fn venv(
     python_request: Option<PythonRequest>,
     install_mirrors: PythonInstallMirrors,
     python_preference: PythonPreference,
+    python_arch: Option<PythonArchitecture>,
     python_downloads: PythonDownloads,
     link_mode: LinkMode,
     index_locations: &IndexLocations,
     index_strategy: IndexStrategy,
     dependency_metadata: DependencyMetadata,
-    git_lfs: uv_git::GitLfs,
+    git_lfs: GitLfs,
     keyring_provider: KeyringProviderType,
     client_builder: &BaseClientBuilder<'_>,
     prompt: uv_virtualenv::Prompt,
@@ -148,11 +151,7 @@ pub(crate) async fn venv(
         None => DefaultGroups::default(),
     };
     let groups = DependencyGroups::default().with_defaults(default_groups);
-    let WorkspacePython {
-        source,
-        python_request,
-        requires_python,
-    } = WorkspacePython::from_request(
+    let project_python = ProjectPythonRequest::from_request(
         python_request,
         project.as_ref().map(VirtualProject::workspace),
         &groups,
@@ -164,15 +163,15 @@ pub(crate) async fn venv(
     // Locate the Python interpreter to use in the environment
     let interpreter = {
         let python = PythonInstallation::find_or_download(
-            python_request.as_ref(),
+            project_python.python_request.as_ref(),
             EnvironmentPreference::OnlySystem,
             python_preference,
+            python_arch,
             python_downloads,
             client_builder,
             cache,
             Some(&reporter),
-            install_mirrors.python_install_mirror.as_deref(),
-            install_mirrors.pypy_install_mirror.as_deref(),
+            install_mirrors.mirrors(),
             install_mirrors.python_downloads_json_url.as_deref(),
         )
         .await?;
@@ -180,13 +179,21 @@ pub(crate) async fn venv(
         python.into_interpreter()
     };
 
-    let upgradeable = python_request
-        .as_ref()
-        .is_none_or(|request| !request.includes_patch());
+    let upgrade_policy = UpgradePolicy::from_request(
+        project_python
+            .python_request
+            .as_ref()
+            .unwrap_or(&PythonRequest::Default),
+    );
 
     // Determine the default path.
     let path = if let Some(workspace) = centralized_workspace {
-        centralized_environment_root(workspace, &interpreter, upgradeable, cache)
+        centralized_environment_root(
+            ProjectEnvironmentTarget::from(workspace),
+            &interpreter,
+            upgrade_policy,
+            cache,
+        )
     } else {
         path.or_else(|| {
             project_environment.as_ref().map(|(_, selection)| {
@@ -199,19 +206,8 @@ pub(crate) async fn venv(
     };
 
     // Check if the discovered Python version is incompatible with the current workspace
-    if let Some(requires_python) = requires_python {
-        match validate_project_requires_python(
-            &interpreter,
-            project.as_ref().map(VirtualProject::workspace),
-            &groups,
-            &requires_python,
-            &source,
-        ) {
-            Ok(()) => {}
-            Err(err) => {
-                warn_user!("{err}");
-            }
-        }
+    if let Err(err) = project_python.check(&interpreter) {
+        warn_user!("{err}");
     }
 
     let with_seed = match seed {
@@ -237,7 +233,7 @@ pub(crate) async fn venv(
 
     // Lock the project environment to avoid synchronization issues.
     let _lock = if let Some((workspace, _)) = project_environment.as_ref() {
-        lock_project_environment(workspace)
+        lock_project_environment(ProjectEnvironmentTarget::from(*workspace))
             .await
             .inspect_err(|err| {
                 warn!("Failed to acquire project environment lock: {err}");
@@ -280,7 +276,7 @@ pub(crate) async fn venv(
         on_existing,
         relocatable,
         seed,
-        upgradeable,
+        upgrade_policy,
     )
     .map_err(VenvError::Creation)?;
 
@@ -366,7 +362,7 @@ pub(crate) async fn venv(
         // Since the virtual environment is empty, and the set of requirements is trivial (no
         // constraints, no editables, etc.), we can use the build dispatch APIs directly.
         let requirements = build_dispatch
-            .resolve(&requirements, &build_stack)
+            .resolve(&requirements, None, &build_stack)
             .await
             .map_err(|err| VenvError::Seed(err.into()))?;
         let installed = build_dispatch
@@ -380,7 +376,11 @@ pub(crate) async fn venv(
 
     // Determine the appropriate environment path.
     let scripts = if let Some(workspace) = centralized_workspace
-        && update_project_environment_link(&venv, workspace, LinkErrorReporting::User)
+        && update_project_environment_link(
+            &venv,
+            ProjectEnvironmentTarget::from(workspace),
+            LinkErrorReporting::User,
+        )
         && let Ok(suffix) = venv.scripts().strip_prefix(&path)
     {
         workspace.install_path().join(".venv").join(suffix)
@@ -391,9 +391,10 @@ pub(crate) async fn venv(
     // Determine the appropriate activation command.
     let activation = match Shell::from_env() {
         None => None,
-        Some(Shell::Bash | Shell::Zsh | Shell::Ksh) => {
+        Some(Shell::Bash | Shell::Zsh) => {
             Some(format!("source {}", shlex_posix(scripts.join("activate"))))
         }
+        Some(Shell::Ksh) => Some(format!(". {}", shlex_posix(scripts.join("activate")))),
         Some(Shell::Fish) => Some(format!(
             "source {}",
             shlex_posix(scripts.join("activate.fish"))

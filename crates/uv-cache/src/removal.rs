@@ -112,7 +112,7 @@ impl Removal {
                 }
                 Err(PhysicalSpaceError::UnsupportedFilesystem) => {
                     debug!(
-                        "Fine-grained space accounting is unsupported for {}; falling back to coarse accounting",
+                        "Fine-grained space accounting is unsupported for `{}`; falling back to coarse accounting",
                         path.display()
                     );
                     self.fine_bytes = None;
@@ -120,7 +120,7 @@ impl Removal {
                 }
                 Err(PhysicalSpaceError::UnmeasurableFile(error)) => {
                     debug!(
-                        "Failed to measure physical space for {}: {error}",
+                        "Failed to measure physical space for `{}`: {error}",
                         path.display()
                     );
                     self.fine_bytes_incomplete = true;
@@ -192,7 +192,7 @@ impl Removal {
 
             let entry = entry?;
 
-            // Remove the exclusive lock last.
+            // Keep the root lock in place for other uv processes.
             if skip_locked_file
                 && entry.file_name() == ".lock"
                 && entry
@@ -217,7 +217,7 @@ impl Removal {
                 self.num_files += 1;
                 remove_dir(entry.path())?;
             } else if entry.file_type().is_dir() {
-                // Remove the directory with the exclusive lock last.
+                // Keep the root directory containing the lock, too.
                 if skip_locked_file && entry.path() == path.as_ref() {
                     continue;
                 }

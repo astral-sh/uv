@@ -33,7 +33,7 @@ use uv_cache_key::cache_digest;
 use uv_configuration::{BuildKind, BuildOutput, NoSources};
 use uv_distribution::BuildRequires;
 use uv_distribution_types::{
-    ConfigSettings, ExtraBuildRequirement, ExtraBuildRequires, IndexLocations, Requirement,
+    ConfigSettings, ExtraBuildRequirement, ExtraBuildRequires, GitLfs, IndexLocations, Requirement,
 };
 use uv_fs::{LockedFile, LockedFileMode};
 use uv_fs::{PythonExt, Simplified};
@@ -41,11 +41,12 @@ use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_preview::PreviewFeature;
 use uv_pypi_types::VerbatimParsedUrl;
-use uv_python::{Interpreter, PythonEnvironment};
+use uv_python_interpreter::{Interpreter, PythonEnvironment};
 use uv_static::EnvVars;
 use uv_types::{
     AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, ResolvedRequirements, SourceBuildTrait,
 };
+use uv_virtualenv::UpgradePolicy;
 use uv_warnings::warn_user_once;
 use uv_workspace::WorkspaceCache;
 
@@ -385,13 +386,13 @@ impl SourceBuild {
                 ),
                 false,
                 uv_virtualenv::Seed::Disabled,
-                false,
+                UpgradePolicy::Fixed,
             )?
         };
 
         // Set up the build environment. If build isolation is disabled, we assume the build
         // environment is already set up.
-        if build_isolation.is_isolated(package_name.as_ref()) {
+        let resolved_requirements = if build_isolation.is_isolated(package_name.as_ref()) {
             debug!("Resolving build requirements");
 
             let dependency_sources = if extra_build_dependencies.is_empty() {
@@ -413,9 +414,11 @@ impl SourceBuild {
                 .install(&resolved_requirements, &venv, build_stack)
                 .await
                 .map_err(|err| Error::RequirementsInstall(dependency_sources, err.into()))?;
+            Some(resolved_requirements)
         } else {
             debug!("Proceeding without build isolation");
-        }
+            None
+        };
 
         // Figure out what the modified path should be, and remove the PATH variable from the
         // environment variables if it's there.
@@ -451,7 +454,7 @@ impl SourceBuild {
         // Create the PEP 517 build environment. If build isolation is disabled, we assume the build
         // environment is already set up.
         let runner = PythonRunner::new(source_build_context.concurrent_build_slots.clone(), level);
-        if build_isolation.is_isolated(package_name.as_ref()) {
+        if let Some(resolved_requirements) = resolved_requirements {
             debug!("Creating PEP 517 build environment");
 
             let extra_requires = get_pep517_build_requirements(
@@ -460,7 +463,10 @@ impl SourceBuild {
                 install_path,
                 &venv,
                 &pep517_backend,
-                build_context,
+                build_context.cache(),
+                build_context
+                    .source_tree_editable_policy()
+                    .workspace_member_editable(None),
                 package_name.as_ref(),
                 package_version.as_ref(),
                 version_id,
@@ -475,6 +481,7 @@ impl SourceBuild {
                 &modified_path,
                 &temp_dir,
                 credentials_cache,
+                build_context.git_lfs(),
             )
             .await?;
             // Some packages (such as tqdm 4.66.1) list only extra requires that have already been part of
@@ -493,7 +500,11 @@ impl SourceBuild {
                     .chain(extra_requires)
                     .collect();
                 let resolution = build_context
-                    .resolve(&requirements, build_stack)
+                    .resolve(
+                        &requirements,
+                        Some(resolved_requirements.hasher()),
+                        build_stack,
+                    )
                     .await
                     .map_err(|err| {
                         Error::RequirementsResolve(
@@ -563,7 +574,10 @@ impl SourceBuild {
             install_path,
             &self.venv,
             &self.pep517_backend,
-            build_context,
+            build_context.cache(),
+            build_context
+                .source_tree_editable_policy()
+                .workspace_member_editable(None),
             self.package_name.as_ref(),
             self.package_version.as_ref(),
             self.version_id.as_deref(),
@@ -578,6 +592,7 @@ impl SourceBuild {
             &self.modified_path,
             &self.temp_dir,
             credentials_cache,
+            build_context.git_lfs(),
         )
         .await
     }
@@ -627,7 +642,7 @@ impl SourceBuild {
                     resolved_requirements.clone()
                 } else {
                     let resolved_requirements = build_context
-                        .resolve(&DEFAULT_BACKEND.requirements, build_stack)
+                        .resolve(&DEFAULT_BACKEND.requirements, None, build_stack)
                         .await
                         .map_err(|err| {
                             Error::RequirementsResolve("`setup.py` build", err.into())
@@ -652,7 +667,7 @@ impl SourceBuild {
                     )
                 };
                 build_context
-                    .resolve(&requirements, build_stack)
+                    .resolve(&requirements, None, build_stack)
                     .await
                     .map_err(|err| Error::RequirementsResolve(dependency_sources, err.into()))?
             },
@@ -947,7 +962,7 @@ impl SourceBuild {
                     "Call to `{}.prepare_metadata_for_build_{}` failed",
                     self.pep517_backend.backend, self.build_kind
                 ),
-                &output,
+                output,
                 self.level,
                 self.package_name.as_ref(),
                 self.package_version.as_ref(),
@@ -1067,7 +1082,7 @@ impl SourceBuild {
                     "Call to `{}.build_{}` failed",
                     self.pep517_backend.backend, self.build_kind
                 ),
-                &output,
+                output,
                 self.level,
                 self.package_name.as_ref(),
                 self.package_version.as_ref(),
@@ -1082,7 +1097,7 @@ impl SourceBuild {
                     "Call to `{}.build_{}` failed",
                     self.pep517_backend.backend, self.build_kind
                 ),
-                &output,
+                output,
                 self.level,
                 self.package_name.as_ref(),
                 self.package_version.as_ref(),
@@ -1110,7 +1125,8 @@ async fn get_pep517_build_requirements(
     install_path: &Path,
     venv: &PythonEnvironment,
     pep517_backend: &Pep517Backend,
-    build_context: &impl BuildContext,
+    cache: &Cache,
+    workspace_member_editable: bool,
     package_name: Option<&PackageName>,
     package_version: Option<&Version>,
     version_id: Option<&str>,
@@ -1125,6 +1141,7 @@ async fn get_pep517_build_requirements(
     modified_path: &OsString,
     temp_dir: &TempDir,
     credentials_cache: &CredentialsCache,
+    git_lfs: GitLfs,
 ) -> Result<Vec<Requirement>, Error> {
     // Write the hook output to a file so that we can read it back reliably.
     let outfile = temp_dir
@@ -1176,7 +1193,7 @@ async fn get_pep517_build_requirements(
                 "Call to `{}.get_requires_for_build_{}` failed",
                 pep517_backend.backend, build_kind
             ),
-            &output,
+            output,
             level,
             package_name,
             package_version,
@@ -1197,7 +1214,7 @@ async fn get_pep517_build_requirements(
                     "Call to `{}.get_requires_for_build_{}` failed: {}",
                     pep517_backend.backend, build_kind, err
                 ),
-                &output,
+                output,
                 level,
                 package_name,
                 package_version,
@@ -1210,7 +1227,7 @@ async fn get_pep517_build_requirements(
     let extra_requires = if no_sources.all() {
         extra_requires
             .into_iter()
-            .map(|requirement| Requirement::from(requirement).with_git_lfs(build_context.git_lfs()))
+            .map(|requirement| Requirement::from(requirement).with_git_lfs(git_lfs))
             .collect()
     } else {
         let build_requires = uv_pypi_types::BuildRequires {
@@ -1222,14 +1239,12 @@ async fn get_pep517_build_requirements(
             install_path,
             locations,
             &no_sources,
-            build_context
-                .source_tree_editable_policy()
-                .workspace_member_editable(None),
+            workspace_member_editable,
             stop_discovery_at,
-            build_context.cache(),
+            cache,
             workspace_cache,
             credentials_cache,
-            build_context.git_lfs(),
+            git_lfs,
         )
         .await
         .map_err(Error::Lowering)?;

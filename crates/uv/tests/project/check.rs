@@ -3,7 +3,7 @@ use std::process::Command;
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
-use indoc::indoc;
+use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 use serde_json::json;
 use wiremock::matchers::{body_string_contains, method, path};
@@ -25,9 +25,13 @@ fn workspace_check(context: &uv_test::TestContext) -> Command {
 fn write_workspace_member(context: &uv_test::TestContext, name: &str, source: &str) -> Result<()> {
     let member = context.temp_dir.child("packages").child(name);
     member.create_dir_all()?;
-    member.child("pyproject.toml").write_str(&format!(
-        "[project]\nname = \"{name}\"\nversion = \"0.1.0\"\nrequires-python = \">=3.12\"\ndependencies = []\n"
-    ))?;
+    member.child("pyproject.toml").write_str(&formatdoc! {r#"
+        [project]
+        name = "{name}"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
     member.child("main.py").write_str(source)?;
 
     Ok(())
@@ -1316,7 +1320,7 @@ fn check_no_sync_creates_lock_without_sync() -> Result<()> {
     }, {
         assert_snapshot!(context.read("uv.lock"), @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
 
         [options]
@@ -1495,7 +1499,7 @@ fn check_no_sync_updates_stale_lock_without_sync() -> Result<()> {
         +++ new
         @@ -1,26 +1,26 @@
          version = 1
-         revision = 3
+         revision = 5
          requires-python = ">=3.12"
 
          [options]
@@ -1841,8 +1845,9 @@ async fn check_uses_exact_ty_version_from_selected_included_group() -> Result<()
 #[test]
 #[cfg(feature = "test-pypi")]
 fn check_locked_tool_rejects_invalid_hash() -> Result<()> {
-    let context =
-        uv_test::test_context!("3.12").with_filter((r"sha256:[0-9a-f]{64}", "sha256:[HASH]"));
+    let context = uv_test::test_context!("3.12")
+        .with_filter((r"sha256:[0-9a-f]{64}", "sha256:[HASH]"))
+        .with_filtered_http_retries();
 
     context
         .temp_dir
@@ -3291,6 +3296,37 @@ fn check_no_install_project_env_var_conflicts() -> Result<()> {
     error: the argument `UV_NO_INSTALL_PROJECT` (environment variable) cannot be used with `--no-project`
     "
     );
+
+    Ok(())
+}
+
+#[test]
+fn check_isolated_incompatible_python() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [dependency-groups]
+        dev = []
+
+        [tool.uv.dependency-groups]
+        dev = { requires-python = ">=3.13" }
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.check()
+        .arg("--preview-features").arg("check-command")
+        .arg("--isolated")
+        .arg("--python").arg("3.12"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: The requested interpreter resolved to Python 3.12.[X], which is incompatible with the project's Python requirement: `>=3.13` (from `tool.uv.dependency-groups.dev.requires-python`).
+    ");
 
     Ok(())
 }

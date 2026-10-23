@@ -25,6 +25,8 @@ use std::hash::{Hash, Hasher};
 
 use serde_json::json;
 
+use uv_redacted::SafeUrl;
+
 /// Package metadata needed to build Simple API responses.
 struct PackageEntry {
     filename: &'static str,
@@ -317,7 +319,7 @@ impl PypiProxy {
 
     /// The host portion of the mock server address (e.g., `127.0.0.1`).
     pub fn host(&self) -> String {
-        let url = url::Url::parse(&self.server.uri()).expect("valid URL");
+        let url = SafeUrl::parse(&self.server.uri()).expect("valid URL");
         url.host_str().expect("has host").to_string()
     }
 

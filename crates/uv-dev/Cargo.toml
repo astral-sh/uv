@@ -1,6 +1,6 @@
 [package]
 name = "uv-dev"
-version = "0.0.86"
+version = "0.0.97"
 description = "This is an internal component crate of uv"
 publish = false
 
@@ -15,6 +15,7 @@ license = { workspace = true }
 workspace = true
 
 [dependencies]
+uv-python-types = { workspace = true }
 uv-cache = { workspace = true, features = ["clap"] }
 uv-cli = { workspace = true }
 uv-client = { workspace = true }
@@ -32,7 +33,7 @@ uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-preview = { workspace = true }
-uv-python = { workspace = true }
+uv-python-discovery = { workspace = true }
 uv-settings = { workspace = true, features = ["schemars"] }
 uv-static = { workspace = true }
 uv-test = { workspace = true }
@@ -56,7 +57,6 @@ resvg = { version = "0.47.0", default-features = false, features = ["text", "sys
 schemars = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-serde_yaml = { version = "0.9.34", default-features = false }
 tagu = { version = "0.1.6", default-features = false, optional = true }
 tempfile = { workspace = true }
 textwrap = { workspace = true }
@@ -67,8 +67,10 @@ tracing-durations-export = { workspace = true, features = ["plot"] }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 uv-performance-memory-allocator = { workspace = true, optional = true }
 walkdir = { workspace = true }
+yaml_serde = { version = "0.10.7", default-features = false, features = ["std"] }
 
 [dev-dependencies]
+indoc = { workspace = true }
 insta = { workspace = true }
 
 [lib]

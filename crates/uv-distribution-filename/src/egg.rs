@@ -7,13 +7,13 @@ use uv_pep440::{Version, VersionParseError};
 
 #[derive(Error, Debug)]
 pub enum EggInfoFilenameError {
-    #[error("The filename \"{0}\" does not end in `.egg-info`")]
+    #[error("The filename `{0}` does not end in `.egg-info`")]
     InvalidExtension(String),
-    #[error("The `.egg-info` filename \"{0}\" is missing a package name")]
+    #[error("The `.egg-info` filename `{0}` is missing a package name")]
     MissingPackageName(String),
-    #[error("The `.egg-info` filename \"{0}\" has an invalid package name")]
+    #[error("The `.egg-info` filename `{0}` has an invalid package name")]
     InvalidPackageName(String, InvalidNameError),
-    #[error("The `.egg-info` filename \"{0}\" has an invalid version: {1}")]
+    #[error("The `.egg-info` filename `{0}` has an invalid version: {1}")]
     InvalidVersion(String, VersionParseError),
 }
 

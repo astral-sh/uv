@@ -7,7 +7,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use rustc_hash::FxHashMap;
-use tracing::{debug, trace, warn};
+use tracing::{debug, warn};
 
 use uv_cache_info::Timestamp;
 use uv_fs::{LockedFile, LockedFileError, LockedFileMode, Simplified, cachedir, directories};
@@ -166,14 +166,14 @@ pub struct Cache {
     root: PathBuf,
     /// The refresh strategy to use when reading from the cache.
     refresh: Refresh,
+    /// Ensure that `uv cache` operations don't remove items from the cache that are used by another
+    /// uv process. Drop the lock before a temporary directory so it can be removed on Windows.
+    lock_file: Option<Arc<LockedFile>>,
     /// A temporary cache directory, if the user requested `--no-cache`.
     ///
     /// Included to ensure that the temporary directory exists for the length of the operation, but
     /// is dropped at the end as appropriate.
     temp_dir: Option<Arc<tempfile::TempDir>>,
-    /// Ensure that `uv cache` operations don't remove items from the cache that are used by another
-    /// uv process.
-    lock_file: Option<Arc<LockedFile>>,
     /// The storage accounting used when removing cache entries.
     removal_accounting: RemovalAccounting,
 }
@@ -291,8 +291,8 @@ impl Cache {
             None => Err(Self {
                 root,
                 refresh,
-                temp_dir,
                 lock_file,
+                temp_dir,
                 removal_accounting,
             }),
         }
@@ -461,9 +461,6 @@ impl Cache {
 
     /// Populate the cache scaffold.
     fn create_base_files(root: &PathBuf) -> io::Result<()> {
-        // Create the cache directory, if it doesn't exist.
-        fs_err::create_dir_all(root)?;
-
         // Add the CACHEDIR.TAG.
         cachedir::ensure_tag(root)?;
 
@@ -526,7 +523,7 @@ impl Cache {
     pub async fn init(self) -> Result<Self, Error> {
         let root = &self.root;
 
-        Self::create_base_files(root).map_err(|err| Error::Init(root.clone(), err))?;
+        fs_err::create_dir_all(root).map_err(|err| Error::Init(root.clone(), err))?;
 
         // Block cache removal operations from interfering.
         let lock_file = match LockedFile::acquire(
@@ -551,6 +548,7 @@ impl Cache {
             Err(err) => return Err(err.into()),
         };
 
+        Self::create_base_files(root).map_err(|err| Error::Init(root.clone(), err))?;
         Ok(Self {
             root: std::path::absolute(root).map_err(Error::Absolute)?,
             lock_file,
@@ -562,7 +560,7 @@ impl Cache {
     pub fn init_no_wait(self) -> Result<Option<Self>, Error> {
         let root = &self.root;
 
-        Self::create_base_files(root).map_err(|err| Error::Init(root.clone(), err))?;
+        fs_err::create_dir_all(root).map_err(|err| Error::Init(root.clone(), err))?;
 
         // Block cache removal operations from interfering.
         let Some(lock_file) = LockedFile::acquire_no_wait(
@@ -572,6 +570,7 @@ impl Cache {
         ) else {
             return Ok(None);
         };
+        Self::create_base_files(root).map_err(|err| Error::Init(root.clone(), err))?;
         Ok(Some(Self {
             root: std::path::absolute(root).map_err(Error::Absolute)?,
             lock_file: Some(Arc::new(lock_file)),
@@ -581,35 +580,12 @@ impl Cache {
 
     /// Clear the cache, removing all entries.
     pub fn clear(self, reporter: Box<dyn CleanReporter>) -> Result<Removal, io::Error> {
-        // Remove everything but `.lock`, Windows does not allow removal of a locked file
-        let mut removal = Remover::new(reporter)
+        // Waiters may have already opened the lock. Retain its path and directory so they acquire
+        // the same lock as new uv processes. Resolve only the root: never follow links inside it.
+        let root = fs_err::canonicalize(&self.root)?;
+        Remover::new(reporter)
             .with_removal_accounting(self.removal_accounting)
-            .rm_rf(&self.root, true)?;
-        let Self {
-            root, lock_file, ..
-        } = self;
-
-        // Remove the `.lock` file, unlocking it first
-        if let Some(lock) = lock_file {
-            drop(lock);
-            fs_err::remove_file(root.join(".lock"))?;
-        }
-        removal.num_files += 1;
-
-        // Remove the root directory
-        match fs_err::remove_dir(root) {
-            Ok(()) => {
-                removal.num_dirs += 1;
-            }
-            // On Windows, when `--force` is used, the `.lock` file can exist and be unremovable,
-            // so we make this non-fatal
-            Err(err) if err.kind() == io::ErrorKind::DirectoryNotEmpty => {
-                trace!("Failed to remove root cache directory: not empty");
-            }
-            Err(err) => return Err(err),
-        }
-
-        Ok(removal)
+            .rm_rf(&root, true)
     }
 
     /// Remove a package from the cache.
@@ -746,7 +722,21 @@ impl Cache {
             Err(err) => return Err(err),
         }
 
-        // Third, if enabled, remove all unzipped wheels, leaving only the wheel archives.
+        // Third, remove all temporary build environments.
+        match fs_err::read_dir(self.bucket(CacheBucket::Builds)) {
+            Ok(entries) => {
+                for entry in entries {
+                    let entry = entry?;
+                    let path = entry.path();
+                    debug!("Removing temporary build environment: {}", path.display());
+                    summary += self.remove_path(path)?;
+                }
+            }
+            Err(err) if err.kind() == io::ErrorKind::NotFound => (),
+            Err(err) => return Err(err),
+        }
+
+        // Fourth, if enabled, remove all unzipped wheels, leaving only the wheel archives.
         if ci {
             // Remove the entire pre-built wheel cache, since every entry is an unzipped wheel.
             match fs_err::read_dir(self.bucket(CacheBucket::Wheels)) {
@@ -791,6 +781,14 @@ impl Cache {
                             continue;
                         }
 
+                        // Visit nested build settings shards separately so their metadata survives.
+                        if entry.file_name() != "src"
+                            && entry.file_type()?.is_dir()
+                            && path.join("metadata.msgpack").exists()
+                        {
+                            continue;
+                        }
+
                         // Retain any built wheel archives.
                         if path
                             .extension()
@@ -806,7 +804,7 @@ impl Cache {
             }
         }
 
-        // Fourth, remove any unused archives (by searching for archives that are not symlinked).
+        // Fifth, remove any unused archives (by searching for archives that are not symlinked).
         let references = self.find_archive_references()?;
 
         match fs_err::read_dir(self.bucket(CacheBucket::Archive)) {
@@ -1291,7 +1289,7 @@ pub enum CacheBucket {
     /// Cached vulnerability data from [OSV](https://osv.dev/).
     ///
     /// Cache structure:
-    ///  * `osv-v0/vulnerability/<vuln_id>.msgpack` — cached full vulnerability records
+    ///  * `osv-v1/vulnerability/<vuln_id>.msgpack` — cached full vulnerability records
     Osv,
 }
 
@@ -1300,29 +1298,27 @@ impl CacheBucket {
         match self {
             // Note that when bumping this, you'll also need to bump it
             // in `crates/uv/tests/build/cache_prune.rs`.
-            // TODO(ww): Remove `uv_pypi_types::HashDigestWire` on the next cache bump
-            // or breaking release.
-            Self::SourceDistributions => "sdists-v9",
+            Self::SourceDistributions => "sdists-v10",
             // Note that when bumping this, you'll also need to bump it
             // in `crates/uv/tests/lock/lock.rs`.
-            Self::FlatIndex => "flat-index-v5",
+            Self::FlatIndex => "flat-index-v7",
             Self::Git => "git-v1",
             Self::Interpreter => "interpreter-v4",
             // Note that when bumping this, you'll also need to bump it
             // in `crates/uv/tests/build/cache_clean.rs`.
-            Self::Simple => "simple-v25",
+            Self::Simple => "simple-v27",
             // Note that when bumping this, you'll also need to bump it
             // in `crates/uv/tests/build/cache_prune.rs`.
-            Self::Wheels => "wheels-v6",
+            Self::Wheels => "wheels-v7",
             // Note that when bumping this, you'll also need to bump
             // `ARCHIVE_VERSION` in `crates/uv-cache/src/lib.rs`.
             Self::Archive => "archive-v0",
             Self::Files => "files-v0",
             Self::Builds => "builds-v0",
             Self::Environments => "environments-v2",
-            Self::Python => "python-v0",
+            Self::Python => "python-v1",
             Self::Binaries => "binaries-v0",
-            Self::Osv => "osv-v0",
+            Self::Osv => "osv-v1",
         }
     }
 
@@ -1332,13 +1328,31 @@ impl CacheBucket {
     fn remove(self, cache: &Cache, name: &PackageName) -> Result<Removal, io::Error> {
         /// Returns `true` if the [`Path`] represents a built wheel for the given package.
         fn is_match(path: &Path, name: &PackageName) -> bool {
-            let Ok(metadata) = fs_err::read(path.join("metadata.msgpack")) else {
-                return false;
-            };
-            let Ok(metadata) = rmp_serde::from_slice::<ResolutionMetadata>(&metadata) else {
-                return false;
-            };
-            metadata.name == *name
+            // The metadata can be in the revision itself or one shard down, if build settings
+            // were used.
+            let walker = walkdir::WalkDir::new(path)
+                .min_depth(1)
+                .max_depth(2)
+                .into_iter();
+            // Unpacked source contents aren't uv cache entries.
+            for entry in walker.filter_entry(|entry| entry.file_name() != "src") {
+                let Ok(entry) = entry else {
+                    continue;
+                };
+                if entry.file_name() != "metadata.msgpack" {
+                    continue;
+                }
+                let Ok(metadata) = fs_err::read(entry.path()) else {
+                    continue;
+                };
+                let Ok(metadata) = rmp_serde::from_slice::<ResolutionMetadata>(&metadata) else {
+                    continue;
+                };
+                if metadata.name == *name {
+                    return true;
+                }
+            }
+            false
         }
 
         let mut summary = cache.removal();

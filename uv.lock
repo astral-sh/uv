@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.8"
 resolution-markers = [
     "python_full_version >= '3.12'",
@@ -18,6 +18,13 @@ astral-dev-toolchain-cargo-deny = "2026-09-15T19:10:00Z"
 astral-dev-toolchain-cargo-dist = "2026-08-28T04:00:00Z"
 astral-dev-toolchain-cargo-shear = "2026-08-27T04:00:00Z"
 astral-dev-toolchain-cargo-xwin = "2026-08-27T04:00:00Z"
+certifi = "2026-10-20T02:24:17Z"
+
+[manifest]
+build-constraints = [
+    { name = "maturin", specifier = "==1.15.0", hashes = ["sha256:0ebf9767892725083138e671c34482c660317a2f3d6a29fc0e0f34e9d8c99136", "sha256:126e12e618b4db42f68c779a56d41f82a390145ba36ac3f621d057eb34f5ad9d", "sha256:4f9d33e6c3f9615c8caceecbbbd440f8eb25a3ddeb687077682cd5eca2e9ae15", "sha256:552c2be4afd43fe8d5c9f3ec8d4c4756d973b8dcbe94c14084390301f50243e1", "sha256:653020a63525bb224e5ab0adf02e17a2e08bc86dbea7fc1399c9a56d7529b99e", "sha256:6bf6dc62e22d4dcfd5a51244ff0d58975fa4979c48209fe84159617648956d82", "sha256:7ab7eebffd7b8debca2265985de4eaeb332141276d24b9560b5ad484d4b3add1", "sha256:7eb066372f541f8eb4909c79c5d9bd0b9e8125980bdf1ec9e8aba23c6c8d6c55", "sha256:94b26cc8e8aba61a5f2099715fe640e18c5f678e9a500408b38761263954228a", "sha256:bf29beddd0c6708f112db51d5275fc28b28b9e9c9c5faae387eaef662918b176", "sha256:c40b4eae7bf5ef1f4b1af8d623fe4105016f93578fb15b764e741d08ec3b92dd", "sha256:c7dc0c66c78d3debdd9c5aa807e861fbcbf07f3505d34b125df74c03986b0f48", "sha256:cd35772633f489841132bc8e71d6fc7f842df30b9c05cd5cdf1ee1ddcb744cc7", "sha256:da649988be98e87e009e51b1bf0d301b6a301bc0cecbdd60d40d8ba60748d1ca"] },
+    { name = "tomli", marker = "python_full_version < '3.11'", specifier = "==2.4.1", hashes = ["sha256:0d85819802132122da43cb86656f8d1f8c6587d54ae7dcaf30e90533028b49fe", "sha256:7c7e1a961a0b2f2472c1ac5b69affa0ae1132c39adcb67aba98568702b9cc23f"] },
+]
 
 [[package]]
 name = "annotated-doc"
@@ -250,11 +257,11 @@ wheels = [
 
 [[package]]
 name = "certifi"
-version = "2026.4.22"
+version = "2026.10.19"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/25/ee/6caf7a40c36a1220410afe15a1cc64993a1f864871f698c0f93acb72842a/certifi-2026.4.22.tar.gz", hash = "sha256:8d455352a37b71bf76a79caa83a3d6c25afee4a385d632127b6afb3963f1c580", size = 137077, upload-time = "2026-04-22T11:26:11.191Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/a6/bd/1436c50cc46699de0230fbaacc1d1de7bfec413176099949e9d5112e88f2/certifi-2026.10.19.tar.gz", hash = "sha256:035c1e85572b141bf1c3a3eff0e33a8eb74917522f2559075ff8d2fea780a1ae", size = 137598, upload-time = "2026-10-20T02:24:16.604Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/22/30/7cd8fdcdfbc5b869528b079bfb76dcdf6056b1a2097a662e5e8c04f42965/certifi-2026.4.22-py3-none-any.whl", hash = "sha256:3cb2210c8f88ba2318d29b0388d1023c8492ff72ecdde4ebdaddbb13a31b1c4a", size = 135707, upload-time = "2026-04-22T11:26:09.372Z" },
+    { url = "https://files.pythonhosted.org/packages/c4/51/29046e48f693c54e5b7412216d447a1d8362c9653148d98c02cdf65fa733/certifi-2026.10.19-py3-none-any.whl", hash = "sha256:42d35340cc5b9ba78e818ddbff0c5b1c2b779de448a340fd1b989f5fa8670e1b", size = 136464, upload-time = "2026-10-20T02:24:15.072Z" },
 ]
 
 [[package]]
@@ -1817,7 +1824,7 @@ wheels = [
 
 [[package]]
 name = "uv"
-version = "0.12.19"
+version = "0.13.5"
 source = { editable = "." }
 
 [package.dev-dependencies]
@@ -1853,6 +1860,14 @@ docs = [
 release = [
     { name = "rooster", marker = "python_full_version >= '3.12'" },
 ]
+test = [
+    { name = "astral-dev-toolchain-cargo-nextest" },
+]
+
+[package.group-requires-python]
+docker = ">=3.12"
+docs = ">=3.12"
+release = ">=3.12"
 
 [package.metadata]
 
@@ -1885,6 +1900,7 @@ docs = [
     { name = "mkdocs-redirects", marker = "python_full_version >= '3.12'", specifier = ">=1.2.2" },
 ]
 release = [{ name = "rooster", marker = "python_full_version >= '3.12'", specifier = "==0.1.1" }]
+test = [{ name = "astral-dev-toolchain-cargo-nextest", specifier = ">=0.9.143" }]
 
 [[package]]
 name = "validate-pyproject"

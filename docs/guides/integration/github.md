@@ -47,7 +47,7 @@ jobs:
         uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
           # Install a specific version of uv.
-          version: "0.12.19"
+          version: "0.13.5"
 ```
 
 ## Setting up Python
@@ -281,7 +281,7 @@ If using the `uv pip` interface instead of the uv project interface, uv requires
 environment by default. To allow installing packages into the system environment, use the `--system`
 flag on all `uv` invocations or set the `UV_SYSTEM_PYTHON` variable.
 
-The `UV_SYSTEM_PYTHON` variable can be defined in at different scopes.
+The `UV_SYSTEM_PYTHON` variable can be defined at different scopes.
 
 Opt-in for the entire workflow by defining it at the top level:
 
@@ -425,7 +425,7 @@ jobs:
           path: dist/
 
       - name: Generate PEP 740 attestations
-        uses: astral-sh/attest-action@f589a42a7efb6fe400b4f400de60b4bc90390027 # v0.0.6
+        uses: astral-sh/attest-action@39b6ce43875c196a579e31635b11aa2a2036384a # v0.0.7
 
       - name: Publish
         run: uv publish

@@ -5,16 +5,18 @@ use petgraph::{
     Directed, Direction,
     graph::{Graph, NodeIndex},
 };
-use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
+use rustc_hash::{FxHashMap, FxHashSet};
 
-use uv_configuration::{Constraints, Overrides};
+use uv_configuration::{Constraints, DependencyModifierScope, DependencyModifiers};
 use uv_distribution_types::{
     DistributionId, HashCollection, IndexUrl, Name, Requirement, RequiresPython,
     ResolutionDiagnostic, parse_url_hashes,
 };
+use uv_git::GitResolver;
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifier};
 use uv_pypi_types::{Conflicts, HashDigests, ParsedUrl, VerbatimParsedUrl, Yanked};
+use uv_resolver_types::PackageRole;
 use uv_types::HashStrategy;
 
 use crate::graph_ops::{marker_reachability, simplify_conflict_markers};
@@ -22,183 +24,238 @@ use crate::preferences::Preferences;
 use crate::resolution::{AnnotatedDist, ResolutionGraphNode, ResolverOutput};
 use crate::resolution_mode::ResolutionStrategy;
 use crate::resolver::{
-    ResolutionDependencyEdge, ResolutionNode, ResolutionPackage, ResolvedFork, SelectedDistribution,
+    Resolution, ResolutionDependencyEdge, ResolutionNode, ResolutionPackage, SelectedDistribution,
 };
 use crate::universal_marker::{ConflictMarker, UniversalMarker};
 use crate::{InMemoryIndex, MetadataResponse, Options, ResolveError, VersionsResponse};
 
-/// Create a new [`ResolverOutput`] from the resolved PubGrub state.
-pub(crate) fn from_state(
-    mut resolutions: Vec<ResolvedFork>,
-    project: Option<&PackageName>,
-    workspace_members: &BTreeSet<PackageName>,
-    requirements: Vec<Requirement>,
-    constraints: Constraints,
-    overrides: Overrides,
-    preferences: &Preferences,
-    hasher: &HashStrategy,
-    index: &InMemoryIndex,
-    requires_python: RequiresPython,
-    conflicts: &Conflicts,
-    resolution_strategy: &ResolutionStrategy,
-    options: Options,
-) -> Result<ResolverOutput, ResolveError> {
-    let size_guess = resolutions[0].nodes.len();
-    let mut graph: Graph<ResolutionGraphNode, UniversalMarker, Directed> =
-        Graph::with_capacity(size_guess, size_guess);
-    let mut inverse: FxHashMap<ResolutionNode, NodeIndex<u32>> =
-        FxHashMap::with_capacity_and_hasher(size_guess, FxBuildHasher);
-    let mut diagnostics = Vec::new();
+/// Merge completed forks without retaining their duplicate graphs or unused artifact pins.
+pub(crate) struct ResolutionGraphBuilder<'a> {
+    graph: Graph<ResolutionGraphNode, UniversalMarker, Directed>,
+    root_index: NodeIndex,
+    inverse: FxHashMap<ResolutionNode, NodeIndex>,
+    fork_markers: Vec<UniversalMarker>,
+    diagnostics: Vec<ResolutionDiagnostic>,
+    project: Option<&'a PackageName>,
+    workspace_members: &'a BTreeSet<PackageName>,
+    preferences: &'a Preferences,
+    hasher: &'a HashStrategy,
+    index: &'a InMemoryIndex,
+    git: &'a GitResolver,
+}
 
-    // Add the root node.
-    let root_index = graph.add_node(ResolutionGraphNode::Root);
-
-    for resolution in &mut resolutions {
-        // Add every package to the graph.
-        for (package, selected) in resolution.nodes.drain(..) {
-            let node = ResolutionNode {
-                package,
-                version: selected.version().clone(),
-            };
-            let Entry::Vacant(entry) = inverse.entry(node) else {
-                // Insert each node only once.
-                continue;
-            };
-            let package = &entry.key().package;
-            let node = add_version(
-                &mut graph,
-                &mut diagnostics,
-                preferences,
-                hasher,
-                index,
-                package,
-                selected,
-                project == Some(&package.name) || workspace_members.contains(&package.name),
-            );
-            entry.insert(node);
+impl<'a> ResolutionGraphBuilder<'a> {
+    /// Start an output graph containing only the root.
+    pub(crate) fn new(
+        project: Option<&'a PackageName>,
+        workspace_members: &'a BTreeSet<PackageName>,
+        preferences: &'a Preferences,
+        hasher: &'a HashStrategy,
+        index: &'a InMemoryIndex,
+        git: &'a GitResolver,
+    ) -> Self {
+        let mut graph = Graph::new();
+        let root_index = graph.add_node(ResolutionGraphNode::Root);
+        Self {
+            graph,
+            root_index,
+            inverse: FxHashMap::default(),
+            fork_markers: Vec::new(),
+            diagnostics: Vec::new(),
+            project,
+            workspace_members,
+            preferences,
+            hasher,
+            index,
+            git,
         }
     }
 
-    let mut seen = FxHashSet::default();
-    for resolution in &resolutions {
+    /// Return the number of completed forks.
+    pub(crate) fn num_forks(&self) -> usize {
+        self.fork_markers.len()
+    }
+
+    /// Consume a completed fork, retaining artifacts and metadata only for new nodes.
+    pub(crate) fn push(&mut self, resolution: Resolution<'_>) -> Result<(), ResolveError> {
+        if self.fork_markers.is_empty() {
+            self.graph.reserve_nodes(resolution.nodes.len());
+            self.graph.reserve_edges(resolution.edges.len());
+            self.inverse.reserve(resolution.nodes.len());
+        }
         let marker = resolution.env.try_universal_markers().unwrap_or_default();
+        self.fork_markers.push(marker);
+        let mut node_indices = Vec::with_capacity(resolution.nodes.len());
+        // Add every package to the graph.
+        for (package, version) in resolution.nodes {
+            let node = ResolutionNode { package, version };
+            let entry = match self.inverse.entry(node) {
+                Entry::Occupied(entry) => {
+                    node_indices.push(*entry.get());
+                    continue;
+                }
+                Entry::Vacant(entry) => entry,
+            };
+            let package = &entry.key().package;
+            let selected = SelectedDistribution::new(
+                package,
+                entry.key().version.clone(),
+                &resolution.pins,
+                self.index,
+                self.git,
+            )?;
+            let package_role = if self.project == Some(&package.name) {
+                PackageRole::Project
+            } else if self.workspace_members.contains(&package.name) {
+                PackageRole::WorkspaceMember
+            } else {
+                PackageRole::Dependency
+            };
+            let node = add_version(
+                &mut self.graph,
+                &mut self.diagnostics,
+                self.preferences,
+                self.hasher,
+                self.index,
+                package,
+                selected,
+                package_role,
+            );
+            entry.insert(node);
+            node_indices.push(node);
+        }
+        drop(resolution.pins);
 
         // Add every edge to the graph, propagating the marker for the current fork, if
-        // necessary.
-        for edge in &resolution.edges {
-            if !seen.insert((edge, marker)) {
-                // Insert each node only once.
+        // necessary. Only retain the duplicate-edge lookup while consuming this fork.
+        let mut seen = FxHashSet::default();
+        for edge in resolution.edges {
+            let from_index = edge
+                .from
+                .map_or(self.root_index, |from| node_indices[from.0]);
+            let to_index = node_indices[edge.to.0];
+            // Local indices can denote different packages in different forks. Deduplicate only
+            // after translating both endpoints into the merged graph.
+            if !seen.insert((from_index, to_index, edge.marker)) {
+                // Insert each edge only once.
                 continue;
             }
 
-            add_edge(&mut graph, &inverse, root_index, edge, marker);
+            add_edge(&mut self.graph, from_index, to_index, &edge, marker);
         }
+        Ok(())
     }
 
-    let fork_markers: Vec<UniversalMarker> = if let [resolution] = resolutions.as_slice() {
-        // In the case of a singleton marker, we only include it if it's not
-        // always true. Otherwise, we keep our `fork_markers` empty as there
-        // are no forks.
-        resolution
-            .env
-            .try_universal_markers()
-            .into_iter()
-            .filter(|marker| !marker.is_true())
-            .collect()
-    } else {
-        resolutions
-            .iter()
-            .map(|resolution| resolution.env.try_universal_markers().unwrap_or_default())
-            .collect()
-    };
-
-    // Compute and apply the marker reachability.
-    let mut reachability = marker_reachability(&graph, &fork_markers);
-
-    // Apply the reachability to the graph and imbibe world
-    // knowledge about conflicts.
-    let conflict_marker = ConflictMarker::from_conflicts(conflicts);
-    for index in graph.node_indices() {
-        if let ResolutionGraphNode::Dist(dist) = &mut graph[index] {
-            dist.marker = reachability.remove(&index).unwrap_or_default();
-            dist.marker.imbibe(conflict_marker);
+    /// Apply global reachability and conflict simplification after every fork has completed.
+    pub(crate) fn finish(
+        self,
+        requirements: Vec<Requirement>,
+        constraints: Constraints,
+        modifiers: DependencyModifiers,
+        requires_python: RequiresPython,
+        conflicts: &Conflicts,
+        resolution_strategy: &ResolutionStrategy,
+        options: Options,
+    ) -> Result<ResolverOutput, ResolveError> {
+        let Self {
+            mut graph,
+            mut fork_markers,
+            mut diagnostics,
+            inverse,
+            ..
+        } = self;
+        // The construction-only node lookup can be large; release it before propagating markers.
+        drop(inverse);
+        assert!(!fork_markers.is_empty(), "At least one fork must resolve");
+        // A single unconditional resolution has no fork markers.
+        if fork_markers.len() == 1 && fork_markers[0].is_true() {
+            fork_markers.clear();
         }
-    }
-    for weight in graph.edge_weights_mut() {
-        weight.imbibe(conflict_marker);
-    }
+        // Compute and apply the marker reachability.
+        let mut reachability = marker_reachability(&graph, &fork_markers);
 
-    simplify_conflict_markers(conflicts, &mut graph);
+        // Apply the reachability to the graph and imbibe world
+        // knowledge about conflicts.
+        let conflict_marker = ConflictMarker::from_conflicts(conflicts);
+        for index in graph.node_indices() {
+            if let ResolutionGraphNode::Dist(dist) = &mut graph[index] {
+                dist.marker = reachability.remove(&index).unwrap_or_default();
+                dist.marker.imbibe(conflict_marker);
+            }
+        }
+        for weight in graph.edge_weights_mut() {
+            weight.imbibe(conflict_marker);
+        }
 
-    // Discard any unreachable nodes.
-    graph.retain_nodes(|graph, node| !graph[node].marker().is_false());
+        simplify_conflict_markers(conflicts, &mut graph);
 
-    if matches!(resolution_strategy, ResolutionStrategy::Lowest) {
-        report_missing_lower_bounds(&graph, &mut diagnostics, &constraints, &overrides);
-    }
+        // Discard any unreachable nodes.
+        graph.retain_nodes(|graph, node| !graph[node].marker().is_false());
 
-    let output = ResolverOutput {
-        graph,
-        requires_python,
-        fork_markers,
-        diagnostics,
-        requirements,
-        constraints,
-        overrides,
-        options,
-    };
+        if matches!(resolution_strategy, ResolutionStrategy::Lowest) {
+            report_missing_lower_bounds(&graph, &mut diagnostics, &constraints, &modifiers);
+        }
 
-    // We only do conflicting distribution detection when no
-    // conflicting groups have been specified. The reason here
-    // is that when there are conflicting groups, then from the
-    // perspective of marker expressions only, it may look like
-    // one can install different versions of the same package for
-    // the same marker environment. However, the thing preventing
-    // this is that the only way this should be possible is if
-    // one tries to install two or more conflicting extras at
-    // the same time. At which point, uv will report an error,
-    // thereby sidestepping the possibility of installing different
-    // versions of the same package into the same virtualenv. ---AG
-    //
-    // FIXME: When `UniversalMarker` supports extras/groups, we can
-    // re-enable this.
-    if conflicts.is_empty() {
-        #[allow(unused_mut, reason = "Used in debug_assertions below")]
-        let mut conflicting = output.find_conflicting_distributions();
-        if !conflicting.is_empty() {
-            tracing::warn!(
-                "found {} conflicting distributions in resolution, \
+        let output = ResolverOutput {
+            graph,
+            requires_python,
+            fork_markers,
+            diagnostics,
+            requirements,
+            constraints,
+            modifiers,
+            options,
+        };
+
+        // We only do conflicting distribution detection when no
+        // conflicting groups have been specified. The reason here
+        // is that when there are conflicting groups, then from the
+        // perspective of marker expressions only, it may look like
+        // one can install different versions of the same package for
+        // the same marker environment. However, the thing preventing
+        // this is that the only way this should be possible is if
+        // one tries to install two or more conflicting extras at
+        // the same time. At which point, uv will report an error,
+        // thereby sidestepping the possibility of installing different
+        // versions of the same package into the same virtualenv. ---AG
+        //
+        // FIXME: When `UniversalMarker` supports extras/groups, we can
+        // re-enable this.
+        if conflicts.is_empty() {
+            #[allow(unused_mut, reason = "Used in debug_assertions below")]
+            let mut conflicting = output.find_conflicting_distributions();
+            if !conflicting.is_empty() {
+                tracing::warn!(
+                    "found {} conflicting distributions in resolution, \
                  please report this as a bug at \
-                 https://github.com/astral-sh/uv/issues/new",
-                conflicting.len()
-            );
+                 `https://github.com/astral-sh/uv/issues/new`",
+                    conflicting.len()
+                );
+            }
+            // When testing, we materialize any conflicting distributions as an
+            // error to ensure any relevant tests fail. Otherwise, we just leave
+            // it at the warning message above. The reason for not returning an
+            // error "in production" is that an incorrect resolution may only be
+            // incorrect in certain marker environments, but fine in most others.
+            // Returning an error in that case would make `uv` unusable whenever
+            // the bug occurs, but letting it through means `uv` *could* still be
+            // usable.
+            #[cfg(debug_assertions)]
+            if let Some(err) = conflicting.pop() {
+                return Err(ResolveError::ConflictingDistribution(err));
+            }
         }
-        // When testing, we materialize any conflicting distributions as an
-        // error to ensure any relevant tests fail. Otherwise, we just leave
-        // it at the warning message above. The reason for not returning an
-        // error "in production" is that an incorrect resolution may only be
-        // incorrect in certain marker environments, but fine in most others.
-        // Returning an error in that case would make `uv` unusable whenever
-        // the bug occurs, but letting it through means `uv` *could* still be
-        // usable.
-        #[cfg(debug_assertions)]
-        if let Some(err) = conflicting.pop() {
-            return Err(ResolveError::ConflictingDistribution(err));
-        }
+        Ok(output)
     }
-    Ok(output)
 }
 
 fn add_edge(
     graph: &mut Graph<ResolutionGraphNode, UniversalMarker>,
-    inverse: &FxHashMap<ResolutionNode, NodeIndex>,
-    root_index: NodeIndex,
+    from_index: NodeIndex,
+    to_index: NodeIndex,
     edge: &ResolutionDependencyEdge,
     marker: UniversalMarker,
 ) {
-    let from_index = edge.from.as_ref().map_or(root_index, |from| inverse[from]);
-    let to_index = inverse[&edge.to];
-
     let edge_marker = {
         let mut edge_marker = edge.universal_marker();
         edge_marker.and(marker);
@@ -225,7 +282,7 @@ fn add_version(
     in_memory: &InMemoryIndex,
     package: &ResolutionPackage,
     selected: SelectedDistribution,
-    is_workspace_member: bool,
+    package_role: PackageRole,
 ) -> NodeIndex {
     let ResolutionPackage {
         name,
@@ -236,7 +293,7 @@ fn add_version(
     let hashes = get_hashes(
         name,
         index.as_ref(),
-        url.as_ref(),
+        url.as_deref(),
         &selected.hashes_id(),
         selected.version(),
         preferences,
@@ -258,17 +315,10 @@ fn add_version(
         }),
     }
 
-    // We normally write dependency paths relative to the lockfile. For the current project and
-    // workspace members, preserve the user's choice of relative or absolute paths instead.
-    // Metadata from `tool.uv.dependency-metadata` already preserves that choice.
-    // Only change this copy, not shared metadata.
-    let metadata = if is_workspace_member {
-        metadata.map(|metadata| metadata.with_force_relative(false))
-    } else {
-        metadata
-    };
-
-    if let Some(metadata) = metadata.as_ref() {
+    if let Some(response) = metadata.as_ref()
+        && let MetadataResponse::Found(archive) = response.as_ref()
+    {
+        let metadata = &archive.metadata;
         // Validate the extra.
         if let Some(extra) = kind.extra() {
             if !metadata.provides_extra.contains(extra) {
@@ -298,6 +348,7 @@ fn add_version(
         kind: kind.clone(),
         hashes,
         metadata,
+        role: package_role,
         marker: UniversalMarker::TRUE,
     }))
 }
@@ -321,7 +372,16 @@ fn get_hashes(
         }
     }
 
-    // 2. Reuse a direct URL's declared hash when collecting hashes without validation.
+    // 2. Preserve trusted hashes for this URL or path. Wheel metadata lookup does not always
+    // hash the archive, so installation still needs the original hashes to verify its contents.
+    if let Some(url) = url {
+        let policy = hasher.archive_policy_for_url(&url.verbatim);
+        if !policy.digests().is_empty() {
+            return HashDigests::from(policy.digests());
+        }
+    }
+
+    // 3. Reuse a direct URL's declared hash when collecting hashes without validation.
     if let Some(url) = url
         && let ParsedUrl::Archive(_) = &url.parsed_url
         && hasher.collection() != HashCollection::None
@@ -333,7 +393,7 @@ fn get_hashes(
         return hashes;
     }
 
-    // 3. Look for hashes computed for the specific wheel or source distribution.
+    // 4. Look for hashes computed for the specific wheel or source distribution.
     if let Some(metadata_response) = in_memory.distributions().get(metadata_id) {
         if let MetadataResponse::Found(ref archive) = *metadata_response {
             let mut digests = archive.hashes.clone();
@@ -344,7 +404,7 @@ fn get_hashes(
         }
     }
 
-    // 4. Look for hashes from the registry, which are served at the package level.
+    // 5. Look for hashes from the registry, which are served at the package level.
     if url.is_none() {
         // Query the implicit and explicit indexes (lazily) for the hashes.
         let implicit_response = in_memory.implicit().get(name);
@@ -400,7 +460,7 @@ fn report_missing_lower_bounds(
     graph: &Graph<ResolutionGraphNode, UniversalMarker>,
     diagnostics: &mut Vec<ResolutionDiagnostic>,
     constraints: &Constraints,
-    overrides: &Overrides,
+    modifiers: &DependencyModifiers,
 ) {
     let mut missing_lower_bounds = Vec::new();
     for node_index in graph.node_indices() {
@@ -408,7 +468,7 @@ fn report_missing_lower_bounds(
             // Ignore the root package.
             continue;
         };
-        if !has_lower_bound(node_index, dist.name(), graph, constraints, overrides) {
+        if !has_lower_bound(node_index, dist.name(), graph, constraints, modifiers) {
             missing_lower_bounds.push(dist.name());
         }
     }
@@ -426,7 +486,7 @@ fn has_lower_bound(
     package_name: &PackageName,
     graph: &Graph<ResolutionGraphNode, UniversalMarker>,
     constraints: &Constraints,
-    overrides: &Overrides,
+    modifiers: &DependencyModifiers,
 ) -> bool {
     for neighbor_index in graph.neighbors_directed(node_index, Direction::Incoming) {
         let neighbor_dist = match graph.node_weight(neighbor_index).unwrap() {
@@ -443,20 +503,22 @@ fn has_lower_bound(
             return true;
         }
 
-        let Some(metadata) = neighbor_dist.metadata.as_ref() else {
+        let Some(metadata) = neighbor_dist.metadata() else {
             // We can't check for lower bounds if we lack metadata.
             return true;
         };
 
         // Get all individual specifier for the current package and check if any has a lower
         // bound.
-        for requirement in overrides
-            .apply_for(
-                neighbor_dist.name(),
-                &neighbor_dist.version,
+        for requirement in modifiers
+            .apply(
+                DependencyModifierScope::Package(neighbor_dist.name(), &neighbor_dist.version),
                 metadata.requires_dist.iter(),
             )
-            .chain(overrides.apply(metadata.dependency_groups.values().flatten()))
+            .chain(modifiers.apply(
+                DependencyModifierScope::Global,
+                metadata.dependency_groups.values().flatten(),
+            ))
             // Constraints are missing from the graph.
             .chain(constraints.requirements().map(Cow::Borrowed))
         {

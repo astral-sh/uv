@@ -7,16 +7,19 @@ use tokio::task::JoinError;
 use crate::metadata::MetadataError;
 use uv_cache::Error as CacheError;
 use uv_client::WrappedReqwestError;
-use uv_distribution_filename::{WheelFilename, WheelFilenameError};
-use uv_distribution_types::{InstalledDist, InstalledDistError, IsBuildBackendError};
+use uv_distribution_filename::{VariantLabel, WheelFilename, WheelFilenameError};
+use uv_distribution_types::{
+    InstalledDist, InstalledDistError, IsBuildBackendError, UnsupportedVariantProperties,
+};
 use uv_fs::Simplified;
 use uv_git::GitError;
+use uv_macros::DebugNoInline;
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_platform_tags::Platform;
 use uv_pypi_types::{HashAlgorithm, HashDigest};
-use uv_python::PythonVariant;
-use uv_redacted::DisplaySafeUrl;
+use uv_python_types::PythonVariant;
+use uv_redacted::SafeUrl;
 use uv_types::AnyErrorBuild;
 
 #[derive(Debug, Clone, Copy)]
@@ -32,8 +35,15 @@ impl fmt::Display for PythonVersion {
     }
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(DebugNoInline, thiserror::Error)]
 pub enum Error {
+    #[error("Wheel variants are not supported yet: `{0}`")]
+    UnsupportedWheelVariant(Box<WheelFilename>),
+    #[error("Wheel variant `{label}` requires unsupported properties: {properties}")]
+    IncompatibleWheelVariant {
+        label: VariantLabel,
+        properties: UnsupportedVariantProperties,
+    },
     #[error("Building source distributions is disabled")]
     NoBuild,
     #[error("Building source distributions for `{0}` is disabled")]
@@ -43,7 +53,7 @@ pub enum Error {
     #[error(transparent)]
     InvalidUrl(#[from] uv_distribution_types::ToUrlError),
     #[error("Expected a file URL, but received: {0}")]
-    NonFileUrl(DisplaySafeUrl),
+    NonFileUrl(SafeUrl),
     #[error(transparent)]
     Git(#[from] uv_git::GitResolverError),
     #[error(transparent)]
@@ -122,7 +132,7 @@ pub enum Error {
     },
     #[error("Failed to parse metadata from built wheel")]
     Metadata(#[from] uv_pypi_types::MetadataError),
-    #[error("Failed to read metadata: `{}`", _0.user_display())]
+    #[error("Failed to read metadata: {}", _0.user_display())]
     WheelMetadata(PathBuf, #[source] Box<uv_metadata::Error>),
     #[error("Failed to read metadata from installed package `{0}`")]
     ReadInstalled(Box<InstalledDist>, #[source] InstalledDistError),
@@ -131,11 +141,11 @@ pub enum Error {
     #[error("The source distribution is missing a `PKG-INFO` file")]
     MissingPkgInfo,
     #[error("The source distribution `{}` has no subdirectory `{}`", _0, _1.display())]
-    MissingSubdirectory(DisplaySafeUrl, PathBuf),
+    MissingSubdirectory(SafeUrl, PathBuf),
     #[error("The source distribution `{0}` is missing Git LFS artifacts.")]
-    MissingSourceDistGitLfsArtifacts(DisplaySafeUrl, #[source] GitError),
+    MissingSourceDistGitLfsArtifacts(SafeUrl, #[source] GitError),
     #[error("The wheel `{0}` is missing Git LFS artifacts.")]
-    MissingWheelGitLfsArtifacts(DisplaySafeUrl, #[source] GitError),
+    MissingWheelGitLfsArtifacts(SafeUrl, #[source] GitError),
     #[error("Failed to extract static metadata from `PKG-INFO`")]
     PkgInfo(#[source] uv_pypi_types::MetadataError),
     #[error("The source distribution is missing a `pyproject.toml` file")]
@@ -145,7 +155,7 @@ pub enum Error {
     #[error(transparent)]
     MetadataLowering(#[from] MetadataError),
     #[error("Distribution not found at: {0}")]
-    NotFound(DisplaySafeUrl),
+    NotFound(SafeUrl),
     #[error("Attempted to re-extract the source distribution for `{}`, but the {} hash didn't match. Run `{}` to clear the cache.", _0, _1, "uv cache clean".green())]
     CacheHeal(String, HashAlgorithm),
     #[error("The source distribution requires Python {0}, but {1} is installed")]
@@ -201,12 +211,12 @@ pub enum Error {
     },
 
     #[error(
-        "Hash-checking is enabled, but no hashes were provided or computed for: `{distribution}`"
+        "Hash-checking is enabled, but no hashes were provided or computed for: {distribution}"
     )]
     MissingHashes { distribution: String },
 
     #[error(
-        "Hash-checking is enabled, but no hashes were computed for: `{distribution}`\n\nExpected:\n{expected}"
+        "Hash-checking is enabled, but no hashes were computed for `{distribution}`\n\nExpected:\n{expected}"
     )]
     MissingActualHashes {
         distribution: String,
@@ -214,17 +224,17 @@ pub enum Error {
     },
 
     #[error(
-        "Hash-checking is enabled, but no hashes were provided for: `{distribution}`\n\nComputed:\n{actual}"
+        "Hash-checking is enabled, but no hashes were provided for `{distribution}`\n\nComputed:\n{actual}"
     )]
     MissingExpectedHashes {
         distribution: String,
         actual: String,
     },
 
-    #[error("Hash-checking is not supported for local directories: `{0}`")]
+    #[error("Hash-checking is not supported for local directories: {0}")]
     HashesNotSupportedSourceTree(String),
 
-    #[error("Hash-checking is not supported for Git repositories: `{0}`")]
+    #[error("Hash-checking is not supported for Git repositories: {0}")]
     HashesNotSupportedGit(String),
 
     #[error(transparent)]
@@ -292,7 +302,9 @@ impl Error {
     /// Return whether this is an expected user-facing failure.
     pub fn is_user_failure(&self) -> bool {
         match self {
-            Self::NoBuild
+            Self::UnsupportedWheelVariant(_)
+            | Self::IncompatibleWheelVariant { .. }
+            | Self::NoBuild
             | Self::NoBuildPackage(_)
             | Self::InvalidUrl(_)
             | Self::NonFileUrl(_)
@@ -408,7 +420,7 @@ mod tests {
     use std::str::FromStr;
     use uv_distribution_filename::WheelFilename;
     use uv_platform_tags::{Arch, Os, Platform};
-    use uv_python::PythonVariant;
+    use uv_python_types::PythonVariant;
 
     #[test]
     fn built_wheel_error_formats_freethreaded_python() {

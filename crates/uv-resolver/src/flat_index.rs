@@ -10,15 +10,20 @@ use uv_client::{
 use uv_configuration::BuildOptions;
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
-    File, HashComparison, IncompatibleSource, IncompatibleWheel, Index, IndexLocations, IndexUrl,
-    MinimumLibcVersion, PrioritizedDist, RegistryBuiltWheel, RegistrySourceDist,
-    SourceDistCompatibility, WheelCompatibility,
+    File, Index, IndexEntryFilename, IndexLocations, IndexUrl, MinimumLibcVersion,
+    RegistryBuiltWheel, RegistrySourceDist,
 };
 use uv_normalize::PackageName;
 use uv_pep440::Version;
-use uv_platform_tags::{TagCompatibility, Tags};
+use uv_platform_tags::{IncompatibleTag, TagCompatibility, Tags};
+use uv_preview::PreviewFeature;
 use uv_pypi_types::HashDigest;
 use uv_types::HashStrategy;
+
+use crate::prioritized_distribution::{
+    HashComparison, IncompatibleSource, IncompatibleWheel, PrioritizedDist, RegistryVariantsJson,
+    SourceDistCompatibility, WheelCompatibility,
+};
 
 /// Unfiltered entries from `--find-links`, indexed by [`PackageName`].
 #[derive(Debug, Clone, Default)]
@@ -90,16 +95,31 @@ impl FlatDistributions {
         let mut distributions = Self::default();
         for entry in entries {
             let (filename, file, index) = entry.into_parts();
-            distributions.add_file(
-                file,
-                filename,
-                tags,
-                hasher,
-                build_options,
-                index,
-                minimum_libc_version,
-            );
+            match filename {
+                IndexEntryFilename::DistFilename(filename) => distributions.add_file(
+                    file,
+                    filename,
+                    tags,
+                    hasher,
+                    build_options,
+                    index,
+                    minimum_libc_version,
+                ),
+                IndexEntryFilename::VariantJson(filename) => {
+                    distributions
+                        .0
+                        .entry(filename.version.clone())
+                        .or_default()
+                        .insert_variants_json(RegistryVariantsJson {
+                            filename,
+                            file,
+                            index,
+                        });
+                }
+            }
         }
+        // Metadata alone does not make a package version installable.
+        distributions.0.retain(|_, dist| !dist.is_empty());
         distributions
     }
 
@@ -213,6 +233,11 @@ impl FlatDistributions {
         hasher: &HashStrategy,
         build_options: &BuildOptions,
     ) -> WheelCompatibility {
+        if filename.variant().is_some() && !uv_preview::is_enabled(PreviewFeature::WheelVariants) {
+            return WheelCompatibility::Incompatible(IncompatibleWheel::Tag(
+                IncompatibleTag::Variant,
+            ));
+        }
         // Check if binaries are allowed for this package.
         if build_options.no_binary_package(&filename.name) {
             return WheelCompatibility::Incompatible(IncompatibleWheel::NoBinary);
@@ -220,7 +245,7 @@ impl FlatDistributions {
 
         // Determine a compatibility for the wheel based on tags.
         let priority = match tags {
-            Some(tags) => match filename.compatibility(tags) {
+            Some(tags) => match filename.tag_compatibility(tags) {
                 TagCompatibility::Incompatible(tag) => {
                     return WheelCompatibility::Incompatible(IncompatibleWheel::Tag(tag));
                 }
@@ -243,10 +268,7 @@ impl FlatDistributions {
             HashComparison::Matched
         };
 
-        // Break ties with the build tag.
-        let build_tag = filename.build_tag().cloned();
-
-        WheelCompatibility::Compatible(hash, priority, build_tag)
+        WheelCompatibility::from_tag_priority(filename, hash, priority)
     }
 }
 

@@ -206,6 +206,11 @@ def main() -> None:
             environment.get("RUSTFLAGS"), f"-Cprofile-generate={profile_dir}"
         ),
     }
+    if not args.debug:
+        # Thin LTO speeds up instrumentation; the profile-use build keeps fat LTO.
+        instrumented_environment["RUSTFLAGS"] = append_flags(
+            instrumented_environment["RUSTFLAGS"], "-Clto=thin -Cembed-bitcode=yes"
+        )
     profile = "debug" if args.debug else "release"
     print(f"Building instrumented {profile} uv and uvx", flush=True)
     run(cargo_command(target, debug=args.debug), environment=instrumented_environment)

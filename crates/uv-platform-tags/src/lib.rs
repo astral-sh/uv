@@ -4,7 +4,8 @@ pub use libc_version::LibcVersion;
 pub use platform::{Arch, Os, Platform, PlatformError};
 pub use platform_tag::{ParsePlatformTagError, ParseReleaseArchError, PlatformTag, ReleaseArch};
 pub use tags::{
-    BinaryFormat, IncompatibleTag, TagCompatibility, TagPriority, Tags, TagsError, TagsOptions,
+    BinaryFormat, CompressedTags, IncompatibleTag, TagCompatibility, TagPriority, Tags, TagsError,
+    TagsOptions,
 };
 
 mod abi_tag;

@@ -83,7 +83,29 @@ pub fn cache_name(name: &str, max_len: Option<usize>) -> Option<Cow<'_, str>> {
 
 #[cfg(test)]
 mod tests {
+    use std::error::Error;
+    use uv_redacted::{
+        SafeUrl,
+        policy::{Raw, Stripped},
+    };
+
     use super::*;
+
+    #[test]
+    fn url_policy_preserves_cache_key() -> Result<(), Box<dyn Error>> {
+        let safe_url =
+            SafeUrl::parse_relaxed("https://user:password@example.com/script.py?sig=signature")?;
+        // `SafeUrl` uses the complete URL for its cache key regardless of serialization policy.
+        // The digest must stay stable so existing cache entries remain addressable.
+        let expected = "a9cdc0a52c71246a";
+        assert_eq!(cache_digest(&safe_url), expected);
+        assert_eq!(
+            cache_digest(&safe_url.clone().with_policy(Stripped)),
+            expected
+        );
+        assert_eq!(cache_digest(&safe_url.with_policy(Raw)), expected);
+        Ok(())
+    }
 
     #[test]
     fn test_cache_name() {

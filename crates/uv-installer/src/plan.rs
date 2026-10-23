@@ -2,7 +2,6 @@ use std::fmt;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use anyhow::{Result, bail};
 use owo_colors::OwoColorize;
 use tracing::{debug, warn};
 
@@ -11,6 +10,7 @@ use uv_cache_info::Timestamp;
 use uv_configuration::{BuildOptions, Reinstall};
 use uv_distribution::{
     BuiltWheelIndex, HttpArchivePointer, PathArchivePointer, RegistryWheelIndex,
+    check_supported_wheel_variant,
 };
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
@@ -20,14 +20,48 @@ use uv_distribution_types::{
 };
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
+use uv_pep508::VerbatimUrl;
 use uv_platform_tags::{AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagCompatibility, Tags};
 use uv_pypi_types::VerbatimParsedUrl;
-use uv_python::PythonEnvironment;
-use uv_redacted::DisplaySafeUrl;
+use uv_python_interpreter::PythonEnvironment;
+use uv_redacted::SafeUrl;
 use uv_types::HashStrategy;
 
 use crate::satisfies::{BuildSettings, RequirementSatisfaction};
 use crate::{InstallationStrategy, SitePackages};
+
+/// A failure while determining which distributions to install.
+#[derive(Debug, thiserror::Error)]
+pub enum PlanError {
+    #[error(transparent)]
+    IncompatibleWheel(#[from] Box<IncompatibleWheelError>),
+    #[error("A Git path dependency is incompatible with the current platform: {}", .0.user_display())]
+    IncompatibleGitPath(PathBuf),
+    #[error("A URL dependency points to a wheel which conflicts with `--no-binary`: {0}")]
+    NoBinaryUrl(VerbatimUrl),
+    #[error("A path dependency points to a wheel which conflicts with `--no-binary`: {0}")]
+    NoBinaryPath(VerbatimUrl),
+    #[error("A Git path dependency points to a wheel which conflicts with `--no-binary`: {0}")]
+    NoBinaryGitPath(VerbatimUrl),
+    #[error(transparent)]
+    DistributionTypes(#[from] Error),
+    #[error(transparent)]
+    Distribution(#[from] uv_distribution::Error),
+}
+
+impl uv_errors::Hinted for PlanError {
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        match self {
+            Self::IncompatibleWheel(error) => error.hints(),
+            Self::Distribution(error) => error.hints(),
+            Self::IncompatibleGitPath(_)
+            | Self::NoBinaryUrl(_)
+            | Self::NoBinaryPath(_)
+            | Self::NoBinaryGitPath(_)
+            | Self::DistributionTypes(_) => uv_errors::Hints::none(),
+        }
+    }
+}
 
 /// A wheel dependency is incompatible with the current platform.
 #[derive(Debug)]
@@ -40,7 +74,7 @@ pub struct IncompatibleWheelError {
 
 #[derive(Debug)]
 enum IncompatibleWheelKind {
-    Url(DisplaySafeUrl),
+    Url(SafeUrl),
     Path(PathBuf),
 }
 
@@ -269,7 +303,7 @@ impl<'a> Planner<'a> {
         cache: &Cache,
         venv: &PythonEnvironment,
         tags: &Tags,
-    ) -> Result<Plan> {
+    ) -> Result<Plan, PlanError> {
         // Index all the already-downloaded wheels in the cache.
         let mut registry_index = RegistryWheelIndex::new(
             cache,
@@ -308,6 +342,11 @@ impl<'a> Planner<'a> {
         //    So, e.g., if a package is marked as `--reinstall`, we _expect_ that it's not passed in
         //    as [`ResolvedDist::Installed`] here.
         for dist in self.resolution.distributions() {
+            if let ResolvedDist::Installable { dist, .. } = dist
+                && let Dist::Built(built) = dist.as_ref()
+            {
+                check_supported_wheel_variant(built)?;
+            }
             // Check if the package should be reinstalled.
             let reinstall = reinstall.contains_package(dist.name())
                 || dist
@@ -347,6 +386,8 @@ impl<'a> Planner<'a> {
                                 );
                             }
                             RequirementSatisfaction::Satisfied => {
+                                // TODO(konsti): Reinstall if the resolver selected a different
+                                // wheel variant, even when the installed variant is compatible.
                                 debug!("Requirement already installed: {installed}");
                                 continue;
                             }
@@ -409,21 +450,19 @@ impl<'a> Planner<'a> {
                 }
                 Dist::Built(BuiltDist::DirectUrl(wheel)) => {
                     if !wheel.filename.is_compatible(tags) {
-                        return Err(IncompatibleWheelError {
-                            kind: IncompatibleWheelKind::Url(wheel.url.to_url()),
-                            compatibility_hint: generate_wheel_compatibility_hint(
-                                &wheel.filename,
-                                tags,
-                            ),
-                        }
-                        .into());
+                        return Err(PlanError::IncompatibleWheel(Box::new(
+                            IncompatibleWheelError {
+                                kind: IncompatibleWheelKind::Url(wheel.url.to_url()),
+                                compatibility_hint: generate_wheel_compatibility_hint(
+                                    &wheel.filename,
+                                    tags,
+                                ),
+                            },
+                        )));
                     }
 
                     if no_binary {
-                        bail!(
-                            "A URL dependency points to a wheel which conflicts with `--no-binary`: {}",
-                            wheel.url
-                        );
+                        return Err(PlanError::NoBinaryUrl(wheel.url.clone()));
                     }
 
                     // Find the exact wheel from the cache, since we know the filename in
@@ -481,21 +520,19 @@ impl<'a> Planner<'a> {
                     }
 
                     if !wheel.filename.is_compatible(tags) {
-                        return Err(IncompatibleWheelError {
-                            kind: IncompatibleWheelKind::Path(wheel.install_path.to_path_buf()),
-                            compatibility_hint: generate_wheel_compatibility_hint(
-                                &wheel.filename,
-                                tags,
-                            ),
-                        }
-                        .into());
+                        return Err(PlanError::IncompatibleWheel(Box::new(
+                            IncompatibleWheelError {
+                                kind: IncompatibleWheelKind::Path(wheel.install_path.to_path_buf()),
+                                compatibility_hint: generate_wheel_compatibility_hint(
+                                    &wheel.filename,
+                                    tags,
+                                ),
+                            },
+                        )));
                     }
 
                     if no_binary {
-                        bail!(
-                            "A path dependency points to a wheel which conflicts with `--no-binary`: {}",
-                            wheel.url
-                        );
+                        return Err(PlanError::NoBinaryPath(wheel.url.clone()));
                     }
 
                     // Find the exact wheel from the cache, since we know the filename in
@@ -538,7 +575,7 @@ impl<'a> Planner<'a> {
                                 }
                             }
                             Err(err) => {
-                                debug!("Failed to get timestamp for wheel {wheel} ({err})");
+                                debug!("Failed to get timestamp for wheel `{wheel}` ({err})");
                             }
                         },
                         Ok(None) => {}
@@ -551,17 +588,11 @@ impl<'a> Planner<'a> {
                 }
                 Dist::Built(BuiltDist::GitPath(wheel)) => {
                     if !wheel.filename.is_compatible(tags) {
-                        bail!(
-                            "A Git path dependency is incompatible with the current platform: {}",
-                            wheel.install_path.user_display()
-                        );
+                        return Err(PlanError::IncompatibleGitPath(wheel.install_path.clone()));
                     }
 
                     if no_binary {
-                        bail!(
-                            "A Git path dependency points to a wheel which conflicts with `--no-binary`: {}",
-                            wheel.url
-                        );
+                        return Err(PlanError::NoBinaryGitPath(wheel.url.clone()));
                     }
 
                     if let Some(git_sha) = wheel.git.precise() {
@@ -599,7 +630,7 @@ impl<'a> Planner<'a> {
                     }
                 }
                 Dist::Source(SourceDist::Registry(sdist)) => {
-                    if let Some(distribution) = registry_index.source(sdist, no_build, no_binary) {
+                    if let Some(distribution) = registry_index.source(sdist, no_build) {
                         debug!("Registry requirement already cached: {distribution}");
                         cached.push(CachedDist::Registry(distribution.clone()));
                         continue;
@@ -621,7 +652,7 @@ impl<'a> Planner<'a> {
                             }
 
                             warn!(
-                                "Cached wheel filename does not match requested distribution for: `{}` (found: `{}`)",
+                                "Cached wheel filename does not match requested distribution `{}` (found `{}`)",
                                 sdist,
                                 wheel.filename()
                             );
@@ -649,7 +680,7 @@ impl<'a> Planner<'a> {
                         }
 
                         warn!(
-                            "Cached wheel filename does not match requested distribution for: `{}` (found: `{}`)",
+                            "Cached wheel filename does not match requested distribution `{}` (found `{}`)",
                             sdist,
                             wheel.filename()
                         );
@@ -670,7 +701,7 @@ impl<'a> Planner<'a> {
                         }
 
                         warn!(
-                            "Cached wheel filename does not match requested distribution for: `{}` (found: `{}`)",
+                            "Cached wheel filename does not match requested distribution `{}` (found `{}`)",
                             sdist,
                             wheel.filename()
                         );
@@ -697,7 +728,7 @@ impl<'a> Planner<'a> {
                             }
 
                             warn!(
-                                "Cached wheel filename does not match requested distribution for: `{}` (found: `{}`)",
+                                "Cached wheel filename does not match requested distribution `{}` (found `{}`)",
                                 sdist,
                                 wheel.filename()
                             );
@@ -733,7 +764,7 @@ impl<'a> Planner<'a> {
                             }
 
                             warn!(
-                                "Cached wheel filename does not match requested distribution for: `{}` (found: `{}`)",
+                                "Cached wheel filename does not match requested distribution `{}` (found `{}`)",
                                 sdist,
                                 wheel.filename()
                             );

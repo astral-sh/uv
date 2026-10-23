@@ -1,8 +1,11 @@
 use std::borrow::Cow;
+use std::fmt;
+use std::marker::PhantomData;
 
 use either::Either;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
-use serde::de::IntoDeserializer;
+use serde::de::{Error, IntoDeserializer, MapAccess, Visitor, value::MapAccessDeserializer};
+use serde::{Deserialize, Deserializer};
 
 use uv_distribution_types::{Requirement, RequirementSource, ResolutionRecorder};
 use uv_normalize::PackageName;
@@ -59,31 +62,52 @@ pub enum Override<T> {
 
 // A derived `#[serde(untagged)]` implementation collapses detailed requirement parse errors into
 // "data did not match any variant", so use a type-directed visitor for string requirements.
-impl<'de, T> serde::Deserialize<'de> for Override<T>
+struct OverrideVisitor<T>(PhantomData<T>);
+
+impl<'de, T> Visitor<'de> for OverrideVisitor<T>
 where
-    T: serde::Deserialize<'de>,
+    T: Deserialize<'de>,
 {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    type Value = Override<T>;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("a string or map")
+    }
+
+    fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
     where
-        D: serde::Deserializer<'de>,
+        E: Error,
     {
-        #[derive(serde::Deserialize)]
+        T::deserialize(value.into_deserializer()).map(Override::Requirement)
+    }
+
+    fn visit_map<M>(self, map: M) -> Result<Self::Value, M::Error>
+    where
+        M: MapAccess<'de>,
+    {
+        #[derive(Deserialize)]
         #[serde(untagged)]
         enum MapOverride<T> {
             Package(PackageOverride<T>),
             Requirement(T),
         }
 
-        serde_untagged::UntaggedEnumVisitor::new()
-            .string(|string| T::deserialize(string.into_deserializer()).map(Self::Requirement))
-            .map(|map| {
-                map.deserialize::<MapOverride<T>>()
-                    .map(|entry| match entry {
-                        MapOverride::Package(package) => Self::Package(package),
-                        MapOverride::Requirement(requirement) => Self::Requirement(requirement),
-                    })
-            })
-            .deserialize(deserializer)
+        MapOverride::deserialize(MapAccessDeserializer::new(map)).map(|entry| match entry {
+            MapOverride::Package(package) => Override::Package(package),
+            MapOverride::Requirement(requirement) => Override::Requirement(requirement),
+        })
+    }
+}
+
+impl<'de, T> Deserialize<'de> for Override<T>
+where
+    T: Deserialize<'de>,
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_any(OverrideVisitor(PhantomData))
     }
 }
 
@@ -123,7 +147,7 @@ pub enum ScopedOverrideSourceError {
 impl Overrides {
     /// Record which settings are consulted while resolving runtime dependencies.
     #[must_use]
-    pub fn with_recorder(mut self, recorder: Option<ResolutionRecorder>) -> Self {
+    pub(crate) fn with_recorder(mut self, recorder: Option<ResolutionRecorder>) -> Self {
         self.recorder = recorder;
         self
     }
@@ -214,14 +238,14 @@ impl Overrides {
     }
 
     /// Return an iterator over all global [`Requirement`]s in the override set.
-    pub fn global_requirements(&self) -> impl Iterator<Item = &Requirement> {
+    pub(crate) fn global_requirements(&self) -> impl Iterator<Item = &Requirement> {
         self.global
             .values()
             .flat_map(|requirements| requirements.iter())
     }
 
     /// Return all scoped [`Requirement`]s with the package and version they apply to.
-    pub fn scoped_requirements(
+    pub(crate) fn scoped_requirements(
         &self,
     ) -> impl Iterator<Item = (&PackageName, Option<&Version>, &Requirement)> {
         self.scoped.iter().flat_map(|(package, entries)| {
@@ -236,7 +260,7 @@ impl Overrides {
     }
 
     /// Return the scoped [`Requirement`]s that apply to a specific package version.
-    pub fn scoped_requirements_for(
+    pub(crate) fn scoped_requirements_for(
         &self,
         package: &PackageName,
         version: &Version,
@@ -247,7 +271,7 @@ impl Overrides {
     }
 
     /// Return whether any overrides are scoped to the given package.
-    pub fn has_scoped_package(&self, package: &PackageName) -> bool {
+    pub(crate) fn has_scoped_package(&self, package: &PackageName) -> bool {
         self.scoped.contains_key(package)
     }
 
@@ -281,48 +305,13 @@ impl Overrides {
         })
     }
 
-    /// Apply the overrides to a set of requirements.
-    ///
-    /// NB: Change this method together with [`Constraints::apply`].
-    pub fn apply<'a, I>(
-        &'a self,
-        requirements: I,
-    ) -> impl Iterator<Item = Cow<'a, Requirement>> + use<'a, I>
-    where
-        I: IntoIterator<Item = &'a Requirement>,
-    {
-        self.apply_inner(requirements, None)
-    }
-
-    /// Apply the overrides to the dependencies of a specific package version.
-    pub fn apply_for<'a, I>(
-        &'a self,
-        package: &PackageName,
-        version: &Version,
-        requirements: I,
-    ) -> impl Iterator<Item = Cow<'a, Requirement>> + use<'a, I>
-    where
-        I: IntoIterator<Item = &'a Requirement>,
-    {
-        self.apply_inner(requirements, Some((package, version)))
-    }
-
     /// Apply overrides with optional package-version context.
-    pub fn apply_for_package<'a, I>(
+    ///
+    /// NB: Change this method together with [`Constraints::apply`](crate::Constraints::apply).
+    pub(crate) fn apply_for_package<'a, I>(
         &'a self,
         package: Option<(&PackageName, &Version)>,
         requirements: I,
-    ) -> impl Iterator<Item = Cow<'a, Requirement>> + use<'a, I>
-    where
-        I: IntoIterator<Item = &'a Requirement>,
-    {
-        self.apply_inner(requirements, package)
-    }
-
-    fn apply_inner<'a, I>(
-        &'a self,
-        requirements: I,
-        package: Option<(&PackageName, &Version)>,
     ) -> impl Iterator<Item = Cow<'a, Requirement>> + use<'a, I>
     where
         I: IntoIterator<Item = &'a Requirement>,
@@ -373,22 +362,22 @@ impl Overrides {
             return Either::Left(std::iter::once(Cow::Borrowed(requirement)));
         };
 
-        // ASSUMPTION: There is one `extra = "..."`, and it's either the only marker or part
-        // of the main conjunction.
-        let Some(extra_expression) = requirement.marker.top_level_extra() else {
-            // Case 2: A non-optional dependency with override(s).
-            return Either::Right(Either::Right(overrides.iter().map(Cow::Borrowed)));
+        // Overrides replace environmental conditions, but optional dependencies must retain
+        // their extra conditions. Project away the environment rather than extracting one extra:
+        // valid metadata can contain alternatives and negative extra conditions.
+        // A false marker has no extra conditions left to retain; overrides can replace it too.
+        let extra_marker = if requirement.marker.is_false() {
+            MarkerTree::TRUE
+        } else {
+            requirement.marker.only_extras()
         };
+        if extra_marker.is_true() {
+            return Either::Right(Either::Right(overrides.iter().map(Cow::Borrowed)));
+        }
 
-        // Case 3: An optional dependency with override(s).
-        //
-        // When the original requirement is an optional dependency, the override(s) need to
-        // be optional for the same extra, otherwise we activate extras that should be inactive.
         Either::Right(Either::Left(overrides.iter().map(
             move |override_requirement| {
-                // Add the extra to the override marker.
-                let joint_marker = MarkerTree::expression(extra_expression.clone())
-                    .and(override_requirement.marker);
+                let joint_marker = extra_marker.and(override_requirement.marker);
                 Cow::Owned(Requirement {
                     marker: joint_marker,
                     ..override_requirement.clone()

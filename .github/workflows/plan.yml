@@ -24,6 +24,9 @@ on:
       check-crates-policies:
         description: "Whether the crates.io publishing policy check should run"
         value: ${{ jobs.plan.outputs.check-crates-policies }}
+      require-check-release:
+        description: "Whether the release planning check must pass"
+        value: ${{ jobs.plan.outputs.require-check-release }}
       build-release-binaries:
         description: "Whether release binaries should be built"
         value: ${{ jobs.plan.outputs.build-release-binaries }}
@@ -81,6 +84,7 @@ jobs:
       review-security: ${{ steps.plan.outputs.review_security }}
       check-schema: ${{ steps.plan.outputs.check_schema }}
       check-crates-policies: ${{ steps.plan.outputs.check_crates_policies }}
+      require-check-release: ${{ steps.plan.outputs.require_check_release }}
       build-release-binaries: ${{ steps.plan.outputs.build_release_binaries }}
       run-checks: ${{ steps.plan.outputs.run_checks }}
       test-publish: ${{ steps.plan.outputs.test_publish }}
@@ -103,11 +107,11 @@ jobs:
           persist-credentials: false
 
       - name: "Install uv"
-        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           # renovate: datasource=github-release-attachments depName=astral-sh/uv
-          version: "0.12.13"
-          checksum: "745765a3b6e360ad76743599ae5c42e9278c7edf8bbff9fc76d05bf2623a04dd"
+          version: "0.13.5"
+          checksum: "f68d291c75783122dad58ab77def0e13f3233f358731db5d6d7e8715603b928f"
 
       - name: "Plan"
         id: plan
@@ -119,6 +123,7 @@ jobs:
           GH_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
           GH_BASE_REF: ${{ github.base_ref }}
           HAS_SKIP_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'test:skip') }}
+          HAS_BENCHMARKS_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'test:benchmarks') }}
           HAS_INTEGRATION_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'test:integration') }}
           HAS_SYSTEM_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'test:system') }}
           HAS_EXTENDED_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'test:extended') }}
@@ -132,13 +137,16 @@ jobs:
           HAS_BUILD_WINDOWS_TRAMPOLINE_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'build:windows-trampoline') }}
           BASE_SHA: ${{ inputs.base-sha || github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ inputs.head-sha || github.event.pull_request.head.sha }}
+          HAS_EXPLICIT_SHAS: ${{ inputs.base-sha != '' || inputs.head-sha != '' }}
         run: |
           [[ "$GH_REF" == "refs/heads/main" ]] && on_main_branch=1
           [[ "$GH_REPOSITORY" == "astral-sh/uv" ]] && is_uv=1
+          [[ "$GH_REPOSITORY" == "astral-sh/uv-dev" ]] && is_uv_dev=1
           [[ "$GH_EVENT_NAME" == "pull_request" ]] && is_pull_request=1
           [[ "$GH_HEAD_REPOSITORY" == "$GH_REPOSITORY" ]] && is_same_repository=1
           [[ "$GH_BASE_REF" == "main" ]] && targets_main_branch=1
           [[ "$HAS_SKIP_LABEL" == "true" ]] && has_skip_label=1
+          [[ "$HAS_BENCHMARKS_LABEL" == "true" ]] && has_benchmarks_label=1
           [[ "$HAS_INTEGRATION_LABEL" == "true" ]] && has_integration_label=1
           [[ "$HAS_SYSTEM_LABEL" == "true" ]] && has_system_label=1
           [[ "$HAS_EXTENDED_LABEL" == "true" ]] && has_extended_label=1
@@ -151,9 +159,20 @@ jobs:
           [[ "$HAS_BUILD_PUSH_DOCKER_LABEL" == "true" ]] && has_build_push_docker_label=1
           [[ "$HAS_BUILD_WINDOWS_TRAMPOLINE_LABEL" == "true" ]] && has_build_windows_trampoline_label=1
 
-          # Detect changes to uv's project version.
+          comparison_base="${BASE_SHA:-origin/main}"
           version_head="${HEAD_SHA:-HEAD}"
-          merge_base="$(git merge-base "${BASE_SHA:-origin/main}" "$version_head")"
+          # Reusable-workflow callers can choose the comparison with explicit SHAs.
+          # For ordinary PR runs, `HEAD` is GitHub's merge of the PR into its target
+          # branch, and `HEAD^1` is the target branch commit used for that merge.
+          # The event's base SHA can be older, causing changes already in the target
+          # branch (including earlier stack layers) to appear in the diff.
+          if [[ "$GH_REF" == refs/pull/*/merge && "$HAS_EXPLICIT_SHAS" != "true" ]]; then
+            comparison_base="$(git rev-parse HEAD^1)"
+            version_head=HEAD
+          fi
+
+          # Detect changes to uv's project version.
+          merge_base="$(git merge-base "$comparison_base" "$version_head")"
           version_dir="$RUNNER_TEMP/uv-release-version"
           mkdir -p "$version_dir/base" "$version_dir/head"
           git show "${merge_base}:pyproject.toml" > "$version_dir/base/pyproject.toml"
@@ -164,7 +183,10 @@ jobs:
             uv_version_changed=1
           fi
 
-          # Detect changed files
+          # Capture the file list in a separate assignment so `bash -e` propagates
+          # a `git diff` failure. A command substitution in the loop's here-string
+          # would hide the exit status, allowing required jobs to be skipped.
+          changed_files="$(git diff --no-ext-diff --no-textconv --name-only "${comparison_base}...HEAD")"
           while IFS= read -r file; do
             [[ -z "$file" ]] && continue
             [[ "$file" =~ \.rs$ ]] && rust_code_changed=1
@@ -174,18 +196,17 @@ jobs:
             [[ "$file" =~ ^\.github/workflows/.*\.yml$ ]] && workflow_changed=1
             [[ "$file" == ".github/workflows/build-release-binaries.yml" || "$file" == ".github/workflows/sign-release-binaries.yml" || "$file" == ".github/workflows/release.yml" ]] && release_workflow_changed=1
             [[ "$file" == "scripts/check_uv_wheel_contents.py" || "$file" == "scripts/patch-dist-manifest-checksums.py" || "$file" == "scripts/repair-sdist-cargo-lock.py" ]] && release_build_changed=1
-            [[ "$file" == scripts/extract-wheel-binaries.py* || "$file" == scripts/sign-release-macos.py* || "$file" == scripts/verify-release-*.py* || "$file" == scripts/verify-release-*.ps1 || "$file" == scripts/test-release-wheels-* ]] && release_build_changed=1
-            [[ "$file" == scripts/extract-github-release-binaries.py* || "$file" == scripts/inject-signed-github-release-binaries.py* || "$file" == scripts/verify-github-release-* ]] && release_build_changed=1
-            [[ "$file" == "dist-workspace.toml" || "$file" == scripts/plan-release-signing.py* ]] && release_build_changed=1
+            [[ "$file" == scripts/test-release-wheels-* ]] && release_build_changed=1
+            [[ "$file" == "dist-workspace.toml" ]] && release_build_changed=1
             [[ "$file" == scripts/assemble-release-artifacts.py* || "$file" == "scripts/dist-manifest-to-files.sh" ]] && release_build_changed=1
             [[ "$file" == ".github/workflows/ci.yml" ]] && ci_workflow_changed=1
             [[ "$file" == "uv.schema.json" ]] && schema_changed=1
-            [[ "$file" =~ ^crates/uv-publish/ || "$file" =~ ^scripts/publish/ || "$file" == "crates/uv/src/commands/publish.rs" ]] && publish_code_changed=1
+            [[ "$file" =~ ^crates/uv-publish/ || "$file" =~ ^crates/uv-publish-commands/ || "$file" =~ ^scripts/publish/ ]] && publish_code_changed=1
             [[ "$file" == ".github/workflows/test-windows-trampolines.yml" ]] && trampoline_workflow_changed=1
             [[ "$file" =~ ^crates/uv-trampoline/ || "$file" =~ ^crates/uv-trampoline-builder/ ]] && trampoline_code_changed=1
             [[ "$file" == "crates/uv-trampoline/rust-toolchain.toml" || "$file" == "crates/uv-trampoline/Dockerfile" || "$file" =~ ^crates/uv-trampoline/.*\.rs$ || "$file" =~ ^crates/uv-trampoline-builder/trampolines/ ]] && trampoline_repro_changed=1
-            [[ "$file" == "scripts/build-trampolines.sh" || "$file" == "scripts/build-trampolines-in-docker.sh" ]] && trampoline_build_scripts_changed=1
-            [[ "$file" == "scripts/build-trampolines.sh" || "$file" == "scripts/build-trampolines-in-docker.sh" || "$file" == "scripts/check-trampoline-version-consistency.py" ]] && trampoline_scripts_changed=1
+            [[ "$file" == "scripts/build-trampolines.sh" || "$file" == "scripts/build-trampolines-in-docker.sh" || "$file" == scripts/normalize-trampoline-versions.py* ]] && trampoline_build_scripts_changed=1
+            [[ "$file" == "scripts/build-trampolines.sh" || "$file" == "scripts/build-trampolines-in-docker.sh" || "$file" == scripts/normalize-trampoline-versions.py* || "$file" == "scripts/check-trampoline-version-consistency.py" ]] && trampoline_scripts_changed=1
             [[ "$file" =~ ^crates/uv-build/ ]] && uv_build_changed=1
             [[ "$file" == "Dockerfile" ]] && dockerfile_changed=1
             [[ "$file" == ".github/workflows/build-docker.yml" || "$file" == ".github/workflows/publish-docker.yml" || "$file" == ".github/workflows/publish-docker-image.yml" ]] && docker_workflow_changed=1
@@ -195,7 +216,9 @@ jobs:
             [[ "$file" == "scripts/check_system_python.py" || "$file" == "scripts/check_embedded_python.py" ]] && system_test_changed=1
             [[ "$file" =~ ^docs/ || "$file" =~ ^mkdocs.*\.yml$ || "$file" =~ \.md$ || "$file" =~ ^bin/ || "$file" =~ ^assets/ || "$file" =~ ^agents/ || "$file" =~ ^\.claude/ || "$file" =~ ^\.codex/ ]] && continue
             any_code_changed=1
-          done <<< "$(git diff --no-ext-diff --no-textconv --name-only "${BASE_SHA:-origin/main}...HEAD")"
+            [[ "$file" =~ ^(crates/[^/]+/tests/|crates/uv-test/|test/) ]] && continue
+            non_test_code_changed=1
+          done <<< "$changed_files"
 
           # Derived groups
           [[ $is_uv && $is_pull_request && $is_same_repository && $targets_main_branch && $uv_version_changed ]] && is_release_pr=1
@@ -210,13 +233,19 @@ jobs:
           [[ $any_code_changed ]] && review_security=1
           [[ $schema_changed ]] && check_schema=1
           [[ $is_release_pr ]] && check_crates_policies=1
+          [[ $is_release_pr ]] && require_check_release=1
           [[ ! $has_skip_label && ! $has_build_skip_label && ! $has_build_skip_release_label && ($release_build_changed || $has_build_release_label) ]] && build_release_binaries=1
           [[ ! $has_skip_label ]] && run_checks=1
           [[ $publish_changed || $has_publish_label || $has_extended_label || $on_main_branch ]] && test_publish=1
           [[ ! $has_skip_label && ($trampoline_code_changed || $trampoline_scripts_changed || $trampoline_workflow_changed || $rust_deps_changed || $has_build_windows_trampoline_label || $on_main_branch) ]] && test_windows_trampoline=1
           [[ ! $has_skip_label && ($trampoline_repro_changed || $trampoline_build_scripts_changed || $has_build_windows_trampoline_label) ]] && test_windows_trampoline_check_binary=1
           [[ $on_main_branch || $cache_relevant_changed ]] && save_rust_cache=1
-          [[ ! $has_skip_label && ($any_rust_changed || $bench_workflow_changed || $on_main_branch) ]] && run_bench=1
+          if [[ ! $has_skip_label && (
+            ($is_uv_dev && $has_benchmarks_label) ||
+            (! $is_uv_dev && (($any_rust_changed && $non_test_code_changed) || $bench_workflow_changed || $on_main_branch))
+          ) ]]; then
+            run_bench=1
+          fi
           [[ ! $has_skip_label ]] && test_smoke=1
           [[ ! $has_skip_label ]] && test_ecosystem=1
           [[ $has_integration_label || $has_extended_label || $on_main_branch || $integration_changed ]] && test_integration=1
@@ -232,6 +261,7 @@ jobs:
             out review_security         "$review_security"
             out check_schema            "$check_schema"
             out check_crates_policies   "$check_crates_policies"
+            out require_check_release   "$require_check_release"
             out build_release_binaries  "$build_release_binaries"
             out run_checks              "$run_checks"
             out test_publish            "$test_publish"

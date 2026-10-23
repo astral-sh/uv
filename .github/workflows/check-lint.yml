@@ -17,9 +17,10 @@ env:
   CARGO_NET_RETRY: 10
   CARGO_TERM_COLOR: always
   # renovate: datasource=github-releases depName=astral-sh/hawk
-  HAWK_VERSION: 0.1.14
+  HAWK_VERSION: 0.1.15
   RUSTUP_MAX_RETRIES: 10
   UV_LOCKED: 1
+  UV_PYTHON_DOWNLOADS_JSON_URL: ${{ github.workspace }}/crates/uv-python-managed/download-metadata.json
 
 jobs:
   ruff:
@@ -30,11 +31,11 @@ jobs:
         with:
           persist-credentials: false
       - name: "Install uv"
-        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           # renovate: datasource=github-release-attachments depName=astral-sh/uv
-          version: "0.12.13"
-          checksum: "745765a3b6e360ad76743599ae5c42e9278c7edf8bbff9fc76d05bf2623a04dd"
+          version: "0.13.5"
+          checksum: "f68d291c75783122dad58ab77def0e13f3233f358731db5d6d7e8715603b928f"
       - run: uv run --only-group check ruff check .
 
   ty:
@@ -45,11 +46,11 @@ jobs:
         with:
           persist-credentials: false
       - name: "Install uv"
-        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           # renovate: datasource=github-release-attachments depName=astral-sh/uv
-          version: "0.12.13"
-          checksum: "745765a3b6e360ad76743599ae5c42e9278c7edf8bbff9fc76d05bf2623a04dd"
+          version: "0.13.5"
+          checksum: "f68d291c75783122dad58ab77def0e13f3233f358731db5d6d7e8715603b928f"
       # `uv check` checks the entire repository; keep this scoped to the Python package.
       - run: uv run --only-group check ty check python/uv
       - name: "Check scrolls"
@@ -89,11 +90,11 @@ jobs:
         with:
           persist-credentials: false
       - name: "Install uv"
-        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           # renovate: datasource=github-release-attachments depName=astral-sh/uv
-          version: "0.12.13"
-          checksum: "745765a3b6e360ad76743599ae5c42e9278c7edf8bbff9fc76d05bf2623a04dd"
+          version: "0.13.5"
+          checksum: "f68d291c75783122dad58ab77def0e13f3233f358731db5d6d7e8715603b928f"
       - name: "Validate pyproject and uv schema"
         run: ./scripts/validate-pyproject.sh
 
@@ -114,23 +115,32 @@ jobs:
     timeout-minutes: 10
     if: ${{ inputs.code-changed == 'true' || github.ref == 'refs/heads/main' }}
     runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
+    env:
+      RUSTC_BOOTSTRAP: "1"
+      CARGO_UNSTABLE_CHECKSUM_FRESHNESS: "true"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-        with:
-          save-if: ${{ inputs.save-rust-cache == 'true' }}
       - name: "Install Rust toolchain"
         run: rustup component add clippy
+
+      - uses: astral-sh/github-actions/rust-workspace-cache@3c9fe5db47e144ea224b57565e3ab1ab769ef41d
+        with:
+          save-if: ${{ inputs.save-rust-cache == 'true' }}
       - name: "Clippy"
-        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+        env:
+          CARGO_BUILD_WARNINGS: deny
+        run: cargo clippy --workspace --all-targets --all-features --locked
 
   clippy-windows:
     name: "clippy on windows"
     timeout-minutes: 15
     if: ${{ inputs.code-changed == 'true' || github.ref == 'refs/heads/main' }}
     runs-on: namespace-profile-windows-2022-x86-64-4
+    env:
+      RUSTC_BOOTSTRAP: "1"
+      CARGO_UNSTABLE_CHECKSUM_FRESHNESS: "true"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -144,17 +154,19 @@ jobs:
         run: |
           Copy-Item -Path "${{ github.workspace }}" -Destination "$Env:UV_WORKSPACE" -Recurse
 
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-        with:
-          workspaces: ${{ env.UV_WORKSPACE }}
-          save-if: ${{ inputs.save-rust-cache == 'true' }}
-
       - name: "Install Rust toolchain"
         run: rustup component add clippy
 
+      - uses: astral-sh/github-actions/rust-workspace-cache@3c9fe5db47e144ea224b57565e3ab1ab769ef41d
+        with:
+          workspace: ${{ env.UV_WORKSPACE }}
+          save-if: ${{ inputs.save-rust-cache == 'true' }}
+
       - name: "Clippy"
         working-directory: ${{ env.UV_WORKSPACE }}
-        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+        env:
+          CARGO_BUILD_WARNINGS: deny
+        run: cargo clippy --workspace --all-targets --all-features --locked
 
   cargo-deny:
     name: "cargo deny"
@@ -165,11 +177,11 @@ jobs:
         with:
           persist-credentials: false
       - name: "Install uv"
-        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           # renovate: datasource=github-release-attachments depName=astral-sh/uv
-          version: "0.12.13"
-          checksum: "745765a3b6e360ad76743599ae5c42e9278c7edf8bbff9fc76d05bf2623a04dd"
+          version: "0.13.5"
+          checksum: "f68d291c75783122dad58ab77def0e13f3233f358731db5d6d7e8715603b928f"
       - name: "Check licenses"
         run: uv run --only-dev cargo deny --all-features check licenses
       - name: "Check sources"
@@ -196,13 +208,13 @@ jobs:
           cache-workspace-crates: "false"
           save-if: ${{ inputs.save-rust-cache == 'true' }}
       - name: "Install Rust toolchain"
-        run: rustup toolchain install 1.98.1
+        run: rustup toolchain install 1.99.0
       - name: "Install Hawk"
         run: |
           curl --proto '=https' --tlsv1.2 -LsSf \
             "https://github.com/astral-sh/hawk/releases/download/${HAWK_VERSION}/cargo-hawk-installer.sh" | sh
       - name: "Hawk"
-        run: cargo +1.98.1 hawk check --target-dir target/hawk -D warnings
+        run: cargo +1.99.0 hawk check --target-dir target/hawk -D warnings
 
   shear:
     name: "cargo shear"
@@ -214,11 +226,11 @@ jobs:
         with:
           persist-credentials: false
       - name: "Install uv"
-        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           # renovate: datasource=github-release-attachments depName=astral-sh/uv
-          version: "0.12.13"
-          checksum: "745765a3b6e360ad76743599ae5c42e9278c7edf8bbff9fc76d05bf2623a04dd"
+          version: "0.13.5"
+          checksum: "f68d291c75783122dad58ab77def0e13f3233f358731db5d6d7e8715603b928f"
       - run: uv run --only-group check cargo-shear --deny-warnings
 
   typos:
@@ -229,9 +241,9 @@ jobs:
         with:
           persist-credentials: false
       - name: "Install uv"
-        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           # renovate: datasource=github-release-attachments depName=astral-sh/uv
-          version: "0.12.13"
-          checksum: "745765a3b6e360ad76743599ae5c42e9278c7edf8bbff9fc76d05bf2623a04dd"
+          version: "0.13.5"
+          checksum: "f68d291c75783122dad58ab77def0e13f3233f358731db5d6d7e8715603b928f"
       - run: uv run --only-group check typos

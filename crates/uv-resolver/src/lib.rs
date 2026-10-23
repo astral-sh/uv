@@ -3,13 +3,14 @@ pub use exclusions::Exclusions;
 pub use flat_index::{FlatDistributions, FlatIndex};
 pub use manifest::Manifest;
 pub use preferences::{Preference, PreferenceError, Preferences};
+pub use prioritized_distribution::{HashComparison, PrioritizedDist, SourceDistCompatibility};
 pub use pubgrub::PubGrubHint;
 pub use python_requirement::PythonRequirement;
 pub use resolution::{ConflictingDistributionError, DisplayResolutionGraph, ResolverOutput};
 pub use resolver::{
     DefaultResolverProvider, InMemoryIndex, MetadataResponse, PackageVersionsResult,
     Reporter as ResolverReporter, Resolver, ResolverEnvironment, ResolverProvider,
-    VersionsResponse, WheelMetadataResult,
+    VariantsJsonResponse, VersionsResponse, WheelMetadataResult,
 };
 pub use universal_marker::UniversalMarker;
 pub use upgrade::UpgradePackages;
@@ -43,16 +44,19 @@ mod exclusions;
 mod flat_index;
 mod fork_indexes;
 mod fork_urls;
+mod known_platform;
 mod manifest;
 mod marker;
 mod pins;
 mod preferences;
 mod prerelease;
+mod prioritized_distribution;
 pub mod pubgrub;
 mod python_requirement;
 mod redirect;
 mod resolution;
 mod resolution_mode;
+mod resolved;
 mod resolver;
 mod upgrade;
 mod version_map;

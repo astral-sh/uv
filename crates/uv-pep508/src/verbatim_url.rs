@@ -7,28 +7,78 @@ use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
 use arcstr::ArcStr;
-use regex::regex;
 use thiserror::Error;
+#[cfg(feature = "unsafe-url")]
+#[expect(clippy::disallowed_types, reason = "Supports the opt-in raw URL API")]
 use url::Url;
 use uv_cache_key::{CacheKey, CacheKeyHasher};
 
 #[cfg_attr(not(feature = "non-pep508-extensions"), allow(unused_imports))]
 use uv_fs::{normalize_absolute_path, normalize_url_path};
-use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
+use uv_redacted::policy::{SerializationPolicy, Unserializable};
+use uv_redacted::{SafeUrl, SafeUrlError};
 
 use crate::Pep508Url;
 
-/// A wrapper around [`Url`] that preserves the original string.
+/// A wrapper around [`SafeUrl`] that preserves the original string.
 ///
-/// The original string is not preserved after serialization/deserialization.
+/// The `From<url::Url>` implementation requires the `unsafe-url` feature.
+///
+/// The serialization policy is stored on the parsed URL. A [`VerbatimUrl`] with
+/// the default [`Unserializable`] policy does not implement [`serde::Serialize`].
+/// With the `serde` feature, URLs with [`uv_redacted::policy::Stripped`] or
+/// [`uv_redacted::policy::Raw`] serialize the normalized URL and omit the original input.
+///
+/// ```compile_fail
+/// use uv_pep508::VerbatimUrl;
+///
+/// fn require_serialize<T: serde::Serialize>() {}
+/// // `VerbatimUrl` uses the `Unserializable` policy by default.
+/// require_serialize::<VerbatimUrl>();
+/// ```
+///
+/// `serialize` method calls through [`Deref`] also require a serializing policy:
+///
+/// ```compile_fail
+/// use serde::Serialize;
+/// use uv_pep508::VerbatimUrl;
+///
+/// let url = VerbatimUrl::parse_url("https://user:password@example.com")?;
+/// url.serialize(serde_json::value::Serializer)?;
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+///
+/// Internal serialization requires [`uv_redacted::policy::Raw`]:
+///
+/// ```compile_fail
+/// use uv_pep508::VerbatimUrl;
+/// use uv_redacted::policy::Stripped;
+///
+/// let url = VerbatimUrl::parse_url("https://user:password@example.com")?
+///     .with_policy(Stripped);
+/// url.serialize_internal(serde_json::value::Serializer)?;
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+#[cfg_attr(
+    not(feature = "unsafe-url"),
+    doc = r#"
+Without `unsafe-url`, raw URLs cannot be converted directly to [`VerbatimUrl`]:
+
+```compile_fail
+use uv_pep508::VerbatimUrl;
+
+let url = url::Url::parse("https://example.com").unwrap();
+let _: VerbatimUrl = url.into();
+```
+"#
+)]
 #[derive(Clone, Eq)]
-pub struct VerbatimUrl {
+pub struct VerbatimUrl<P: SerializationPolicy = Unserializable> {
     /// The parsed URL.
-    url: DisplaySafeUrl,
+    url: SafeUrl<P>,
     /// The URL as it was provided by the user.
     ///
-    /// Even if originally set, this will be [`None`] after
-    /// serialization/deserialization.
+    /// This is [`None`] when the URL is deserialized.
     given: Option<ArcStr>,
     /// Given value is a [`Pep508Url`] which contained variable references which were successfully
     /// expanded.
@@ -37,10 +87,10 @@ pub struct VerbatimUrl {
     force_relative: bool,
 }
 
-impl Debug for VerbatimUrl {
+impl<P: SerializationPolicy> Debug for VerbatimUrl<P> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let given = self.given.as_deref().map(|given| {
-            DisplaySafeUrl::parse(given).map_or_else(
+            SafeUrl::parse(given).map_or_else(
                 |_| Cow::Borrowed(given),
                 |url| {
                     let redacted = url.to_string();
@@ -62,39 +112,29 @@ impl Debug for VerbatimUrl {
     }
 }
 
-impl Hash for VerbatimUrl {
+impl<P: SerializationPolicy> Hash for VerbatimUrl<P> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.url.hash(state);
     }
 }
 
-impl CacheKey for VerbatimUrl {
+impl<P: SerializationPolicy> CacheKey for VerbatimUrl<P> {
     fn cache_key(&self, state: &mut CacheKeyHasher) {
         self.url.as_str().cache_key(state);
     }
 }
 
-impl PartialEq for VerbatimUrl {
+impl<P: SerializationPolicy> PartialEq for VerbatimUrl<P> {
     fn eq(&self, other: &Self) -> bool {
         self.url == other.url
     }
 }
 
 impl VerbatimUrl {
-    /// Create a [`VerbatimUrl`] from a [`Url`].
-    pub fn from_url(url: DisplaySafeUrl) -> Self {
-        Self {
-            url,
-            given: None,
-            expanded: false,
-            force_relative: false,
-        }
-    }
-
     /// Parse a URL from a string.
     pub fn parse_url(given: impl AsRef<str>) -> Result<Self, VerbatimUrlError> {
         let given = given.as_ref();
-        let url = DisplaySafeUrl::parse(given)?;
+        let url = SafeUrl::parse(given)?;
 
         Ok(Self {
             url,
@@ -167,8 +207,8 @@ impl VerbatimUrl {
             .map_err(|err| VerbatimUrlError::Normalization(path.to_path_buf(), err))?;
 
         // Convert to a URL.
-        let url = DisplaySafeUrl::from_file_path(path.clone())
-            .map_err(|()| VerbatimUrlError::UrlConversion(path.clone()))?;
+        let url =
+            SafeUrl::from_file_path(&path).map_err(|()| VerbatimUrlError::UrlConversion(path))?;
 
         Ok(Self {
             url,
@@ -209,7 +249,7 @@ impl VerbatimUrl {
             .map_err(|err| VerbatimUrlError::Normalization(path.to_path_buf(), err))?;
 
         // Convert to a URL.
-        let url = DisplaySafeUrl::from_file_path(path.clone())
+        let url = SafeUrl::from_file_path(&path)
             .unwrap_or_else(|()| panic!("path is absolute: {}", path.display()));
 
         Ok(Self {
@@ -234,7 +274,7 @@ impl VerbatimUrl {
         };
 
         // Convert to a URL.
-        let url = DisplaySafeUrl::from_file_path(path)
+        let url = SafeUrl::from_file_path(path)
             .unwrap_or_else(|()| panic!("path is absolute: {}", path.display()));
 
         Ok(Self {
@@ -243,6 +283,29 @@ impl VerbatimUrl {
             expanded: false,
             force_relative: false,
         })
+    }
+}
+
+impl<P: SerializationPolicy> VerbatimUrl<P> {
+    /// Create a [`VerbatimUrl`] from a [`SafeUrl`].
+    pub fn from_url(url: SafeUrl<P>) -> Self {
+        Self {
+            url,
+            given: None,
+            expanded: false,
+            force_relative: false,
+        }
+    }
+
+    /// Change the serialization policy while retaining the original input and path preferences.
+    #[must_use]
+    pub fn with_policy<Q: SerializationPolicy>(self, policy: Q) -> VerbatimUrl<Q> {
+        VerbatimUrl {
+            url: self.url.with_policy(policy),
+            given: self.given,
+            expanded: self.expanded,
+            force_relative: self.force_relative,
+        }
     }
 
     /// Set a fragment that was provided as part of a URL.
@@ -315,18 +378,29 @@ impl VerbatimUrl {
         Self { expanded, ..self }
     }
 
-    /// Return the underlying [`DisplaySafeUrl`].
-    pub fn raw(&self) -> &DisplaySafeUrl {
+    /// Return the underlying [`SafeUrl`].
+    pub fn raw(&self) -> &SafeUrl<P> {
         &self.url
     }
 
-    /// Convert a [`VerbatimUrl`] into a [`DisplaySafeUrl`].
-    pub fn to_url(&self) -> DisplaySafeUrl {
+    /// Convert a [`VerbatimUrl`] into a [`SafeUrl`].
+    pub fn to_url(&self) -> SafeUrl<P> {
         self.url.clone()
     }
 
-    /// Convert the [`VerbatimUrl`] into a [`DisplaySafeUrl`].
-    pub fn into_url(self) -> DisplaySafeUrl {
+    /// Convert the [`VerbatimUrl`] into a [`SafeUrl`].
+    ///
+    /// To pass the result to an API that requires [`url::Url`], call [`SafeUrl::into_unsafe_url`].
+    /// Direct conversion to [`url::Url`] using [`From`] is not supported:
+    ///
+    /// ```compile_fail
+    /// use uv_pep508::VerbatimUrl;
+    ///
+    /// let url = VerbatimUrl::parse_url("https://example.com")?;
+    /// let _: url::Url = url.into();
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn into_url(self) -> SafeUrl<P> {
         self.url
     }
 
@@ -335,17 +409,17 @@ impl VerbatimUrl {
     pub fn as_path(&self) -> Result<PathBuf, VerbatimUrlError> {
         self.url
             .to_file_path()
-            .map_err(|()| VerbatimUrlError::PathConversion(Box::new(self.url.clone())))
+            .map_err(|()| VerbatimUrlError::PathConversion(Box::new(self.url.as_url().clone())))
     }
 }
 
-impl Ord for VerbatimUrl {
+impl<P: SerializationPolicy> Ord for VerbatimUrl<P> {
     fn cmp(&self, other: &Self) -> Ordering {
         self.url.cmp(&other.url)
     }
 }
 
-impl PartialOrd for VerbatimUrl {
+impl<P: SerializationPolicy> PartialOrd for VerbatimUrl<P> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
@@ -359,56 +433,55 @@ impl std::str::FromStr for VerbatimUrl {
     }
 }
 
-impl std::fmt::Display for VerbatimUrl {
+impl<P: SerializationPolicy> std::fmt::Display for VerbatimUrl<P> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         std::fmt::Display::fmt(&self.url, f)
     }
 }
 
-impl Deref for VerbatimUrl {
-    type Target = DisplaySafeUrl;
+impl<P: SerializationPolicy> Deref for VerbatimUrl<P> {
+    type Target = SafeUrl<P>;
 
     fn deref(&self) -> &Self::Target {
         &self.url
     }
 }
 
+#[cfg(feature = "unsafe-url")]
+#[expect(clippy::disallowed_types, reason = "Supports the opt-in raw URL API")]
 impl From<Url> for VerbatimUrl {
     fn from(url: Url) -> Self {
-        Self::from_url(DisplaySafeUrl::from_url(url))
+        Self::from_url(SafeUrl::from_url(url))
     }
 }
 
-impl From<DisplaySafeUrl> for VerbatimUrl {
-    fn from(url: DisplaySafeUrl) -> Self {
+impl<P: SerializationPolicy> From<SafeUrl<P>> for VerbatimUrl<P> {
+    fn from(url: SafeUrl<P>) -> Self {
         Self::from_url(url)
     }
 }
 
-impl From<VerbatimUrl> for Url {
-    fn from(url: VerbatimUrl) -> Self {
-        Self::from(url.url)
+#[cfg(feature = "serde")]
+impl<'de, P: SerializationPolicy> serde::Deserialize<'de> for VerbatimUrl<P> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let url = SafeUrl::<P>::deserialize(deserializer)?;
+        Ok(Self::from_url(url))
     }
 }
 
 #[cfg(feature = "serde")]
-impl serde::Serialize for VerbatimUrl {
+impl<P: SerializationPolicy> serde::Serialize for VerbatimUrl<P>
+where
+    SafeUrl<P>: serde::Serialize,
+{
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
     {
         self.url.serialize(serializer)
-    }
-}
-
-#[cfg(feature = "serde")]
-impl<'de> serde::Deserialize<'de> for VerbatimUrl {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let url = DisplaySafeUrl::deserialize(deserializer)?;
-        Ok(Self::from_url(url))
     }
 }
 
@@ -505,7 +578,7 @@ impl Pep508Url for VerbatimUrl {
 pub enum VerbatimUrlError {
     /// Failed to parse a URL.
     #[error(transparent)]
-    Url(#[from] DisplaySafeUrlError),
+    Url(#[from] SafeUrlError),
 
     /// Received a relative path, but no working directory was provided.
     #[error("relative path without a working directory: {0}")]
@@ -517,7 +590,7 @@ pub enum VerbatimUrlError {
 
     /// Received a URL that could not be converted to a path.
     #[error("URL could not be converted to a path: {0}")]
-    PathConversion(Box<DisplaySafeUrl>),
+    PathConversion(Box<SafeUrl>),
 
     /// Received a path that could not be normalized.
     #[error("path could not be normalized: {0}")]
@@ -556,13 +629,38 @@ pub fn expand_env_vars(s: &str) -> Cow<'_, str> {
         project_root.to_string_lossy().to_string()
     });
 
-    regex!(r"(?P<var>\$\{(?P<name>[A-Z0-9_]+)})").replace_all(s, |caps: &regex::Captures<'_>| {
-        let name = caps.name("name").unwrap().as_str();
-        std::env::var(name).unwrap_or_else(|_| match name {
-            "PROJECT_ROOT" => PROJECT_ROOT_FRAGMENT.to_string(),
-            _ => caps["var"].to_owned(),
-        })
-    })
+    let mut expanded = None;
+    let mut previous_end = 0;
+    for (start, _) in s.match_indices("${") {
+        let remaining = &s[start + 2..];
+        let Some(length) = remaining
+            .bytes()
+            .position(|byte| !byte.is_ascii_uppercase() && !byte.is_ascii_digit() && byte != b'_')
+        else {
+            continue;
+        };
+        if length == 0 || remaining.as_bytes()[length] != b'}' {
+            continue;
+        }
+
+        let name = &remaining[..length];
+        let end = start + 2 + length + 1;
+        let expanded = expanded.get_or_insert_with(|| String::with_capacity(s.len()));
+        expanded.push_str(&s[previous_end..start]);
+        match std::env::var(name) {
+            Ok(value) => expanded.push_str(&value),
+            Err(_) if name == "PROJECT_ROOT" => expanded.push_str(&PROJECT_ROOT_FRAGMENT),
+            Err(_) => expanded.push_str(&s[start..end]),
+        }
+        previous_end = end;
+    }
+
+    if let Some(mut expanded) = expanded {
+        expanded.push_str(&s[previous_end..]);
+        Cow::Owned(expanded)
+    } else {
+        Cow::Borrowed(s)
+    }
 }
 
 /// Returns `true` if [`expand_env_vars`] changed the given value.
@@ -573,7 +671,7 @@ pub(crate) fn were_vars_expanded(given: &str, expanded: &str) -> bool {
     expanded != given
 }
 
-/// Like [`Url::parse`], but only splits the scheme. Derived from the `url` crate.
+/// Like [`url::Url::parse`], but only splits the scheme. Derived from the `url` crate.
 pub fn split_scheme(s: &str) -> Option<(&str, &str)> {
     /// <https://url.spec.whatwg.org/#c0-controls-and-space>
     #[inline]
@@ -628,7 +726,7 @@ pub(crate) fn strip_host(path: &str) -> &str {
 }
 
 /// Returns `true` if a URL looks like a reference to a Git repository (e.g., `https://github.com/user/repo.git`).
-pub fn looks_like_git_repository(url: &Url) -> bool {
+pub fn looks_like_git_repository<P: SerializationPolicy>(url: &SafeUrl<P>) -> bool {
     matches!(
         url.host_str(),
         Some("github.com" | "gitlab.com" | "bitbucket.org")
@@ -772,8 +870,47 @@ impl std::fmt::Display for Scheme {
 #[cfg(test)]
 mod tests {
     use insta::assert_snapshot;
+    #[cfg(feature = "serde")]
+    use uv_redacted::policy::{Raw, Stripped};
 
     use super::*;
+
+    #[test]
+    #[cfg(feature = "unsafe-url")]
+    #[expect(clippy::disallowed_types, reason = "Exercises the opt-in raw URL API")]
+    fn from_raw_url() {
+        let raw = Url::parse("https://user:password@EXAMPLE.COM/demo.whl?sig=signature").unwrap();
+        let url = VerbatimUrl::from(raw);
+        assert_eq!(
+            url.raw().as_str(),
+            "https://user:password@example.com/demo.whl?sig=signature"
+        );
+        assert_eq!(url.given(), None);
+        assert_snapshot!(url, @"https://user:****@example.com/demo.whl?sig=****");
+    }
+
+    #[test]
+    #[cfg(feature = "serde")]
+    fn serialization_policy_retains_verbatim_input() -> Result<(), Box<dyn std::error::Error>> {
+        let input = "https://user:password@EXAMPLE.COM/file.whl?sig=abc%2Bdef%3D";
+        let url = VerbatimUrl::parse_url(input)?
+            .with_given(input)
+            .with_force_relative(true)
+            .with_policy(Stripped);
+        assert_eq!(url.given(), Some(input));
+        assert!(url.force_relative());
+        assert_eq!(url.password(), Some("password"));
+        assert_snapshot!(serde_json::to_string(&url)?, @r#""https://example.com/file.whl?sig=abc%2Bdef%3D""#);
+
+        let url = url.with_policy(Raw);
+        assert_eq!(url.given(), Some(input));
+        assert!(url.force_relative());
+        assert_snapshot!(serde_json::to_string(&url)?, @r#""https://user:password@example.com/file.whl?sig=abc%2Bdef%3D""#);
+        let roundtrip: VerbatimUrl<Raw> = serde_json::from_str(&serde_json::to_string(&url)?)?;
+        assert_eq!(roundtrip.raw(), url.raw());
+        assert_eq!(roundtrip.given(), None);
+        Ok(())
+    }
 
     #[test]
     #[cfg(feature = "non-pep508-extensions")]
@@ -886,49 +1023,49 @@ mod tests {
 
     #[test]
     fn git_repository() {
-        let url = Url::parse("https://github.com/user/repo.git").unwrap();
+        let url = SafeUrl::parse("https://github.com/user/repo.git").unwrap();
         assert!(looks_like_git_repository(&url));
 
-        let url = Url::parse("https://gitlab.com/user/repo.git").unwrap();
+        let url = SafeUrl::parse("https://gitlab.com/user/repo.git").unwrap();
         assert!(looks_like_git_repository(&url));
 
-        let url = Url::parse("https://bitbucket.org/user/repo.git").unwrap();
+        let url = SafeUrl::parse("https://bitbucket.org/user/repo.git").unwrap();
         assert!(looks_like_git_repository(&url));
 
-        let url = Url::parse("https://github.com/user/repo").unwrap();
+        let url = SafeUrl::parse("https://github.com/user/repo").unwrap();
         assert!(looks_like_git_repository(&url));
 
-        let url = Url::parse("https://example.com/user/repo.git").unwrap();
+        let url = SafeUrl::parse("https://example.com/user/repo.git").unwrap();
         assert!(!looks_like_git_repository(&url));
 
-        let url = Url::parse("https://github.com/user").unwrap();
+        let url = SafeUrl::parse("https://github.com/user").unwrap();
         assert!(!looks_like_git_repository(&url));
 
-        let url = Url::parse("https://github.com/user/repo.zip").unwrap();
+        let url = SafeUrl::parse("https://github.com/user/repo.zip").unwrap();
         assert!(!looks_like_git_repository(&url));
 
-        let url = Url::parse("https://github.com/").unwrap();
+        let url = SafeUrl::parse("https://github.com/").unwrap();
         assert!(!looks_like_git_repository(&url));
 
-        let url = Url::parse("").unwrap_err();
+        let url = SafeUrl::parse_relaxed("").unwrap_err();
         assert_eq!(url.to_string(), "relative URL without a base");
 
-        let url = Url::parse("github.com/user/repo.git").unwrap_err();
+        let url = SafeUrl::parse_relaxed("github.com/user/repo.git").unwrap_err();
         assert_eq!(url.to_string(), "relative URL without a base");
 
-        let url = Url::parse("https://github.com/user/repo/extra.git").unwrap();
+        let url = SafeUrl::parse("https://github.com/user/repo/extra.git").unwrap();
         assert!(!looks_like_git_repository(&url));
 
-        let url = Url::parse("https://github.com/user/repo.GIT").unwrap();
+        let url = SafeUrl::parse("https://github.com/user/repo.GIT").unwrap();
         assert!(looks_like_git_repository(&url));
 
-        let url = Url::parse("https://github.com/user/repo.git?foo=bar").unwrap();
+        let url = SafeUrl::parse("https://github.com/user/repo.git?foo=bar").unwrap();
         assert!(looks_like_git_repository(&url));
 
-        let url = Url::parse("https://github.com/user/repo.git#readme").unwrap();
+        let url = SafeUrl::parse("https://github.com/user/repo.git#readme").unwrap();
         assert!(looks_like_git_repository(&url));
 
-        let url = Url::parse("https://github.com/pypa/pip/archive/1.3.1.zip#sha1=da9234ee9982d4bbb3c72346a6de940a148ea686").unwrap();
+        let url = SafeUrl::parse("https://github.com/pypa/pip/archive/1.3.1.zip#sha1=da9234ee9982d4bbb3c72346a6de940a148ea686").unwrap();
         assert!(!looks_like_git_repository(&url));
     }
 
@@ -964,6 +1101,9 @@ mod tests {
                 ("BAZ", Some("baz")),
                 ("Not-Valid", Some("Not-Valid")),
                 ("TEST_1", Some("Test 1")),
+                ("1", Some("one")),
+                ("EMPTY", Some("")),
+                ("LITERAL", Some("${BAR}")),
                 ("PROJECT_ROOT", None),
             ],
             || {
@@ -983,6 +1123,7 @@ mod tests {
                     Cow::Borrowed("${Not-Valid}")
                 );
                 assert_eq!(expand_env_vars("${}"), Cow::Borrowed("${}"));
+                assert_eq!(expand_env_vars("${BÁR}"), Cow::Borrowed("${BÁR}"));
 
                 // Missing
                 assert_eq!(expand_env_vars("${FOO}"), "${FOO}");
@@ -1006,6 +1147,12 @@ mod tests {
 
                 // Weird
                 assert_eq!(expand_env_vars("${${TEST_1}}"), "${Test 1}");
+                assert_eq!(expand_env_vars("${INVALID-${BAR}}"), "${INVALID-bar}");
+                assert_eq!(expand_env_vars("é${BAR}🦀${BAZ}"), "ébar🦀baz");
+                assert_eq!(expand_env_vars("${BAR}${BAZ"), "bar${BAZ");
+                assert_eq!(expand_env_vars("${1}"), "one");
+                assert_eq!(expand_env_vars("${EMPTY}"), "");
+                assert_eq!(expand_env_vars("${LITERAL}"), "${BAR}");
 
                 // PROJECT_ROOT
                 let cwd = std::env::current_dir().unwrap();

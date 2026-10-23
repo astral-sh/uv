@@ -2,13 +2,14 @@ use std::collections::hash_map::Entry;
 
 use rustc_hash::FxHashMap;
 
-use uv_distribution_types::{CompatibleDist, DistributionId, Identifier, ResolvedDist};
+use uv_distribution_types::{DistributionId, Identifier, ResolvedDist};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 
 use crate::ResolveError;
 use crate::candidate_selector::Candidate;
-use crate::resolver::RegisteredMetadata;
+use crate::prioritized_distribution::CompatibleDist;
+use crate::resolver::{RegisteredMetadata, RegisteredVariantsJson};
 
 #[derive(Clone, Debug)]
 enum FilePin<'index> {
@@ -17,6 +18,8 @@ enum FilePin<'index> {
         dist: ResolvedDist,
         /// The concrete distribution whose metadata is used during resolution.
         metadata: PinMetadata<'index>,
+        /// The index-level variant metadata for the selected package version.
+        variants_json: Option<RegisteredVariantsJson<'index>>,
     },
     Url(RegisteredMetadata<'index>),
 }
@@ -41,6 +44,7 @@ impl<'index> FilePins<'index> {
         &mut self,
         candidate: &Candidate,
         dist: &CompatibleDist,
+        variants_json: Option<RegisteredVariantsJson<'index>>,
         request: Option<impl FnOnce() -> Result<RegisteredMetadata<'index>, ResolveError>>,
     ) -> Result<(), ResolveError> {
         match self
@@ -48,6 +52,14 @@ impl<'index> FilePins<'index> {
             .entry((candidate.name().clone(), candidate.version().clone()))
         {
             Entry::Occupied(mut entry) => {
+                if let FilePin::Registry {
+                    variants_json: pinned_variants_json,
+                    ..
+                } = entry.get_mut()
+                    && pinned_variants_json.is_none()
+                {
+                    *pinned_variants_json = variants_json;
+                }
                 if let Some(request) = request
                     && let FilePin::Registry {
                         metadata: metadata @ PinMetadata::Unrequested(_),
@@ -66,6 +78,7 @@ impl<'index> FilePins<'index> {
                 entry.insert(FilePin::Registry {
                     dist: dist.for_installation().to_owned(),
                     metadata,
+                    variants_json,
                 });
             }
         }
@@ -111,6 +124,18 @@ impl<'index> FilePins<'index> {
         }
     }
 
+    /// Return the variant metadata registered when selecting this package version.
+    pub(crate) fn variants_json(
+        &self,
+        name: &PackageName,
+        version: &Version,
+    ) -> Option<&RegisteredVariantsJson<'index>> {
+        match self.0.get(&(name.clone(), version.clone()))? {
+            FilePin::Registry { variants_json, .. } => variants_json.as_ref(),
+            FilePin::Url(_) => None,
+        }
+    }
+
     /// Return the pinned registry artifact and its metadata identity in a single lookup.
     pub(crate) fn dist_and_id(
         &self,
@@ -118,7 +143,7 @@ impl<'index> FilePins<'index> {
         version: &Version,
     ) -> Option<(&ResolvedDist, &DistributionId)> {
         match self.0.get(&(name.clone(), version.clone()))? {
-            FilePin::Registry { dist, metadata } => Some((
+            FilePin::Registry { dist, metadata, .. } => Some((
                 dist,
                 match metadata {
                     PinMetadata::Unrequested(id) => id,

@@ -33,7 +33,6 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use rustc_hash::FxHashSet;
 use tracing::instrument;
-use url::Url;
 
 use uv_cache_key::CanonicalUrl;
 use uv_client::BaseClientBuilder;
@@ -277,7 +276,7 @@ impl RequirementsSpecification {
                 if let RequirementsInput::Local(path) = input
                     && !path.exists()
                 {
-                    return Err(anyhow::anyhow!("File not found: `{}`", path.user_display()));
+                    return Err(anyhow::anyhow!("File not found: {}", path.user_display()));
                 }
 
                 let requirements_txt =
@@ -297,7 +296,7 @@ impl RequirementsSpecification {
                 let content = match fs_err::tokio::read_to_string(&path).await {
                     Ok(content) => content,
                     Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-                        return Err(anyhow::anyhow!("File not found: `{}`", path.user_display()));
+                        return Err(anyhow::anyhow!("File not found: {}", path.user_display()));
                     }
                     Err(err) => {
                         return Err(anyhow::anyhow!(
@@ -308,7 +307,7 @@ impl RequirementsSpecification {
                     }
                 };
                 let pyproject_toml = PyProjectToml::from_toml(&content, path.user_display())
-                    .with_context(|| format!("Failed to parse: `{}`", path.user_display()))?;
+                    .with_context(|| format!("Failed to parse: {}", path.user_display()))?;
 
                 Self {
                     source_trees: vec![SourceTree::PyProjectToml(path.clone(), pyproject_toml)],
@@ -339,7 +338,7 @@ impl RequirementsSpecification {
             }
             RequirementsSource::SetupPy(path) => {
                 if !path.is_file() {
-                    return Err(anyhow::anyhow!("File not found: `{}`", path.user_display()));
+                    return Err(anyhow::anyhow!("File not found: {}", path.user_display()));
                 }
 
                 Self {
@@ -349,7 +348,7 @@ impl RequirementsSpecification {
             }
             RequirementsSource::SetupCfg(path) => {
                 if !path.is_file() {
-                    return Err(anyhow::anyhow!("File not found: `{}`", path.user_display()));
+                    return Err(anyhow::anyhow!("File not found: {}", path.user_display()));
                 }
 
                 Self {
@@ -361,7 +360,7 @@ impl RequirementsSpecification {
                 if let RequirementsInput::Local(path) = input
                     && !path.exists()
                 {
-                    return Err(anyhow::anyhow!("File not found: `{}`", path.user_display()));
+                    return Err(anyhow::anyhow!("File not found: {}", path.user_display()));
                 }
 
                 Self {
@@ -789,11 +788,7 @@ async fn read_file(
         RequirementsInput::Stdin => Ok(uv_fs::read_stdin_to_string_transcode()?),
         RequirementsInput::Remote(url) => {
             let client = client_builder.build()?;
-            let response = client
-                .for_host(url)
-                .get(Url::from(url.clone()))
-                .send()
-                .await?;
+            let response = client.for_host(url).get(url.clone()).send().await?;
 
             response.error_for_status_ref()?;
 

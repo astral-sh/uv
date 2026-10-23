@@ -1,15 +1,20 @@
 pub use crate::extras::*;
 pub use crate::lookahead::*;
+pub use crate::script::{
+    ScriptRequirementsError, script_extra_build_requires, script_specification,
+};
 pub use crate::source_tree::*;
 pub use crate::sources::*;
 pub use crate::specification::*;
 pub use crate::unnamed::*;
 pub use uv_configuration::RequirementsInput;
 
+use uv_distribution::check_supported_wheel_variant;
 use uv_distribution_types::{Dist, DistErrorKind, Requirement, RequirementSource};
 
 mod extras;
 mod lookahead;
+mod script;
 mod source_tree;
 mod sources;
 mod specification;
@@ -68,10 +73,8 @@ impl Error {
 }
 
 /// Convert a [`Requirement`] into a [`Dist`], if it is a direct URL.
-pub(crate) fn required_dist(
-    requirement: &Requirement,
-) -> Result<Option<Dist>, uv_distribution_types::Error> {
-    Ok(Some(match &requirement.source {
+pub(crate) fn required_dist(requirement: &Requirement) -> Result<Option<Dist>, Error> {
+    let dist = match &requirement.source {
         RequirementSource::Registry { .. } => return Ok(None),
         RequirementSource::Url {
             subdirectory,
@@ -81,7 +84,7 @@ pub(crate) fn required_dist(
         } => Dist::from_http_url(
             requirement.name.clone(),
             url.clone(),
-            location.clone(),
+            location.as_url().clone(),
             subdirectory.clone(),
             *ext,
         )?,
@@ -124,5 +127,13 @@ pub(crate) fn required_dist(
             *editable,
             *r#virtual,
         )?,
-    }))
+    };
+
+    // A direct requirement has no index from which to resolve a wheel variant.
+    if let Dist::Built(built) = &dist
+        && let Err(err) = check_supported_wheel_variant(built)
+    {
+        return Err(Error::from_dist(dist, err));
+    }
+    Ok(Some(dist))
 }

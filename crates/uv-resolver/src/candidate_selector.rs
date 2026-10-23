@@ -7,10 +7,7 @@ use smallvec::SmallVec;
 use tracing::{debug, trace};
 
 use uv_configuration::IndexStrategy;
-use uv_distribution_types::{
-    CompatibleDist, IncompatibleDist, IncompatibleSource, IndexUrl, ResolutionRecorder,
-};
-use uv_distribution_types::{DistributionMetadata, IncompatibleWheel, Name, PrioritizedDist};
+use uv_distribution_types::{DistributionMetadata, IndexUrl, Name, ResolutionRecorder};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_platform_tags::Tags;
@@ -18,6 +15,9 @@ use uv_types::InstalledPackagesProvider;
 
 use crate::preferences::{Entry, PreferenceSource, Preferences};
 use crate::prerelease::{PrereleaseSelection, PrereleaseStrategy};
+use crate::prioritized_distribution::{
+    CompatibleDist, IncompatibleDist, IncompatibleSource, IncompatibleWheel, PrioritizedDist,
+};
 use crate::pubgrub::Range;
 use crate::resolution_mode::ResolutionStrategy;
 use crate::version_map::{VersionMap, VersionMapDistHandle};
@@ -279,7 +279,7 @@ impl CandidateSelector {
                     [dist] => {
                         if dist.version() == version {
                             debug!(
-                                "Found installed version of {dist} that satisfies preference in {range}"
+                                "Found installed version of `{dist}` that satisfies preference in {range}"
                             );
 
                             // Verify that the installed distribution is compatible with the environment.
@@ -289,7 +289,7 @@ impl CandidateSelector {
                                 };
                                 !wheel_tags.is_compatible(tags)
                             }) {
-                                debug!("Platform tags mismatch for installed {dist}");
+                                debug!("Platform tags mismatch for installed `{dist}`");
                                 continue;
                             }
 
@@ -401,7 +401,7 @@ impl CandidateSelector {
                     };
                     !wheel_tags.is_compatible(tags)
                 }) {
-                    debug!("Platform tags mismatch for installed {dist}");
+                    debug!("Platform tags mismatch for installed `{dist}`");
                     return None;
                 }
 
@@ -780,17 +780,16 @@ where
                     return !is_after(version, end);
                 }
             }
-        } else {
-            loop {
-                let (start, end) = self.current;
-                if is_after(version, end) {
-                    let Some(current) = self.segments.next() else {
-                        return false;
-                    };
-                    self.current = current;
-                } else {
-                    return !is_before(version, start);
-                }
+        }
+        loop {
+            let (start, end) = self.current;
+            if is_after(version, end) {
+                let Some(current) = self.segments.next() else {
+                    return false;
+                };
+                self.current = current;
+            } else {
+                return !is_before(version, start);
             }
         }
     }
@@ -882,9 +881,9 @@ pub(crate) enum CandidateDist<'a> {
     },
 }
 
-impl CandidateDist<'_> {
+impl<'a> CandidateDist<'a> {
     /// For an installable dist, return the prioritized distribution.
-    fn prioritized(&self) -> Option<&PrioritizedDist> {
+    fn prioritized(&self) -> Option<&'a PrioritizedDist> {
         match self {
             Self::Compatible(dist) => dist.prioritized(),
             Self::Incompatible {
@@ -968,6 +967,14 @@ impl<'a> Candidate<'a> {
         }
     }
 
+    /// Reevaluate this version with variant compatibility taken into account.
+    pub(crate) fn with_prioritized_dist(self, prioritized: &'a PrioritizedDist) -> Self {
+        Self {
+            dist: CandidateDist::from(prioritized),
+            ..self
+        }
+    }
+
     /// Return the name of the package.
     pub(crate) fn name(&self) -> &PackageName {
         self.name
@@ -998,7 +1005,7 @@ impl<'a> Candidate<'a> {
     }
 
     /// Return the prioritized distribution for the candidate.
-    pub(crate) fn prioritized(&self) -> Option<&PrioritizedDist> {
+    pub(crate) fn prioritized(&self) -> Option<&'a PrioritizedDist> {
         self.dist.prioritized()
     }
 }

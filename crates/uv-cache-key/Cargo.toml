@@ -1,6 +1,6 @@
 [package]
 name = "uv-cache-key"
-version = "0.0.86"
+version = "0.0.97"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -22,4 +22,3 @@ hex = { workspace = true }
 memchr = { workspace = true }
 percent-encoding = { workspace = true }
 seahash = { workspace = true }
-url = { workspace = true }

@@ -3,7 +3,6 @@ use std::fmt::Formatter;
 use std::path::{Component, Path, PathBuf};
 
 use owo_colors::OwoColorize;
-use url::Url;
 
 use uv_configuration::{
     DependencyGroupsWithDefaults, EditableMode, ExtrasSpecificationWithDefaults, InstallOptions,
@@ -13,9 +12,9 @@ use uv_fs::Simplified;
 use uv_git_types::GitReference;
 use uv_normalize::PackageName;
 use uv_pypi_types::{ParsedArchiveUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl};
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 
-use crate::lock::export::{ExportableRequirement, ExportableRequirements};
+use crate::lock::export::{ExportableRequirement, ExportableRequirements, VirtualPackages};
 use crate::lock::{Package, PackageId, Source};
 use crate::{Installable, LockError};
 
@@ -46,6 +45,7 @@ impl<'lock> RequirementsTxtExport<'lock> {
             dev,
             annotate,
             install_options,
+            VirtualPackages::Exclude,
         )?;
 
         // Sort the nodes, such that unnamed URLs (editables) appear at the top.
@@ -99,13 +99,13 @@ impl std::fmt::Display for RequirementsTxtExport<'_> {
                     let url = if let Some(install_path) = git.path.as_ref() {
                         let ext =
                             DistExtension::from_path(install_path).map_err(|_| std::fmt::Error)?;
-                        DisplaySafeUrl::from(ParsedGitPathUrl {
+                        SafeUrl::from(ParsedGitPathUrl {
                             url: git_url.clone(),
                             install_path: install_path.clone(),
                             ext,
                         })
                     } else {
-                        DisplaySafeUrl::from(ParsedGitDirectoryUrl {
+                        SafeUrl::from(ParsedGitDirectoryUrl {
                             url: git_url.clone(),
                             subdirectory: git.subdirectory.clone(),
                         })
@@ -114,7 +114,7 @@ impl std::fmt::Display for RequirementsTxtExport<'_> {
                     write!(f, "{} @ {}", package.id.name, url)?;
                 }
                 Source::Direct(url, direct) => {
-                    let url = DisplaySafeUrl::from(ParsedArchiveUrl {
+                    let url = SafeUrl::from(ParsedArchiveUrl {
                         url: url.to_url().map_err(|_| std::fmt::Error)?,
                         subdirectory: direct.subdirectory.clone(),
                         ext: DistExtension::Source(SourceDistExtension::TarGz),
@@ -133,7 +133,7 @@ impl std::fmt::Display for RequirementsTxtExport<'_> {
                         write!(
                             f,
                             "{}",
-                            Url::from_file_path(path).map_err(|()| std::fmt::Error)?
+                            SafeUrl::from_file_path(path).map_err(|()| std::fmt::Error)?
                         )?;
                     } else {
                         write!(f, "{}", anchor(path).portable_display())?;
@@ -152,7 +152,7 @@ impl std::fmt::Display for RequirementsTxtExport<'_> {
                             write!(
                                 f,
                                 "{}",
-                                Url::from_file_path(path).map_err(|()| std::fmt::Error)?
+                                SafeUrl::from_file_path(path).map_err(|()| std::fmt::Error)?
                             )?;
                         } else {
                             write!(f, "{}", anchor(path).portable_display())?;

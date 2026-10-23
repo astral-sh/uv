@@ -9,16 +9,19 @@ use memchr::memmem::Finder;
 use serde::Deserialize;
 use thiserror::Error;
 use tracing::instrument;
-use url::Url;
 
 use uv_configuration::NoSources;
 use uv_normalize::PackageName;
 use uv_pep440::VersionSpecifiers;
 use uv_pypi_types::VerbatimParsedUrl;
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 use uv_settings::{GlobalOptions, ResolverInstallerSchema};
 use uv_warnings::warn_user;
 use uv_workspace::pyproject::{BuildConstraintDependency, ExtraBuildDependency, Sources};
+
+mod discovery;
+
+pub use discovery::{ScriptDiscoveryError, find_scripts};
 
 pub use uv_configuration::ExcludeDependency;
 pub use uv_workspace::pyproject::OverrideDependency;
@@ -33,7 +36,7 @@ pub enum Pep723Item {
     /// A PEP 723 script provided via `stdin`.
     Stdin(Pep723Metadata),
     /// A PEP 723 script provided via a remote URL.
-    Remote(Pep723Metadata, DisplaySafeUrl),
+    Remote(Pep723Metadata, SafeUrl),
 }
 
 impl Pep723Item {
@@ -63,7 +66,7 @@ pub enum Pep723ItemRef<'item> {
     /// A PEP 723 script provided via `stdin`.
     Stdin(&'item Pep723Metadata),
     /// A PEP 723 script provided via a remote URL.
-    Remote(&'item Pep723Metadata, &'item Url),
+    Remote(&'item Pep723Metadata, &'item SafeUrl),
 }
 
 impl Pep723ItemRef<'_> {
@@ -727,9 +730,11 @@ fn serialize_metadata(metadata: &str) -> String {
 #[cfg(test)]
 mod tests {
     use std::assert_matches;
+    use std::str::FromStr;
+
+    use indoc::indoc;
 
     use crate::{Pep723Error, Pep723Script, ScriptTag, serialize_metadata};
-    use std::str::FromStr;
 
     #[test]
     fn missing_space() {
@@ -764,8 +769,11 @@ mod tests {
 
     #[test]
     fn closing_tag_trailing_whitespace() {
-        // Explicit string (not `indoc`) so the closing tag's trailing space is preserved.
-        let contents = "# /// script\n# requires-python = '>=3.11'\n# /// \n";
+        let contents = indoc! {"
+            # /// script
+            # requires-python = '>=3.11'
+            # ///\x20
+        "};
 
         assert_matches!(
             ScriptTag::parse(contents.as_bytes()),
@@ -802,19 +810,33 @@ mod tests {
         assert_eq!(actual.metadata, "dependencies = []\n");
         assert_eq!(
             actual.postlude,
-            "# /// documentation\nprint(\"Hello, world!\")\n"
+            indoc! {r#"
+                # /// documentation
+                print("Hello, world!")
+            "#}
         );
     }
 
     #[test]
     fn closing_tag_followed_by_trailing_whitespace_comment() {
-        let contents =
-            "# /// script\n# dependencies = []\n# ///\n# /// \nprint(\"Hello, world!\")\n";
+        let contents = indoc! {"
+            # /// script
+            # dependencies = []
+            # ///
+            # ///\x20
+            print(\"Hello, world!\")
+        "};
 
         let actual = ScriptTag::parse(contents.as_bytes()).unwrap().unwrap();
 
         assert_eq!(actual.metadata, "dependencies = []\n");
-        assert_eq!(actual.postlude, "# /// \nprint(\"Hello, world!\")\n");
+        assert_eq!(
+            actual.postlude,
+            indoc! {"
+                # ///\x20
+                print(\"Hello, world!\")
+            "}
+        );
     }
 
     #[test]
@@ -1009,7 +1031,13 @@ mod tests {
         let actual = ScriptTag::parse(contents.as_bytes()).unwrap().unwrap();
 
         assert_eq!(actual.metadata, "dependencies = []\n");
-        assert_eq!(actual.postlude, "# /// script\nprint(\"Hello, world!\")\n");
+        assert_eq!(
+            actual.postlude,
+            indoc! {r#"
+                # /// script
+                print("Hello, world!")
+            "#}
+        );
     }
 
     #[test]
@@ -1057,7 +1085,10 @@ mod tests {
     #[test]
     fn serialize_metadata_empty() {
         let metadata = "";
-        let expected_output = "# /// script\n# ///\n";
+        let expected_output = indoc! {"
+            # /// script
+            # ///
+        "};
 
         let result = serialize_metadata(metadata);
         assert_eq!(result, expected_output);

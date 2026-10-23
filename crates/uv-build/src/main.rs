@@ -3,14 +3,12 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::str::FromStr;
 use uv_preview::Preview;
-use uv_static::{EnvVars, parse_boolish_environment_variable};
+use uv_static::{EnvVars, TarBackend, parse_boolish_environment_variable};
 
 use anyhow::{Context, Result, bail};
 use tracing::debug;
+use tracing_subscriber::EnvFilter;
 use tracing_subscriber::filter::LevelFilter;
-use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::util::SubscriberInitExt;
-use tracing_subscriber::{EnvFilter, Layer};
 
 use uv_logging::UvFormat;
 
@@ -25,22 +23,18 @@ fn main() -> Result<()> {
         .with_default_directive(LevelFilter::OFF.into())
         .from_env()
         .context("Invalid RUST_LOG directives")?;
-    let stderr_layer = tracing_subscriber::fmt::layer()
-        .event_format(UvFormat::default())
+    tracing_subscriber::fmt()
+        .event_format(UvFormat)
         .with_writer(std::sync::Mutex::new(anstream::stderr()))
-        .with_filter(filter);
-    tracing_subscriber::registry().with(stderr_layer).init();
+        .with_env_filter(filter)
+        .init();
 
     // Handrolled to avoid the large clap dependency
     let mut args = env::args_os();
     // Skip the name of the binary
     args.next();
-    let command = args
-        .next()
-        .context("Missing command")?
-        .to_str()
-        .context("Invalid non-UTF8 command")?
-        .to_string();
+    let command = args.next().context("Missing command")?;
+    let command = command.to_str().context("Invalid non-UTF8 command")?;
 
     // Ad-hoc preview features parsing due to a lack of clap CLI in uv-build.
     let preview = if parse_boolish_environment_variable(EnvVars::UV_PREVIEW)?.unwrap_or(false) {
@@ -68,7 +62,7 @@ fn main() -> Result<()> {
     // Errors returned by finalize are self-describing, but should also be impossible.
     uv_preview::finalize().unwrap();
 
-    match command.as_str() {
+    match command {
         "build-sdist" => {
             let sdist_directory = PathBuf::from(args.next().context("Missing sdist directory")?);
             let filename = uv_build_backend::build_source_dist(
@@ -76,6 +70,7 @@ fn main() -> Result<()> {
                 &sdist_directory,
                 uv_version::version(),
                 false,
+                TarBackend::from_env(),
             )?;
             // Tell the build frontend about the name of the artifact we built
             writeln!(&mut std::io::stdout(), "{filename}").context("stdout is closed")?;

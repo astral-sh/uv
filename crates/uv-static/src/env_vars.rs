@@ -141,6 +141,10 @@ impl EnvVars {
     #[attr_added_in("0.1.34")]
     pub const UV_REQUIRE_HASHES: &'static str = "UV_REQUIRE_HASHES";
 
+    /// Require hashes for build dependencies across project, build, tool, and pip commands.
+    #[attr_added_in("0.13.0")]
+    pub const UV_REQUIRE_BUILD_HASHES: &'static str = "UV_REQUIRE_BUILD_HASHES";
+
     /// Require wheel metadata to be fetched with HTTP range requests when separate metadata is
     /// unavailable. If set to `true`, uv will fail instead of downloading the entire wheel.
     #[attr_hidden]
@@ -220,6 +224,11 @@ impl EnvVars {
     /// Whether uv should prefer system or managed Python versions.
     #[attr_added_in("0.3.2")]
     pub const UV_PYTHON_PREFERENCE: &'static str = "UV_PYTHON_PREFERENCE";
+
+    /// Selects the architecture for Python requests that do not specify one, e.g., `x86_64`
+    /// or `aarch64`. Requests that name an interpreter executable take precedence.
+    #[attr_added_in("0.12.22")]
+    pub const UV_PYTHON_ARCH: &'static str = "UV_PYTHON_ARCH";
 
     /// Require use of uv-managed Python versions.
     #[attr_added_in("0.6.8")]
@@ -416,6 +425,11 @@ impl EnvVars {
     #[attr_added_in("0.8.6")]
     pub const UV_INSECURE_NO_ZIP_VALIDATION: &'static str = "UV_INSECURE_NO_ZIP_VALIDATION";
 
+    /// Use the legacy backend to read and write tar archives.
+    /// Set to a true value (e.g., `1`) to enable this compatibility fallback.
+    #[attr_added_in("0.13.0")]
+    pub const UV_LEGACY_TAR_BACKEND: &'static str = "UV_LEGACY_TAR_BACKEND";
+
     /// Sets the maximum number of in-flight concurrent downloads that uv will
     /// perform at any given time.
     #[attr_added_in("0.1.43")]
@@ -526,6 +540,24 @@ impl EnvVars {
     /// Distributions can be read from a local directory by using the `file://` URL scheme.
     #[attr_added_in("0.2.35")]
     pub const UV_PYPY_INSTALL_MIRROR: &'static str = "UV_PYPY_INSTALL_MIRROR";
+
+    /// Managed GraalPy installations are downloaded from [GitHub](https://github.com/oracle/graalpython/releases).
+    ///
+    /// This variable can be set to a mirror URL to use a different source for GraalPy installations.
+    /// The provided URL will replace `https://github.com/oracle/graalpython/releases/download` in, e.g.,
+    /// `https://github.com/oracle/graalpython/releases/download/graal-24.2.2/graalpy-24.2.2-macos-aarch64.tar.gz`.
+    /// Distributions can be read from a local directory by using the `file://` URL scheme.
+    #[attr_added_in("0.12.24")]
+    pub const UV_GRAALPY_INSTALL_MIRROR: &'static str = "UV_GRAALPY_INSTALL_MIRROR";
+
+    /// Managed Pyodide installations are downloaded from [GitHub](https://github.com/pyodide/pyodide/releases).
+    ///
+    /// This variable can be set to a mirror URL to use a different source for Pyodide installations.
+    /// The provided URL will replace `https://github.com/pyodide/pyodide/releases/download` in, e.g.,
+    /// `https://github.com/pyodide/pyodide/releases/download/0.29.5/xbuildenv-0.29.5.tar.gz`.
+    /// Distributions can be read from a local directory by using the `file://` URL scheme.
+    #[attr_added_in("0.12.24")]
+    pub const UV_PYODIDE_INSTALL_MIRROR: &'static str = "UV_PYODIDE_INSTALL_MIRROR";
 
     /// Replaces the `https://releases.astral.sh` base URL for all Astral-mirrored
     /// metadata and artifact downloads.
@@ -1389,7 +1421,7 @@ impl EnvVars {
     pub const UV_RUN_RLIMIT_NOFILE: &'static str = "UV_RUN_RLIMIT_NOFILE";
 
     /// Number of times that `uv run` has been recursively invoked. Used to guard against infinite
-    /// recursion, e.g., when `uv run`` is used in a script shebang.
+    /// recursion, e.g., when `uv run` is used in a script shebang.
     #[attr_hidden]
     #[attr_added_in("0.5.31")]
     pub const UV_RUN_RECURSION_DEPTH: &'static str = "UV_RUN_RECURSION_DEPTH";
@@ -1410,6 +1442,20 @@ impl EnvVars {
     #[attr_hidden]
     #[attr_added_in("0.6.9")]
     pub const UV_CUDA_DRIVER_VERSION: &'static str = "UV_CUDA_DRIVER_VERSION";
+
+    // TODO(konsti): Unhide these NVIDIA provider overrides when wheel variants leave preview.
+    // TODO(konsti): Adopt clearer override names if the NVIDIA provider defines them upstream.
+    /// Override the CUDA user-mode driver version for the NVIDIA wheel variant provider
+    /// (e.g., `12.7`).
+    #[attr_hidden]
+    #[attr_added_in("next release")]
+    pub const NV_VARIANT_PROVIDER_FORCE_CUDA_DRIVER_VERSION: &'static str =
+        "NV_VARIANT_PROVIDER_FORCE_CUDA_DRIVER_VERSION";
+
+    /// Override the GPU compute capability for the NVIDIA wheel variant provider (e.g., `8.9`).
+    #[attr_hidden]
+    #[attr_added_in("next release")]
+    pub const NV_VARIANT_PROVIDER_FORCE_SM_ARCH: &'static str = "NV_VARIANT_PROVIDER_FORCE_SM_ARCH";
 
     /// The AMD GPU architecture to assume when inferring the PyTorch backend (e.g., `gfx1100`).
     #[attr_hidden]

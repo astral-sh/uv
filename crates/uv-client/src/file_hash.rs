@@ -2,11 +2,10 @@ use std::path::Path;
 
 use futures::TryStreamExt;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
-use url::Url;
 
 use uv_extract::hash::{HashReader, Hasher};
 use uv_pypi_types::{HashAlgorithm, HashDigest};
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 
 use crate::{RegistryClient, WrappedReqwestError};
 
@@ -18,16 +17,16 @@ pub enum FileHashError {
     // Request and status errors use `WrappedReqwestError`, while errors reading the response body
     // use `io::Error`. Both are download failures.
     #[error("Failed to download `{0}` to compute missing hashes")]
-    DownloadFile(Box<DisplaySafeUrl>, #[source] WrappedReqwestError),
+    DownloadFile(Box<SafeUrl>, #[source] WrappedReqwestError),
     #[error("Failed to download `{0}` to compute missing hashes")]
-    StreamFile(Box<DisplaySafeUrl>, #[source] std::io::Error),
+    StreamFile(Box<SafeUrl>, #[source] std::io::Error),
     #[error("Failed to read `{0}` to compute missing hashes")]
     ReadFile(Box<Path>, #[source] std::io::Error),
 }
 
 impl RegistryClient {
     /// Read or download a file and compute its SHA-256 digest without extracting its contents.
-    pub async fn hash_file(&self, url: &DisplaySafeUrl) -> Result<HashDigest, FileHashError> {
+    pub async fn hash_file(&self, url: &SafeUrl) -> Result<HashDigest, FileHashError> {
         let mut hashers = [Hasher::from(HashAlgorithm::Sha256)];
         if url.scheme() == "file" {
             let path = url.to_file_path().map_err(|()| FileHashError::UrlToPath)?;
@@ -41,7 +40,7 @@ impl RegistryClient {
         } else {
             let response = self
                 .uncached_client(url)
-                .get(Url::from(url.clone()))
+                .get(url.clone())
                 .header(
                     // `reqwest` defaults to accepting compressed responses.
                     // Specify identity encoding to get consistent .whl downloading

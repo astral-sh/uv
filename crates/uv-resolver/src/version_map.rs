@@ -11,18 +11,22 @@ use uv_client::{FlatIndexEntry, OwnedArchive, SimpleDetailMetadata, VersionFiles
 use uv_configuration::BuildOptions;
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
-    HashComparison, IncompatibleSource, IncompatibleWheel, IndexUrl, MinimumLibcVersion,
-    PrioritizedDist, RegistryBuiltWheel, RegistrySourceDist, RequiresPython,
-    SourceDistCompatibility, WheelCompatibility,
+    IndexEntryFilename, IndexUrl, MinimumLibcVersion, RegistryBuiltWheel, RegistrySourceDist,
+    RequiresPython,
 };
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_platform_tags::{IncompatibleTag, TagCompatibility, Tags};
+use uv_preview::PreviewFeature;
 use uv_pypi_types::{HashDigest, ResolutionMetadata, Yanked};
 use uv_types::HashStrategy;
 use uv_warnings::warn_user_once;
 
 use crate::flat_index::FlatDistributions;
+use crate::prioritized_distribution::{
+    HashComparison, IncompatibleSource, IncompatibleWheel, PrioritizedDist, RegistryVariantsJson,
+    SourceDistCompatibility, WheelCompatibility,
+};
 use crate::yanks::AllowedYanks;
 
 /// A map from versions to distributions.
@@ -63,6 +67,10 @@ impl VersionMap {
         // from a `VersionFiles` to a PrioritizedDist for each version
         // isn't done until that specific version is requested.
         for (datum_index, datum) in simple_metadata.iter().enumerate() {
+            // Index metadata alone does not provide an installable distribution.
+            if datum.files.wheels.is_empty() && datum.files.source_dists.is_empty() {
+                continue;
+            }
             let version = rkyv::deserialize::<Version, rkyv::rancor::Error>(&datum.version)
                 .expect("archived version always deserializes");
 
@@ -627,7 +635,24 @@ impl VersionMapLazy {
             )
             .expect("archived version files always deserializes");
             let mut priority_dist = init.cloned().unwrap_or_default();
-            for (filename, file) in files.all(&self.package_name) {
+            for (filename, file) in files.all_entries(&self.package_name) {
+                let filename = match filename {
+                    IndexEntryFilename::DistFilename(filename) => filename,
+                    IndexEntryFilename::VariantJson(filename) => {
+                        if !priority_dist
+                            .variants_json()
+                            .iter()
+                            .any(|variants_json| variants_json.index == self.index)
+                        {
+                            priority_dist.insert_variants_json(RegistryVariantsJson {
+                                filename,
+                                file,
+                                index: self.index.clone(),
+                            });
+                        }
+                        continue;
+                    }
+                };
                 // Support resolving as if it were an earlier timestamp, at least as long files have
                 // upload time information.
                 let (excluded, upload_time) = if let Some(included_version_cutoff) =
@@ -645,7 +670,7 @@ impl VersionMapLazy {
                         }
                         None => {
                             warn_user_once!(
-                                "{} is missing an upload date, but user provided: {included_version_cutoff}",
+                                "`{}` is missing an upload date, but user provided: {included_version_cutoff}",
                                 file.filename,
                             );
                             (true, None)
@@ -814,9 +839,15 @@ impl VersionMapLazy {
             }
         }
 
+        if filename.variant().is_some() && !uv_preview::is_enabled(PreviewFeature::WheelVariants) {
+            return WheelCompatibility::Incompatible(IncompatibleWheel::Tag(
+                IncompatibleTag::Variant,
+            ));
+        }
+
         // Determine a compatibility for the wheel based on tags.
         let priority = if let Some(tags) = &self.tags {
-            match filename.compatibility(tags) {
+            match filename.tag_compatibility(tags) {
                 TagCompatibility::Incompatible(tag) => {
                     return WheelCompatibility::Incompatible(IncompatibleWheel::Tag(tag));
                 }
@@ -848,10 +879,7 @@ impl VersionMapLazy {
             }
         };
 
-        // Break ties with the build tag.
-        let build_tag = filename.build_tag().cloned();
-
-        WheelCompatibility::Compatible(hash, priority, build_tag)
+        WheelCompatibility::from_tag_priority(filename, hash, priority)
     }
 }
 

@@ -1,6 +1,6 @@
 pub use compile::{CompileError, compile_files, compile_tree};
-pub use installer::{Installer, Reporter as InstallReporter};
-pub use plan::{IncompatibleWheelError, Plan, Planner};
+pub use installer::{InstallError, Installer, Reporter as InstallReporter};
+pub use plan::{IncompatibleWheelError, Plan, PlanError, Planner};
 pub use preparer::{Error as PrepareError, Preparer, Reporter as PrepareReporter};
 pub use satisfies::BuildSettings;
 pub use site_packages::{

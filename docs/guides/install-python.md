@@ -28,7 +28,7 @@ Once Python is installed, it will be used by `uv` commands automatically. uv als
 version to your `PATH`:
 
 ```console
-$ python3.13
+$ python3.15
 ```
 
 uv only installs a _versioned_ executable by default. To install `python` and `python3` executables,
@@ -128,11 +128,6 @@ To force uv to use the system Python, provide the `--no-managed-python` flag. Se
 documentation for more details.
 
 ## Upgrading Python versions
-
-!!! important
-
-    Support for upgrading Python patch versions is in _preview_. This means the behavior is
-    experimental and subject to change.
 
 To upgrade a Python version to the latest supported patch release:
 

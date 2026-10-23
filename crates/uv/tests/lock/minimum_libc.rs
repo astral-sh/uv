@@ -1,5 +1,3 @@
-use std::collections::BTreeMap;
-
 use anyhow::{Context, Result};
 use assert_fs::fixture::ChildPath;
 use assert_fs::prelude::*;
@@ -8,21 +6,15 @@ use insta::assert_snapshot;
 
 use uv_test::archive::write_tar_gz;
 use uv_test::find_links::FindLinksServer;
-use uv_test::packse::{PackseServer, generate_wheel, scenario::Scenario};
+use uv_test::packse::{PackseServer, WheelBuilder, scenario::Scenario};
 use uv_test::{TestContext, uv_snapshot};
 
 fn wheel(context: &TestContext, name: &str, version: &str, tag: &str) -> Result<ChildPath> {
     let links = context.temp_dir.child("links");
     links.create_dir_all()?;
-    let (filename, bytes) = generate_wheel(
-        &name.parse()?,
-        &version.parse()?,
-        &[],
-        &BTreeMap::new(),
-        None,
-        tag,
-        &[],
-    );
+    let (filename, bytes) = WheelBuilder::new(&name.parse()?, &version.parse()?)
+        .tag(tag)
+        .build();
     let wheel = links.child(filename);
     wheel.write_binary(&bytes)?;
     Ok(wheel)
@@ -72,7 +64,7 @@ fn minimum_libc_retains_locked_wheels() -> Result<()> {
     insta::with_settings!({filters => context.filters()}, {
         assert_snapshot!(context.read("uv.lock"), @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         required-markers = [
             "platform_machine == 'x86_64' and sys_platform == 'linux'",
@@ -133,7 +125,7 @@ fn minimum_libc_retains_locked_wheels() -> Result<()> {
      + demo==1.0.0
     ");
     let wheel_metadata = context.site_packages().join("demo-1.0.0.dist-info/WHEEL");
-    assert_snapshot!(fs_err::read_to_string(&wheel_metadata)?, @"
+    assert_snapshot!(context.read(&wheel_metadata), @"
     Wheel-Version: 1.0
     Generator: uv-test
     Root-Is-Purelib: true
@@ -148,7 +140,7 @@ fn minimum_libc_retains_locked_wheels() -> Result<()> {
     Installed 1 package in [TIME]
      ~ demo==1.0.0
     ");
-    assert_snapshot!(fs_err::read_to_string(&wheel_metadata)?, @"
+    assert_snapshot!(context.read(&wheel_metadata), @"
     Wheel-Version: 1.0
     Generator: uv-test
     Root-Is-Purelib: true
@@ -225,7 +217,7 @@ fn minimum_libc_switch_families() -> Result<()> {
     insta::with_settings!({filters => context.filters()}, {
         assert_snapshot!(lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         resolution-markers = [
             "platform_machine == 'x86_64' and sys_platform == 'linux'",
@@ -288,7 +280,7 @@ fn minimum_libc_switch_families() -> Result<()> {
     insta::with_settings!({filters => context.filters()}, {
         assert_snapshot!(lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         resolution-markers = [
             "platform_machine == 'x86_64' and sys_platform == 'linux'",
@@ -410,7 +402,7 @@ fn minimum_libc_local_version_fallback() -> Result<()> {
     insta::with_settings!({filters => context.filters()}, {
         assert_snapshot!(lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         resolution-markers = [
             "python_full_version >= '3.13' or platform_machine != 'aarch64' or platform_python_implementation != 'CPython' or sys_platform != 'linux'",
@@ -539,7 +531,7 @@ fn minimum_libc_backtracks_and_invalidates_lock() -> Result<()> {
     insta::with_settings!({filters => context.filters()}, {
         assert_snapshot!(lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         required-markers = [
             "platform_machine == 'x86_64' and sys_platform == 'linux'",
@@ -751,7 +743,7 @@ fn minimum_libc_allows_sdist_fallback() -> Result<()> {
     insta::with_settings!({filters => context.filters()}, {
         assert_snapshot!(lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         required-markers = [
             "platform_machine == 'x86_64' and sys_platform == 'linux'",
@@ -945,7 +937,7 @@ fn minimum_libc_architectures_and_markers() -> Result<()> {
     insta::with_settings!({filters => context.filters()}, {
         assert_snapshot!(lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         resolution-markers = [
             "platform_machine == 'x86_64' and sys_platform == 'linux'",
@@ -1046,7 +1038,7 @@ fn minimum_libc_invalid_configuration() -> Result<()> {
          |                                  ^^^^^^^^
       expected a libc version in the form `<major>.<minor>` (e.g., `2.31` or `1.2`)
 
-    error: Failed to parse: `pyproject.toml`
+    error: Failed to parse: pyproject.toml
       cause: TOML parse error at line 11, column 34
                 |
              11 | minimum-libc-version = { glibc = "2.31.1" }
@@ -1074,7 +1066,7 @@ fn minimum_libc_invalid_configuration() -> Result<()> {
         |                                 ^^^^^
       invalid type: boolean `false`, expected a libc version string in the form `<major>.<minor>`
 
-    error: Failed to parse: `pyproject.toml`
+    error: Failed to parse: pyproject.toml
       cause: TOML parse error at line 8, column 33
                |
              8 | minimum-libc-version = { musl = false }
@@ -1102,7 +1094,7 @@ fn minimum_libc_invalid_configuration() -> Result<()> {
         |                                  ^^^^
       invalid type: floating point `2.31`, expected a libc version string in the form `<major>.<minor>`
 
-    error: Failed to parse: `pyproject.toml`
+    error: Failed to parse: pyproject.toml
       cause: TOML parse error at line 8, column 34
                |
              8 | minimum-libc-version = { glibc = 2.31 }
@@ -1130,7 +1122,7 @@ fn minimum_libc_invalid_configuration() -> Result<()> {
         |                          ^^^^^^^
       unknown field `unknown`, expected `glibc` or `musl`
 
-    error: Failed to parse: `pyproject.toml`
+    error: Failed to parse: pyproject.toml
       cause: TOML parse error at line 8, column 26
                |
              8 | minimum-libc-version = { unknown = "1.2" }
@@ -1160,7 +1152,7 @@ fn minimum_libc_invalid_configuration() -> Result<()> {
         warning: Found both a `uv.toml` file and a `[tool.uv]` section in an adjacent `pyproject.toml`. The following fields from `[tool.uv]` will be ignored in favor of the `uv.toml` file:
         - no-index
         - find-links
-        error: Failed to parse: `uv.toml`. The `minimum-libc-version` field is not allowed in a `uv.toml` file. `minimum-libc-version` is only applicable in the context of a project, and should be placed in a `pyproject.toml` file instead.
+        error: Failed to parse `uv.toml`. The `minimum-libc-version` field is not allowed in a `uv.toml` file. `minimum-libc-version` is only applicable in the context of a project, and should be placed in a `pyproject.toml` file instead.
     ");
     Ok(())
 }

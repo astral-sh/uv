@@ -5,9 +5,7 @@ use std::hash::{Hash, Hasher};
 use std::ops::Bound;
 use std::str::FromStr;
 
-use crate::{
-    Operator, OperatorParseError, Version, VersionPattern, VersionPatternParseError, version,
-};
+use crate::{Operator, OperatorParseError, Version, VersionPattern, VersionPatternParseError};
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 #[cfg(feature = "tracing")]
 use tracing::warn;
@@ -716,19 +714,11 @@ impl VersionSpecifier {
                     return true;
                 }
 
-                if version::compare_release(&this.release(), &other.release()) == Ordering::Equal {
-                    // This special case is here so that, unless the specifier itself
-                    // includes is a post-release version, that we do not accept
-                    // post-release versions for the version mentioned in the specifier
-                    // (e.g. >3.1 should not match 3.0.post0, but should match 3.2.post0).
-                    if !this.is_post() && other.is_post() {
-                        return false;
-                    }
-
-                    // We already checked that self doesn't have a local version
-                    if other.is_local() {
-                        return false;
-                    }
+                // `>V` excludes post-releases of V unless V is itself a post-release.
+                // A post-release's base retains its pre-release component, so `>1.0a1`
+                // excludes `1.0a1.post0` but accepts `1.0.post0`.
+                if !this.is_post() && other.is_post() && other.without_post_and_dev_eq(this) {
+                    return false;
                 }
 
                 other.as_ref() > this
@@ -1076,11 +1066,11 @@ impl std::fmt::Display for TildeVersionSpecifier<'_> {
 
 #[cfg(test)]
 mod tests {
-    use std::{cmp::Ordering, str::FromStr};
+    use std::{cmp::Ordering, error::Error, str::FromStr};
 
     use indoc::indoc;
 
-    use crate::LocalSegment;
+    use crate::{LocalSegment, version};
 
     use super::*;
 
@@ -1125,6 +1115,60 @@ mod tests {
                 "expected `{specifier}` to contain `{candidate}`: {expected}"
             );
         }
+    }
+
+    #[test]
+    fn greater_than_post_release_with_long_versions() -> Result<(), Box<dyn Error>> {
+        // Long release numbers use the full version representation. Trailing zeros
+        // do not change which post-releases belong to the bound.
+        let short: VersionSpecifier = ">1.0".parse()?;
+        assert!(!short.contains(&"1.0.0.0.0.post1".parse()?));
+        assert!(short.contains(&"1.0.0.0.1.post1".parse()?));
+
+        let long: VersionSpecifier = ">1.0.0.0.0".parse()?;
+        assert!(!long.contains(&"1.0.post1".parse()?));
+        assert!(long.contains(&"1.1.post1".parse()?));
+
+        // A post-release belongs to a pre-release only when the pre-release
+        // component matches, even if it also has a development component.
+        let prerelease: VersionSpecifier = ">1.0.0.0.0a1".parse()?;
+        assert!(!prerelease.contains(&"1.0a1.post1.dev2".parse()?));
+        assert!(prerelease.contains(&"1.0a2.post1".parse()?));
+        assert!(prerelease.contains(&"1.0.post1".parse()?));
+
+        Ok(())
+    }
+
+    #[test]
+    fn greater_than_post_release_with_maximum_development_number() -> Result<(), Box<dyn Error>> {
+        // The largest parsed development number is still before the
+        // corresponding post-release.
+        let prerelease: VersionSpecifier = ">1.0a1.dev18446744073709551614".parse()?;
+        assert!(prerelease.contains(&"1.0a1.post0".parse()?));
+
+        // An internal maximum development number compares equal to an absent
+        // development component on a pre-release.
+        let lower = "1.0a1".parse::<Version>()?.with_dev(Some(u64::MAX));
+        let specifier = VersionSpecifier::from_version(Operator::GreaterThan, lower)?;
+        assert!(!specifier.contains(&"1.0a1.post0".parse()?));
+
+        Ok(())
+    }
+
+    #[test]
+    fn greater_than_post_release_with_internal_minimum() -> Result<(), Box<dyn Error>> {
+        // Internal minimum bounds compare before ordinary versions and retain
+        // their ordering when their candidate has other version components.
+        let lower = Version::new([1, 0]).with_min(Some(0));
+        let specifier = VersionSpecifier::from_version(Operator::GreaterThan, lower)?;
+
+        let same_minimum = "1.0.post1".parse::<Version>()?.with_min(Some(0));
+        assert!(!specifier.contains(&same_minimum));
+
+        let later_minimum = "1.0.post1".parse::<Version>()?.with_min(Some(1));
+        assert!(specifier.contains(&later_minimum));
+
+        Ok(())
     }
 
     const VERSIONS_ALL: &[&str] = &[

@@ -35,7 +35,7 @@ impl fmt::Display for ArgumentError {
 impl Error for ArgumentError {}
 
 /// Given a boolean flag pair (like `--upgrade` and `--no-upgrade`), resolve the value of the flag.
-pub fn flag(yes: bool, no: bool, name: &str) -> anyhow::Result<Option<bool>> {
+pub(crate) fn flag(yes: bool, no: bool, name: &str) -> anyhow::Result<Option<bool>> {
     debug_assert!(
         !name.starts_with("no-"),
         "flag names must not include the `no-` prefix"
@@ -59,7 +59,7 @@ pub fn flag(yes: bool, no: bool, name: &str) -> anyhow::Result<Option<bool>> {
 
 /// The source of a boolean flag value.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum FlagSource {
+pub(crate) enum FlagSource {
     /// The flag was set via command-line argument.
     Cli,
     /// The flag was set via environment variable.
@@ -80,7 +80,7 @@ impl fmt::Display for FlagSource {
 
 /// A boolean flag value with its source.
 #[derive(Debug, Clone, Copy)]
-pub enum Flag {
+pub(crate) enum Flag {
     /// The flag is not set.
     Disabled,
     /// The flag is enabled with a known source.
@@ -93,12 +93,12 @@ pub enum Flag {
 
 impl Flag {
     /// Create a flag that is explicitly disabled.
-    pub const fn disabled() -> Self {
+    pub(crate) const fn disabled() -> Self {
         Self::Disabled
     }
 
     /// Create an enabled flag from a CLI argument.
-    pub const fn from_cli(name: &'static str) -> Self {
+    pub(crate) const fn from_cli(name: &'static str) -> Self {
         Self::Enabled {
             source: FlagSource::Cli,
             name,
@@ -106,7 +106,7 @@ impl Flag {
     }
 
     /// Create an enabled flag from workspace/project configuration.
-    pub const fn from_config(name: &'static str) -> Self {
+    pub(crate) const fn from_config(name: &'static str) -> Self {
         Self::Enabled {
             source: FlagSource::Config,
             name,
@@ -114,7 +114,7 @@ impl Flag {
     }
 
     /// Returns `true` if the flag is set.
-    pub fn is_enabled(self) -> bool {
+    pub(crate) fn is_enabled(self) -> bool {
         matches!(self, Self::Enabled { .. })
     }
 }
@@ -129,7 +129,7 @@ impl From<Flag> for bool {
 ///
 /// The CLI argument takes precedence over the environment variable. Returns a [`Flag`] with the
 /// resolved value and source.
-pub fn resolve_flag(cli_flag: bool, name: &'static str, env_flag: EnvFlag) -> Flag {
+pub(crate) fn resolve_flag(cli_flag: bool, name: &'static str, env_flag: EnvFlag) -> Flag {
     if cli_flag {
         Flag::Enabled {
             source: FlagSource::Cli,
@@ -149,7 +149,7 @@ pub fn resolve_flag(cli_flag: bool, name: &'static str, env_flag: EnvFlag) -> Fl
 ///
 /// If either flag is set on the command line, both environment variables are ignored so the CLI
 /// retains precedence over the full pair.
-pub fn resolve_flag_pair(
+pub(crate) fn resolve_flag_pair(
     cli_flag: bool,
     cli_no_flag: bool,
     name: &'static str,
@@ -186,7 +186,7 @@ pub fn resolve_flag_pair(
 ///
 /// This function checks if both flags are enabled (truthy) and reports an error if so, including
 /// the source of each flag (CLI or environment variable) in the error message.
-pub fn check_conflicts(flag_a: Flag, flag_b: Flag) -> anyhow::Result<()> {
+pub(crate) fn check_conflicts(flag_a: Flag, flag_b: Flag) -> anyhow::Result<()> {
     if let (
         Flag::Enabled {
             source: source_a,
@@ -235,7 +235,7 @@ impl TryFrom<RefreshArgs> for Refresh {
 }
 
 /// Convert command-line arguments into [`PipOptions`].
-pub trait IntoPipOptions {
+pub(crate) trait IntoPipOptions {
     /// Convert command-line arguments into pip options using the effective configuration.
     fn into_pip_options(self, configured_indexes: &[Index]) -> anyhow::Result<PipOptions>;
 }
@@ -579,7 +579,7 @@ impl IntoPipOptions for IndexArgs {
 }
 
 /// Construct the [`ResolverOptions`] from the [`ResolverArgs`] and [`BuildOptionsArgs`].
-pub fn resolver_options(
+pub(crate) fn resolver_options(
     resolver_args: ResolverArgs,
     build_args: BuildOptionsArgs,
     configured_indexes: &[Index],
@@ -633,6 +633,8 @@ pub fn resolver_options(
         no_binary,
         binary,
         no_binary_package,
+        require_build_hashes,
+        no_require_build_hashes,
     } = build_args;
 
     ResolverOptions {
@@ -664,6 +666,11 @@ pub fn resolver_options(
             flag(no_build_isolation, build_isolation, "build-isolation")?,
             no_build_isolation_package,
         ),
+        require_build_hashes: flag(
+            require_build_hashes,
+            no_require_build_hashes,
+            "require-build-hashes",
+        )?,
         extra_build_dependencies: None,
         extra_build_variables: None,
         exclude_newer,
@@ -694,13 +701,15 @@ pub fn resolver_options(
 }
 
 /// Construct the [`ResolverOptions`] for an [`UpgradeArgs`] invocation.
-pub fn upgrade_options(
+pub(crate) fn upgrade_options(
     args: UpgradeArgs,
     configured_indexes: &[Index],
 ) -> anyhow::Result<(Vec<PackageName>, Vec<PackageName>, ResolverOptions)> {
     let UpgradeArgs {
         packages,
         exclude,
+        require_build_hashes,
+        no_require_build_hashes,
         index_args,
         registry_client:
             RegistryClientArgs {
@@ -713,6 +722,11 @@ pub fn upgrade_options(
         indexes: index_args.resolve(configured_indexes)?,
         index_strategy,
         keyring_provider,
+        require_build_hashes: flag(
+            require_build_hashes,
+            no_require_build_hashes,
+            "require-build-hashes",
+        )?,
         ..ResolverOptions::default()
     }
     .relative_to(&env::current_dir()?)?;
@@ -721,7 +735,7 @@ pub fn upgrade_options(
 }
 
 /// Construct the [`ResolverInstallerOptions`] from the [`ResolverInstallerArgs`] and [`BuildOptionsArgs`].
-pub fn resolver_installer_options(
+pub(crate) fn resolver_installer_options(
     resolver_installer_args: ResolverInstallerArgs,
     build_args: BuildOptionsArgs,
     configured_indexes: &[Index],
@@ -786,6 +800,8 @@ pub fn resolver_installer_options(
         no_binary,
         binary,
         no_binary_package,
+        require_build_hashes,
+        no_require_build_hashes,
     } = build_args;
 
     ResolverInstallerOptions {
@@ -821,6 +837,11 @@ pub fn resolver_installer_options(
             flag(no_build_isolation, build_isolation, "build-isolation")?,
             no_build_isolation_package,
         ),
+        require_build_hashes: flag(
+            require_build_hashes,
+            no_require_build_hashes,
+            "require-build-hashes",
+        )?,
         extra_build_dependencies: None,
         extra_build_variables: None,
         exclude_newer,

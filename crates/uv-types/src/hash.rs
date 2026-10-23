@@ -13,7 +13,7 @@ use uv_distribution_types::{
 use uv_normalize::PackageName;
 use uv_pep440::{Operator, Version};
 use uv_pypi_types::{HashAlgorithm, HashDigest, HashDigests, HashError, ResolverMarkerEnvironment};
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 
 /// Hash collection and verification policies for a resolution.
 ///
@@ -161,12 +161,12 @@ impl HashStrategy {
     /// Return the [`ArchiveHashPolicy`] for the given direct URL package.
     ///
     /// A direct URL identifies a single concrete artifact, so every provided digest must match.
-    pub fn archive_policy_for_url(&self, url: &DisplaySafeUrl) -> ArchiveHashPolicy<'_> {
+    pub fn archive_policy_for_url(&self, url: &SafeUrl) -> ArchiveHashPolicy<'_> {
         self.archive_policy_for_id(|| VersionId::from_url(url))
     }
 
     /// Return the [`MetadataHashPolicy`] for a URL whose package name is not yet known.
-    pub fn metadata_policy_for_url(&self, url: &DisplaySafeUrl) -> MetadataHashPolicy<'_> {
+    pub fn metadata_policy_for_url(&self, url: &SafeUrl) -> MetadataHashPolicy<'_> {
         MetadataHashPolicy {
             collection: self.collection,
             validation: self.validation_for_id(|| VersionId::from_url(url)),
@@ -242,7 +242,7 @@ impl HashStrategy {
     }
 
     /// Returns `true` if the given direct URL package is allowed.
-    pub fn allows_url(&self, url: &DisplaySafeUrl) -> bool {
+    pub fn allows_url(&self, url: &SafeUrl) -> bool {
         match &self.verification {
             HashVerification::Required(hashes) => hashes.contains_key(&VersionId::from_url(url)),
             HashVerification::None | HashVerification::IfPresent(_) => true,
@@ -560,7 +560,7 @@ impl HashStrategy {
                 subdirectory,
                 ..
             } => Some(VersionId::from_archive(
-                location.clone(),
+                location.as_url().clone(),
                 subdirectory.clone().map(Path::into_path_buf),
             )),
             RequirementSource::GitDirectory {
@@ -720,7 +720,8 @@ mod tests {
     use uv_normalize::PackageName;
     use uv_pep440::Version;
     use uv_pypi_types::HashDigest;
-    use uv_redacted::DisplaySafeUrl;
+    use uv_redacted::SafeUrl;
+    use uv_redacted::policy::Raw;
 
     use super::{HashStrategy, HashVerification};
 
@@ -732,8 +733,9 @@ mod tests {
             marker: "python_version >= '3.8'".parse().unwrap(),
             source: RequirementSource::Url {
                 location: "https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl"
-                    .parse()
-                    .unwrap(),
+                    .parse::<SafeUrl>()
+                    .unwrap()
+                    .with_policy(Raw),
                 subdirectory: None,
                 ext: DistExtension::Wheel,
                 url: url.parse().unwrap(),
@@ -789,8 +791,8 @@ mod tests {
     #[test]
     fn generate_and_verify_validates_known_hashes_and_generates_unknown_hashes()
     -> Result<(), Box<dyn std::error::Error>> {
-        let url: DisplaySafeUrl = "https://example.com/anyio-4.0.0.tar.gz".parse()?;
-        let unknown_url: DisplaySafeUrl = "https://example.com/anyio-4.1.0.tar.gz".parse()?;
+        let url: SafeUrl = "https://example.com/anyio-4.0.0.tar.gz".parse()?;
+        let unknown_url: SafeUrl = "https://example.com/anyio-4.1.0.tar.gz".parse()?;
         let name: PackageName = "anyio".parse()?;
         let version: Version = "4.0.0".parse()?;
         let unknown_version: Version = "4.1.0".parse()?;
@@ -855,7 +857,7 @@ mod tests {
 
     #[test]
     fn required_hashes_take_precedence_over_collection() -> Result<(), Box<dyn std::error::Error>> {
-        let url: DisplaySafeUrl = "https://example.com/anyio-4.0.0.tar.gz".parse()?;
+        let url: SafeUrl = "https://example.com/anyio-4.0.0.tar.gz".parse()?;
         let name: PackageName = "anyio".parse()?;
         let version: Version = "4.0.0".parse()?;
         let strategy = HashStrategy::collect(HashCollection::All)
