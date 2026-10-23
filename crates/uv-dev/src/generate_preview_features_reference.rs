@@ -393,6 +393,10 @@ mod tests {
         environments. The name alone does not cause uv to treat a user-created environment as the
         base Conda installation.
 
+        ### `system-certs-default` {#system-certs-default}
+
+        Enables [system certificates](../concepts/authentication/certificates.md) by default.
+
         ### `target-workspace-discovery` {#target-workspace-discovery}
 
         For a local `uv run` target, uv starts project and workspace discovery from the directory
