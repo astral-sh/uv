@@ -18,6 +18,7 @@ use sha2::{Digest, Sha256};
 use tar_codec::{ArchiveBuilder as _, EntryMetadata, TarEncoder};
 use tokio_util::compat::FuturesAsyncWriteCompatExt;
 
+use uv_distribution_filename::VariantLabel;
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::Requirement;
@@ -36,6 +37,7 @@ pub struct WheelBuilder<'a> {
     tag: &'a str,
     entry_points: &'a [String],
     files: &'a [(&'a str, &'a str)],
+    variant: Option<(&'a VariantLabel, &'a str)>,
 }
 
 impl<'a> WheelBuilder<'a> {
@@ -49,6 +51,7 @@ impl<'a> WheelBuilder<'a> {
             tag: DEFAULT_WHEEL_TAG,
             entry_points: &[],
             files: &[],
+            variant: None,
         }
     }
 
@@ -80,6 +83,12 @@ impl<'a> WheelBuilder<'a> {
     /// Include additional files as `(path, contents)` pairs.
     pub fn files(mut self, files: &'a [(&'a str, &'a str)]) -> Self {
         self.files = files;
+        self
+    }
+
+    /// Include variant metadata and append its label to the wheel filename.
+    pub(super) fn variant(mut self, label: &'a VariantLabel, metadata: &'a str) -> Self {
+        self.variant = Some((label, metadata));
         self
     }
 
@@ -123,6 +132,10 @@ impl<'a> WheelBuilder<'a> {
             entries.push((format!("{normalized}/cli.py"), build_cli_module(self.name)));
         }
 
+        if let Some((_, metadata)) = self.variant {
+            entries.push((format!("{dist_info}/variant.json"), metadata.to_owned()));
+        }
+
         entries.extend(
             self.files
                 .iter()
@@ -143,7 +156,11 @@ impl<'a> WheelBuilder<'a> {
             .expect("failed to write `RECORD` file");
 
         let bytes = block_on(zip.close()).expect("failed to finish in-memory wheel");
-        let filename = format!("{normalized}-{version}-{tag}.whl");
+        let filename = if let Some((label, _)) = self.variant {
+            format!("{normalized}-{version}-{tag}-{label}.whl")
+        } else {
+            format!("{normalized}-{version}-{tag}.whl")
+        };
         (filename, bytes)
     }
 }
