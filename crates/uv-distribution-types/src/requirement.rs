@@ -945,10 +945,7 @@ impl Serialize for RequirementSource {
                 if !specifier.is_empty() {
                     state.serialize_field("specifier", specifier)?;
                 }
-                state.serialize_field(
-                    "index",
-                    &index.as_ref().map(|index| index.url.clone().into_url()),
-                )?;
+                state.serialize_field("index", &index.as_ref().map(|index| &index.url))?;
                 state.serialize_field("conflict", conflict)?;
                 state.end()
             }
