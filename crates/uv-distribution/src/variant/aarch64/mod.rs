@@ -1,0 +1,60 @@
+mod macos;
+
+use std::sync::LazyLock;
+
+use uv_distribution_types::{SupportedVariantFeature, VariantNamespace};
+use uv_normalize::PackageName;
+use uv_pep440::Version;
+use uv_platform_tags::{Arch, Platform};
+
+use self::macos::{BASELINE, FEATURE, values};
+use super::{PluginApi, VendoredVariantProvider};
+
+static NAMESPACE: LazyLock<VariantNamespace> = LazyLock::new(|| {
+    VariantNamespace::try_from("aarch64".to_owned()).expect("valid variant namespace")
+});
+static PACKAGE_NAME: LazyLock<PackageName> = LazyLock::new(|| {
+    "aarch64-variant-provider"
+        .parse()
+        .expect("valid provider name")
+});
+
+/// The vendored implementation of `aarch64-variant-provider` 0.2.0.
+pub(super) struct Aarch64VariantProvider;
+
+impl VendoredVariantProvider for Aarch64VariantProvider {
+    fn namespace(&self) -> &VariantNamespace {
+        &NAMESPACE
+    }
+
+    fn plugin_api(&self) -> Option<&PluginApi> {
+        None
+    }
+
+    fn package_name(&self) -> &PackageName {
+        &PACKAGE_NAME
+    }
+
+    fn package_version(&self) -> Version {
+        Version::new([0, 2, 0])
+    }
+
+    fn properties(&self, cross_platform: Option<&Platform>) -> Option<&[SupportedVariantFeature]> {
+        static HOST: LazyLock<[SupportedVariantFeature; 1]> = LazyLock::new(|| feature(values()));
+        static PLATFORM_DEFAULTS: LazyLock<[SupportedVariantFeature; 1]> =
+            LazyLock::new(|| feature([BASELINE.to_owned()]));
+
+        // An explicit target identifies the architecture, but we cannot probe its CPU features.
+        match cross_platform {
+            None => Some(HOST.as_slice()),
+            Some(platform) if platform.arch() == Arch::Aarch64 => {
+                Some(PLATFORM_DEFAULTS.as_slice())
+            }
+            Some(_) => None,
+        }
+    }
+}
+
+fn feature(values: impl IntoIterator<Item = String>) -> [SupportedVariantFeature; 1] {
+    [SupportedVariantFeature::new(FEATURE, values).expect("valid AArch64 versions")]
+}
