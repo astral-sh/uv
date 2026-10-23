@@ -27,9 +27,12 @@ static PACKAGE_NAME: LazyLock<PackageName> = LazyLock::new(|| {
         .parse()
         .expect("valid package name")
 });
-static NAMESPACE: LazyLock<VariantNamespace> = LazyLock::new(|| {
-    VariantNamespace::try_from("nvidia".to_string()).expect("valid variant namespace")
-});
+const NAMESPACE: &VariantNamespace = &VariantNamespace::from_static("nvidia");
+const CUDA_VERSION_LOWER_BOUND: VariantFeature =
+    VariantFeature::from_static("cuda_version_lower_bound");
+const CUDA_VERSION_UPPER_BOUND: VariantFeature =
+    VariantFeature::from_static("cuda_version_upper_bound");
+const SM_ARCH: VariantFeature = VariantFeature::from_static("sm_arch");
 
 const MIN_CUDA_MAJOR: u64 = 11;
 const MIN_CUDA_MINOR: u64 = 0;
@@ -177,7 +180,7 @@ impl NvidiaVariantProvider {
                 });
             }
             properties.push(SupportedVariantFeature {
-                name: VariantFeature::try_from("cuda_version_lower_bound".to_string())?,
+                name: CUDA_VERSION_LOWER_BOUND,
                 values: lower_bound,
             });
         }
@@ -196,7 +199,7 @@ impl NvidiaVariantProvider {
                 .collect::<Result<Vec<_>, _>>()?;
             if !upper_bound.is_empty() {
                 properties.push(SupportedVariantFeature {
-                    name: VariantFeature::try_from("cuda_version_upper_bound".to_string())?,
+                    name: CUDA_VERSION_UPPER_BOUND,
                     values: upper_bound,
                 });
             }
@@ -212,7 +215,7 @@ impl NvidiaVariantProvider {
                 .map(VariantValue::try_from)
                 .collect::<Result<_, _>>()?;
             properties.push(SupportedVariantFeature {
-                name: VariantFeature::try_from("sm_arch".to_string())?,
+                name: SM_ARCH,
                 values: architectures,
             });
         }
@@ -222,7 +225,7 @@ impl NvidiaVariantProvider {
 
 impl VendoredVariantProvider for NvidiaVariantProvider {
     fn namespace(&self) -> &VariantNamespace {
-        &NAMESPACE
+        NAMESPACE
     }
 
     fn plugin_api(&self) -> Option<&PluginApi> {

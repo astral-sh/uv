@@ -1,6 +1,8 @@
+use std::borrow::Cow;
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, BTreeSet};
-use std::fmt;
+use std::fmt::{self, Display};
+use std::str::FromStr;
 
 use itertools::{Either, Itertools};
 use serde::{Deserialize, Serialize};
@@ -29,11 +31,12 @@ pub enum VariantsJsonParseError {
     Json(#[from] serde_json::Error),
     /// A wheel's variant metadata does not describe exactly the variant named in its filename.
     #[error(
-        "Expected `variant.json` to describe only the variant `{expected}` from the wheel filename, found {labels:?}"
+        "Expected `variant.json` to describe only the variant `{expected}` from the wheel filename, found {labels:?}",
+        labels = .labels.iter().map(VariantLabel::as_str).collect_vec(),
     )]
     WheelLabels {
         expected: VariantLabel,
-        labels: Vec<String>,
+        labels: Vec<VariantLabel>,
     },
 }
 
@@ -136,7 +139,7 @@ impl VariantsJsonContent {
         } else {
             Err(VariantsJsonParseError::WheelLabels {
                 expected: label.clone(),
-                labels: metadata.variants.keys().map(ToString::to_string).collect(),
+                labels: metadata.variants.into_keys().collect(),
             })
         }
     }
@@ -362,33 +365,41 @@ pub enum VariantMetadataError {
     #[error("Variant namespace priorities must be non-empty and unique")]
     NamespacePriorities,
     #[error("Variant namespace `{0}` is missing from default-priorities.namespace")]
-    MissingNamespace(String),
+    MissingNamespace(VariantNamespace),
     #[error(
-        "Variant providers must match the namespaces in default-priorities.namespace: expected {expected:?}, found {actual:?}"
+        "Variant providers must match the namespaces in default-priorities.namespace: expected {expected:?}, found {actual:?}",
+        expected = .expected.iter().map(VariantNamespace::as_str).collect_vec(),
+        actual = .actual.iter().map(VariantNamespace::as_str).collect_vec(),
     )]
     ProviderNamespaces {
-        expected: Vec<String>,
-        actual: Vec<String>,
+        expected: Vec<VariantNamespace>,
+        actual: Vec<VariantNamespace>,
     },
     #[error(
-        "Variant provider `{namespace}` must define feature-order for multiple static features: {features:?}"
+        "Variant provider `{namespace}` must define feature-order for multiple static features: {features:?}",
+        features = .features.iter().map(VariantFeature::as_str).collect_vec(),
     )]
     MissingFeatureOrder {
-        namespace: String,
-        features: Vec<String>,
+        namespace: VariantNamespace,
+        features: Vec<VariantFeature>,
     },
     #[error(
-        "Variant provider `{namespace}` has an invalid feature-order: expected a non-empty list containing each static feature in {expected:?} exactly once, found {actual:?}"
+        "Variant provider `{namespace}` has an invalid feature-order: expected a non-empty list containing each static feature in {expected:?} exactly once, found {actual:?}",
+        expected = .expected.iter().map(VariantFeature::as_str).collect_vec(),
+        actual = .actual.iter().map(VariantFeature::as_str).collect_vec(),
     )]
     InvalidFeatureOrder {
-        namespace: String,
-        expected: Vec<String>,
-        actual: Vec<String>,
+        namespace: VariantNamespace,
+        expected: Vec<VariantFeature>,
+        actual: Vec<VariantFeature>,
     },
     #[error("Variant feature `{0} :: {1}` must have at least one value")]
-    EmptyValues(String, String),
-    #[error("Variant feature `{0} :: {1}` must not contain duplicate values: {2:?}")]
-    DuplicateValues(String, String, Vec<String>),
+    EmptyValues(VariantNamespace, VariantFeature),
+    #[error(
+        "Variant feature `{0} :: {1}` must not contain duplicate values: {values:?}",
+        values = .2.iter().map(VariantValue::as_str).collect_vec(),
+    )]
+    DuplicateValues(VariantNamespace, VariantFeature, Vec<VariantValue>),
     #[error("The null variant must not have properties")]
     NullProperties,
 }
@@ -413,14 +424,8 @@ impl TryFrom<VariantsJsonWire> for VariantsJsonContent {
                 .collect::<BTreeSet<_>>();
             if provider_namespaces != namespace_set {
                 return Err(VariantMetadataError::ProviderNamespaces {
-                    expected: namespaces
-                        .iter()
-                        .map(|namespace| namespace.0.clone())
-                        .collect(),
-                    actual: provider_namespaces
-                        .into_iter()
-                        .map(|namespace| namespace.0.clone())
-                        .collect(),
+                    expected: namespaces.clone(),
+                    actual: provider_namespaces.into_iter().cloned().collect(),
                 });
             }
         }
@@ -439,21 +444,15 @@ impl TryFrom<VariantsJsonWire> for VariantsJsonContent {
                             || !order.iter().sorted().eq(static_properties.keys()) =>
                     {
                         return Err(VariantMetadataError::InvalidFeatureOrder {
-                            namespace: namespace.0.clone(),
-                            expected: static_properties
-                                .keys()
-                                .map(|feature| feature.0.clone())
-                                .collect(),
-                            actual: order.iter().map(|feature| feature.0.clone()).collect(),
+                            namespace: namespace.clone(),
+                            expected: static_properties.keys().cloned().collect(),
+                            actual: order.clone(),
                         });
                     }
                     None if static_properties.len() > 1 => {
                         return Err(VariantMetadataError::MissingFeatureOrder {
-                            namespace: namespace.0.clone(),
-                            features: static_properties
-                                .keys()
-                                .map(|feature| feature.0.clone())
-                                .collect(),
+                            namespace: namespace.clone(),
+                            features: static_properties.keys().cloned().collect(),
                         });
                     }
                     Some(_) | None => {}
@@ -461,9 +460,9 @@ impl TryFrom<VariantsJsonWire> for VariantsJsonContent {
                 for (feature, values) in static_properties {
                     if !values.iter().all_unique() {
                         return Err(VariantMetadataError::DuplicateValues(
-                            namespace.0.clone(),
-                            feature.0.clone(),
-                            values.iter().map(|value| value.0.clone()).collect(),
+                            namespace.clone(),
+                            feature.clone(),
+                            values.clone(),
                         ));
                     }
                 }
@@ -473,20 +472,20 @@ impl TryFrom<VariantsJsonWire> for VariantsJsonContent {
         for (label, properties) in &mut wire.variants {
             for (namespace, features) in properties.iter_mut() {
                 if !features.is_empty() && !namespace_set.contains(namespace) {
-                    return Err(VariantMetadataError::MissingNamespace(namespace.0.clone()));
+                    return Err(VariantMetadataError::MissingNamespace(namespace.clone()));
                 }
                 for (feature, values) in features {
                     if values.is_empty() {
                         return Err(VariantMetadataError::EmptyValues(
-                            namespace.0.clone(),
-                            feature.0.clone(),
+                            namespace.clone(),
+                            feature.clone(),
                         ));
                     }
                     if !values.iter().all_unique() {
                         return Err(VariantMetadataError::DuplicateValues(
-                            namespace.0.clone(),
-                            feature.0.clone(),
-                            values.iter().map(|value| value.0.clone()).collect(),
+                            namespace.clone(),
+                            feature.clone(),
+                            values.clone(),
                         ));
                     }
                     if label.as_str() == "null" {
@@ -522,11 +521,34 @@ struct VariantsJsonSchema {
 /// A validated variant namespace.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(try_from = "String")]
-pub struct VariantNamespace(String);
+pub struct VariantNamespace(Cow<'static, str>);
 
-impl fmt::Display for VariantNamespace {
+impl VariantNamespace {
+    /// Create a variant namespace from a static string.
+    ///
+    /// An invalid namespace causes a compilation error in a const context and a panic at runtime.
+    pub const fn from_static(value: &'static str) -> Self {
+        assert!(valid_component(value, false), "invalid variant namespace");
+        Self(Cow::Borrowed(value))
+    }
+
+    /// Return the variant namespace as a string slice.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl Display for VariantNamespace {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.0)
+        Display::fmt(&self.0, f)
+    }
+}
+
+impl FromStr for VariantNamespace {
+    type Err = VariantMetadataError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Self::try_from(value.to_owned())
     }
 }
 
@@ -535,7 +557,7 @@ impl TryFrom<String> for VariantNamespace {
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
         if valid_component(&value, false) {
-            Ok(Self(value))
+            Ok(Self(Cow::Owned(value)))
         } else {
             Err(VariantMetadataError::InvalidNamespace(value))
         }
@@ -543,16 +565,45 @@ impl TryFrom<String> for VariantNamespace {
 }
 
 /// A validated variant feature.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(try_from = "String")]
-pub struct VariantFeature(String);
+pub struct VariantFeature(Cow<'static, str>);
+
+impl VariantFeature {
+    /// Create a variant feature from a static string.
+    ///
+    /// An invalid feature causes a compilation error in a const context and a panic at runtime.
+    pub const fn from_static(value: &'static str) -> Self {
+        assert!(valid_component(value, false), "invalid variant feature");
+        Self(Cow::Borrowed(value))
+    }
+
+    /// Return the variant feature as a string slice.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl Display for VariantFeature {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        Display::fmt(&self.0, f)
+    }
+}
+
+impl FromStr for VariantFeature {
+    type Err = VariantMetadataError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Self::try_from(value.to_owned())
+    }
+}
 
 impl TryFrom<String> for VariantFeature {
     type Error = VariantMetadataError;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
         if valid_component(&value, false) {
-            Ok(Self(value))
+            Ok(Self(Cow::Owned(value)))
         } else {
             Err(VariantMetadataError::InvalidFeature(value))
         }
@@ -562,26 +613,65 @@ impl TryFrom<String> for VariantFeature {
 /// A validated variant value.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(try_from = "String")]
-pub struct VariantValue(String);
+pub struct VariantValue(Cow<'static, str>);
+
+impl VariantValue {
+    /// Create a variant value from a static string.
+    ///
+    /// An invalid value causes a compilation error in a const context and a panic at runtime.
+    pub const fn from_static(value: &'static str) -> Self {
+        assert!(valid_component(value, true), "invalid variant value");
+        Self(Cow::Borrowed(value))
+    }
+
+    /// Return the variant value as a string slice.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl Display for VariantValue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        Display::fmt(&self.0, f)
+    }
+}
+
+impl FromStr for VariantValue {
+    type Err = VariantMetadataError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Self::try_from(value.to_owned())
+    }
+}
 
 impl TryFrom<String> for VariantValue {
     type Error = VariantMetadataError;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
         if valid_component(&value, true) {
-            Ok(Self(value))
+            Ok(Self(Cow::Owned(value)))
         } else {
             Err(VariantMetadataError::InvalidValue(value))
         }
     }
 }
 
-fn valid_component(value: &str, allow_period: bool) -> bool {
-    !value.is_empty()
-        && value.bytes().all(|character| {
-            character.is_ascii_lowercase()
-                || character.is_ascii_digit()
-                || character == b'_'
-                || (allow_period && character == b'.')
-        })
+const fn valid_component(value: &str, allow_period: bool) -> bool {
+    if value.is_empty() {
+        return false;
+    }
+    let bytes = value.as_bytes();
+    let mut index = 0;
+    while index < bytes.len() {
+        let character = bytes[index];
+        if !(character.is_ascii_lowercase()
+            || character.is_ascii_digit()
+            || character == b'_'
+            || (allow_period && character == b'.'))
+        {
+            return false;
+        }
+        index += 1;
+    }
+    true
 }
