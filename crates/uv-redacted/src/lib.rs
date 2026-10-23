@@ -404,6 +404,11 @@ impl<P: SerializationPolicy> SafeUrl<P> {
         self.0.path_segments()
     }
 
+    /// Return whether the URL has a query, including an empty query.
+    pub fn has_query(&self) -> bool {
+        self.0.query().is_some()
+    }
+
     /// Return the decoded query name/value pairs.
     pub fn query_pairs(&self) -> url::form_urlencoded::Parse<'_> {
         self.0.query_pairs()

@@ -8,10 +8,10 @@ use assert_fs::prelude::*;
 use indoc::formatdoc;
 use indoc::indoc;
 use insta::assert_snapshot;
-#[cfg(all(feature = "test-git", feature = "test-universal"))]
-use url::Url;
 
 use uv_lock::Lock;
+#[cfg(all(feature = "test-git", feature = "test-universal"))]
+use uv_redacted::SafeUrl;
 use uv_test::{diff_snapshot, uv_snapshot};
 
 /// V2 conflict locks retain extra and group selection across frozen reads and revalidation.
@@ -1425,10 +1425,10 @@ fn lockfile_v2_git_sources() -> Result<()> {
      requires-dist = [
     -    { name = "archive", git = "https://example.com/repo?path=dist%2Farchive-1.0.0.tar.gz&rev=main&lfs=true" },
     -    { name = "child", extras = ["feature"], marker = "sys_platform == 'linux'", git = "https://example.com/repo?subdirectory=python&lfs=true&branch=feature%2Fwork" },
-    -    { name = "pinned", git = "https://example.com/repo?rev=0123456789012345678901234567890123456789#0123456789012345678901234567890123456789" },
+    -    { name = "pinned", git = "https://example.com/repo?rev=0123456789012345678901234567890123456789" },
     +    { name = "archive", git = "https://example.com/repo", rev = "main", path = "dist/archive-1.0.0.tar.gz", lfs = true },
     +    { name = "child", extras = ["feature"], marker = "sys_platform == 'linux'", git = "https://example.com/repo", branch = "feature/work", subdirectory = "python", lfs = true },
-    +    { name = "pinned", git = "https://example.com/repo", rev = "0123456789012345678901234567890123456789", commit = "0123456789012345678901234567890123456789" },
+    +    { name = "pinned", git = "https://example.com/repo", rev = "0123456789012345678901234567890123456789" },
      ]
     "#);
     assert_eq!(Lock::from_canonical_toml(&upgraded)?, expected);
@@ -1500,7 +1500,7 @@ fn lockfile_v2_git_locked() -> Result<()> {
         .env("GIT_COMMITTER_DATE", "2000-01-01T00:00:00Z")
         .assert()
         .success();
-    let repository_url = Url::from_directory_path(repository.path())
+    let repository_url = SafeUrl::from_directory_path(repository.path())
         .map_err(|()| anyhow::anyhow!("failed to convert repository path to file URL"))?;
     context
         .temp_dir

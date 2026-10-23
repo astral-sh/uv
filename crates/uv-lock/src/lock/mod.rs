@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::error::Error;
-use std::fmt::{Debug, Display};
+use std::fmt::{self, Debug, Display};
 use std::io;
 use std::iter;
 use std::path::{Path, PathBuf};
@@ -16,6 +16,9 @@ use owo_colors::OwoColorize;
 use petgraph::graph::NodeIndex;
 use petgraph::visit::EdgeRef;
 use rustc_hash::{FxHashMap, FxHashSet};
+use serde::Deserialize;
+use serde::de::value::MapAccessDeserializer;
+use serde::de::{MapAccess, Visitor};
 use tracing::{debug, instrument, trace};
 
 use uv_cache_key::RepositoryUrl;
@@ -7594,9 +7597,17 @@ impl<'de> serde::Deserialize<'de> for RequirementWire {
     where
         D: serde::Deserializer<'de>,
     {
-        serde_untagged::UntaggedEnumVisitor::new()
-            .string(|name| {
-                Ok(Self(Requirement {
+        struct WireVisitor;
+
+        impl<'de> Visitor<'de> for WireVisitor {
+            type Value = RequirementWire;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+                formatter.write_str("a package name or a table")
+            }
+
+            fn visit_str<E: serde::de::Error>(self, name: &str) -> Result<Self::Value, E> {
+                Ok(RequirementWire(Requirement {
                     name: PackageName::from_str(name).map_err(serde::de::Error::custom)?,
                     extras: Box::new([]),
                     groups: Box::new([]),
@@ -7609,12 +7620,13 @@ impl<'de> serde::Deserialize<'de> for RequirementWire {
                     scope: RequirementScope::Global,
                     origin: None,
                 }))
-            })
-            .map(|map| {
+            }
+
+            fn visit_map<M: MapAccess<'de>>(self, map: M) -> Result<Self::Value, M::Error> {
                 let RequirementTableWire {
                     mut requirement,
                     git_fields,
-                } = map.deserialize()?;
+                } = RequirementTableWire::deserialize(MapAccessDeserializer::new(map))?;
                 let url = match &requirement.source {
                     RequirementSource::GitDirectory {
                         git, subdirectory, ..
@@ -7635,9 +7647,11 @@ impl<'de> serde::Deserialize<'de> for RequirementWire {
                         serde::de::value::MapDeserializer::new(iter::once(("git", url.as_str()))),
                     )?;
                 }
-                Ok(Self(requirement))
-            })
-            .deserialize(deserializer)
+                Ok(RequirementWire(requirement))
+            }
+        }
+
+        deserializer.deserialize_any(WireVisitor)
     }
 }
 
@@ -9635,9 +9649,17 @@ impl<'de> serde::Deserialize<'de> for DependencyWire {
     where
         D: serde::Deserializer<'de>,
     {
-        serde_untagged::UntaggedEnumVisitor::new()
-            .string(|name| {
-                Ok(Self(DependencyWireTable {
+        struct WireVisitor;
+
+        impl<'de> Visitor<'de> for WireVisitor {
+            type Value = DependencyWire;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+                formatter.write_str("a package name or a table")
+            }
+
+            fn visit_str<E: serde::de::Error>(self, name: &str) -> Result<Self::Value, E> {
+                Ok(DependencyWire(DependencyWireTable {
                     package_id: PackageIdForDependency {
                         name: PackageName::from_str(name).map_err(serde::de::Error::custom)?,
                         version: None,
@@ -9646,9 +9668,15 @@ impl<'de> serde::Deserialize<'de> for DependencyWire {
                     extra: BTreeSet::new(),
                     marker: SimplifiedMarkerTree::default(),
                 }))
-            })
-            .map(|map| map.deserialize().map(Self))
-            .deserialize(deserializer)
+            }
+
+            fn visit_map<M: MapAccess<'de>>(self, map: M) -> Result<Self::Value, M::Error> {
+                DependencyWireTable::deserialize(MapAccessDeserializer::new(map))
+                    .map(DependencyWire)
+            }
+        }
+
+        deserializer.deserialize_any(WireVisitor)
     }
 }
 

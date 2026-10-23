@@ -1,4 +1,4 @@
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 
 /// A Git source with repository identity and checkout settings recorded separately.
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
@@ -29,7 +29,7 @@ pub(super) struct GitFieldsWire {
 
 impl GitSourceWire {
     /// Extract checkout settings from the internal lockfile URL representation.
-    pub(super) fn from_url(mut url: DisplaySafeUrl) -> Self {
+    pub(super) fn from_url(mut url: SafeUrl) -> Self {
         let mut fields = GitFieldsWire {
             commit: url.fragment().map(str::to_owned),
             ..GitFieldsWire::default()
@@ -57,10 +57,7 @@ impl GitSourceWire {
 
 impl GitFieldsWire {
     /// Encode explicit fields for the shared Git URL validation and conversion routines.
-    pub(super) fn apply_to_url(
-        self,
-        mut url: DisplaySafeUrl,
-    ) -> Result<DisplaySafeUrl, &'static str> {
+    pub(super) fn apply_to_url(self, mut url: SafeUrl) -> Result<SafeUrl, &'static str> {
         let references = [self.branch.as_ref(), self.tag.as_ref(), self.rev.as_ref()];
         if references.iter().flatten().count() > 1 {
             return Err("only one of `branch`, `tag`, or `rev` may be specified");
@@ -76,7 +73,7 @@ impl GitFieldsWire {
         if !has_fields {
             return Ok(url);
         }
-        if url.query().is_some() || url.fragment().is_some() {
+        if url.has_query() || url.fragment().is_some() {
             return Err(
                 "cannot combine structured Git fields with URL query parameters or fragments",
             );

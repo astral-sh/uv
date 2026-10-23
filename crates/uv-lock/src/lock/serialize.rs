@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::fmt;
 
 use serde::Serialize;
@@ -8,7 +9,7 @@ use uv_fs::PortablePath;
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::MarkerTree;
 use uv_pypi_types::ConflictKind;
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 
 use super::git::GitSourceWire;
 use super::{
@@ -786,12 +787,13 @@ where
 }
 
 /// Writes declared requirements using the canonical layout for their cardinality.
-fn write_requirements(
+fn write_requirements<'a>(
     writer: &mut LockWriter,
     key: &str,
-    requirements: &BTreeSet<Requirement>,
+    requirements: impl IntoIterator<Item = &'a Requirement, IntoIter: ExactSizeIterator>,
     version: u32,
 ) -> Result<(), WriteError> {
+    let requirements = requirements.into_iter();
     writer.key_start(key)?;
     let write_requirement = |writer: &mut LockWriter, requirement: &Requirement| {
         write_requirement_inline(writer, requirement, version)
@@ -872,8 +874,7 @@ fn structure_git_sources(value: &mut Value) -> Result<(), WriteError> {
 
 /// Adapts the internal Git URL to explicit repository and checkout fields.
 fn serialize_git_source(url: &str) -> Result<SerializedValue, WriteError> {
-    let url =
-        DisplaySafeUrl::parse(url).map_err(|err| toml_edit::ser::Error::Custom(err.to_string()))?;
+    let url = SafeUrl::parse(url).map_err(|err| toml_edit::ser::Error::Custom(err.to_string()))?;
     serialize_value(&GitSourceWire::from_url(url))
 }
 
