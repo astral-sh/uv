@@ -8035,6 +8035,7 @@ dependencies = [
  "uv-fs",
  "uv-install-wheel",
  "uv-installer",
+ "uv-macros",
  "uv-normalize",
  "uv-pep440",
  "uv-pep508",
