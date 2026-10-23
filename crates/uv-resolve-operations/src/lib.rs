@@ -342,7 +342,7 @@ pub async fn resolve(
                 .with_recorder(recorder.clone()),
             )
             .with_reporter(Arc::new(ResolverReporter::from(printer)))
-            .resolve(&resolver_env)
+            .resolve(&resolver_env, tags, python_requirement.target())
             .await?;
             hasher = updated_hasher;
             lookaheads

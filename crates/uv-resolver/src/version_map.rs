@@ -12,7 +12,7 @@ use uv_configuration::BuildOptions;
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
     IndexEntryFilename, IndexUrl, MinimumLibcVersion, RegistryBuiltWheel, RegistrySourceDist,
-    RequiresPython,
+    RegistryVariantsJson, RequiresPython,
 };
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -24,7 +24,7 @@ use uv_warnings::warn_user_once;
 
 use crate::flat_index::FlatDistributions;
 use crate::prioritized_distribution::{
-    HashComparison, IncompatibleSource, IncompatibleWheel, PrioritizedDist, RegistryVariantsJson,
+    HashComparison, IncompatibleSource, IncompatibleWheel, PrioritizedDist,
     SourceDistCompatibility, WheelCompatibility,
 };
 use crate::yanks::AllowedYanks;
@@ -646,7 +646,7 @@ impl VersionMapLazy {
                         {
                             priority_dist.insert_variants_json(RegistryVariantsJson {
                                 filename,
-                                file,
+                                file: Box::new(file),
                                 index: self.index.clone(),
                             });
                         }

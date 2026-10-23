@@ -11,7 +11,7 @@ use uv_configuration::BuildOptions;
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
     File, Index, IndexEntryFilename, IndexLocations, IndexUrl, MinimumLibcVersion,
-    RegistryBuiltWheel, RegistrySourceDist,
+    RegistryBuiltWheel, RegistrySourceDist, RegistryVariantsJson,
 };
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -21,7 +21,7 @@ use uv_pypi_types::HashDigest;
 use uv_types::HashStrategy;
 
 use crate::prioritized_distribution::{
-    HashComparison, IncompatibleSource, IncompatibleWheel, PrioritizedDist, RegistryVariantsJson,
+    HashComparison, IncompatibleSource, IncompatibleWheel, PrioritizedDist,
     SourceDistCompatibility, WheelCompatibility,
 };
 
@@ -112,7 +112,7 @@ impl FlatDistributions {
                         .or_default()
                         .insert_variants_json(RegistryVariantsJson {
                             filename,
-                            file,
+                            file: Box::new(file),
                             index,
                         });
                 }

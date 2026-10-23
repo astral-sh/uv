@@ -2,15 +2,16 @@ use std::collections::BTreeMap;
 #[cfg(feature = "test-git")]
 use std::process::Command;
 
-use anyhow::Result;
 #[cfg(feature = "test-git")]
 use anyhow::anyhow;
+use anyhow::{Context, Result};
 #[cfg(feature = "test-git")]
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
-use indoc::indoc;
+use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 use serde_json::{Map, Value, json};
+use sha2::{Digest, Sha256};
 use uv_distribution_types::PEP_850_SCHEMA;
 #[cfg(feature = "test-git")]
 use uv_redacted::SafeUrl;
@@ -19,6 +20,8 @@ use uv_test::archive::generate_source_archive;
 use uv_test::find_links::FindLinksServer;
 use uv_test::packse::{PackseServer, WheelBuilder, scenario::Scenario};
 use uv_test::uv_snapshot;
+use wiremock::matchers::{method, path};
+use wiremock::{Mock, MockServer, ResponseTemplate};
 
 fn null_variant() -> Value {
     json!({
@@ -49,6 +52,292 @@ fn gpu_variant() -> Value {
     })
 }
 
+/// Provider authorization must not let project-configured sources replace the trusted package.
+#[test]
+fn install_authorized_variant_provider_from_trusted_index() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "authorized-variant-provider"
+        root = {}
+        expected.satisfiable = true
+
+        [packages.ok.versions."1.0.0"]
+        wheel = false
+        sdist = false
+
+        [packages.ok.versions."1.0.0".variants]
+        namespaces = ["example"]
+
+        [packages.ok.versions."1.0.0".variants.providers.example]
+        requires = ["variant-provider>=1.0.0"]
+        plugin-api = "variant_provider.plugin:Provider"
+
+        [packages.ok.versions."1.0.0".variants.wheels]
+        accelerated.properties = ["example :: acceleration :: enabled"]
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
+    let provider = indoc! {r#"
+        import os
+        from types import SimpleNamespace
+
+        class Provider:
+            @classmethod
+            def get_supported_configs(cls):
+                assert "UV_VARIANT_PROVIDER_INDEX" not in os.environ
+                return [SimpleNamespace(name="acceleration", values=["enabled"], multi_value=False)]
+    "#};
+    let (filename, wheel) = WheelBuilder::new(&"variant-provider".parse()?, &"1.0.0".parse()?)
+        .files(&[("variant_provider/plugin.py", provider)])
+        .build();
+    let trusted_index = context.temp_dir.child("trusted-index");
+    let trusted_package = trusted_index.child("variant-provider");
+    trusted_package.create_dir_all()?;
+    trusted_package.child(&filename).write_binary(&wheel)?;
+    trusted_package
+        .child("index.html")
+        .write_str(&format!(r#"<a href="{filename}">{filename}</a>"#))?;
+
+    let shadow_provider = indoc! {r#"
+        import os
+        from pathlib import Path
+        Path(os.environ["UV_TEST_PROVIDER_SENTINEL"]).touch()
+    "#};
+    let (shadow_filename, shadow_wheel) =
+        WheelBuilder::new(&"variant-provider".parse()?, &"2.0.0".parse()?)
+            .files(&[("variant_provider/plugin.py", shadow_provider)])
+            .build();
+    let shadow = context.temp_dir.child("shadow");
+    shadow.create_dir_all()?;
+    shadow.child(shadow_filename).write_binary(&shadow_wheel)?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [tool.uv]
+            find-links = ["shadow"]
+        "#})?;
+    let sentinel = context.temp_dir.child("shadow-provider-ran");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("--variant-provider")
+        .arg("example=variant-provider@variant_provider.plugin:Provider")
+        .env(EnvVars::UV_VARIANT_PROVIDER_INDEX, trusted_index.path())
+        .arg("--index-url")
+        .arg(server.index_url())
+        .env("UV_TEST_PROVIDER_SENTINEL", sentinel.path())
+        .arg("ok==1.0.0"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0
+    ");
+    assert!(!sentinel.path().exists());
+    assert!(!context.site_packages().join("variant_provider").exists());
+    Ok(())
+}
+
+/// A hash for a variant wheel does not authorize an unhashed provider installation.
+#[test]
+fn require_hashes_prevents_variant_provider_installation() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "require-hashes-prevents-provider-installation"
+        root = {}
+        expected.satisfiable = true
+
+        [packages.ok.versions."1.0.0"]
+        wheel = false
+        sdist = false
+
+        [packages.ok.versions."1.0.0".variants]
+        namespaces = ["example"]
+
+        [packages.ok.versions."1.0.0".variants.providers.example]
+        requires = ["variant-provider"]
+
+        [packages.ok.versions."1.0.0".variants.wheels]
+        accelerated.properties = ["example :: acceleration :: enabled"]
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
+    let (_, hash) = server
+        .files()
+        .find(|(filename, _)| filename.ends_with("-accelerated.whl"))
+        .context("missing test variant wheel")?;
+    context
+        .temp_dir
+        .child("requirements.txt")
+        .write_str(&format!("ok==1.0.0 --hash=sha256:{hash}\n"))?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--index-url")
+        .arg(server.index_url())
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("--variant-provider")
+        .arg("example=variant-provider")
+        .arg("--variant-provider-index")
+        .arg(server.index_url())
+        .arg("--require-hashes")
+        .arg("-r").arg("requirements.txt"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to query wheel variant provider for namespace `example`
+      cause: wheel variant provider packages cannot be installed when hashes are required; provide static target properties
+    ");
+    Ok(())
+}
+
+/// A provider index can contain credentials even when the URL fails to parse.
+#[test]
+fn invalid_variant_provider_index_does_not_expose_credentials() {
+    let context = uv_test::test_context_with_versions!(&[]);
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--variant-provider")
+        .arg("example=example-provider")
+        .env(
+            EnvVars::UV_VARIANT_PROVIDER_INDEX,
+            "https://user:password@providers.example:bad-port/simple/",
+        )
+        .arg("ok==1.0.0"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: expected an index URL or path for `--variant-provider-index`
+
+    Usage: uv pip install [OPTIONS] <PACKAGE|--requirements <REQUIREMENTS>|--editable <EDITABLE>|--group <GROUP>>
+
+    For more information, try '--help'.
+    ");
+}
+
+/// Emitting package index URLs must not publish the credentials used to fetch a provider.
+#[test]
+fn pip_compile_omits_variant_provider_index_from_header() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("requirements.in")
+        .write_str("ok==1.0.0")?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in")
+        .arg("--emit-index-url")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links"))
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("--variant-provider")
+        .arg("example=example-provider")
+        .arg("--variant-provider-index")
+        .arg("https://user:password@providers.example/simple/"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in --emit-index-url --no-index --preview-features wheel-variants --variant-provider example=example-provider
+    ok==1.0.0
+        # via -r requirements.in
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    Ok(())
+}
+
+/// Project exports omit the provider index when its URL is supplied in the same argument.
+#[test]
+fn export_omits_variant_provider_index_from_header() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--no-index")
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("--variant-provider")
+        .arg("example=example-provider")
+        .arg("--variant-provider-index=https://user:password@providers.example/simple/"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv export --cache-dir [CACHE_DIR] --no-index --preview-features wheel-variants --variant-provider example=example-provider
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    Ok(())
+}
+
+/// A universal lock must retain each variant wheel's own dependencies, even when its metadata
+/// does not put an explicit variant marker on them.
+#[test]
+fn lock_variant_wheel_specific_dependencies() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "variant-wheel-specific-dependencies"
+        root = {}
+        expected.satisfiable = true
+
+        [packages.ok.versions."1.0.0"]
+        wheel = false
+        sdist = false
+        variants.namespaces = ["blas_lapack"]
+        variants.providers.blas_lapack.static-properties.library = ["openblas"]
+        variants.wheels.null.properties = []
+        variants.wheels.null.requires = ["cpu-only==1.0.0"]
+        variants.wheels.openblas.properties = ["blas_lapack :: library :: openblas"]
+        variants.wheels.openblas.requires = ["blas-only==1.0.0"]
+
+        [packages.cpu-only.versions."1.0.0"]
+        [packages.blas-only.versions."1.0.0"]
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["ok==1.0.0"]
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--frozen")
+        .arg("--preview-features")
+        .arg("wheel-variants"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + blas-only==1.0.0
+     + ok==1.0.0
+    ");
+    Ok(())
+}
+
 /// Local wheels must remain compatible when installed or cached.
 #[test]
 fn install_local_variant_wheel() -> Result<()> {
@@ -69,7 +358,6 @@ fn install_local_variant_wheel() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + ok==1.0.0 (from file://[TEMP_DIR]/ok-1.0.0-py3-none-any-gpu.whl)
     ");
@@ -80,10 +368,9 @@ fn install_local_variant_wheel() -> Result<()> {
         .arg("--preview-features")
         .arg("wheel-variants")
         .arg(wheel_path.path()), @"
-    exit_code: 2 (failure)
+    exit_code: 1 (failure)
     ----- stderr -----
-    Resolved 1 package in [TIME]
-    error: Failed to determine installation plan
+    error: Failed to read `ok @ file://[TEMP_DIR]/ok-1.0.0-py3-none-any-gpu.whl`
       cause: Wheel variant `gpu` requires unsupported properties: `nvidia :: cuda_version_lower_bound :: 12` and `nvidia :: sm_arch :: 89_real`
     ");
 
@@ -94,10 +381,9 @@ fn install_local_variant_wheel() -> Result<()> {
         .arg("--preview-features")
         .arg("wheel-variants")
         .arg(wheel_path.path()), @"
-    exit_code: 2 (failure)
+    exit_code: 1 (failure)
     ----- stderr -----
-    Resolved 1 package in [TIME]
-    error: Failed to determine installation plan
+    error: Failed to read `ok @ file://[TEMP_DIR]/ok-1.0.0-py3-none-any-gpu.whl`
       cause: Wheel variant `gpu` requires unsupported properties: `nvidia :: cuda_version_lower_bound :: 12` and `nvidia :: sm_arch :: 89_real`
     ");
     Ok(())
@@ -124,13 +410,11 @@ fn refresh_incompatible_variant_wheel() -> Result<()> {
         .arg("linux")
         .arg("--refresh")
         .arg(wheel_path.path()), @"
-    exit_code: 2 (failure)
+    exit_code: 1 (failure)
     ----- stderr -----
-    Resolved 1 package in [TIME]
-    error: Failed to determine installation plan
-      cause: A path (ok-1.0.0-py3-none-win_amd64-null.whl) dependency is incompatible with the current platform
-
-    hint: The wheel is compatible with Windows (`win_amd64`), but you're on Linux (`manylinux_2_28_x86_64`)
+    error: No solution found when resolving dependencies
+      cause: Because only ok==1.0.0 is available and ok==1.0.0 has no wheels with a matching platform tag (e.g., `manylinux_2_28_x86_64`), we can conclude that all versions of ok cannot be used.
+             And because you require ok, we can conclude that your requirements are unsatisfiable.
     ");
     Ok(())
 }
@@ -158,7 +442,6 @@ fn install_direct_url_variant_wheel() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + ok==1.0.0 (from http://[LOCALHOST]/ok-1.0.0-py3-none-any-gpu.whl)
     ");
@@ -170,10 +453,9 @@ fn install_direct_url_variant_wheel() -> Result<()> {
         .arg("--preview-features")
         .arg("wheel-variants")
         .arg(&url), @"
-    exit_code: 2 (failure)
+    exit_code: 1 (failure)
     ----- stderr -----
-    Resolved 1 package in [TIME]
-    error: Failed to determine installation plan
+    error: Failed to download `ok @ http://[LOCALHOST]/ok-1.0.0-py3-none-any-gpu.whl`
       cause: Wheel variant `gpu` requires unsupported properties: `nvidia :: cuda_version_lower_bound :: 12` and `nvidia :: sm_arch :: 89_real`
     ");
     Ok(())
@@ -235,7 +517,6 @@ fn install_git_path_variant_wheel() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + ok==1.0.0 (from git+file://[TEMP_DIR]/repository/@[COMMIT]#path=ok-1.0.0-py3-none-any-gpu.whl)
     ");
@@ -247,10 +528,9 @@ fn install_git_path_variant_wheel() -> Result<()> {
         .arg("--preview-features")
         .arg("wheel-variants")
         .arg(&requirement), @"
-    exit_code: 2 (failure)
+    exit_code: 1 (failure)
     ----- stderr -----
-    Resolved 1 package in [TIME]
-    error: Failed to determine installation plan
+    error: Failed to download `ok @ git+file://[TEMP_DIR]/repository/@[COMMIT]#path=ok-1.0.0-py3-none-any-gpu.whl`
       cause: Wheel variant `gpu` requires unsupported properties: `nvidia :: cuda_version_lower_bound :: 12` and `nvidia :: sm_arch :: 89_real`
     ");
     Ok(())
@@ -272,6 +552,51 @@ fn local_variant_wheel_requires_variant_metadata() -> Result<()> {
     error: Failed to read `ok @ file://[TEMP_DIR]/ok-1.0.0-py3-none-any-null.whl`
       cause: Failed to read metadata: [TEMP_DIR]/ok-1.0.0-py3-none-any-null.whl
       cause: Missing `variant.json` in the wheel's .dist-info directory
+    ");
+    Ok(())
+}
+
+/// A pylock install validates the original local wheel before caching its extracted contents.
+#[test]
+fn pylock_rejects_local_wheel_with_duplicate_variant_metadata() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let variant = null_variant().to_string();
+    let (_, wheel) = WheelBuilder::new(&"ok".parse()?, &"1.0.0".parse()?)
+        .files(&[
+            ("ok-1.0.0.dist-info/variant.json", &variant),
+            ("ok-1.0.0.dist-info/variant.json", &variant),
+        ])
+        .build();
+    let filename = "ok-1.0.0-py3-none-any-null.whl";
+    context.temp_dir.child(filename).write_binary(&wheel)?;
+    let hash = hex::encode(Sha256::digest(&wheel));
+    context
+        .temp_dir
+        .child("pylock.toml")
+        .write_str(&formatdoc! {r#"
+        lock-version = "1.0"
+        created-by = "test"
+
+        [[packages]]
+        name = "ok"
+        version = "1.0.0"
+        archive = {{ path = "{filename}", hashes = {{ sha256 = "{hash}" }} }}
+
+        [packages.variants-json]
+        "$schema" = "https://variants-schema.wheelnext.dev/peps/825/v0.1.1.json"
+        default-priorities = {{ namespace = ["x86_64"] }}
+        variants = {{ null = {{}} }}
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview-features")
+        .arg("pylock,wheel-variants")
+        .arg("pylock.toml"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to read `ok @ file://[TEMP_DIR]/ok-1.0.0-py3-none-any-null.whl`
+      cause: Failed to read variant metadata from `ok @ file://[TEMP_DIR]/ok-1.0.0-py3-none-any-null.whl`
+      cause: Multiple `variant.json` entries in the wheel's .dist-info directory
     ");
     Ok(())
 }
@@ -378,35 +703,166 @@ fn replace_incompatible_installed_variant() -> Result<()> {
     Ok(())
 }
 
-/// Project sync installs the wheel selected by the lockfile even if another compatible variant
-/// is already installed.
+/// Dependency markers use only the selected wheel properties supported by the target.
 #[test]
-fn sync_replaces_compatible_variant_with_selected_wheel() -> Result<()> {
+fn selected_variant_properties_filter_dependencies() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let scenario = toml::from_str::<Scenario>(indoc! {r#"
-        name = "installed-variant-lockfile-selection"
+        name = "selected-variant-properties"
+        root = {}
+        expected.satisfiable = true
+
+        [packages.ok.versions."1.0.0"]
+        wheel = false
+        sdist = false
+        requires = [
+            "chosen ; 'blas_lapack :: library :: openblas' in variant_properties",
+            "unsupported ; 'blas_lapack :: library :: mkl' in variant_properties",
+        ]
+
+        [packages.ok.versions."1.0.0".variants]
+        namespaces = ["blas_lapack"]
+
+        [packages.ok.versions."1.0.0".variants.providers.blas_lapack]
+        static-properties.library = ["openblas"]
+
+        [packages.ok.versions."1.0.0".variants.wheels]
+        blas.properties = [
+            "blas_lapack :: library :: openblas",
+            "blas_lapack :: library :: mkl",
+        ]
+
+        [packages.chosen.versions."1.0.0"]
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--index-url")
+        .arg(server.index_url())
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("ok==1.0.0"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + chosen==1.0.0
+     + ok==1.0.0
+    ");
+
+    let recorded = context.read(
+        context
+            .site_packages()
+            .join("ok-1.0.0.dist-info/uv_variant.json"),
+    );
+    assert_eq!(
+        serde_json::from_str::<Value>(&recorded)?,
+        json!({"label": "blas", "properties": {"blas_lapack": {"library": ["openblas"]}}}),
+    );
+    uv_snapshot!(context.pip_check(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Checked 2 packages in [TIME]
+    All installed packages are compatible
+    ");
+    Ok(())
+}
+
+/// The only wheel requires a property supplied by the target, absent from the host defaults.
+#[test]
+fn explicit_variant_target_selects_registry_wheel() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "explicit-variant-target-selects-registry-wheel"
+        root = {}
+        expected.satisfiable = true
+
+        [packages.ok.versions."1.0.0"]
+        wheel = false
+        sdist = false
+
+        [packages.ok.versions."1.0.0".variants]
+        namespaces = ["blas_lapack"]
+
+        [packages.ok.versions."1.0.0".variants.providers.blas_lapack]
+        static-properties.library = ["openblas"]
+
+        [packages.ok.versions."1.0.0".variants.wheels]
+        mkl.properties = ["blas_lapack :: library :: mkl"]
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
+    let target = context.temp_dir.child("target.json");
+    target.write_str(r#"{"blas_lapack": [["library", ["mkl"]]]}"#)?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--index-url")
+        .arg(server.index_url())
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("--variant-target")
+        .arg(target.path())
+        .arg("ok==1.0.0"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0
+    ");
+    let recorded = context.read(
+        context
+            .site_packages()
+            .join("ok-1.0.0.dist-info/uv_variant.json"),
+    );
+    assert_eq!(
+        serde_json::from_str::<Value>(&recorded)?,
+        json!({"label": "mkl", "properties": {"blas_lapack": {"library": ["mkl"]}}}),
+    );
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--offline")
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("--variant-target")
+        .arg(target.path())
+        .arg("ok==1.0.0"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Checked 1 package in [TIME]
+    ");
+    Ok(())
+}
+
+/// An explicit empty target replaces an installed variant when another package forces resolution.
+#[test]
+fn explicit_variant_target_replaces_installed_wheel_during_resolution() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "explicit-variant-target-replaces-installed-wheel"
         root = {}
         expected.satisfiable = true
 
         [packages.ok.versions."1.0.0"]
         sdist = false
-        variants.namespaces = ["x86_64"]
-        variants.wheels.null.properties = []
+
+        [packages.ok.versions."1.0.0".variants]
+        namespaces = ["blas_lapack"]
+
+        [packages.ok.versions."1.0.0".variants.providers.blas_lapack]
+        static-properties.library = ["openblas"]
+
+        [packages.ok.versions."1.0.0".variants.wheels]
+        blas.properties = ["blas_lapack :: library :: openblas"]
+
+        [packages.missing.versions."1.0.0"]
     "#})?;
     let server = PackseServer::from_scenario(&scenario);
     let installed_variant = context
         .site_packages()
         .join("ok-1.0.0.dist-info/variant.json");
-    context
-        .temp_dir
-        .child("pyproject.toml")
-        .write_str(indoc! {r#"
-            [project]
-            name = "example"
-            version = "1.0.0"
-            requires-python = ">=3.12"
-            dependencies = ["ok==1.0.0"]
-        "#})?;
+    let target = context.temp_dir.child("empty-target.json");
+    target.write_str("{}")?;
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--index-url")
@@ -423,7 +879,59 @@ fn sync_replaces_compatible_variant_with_selected_wheel() -> Result<()> {
     ");
     assert!(installed_variant.is_file());
 
-    uv_snapshot!(context.filters(), context.sync()
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--index-url")
+        .arg(server.index_url())
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("--variant-target")
+        .arg(target.path())
+        .arg("ok==1.0.0")
+        .arg("missing==1.0.0"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 2 packages in [TIME]
+     + missing==1.0.0
+     ~ ok==1.0.0
+    ");
+    assert!(!installed_variant.exists());
+    Ok(())
+}
+
+/// Frozen sync selects a variant for one target and replaces it with an ordinary wheel for another.
+#[test]
+fn frozen_sync_replaces_compatible_variant_with_selected_wheel() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "installed-variant-lockfile-selection"
+        root = {}
+        expected.satisfiable = true
+
+        [packages.ok.versions."1.0.0"]
+        sdist = false
+        variants.namespaces = ["blas_lapack"]
+        variants.providers.blas_lapack.static-properties.library = ["openblas"]
+        variants.wheels.blas.properties = ["blas_lapack :: library :: openblas"]
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
+    let installed_variant = context
+        .site_packages()
+        .join("ok-1.0.0.dist-info/variant.json");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "example"
+            version = "1.0.0"
+            requires-python = ">=3.12"
+            dependencies = ["ok==1.0.0"]
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
         .arg("--index-url")
         .arg(server.index_url())
         .arg("--preview-features")
@@ -431,6 +939,25 @@ fn sync_replaces_compatible_variant_with_selected_wheel() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.sync()
+        .args(["--frozen", "--preview-features", "wheel-variants"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0
+    ");
+    assert!(installed_variant.is_file());
+
+    let target = context.temp_dir.child("empty-target.json");
+    target.write_str("{}")?;
+    uv_snapshot!(context.filters(), context.sync()
+        .args(["--frozen", "--preview-features", "wheel-variants", "--variant-target"])
+        .arg(target.path()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -490,7 +1017,7 @@ fn sync_replaces_compatible_variant_with_selected_sdist() -> Result<()> {
     ");
     assert!(installed_variant.is_file());
 
-    uv_snapshot!(context.filters(), context.sync(), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--no-binary-package").arg("ok"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
@@ -554,18 +1081,295 @@ fn incompatible_installed_variant_without_replacement() -> Result<()> {
     Ok(())
 }
 
-/// A variant-only release cannot be represented as an installable package in `pylock.toml`.
-#[test]
-fn pylock_rejects_selected_wheel_variant() -> Result<()> {
+/// A malformed variant wheel must be rejected before its provider is installed.
+#[tokio::test]
+async fn pylock_rejects_invalid_variant_source_before_provider() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let links = context.temp_dir.child("links");
-    links.create_dir_all()?;
+    let provider_index = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/simple/variant-provider/"))
+        .respond_with(ResponseTemplate::new(500))
+        .expect(0)
+        .mount(&provider_index)
+        .await;
+    context.temp_dir.child("pylock.toml").write_str(&format!(
+        indoc! {r#"
+            lock-version = "1.0"
+            created-by = "test"
+
+            [[packages]]
+            name = "ok"
+            version = "1.0.0"
+
+            [packages.archive]
+            url = "https://example.org/other-1.0.0-py3-none-any-accelerated.whl"
+
+            [packages.archive.hashes]
+            sha256 = "0000000000000000000000000000000000000000000000000000000000000000"
+
+            [packages.variants-json]
+            "$schema" = "{}"
+
+            [packages.variants-json.default-priorities]
+            namespace = ["example"]
+
+            [packages.variants-json.providers.example]
+            requires = ["variant-provider==1.0.0"]
+            plugin-api = "variant_provider.plugin:Provider"
+
+            [packages.variants-json.variants.accelerated.example]
+            acceleration = ["enabled"]
+        "#},
+        PEP_850_SCHEMA
+    ))?;
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview-features")
+        .arg("pylock,wheel-variants")
+        .arg("--variant-provider")
+        .arg("example=variant-provider@variant_provider.plugin:Provider")
+        .arg("--variant-provider-index")
+        .arg(format!("{}/simple/", provider_index.uri()))
+        .arg("--no-index")
+        .arg("pylock.toml"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Wheel filename `other-1.0.0-py3-none-any-accelerated.whl` does not match package name `ok`
+    ");
+    Ok(())
+}
+
+/// A frozen export must authenticate the direct wheel before reading its embedded metadata.
+#[test]
+fn pylock_rejects_changed_locked_variant_wheel() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
     let variant = null_variant().to_string();
     let (_, wheel) = WheelBuilder::new(&"ok".parse()?, &"1.0.0".parse()?)
         .files(&[("ok-1.0.0.dist-info/variant.json", &variant)])
         .build();
+    let wheel_path = context.temp_dir.child("ok-1.0.0-py3-none-any-null.whl");
+    wheel_path.write_binary(&wheel)?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["ok"]
+
+        [tool.uv.sources]
+        ok = { path = "ok-1.0.0-py3-none-any-null.whl" }
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("--no-index"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    let changed_wheel = vec![0; wheel.len()];
+    wheel_path.write_binary(&changed_wheel)?;
+    let context = context
+        .with_filter((hex::encode(Sha256::digest(&wheel)), "[LOCKED_WHEEL_HASH]"))
+        .with_filter((
+            hex::encode(Sha256::digest(&changed_wheel)),
+            "[CHANGED_WHEEL_HASH]",
+        ));
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("--frozen")
+        .arg("--format")
+        .arg("pylock.toml"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to read locked wheel variant metadata for `ok`
+      cause: Hash mismatch for `ok @ file://[TEMP_DIR]/ok-1.0.0-py3-none-any-null.whl`
+
+             Expected:
+               sha256:[LOCKED_WHEEL_HASH]
+
+             Computed:
+               sha256:[CHANGED_WHEEL_HASH]
+    ");
+    Ok(())
+}
+
+/// Different ZIP entry names can extract to the same metadata path. Reject the archive
+/// before publishing the extracted wheel to the cache.
+#[test]
+fn reject_cached_wheel_with_duplicate_variant_metadata() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let variant = null_variant().to_string();
+    let (_, wheel) = WheelBuilder::new(&"ok".parse()?, &"1.0.0".parse()?)
+        .files(&[
+            ("ok-1.0.0.dist-info/variant.json", &variant),
+            ("ok-1.0.0.dist-info/./variant.json", &variant),
+        ])
+        .build();
+    let filename = "ok-1.0.0-py3-none-any-null.whl";
+    let hash = hex::encode(Sha256::digest(&wheel));
+    let size = wheel.len();
+    context.temp_dir.child(filename).write_binary(&wheel)?;
+    let server = FindLinksServer::new(context.temp_dir.path());
+    let url = format!("{}/{filename}", server.url());
+    let context = context.with_filter((server.url(), "http://[LOCALHOST]"));
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["ok"]
+        "#})?;
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(&formatdoc! {r#"
+            version = 1
+            revision = 3
+            requires-python = ">=3.12"
+
+            [[package]]
+            name = "ok"
+            version = "1.0.0"
+            source = {{ url = "{url}" }}
+            wheels = [{{ url = "{url}", hash = "sha256:{hash}", size = {size} }}]
+
+            [[package]]
+            name = "project"
+            version = "0.1.0"
+            source = {{ virtual = "." }}
+            dependencies = [{{ name = "ok" }}]
+        "#})?;
+    context
+        .temp_dir
+        .child("pylock.toml")
+        .write_str(&formatdoc! {r#"
+            lock-version = "1.0"
+            created-by = "test"
+
+            [[packages]]
+            name = "ok"
+            version = "1.0.0"
+            archive = {{ url = "{url}", size = {size}, hashes = {{ sha256 = "{hash}" }} }}
+
+            [packages.variants-json]
+            "$schema" = "https://variants-schema.wheelnext.dev/peps/825/v0.1.1.json"
+            default-priorities = {{ namespace = ["x86_64"] }}
+            variants = {{ null = {{}} }}
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--frozen")
+        .arg("--format")
+        .arg("pylock.toml")
+        .arg("--preview-features")
+        .arg("wheel-variants"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to read locked wheel variant metadata for `ok`
+      cause: Failed to extract archive: ok-1.0.0-py3-none-any-null.whl
+      cause: ZIP file contains multiple entries for the same output path: ok-1.0.0.dist-info/variant.json
+    ");
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview-features")
+        .arg("pylock,wheel-variants")
+        .arg("pylock.toml"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to download `ok @ http://[LOCALHOST]/ok-1.0.0-py3-none-any-null.whl`
+      cause: Failed to extract archive: ok-1.0.0-py3-none-any-null.whl
+      cause: ZIP file contains multiple entries for the same output path: ok-1.0.0.dist-info/variant.json
+    ");
+    Ok(())
+}
+
+/// Stop reading a changed direct wheel as soon as it exceeds the locked size.
+#[test]
+fn pylock_rejects_oversized_locked_variant_wheel() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let filename = "ok-1.0.0-py3-none-any-null.whl";
+    context
+        .temp_dir
+        .child(filename)
+        .write_binary(b"0123456789")?;
+    let server = FindLinksServer::new(context.temp_dir.path());
+    let url = format!("{}/{filename}", server.url());
+    let context = context.with_filter((server.url(), "http://[LOCALHOST]"));
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["ok"]
+        "#})?;
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(&formatdoc! {r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [[package]]
+        name = "ok"
+        version = "1.0.0"
+        source = {{ url = "{url}" }}
+
+        [[package.wheels]]
+        url = "{url}"
+        hash = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+        size = 1
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = {{ virtual = "." }}
+        dependencies = [{{ name = "ok" }}]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("--frozen")
+        .arg("--format")
+        .arg("pylock.toml"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to read locked wheel variant metadata for `ok`
+      cause: Size mismatch for `ok @ http://[LOCALHOST]/ok-1.0.0-py3-none-any-null.whl`: expected 1 bytes, but downloaded 2 bytes
+    ");
+    Ok(())
+}
+
+/// The exported lockfile carries the variant metadata needed to install without the sidecar.
+#[test]
+fn pylock_selects_wheel_variant() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filter((r"[a-f0-9]{64}", "[HASH]"));
+    let links = context.temp_dir.child("links");
+    links.create_dir_all()?;
+    let variant = json!({
+        "$schema": PEP_850_SCHEMA,
+        "default-priorities": { "namespace": ["blas"] },
+        "providers": { "blas": { "static-properties": { "library": ["openblas"] } } },
+        "variants": { "openblas": { "blas": { "library": ["openblas"] } } },
+    })
+    .to_string();
+    let (_, wheel) = WheelBuilder::new(&"ok".parse()?, &"1.0.0".parse()?)
+        .files(&[("ok-1.0.0.dist-info/variant.json", &variant)])
+        .build();
     links
-        .child("ok-1.0.0-py3-none-any-null.whl")
+        .child("ok-1.0.0-py3-none-any-openblas.whl")
         .write_binary(&wheel)?;
     links.child("ok-1.0.0-variants.json").write_str(&variant)?;
     context
@@ -582,16 +1386,128 @@ fn pylock_rejects_selected_wheel_variant() -> Result<()> {
         .arg("wheel-variants")
         .arg("--no-header")
         .arg("-o")
-        .arg("pylock.toml"), @"
-    exit_code: 2 (failure)
+        .arg("pylock.toml"), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    lock-version = "1.0"
+    created-by = "uv"
+    requires-python = ">=3.12.[X]"
+
+    [[packages]]
+    name = "ok"
+    version = "1.0.0"
+    wheels = [{ url = "file://[TEMP_DIR]/links/ok-1.0.0-py3-none-any-openblas.whl", hashes = { sha256 = "[HASH]" } }]
+
+    [packages.variants-json]
+    "$schema" = "https://variants-schema.wheelnext.dev/peps/850/v0.2.0.json"
+    default-priorities = { namespace = ["blas"] }
+    providers = { blas = { optional = false, static-properties = { library = ["openblas"] } } }
+    variants = { openblas = { blas = { library = ["openblas"] } } }
+
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Package `ok` resolved to a wheel variant, which pylock.toml export does not support
+    "#);
+    fs_err::remove_file(links.child("ok-1.0.0-variants.json"))?;
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview-features")
+        .arg("pylock,wheel-variants")
+        .arg("pylock.toml"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0
     ");
+    assert!(
+        context
+            .site_packages()
+            .join("ok-1.0.0.dist-info/variant.json")
+            .is_file()
+    );
+    Ok(())
+}
+
+/// A variant without metadata must not prevent exporting an ordinary wheel.
+#[test]
+fn pylock_omits_variant_without_metadata() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filter((r"[a-f0-9]{64}", "[HASH]"));
+    let links = context.temp_dir.child("links");
+    links.create_dir_all()?;
+    let (_, wheel) = WheelBuilder::new(&"ok".parse()?, &"1.0.0".parse()?).build();
+    links
+        .child("ok-1.0.0-py3-none-any.whl")
+        .write_binary(&wheel)?;
+    links
+        .child("ok-1.0.0-py3-none-any-unlisted.whl")
+        .write_binary(&wheel)?;
     context
         .temp_dir
-        .child("pylock.toml")
-        .assert(predicates::path::missing());
+        .child("requirements.in")
+        .write_str("ok==1.0.0")?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(links.path())
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("--no-header")
+        .arg("-o")
+        .arg("pylock.toml"), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    lock-version = "1.0"
+    created-by = "uv"
+    requires-python = ">=3.12.[X]"
+
+    [[packages]]
+    name = "ok"
+    version = "1.0.0"
+    wheels = [{ url = "file://[TEMP_DIR]/links/ok-1.0.0-py3-none-any.whl", hashes = { sha256 = "[HASH]" } }]
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    "#);
+    Ok(())
+}
+
+/// A universal resolution can select a variant before a sidecar is verified.
+#[test]
+fn pylock_rejects_selected_variant_without_metadata() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let variant = null_variant().to_string();
+    let (_, wheel) = WheelBuilder::new(&"ok".parse()?, &"1.0.0".parse()?)
+        .files(&[("ok-1.0.0.dist-info/variant.json", &variant)])
+        .build();
+    context
+        .temp_dir
+        .child("ok-1.0.0-py3-none-any-null.whl")
+        .write_binary(&wheel)?;
+    context
+        .temp_dir
+        .child("requirements.in")
+        .write_str("ok==1.0.0")?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in")
+        .arg("--universal")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(context.temp_dir.path())
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("-o")
+        .arg("pylock.toml"), @"
+    exit_code: 2 (failure)
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in --universal --no-index --preview-features wheel-variants -o pylock.toml
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Package `ok` contains a variant wheel without `packages.variants-json` metadata
+    ");
     Ok(())
 }
 

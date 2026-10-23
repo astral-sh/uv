@@ -30,6 +30,7 @@ uv-errors = { workspace = true }
 uv-git = { workspace = true }
 uv-install-wheel = { workspace = true }
 uv-installer = { workspace = true }
+uv-pep508 = { workspace = true }
 uv-platform-tags = { workspace = true }
 uv-preview = { workspace = true }
 uv-pypi-types = { workspace = true }
@@ -38,12 +39,15 @@ uv-resolver = { workspace = true }
 uv-static = { workspace = true }
 uv-types = { workspace = true }
 uv-version = { workspace = true }
+uv-virtualenv = { workspace = true }
 uv-workspace = { workspace = true }
 
 anyhow = { workspace = true }
+fs-err = { workspace = true }
 futures = { workspace = true }
 itertools = { workspace = true }
 rustc-hash = { workspace = true }
+serde_json = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }

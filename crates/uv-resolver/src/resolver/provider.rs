@@ -3,12 +3,13 @@ use std::sync::Arc;
 pub use uv_resolver_types::MetadataResponse;
 pub(crate) use uv_resolver_types::MetadataUnavailable;
 
-use uv_client::MetadataFormat;
+use uv_client::{FetchedVariantsJson, MetadataFormat};
 use uv_configuration::BuildOptions;
 use uv_distribution::{DistributionDatabase, Reporter};
 use uv_distribution_types::{
-    Dist, File, IndexCapabilities, IndexLocations, IndexMetadata, IndexMetadataRef, IndexUrl,
-    InstalledDist, MinimumLibcVersion, RequestedDist, RequiresPython,
+    BuiltDist, Dist, File, IndexCapabilities, IndexLocations, IndexMetadata, IndexMetadataRef,
+    IndexUrl, InstalledDist, MinimumLibcVersion, RequestedDist, RequiresPython, SelectedVariant,
+    SupportedVariantProperties, VariantsJsonContent,
 };
 use uv_normalize::PackageName;
 use uv_platform_tags::Tags;
@@ -31,7 +32,7 @@ pub type WheelMetadataResult = Result<MetadataResponse, uv_distribution::Error>;
 #[derive(Debug)]
 pub enum VariantsJsonResponse {
     /// The variant metadata was fetched successfully.
-    Found(Vec<u8>),
+    Found(FetchedVariantsJson),
     /// The package version cannot be used.
     Unavailable(MetadataUnavailable),
 }
@@ -80,6 +81,29 @@ pub trait ResolverProvider {
         file: &'io File,
         index: &'io IndexUrl,
     ) -> impl Future<Output = Result<VariantsJsonResponse, uv_client::Error>> + 'io;
+
+    /// Discover the target's supported variant properties.
+    fn supported_variant_properties<'io>(
+        &'io self,
+        metadata: &'io VariantsJsonContent,
+        require_hashes: bool,
+    ) -> impl Future<Output = Result<SupportedVariantProperties, uv_distribution::Error>> + 'io;
+
+    /// Select a direct wheel's supported properties after verifying the wheel.
+    fn select_wheel_variant<'io>(
+        &'io self,
+        dist: &'io BuiltDist,
+    ) -> impl Future<Output = Result<Option<SelectedVariant>, uv_distribution::Error>> + 'io;
+
+    /// Whether this resolution installs a variant provider.
+    fn is_variant_provider(&self) -> bool {
+        false
+    }
+
+    /// Return an explicitly configured variant target, if any.
+    fn variant_target(&self) -> Option<&SupportedVariantProperties> {
+        None
+    }
 
     /// Set the [`Reporter`] to use for this installer.
     #[must_use]
@@ -184,6 +208,33 @@ impl<'a, Context: BuildContext> DefaultResolverProvider<'a, Context> {
 }
 
 impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Context> {
+    fn is_variant_provider(&self) -> bool {
+        self.fetcher.is_variant_provider()
+    }
+
+    fn variant_target(&self) -> Option<&SupportedVariantProperties> {
+        self.fetcher.variant_target()
+    }
+
+    async fn select_wheel_variant<'io>(
+        &'io self,
+        dist: &'io BuiltDist,
+    ) -> Result<Option<SelectedVariant>, uv_distribution::Error> {
+        self.fetcher
+            .select_wheel_variant(dist, self.hasher.archive_policy(dist))
+            .await
+    }
+
+    async fn supported_variant_properties<'io>(
+        &'io self,
+        metadata: &'io VariantsJsonContent,
+        require_hashes: bool,
+    ) -> Result<SupportedVariantProperties, uv_distribution::Error> {
+        self.fetcher
+            .supported_variant_properties(metadata, require_hashes)
+            .await
+    }
+
     /// Make a "Simple API" request for the package and convert the result to a [`VersionMap`].
     async fn get_package_versions<'io>(
         &'io self,

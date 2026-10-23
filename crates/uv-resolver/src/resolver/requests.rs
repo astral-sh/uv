@@ -2,17 +2,19 @@ use std::sync::Arc;
 
 use tokio::sync::mpsc::Sender;
 
+use uv_distribution::ArchiveMetadata;
 use uv_distribution_types::{
-    Dist, DistributionId, Identifier, IndexMetadata, IndexUrl, Name, ResolutionRecorder,
+    BuiltDist, DerivationChain, Dist, DistErrorKind, DistributionId, Identifier, IndexMetadata,
+    IndexUrl, Name, RegistryVariantsJson, RequestedDist, ResolutionRecorder, SelectedVariant,
+    SupportedVariantProperties,
 };
 use uv_normalize::PackageName;
 use uv_once_map::Registration;
 use uv_pep440::Version;
 
-use crate::prioritized_distribution::RegistryVariantsJson;
 use crate::pubgrub::Range;
 use crate::resolved::ResolvedDistRef;
-use crate::resolver::index::{FxRegisteredEntry, ParsedVariantsJsonResponse};
+use crate::resolver::index::{FxRegisteredEntry, ParsedVariantsJson, ParsedVariantsJsonResponse};
 use crate::resolver::{InMemoryIndex, MetadataResponse, Request, VersionsResponse};
 use crate::{PythonRequirement, ResolveError};
 
@@ -226,6 +228,82 @@ impl MetadataRequests {
             Registration::Existing(entry) => entry,
         };
         Ok(RegisteredVariantsJson(entry))
+    }
+
+    /// Request target-specific properties for verified metadata at most once.
+    pub(crate) fn request_variant_properties(
+        &self,
+        parsed: Arc<ParsedVariantsJson>,
+    ) -> Result<
+        FxRegisteredEntry<'_, RegistryVariantsJson, Arc<SupportedVariantProperties>>,
+        ResolveError,
+    > {
+        let entry = match self
+            .index
+            .variant_properties()
+            .register_entry(parsed.artifact.clone())
+        {
+            Registration::New(entry) => {
+                self.sender
+                    .blocking_send(Request::VariantProperties(parsed))?;
+                entry
+            }
+            Registration::Existing(entry) => entry,
+        };
+        Ok(entry)
+    }
+
+    /// Select a direct wheel's variant once, reusing lookahead results when available.
+    pub(crate) fn select_direct_variant(
+        &self,
+        dist: &BuiltDist,
+    ) -> Result<Option<SelectedVariant>, ResolveError> {
+        let entry = match self
+            .index
+            .direct_variants()
+            .register_entry(dist.distribution_id())
+        {
+            Registration::New(entry) => {
+                self.sender
+                    .blocking_send(Request::DirectVariant(dist.clone()))?;
+                entry
+            }
+            Registration::Existing(entry) => entry,
+        };
+        entry.wait_blocking().map_err(|error| {
+            let requested = RequestedDist::Installable(Dist::Built(dist.clone()));
+            ResolveError::Dist(
+                DistErrorKind::from_requested_dist(&requested, error.as_ref()),
+                Box::new(requested),
+                DerivationChain::default(),
+                error,
+            )
+        })
+    }
+
+    /// Request dependency metadata for the wheels declared in verified variant metadata.
+    pub(crate) fn request_variant_dependencies(
+        &self,
+        dist: Arc<Dist>,
+        variants: Arc<ParsedVariantsJson>,
+        baseline: &ArchiveMetadata,
+    ) -> Result<FxRegisteredEntry<'_, Arc<Dist>, Arc<MetadataResponse>>, ResolveError> {
+        let entry = match self
+            .index
+            .variant_dependencies()
+            .register_entry(Arc::clone(&dist))
+        {
+            Registration::New(entry) => {
+                self.sender.blocking_send(Request::VariantDependencies {
+                    dist,
+                    variants,
+                    baseline: Box::new(baseline.clone()),
+                })?;
+                entry
+            }
+            Registration::Existing(entry) => entry,
+        };
+        Ok(entry)
     }
 
     /// Schedule speculative candidate selection using an already-requested package version map.

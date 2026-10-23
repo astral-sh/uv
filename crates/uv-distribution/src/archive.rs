@@ -16,6 +16,9 @@ pub struct Archive {
     pub version: u8,
     /// The size of the downloaded archive.
     pub size: Option<u64>,
+    /// The archive entry list was checked for unambiguous variant metadata.
+    #[serde(default)]
+    pub(crate) variant_metadata_checked: bool,
 }
 
 impl Archive {
@@ -32,7 +35,13 @@ impl Archive {
             filename,
             version: ARCHIVE_VERSION,
             size,
+            variant_metadata_checked: false,
         }
+    }
+
+    /// An extracted variant wheel is reusable only after its original ZIP entries were checked.
+    pub(crate) fn has_unambiguous_variant_metadata(&self) -> bool {
+        self.filename.variant().is_none() || self.variant_metadata_checked
     }
 
     /// Returns `true` if the archive exists in the cache.
@@ -52,6 +61,21 @@ mod tests {
     use std::str::FromStr;
 
     use super::*;
+
+    #[test]
+    fn read_legacy_archive_without_variant_validation() {
+        let legacy = (
+            ArchiveId::default(),
+            HashDigests::empty(),
+            WheelFilename::from_str("iniconfig-2.0.0-py3-none-any.whl")
+                .expect("valid wheel filename"),
+            ARCHIVE_VERSION,
+            Some(42_u64),
+        );
+        let bytes = rmp_serde::to_vec(&legacy).expect("serialize legacy archive");
+        let archive: Archive = rmp_serde::from_slice(&bytes).expect("deserialize legacy archive");
+        assert!(!archive.variant_metadata_checked);
+    }
 
     #[test]
     fn round_trip_current_archive() {

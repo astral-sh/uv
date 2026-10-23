@@ -4,11 +4,11 @@ use arcstr::ArcStr;
 use owo_colors::OwoColorize;
 use tracing::debug;
 
-use uv_distribution::supported_variant_properties;
 use uv_distribution_filename::{BuildTag, WheelFilename};
 use uv_distribution_types::{
     File, IndexUrl, InstalledDist, MinimumLibcVersion, Name, RegistryBuiltDist, RegistryBuiltWheel,
-    RegistrySourceDist, RequiresPython, VariantsJsonContent, VariantsJsonFilename,
+    RegistrySourceDist, RegistryVariantsJson, RequiresPython, SelectedVariant,
+    SupportedVariantProperties, VariantsJsonContent,
 };
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
@@ -25,14 +25,6 @@ use crate::resolved::ResolvedDistRef;
 #[derive(Debug, Default, Clone)]
 pub struct PrioritizedDist(Box<PrioritizedDistInner>);
 
-/// Variant metadata for a package version on an index.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(crate) struct RegistryVariantsJson {
-    pub(crate) filename: VariantsJsonFilename,
-    pub(crate) file: File,
-    pub(crate) index: IndexUrl,
-}
-
 /// The contents of a [`PrioritizedDist`], boxed to keep the outer type small.
 #[derive(Debug, Clone)]
 struct PrioritizedDistInner {
@@ -45,6 +37,8 @@ struct PrioritizedDistInner {
     wheels: Vec<(RegistryBuiltWheel, WheelCompatibility)>,
     /// Variant metadata files from the indexes contributing files for this version.
     variants_json: Vec<RegistryVariantsJson>,
+    /// The selected wheel's properties supported by this target.
+    selected_variant: Option<SelectedVariant>,
     /// The hashes for each distribution.
     hashes: Vec<HashDigest>,
     /// Python coverage, unioned over compatible wheels independently of their platforms.
@@ -62,6 +56,7 @@ impl Default for PrioritizedDistInner {
             best_wheel_index: None,
             wheels: Vec::new(),
             variants_json: Vec::new(),
+            selected_variant: None,
             hashes: Vec::new(),
             python_markers: MarkerTree::FALSE,
             markers: [MarkerTree::FALSE; 2],
@@ -419,38 +414,71 @@ impl PrioritizedDist {
         &self.0.variants_json
     }
 
+    pub(crate) fn selected_variant(&self) -> Option<&SelectedVariant> {
+        self.0.selected_variant.as_ref()
+    }
+
     /// Return the `variants.json` files we need to check the candidate wheels.
     ///
     /// Match on the index as well as the release: a flat index can include wheels from
     /// several sources, and each source describes only its own variants.
-    pub(crate) fn variants_json_for_selection(
-        &self,
-    ) -> impl Iterator<Item = &RegistryVariantsJson> {
-        self.0.variants_json.iter().filter(|metadata| {
-            self.0.wheels.iter().any(|(wheel, compatibility)| {
-                wheel.index == metadata.index
-                    && matches!(compatibility, WheelCompatibility::Variant(..))
-            })
+    pub(crate) fn variants_json_for_selection<'a>(
+        &'a self,
+        requires_python: &'a RequiresPython,
+    ) -> impl Iterator<Item = &'a RegistryVariantsJson> {
+        self.0.variants_json.iter().filter(move |metadata| {
+            self.eligible_variant_wheels(&metadata.index, requires_python)
+                .next()
+                .is_some()
         })
+    }
+
+    /// Whether this source's metadata describes a wheel eligible for selection.
+    pub(crate) fn has_variant_in_metadata(
+        &self,
+        index: &IndexUrl,
+        metadata: &VariantsJsonContent,
+        requires_python: &RequiresPython,
+    ) -> bool {
+        self.eligible_variant_wheels(index, requires_python)
+            .filter_map(|wheel| wheel.filename.variant())
+            .any(|label| metadata.contains_variant(label))
+    }
+
+    fn eligible_variant_wheels<'a>(
+        &'a self,
+        index: &'a IndexUrl,
+        requires_python: &'a RequiresPython,
+    ) -> impl Iterator<Item = &'a RegistryBuiltWheel> {
+        self.0
+            .wheels
+            .iter()
+            .filter_map(move |(wheel, compatibility)| {
+                if let WheelCompatibility::Variant(..) = compatibility
+                    && &wheel.index == index
+                    && Self::wheel_supports_python(wheel, requires_python)
+                {
+                    Some(wheel)
+                } else {
+                    None
+                }
+            })
     }
 
     /// Choose the best compatible variant, or return `None` to use the ordinary wheel or sdist.
     pub(crate) fn prioritize_variants(
         &self,
-        metadata: &[(&IndexUrl, &VariantsJsonContent)],
+        metadata: &[(&IndexUrl, &VariantsJsonContent, &SupportedVariantProperties)],
+        requires_python: &RequiresPython,
     ) -> Option<Self> {
         if metadata.is_empty() {
             return None;
         }
-        let metadata: Vec<_> = metadata
-            .iter()
-            .map(|(source, metadata)| (*source, *metadata, supported_variant_properties(metadata)))
-            .collect();
         // Prefer wheels whose advertised hash matches a required hash, followed by wheels with
         // no advertised hash, then mismatches. If no hashes are required, all wheels match.
         // The installer verifies required hashes against the downloaded wheel.
         // Break ties by variant rank, platform tags, then build tag.
-        let (best_index, (hash, _, priority, build_tag)) = self
+        let (best_index, (hash, _, priority, build_tag), metadata, supported) = self
             .0
             .wheels
             .iter()
@@ -459,17 +487,27 @@ impl PrioritizedDist {
                 let WheelCompatibility::Variant(hash, priority, build_tag) = compatibility else {
                     return None;
                 };
+                if !Self::wheel_supports_python(wheel, requires_python) {
+                    return None;
+                }
                 let label = wheel.filename.variant()?;
-                let score = metadata
+                let (score, metadata, supported) = metadata
                     .iter()
                     .filter(|(source, _, _)| *source == &wheel.index)
                     .filter_map(|(_, metadata, supported_properties)| {
-                        metadata.score_variant(label, supported_properties)
+                        metadata
+                            .score_variant(label, supported_properties)
+                            .map(|score| (score, *metadata, *supported_properties))
                     })
-                    .max()?;
-                Some((index, (*hash, score, *priority, build_tag)))
+                    .max_by(|left, right| left.0.cmp(&right.0))?;
+                Some((
+                    index,
+                    (*hash, score, *priority, build_tag),
+                    metadata,
+                    supported,
+                ))
             })
-            .max_by(|(_, left), (_, right)| left.cmp(right))?;
+            .max_by(|(_, left, ..), (_, right, ..)| left.cmp(right))?;
 
         // Keep the ordinary wheel if its advertised hash ranks higher.
         if let Some((_, WheelCompatibility::Compatible(existing_hash, ..))) = self.best_wheel()
@@ -482,7 +520,19 @@ impl PrioritizedDist {
         prioritized.0.wheels[best_index].1 =
             WheelCompatibility::Compatible(hash, priority, build_tag.clone());
         prioritized.0.best_wheel_index = Some(best_index);
+        prioritized.0.selected_variant = Some(metadata.select_variant(
+            prioritized.0.wheels[best_index].0.filename.variant()?,
+            supported,
+        )?);
         Some(prioritized)
+    }
+
+    fn wheel_supports_python(wheel: &RegistryBuiltWheel, requires_python: &RequiresPython) -> bool {
+        wheel
+            .file
+            .requires_python
+            .as_deref()
+            .is_none_or(|specifiers| requires_python.is_contained_by(specifiers))
     }
 
     /// Insert the given built distribution into the [`PrioritizedDist`].
@@ -511,15 +561,19 @@ impl PrioritizedDist {
         if !compatibility.is_excluded() {
             self.0.hashes.extend(hashes);
         }
-        // Before checking variant properties, prefer ordinary wheels as metadata sources even
-        // when they cannot be installed (e.g., with `--no-binary`).
+        // Excluded wheels cannot provide metadata. Among the remaining wheels, prefer ordinary
+        // wheels as metadata sources even when they cannot be installed (e.g., with `--no-binary`).
         if let Some((existing_wheel, existing_compatibility)) = self.best_wheel() {
             let is_more_compatible =
-                match (dist.filename.variant(), existing_wheel.filename.variant()) {
-                    (None, Some(_)) => true,
-                    (Some(_), None) => false,
-                    (None, None) | (Some(_), Some(_)) => {
-                        compatibility.is_more_compatible(existing_compatibility)
+                if compatibility.is_excluded() != existing_compatibility.is_excluded() {
+                    existing_compatibility.is_excluded()
+                } else {
+                    match (dist.filename.variant(), existing_wheel.filename.variant()) {
+                        (None, Some(_)) => true,
+                        (Some(_), None) => false,
+                        (None, None) | (Some(_), Some(_)) => {
+                            compatibility.is_more_compatible(existing_compatibility)
+                        }
                     }
                 };
             if is_more_compatible {
@@ -563,12 +617,16 @@ impl PrioritizedDist {
         match (&best_wheel, &self.0.source) {
             // If both are compatible, break ties based on the hash outcome. For example, prefer a
             // source distribution with a matching hash over a wheel with a mismatched hash. When
-            // the outcomes are equivalent (e.g., both have a matching hash), prefer the wheel.
+            // the outcomes are equivalent, prefer the wheel unless universal resolution still
+            // needs to check its variant label against the index metadata. In that case the source
+            // distribution provides the baseline, and the declared variants contribute their own
+            // dependencies once the sidecar is available.
             (
-                Some((wheel, WheelCompatibility::Compatible(wheel_hash, ..))),
+                Some((wheel, WheelCompatibility::Compatible(wheel_hash, priority, _))),
                 Some((sdist, SourceDistCompatibility::Compatible(sdist_hash))),
             ) => {
-                if sdist_hash > wheel_hash {
+                let universal_variant = priority.is_none() && wheel.filename.variant().is_some();
+                if sdist_hash > wheel_hash || (sdist_hash == wheel_hash && universal_variant) {
                     Some(CompatibleDist::SourceDist {
                         sdist,
                         prioritized: self,
@@ -811,14 +869,16 @@ impl<'a> CompatibleDist<'a> {
 }
 
 impl WheelCompatibility {
-    /// Record platform compatibility, deferring the property check for a variant wheel.
+    /// Record platform compatibility, deferring variant properties for a concrete target.
+    ///
+    /// Universal resolution has no tag priority and includes variants for every target.
     pub(crate) fn from_tag_priority(
         filename: &WheelFilename,
         hash: HashComparison,
         priority: Option<TagPriority>,
     ) -> Self {
         let build_tag = filename.build_tag().cloned();
-        if filename.variant().is_some() {
+        if filename.variant().is_some() && priority.is_some() {
             Self::Variant(hash, priority, build_tag)
         } else {
             Self::Compatible(hash, priority, build_tag)

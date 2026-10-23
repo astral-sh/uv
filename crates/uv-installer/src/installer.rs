@@ -1,15 +1,19 @@
 use std::sync::Arc;
 
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use rustc_hash::FxHashMap;
 use tokio::sync::oneshot;
 use tracing::{instrument, warn};
 
 use uv_cache::Cache;
-use uv_distribution_types::CachedDist;
+use uv_distribution::{DistributionDatabase, read_wheel_variant_metadata};
+use uv_distribution_filename::WheelFilename;
+use uv_distribution_types::{CachedDist, Resolution, SelectedVariant};
 use uv_install_wheel::{Layout, LinkMode};
 use uv_preview::Preview;
 use uv_python_interpreter::PythonEnvironment;
 use uv_threads::initialize_rayon_once;
+use uv_types::{BuildContext, HashStrategy, HashVerification};
 
 /// A failure while installing wheels into a Python environment.
 #[derive(Debug, thiserror::Error)]
@@ -20,6 +24,12 @@ pub enum InstallError {
     SymlinkWithoutCache,
     #[error("`install_blocking` task panicked")]
     WorkerPanicked,
+    #[error(transparent)]
+    Variant(#[from] uv_distribution::Error),
+    #[error("Selected variant properties do not match wheel `{0}`")]
+    VariantContextMismatch(Box<WheelFilename>),
+    #[error("Wheel `{0}` is incompatible with the selected variant properties")]
+    VariantIncompatible(Box<WheelFilename>),
     #[error("Failed to install: {} ({wheel})", wheel.filename())]
     Wheel {
         wheel: Box<CachedDist>,
@@ -37,6 +47,8 @@ pub struct Installer<'a> {
     name: Option<String>,
     /// The metadata associated with the [`Installer`].
     metadata: bool,
+    /// Properties used to evaluate each installed wheel's dependencies.
+    variants: FxHashMap<WheelFilename, SelectedVariant>,
     /// Preview settings for the installer.
     preview: Preview,
 }
@@ -51,6 +63,7 @@ impl<'a> Installer<'a> {
             reporter: None,
             name: Some("uv".to_string()),
             metadata: true,
+            variants: FxHashMap::default(),
             preview,
         }
     }
@@ -97,6 +110,55 @@ impl<'a> Installer<'a> {
         }
     }
 
+    /// Validate and capture the selected properties before replacing installed distributions.
+    pub async fn with_variant_contexts(
+        mut self,
+        wheels: &[CachedDist],
+        resolution: &Resolution,
+        database: &DistributionDatabase<'_, impl BuildContext>,
+        hasher: &HashStrategy,
+    ) -> Result<Self, InstallError> {
+        let require_hashes = match hasher.verification() {
+            HashVerification::Required(_) => true,
+            HashVerification::None | HashVerification::IfPresent(_) => false,
+        };
+        for wheel in wheels {
+            let Some(label) = wheel.filename().variant() else {
+                continue;
+            };
+            let metadata = read_wheel_variant_metadata(wheel.filename(), wheel.path())?
+                .ok_or_else(|| {
+                    InstallError::VariantContextMismatch(Box::new(wheel.filename().clone()))
+                })?;
+            let selected = if let Some(selected) = resolution.variant_context(wheel.filename()) {
+                if !metadata.validates_selected_variant(selected) {
+                    return Err(InstallError::VariantContextMismatch(Box::new(
+                        wheel.filename().clone(),
+                    )));
+                }
+                selected.clone()
+            } else {
+                let supported = database
+                    .supported_variant_properties(&metadata, require_hashes)
+                    .await?;
+                metadata.select_variant(label, &supported).ok_or_else(|| {
+                    match metadata.unsupported_variant_properties(label, &supported) {
+                        Some(properties) => uv_distribution::Error::IncompatibleWheelVariant {
+                            label: label.clone(),
+                            properties,
+                        }
+                        .into(),
+                        None => {
+                            InstallError::VariantIncompatible(Box::new(wheel.filename().clone()))
+                        }
+                    }
+                })?
+            };
+            self.variants.insert(wheel.filename().clone(), selected);
+        }
+        Ok(self)
+    }
+
     /// Install a set of wheels into a Python virtual environment.
     #[instrument(skip_all, fields(num_wheels = %wheels.len()))]
     pub async fn install(self, wheels: Vec<CachedDist>) -> Result<Vec<CachedDist>, InstallError> {
@@ -107,6 +169,7 @@ impl<'a> Installer<'a> {
             reporter,
             name: installer_name,
             metadata: installer_metadata,
+            variants,
             preview,
         } = self;
 
@@ -131,6 +194,7 @@ impl<'a> Installer<'a> {
                 reporter.as_ref(),
                 relocatable,
                 installer_metadata,
+                &variants,
                 preview,
             );
 
@@ -161,6 +225,7 @@ impl<'a> Installer<'a> {
             self.reporter.as_ref(),
             self.venv.relocatable(),
             self.metadata,
+            &self.variants,
             self.preview,
         )
     }
@@ -176,6 +241,7 @@ fn install(
     reporter: Option<&Arc<dyn Reporter>>,
     relocatable: bool,
     installer_metadata: bool,
+    variants: &FxHashMap<WheelFilename, SelectedVariant>,
     preview: Preview,
 ) -> Result<Vec<CachedDist>, InstallError> {
     // Initialize the threadpool with the user settings.
@@ -197,6 +263,7 @@ fn install(
                 Some(wheel.cache_info())
             },
             wheel.build_info(),
+            variants.get(wheel.filename()),
             installer_name,
             installer_metadata,
             link_mode,

@@ -6414,9 +6414,11 @@ name = "uv-dispatch"
 version = "0.0.97"
 dependencies = [
  "anyhow",
+ "fs-err",
  "futures",
  "itertools 0.14.0",
  "rustc-hash",
+ "serde_json",
  "thiserror",
  "tokio",
  "tracing",
@@ -6432,6 +6434,7 @@ dependencies = [
  "uv-git",
  "uv-install-wheel",
  "uv-installer",
+ "uv-pep508",
  "uv-platform-tags",
  "uv-preview",
  "uv-pypi-types",
@@ -6441,6 +6444,7 @@ dependencies = [
  "uv-static",
  "uv-types",
  "uv-version",
+ "uv-virtualenv",
  "uv-workspace",
 ]
 
@@ -6938,6 +6942,7 @@ dependencies = [
  "toml_writer",
  "tracing",
  "uuid",
+ "uv-cache",
  "uv-cache-key",
  "uv-client",
  "uv-configuration",
@@ -7678,6 +7683,7 @@ dependencies = [
  "uv-fs",
  "uv-normalize",
  "uv-pep508",
+ "uv-platform-tags",
  "uv-pypi-types",
  "uv-redacted",
  "uv-requirements-txt",

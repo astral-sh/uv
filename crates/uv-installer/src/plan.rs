@@ -10,7 +10,7 @@ use uv_cache_info::Timestamp;
 use uv_configuration::{BuildOptions, Reinstall};
 use uv_distribution::{
     BuiltWheelIndex, HttpArchivePointer, PathArchivePointer, RegistryWheelIndex,
-    check_supported_wheel_variant, check_wheel_variant_compatibility,
+    check_supported_wheel_variant,
 };
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
@@ -379,6 +379,16 @@ impl<'a> Planner<'a> {
                                 extra_build_requires,
                                 extra_build_variables,
                             }),
+                            site_packages.variant_target(),
+                            match dist {
+                                ResolvedDist::Installable { dist, .. } => match dist.as_ref() {
+                                    Dist::Built(wheel) => {
+                                        self.resolution.variant_context(wheel.wheel_filename())
+                                    }
+                                    Dist::Source(_) => None,
+                                },
+                                ResolvedDist::Installed { .. } => None,
+                            },
                         ) {
                             RequirementSatisfaction::Mismatch => {
                                 debug!(
@@ -530,10 +540,6 @@ impl<'a> Planner<'a> {
                                     build_info,
                                     path: cache.archive(&archive.id).into_boxed_path(),
                                 };
-                                check_wheel_variant_compatibility(
-                                    &cached_dist.filename,
-                                    &cached_dist.path,
-                                )?;
                                 debug!("URL wheel requirement already cached: {cached_dist}");
                                 cached.push(CachedDist::Url(cached_dist));
                                 continue;
@@ -583,10 +589,6 @@ impl<'a> Planner<'a> {
                                             build_info,
                                             path: cache.archive(&archive.id).into_boxed_path(),
                                         };
-                                        check_wheel_variant_compatibility(
-                                            &cached_dist.filename,
-                                            &cached_dist.path,
-                                        )?;
                                         debug!(
                                             "Path wheel requirement already cached: {cached_dist}"
                                         );
@@ -641,10 +643,6 @@ impl<'a> Planner<'a> {
                                     build_info,
                                     path: cache.archive(&archive.id).into_boxed_path(),
                                 };
-                                check_wheel_variant_compatibility(
-                                    &cached_dist.filename,
-                                    &cached_dist.path,
-                                )?;
                                 debug!("Git wheel requirement already cached: {cached_dist}");
                                 cached.push(CachedDist::Url(cached_dist));
                                 continue;
