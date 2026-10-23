@@ -52,7 +52,7 @@ jobs:
             pull_requests: write
 
       - name: "Apply AI policy"
-        uses: astral-sh/github-actions/ai-policy@232f3b20c56ff11b09180984e5415533e9830e4d
+        uses: astral-sh/github-actions/ai-policy@610c50be70008f185dfde2683cbfe7c4b3927e7d
         with:
           token: ${{ steps.token.outputs.token }}
           number: ${{ inputs.issue || inputs.pull_request }}
