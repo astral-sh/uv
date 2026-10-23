@@ -610,6 +610,175 @@ def get_operating_system_and_architecture():
     return {"os": operating_system, "arch": architecture}
 
 
+def _get_cpu_info():
+    """Return raw data so Rust can interpret additional features from the cache.
+
+    The platform-specific probes mostly follow archspec's CPU detection.
+    """
+    if sys.platform == "darwin":
+        return _macos_cpu_info()
+    elif os.name == "nt":
+        return _windows_cpu_info()
+    elif sys.platform == "linux":
+        flags = _linux_cpu_flags()
+        if flags:
+            return {"kind": "flags", "flags": flags}
+    return {"kind": "unavailable"}
+
+
+def _linux_cpu_flags():
+    """Read the first processor's raw flags, following archspec's Linux detection.
+
+    https://github.com/archspec/archspec/blob/ebd3eb502d9205f1033ffc028d661f2fbece7dfc/archspec/cpu/detect.py#L78-L104
+    """
+    with open("/proc/cpuinfo", encoding="utf-8") as cpuinfo:
+        for line in cpuinfo:
+            if not line.strip():
+                break
+            key, _, value = line.partition(":")
+            if key.strip() == "flags":
+                return value.strip()
+    # An emulated interpreter may see a non-x86 host's /proc/cpuinfo, which lacks x86 flags.
+    return None
+
+
+def _macos_cpu_info():
+    import ctypes
+
+    # archspec reads these x86 feature keys using the sysctl command. Query them from this
+    # process instead: a separate executable could run under a different architecture.
+    # https://github.com/archspec/archspec/blob/ebd3eb502d9205f1033ffc028d661f2fbece7dfc/archspec/cpu/detect.py#L290-L300
+    sysctl = ctypes.CDLL(None).sysctlbyname
+    sysctl.argtypes = [
+        ctypes.c_char_p,
+        ctypes.c_void_p,
+        ctypes.POINTER(ctypes.c_size_t),
+        ctypes.c_void_p,
+        ctypes.c_size_t,
+    ]
+    flags = []
+    # A missing key must not hide features available through another key.
+    for key in (
+        b"machdep.cpu.features",
+        b"machdep.cpu.leaf7_features",
+        b"machdep.cpu.extfeatures",
+    ):
+        size = ctypes.c_size_t()
+        if sysctl(key, None, ctypes.byref(size), None, 0) != 0 or size.value == 0:
+            continue
+        buffer = ctypes.create_string_buffer(size.value)
+        if sysctl(key, buffer, ctypes.byref(size), None, 0) == 0:
+            flags.append(buffer.value.decode("ascii", errors="replace"))
+    if flags:
+        return {"kind": "flags", "flags": " ".join(flags)}
+    return {"kind": "unavailable"}
+
+
+def _windows_cpu_info():
+    import ctypes
+
+    # Probe inside the interpreter so emulation and per-process settings are reflected. Python
+    # has no CPUID API, so the stub bridges the Windows x64 calling convention to CPUID's register
+    # inputs and preserves RBX for its caller.
+    cpuid = bytes.fromhex(
+        "49 89 CA "  # mov r10, rcx
+        "89 D0 "  # mov eax, edx
+        "44 89 C1 "  # mov ecx, r8d
+        "49 89 D9 "  # mov r9, rbx (callee-saved)
+        "0F A2 "  # cpuid
+        "41 89 02 "  # mov [r10], eax
+        "41 89 5A 04 "  # mov [r10+4], ebx
+        "41 89 4A 08 "  # mov [r10+8], ecx
+        "41 89 52 0C "  # mov [r10+12], edx
+        "4C 89 CB "  # mov rbx, r9
+        "C3"  # ret
+    )
+    # CPUID alone cannot establish AVX usability: XCR0 (ECX = 0) records the register state
+    # enabled by the OS. XGETBV returns EDX:EAX, but the callable stub must return it in RAX.
+    xgetbv = bytes.fromhex(
+        "31 C9 "  # xor ecx, ecx
+        "0F 01 D0 "  # xgetbv
+        "48 C1 E2 20 "  # shl rdx, 32
+        "48 09 D0 "  # or rax, rdx
+        "C3"  # ret
+    )
+    # Use x86 NOP padding (0x90) to align XGETBV to Control Flow Guard's 16-byte granularity.
+    # https://learn.microsoft.com/en-us/windows/win32/secbp/pe-metadata#function-alignment
+    xgetbv_offset = (len(cpuid) + 15) & ~15
+    code = cpuid.ljust(xgetbv_offset, b"\x90") + xgetbv
+
+    # Follow archspec's Windows x64 CPUID setup: CDLL avoids the allocation failures it
+    # observed with windll on some 64-bit Python builds.
+    # https://github.com/archspec/cpuid/blob/5b381ed2af05ad9ead46a136b43c2f7021bd44bb/cpuid.py#L85-L147
+    kernel32 = ctypes.CDLL("kernel32.dll", use_last_error=True)
+    pointer = ctypes.c_void_p
+    size = ctypes.c_size_t
+    word = ctypes.c_uint32
+    kernel32.VirtualAlloc.argtypes = (pointer, size, word, word)
+    kernel32.VirtualAlloc.restype = pointer
+    # The remaining APIs return BOOL, which matches ctypes' default c_int return type.
+    kernel32.VirtualProtect.argtypes = (pointer, size, word, ctypes.POINTER(word))
+    kernel32.FlushInstructionCache.argtypes = (pointer, pointer, size)
+    kernel32.VirtualFree.argtypes = (pointer, size, word)
+    # Avoid memory that is writable and executable at once. Windows also requires instruction
+    # cache coherence before executing dynamically generated code:
+    # https://learn.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualalloc#remarks
+    # 0x3000 = MEM_COMMIT | MEM_RESERVE; 0x04 = PAGE_READWRITE.
+    address = kernel32.VirtualAlloc(None, len(code), 0x3000, 0x04)
+    if not address:
+        raise ctypes.WinError(ctypes.get_last_error())
+    try:
+        ctypes.memmove(address, code, len(code))
+        # 0x20 = PAGE_EXECUTE_READ.
+        if not kernel32.VirtualProtect(address, len(code), 0x20, ctypes.byref(word())):
+            raise ctypes.WinError(ctypes.get_last_error())
+        # -1 is the current-process pseudo-handle.
+        if not kernel32.FlushInstructionCache(pointer(-1), address, len(code)):
+            raise ctypes.WinError(ctypes.get_last_error())
+        return _query_cpuid(address, xgetbv_offset)
+    finally:
+        # MEM_RELEASE (0x8000) requires size 0.
+        if not kernel32.VirtualFree(address, 0, 0x8000):
+            raise ctypes.WinError(ctypes.get_last_error())
+
+
+def _query_cpuid(address, xgetbv_offset):
+    import ctypes
+
+    probe = ctypes.CFUNCTYPE(
+        None, ctypes.POINTER(ctypes.c_uint32), ctypes.c_uint32, ctypes.c_uint32
+    )(address)
+    xgetbv = ctypes.CFUNCTYPE(ctypes.c_uint64)(address + xgetbv_offset)
+    leaves = []
+
+    def query(leaf, subleaf):
+        # The serialized register order must match Rust's CpuidLeaf: EAX, EBX, ECX, EDX.
+        registers = (ctypes.c_uint32 * 4)()
+        probe(registers, leaf, subleaf)
+        leaves.append({"leaf": leaf, "subleaf": subleaf, "registers": list(registers)})
+        return registers
+
+    # Save raw feature data for later Rust decoders without another interpreter query.
+    # Query advertised limits (basic: 0; extended: 0x80000000) to avoid unsupported leaves,
+    # and cap each range at 64 so a bogus emulator response cannot trigger an excessive scan.
+    xstate = 0  # Without XGETBV, Rust must not infer OS support for AVX.
+    # XGETBV can fault without XSAVE (CPUID leaf 1 ECX bit 26) and OSXSAVE (bit 27).
+    xsave_flags = (1 << 26) | (1 << 27)
+    for base in (0, 0x80000000):
+        maximum = min(query(base, 0)[0], base + 64)
+        for leaf in range(base + 1, maximum + 1):
+            registers = query(leaf, 0)
+            if leaf == 1 and registers[2] & xsave_flags == xsave_flags:
+                xstate = xgetbv()
+            elif leaf == 7:  # EAX gives the highest structured-feature subleaf.
+                for subleaf in range(1, min(registers[0], 64) + 1):
+                    query(leaf, subleaf)
+            elif leaf == 13:  # Leaf 0xD, subleaf 1: XSAVE feature flags.
+                query(leaf, 1)
+
+    return {"kind": "cpuid", "leaves": leaves, "xstate": xstate}
+
+
 def main() -> None:
     markers = {
         "implementation_name": implementation_name,
@@ -626,6 +795,16 @@ def main() -> None:
     }
 
     os_and_arch = get_operating_system_and_architecture()
+    cpu_info = None
+    if os_and_arch["arch"].lower() in ("x86_64", "amd64"):
+        try:
+            cpu_info = _get_cpu_info()
+        except Exception as error:
+            # Rust applies the preview policy to probe failures.
+            cpu_info = {
+                "kind": "unavailable",
+                "error": f"{type(error).__name__}: {error}",
+            }
 
     manylinux_compatible = False
 
@@ -705,6 +884,7 @@ def main() -> None:
         "scheme": get_scheme(use_sysconfig_scheme),
         "virtualenv": get_virtualenv(),
         "platform": os_and_arch,
+        "cpu_info": cpu_info,
         "manylinux_compatible": manylinux_compatible,
         # The `t` abiflag for freethreading Python.
         # https://peps.python.org/pep-0703/#build-configuration-changes

@@ -26,10 +26,12 @@ uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
 uv-platform = { workspace = true }
 uv-platform-tags = { workspace = true }
+uv-preview = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-python-types = { workspace = true }
 uv-static = { workspace = true }
 uv-trampoline-builder = { workspace = true }
+uv-warnings = { workspace = true }
 
 astral-ini = { workspace = true }
 dunce = { workspace = true }

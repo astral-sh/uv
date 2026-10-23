@@ -24,9 +24,11 @@ use uv_install_wheel::Layout;
 use uv_pep440::Version;
 use uv_pep508::{MarkerEnvironment, StringVersion};
 use uv_platform::{Arch, Libc, Os};
-use uv_platform_tags::{Platform, Tags, TagsError, TagsOptions};
+use uv_platform_tags::{CpuInfo, Platform, Tags, TagsError, TagsOptions};
+use uv_preview::PreviewFeature;
 use uv_pypi_types::{ResolverMarkerEnvironment, Scheme};
 use uv_static::EnvVars;
+use uv_warnings::warn_user_once;
 
 use crate::PointerSize;
 use crate::PyVenvConfiguration;
@@ -73,6 +75,22 @@ impl Interpreter {
     pub fn query(executable: impl AsRef<Path>, cache: &Cache) -> Result<Self, Error> {
         let executable = executable.as_ref();
         let info = InterpreterInfo::query_cached(executable, cache)?;
+        let cpu_info = match info.cpu_info {
+            Some(CpuInfo::Unavailable {
+                error: Some(message),
+            }) => {
+                let error = Error::CpuDetection {
+                    path: executable.to_path_buf(),
+                    message,
+                };
+                if uv_preview::is_enabled(PreviewFeature::WheelVariants) {
+                    return Err(error);
+                }
+                warn_user_once!("{error}; using the x86-64 platform defaults (v2, v1)");
+                None
+            }
+            cpu_info => cpu_info,
+        };
 
         debug_assert!(
             info.sys_executable.is_absolute(),
@@ -81,7 +99,7 @@ impl Interpreter {
         );
 
         Ok(Self {
-            platform: info.platform,
+            platform: info.platform.with_cpu_info(cpu_info),
             markers: Box::new(info.markers),
             scheme: info.scheme,
             virtualenv: info.virtualenv,
@@ -202,7 +220,7 @@ impl Interpreter {
         Ok(base_python)
     }
 
-    /// Returns the path to the Python virtual environment.
+    /// Returns the Python interpreter's platform.
     #[inline]
     pub fn platform(&self) -> &Platform {
         &self.platform
@@ -996,6 +1014,8 @@ impl Display for StatusCodeError {
 
 #[derive(Debug, Error)]
 pub enum Error {
+    #[error("Failed to detect CPU capabilities for interpreter at `{path}`: {message}")]
+    CpuDetection { path: PathBuf, message: Box<str> },
     #[error("Failed to query Python interpreter")]
     Io(#[from] io::Error),
     #[error(transparent)]
@@ -1139,6 +1159,8 @@ struct InterpreterInfo {
     pointer_size: PointerSize,
     gil_disabled: bool,
     debug_enabled: bool,
+    /// Raw processor capabilities, if the interpreter runs on x86-64.
+    cpu_info: Option<CpuInfo>,
 }
 
 impl InterpreterInfo {
