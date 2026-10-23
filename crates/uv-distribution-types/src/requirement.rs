@@ -3,6 +3,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
+use serde::ser::{Serialize, SerializeStruct, Serializer};
 use thiserror::Error;
 use uv_cache_key::{CacheKey, CacheKeyHasher};
 use uv_distribution_filename::DistExtension;
@@ -573,10 +574,8 @@ impl CacheKey for Requirement {
 /// We store both the parsed fields (such as the plain url and the subdirectory) and the joined
 /// PEP 508 style url (e.g. `file:///<path>#subdirectory=<subdirectory>`) since we need both in
 /// different locations.
-#[derive(
-    Hash, Debug, Clone, Eq, PartialEq, Ord, PartialOrd, serde::Serialize, serde::Deserialize,
-)]
-#[serde(try_from = "RequirementSourceWire", into = "RequirementSourceWire")]
+#[derive(Hash, Debug, Clone, Eq, PartialEq, Ord, PartialOrd, serde::Deserialize)]
+#[serde(try_from = "RequirementSourceWire")]
 pub enum RequirementSource {
     /// The requirement has a version specifier, such as `foo >1,<2`.
     Registry {
@@ -915,36 +914,9 @@ impl Display for RequirementSource {
     }
 }
 
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
-#[serde(untagged, from = "RequirementSourceFields")]
-enum RequirementSourceWire {
-    /// Ex) `source = { git = "<https://github.com/astral-test/uv-public-pypackage?rev=0.0.1#0dacfd662c64cb4ceb16e6cf65a157a8b715b979>" }`
-    Git { git: String },
-    /// Ex) `source = { url = "<https://example.org/foo-1.0.zip>" }`
-    Direct {
-        url: SafeUrl<Raw>,
-        subdirectory: Option<PortablePathBuf>,
-    },
-    /// Ex) `source = { path = "/home/ferris/iniconfig-2.0.0-py3-none-any.whl" }`
-    Path { path: PortablePathBuf },
-    /// Ex) `source = { directory = "/home/ferris/iniconfig" }`
-    Directory { directory: PortablePathBuf },
-    /// Ex) `source = { editable = "/home/ferris/iniconfig" }`
-    Editable { editable: PortablePathBuf },
-    /// Ex) `source = { editable = "/home/ferris/iniconfig" }`
-    Virtual { r#virtual: PortablePathBuf },
-    /// Ex) `source = { specifier = "foo >1,<2" }`
-    Registry {
-        #[serde(skip_serializing_if = "VersionSpecifiers::is_empty")]
-        specifier: VersionSpecifiers,
-        index: Option<SafeUrl<Stripped>>,
-        conflict: Option<ConflictItem>,
-    },
-}
-
 /// Read the flattened source fields once. A requirement can omit all of them to use the registry.
 #[derive(serde::Deserialize)]
-struct RequirementSourceFields {
+struct RequirementSourceWire {
     git: Option<String>,
     url: Option<SafeUrl<Raw>>,
     subdirectory: Option<PortablePathBuf>,
@@ -958,197 +930,124 @@ struct RequirementSourceFields {
     conflict: Option<ConflictItem>,
 }
 
-impl From<RequirementSourceFields> for RequirementSourceWire {
-    fn from(fields: RequirementSourceFields) -> Self {
-        if let Some(git) = fields.git {
-            Self::Git { git }
-        } else if let Some(url) = fields.url {
-            Self::Direct {
-                url,
-                subdirectory: fields.subdirectory,
-            }
-        } else if let Some(path) = fields.path {
-            Self::Path { path }
-        } else if let Some(directory) = fields.directory {
-            Self::Directory { directory }
-        } else if let Some(editable) = fields.editable {
-            Self::Editable { editable }
-        } else if let Some(r#virtual) = fields.r#virtual {
-            Self::Virtual { r#virtual }
-        } else {
+impl Serialize for RequirementSource {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match self {
             Self::Registry {
-                specifier: fields.specifier,
-                index: fields.index,
-                conflict: fields.conflict,
-            }
-        }
-    }
-}
-
-impl From<RequirementSource> for RequirementSourceWire {
-    fn from(value: RequirementSource) -> Self {
-        match value {
-            RequirementSource::Registry {
                 specifier,
                 index,
                 conflict,
             } => {
-                let index = index.map(|index| index.url.into_url());
-                Self::Registry {
-                    specifier,
-                    index,
-                    conflict,
+                let mut state = serializer.serialize_struct(
+                    "RequirementSourceWire",
+                    2 + usize::from(!specifier.is_empty()),
+                )?;
+                if !specifier.is_empty() {
+                    state.serialize_field("specifier", specifier)?;
                 }
+                state.serialize_field(
+                    "index",
+                    &index.as_ref().map(|index| index.url.clone().into_url()),
+                )?;
+                state.serialize_field("conflict", conflict)?;
+                state.end()
             }
-            RequirementSource::Url {
+            Self::Url {
                 subdirectory,
                 location,
                 ext: _,
                 url: _,
-            } => Self::Direct {
-                url: location,
-                subdirectory: subdirectory.map(PortablePathBuf::from),
-            },
-            RequirementSource::GitDirectory {
-                git,
-                subdirectory,
-                url: _,
             } => {
-                let mut url = git.url().clone();
-
-                // Remove the credentials.
-                url.remove_credentials();
-
-                // Clear out any existing state.
-                url.set_fragment(None);
-                url.set_query(None);
-
-                // Put the subdirectory in the query.
-                if let Some(subdirectory) = subdirectory
-                    .as_deref()
-                    .map(PortablePath::from)
-                    .as_ref()
-                    .map(PortablePath::to_string)
-                {
-                    url.query_pairs_mut()
-                        .append_pair("subdirectory", &subdirectory);
-                }
-
-                // Persist lfs=true in the distribution metadata only when explicitly enabled.
-                if git.lfs().enabled() {
-                    url.query_pairs_mut().append_pair("lfs", "true");
-                }
-
-                // Put the requested reference in the query.
-                match git.reference() {
-                    GitReference::Commit(commit) => {
-                        url.query_pairs_mut().append_pair("rev", commit.as_str());
-                    }
-                    GitReference::Branch(branch) => {
-                        url.query_pairs_mut().append_pair("branch", branch.as_str());
-                    }
-                    GitReference::Tag(tag) => {
-                        url.query_pairs_mut().append_pair("tag", tag.as_str());
-                    }
-                    GitReference::BranchOrTag(rev)
-                    | GitReference::BranchOrTagOrCommit(rev)
-                    | GitReference::NamedRef(rev) => {
-                        url.query_pairs_mut().append_pair("rev", rev.as_str());
-                    }
-                    GitReference::DefaultBranch => {}
-                }
-
-                // Put the resolved commit in the fragment.
-                if let Some(commit) = git.resolved_commit() {
-                    url.set_fragment(Some(commit.as_str()));
-                }
-
-                Self::Git {
-                    git: url.to_string(),
-                }
+                let mut state = serializer.serialize_struct("RequirementSourceWire", 2)?;
+                state.serialize_field("url", location)?;
+                state.serialize_field(
+                    "subdirectory",
+                    &subdirectory.as_deref().map(PortablePath::from),
+                )?;
+                state.end()
             }
-            RequirementSource::GitPath {
-                git,
+            Self::GitDirectory {
+                git, subdirectory, ..
+            } => serialize_source_field(
+                serializer,
+                "git",
+                &requirement_git_url(git, subdirectory.as_deref(), None),
+            ),
+            Self::GitPath {
+                git, install_path, ..
+            } => serialize_source_field(
+                serializer,
+                "git",
+                &requirement_git_url(git, None, Some(install_path)),
+            ),
+            Self::Path {
                 install_path,
                 ext: _,
                 url: _,
-            } => {
-                let mut url = git.url().clone();
-
-                // Remove the credentials.
-                url.remove_credentials();
-
-                // Clear out any existing state.
-                url.set_fragment(None);
-                url.set_query(None);
-
-                // Put the path in the query.
-                if let Some(install_path) = install_path.to_str() {
-                    url.query_pairs_mut().append_pair("path", install_path);
-                }
-
-                // Put the requested reference in the query.
-                match git.reference() {
-                    GitReference::Commit(commit) => {
-                        url.query_pairs_mut().append_pair("rev", commit.as_str());
-                    }
-                    GitReference::Branch(branch) => {
-                        url.query_pairs_mut().append_pair("branch", branch.as_str());
-                    }
-                    GitReference::Tag(tag) => {
-                        url.query_pairs_mut().append_pair("tag", tag.as_str());
-                    }
-                    GitReference::BranchOrTag(rev)
-                    | GitReference::BranchOrTagOrCommit(rev)
-                    | GitReference::NamedRef(rev) => {
-                        url.query_pairs_mut().append_pair("rev", rev.as_str());
-                    }
-                    GitReference::DefaultBranch => {}
-                }
-
-                // Persist lfs=true in the distribution metadata only when explicitly enabled.
-                if git.lfs().enabled() {
-                    url.query_pairs_mut().append_pair("lfs", "true");
-                }
-
-                // Put the resolved commit in the fragment.
-                if let Some(commit) = git.resolved_commit() {
-                    url.set_fragment(Some(commit.as_str()));
-                }
-
-                Self::Git {
-                    git: url.to_string(),
-                }
-            }
-            RequirementSource::Path {
-                install_path,
-                ext: _,
-                url: _,
-            } => Self::Path {
-                path: PortablePathBuf::from(install_path),
-            },
-            RequirementSource::Directory {
+            } => serialize_source_field(serializer, "path", &PortablePath::from(install_path)),
+            Self::Directory {
                 install_path,
                 editable,
                 r#virtual,
                 url: _,
             } => {
-                if editable.unwrap_or(false) {
-                    Self::Editable {
-                        editable: PortablePathBuf::from(install_path),
-                    }
+                let field = if editable.unwrap_or(false) {
+                    "editable"
                 } else if r#virtual.unwrap_or(false) {
-                    Self::Virtual {
-                        r#virtual: PortablePathBuf::from(install_path),
-                    }
+                    "virtual"
                 } else {
-                    Self::Directory {
-                        directory: PortablePathBuf::from(install_path),
-                    }
-                }
+                    "directory"
+                };
+                serialize_source_field(serializer, field, &PortablePath::from(install_path))
             }
         }
     }
+}
+
+/// Encode a Git requirement's reference, location within the repository, and resolved commit.
+fn requirement_git_url(git: &GitUrl, subdirectory: Option<&Path>, path: Option<&Path>) -> String {
+    let mut url = git.url().clone();
+    url.remove_credentials();
+    url.set_query(None);
+    url.set_fragment(git.resolved_commit().as_ref().map(GitOid::as_str));
+
+    let reference = match git.reference() {
+        GitReference::Branch(branch) => Some(("branch", branch.as_str())),
+        GitReference::Tag(tag) => Some(("tag", tag.as_str())),
+        GitReference::Commit(commit) => Some(("rev", commit.as_str())),
+        GitReference::BranchOrTag(rev)
+        | GitReference::BranchOrTagOrCommit(rev)
+        | GitReference::NamedRef(rev) => Some(("rev", rev.as_str())),
+        GitReference::DefaultBranch => None,
+    };
+    let lfs = git.lfs().enabled().then_some(("lfs", "true"));
+    let subdirectory = subdirectory.map(|path| PortablePath::from(path).to_string());
+    // The lockfile places the reference before `lfs` for Git archives and after it for directories.
+    let query = if let Some(path) = path {
+        [path.to_str().map(|path| ("path", path)), reference, lfs]
+    } else {
+        [
+            subdirectory
+                .as_deref()
+                .map(|subdirectory| ("subdirectory", subdirectory)),
+            lfs,
+            reference,
+        ]
+    };
+    for (key, value) in query.into_iter().flatten() {
+        url.query_pairs_mut().append_pair(key, value);
+    }
+    url.to_string()
+}
+
+fn serialize_source_field<S: Serializer>(
+    serializer: S,
+    key: &'static str,
+    value: &impl Serialize,
+) -> Result<S::Ok, S::Error> {
+    let mut state = serializer.serialize_struct("RequirementSourceWire", 1)?;
+    state.serialize_field(key, value)?;
+    state.end()
 }
 
 impl TryFrom<RequirementSourceWire> for RequirementSource {
@@ -1156,17 +1055,7 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
 
     fn try_from(wire: RequirementSourceWire) -> Result<Self, RequirementError> {
         match wire {
-            RequirementSourceWire::Registry {
-                specifier,
-                index,
-                conflict,
-            } => Ok(Self::Registry {
-                specifier,
-                index: index
-                    .map(|index| IndexMetadata::from(IndexUrl::from(VerbatimUrl::from_url(index)))),
-                conflict,
-            }),
-            RequirementSourceWire::Git { git } => {
+            RequirementSourceWire { git: Some(git), .. } => {
                 let mut repository = SafeUrl::parse(&git)?;
 
                 let mut reference = GitReference::DefaultBranch;
@@ -1238,7 +1127,11 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
                     })
                 }
             }
-            RequirementSourceWire::Direct { url, subdirectory } => {
+            RequirementSourceWire {
+                url: Some(url),
+                subdirectory,
+                ..
+            } => {
                 let location = url.clone();
 
                 // Create a PEP 508-compatible URL.
@@ -1259,7 +1152,9 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
             // to the workspace root, but we don't have access to it here. When comparing these
             // sources in the lockfile, we replace the URL anyway. Ideally, we'd either remove the
             // URL field or make it optional.
-            RequirementSourceWire::Path { path } => {
+            RequirementSourceWire {
+                path: Some(path), ..
+            } => {
                 let path = Box::<Path>::from(path);
                 let url = VerbatimUrl::from_normalized_path(normalize_path(CWD.join(&path)))?;
                 Ok(Self::Path {
@@ -1270,37 +1165,47 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
                     url,
                 })
             }
-            RequirementSourceWire::Directory { directory } => {
-                let directory = Box::<Path>::from(directory);
-                let url = VerbatimUrl::from_normalized_path(normalize_path(CWD.join(&directory)))?;
-                Ok(Self::Directory {
-                    install_path: directory,
-                    editable: Some(false),
-                    r#virtual: Some(false),
-                    url,
-                })
-            }
-            RequirementSourceWire::Editable { editable } => {
-                let editable = Box::<Path>::from(editable);
-                let url = VerbatimUrl::from_normalized_path(normalize_path(CWD.join(&editable)))?;
-                Ok(Self::Directory {
-                    install_path: editable,
-                    editable: Some(true),
-                    r#virtual: Some(false),
-                    url,
-                })
-            }
-            RequirementSourceWire::Virtual { r#virtual } => {
-                let r#virtual = Box::<Path>::from(r#virtual);
-                let url = VerbatimUrl::from_normalized_path(normalize_path(CWD.join(&r#virtual)))?;
-                Ok(Self::Directory {
-                    install_path: r#virtual,
-                    editable: Some(false),
-                    r#virtual: Some(true),
-                    url,
-                })
-            }
+            RequirementSourceWire {
+                directory: Some(directory),
+                ..
+            } => Self::from_wire_directory(directory, false, false),
+            RequirementSourceWire {
+                editable: Some(directory),
+                ..
+            } => Self::from_wire_directory(directory, true, false),
+            RequirementSourceWire {
+                r#virtual: Some(directory),
+                ..
+            } => Self::from_wire_directory(directory, false, true),
+            RequirementSourceWire {
+                specifier,
+                index,
+                conflict,
+                ..
+            } => Ok(Self::Registry {
+                specifier,
+                index: index
+                    .map(|index| IndexMetadata::from(IndexUrl::from(VerbatimUrl::from_url(index)))),
+                conflict,
+            }),
         }
+    }
+}
+
+impl RequirementSource {
+    fn from_wire_directory(
+        directory: PortablePathBuf,
+        editable: bool,
+        r#virtual: bool,
+    ) -> Result<Self, RequirementError> {
+        let install_path = Box::<Path>::from(directory);
+        let url = VerbatimUrl::from_normalized_path(normalize_path(CWD.join(&install_path)))?;
+        Ok(Self::Directory {
+            install_path,
+            editable: Some(editable),
+            r#virtual: Some(r#virtual),
+            url,
+        })
     }
 }
 
@@ -1356,6 +1261,24 @@ mod tests {
         let raw = toml::to_string(&requirement).unwrap();
         let deserialized: Requirement = toml::from_str(&raw).unwrap();
         assert_eq!(requirement, deserialized);
+    }
+
+    /// Only the optional fields belonging to the selected source appear as null in JSON.
+    #[test]
+    fn serialize_optional_source_fields() -> Result<(), Box<dyn Error>> {
+        let registry: RequirementSource = toml::from_str("")?;
+        assert_eq!(
+            serde_json::to_string(&registry)?,
+            r#"{"index":null,"conflict":null}"#
+        );
+
+        let direct: RequirementSource =
+            toml::from_str(r#"url = "https://example.org/foo-1.0.zip""#)?;
+        assert_eq!(
+            serde_json::to_string(&direct)?,
+            r#"{"url":"https://example.org/foo-1.0.zip","subdirectory":null}"#
+        );
+        Ok(())
     }
 
     /// Falling back after a Git type error would turn this into an unrestricted registry requirement.
