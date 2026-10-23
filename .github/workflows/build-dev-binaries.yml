@@ -148,7 +148,9 @@ jobs:
           persist-credentials: false
 
       - name: "Setup musl"
-        run: sudo apt-get install musl-tools
+        run: |
+          sudo sed -i '/azure\.archive\.ubuntu\.com/d' /etc/apt/apt-mirrors.txt
+          sudo apt-get install musl-tools
 
       - name: "Install Rust toolchain"
         run: |
