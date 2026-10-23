@@ -469,6 +469,15 @@ impl ManagedPythonInstallation {
         executable
     }
 
+    /// Whether the Python executable of this installation exists.
+    ///
+    /// The installation directory can outlive its interpreter, e.g., when the executable is
+    /// removed by hand or quarantined by security software. Such an installation cannot be used
+    /// and is treated as absent, so it is reinstalled rather than reported as installed.
+    pub fn has_executable(&self) -> bool {
+        self.executable(false).exists()
+    }
+
     fn python_dir(&self) -> PathBuf {
         let install = self.path.join("install");
         if install.is_dir() {

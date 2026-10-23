@@ -250,6 +250,13 @@ fn python_executables_from_installed<'a>(
                                 return false;
                             }
                         }
+                        if !installation.has_executable() {
+                            debug!(
+                                "Skipping managed installation `{installation}`: the Python executable `{}` is missing",
+                                installation.executable(false).user_display()
+                            );
+                            return false;
+                        }
 
                         true
                     })
