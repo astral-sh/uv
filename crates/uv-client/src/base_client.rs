@@ -819,10 +819,10 @@ impl BaseClient {
             .any(|allow_insecure_host| allow_insecure_host.matches(url))
     }
 
-    /// Return the [`GitHttpSettings`] for fetching from the given URL.
-    pub fn git_http_settings(&self, url: &SafeUrl) -> GitHttpSettings {
+    /// Return the transport settings for Git operations.
+    pub fn git_http_settings(&self) -> GitHttpSettings {
         GitHttpSettings::default()
-            .with_disabled_ssl(self.disable_ssl(url))
+            .with_insecure_hosts(self.allow_insecure_host.clone())
             .with_offline(self.connectivity().is_offline())
     }
 

@@ -13,6 +13,7 @@ use uv_cache_key::cache_digest;
 use uv_git_types::{GitOid, GitUrl};
 use uv_redacted::SafeUrl;
 
+use crate::GitHttpSettings;
 use crate::credentials::GIT_STORE;
 use crate::git::{GitDatabase, GitRemote};
 
@@ -20,10 +21,8 @@ use crate::git::{GitDatabase, GitRemote};
 pub(crate) struct GitSource {
     /// The Git reference from the manifest file.
     git: GitUrl,
-    /// Whether to disable SSL verification.
-    disable_ssl: bool,
-    /// Whether to operate without network connectivity.
-    offline: bool,
+    /// Settings for fetching and checking out the repository.
+    settings: GitHttpSettings,
     /// The path to the Git source database.
     cache: PathBuf,
     /// The reporter to use for this source.
@@ -31,23 +30,13 @@ pub(crate) struct GitSource {
 }
 
 impl GitSource {
-    /// Initialize a [`GitSource`] with the given Git URL, HTTP client, and cache path.
-    pub(crate) fn new(git: GitUrl, cache: impl Into<PathBuf>, offline: bool) -> Self {
+    /// Initialize a [`GitSource`] with the given Git URL, cache path, and fetch settings.
+    pub(crate) fn new(git: GitUrl, cache: impl Into<PathBuf>, settings: GitHttpSettings) -> Self {
         Self {
             git,
-            disable_ssl: false,
-            offline,
+            settings,
             cache: cache.into(),
             reporter: None,
-        }
-    }
-
-    /// Disable SSL verification for this [`GitSource`].
-    #[must_use]
-    pub(crate) fn dangerous(self) -> Self {
-        Self {
-            disable_ssl: true,
-            ..self
         }
     }
 
@@ -113,8 +102,7 @@ impl GitSource {
                 maybe_db,
                 self.git.reference(),
                 self.git.precise(),
-                self.disable_ssl,
-                self.offline,
+                &self.settings,
                 lfs_requested,
             )?;
 
@@ -146,7 +134,7 @@ impl GitSource {
         // Check out `actual_rev` from the database to a scoped location on the
         // filesystem. This will use hard links and such to ideally make the
         // checkout operation here pretty fast.
-        let checkout = db.copy_to(actual_rev, &checkout_path)?;
+        let checkout = db.copy_to(actual_rev, &checkout_path, &self.settings)?;
 
         // Report the checkout operation to the reporter.
         if let Some(task) = maybe_task {
