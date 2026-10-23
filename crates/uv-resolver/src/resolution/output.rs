@@ -293,7 +293,7 @@ fn add_version(
     let hashes = get_hashes(
         name,
         index.as_ref(),
-        url.as_ref(),
+        url.as_deref(),
         &selected.hashes_id(),
         selected.version(),
         preferences,

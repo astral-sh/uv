@@ -60,7 +60,7 @@ impl SelectedDistribution {
         index: &InMemoryIndex,
         git: &GitResolver,
     ) -> Result<Self, ResolveError> {
-        let source = if let Some(url) = &package.url {
+        let source = if let Some(url) = package.url.as_deref() {
             let metadata_id = Dist::from_url(package.name.clone(), url.clone())?.distribution_id();
             let response = index.distributions().get(&metadata_id).ok_or_else(|| {
                 ResolveError::UnregisteredTask(format!("{} @ {}", package.name, url.verbatim))
@@ -187,7 +187,7 @@ pub(crate) struct ResolutionPackage {
     pub(crate) name: PackageName,
     pub(crate) kind: PackageNodeKind,
     /// For registry packages, this is `None`; otherwise, the direct URL of the distribution.
-    pub(crate) url: Option<VerbatimParsedUrl>,
+    pub(crate) url: Option<Arc<VerbatimParsedUrl>>,
     /// For URL packages, this is `None`; otherwise, the index URL of the distribution.
     pub(crate) index: Option<IndexUrl>,
 }
