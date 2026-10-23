@@ -77,7 +77,10 @@ fn username_password_no_longer_supported() {
         .with_filtered_sizes()
         .with_filtered_http_retries();
 
-    uv_snapshot!(context.filters(), context.publish()
+    let mut filters = context.filters();
+    filters.push((r" See https://[^\n]*", " See [PYPI-DOCS]"));
+
+    uv_snapshot!(filters, context.publish()
         .arg("-u")
         .arg("dummy")
         .arg("-p")
@@ -91,7 +94,7 @@ fn username_password_no_longer_supported() {
     Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
     Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
     error: Failed to publish `[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl` to `https://test.pypi.org/legacy/`
-      cause: Server returned status code 403 Forbidden. Server says: 403 Username/Password authentication is no longer supported. Migrate to API Tokens or Trusted Publishers instead. See https://test.pypi.org/help/#apitoken and https://test.pypi.org/help/#trusted-publishers
+      cause: Server returned status code 403 Forbidden. Server says: 403 Username/Password authentication is no longer supported. Migrate to API Tokens or Trusted Publishers instead. See [PYPI-DOCS]
     "
     );
 }
@@ -102,7 +105,10 @@ fn invalid_token() {
         .with_filtered_sizes()
         .with_filtered_http_retries();
 
-    uv_snapshot!(context.filters(), context.publish()
+    let mut filters = context.filters();
+    filters.push((r" See https://[^\n]*", " See [PYPI-DOCS]"));
+
+    uv_snapshot!(filters, context.publish()
         .arg("-u")
         .arg("__token__")
         .arg("-p")
@@ -116,7 +122,7 @@ fn invalid_token() {
     Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
     Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
     error: Failed to publish `[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl` to `https://test.pypi.org/legacy/`
-      cause: Server returned status code 403 Forbidden. Server says: 403 Invalid or non-existent authentication information. See https://test.pypi.org/help/#invalid-auth for more information.
+      cause: Server returned status code 403 Forbidden. Server says: 403 Invalid or non-existent authentication information. See [PYPI-DOCS]
     "
     );
 }
@@ -529,6 +535,9 @@ fn check_keyring_behaviours() {
         .with_filtered_sizes()
         .with_filtered_http_retries();
 
+    let mut filters = context.filters();
+    filters.push((r" See https://[^\n]*", " See [PYPI-DOCS]"));
+
     // Install our keyring plugin
     context
         .pip_install()
@@ -543,7 +552,7 @@ fn check_keyring_behaviours() {
         .success();
 
     // Ok: The keyring may be used for the index page.
-    uv_snapshot!(context.filters(), context.publish()
+    uv_snapshot!(filters, context.publish()
         .arg("-u")
         .arg("dummy")
         .arg("-p")
@@ -562,12 +571,12 @@ fn check_keyring_behaviours() {
     Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
     Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
     error: Failed to publish `[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl` to `https://test.pypi.org/legacy/?ok`
-      cause: Server returned status code 403 Forbidden. Server says: 403 Username/Password authentication is no longer supported. Migrate to API Tokens or Trusted Publishers instead. See https://test.pypi.org/help/#apitoken and https://test.pypi.org/help/#trusted-publishers
+      cause: Server returned status code 403 Forbidden. Server says: 403 Username/Password authentication is no longer supported. Migrate to API Tokens or Trusted Publishers instead. See [PYPI-DOCS]
     "
     );
 
     // Warn: The keyring is unused.
-    uv_snapshot!(context.filters(), context.publish()
+    uv_snapshot!(filters, context.publish()
         .arg("-u")
         .arg("dummy")
         .arg("-p")
@@ -585,13 +594,13 @@ fn check_keyring_behaviours() {
     Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
     Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
     error: Failed to publish `[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl` to `https://test.pypi.org/legacy/?ok`
-      cause: Server returned status code 403 Forbidden. Server says: 403 Username/Password authentication is no longer supported. Migrate to API Tokens or Trusted Publishers instead. See https://test.pypi.org/help/#apitoken and https://test.pypi.org/help/#trusted-publishers
+      cause: Server returned status code 403 Forbidden. Server says: 403 Username/Password authentication is no longer supported. Migrate to API Tokens or Trusted Publishers instead. See [PYPI-DOCS]
     "
     );
 
     // Warn: There is no keyring entry for the user dummy.
     // https://github.com/astral-sh/uv/issues/7963#issuecomment-2453558043
-    uv_snapshot!(context.filters(), context.publish()
+    uv_snapshot!(filters, context.publish()
         .arg("-u")
         .arg("dummy")
         .arg("--keyring-provider")
@@ -613,13 +622,13 @@ fn check_keyring_behaviours() {
     Keyring request for dummy@https://test.pypi.org/legacy/?ok
     Keyring request for dummy@test.pypi.org
     error: Failed to publish `[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl` to `https://test.pypi.org/legacy/?ok`
-      cause: Server returned status code 403 Forbidden. Server says: 403 Username/Password authentication is no longer supported. Migrate to API Tokens or Trusted Publishers instead. See https://test.pypi.org/help/#apitoken and https://test.pypi.org/help/#trusted-publishers
+      cause: Server returned status code 403 Forbidden. Server says: 403 Username/Password authentication is no longer supported. Migrate to API Tokens or Trusted Publishers instead. See [PYPI-DOCS]
     "
     );
 
     // Ok: There is a keyring entry for the user dummy.
     // https://github.com/astral-sh/uv/issues/7963#issuecomment-2453558043
-    uv_snapshot!(context.filters(), context.publish()
+    uv_snapshot!(filters, context.publish()
         .arg("-u")
         .arg("dummy")
         .arg("--keyring-provider")
@@ -636,7 +645,7 @@ fn check_keyring_behaviours() {
     Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
     Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
     error: Failed to publish `[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl` to `https://test.pypi.org/legacy/?ok`
-      cause: Server returned status code 403 Forbidden. Server says: 403 Username/Password authentication is no longer supported. Migrate to API Tokens or Trusted Publishers instead. See https://test.pypi.org/help/#apitoken and https://test.pypi.org/help/#trusted-publishers
+      cause: Server returned status code 403 Forbidden. Server says: 403 Username/Password authentication is no longer supported. Migrate to API Tokens or Trusted Publishers instead. See [PYPI-DOCS]
     "
     );
 }
