@@ -1714,14 +1714,15 @@ impl ProjectWorkspace {
             return Ok(None);
         };
 
-        match Self::from_project(
+        // Keep uncached workspace discovery out of the cache-hit future.
+        match Box::pin(Self::from_project(
             project_root,
             &project,
             &pyproject_toml,
             options,
             cache,
             workspace_cache,
-        )
+        ))
         .await
         {
             Ok(workspace) => Ok(Some(workspace)),
