@@ -50,11 +50,6 @@ impl VariantLabel {
         }
         Self(Cow::Borrowed(label))
     }
-
-    /// Return the variant label as a string slice.
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
 }
 
 impl Display for VariantLabel {

@@ -343,36 +343,12 @@ reason = "retained as a public pyvenv.cfg editing helper"
 # Keep wheel variant component APIs consistent.
 
 [[override]]
-lint = "hawk::unnecessary_public"
-crate = "uv_distribution_types"
-item = "variants_json::VariantNamespace::as_str"
-kind = "inherent_method"
-level = "expect"
-reason = "kept public alongside the other wheel variant component accessors"
-
-[[override]]
-lint = "hawk::unnecessary_public"
-crate = "uv_distribution_types"
-item = "variants_json::VariantFeature::as_str"
-kind = "inherent_method"
-level = "expect"
-reason = "kept public alongside the other wheel variant component accessors"
-
-[[override]]
 lint = "hawk::dead_public"
 crate = "uv_distribution_types"
 item = "variants_json::VariantValue::from_static"
 kind = "inherent_method"
 level = "expect"
 reason = "kept public alongside the other wheel variant component constructors"
-
-[[override]]
-lint = "hawk::unnecessary_public"
-crate = "uv_distribution_types"
-item = "variants_json::VariantValue::as_str"
-kind = "inherent_method"
-level = "expect"
-reason = "kept public alongside the other wheel variant component accessors"
 
 [[exclude]]
 crate = "uv_extract"

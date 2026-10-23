@@ -34,7 +34,7 @@ pub enum VariantsJsonParseError {
     /// A wheel's variant metadata does not describe exactly the variant named in its filename.
     #[error(
         "Expected `variant.json` to describe only the variant `{expected}` from the wheel filename, found {labels:?}",
-        labels = .labels.iter().map(VariantLabel::as_str).collect_vec(),
+        labels = .labels.iter().map(ToString::to_string).collect_vec(),
     )]
     WheelLabels {
         expected: VariantLabel,
@@ -370,8 +370,8 @@ pub enum VariantMetadataError {
     MissingNamespace(VariantNamespace),
     #[error(
         "Variant providers must match the namespaces in default-priorities.namespace: expected {expected:?}, found {actual:?}",
-        expected = .expected.iter().map(VariantNamespace::as_str).collect_vec(),
-        actual = .actual.iter().map(VariantNamespace::as_str).collect_vec(),
+        expected = .expected.iter().map(|namespace| &namespace.0).collect_vec(),
+        actual = .actual.iter().map(|namespace| &namespace.0).collect_vec(),
     )]
     ProviderNamespaces {
         expected: Vec<VariantNamespace>,
@@ -379,7 +379,7 @@ pub enum VariantMetadataError {
     },
     #[error(
         "Variant provider `{namespace}` must define feature-order for multiple static features: {features:?}",
-        features = .features.iter().map(VariantFeature::as_str).collect_vec(),
+        features = .features.iter().map(|feature| &feature.0).collect_vec(),
     )]
     MissingFeatureOrder {
         namespace: VariantNamespace,
@@ -387,8 +387,8 @@ pub enum VariantMetadataError {
     },
     #[error(
         "Variant provider `{namespace}` has an invalid feature-order: expected a non-empty list containing each static feature in {expected:?} exactly once, found {actual:?}",
-        expected = .expected.iter().map(VariantFeature::as_str).collect_vec(),
-        actual = .actual.iter().map(VariantFeature::as_str).collect_vec(),
+        expected = .expected.iter().map(|feature| &feature.0).collect_vec(),
+        actual = .actual.iter().map(|feature| &feature.0).collect_vec(),
     )]
     InvalidFeatureOrder {
         namespace: VariantNamespace,
@@ -399,7 +399,7 @@ pub enum VariantMetadataError {
     EmptyValues(VariantNamespace, VariantFeature),
     #[error(
         "Variant feature `{namespace} :: {feature}` must not contain duplicate values: {values:?}",
-        values = .values.iter().map(VariantValue::as_str).collect_vec(),
+        values = .values.iter().map(|value| &value.0).collect_vec(),
     )]
     DuplicateValues {
         namespace: VariantNamespace,
@@ -537,11 +537,6 @@ impl VariantNamespace {
         assert!(valid_component(value, false), "invalid variant namespace");
         Self(Cow::Borrowed(value))
     }
-
-    /// Return the variant namespace as a string slice.
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
 }
 
 impl Display for VariantNamespace {
@@ -583,11 +578,6 @@ impl VariantFeature {
         assert!(valid_component(value, false), "invalid variant feature");
         Self(Cow::Borrowed(value))
     }
-
-    /// Return the variant feature as a string slice.
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
 }
 
 impl Display for VariantFeature {
@@ -628,11 +618,6 @@ impl VariantValue {
     pub const fn from_static(value: &'static str) -> Self {
         assert!(valid_component(value, true), "invalid variant value");
         Self(Cow::Borrowed(value))
-    }
-
-    /// Return the variant value as a string slice.
-    pub fn as_str(&self) -> &str {
-        &self.0
     }
 }
 
