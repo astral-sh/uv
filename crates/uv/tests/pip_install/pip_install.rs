@@ -19189,3 +19189,19 @@ fn compile_bytecode_excludes_stdlib() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn install_from_uv_lockfile() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let lockfile = context.temp_dir.join("uv.lock");
+    fs_err::write(&lockfile, "version = 1\n\n[[package]]\nname = \"any\"")?;
+
+    uv_snapshot!(context.filters(), context.pip_install().arg("-r").arg(&lockfile), @r#"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: The file `uv.lock` appears to be a lockfile, but lockfiles are not valid requirements inputs. Did you mean to run `uv pip install`?
+    "#);
+
+    Ok(())
+}
