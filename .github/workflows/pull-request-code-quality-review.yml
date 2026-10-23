@@ -9,7 +9,18 @@ env:
 jobs:
   review:
     name: "code quality review"
-    if: github.event_name == 'pull_request' && github.repository == 'astral-sh/uv-dev' && github.event.pull_request.head.repo.full_name == github.repository
+    if: >-
+      ${{
+        github.event_name == 'pull_request' &&
+        github.event.pull_request.head.repo.full_name == github.repository &&
+        (
+          github.repository == 'astral-sh/uv-dev' ||
+          (
+            github.repository == 'astral-sh/uv' &&
+            contains(fromJSON('["astral-automations-bot[bot]", "woodruffw", "zanieb", "zaniebot", "zsol"]'), github.event.pull_request.user.login)
+          )
+        )
+      }}
     runs-on: depot-ubuntu-24.04-16
     environment:
       name: automations
@@ -170,7 +181,7 @@ jobs:
         with:
           exchange-url: ${{ secrets.STS_API_URL }}/exchange
           audience: ${{ secrets.STS_API_URL }}
-          repository: astral-sh/uv-dev
+          repository: ${{ github.repository }}
           permissions: |
             pull_requests: write
 
