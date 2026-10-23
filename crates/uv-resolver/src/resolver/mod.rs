@@ -1546,6 +1546,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             Either::Right(std::iter::once(prioritized))
         };
 
+        let cross_platform = self.tags.as_ref().and_then(Tags::cross_platform);
         let mut selection = WheelVariantSelection::default();
         for dist in candidates {
             // Queue all metadata requests for this candidate before waiting for any of them.
@@ -1574,7 +1575,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             }
             // Prefer a compatible variant from this index, then its ordinary wheel or sdist,
             // before considering a distribution from the next index.
-            if let Some(variant) = dist.prioritize_variants(&metadata) {
+            if let Some(variant) = dist.prioritize_variants(&metadata, cross_platform) {
                 selection.distribution = Some(Cow::Owned(variant));
                 break;
             }

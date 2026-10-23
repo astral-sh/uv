@@ -227,7 +227,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             Dist::Built(built) => {
                 check_supported_wheel_variant(built)?;
                 let wheel = self.get_wheel(built, hashes).await?;
-                check_wheel_variant_compatibility(&wheel.filename, &wheel.archive)?;
+                check_wheel_variant_compatibility(
+                    &wheel.filename,
+                    &wheel.archive,
+                    tags.cross_platform(),
+                )?;
                 Ok(wheel)
             }
             // TODO(konsti): Support source distributions that build variant wheels.

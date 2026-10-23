@@ -30,7 +30,16 @@ pub struct TagsOptions {
     pub manylinux_compatible: bool,
     pub gil_disabled: bool,
     pub debug_enabled: bool,
-    pub is_cross: bool,
+    pub target_override: Option<TargetOverride>,
+}
+
+/// Which part of the interpreter's target was overridden when generating wheel tags.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TargetOverride {
+    /// Only the Python version was specified. The interpreter supplies the platform.
+    PythonVersion,
+    /// The platform was specified, possibly along with a Python version.
+    PythonPlatform,
 }
 
 #[derive(Debug, Eq, Ord, PartialEq, PartialOrd, Copy, Clone)]
@@ -121,9 +130,7 @@ pub struct Tags {
     python_platform: Platform,
     /// Python version used to generate the tags, for error messages.
     python_version: (u8, u8),
-    /// Whether the tags are for a different Python interpreter than the current one, for error
-    /// messages.
-    is_cross: bool,
+    target_override: Option<TargetOverride>,
     /// Whether this is free-threaded Python.
     is_freethreaded: bool,
 }
@@ -137,7 +144,7 @@ impl Tags {
         tags: Vec<(LanguageTag, AbiTag, PlatformTag)>,
         python_platform: Platform,
         python_version: (u8, u8),
-        is_cross: bool,
+        target_override: Option<TargetOverride>,
         is_freethreaded: bool,
     ) -> Self {
         // Store the highest-priority tag for each component.
@@ -159,7 +166,7 @@ impl Tags {
             best,
             python_platform,
             python_version,
-            is_cross,
+            target_override,
             is_freethreaded,
         }
     }
@@ -331,7 +338,7 @@ impl Tags {
             tags,
             platform,
             python_version,
-            options.is_cross,
+            options.target_override,
             options.gil_disabled,
         ))
     }
@@ -473,7 +480,15 @@ impl Tags {
     }
 
     pub fn is_cross(&self) -> bool {
-        self.is_cross
+        self.target_override.is_some()
+    }
+
+    /// Return the requested cross-install platform, if the interpreter's platform was overridden.
+    pub fn cross_platform(&self) -> Option<&Platform> {
+        match self.target_override {
+            Some(TargetOverride::PythonPlatform) => Some(&self.python_platform),
+            Some(TargetOverride::PythonVersion) | None => None,
+        }
     }
 }
 

@@ -4,6 +4,7 @@ use uv_cache_info::CacheInfo;
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{BuildInfo, BuiltDist, CachedDist, Dist, Hashed};
 use uv_metadata::{find_flat_dist_info, read_flat_wheel_metadata, read_wheel_variant};
+use uv_platform_tags::Platform;
 use uv_preview::PreviewFeature;
 use uv_pypi_types::{HashDigest, HashDigests, ResolutionMetadata};
 
@@ -24,6 +25,7 @@ pub fn check_supported_wheel_variant(dist: &BuiltDist) -> Result<(), Error> {
 pub(crate) fn check_wheel_variant_compatibility(
     filename: &WheelFilename,
     archive: &Path,
+    cross_platform: Option<&Platform>,
 ) -> Result<(), Error> {
     let Some(label) = filename.variant() else {
         return Ok(());
@@ -37,9 +39,8 @@ pub(crate) fn check_wheel_variant_compatibility(
     let path = archive.join(format!("{dist_info}.dist-info/variant.json"));
     let metadata = read_wheel_variant(&path, label)
         .map_err(|err| Error::WheelMetadata(path, Box::new(err)))?;
-    if let Some(properties) =
-        metadata.unsupported_variant_properties(label, &supported_variant_properties(&metadata))
-    {
+    let supported = supported_variant_properties(&metadata, cross_platform);
+    if let Some(properties) = metadata.unsupported_variant_properties(label, &supported) {
         return Err(Error::IncompatibleWheelVariant {
             label: label.clone(),
             properties,
