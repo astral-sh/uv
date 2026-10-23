@@ -17,7 +17,7 @@ jobs:
           github.repository == 'astral-sh/uv-dev' ||
           (
             github.repository == 'astral-sh/uv' &&
-            contains(fromJSON('["astral-automations-bot[bot]", "woodruffw", "zanieb", "zaniebot", "zsol"]'), github.event.pull_request.user.login)
+            contains(fromJSON('["astral-automations-bot[bot]", "charliermarsh", "woodruffw", "zanieb", "zaniebot", "zsol"]'), github.event.pull_request.user.login)
           )
         )
       }}
