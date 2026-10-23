@@ -23,7 +23,8 @@ use tracing::{Level, debug, info, instrument, trace, warn};
 
 use uv_configuration::{Constraints, DependencyModifiers, IndexStrategy};
 use uv_distribution::{
-    ArchiveMetadata, DistributionDatabase, Metadata, supported_variant_properties,
+    ArchiveMetadata, DistributionDatabase, Metadata, VariantProviderError,
+    detect_variant_properties,
 };
 use uv_distribution_types::{
     BuiltDist, DerivationChain, Dist, DistErrorKind, Identifier, IndexCapabilities, IndexLocations,
@@ -171,6 +172,8 @@ struct WheelVariantSelection<'a> {
     distribution: Option<Cow<'a, PrioritizedDist>>,
     /// Why we couldn't check all the variants, even if we found a usable distribution.
     unavailable: Option<MetadataUnavailable>,
+    /// Detection failures for providers required by otherwise eligible variants.
+    provider_errors: BTreeSet<VariantProviderError>,
 }
 
 impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
@@ -1344,14 +1347,21 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         {
             let unavailable = match variant {
                 Ok(variant) => {
-                    let supported = supported_variant_properties(&variant, tags.python_platform());
+                    let detection = detect_variant_properties(&variant, tags.python_platform());
                     // TODO(konsti): Include the unsupported properties in the resolver error.
                     variant
-                        .unsupported_variant_properties(&label, &supported)
+                        .unsupported_variant_properties(&label, detection.supported())
                         .map(|_| {
-                            UnavailableVersion::IncompatibleDist(IncompatibleDist::Wheel(
-                                IncompatibleWheel::Tag(IncompatibleTag::Variant),
-                            ))
+                            let errors: BTreeSet<_> =
+                                detection.errors_for(&variant, &label).cloned().collect();
+                            let incompatibility = if errors.is_empty() {
+                                IncompatibleDist::Wheel(IncompatibleWheel::Tag(
+                                    IncompatibleTag::Variant,
+                                ))
+                            } else {
+                                IncompatibleDist::WheelVariant(errors)
+                            };
+                            UnavailableVersion::IncompatibleDist(incompatibility)
                         })
                 }
                 Err(reason) => Some(self.record_unavailable_metadata(name, version, &reason)),
@@ -1454,12 +1464,19 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 incompatible_dist: incompatibility,
                 prioritized_dist: _,
             } => {
+                let incompatibility = if let IncompatibleDist::Wheel(IncompatibleWheel::Tag(
+                    IncompatibleTag::Variant,
+                )) = incompatibility
+                    && !variant.provider_errors.is_empty()
+                {
+                    IncompatibleDist::WheelVariant(variant.provider_errors)
+                } else {
+                    incompatibility.clone()
+                };
                 // If the version is incompatible because no distributions are compatible, exit early.
                 return Ok(Some(ResolverVersion::Unavailable(
                     candidate.version().clone(),
-                    // TODO(charlie): We can avoid this clone; the candidate is dropped here and
-                    // owns the incompatibility.
-                    UnavailableVersion::IncompatibleDist(incompatibility.clone()),
+                    UnavailableVersion::IncompatibleDist(incompatibility),
                 )));
             }
         };
@@ -1606,8 +1623,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             for (index, response) in &responses {
                 match response.as_ref() {
                     Ok(content) => {
-                        let supported = supported_variant_properties(content, target);
-                        metadata.push((*index, content, supported));
+                        let detection = detect_variant_properties(content, target);
+                        metadata.push((*index, content, detection));
                     }
                     Err(reason) => {
                         // Keep the first error to report if no distribution works.
@@ -1618,7 +1635,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             // Try this index's variants, then its ordinary wheel or sdist, before moving on
             // to the next index.
             if !metadata.is_empty()
-                && let Some((_, index)) = dist.scored_variants(&metadata).max()
+                && let Some((_, index)) = dist
+                    .scored_variants(&metadata, &mut selection.provider_errors)
+                    .max()
                 && let Some(selected) = dist.select_variant(index)
             {
                 selection.distribution = Some(Cow::Owned(selected));
