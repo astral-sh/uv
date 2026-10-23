@@ -15,6 +15,8 @@ env:
   CARGO_TERM_COLOR: always
   PYTHON_VERSION: "3.12"
   RUSTUP_MAX_RETRIES: 10
+  # Stabilize unlocked PyPI resolutions.
+  UV_EXCLUDE_NEWER: "2026-10-11T00:00:00Z"
   UV_LOCKED: 1
 
 jobs:
@@ -718,9 +720,11 @@ jobs:
           echo "PYODIDE_INDEX=$PYODIDE_INDEX" >> $GITHUB_ENV
 
       - name: "Create Pyodide virtual environment"
+        env:
+          # The bundled Pyodide index does not include upload dates.
+          UV_EXCLUDE_NEWER: "false"
         run: |
-          # The bundled Pyodide index does not include upload dates, so run outside the
-          # repository to avoid applying its exclude-newer setting.
+          # Run outside the repository so its project configuration does not affect the install.
           PYODIDE_VENV="$RUNNER_TEMP/venv-pyodide"
           ./uv venv -p "$PYODIDE_PYTHON" "$PYODIDE_VENV"
           source "$PYODIDE_VENV/bin/activate"
@@ -772,6 +776,9 @@ jobs:
           echo "PYODIDE_INDEX=$env:PYODIDE_INDEX" >> $env:GITHUB_ENV
 
       - name: "Create Pyodide virtual environment"
+        env:
+          # The bundled Pyodide index does not include upload dates.
+          UV_EXCLUDE_NEWER: "false"
         run: |
           .\uv.exe venv -p $env:PYODIDE_PYTHON venv-pyodide
           & .\venv-pyodide\Scripts\Activate.ps1
@@ -828,6 +835,7 @@ jobs:
       - name: "Run uv on Windows NanoServer"
         run: |
           docker run --rm `
+            -e UV_EXCLUDE_NEWER `
             -v "${{ github.workspace }}:C:\uv" `
             mcr.microsoft.com/powershell:lts-nanoserver-ltsc2022 `
             pwsh -ExecutionPolicy Bypass -File C:\uv\test\integration\windows-nanoserver.ps1
@@ -1014,8 +1022,12 @@ jobs:
         run: chmod +x ./uv
 
       - name: "Run public registry tests"
-        run: ./uv run --locked --python "${PYTHON_VERSION}" --no-build --script scripts/registries-test.py --uv ./uv --color always
+        # Use the script's lockfile without revalidating its exclude-newer setting.
+        run: ./uv run --frozen --python "${PYTHON_VERSION}" --no-build --script scripts/registries-test.py --uv ./uv --color always
         env:
+          # NVIDIA's index does not provide upload dates.
+          UV_EXCLUDE_NEWER: "false"
+          UV_LOCKED: "false"
           UV_TEST_ASTRAL_PKG: transformer-engine
           UV_TEST_ASTRAL_PUBLIC: "true"
           UV_TEST_ASTRAL_URL: https://wheels.astral.sh/simple/cu128/
@@ -1097,8 +1109,12 @@ jobs:
           echo "UV_TEST_GCP_TOKEN=$UV_TEST_GCP_TOKEN" >> $GITHUB_ENV
 
       - name: "Run registry tests with environment variable backend"
-        run: ./uv run --locked --python "${PYTHON_VERSION}" --no-build --script scripts/registries-test.py --uv ./uv --color always --all --auth-method env
+        # Use the script's lockfile without revalidating its exclude-newer setting.
+        run: ./uv run --frozen --python "${PYTHON_VERSION}" --no-build --script scripts/registries-test.py --uv ./uv --color always --all --auth-method env
         env:
+          # Test registry authentication without the workflow's PyPI cutoff.
+          UV_EXCLUDE_NEWER: "false"
+          UV_LOCKED: "false"
           RUST_LOG: uv=debug
           UV_TEST_ARTIFACTORY_REQUIRE_METADATA_RANGE_REQUESTS: "true"
           UV_TEST_ARTIFACTORY_TOKEN: ${{ secrets.UV_TEST_ARTIFACTORY_TOKEN }}
@@ -1127,8 +1143,12 @@ jobs:
           UV_TEST_GITLAB_USERNAME: token
 
       - name: "Run registry tests with text store backend"
-        run: ./uv run --locked --python "${PYTHON_VERSION}" --no-build --script scripts/registries-test.py --uv ./uv --color always --all --auth-method text-store
+        # Use the script's lockfile without revalidating its exclude-newer setting.
+        run: ./uv run --frozen --python "${PYTHON_VERSION}" --no-build --script scripts/registries-test.py --uv ./uv --color always --all --auth-method text-store
         env:
+          # Test registry authentication without the workflow's PyPI cutoff.
+          UV_EXCLUDE_NEWER: "false"
+          UV_LOCKED: "false"
           RUST_LOG: uv=debug
           UV_TEST_ARTIFACTORY_REQUIRE_METADATA_RANGE_REQUESTS: "true"
           UV_TEST_ARTIFACTORY_TOKEN: ${{ secrets.UV_TEST_ARTIFACTORY_TOKEN }}

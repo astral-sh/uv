@@ -10,6 +10,7 @@ permissions:
   contents: read
 
 env:
+  UV_EXCLUDE_NEWER: "2026-10-11T00:00:00Z"
   UV_LOCKED: 1
 
 jobs:
@@ -409,6 +410,7 @@ jobs:
       - name: "Validate global Python install"
         run: |
           docker run --rm --user root \
+            -e UV_EXCLUDE_NEWER \
             -v "${{ github.workspace }}:/app" \
             -w /app \
             cgr.dev/chainguard/python:latest@sha256:c789723622cfc4a6b5d604a59250e3f708d0b4bb64cabb39a17c47119a224179 \
