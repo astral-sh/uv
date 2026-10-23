@@ -424,6 +424,18 @@ pub enum PreviewFeature {
     /// can share a cache entry, reducing duplication when the same wheel contents are encountered
     /// more than once.
     ContentAddressedCache,
+    /// Requests commits with `tree:0`, then downloads the trees and blobs needed to check out the
+    /// requested revision. This can reduce transfer sizes for repositories with long histories.
+    /// Build tools that inspect other revisions may fetch additional objects. In offline mode, uv
+    /// passes a file-only Git transport setting to builds of Git sources; missing historical objects
+    /// can cause builds to fail.
+    ///
+    /// Partial Git fetches use a separate cache from full fetches. Switching modes can require
+    /// downloading a repository again, even when its revision is cached in the other mode.
+    ///
+    /// Repositories with URL credentials or query parameters, and remotes that match
+    /// `--allow-insecure-host`, use full fetches.
+    GitPartialFetches,
     /// uv omits `exclude-newer-package` entries from the lockfile when the corresponding packages
     /// are absent from the resolved dependencies. This keeps cutoffs for unrelated packages out of
     /// `uv.lock`.

@@ -3035,7 +3035,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         &install_path,
                         stop_discovery_at,
                         Some(&source.to_string()),
-                        source.as_dist(),
+                        Some(source),
                         &no_sources,
                         if source.is_editable() {
                             BuildKind::Editable
@@ -3169,7 +3169,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 &install_path,
                 stop_discovery_at,
                 Some(&source.to_string()),
-                source.as_dist(),
+                Some(source),
                 &no_sources,
                 build_kind,
                 if uv_flags::contains(uv_flags::EnvironmentFlags::HIDE_BUILD_OUTPUT) {

@@ -25,13 +25,13 @@ use uv_configuration::{BuildOutput, Concurrency};
 use uv_distribution::DistributionDatabase;
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
-    CachedDist, ConfigSettings, DependencyMetadata, ExtraBuildRequires, ExtraBuildVariables,
-    Identifier, IndexCapabilities, IndexLocations, IsBuildBackendError, Name,
-    PackageConfigSettings, Requirement, Resolution, SourceDist, VersionOrUrlRef,
+    BuildableSource, CachedDist, ConfigSettings, DependencyMetadata, ExtraBuildRequires,
+    ExtraBuildVariables, Identifier, IndexCapabilities, IndexLocations, IsBuildBackendError, Name,
+    PackageConfigSettings, Requirement, Resolution, SourceDist, SourceUrl, VersionOrUrlRef,
 };
 use uv_git::GitResolver;
 use uv_installer::{InstallationStrategy, Installer, Plan, Planner, Preparer, SitePackages};
-use uv_preview::Preview;
+use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::Conflicts;
 use uv_python_interpreter::{Interpreter, PythonEnvironment};
 use uv_requirements::LookaheadResolver;
@@ -39,7 +39,7 @@ use uv_resolver::{
     ExcludeNewer, FlatIndex, Flexibility, InMemoryIndex, Manifest, OptionsBuilder,
     PythonRequirement, Resolver, ResolverEnvironment,
 };
-use uv_static::TarBackend;
+use uv_static::{EnvVars, TarBackend};
 use uv_types::{
     AnyErrorBuild, BuildArena, BuildContext, BuildIsolation, BuildStack, EmptyInstalledPackages,
     HashStrategy, HashVerification, InFlight, ResolvedRequirements, SourceTreeEditablePolicy,
@@ -588,12 +588,13 @@ impl BuildContext for BuildDispatch<'_> {
         install_path: &'data Path,
         stop_discovery_at: Option<&'data Path>,
         version_id: Option<&'data str>,
-        dist: Option<&'data SourceDist>,
+        buildable_source: Option<&'data BuildableSource<'data>>,
         sources: &'data NoSources,
         build_kind: BuildKind,
         build_output: BuildOutput,
         mut build_stack: BuildStack,
     ) -> Result<SourceBuild, uv_build_frontend::Error> {
+        let dist = buildable_source.and_then(BuildableSource::as_dist);
         let dist_name = dist.map(uv_distribution_types::Name::name);
         let dist_version = dist
             .map(uv_distribution_types::DistributionMetadata::version_or_url)
@@ -628,6 +629,17 @@ impl BuildContext for BuildDispatch<'_> {
                         .map(|(key, value)| (OsString::from(key), OsString::from(value))),
                 );
             }
+        }
+
+        // Reading Git history in a build backend can trigger lazy object fetches.
+        if uv_preview::is_enabled(PreviewFeature::GitPartialFetches)
+            && self.client.connectivity().is_offline()
+            && let Some(
+                BuildableSource::Dist(SourceDist::GitDirectory(_))
+                | BuildableSource::Url(SourceUrl::GitDirectory(_)),
+            ) = buildable_source
+        {
+            environment_variables.insert(EnvVars::GIT_ALLOW_PROTOCOL.into(), "file".into());
         }
 
         let builder = SourceBuild::setup(
