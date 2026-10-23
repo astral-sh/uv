@@ -1,10 +1,11 @@
+use std::collections::BTreeSet;
 use std::fmt::{Display, Formatter};
 
 use arcstr::ArcStr;
 use owo_colors::OwoColorize;
 use tracing::debug;
 
-use uv_distribution::supported_variant_properties;
+use uv_distribution::{VariantProviderError, detect_variant_properties};
 use uv_distribution_filename::{BuildTag, WheelFilename};
 use uv_distribution_types::{
     File, IndexUrl, InstalledDist, MinimumLibcVersion, Name, RegistryBuiltDist, RegistryBuiltWheel,
@@ -171,6 +172,8 @@ impl<'a> CompatibleDist<'a> {
 pub enum IncompatibleDist {
     /// An incompatible wheel is available.
     Wheel(IncompatibleWheel),
+    /// Only unsupported wheel variants are available, and required providers failed detection.
+    WheelVariant(BTreeSet<VariantProviderError>),
     /// An incompatible source distribution is available.
     Source(IncompatibleSource),
     /// No distributions are available
@@ -203,7 +206,7 @@ impl IncompatibleDist {
                 }
                 IncompatibleSource::NotPep625Filename => format!("has {self}"),
             },
-            Self::Unavailable => format!("has {self}"),
+            Self::WheelVariant(_) | Self::Unavailable => format!("has {self}"),
         }
     }
 
@@ -232,7 +235,7 @@ impl IncompatibleDist {
                 }
                 IncompatibleSource::NotPep625Filename => format!("have {self}"),
             },
-            Self::Unavailable => format!("have {self}"),
+            Self::WheelVariant(_) | Self::Unavailable => format!("have {self}"),
         }
     }
 
@@ -269,7 +272,7 @@ impl IncompatibleDist {
                 IncompatibleWheel::MissingPlatform(..) => None,
             },
             Self::Source(..) => None,
-            Self::Unavailable => None,
+            Self::WheelVariant(_) | Self::Unavailable => None,
         }
     }
 }
@@ -342,6 +345,9 @@ impl Display for IncompatibleDist {
                     f.write_str("a non-PEP 625-compliant source distribution filename")
                 }
             },
+            Self::WheelVariant(_) => {
+                Self::Wheel(IncompatibleWheel::Tag(IncompatibleTag::Variant)).fmt(f)
+            }
             Self::Unavailable => f.write_str("no available distributions"),
         }
     }
@@ -435,22 +441,26 @@ impl PrioritizedDist {
     }
 
     /// Choose the best compatible variant, or return `None` to use the ordinary wheel or sdist.
+    ///
+    /// If no variant is compatible, return any detection errors from providers with unsupported
+    /// properties in those variants.
     pub(crate) fn prioritize_variants(
         &self,
         metadata: &[(&IndexUrl, &VariantsJsonContent)],
-    ) -> Option<Self> {
+    ) -> Result<Option<Self>, BTreeSet<VariantProviderError>> {
         if metadata.is_empty() {
-            return None;
+            return Ok(None);
         }
         let metadata: Vec<_> = metadata
             .iter()
-            .map(|(source, metadata)| (*source, *metadata, supported_variant_properties(metadata)))
+            .map(|(source, metadata)| (*source, *metadata, detect_variant_properties(metadata)))
             .collect();
         // Prefer wheels whose advertised hash matches a required hash, followed by wheels with
         // no advertised hash, then mismatches. If no hashes are required, all wheels match.
         // The installer verifies required hashes against the downloaded wheel.
         // Break ties by variant rank, platform tags, then build tag.
-        let (best_index, (hash, _, priority, build_tag)) = self
+        let mut provider_errors = BTreeSet::new();
+        let best = self
             .0
             .wheels
             .iter()
@@ -463,26 +473,37 @@ impl PrioritizedDist {
                 let score = metadata
                     .iter()
                     .filter(|(source, _, _)| *source == &wheel.index)
-                    .filter_map(|(_, metadata, supported_properties)| {
-                        metadata.score_variant(label, supported_properties)
+                    .filter_map(|(_, metadata, detection)| {
+                        let score = metadata.score_variant(label, detection.supported());
+                        if score.is_none() {
+                            provider_errors.extend(detection.errors_for(metadata, label).cloned());
+                        }
+                        score
                     })
                     .max()?;
                 Some((index, (*hash, score, *priority, build_tag)))
             })
-            .max_by(|(_, left), (_, right)| left.cmp(right))?;
+            .max_by(|(_, left), (_, right)| left.cmp(right));
+        let Some((best_index, (hash, _, priority, build_tag))) = best else {
+            return if provider_errors.is_empty() {
+                Ok(None)
+            } else {
+                Err(provider_errors)
+            };
+        };
 
         // Keep the ordinary wheel if its advertised hash ranks higher.
         if let Some((_, WheelCompatibility::Compatible(existing_hash, ..))) = self.best_wheel()
             && *existing_hash > hash
         {
-            return None;
+            return Ok(None);
         }
 
         let mut prioritized = self.clone();
         prioritized.0.wheels[best_index].1 =
             WheelCompatibility::Compatible(hash, priority, build_tag.clone());
         prioritized.0.best_wheel_index = Some(best_index);
-        Some(prioritized)
+        Ok(Some(prioritized))
     }
 
     /// Insert the given built distribution into the [`PrioritizedDist`].

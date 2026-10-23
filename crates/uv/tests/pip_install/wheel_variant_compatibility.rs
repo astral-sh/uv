@@ -291,6 +291,50 @@ fn skip_excessive_nvidia_cuda_override() -> Result<()> {
     Ok(())
 }
 
+/// A failed provider explains why its wheel variant could not be selected.
+#[test]
+fn provider_detection_error_hint() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let links = context.temp_dir.child("links");
+    links.create_dir_all()?;
+    let metadata = json!({
+        "$schema": PEP_850_SCHEMA,
+        "default-priorities": { "namespace": ["nvidia"] },
+        "providers": {
+            "nvidia": {
+                "requires": ["nvidia-variant-provider==0.0.1"],
+                "plugin-api": "nvidia_variant_provider.plugin:NvidiaVariantPlugin"
+            }
+        },
+        "variants": { "gpu": { "nvidia": { "cuda_version_lower_bound": ["12.0"] } } }
+    })
+    .to_string();
+    let (_, wheel) = WheelBuilder::new(&"ok".parse()?, &"1.0.0".parse()?)
+        .files(&[("ok-1.0.0.dist-info/variant.json", &metadata)])
+        .build();
+    links
+        .child("ok-1.0.0-py3-none-any-gpu.whl")
+        .write_binary(&wheel)?;
+    links.child("ok-1.0.0-variants.json").write_str(&metadata)?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .env(EnvVars::NV_VARIANT_PROVIDER_FORCE_CUDA_DRIVER_VERSION, "invalid")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(links.path())
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("ok==1.0.0"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies
+      cause: Because ok==1.0.0 has only unsupported wheel variants and you require ok==1.0.0, we can conclude that your requirements are unsatisfiable.
+
+    hint: The `nvidia` wheel variant provider failed to detect compatible properties: Invalid value for `NV_VARIANT_PROVIDER_FORCE_CUDA_DRIVER_VERSION`: `invalid`
+    ");
+    Ok(())
+}
+
 /// Streaming metadata must not combine files from two different `.dist-info` directories.
 #[test]
 fn streamed_variant_metadata_requires_one_dist_info_directory() -> Result<()> {
