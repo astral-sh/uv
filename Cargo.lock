@@ -5911,6 +5911,7 @@ dependencies = [
  "uv-redacted",
  "uv-resolver",
  "uv-resolver-types",
+ "uv-settings",
  "uv-static",
  "uv-types",
  "uv-workspace",
