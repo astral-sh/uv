@@ -396,10 +396,14 @@ pub enum VariantMetadataError {
     #[error("Variant feature `{0} :: {1}` must have at least one value")]
     EmptyValues(VariantNamespace, VariantFeature),
     #[error(
-        "Variant feature `{0} :: {1}` must not contain duplicate values: {values:?}",
-        values = .2.iter().map(VariantValue::as_str).collect_vec(),
+        "Variant feature `{namespace} :: {feature}` must not contain duplicate values: {values:?}",
+        values = .values.iter().map(VariantValue::as_str).collect_vec(),
     )]
-    DuplicateValues(VariantNamespace, VariantFeature, Vec<VariantValue>),
+    DuplicateValues {
+        namespace: VariantNamespace,
+        feature: VariantFeature,
+        values: Vec<VariantValue>,
+    },
     #[error("The null variant must not have properties")]
     NullProperties,
 }
@@ -459,11 +463,11 @@ impl TryFrom<VariantsJsonWire> for VariantsJsonContent {
                 }
                 for (feature, values) in static_properties {
                     if !values.iter().all_unique() {
-                        return Err(VariantMetadataError::DuplicateValues(
-                            namespace.clone(),
-                            feature.clone(),
-                            values.clone(),
-                        ));
+                        return Err(VariantMetadataError::DuplicateValues {
+                            namespace: namespace.clone(),
+                            feature: feature.clone(),
+                            values: values.clone(),
+                        });
                     }
                 }
             }
@@ -482,11 +486,11 @@ impl TryFrom<VariantsJsonWire> for VariantsJsonContent {
                         ));
                     }
                     if !values.iter().all_unique() {
-                        return Err(VariantMetadataError::DuplicateValues(
-                            namespace.clone(),
-                            feature.clone(),
-                            values.clone(),
-                        ));
+                        return Err(VariantMetadataError::DuplicateValues {
+                            namespace: namespace.clone(),
+                            feature: feature.clone(),
+                            values: values.clone(),
+                        });
                     }
                     if label.as_str() == "null" {
                         return Err(VariantMetadataError::NullProperties);
