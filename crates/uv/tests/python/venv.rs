@@ -16,6 +16,8 @@ use fs_err::os::unix::fs::symlink;
 use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
 #[cfg(windows)]
 use std::{ffi::OsString, os::windows::ffi::OsStringExt};
+#[cfg(unix)]
+use std::{fs::Permissions, os::unix::fs::PermissionsExt};
 
 use uv_test::{assert_link_target, site_packages_path, uv_snapshot};
 
@@ -2433,6 +2435,34 @@ fn create_venv_current_working_directory() {
       cause: failed to remove directory `[VENV]/`: The process cannot access the file because it is being used by another process. (os error 32)
     "
     );
+}
+
+/// Settings discovery ignores an unreadable `uv.toml` in a parent directory, e.g., in a sandbox
+/// that denies access to the parent directories of a worktree.
+#[test]
+#[cfg(unix)]
+fn create_venv_unreadable_parent_uv_toml() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+
+    let uv_toml = context.temp_dir.child("uv.toml");
+    uv_toml.touch()?;
+    fs_err::set_permissions(&uv_toml, Permissions::from_mode(0o000))?;
+
+    let child = context.temp_dir.child("child");
+    child.create_dir_all()?;
+
+    uv_snapshot!(context.filters(), context.venv()
+        .arg("--python")
+        .arg("3.12")
+        .current_dir(child.path()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Activate with: source .venv/[BIN]/activate
+    ");
+
+    Ok(())
 }
 
 #[test]
