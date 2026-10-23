@@ -353,9 +353,11 @@ impl GitDatabase {
         if !checkout.repo.lfs_fsck_objects(rev.as_str()) {
             return checkout.reset(self);
         }
-        checkout.repo.materialize_lfs()?;
-        paths::create(checkout.repo.path.with_extension(CHECKOUT_READY_EXTENSION))?;
-        Ok(checkout.with_lfs_ready(Some(true)))
+        let ready = checkout.materialize_lfs()?;
+        if ready {
+            paths::create(checkout.repo.path.with_extension(CHECKOUT_READY_EXTENSION))?;
+        }
+        Ok(checkout.with_lfs_ready(Some(ready)))
     }
 
     /// Copy LFS objects from the shared database into a checkout clone.
@@ -491,6 +493,40 @@ impl GitCheckout {
         }
     }
 
+    /// Materialize available local LFS objects and check initialized submodules recursively when supported.
+    fn materialize_lfs(&self) -> Result<bool> {
+        self.repo.materialize_lfs()?;
+        if !self.repo.path.join(".gitmodules").exists() {
+            return Ok(true);
+        }
+        let submodules = GIT
+            .as_ref()
+            .cloned()?
+            .args(&[
+                "submodule",
+                "foreach",
+                "--quiet",
+                "--recursive",
+                r#"printf '%s\0' "$displaypath""#,
+            ])
+            .env("GIT_NO_LAZY_FETCH", "1")
+            .env(EnvVars::GIT_ALLOW_PROTOCOL, "file")
+            .cwd(&self.repo.path)
+            .exec_with_output()?;
+        let mut ready = true;
+        for path in submodules
+            .stdout
+            .split(|&byte| byte == 0)
+            .filter(|path| !path.is_empty())
+        {
+            let repo = GitRepository::open(&self.repo.path.join(paths::bytes2path(path)?))?;
+            repo.materialize_lfs()?;
+            // `git lfs checkout` skips missing objects without failing.
+            ready &= repo.lfs_fsck_objects("HEAD");
+        }
+        Ok(ready)
+    }
+
     /// Indicates Git LFS artifacts have been initialized (when requested).
     pub(crate) fn lfs_ready(&self) -> Option<bool> {
         self.lfs_ready
@@ -587,8 +623,7 @@ impl GitCheckout {
             None => None,
             Some(false) => Some(false),
             Some(true) => {
-                self.repo.materialize_lfs()?;
-                Some(self.repo.lfs_fsck_objects(self.revision.as_str()))
+                Some(self.materialize_lfs()? && self.repo.lfs_fsck_objects(self.revision.as_str()))
             }
         };
 
