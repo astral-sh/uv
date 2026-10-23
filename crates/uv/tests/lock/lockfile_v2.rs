@@ -77,6 +77,78 @@ fn lockfile_v2_conflicting_extras_and_groups() -> Result<()> {
         .assert()
         .success();
     let lock = context.read("uv.lock");
+    assert_snapshot!(lock, @r#"
+    version = 2
+    requires-python = ">=3.12"
+    conflicts = [[
+        { package = "project", extra = "bar" },
+        { package = "project", extra = "foo" },
+    ]]
+
+    [options]
+    exclude-newer = "2024-03-25T00:00:00Z"
+
+    [[package]]
+    name = "child"
+    version = "1.0.0"
+    source = { virtual = "one" }
+    dependencies = [
+        "leaf",
+    ]
+
+    [package.metadata]
+    requires-dist = [{ name = "leaf", virtual = "leaf" }]
+
+    [[package]]
+    name = "child"
+    version = "2.0.0"
+    source = { virtual = "two" }
+    dependencies = [
+        "leaf",
+    ]
+
+    [package.metadata]
+    requires-dist = [{ name = "leaf", virtual = "leaf" }]
+
+    [[package]]
+    name = "leaf"
+    version = "1.0.0"
+    source = { virtual = "leaf" }
+
+    [[package]]
+    name = "project"
+    version = "1.0.0"
+    source = { virtual = "." }
+
+    [package.optional-dependencies]
+    bar = [
+        { name = "child", version = "2.0.0" },
+    ]
+    foo = [
+        { name = "child", version = "1.0.0" },
+    ]
+
+    [package.dependency-groups]
+    first = [
+        "project",
+        { name = "project", extras = ["foo"], marker = { enabled = [{ package = "project", extra = "foo" }] } },
+    ]
+    second = [
+        "project",
+        { name = "project", extras = ["bar"], marker = { enabled = [{ package = "project", extra = "bar" }] } },
+    ]
+
+    [package.metadata]
+    requires-dist = [
+        { name = "child", marker = "extra == 'bar'", virtual = "two" },
+        { name = "child", marker = "extra == 'foo'", virtual = "one" },
+    ]
+    provides-extras = ["foo", "bar"]
+
+    [package.metadata.dependency-groups]
+    first = [{ name = "project", extras = ["foo"], virtual = "." }]
+    second = [{ name = "project", extras = ["bar"], virtual = "." }]
+    "#);
     assert_eq!(Lock::from_canonical_toml(&lock)?.to_toml()?, lock);
     assert_eq!(toml::from_str::<Lock>(&lock)?.to_toml()?, lock);
     uv_snapshot!(context.filters(), context.lock().args(["--offline", "--locked", "--preview-features", "lockfile-v2"]), @"
@@ -214,6 +286,10 @@ fn lockfile_v2_conflict_discovery_respects_parent_reachability() -> Result<()> {
         foo = []
         "#,
     )?;
+
+    // Rewrite legacy marker strings to the canonical v2 conditions before frozen installation.
+    let lock = toml::from_str::<Lock>(&context.read("uv.lock"))?.to_toml()?;
+    context.temp_dir.child("uv.lock").write_str(&lock)?;
 
     uv_snapshot!(context.filters(), context.sync()
         .arg("--extra")
@@ -1769,4 +1845,121 @@ fn lockfile_v2_artifact_bases_sync() -> Result<()> {
     ");
     context.assert_command("import idna").success();
     Ok(())
+}
+
+/// Structured conditions preserve disjunctions, negation, and their environment correlations.
+#[test]
+fn lockfile_v2_conflict_conditions() -> Result<()> {
+    let input = indoc! {r#"
+        version = 1
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "sys_platform == 'linux' and extra == 'extra-7-project-foo'",
+            "sys_platform != 'linux' or extra != 'extra-7-project-foo'",
+        ]
+
+        [[package]]
+        name = "child"
+        version = "1.0.0"
+        source = { virtual = "child" }
+        resolution-markers = [
+            "sys_platform == 'linux' and extra == 'extra-7-project-foo'",
+            "sys_platform != 'linux' or extra != 'extra-7-project-foo'",
+        ]
+
+        [[package]]
+        name = "project"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "child", marker = "(sys_platform == 'linux' and extra == 'extra-7-project-foo') or (sys_platform == 'win32' and extra == 'group-7-project-test' and extra != 'project-5-other')" },
+        ]
+
+        [package.optional-dependencies]
+        foo = [
+            { name = "child", marker = "extra != 'extra-7-project-bar'" },
+        ]
+        bar = []
+
+        [package.dev-dependencies]
+        test = [
+            { name = "child", marker = "sys_platform == 'linux' or extra == 'project-5-other'" },
+        ]
+    "#};
+    let original = toml::from_str::<Lock>(input)?.to_toml()?;
+    let expected = toml::from_str::<Lock>(&input.replace("version = 1\n", "version = 2\n"))?;
+    let upgraded = expected.to_toml()?;
+    assert_snapshot!(upgraded, @r#"
+    version = 2
+    requires-python = ">=3.12"
+    resolution-markers = [
+        { environment = "sys_platform == 'linux'", enabled = [{ package = "project", extra = "foo" }] },
+        { any = [{ environment = "sys_platform != 'linux'" }, { disabled = [{ package = "project", extra = "foo" }] }] },
+    ]
+
+    [[package]]
+    name = "child"
+    version = "1.0.0"
+    source = { virtual = "child" }
+    resolution-markers = [
+        { environment = "sys_platform == 'linux'", enabled = [{ package = "project", extra = "foo" }] },
+        { any = [{ environment = "sys_platform != 'linux'" }, { disabled = [{ package = "project", extra = "foo" }] }] },
+    ]
+
+    [[package]]
+    name = "project"
+    source = { virtual = "." }
+    dependencies = [
+        { name = "child", marker = { any = [{ environment = "sys_platform == 'linux'", enabled = [{ package = "project", extra = "foo" }] }, { environment = "sys_platform == 'win32'", enabled = [{ package = "project", group = "test" }], disabled = [{ package = "other" }] }] } },
+    ]
+
+    [package.optional-dependencies]
+    bar = []
+    foo = [
+        { name = "child", marker = { disabled = [{ package = "project", extra = "bar" }] } },
+    ]
+
+    [package.dependency-groups]
+    test = [
+        { name = "child", marker = { any = [{ environment = "sys_platform == 'linux'" }, { enabled = [{ package = "other" }] }] } },
+    ]
+    "#);
+    assert_eq!(Lock::from_canonical_toml(&upgraded)?, expected);
+    assert_eq!(toml::from_str::<Lock>(&upgraded)?, expected);
+    assert_eq!(Lock::from_canonical_toml(&upgraded)?.to_toml()?, upgraded);
+    assert_eq!(
+        toml::from_str::<Lock>(&upgraded.replace("version = 2\n", "version = 1\n"))?.to_toml()?,
+        original
+    );
+    Ok(())
+}
+
+/// Reject malformed conflict conditions instead of silently broadening an edge's applicability.
+#[test]
+fn lockfile_v2_invalid_conflict_conditions() {
+    for marker in [
+        r#"{ enabled = [{ extra = "foo" }] }"#,
+        r#"{ enabled = [{ package = "project", extra = "foo", group = "test" }] }"#,
+        r#"{ enabled = [{ package = "project", extras = ["foo"] }] }"#,
+        r#"{ enabled = [{ package = "project", extra = "!" }] }"#,
+        r#"{ environment = "extra == 'extra-7-project-foo'" }"#,
+        r#"{ environment = "invalid" }"#,
+        r#"{ enable = [{ package = "project" }] }"#,
+        r#"{ any = [{}], disabled = [{ package = "project" }] }"#,
+    ] {
+        let input = formatdoc! {r#"
+            version = 2
+            requires-python = ">=3.12"
+
+            [[package]]
+            name = "child"
+            source = {{ virtual = "child" }}
+
+            [[package]]
+            name = "project"
+            source = {{ virtual = "." }}
+            dependencies = [{{ name = "child", marker = {marker} }}]
+        "#};
+        assert!(Lock::from_canonical_toml(&input).is_err(), "{marker}");
+        assert!(toml::from_str::<Lock>(&input).is_err(), "{marker}");
+    }
 }

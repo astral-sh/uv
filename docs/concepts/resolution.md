@@ -997,6 +997,12 @@ Dependency edges include only the version or source needed to identify their tar
 also omit conflict conditions already implied by reaching their parent; readers evaluate edges in
 that parent context.
 
+Conflict predicates use explicit `enabled` and `disabled` lists of package, extra, or group items. A
+clause can include an `environment` marker, and `any` joins alternative clauses without losing which
+environment each conflict predicate applies to. This representation is used on dependency edges and
+in `resolution-markers`; environment-only markers remain strings. Requirement metadata continues to
+use standard PEP 508 markers.
+
 Git sources record the repository URL separately from `branch`, `tag`, or `rev`, the resolved
 `commit`, and any `subdirectory`, archive `path`, or `lfs` setting. These fields replace the query
 parameters and fragment used in version 1.
