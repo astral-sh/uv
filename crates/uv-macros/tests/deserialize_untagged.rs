@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use std::io::{self, Read};
 
 use serde::Deserialize;
-use serde::de::value::{Error, StringDeserializer};
+use serde::de::value::{Error, SeqAccessDeserializer, SeqDeserializer, StringDeserializer};
 use uv_macros::DeserializeUntagged;
 
 #[derive(Debug, PartialEq, DeserializeUntagged)]
@@ -45,6 +45,26 @@ fn dispatches_by_shape() -> serde_json::Result<()> {
             enabled: false
         }
     );
+    Ok(())
+}
+
+#[test]
+fn checks_the_length_of_fixed_size_sequences() -> Result<(), Error> {
+    #[derive(Debug, PartialEq, DeserializeUntagged)]
+    enum FixedLength {
+        #[untagged(seq)]
+        Pair([u8; 2]),
+    }
+
+    let seq = SeqDeserializer::new([1u8, 2].into_iter());
+    assert_eq!(
+        FixedLength::deserialize(SeqAccessDeserializer::new(seq))?,
+        FixedLength::Pair([1, 2])
+    );
+
+    let seq = SeqDeserializer::<_, Error>::new([1u8, 2, 3].into_iter());
+    let error = FixedLength::deserialize(SeqAccessDeserializer::new(seq)).unwrap_err();
+    assert_eq!(error.to_string(), "unexpected trailing sequence element");
     Ok(())
 }
 

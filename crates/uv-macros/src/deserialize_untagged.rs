@@ -217,9 +217,13 @@ fn visitor_methods(
         "seq" => (
             "a sequence",
             quote! {
-                fn visit_seq<__A: ::serde::de::SeqAccess<'__de>>(self, seq: __A) -> ::core::result::Result<Self::Value, __A::Error> {
-                    let __input = ::serde::de::value::SeqAccessDeserializer::new(seq);
-                    #decode
+                fn visit_seq<__A: ::serde::de::SeqAccess<'__de>>(self, mut seq: __A) -> ::core::result::Result<Self::Value, __A::Error> {
+                    let __input = ::serde::de::value::SeqAccessDeserializer::new(&mut seq);
+                    let __value = { #decode }?;
+                    if seq.next_element::<::serde::de::IgnoredAny>()?.is_some() {
+                        return ::core::result::Result::Err(::serde::de::Error::custom("unexpected trailing sequence element"));
+                    }
+                    ::core::result::Result::Ok(__value)
                 }
             },
         ),
