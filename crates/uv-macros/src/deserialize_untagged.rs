@@ -194,25 +194,31 @@ fn visitor_methods(
     decode: &TokenStream,
 ) -> syn::Result<(&'static str, TokenStream)> {
     Ok(match shape.to_string().as_str() {
-        "string" => {
-            let transient = scalar("str", &quote!(&str), "StrDeserializer", decode);
-            let borrowed = scalar(
-                "borrowed_str",
-                &quote!(&'__de str),
-                "BorrowedStrDeserializer",
-                decode,
-            );
-            let owned = scalar(
-                "string",
-                &quote!(::std::string::String),
-                "StringDeserializer",
-                decode,
-            );
-            ("a string", quote! { #transient #borrowed #owned })
-        }
+        "string" => (
+            "a string",
+            quote! {
+                fn visit_str<__E: ::serde::de::Error>(self, value: &str) -> ::core::result::Result<Self::Value, __E> {
+                    let __input = ::serde::de::value::StrDeserializer::<__E>::new(value);
+                    #decode
+                }
+                fn visit_borrowed_str<__E: ::serde::de::Error>(self, value: &'__de str) -> ::core::result::Result<Self::Value, __E> {
+                    let __input = ::serde::de::value::BorrowedStrDeserializer::<__E>::new(value);
+                    #decode
+                }
+                fn visit_string<__E: ::serde::de::Error>(self, value: ::std::string::String) -> ::core::result::Result<Self::Value, __E> {
+                    let __input = ::serde::de::value::StringDeserializer::<__E>::new(value);
+                    #decode
+                }
+            },
+        ),
         "bool" => (
             "a boolean",
-            scalar("bool", &quote!(bool), "BoolDeserializer", decode),
+            quote! {
+                fn visit_bool<__E: ::serde::de::Error>(self, value: bool) -> ::core::result::Result<Self::Value, __E> {
+                    let __input = ::serde::de::value::BoolDeserializer::<__E>::new(value);
+                    #decode
+                }
+            },
         ),
         "seq" => (
             "a sequence",
@@ -252,20 +258,4 @@ fn serde_options(attributes: &[Attribute]) -> syn::Result<Vec<Meta>> {
         options.extend(attribute.parse_args_with(Punctuated::<Meta, Token![,]>::parse_terminated)?);
     }
     Ok(options)
-}
-
-fn scalar(
-    callback: &str,
-    ty: &TokenStream,
-    deserializer: &str,
-    decode: &TokenStream,
-) -> TokenStream {
-    let method = format_ident!("visit_{callback}");
-    let deserializer = format_ident!("{deserializer}");
-    quote! {
-        fn #method<__E: ::serde::de::Error>(self, value: #ty) -> ::core::result::Result<Self::Value, __E> {
-            let __input = ::serde::de::value::#deserializer::<__E>::new(value);
-            #decode
-        }
-    }
 }
