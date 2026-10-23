@@ -312,7 +312,7 @@ pub async fn metadata(
         .context("Failed to inspect environment")?;
         export = export
             .with_environment(&environment, collected.packages)
-            .with_module_owners(collected.module_owners);
+            .with_modules(collected.module_owners);
     }
 
     print_metadata(&export, printer)
