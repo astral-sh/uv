@@ -1,7 +1,13 @@
 use std::collections::BTreeMap;
+#[cfg(unix)]
+use std::fs::Permissions;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 
 use anyhow::Result;
 use assert_fs::prelude::*;
+#[cfg(unix)]
+use indoc::indoc;
 use insta::assert_snapshot;
 use serde_json::{Map, Value, json};
 use uv_distribution_types::PEP_850_SCHEMA;
@@ -281,6 +287,110 @@ fn skip_excessive_nvidia_cuda_override() -> Result<()> {
         .arg("--preview-features")
         .arg("wheel-variants")
         .arg("ok"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0
+    ");
+    Ok(())
+}
+
+/// A CUDA-only variant must not inspect SM, even when its override is invalid. CUDA detection is
+/// cached across resolution and wheel installation.
+#[cfg(unix)]
+#[test]
+fn nvidia_cuda_only_queries_once() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let links = context.temp_dir.child("links");
+    links.create_dir_all()?;
+    let metadata = json!({
+        "$schema": PEP_850_SCHEMA,
+        "default-priorities": { "namespace": ["nvidia"] },
+        "providers": {
+            "nvidia": {
+                "requires": ["nvidia-variant-provider==0.0.1"],
+                "plugin-api": "nvidia_variant_provider.plugin:NvidiaVariantPlugin"
+            }
+        },
+        "variants": { "gpu": { "nvidia": { "cuda_version_lower_bound": ["12.8"] } } }
+    })
+    .to_string();
+    let (_, wheel) = WheelBuilder::new(&"ok".parse()?, &"1.0.0".parse()?)
+        .files(&[("ok-1.0.0.dist-info/variant.json", &metadata)])
+        .build();
+    links
+        .child("ok-1.0.0-py3-none-any-gpu.whl")
+        .write_binary(&wheel)?;
+    links.child("ok-1.0.0-variants.json").write_str(&metadata)?;
+
+    let smi = context.bin_dir.child("nvidia-smi");
+    smi.write_str(indoc! {r#"
+        #!/bin/sh
+        printf '%s\n' "$*" >> "$UV_TEST_NVIDIA_LOG"
+        printf 'CUDA UMD Version : 12.8\n'
+    "#})?;
+    fs_err::set_permissions(smi.path(), Permissions::from_mode(0o755))?;
+    let log = context.temp_dir.child("nvidia-smi.log");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .env("LD_LIBRARY_PATH", "relative")
+        .env("UV_TEST_NVIDIA_LOG", log.path())
+        .env_remove(EnvVars::NV_VARIANT_PROVIDER_FORCE_CUDA_DRIVER_VERSION)
+        .env(EnvVars::NV_VARIANT_PROVIDER_FORCE_SM_ARCH, "invalid")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(links.path())
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("ok==1.0.0"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0
+    ");
+    assert_snapshot!(context.read(log.path()), @"-q");
+    Ok(())
+}
+
+/// An SM-only variant can use its override without a CUDA version or CUDA override.
+#[test]
+fn nvidia_sm_only_override() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let links = context.temp_dir.child("links");
+    links.create_dir_all()?;
+    let metadata = json!({
+        "$schema": PEP_850_SCHEMA,
+        "default-priorities": { "namespace": ["nvidia"] },
+        "providers": {
+            "nvidia": {
+                "requires": ["nvidia-variant-provider==0.0.1"],
+                "plugin-api": "nvidia_variant_provider.plugin:NvidiaVariantPlugin"
+            }
+        },
+        "variants": { "gpu": { "nvidia": { "sm_arch": ["89_real"] } } }
+    })
+    .to_string();
+    let (_, wheel) = WheelBuilder::new(&"ok".parse()?, &"1.0.0".parse()?)
+        .files(&[("ok-1.0.0.dist-info/variant.json", &metadata)])
+        .build();
+    links
+        .child("ok-1.0.0-py3-none-any-gpu.whl")
+        .write_binary(&wheel)?;
+    links.child("ok-1.0.0-variants.json").write_str(&metadata)?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .env(EnvVars::NV_VARIANT_PROVIDER_FORCE_CUDA_DRIVER_VERSION, "invalid")
+        .env(EnvVars::NV_VARIANT_PROVIDER_FORCE_SM_ARCH, "8.9")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(links.path())
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("ok==1.0.0"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]

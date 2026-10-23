@@ -24,11 +24,16 @@ serde = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 
+[target.'cfg(all(target_os = "linux", target_arch = "x86_64", target_env = "gnu"))'.dependencies]
+goblin = { workspace = true }
+serde_json = { workspace = true }
+
 [target.'cfg(all(target_os = "windows"))'.dependencies]
 windows = { workspace = true }
 
 [dev-dependencies]
 indoc = { workspace = true }
+tempfile = { workspace = true }
 
 [lints]
 workspace = true

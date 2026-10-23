@@ -5,48 +5,57 @@ use uv_pep440::Version;
 
 use crate::AcceleratorError;
 
-/// NVIDIA GPU capabilities.
-#[derive(Debug)]
-pub struct NvidiaGpu {
-    /// The NVIDIA kernel-mode driver version (e.g., `570.86.10`).
-    pub driver_version: Version,
-    /// The CUDA user-mode driver version (e.g., `12.8`), as distinct from the kernel driver
-    /// version used to select PyTorch indexes (e.g., `570.86.10`).
-    pub cuda_version: Version,
-    /// The highest compute capability among the detected GPUs.
-    pub compute_capability: Option<(u8, u8)>,
-}
+#[cfg(all(target_os = "linux", target_arch = "x86_64", target_env = "gnu"))]
+mod linux;
+
+/// NVIDIA GPU detection.
+pub struct NvidiaGpu;
 
 impl NvidiaGpu {
-    /// Detect the NVIDIA driver, CUDA user-mode driver version, and GPU compute capability.
-    pub fn detect() -> Result<Option<Self>, AcceleratorError> {
-        let Some(driver_version) = Self::detect_driver_version()? else {
-            return Ok(None);
-        };
-        let Some(output) = run_nvidia_smi(&["-q"])? else {
-            return Ok(None);
-        };
-        let Some(cuda_version) = output.lines().find_map(|line| {
+    /// Detect the CUDA user-mode driver version independently of the kernel driver version.
+    pub fn detect_cuda_version() -> Option<Version> {
+        #[cfg(all(target_os = "linux", target_arch = "x86_64", target_env = "gnu"))]
+        if let Some(version) = linux::cuda_version() {
+            return Some(version);
+        }
+        run_nvidia_smi(&["-q"]).ok()??.lines().find_map(|line| {
             let (key, value) = line.split_once(':')?;
             match key.trim() {
-                "CUDA Version" | "CUDA UMD Version" => value.trim().parse::<Version>().ok(),
+                "CUDA Version" | "CUDA UMD Version" => value.trim().parse().ok(),
                 _ => None,
             }
-        }) else {
-            return Ok(None);
+        })
+    }
+
+    /// Detect the highest compute capability among the visible GPUs.
+    pub fn detect_compute_capability() -> Option<(u8, u8)> {
+        let visibility = std::env::var_os("CUDA_VISIBLE_DEVICES");
+        let visibility = match &visibility {
+            Some(value) => Some(value.to_str()?),
+            None => None,
         };
-        // TODO(konsti): Filter GPUs by `CUDA_VISIBLE_DEVICES` before choosing compute capability.
-        let compute_capability = query_gpu("compute_cap")?.and_then(|output| {
-            output
-                .lines()
-                .filter_map(Self::parse_compute_capability)
-                .max()
-        });
-        Ok(Some(Self {
-            driver_version,
-            cuda_version,
-            compute_capability,
-        }))
+        if let Some(visibility) = visibility {
+            if visibility.is_empty() {
+                return None;
+            }
+            let output = query_gpu("uuid,pci.bus_id,compute_cap").ok()??;
+            return visible_capability(
+                &output,
+                visibility,
+                std::env::var("CUDA_DEVICE_ORDER").ok().as_deref(),
+            );
+        }
+        #[cfg(all(target_os = "linux", target_arch = "x86_64", target_env = "gnu"))]
+        if let Some(capability) = linux::compute_capability() {
+            return Some(capability);
+        }
+        query_gpu("compute_cap")
+            .ok()??
+            .lines()
+            .map(Self::parse_compute_capability)
+            .collect::<Option<Vec<_>>>()?
+            .into_iter()
+            .max()
     }
 
     /// Parse a CUDA compute capability in `major.minor` form (e.g., `8.9`).
@@ -94,6 +103,62 @@ impl NvidiaGpu {
         }
         Ok(None)
     }
+}
+
+/// CUDA ordinals are only predictable without CUDA's fastest-first heuristic for a single GPU or
+/// when PCI bus ordering is explicitly selected. UUID prefixes must identify exactly one GPU.
+fn visible_capability(output: &str, visibility: &str, order: Option<&str>) -> Option<(u8, u8)> {
+    struct Device<'a> {
+        uuid: &'a str,
+        bus_id: &'a str,
+        capability: Option<(u8, u8)>,
+    }
+    let mut devices = output
+        .lines()
+        .map(|line| {
+            let mut fields = line.split(',').map(str::trim);
+            let device = Device {
+                uuid: fields.next()?,
+                bus_id: fields.next()?,
+                capability: NvidiaGpu::parse_compute_capability(fields.next()?),
+            };
+            fields.next().is_none().then_some(device)
+        })
+        .collect::<Option<Vec<_>>>()?;
+    devices.sort_unstable_by_key(|device| device.bus_id);
+    let mut selected = Vec::new();
+    let mut maximum = None;
+    for token in visibility.split(',') {
+        let device = if token.starts_with("GPU-") {
+            let mut matches = devices
+                .iter()
+                .filter(|device| device.uuid.starts_with(token));
+            let device = matches.next()?;
+            if matches.next().is_some() {
+                return None;
+            }
+            device
+        } else {
+            let index = token.parse::<i64>().ok()?;
+            let Some(device) = usize::try_from(index)
+                .ok()
+                .and_then(|index| devices.get(index))
+            else {
+                // CUDA ignores this ordinal and every device after it.
+                break;
+            };
+            if devices.len() != 1 && order != Some("PCI_BUS_ID") {
+                return None;
+            }
+            device
+        };
+        if selected.contains(&device.bus_id) {
+            return None;
+        }
+        selected.push(device.bus_id);
+        maximum = maximum.max(Some(device.capability?));
+    }
+    maximum
 }
 
 /// Parse the CUDA driver version from the content of `/proc/driver/nvidia/version`.
@@ -144,7 +209,20 @@ mod tests {
     use uv_pep440::Version;
 
     use crate::AcceleratorError;
-    use crate::nvidia::{parse_nvidia_smi_driver_version, parse_proc_driver_nvidia_version};
+    use crate::nvidia::{
+        parse_nvidia_smi_driver_version, parse_proc_driver_nvidia_version, visible_capability,
+    };
+
+    #[test]
+    fn nvidia_smi_visibility_mask() {
+        let output = "GPU-aabb, 00000000:01:00.0, 8.0\nGPU-bbcc, 00000000:02:00.0, 9.0\n";
+        assert_eq!(visible_capability(output, "GPU-aa", None), Some((8, 0)));
+        assert_eq!(visible_capability(output, "0", None), None);
+        assert_eq!(
+            visible_capability(output, "0,-1,1", Some("PCI_BUS_ID")),
+            Some((8, 0))
+        );
+    }
 
     #[test]
     fn proc_driver_nvidia_version() -> Result<(), AcceleratorError> {

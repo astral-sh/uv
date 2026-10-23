@@ -87,6 +87,15 @@ pub struct VariantsJsonContent {
 }
 
 impl VariantsJsonContent {
+    /// Whether any variant requires a feature from the given namespace.
+    pub fn uses_feature(&self, namespace: &VariantNamespace, feature: &str) -> bool {
+        self.variants.values().any(|properties| {
+            properties
+                .get(namespace)
+                .is_some_and(|features| features.keys().any(|candidate| candidate.0 == feature))
+        })
+    }
+
     /// Parse a wheel's `variant.json`, validating its label against the wheel filename.
     ///
     /// PEP 825 requires a wheel to describe exactly the variant named in its filename.
@@ -178,13 +187,13 @@ impl VariantsJsonContent {
     /// Collect compatible features from static and detected providers.
     pub fn supported_properties<'a>(
         &self,
-        detected: impl IntoIterator<Item = (&'a VariantNamespace, &'a [SupportedVariantFeature])>,
+        detected: impl IntoIterator<Item = (&'a VariantNamespace, Vec<SupportedVariantFeature>)>,
     ) -> SupportedVariantProperties {
         let mut supported = self.static_supported_properties();
         for (namespace, features) in detected {
             let features = features
-                .iter()
-                .map(|feature| (feature.name.clone(), feature.values.clone()))
+                .into_iter()
+                .map(|feature| (feature.name, feature.values))
                 .collect();
             supported.properties.insert(namespace.clone(), features);
         }

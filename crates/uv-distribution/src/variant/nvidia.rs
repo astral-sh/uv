@@ -1,9 +1,9 @@
-use std::cell::LazyCell;
 use std::sync::LazyLock;
 
 use tracing::debug;
 use uv_distribution_types::{
     SupportedVariantFeature, VariantFeature, VariantMetadataError, VariantNamespace, VariantValue,
+    VariantsJsonContent,
 };
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionParseError};
@@ -43,8 +43,9 @@ const MAX_CUDA_VERSION_VALUES: usize = 1_024;
 // TODO(konsti): Move the NVIDIA variant provider into its own crate.
 /// The vendored implementation of `nvidia-variant-provider` 0.0.1.
 pub(super) struct NvidiaVariantProvider {
-    /// Cache capabilities so every package and installation stage uses the same result.
-    properties: LazyLock<Option<Vec<SupportedVariantFeature>>>,
+    /// Cache each capability separately, including failures, for the lifetime of the process.
+    cuda: LazyLock<Option<Vec<SupportedVariantFeature>>>,
+    sm: LazyLock<Option<SupportedVariantFeature>>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -75,24 +76,25 @@ enum NvidiaProviderError {
 impl NvidiaVariantProvider {
     pub(super) const fn new() -> Self {
         Self {
-            properties: LazyLock::new(|| match Self::detect_properties() {
+            cuda: LazyLock::new(|| match Self::detect_cuda_properties() {
                 Ok(properties) => properties,
                 Err(err) => {
-                    debug!("Skipping NVIDIA variant provider: {err}");
+                    debug!("Skipping NVIDIA CUDA properties: {err}");
+                    None
+                }
+            }),
+            sm: LazyLock::new(|| match Self::detect_sm_property() {
+                Ok(property) => property,
+                Err(err) => {
+                    debug!("Skipping NVIDIA SM property: {err}");
                     None
                 }
             }),
         }
     }
 
-    fn detect_properties() -> Result<Option<Vec<SupportedVariantFeature>>, NvidiaProviderError> {
-        let gpu = LazyCell::new(|| match NvidiaGpu::detect() {
-            Ok(gpu) => gpu,
-            Err(err) => {
-                debug!("Failed to detect NVIDIA GPU capabilities: {err}");
-                None
-            }
-        });
+    fn detect_cuda_properties() -> Result<Option<Vec<SupportedVariantFeature>>, NvidiaProviderError>
+    {
         let cuda_version = if let Ok(value) =
             std::env::var(EnvVars::NV_VARIANT_PROVIDER_FORCE_CUDA_DRIVER_VERSION)
             && !value.is_empty()
@@ -101,22 +103,26 @@ impl NvidiaVariantProvider {
                 .parse::<Version>()
                 .map_err(|source| NvidiaProviderError::InvalidCudaVersion { value, source })?
         } else {
-            let Some(gpu) = gpu.as_ref() else {
+            let Some(cuda_version) = NvidiaGpu::detect_cuda_version() else {
                 return Ok(None);
             };
-            if gpu.cuda_version < Version::new([MIN_CUDA_MAJOR, MIN_CUDA_MINOR])
-                || gpu.cuda_version > Version::new([MAX_CUDA_MAJOR, MAX_CUDA_MINOR])
+            if cuda_version < Version::new([MIN_CUDA_MAJOR, MIN_CUDA_MINOR])
+                || cuda_version > Version::new([MAX_CUDA_MAJOR, MAX_CUDA_MINOR])
             {
                 debug!(
                     "Skipping NVIDIA variant provider: CUDA user-mode driver version {} is \
                      outside the supported range {MIN_CUDA_MAJOR}.{MIN_CUDA_MINOR} to \
                      {MAX_CUDA_MAJOR}.{MAX_CUDA_MINOR}",
-                    gpu.cuda_version
+                    cuda_version
                 );
                 return Ok(None);
             }
-            gpu.cuda_version.clone()
+            cuda_version
         };
+        Ok(Some(Self::properties_for_cuda(&cuda_version)?))
+    }
+
+    fn detect_sm_property() -> Result<Option<SupportedVariantFeature>, NvidiaProviderError> {
         let compute_capability = if let Ok(value) =
             std::env::var(EnvVars::NV_VARIANT_PROVIDER_FORCE_SM_ARCH)
             && !value.is_empty()
@@ -126,20 +132,16 @@ impl NvidiaVariantProvider {
                     .ok_or(NvidiaProviderError::InvalidComputeCapability { value })?,
             )
         } else {
-            gpu.as_ref().and_then(|gpu| gpu.compute_capability)
+            NvidiaGpu::detect_compute_capability()
         };
-        Ok(Some(Self::properties_for_capabilities(
-            &cuda_version,
-            compute_capability,
-        )?))
+        Self::property_for_sm(compute_capability)
     }
 
     /// Implement the ordered properties of `nvidia-variant-provider` 0.0.1.
     ///
     /// See <https://github.com/wheelnext/nvidia-variant-provider/blob/v0.0.1/nvidia_variant_provider/plugin.py>.
-    fn properties_for_capabilities(
+    fn properties_for_cuda(
         cuda_version: &Version,
-        compute_capability: Option<(u8, u8)>,
     ) -> Result<Vec<SupportedVariantFeature>, NvidiaProviderError> {
         let release = cuda_version.release();
         let detected_major = release[0];
@@ -194,6 +196,12 @@ impl NvidiaVariantProvider {
                 });
             }
         }
+        Ok(properties)
+    }
+
+    fn property_for_sm(
+        compute_capability: Option<(u8, u8)>,
+    ) -> Result<Option<SupportedVariantFeature>, NvidiaProviderError> {
         if let Some((major, minor)) = compute_capability
             && (major, minor) >= MIN_COMPUTE_CAPABILITY
         {
@@ -204,12 +212,12 @@ impl NvidiaVariantProvider {
                 .chain([format!("{major}0_virtual")])
                 .map(VariantValue::try_from)
                 .collect::<Result<_, _>>()?;
-            properties.push(SupportedVariantFeature {
+            return Ok(Some(SupportedVariantFeature {
                 name: VariantFeature::try_from("sm_arch".to_string())?,
                 values: architectures,
-            });
+            }));
         }
-        Ok(properties)
+        Ok(None)
     }
 }
 
@@ -230,7 +238,19 @@ impl VendoredVariantProvider for NvidiaVariantProvider {
         Version::new([0, 0, 1])
     }
 
-    fn properties(&self) -> Option<&[SupportedVariantFeature]> {
-        self.properties.as_deref()
+    fn properties(&self, metadata: &VariantsJsonContent) -> Vec<SupportedVariantFeature> {
+        let mut properties = Vec::new();
+        if (metadata.uses_feature(&NAMESPACE, "cuda_version_lower_bound")
+            || metadata.uses_feature(&NAMESPACE, "cuda_version_upper_bound"))
+            && let Some(cuda) = self.cuda.as_ref()
+        {
+            properties.extend(cuda.iter().cloned());
+        }
+        if metadata.uses_feature(&NAMESPACE, "sm_arch")
+            && let Some(sm) = self.sm.as_ref()
+        {
+            properties.push(sm.clone());
+        }
+        properties
     }
 }

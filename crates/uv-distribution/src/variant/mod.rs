@@ -48,7 +48,7 @@ trait VendoredVariantProvider: Sync {
     /// The namespace of the emitted properties.
     fn namespace(&self) -> &VariantNamespace;
     /// Query the host for the compatible properties and their order.
-    fn properties(&self) -> Option<&[SupportedVariantFeature]>;
+    fn properties(&self, metadata: &VariantsJsonContent) -> Vec<SupportedVariantFeature>;
 }
 
 /// Collect the variant properties supported by enabled static and vendored providers.
@@ -74,7 +74,7 @@ pub fn supported_variant_properties(metadata: &VariantsJsonContent) -> Supported
                 }
                 return None;
             };
-            Some((namespace, provider.properties()?))
+            Some((namespace, provider.properties(metadata)))
         });
     metadata.supported_properties(detected)
 }
