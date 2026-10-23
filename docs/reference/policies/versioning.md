@@ -37,3 +37,6 @@ Cache versions are considered internal to uv, and so may be changed in a minor o
 The `uv.lock` schema version is considered part of the public API, and so will only be incremented
 in a minor release as a breaking change. See
 [Lockfile versioning](../../concepts/resolution.md#lockfile-versioning) for more.
+
+The `lockfile-v2` preview feature is highly experimental and is exempt from this policy. Its
+lockfile format may change incompatibly in patch releases.
