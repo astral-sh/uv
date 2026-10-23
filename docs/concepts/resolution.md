@@ -986,9 +986,12 @@ metadata and static dependency metadata retain `requires-dist` and `provides-ext
 their Core Metadata fields. A metadata table containing only dependency-group subtables omits the
 empty parent header.
 
-Name-only dependency edges and declarations use strings, such as `"requests"`, instead of inline
-tables. Declarations with specifiers, sources, extras, groups, or markers retain their tables.
-Resolved edges with extras, markers, or ambiguous package names also retain tables, with `extras`
+Registry dependency declarations use PEP 508 strings, such as `"requests>=2"` or
+`"requests[socks]>=2 ; sys_platform == 'linux'"`. This applies to workspace dependencies, package
+metadata, dependency groups, constraints, and overrides. Declarations with explicit indexes,
+conflict or group selectors, URL or local sources, or build-constraint hashes retain their tables.
+Name-only resolved dependency edges use strings, such as `"requests"`, instead of inline tables.
+Resolved edges with extras, markers, or ambiguous package names retain tables, with `extras`
 replacing `extra`. Global and package-specific relative `exclude-newer` cutoffs use
 `{ span = "P7D" }`, without the placeholder timestamps or separate `exclude-newer-span` field used
 in version 1.

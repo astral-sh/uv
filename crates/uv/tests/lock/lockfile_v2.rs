@@ -1231,11 +1231,21 @@ fn lockfile_v2_requirement_shorthand() -> Result<()> {
         requires-python = ">=3.12"
 
         [manifest]
-        dependencies = [{ name = "plain" }]
+        dependencies = [{ name = "plain", specifier = ">=2" }]
+
+        constraints = [{ name = "plain", specifier = "<3" }]
+        overrides = [
+            { name = "bounded", specifier = ">=1" },
+            { package = { name = "parent", version = "1.0.0" }, dependencies = [{ name = "plain", specifier = ">=2" }] },
+        ]
+        build-constraints = [
+            { name = "setuptools", specifier = ">=70" },
+            { name = "wheel", specifier = "==0.45.1", hashes = ["sha256:1234"] },
+        ]
 
         [manifest.dependency-groups]
-        dev = [{ name = "plain" }]
-        docs = { requires-python = ">=3.13", dependencies = [{ name = "plain" }] }
+        dev = [{ name = "plain", extras = ["feature"], specifier = ">=2", marker = "sys_platform == 'linux'" }]
+        docs = { requires-python = ">=3.13", dependencies = [{ name = "plain", specifier = ">=2" }] }
 
         [[package]]
         name = "project"
@@ -1246,6 +1256,9 @@ fn lockfile_v2_requirement_shorthand() -> Result<()> {
         requires-dist = [
             { name = "plain" },
             { name = "bounded", specifier = ">=1" },
+            { name = "combined", extras = ["foo", "bar"], specifier = ">=1,<3", marker = "sys_platform == 'linux' or sys_platform == 'darwin'" },
+            { name = "conflicting", specifier = ">=2", conflict = { package = "project", extra = "foo" } },
+            { name = "direct", url = "https://example.com/direct-1.0.0.tar.gz" },
             { name = "extra", extras = ["feature"] },
             { name = "group", groups = ["dev"] },
             { name = "marker", marker = "sys_platform == 'linux'" },
@@ -1254,7 +1267,7 @@ fn lockfile_v2_requirement_shorthand() -> Result<()> {
         ]
 
         [package.metadata.dependency-groups]
-        dev = [{ name = "plain" }]
+        dev = [{ name = "plain", extras = ["feature"], specifier = ">=2", marker = "sys_platform == 'linux'" }]
     "#};
     let lock = toml::from_str::<Lock>(input)?.to_toml()?;
     assert_snapshot!(lock, @r#"
@@ -1262,11 +1275,20 @@ fn lockfile_v2_requirement_shorthand() -> Result<()> {
     requires-python = ">=3.12"
 
     [workspace]
-    dependencies = ["plain"]
+    dependencies = ["plain>=2"]
+    constraints = ["plain<3"]
+    overrides = [
+        { package = { name = "parent", version = "1.0.0" }, dependencies = ["plain>=2"] },
+        "bounded>=1",
+    ]
+    build-constraints = [
+        "setuptools>=70",
+        { name = "wheel", specifier = "==0.45.1", hashes = ["sha256:1234"] },
+    ]
 
     [workspace.dependency-groups]
-    dev = ["plain"]
-    docs = { requires-python = ">=3.13", dependencies = ["plain"] }
+    dev = ["plain[feature]>=2 ; sys_platform == 'linux'"]
+    docs = { requires-python = ">=3.13", dependencies = ["plain>=2"] }
 
     [[package]]
     name = "project"
@@ -1275,17 +1297,20 @@ fn lockfile_v2_requirement_shorthand() -> Result<()> {
 
     [package.metadata]
     requires-dist = [
-        { name = "bounded", specifier = ">=1" },
-        { name = "extra", extras = ["feature"] },
+        "bounded>=1",
+        "combined[foo,bar]>=1,<3 ; sys_platform == 'darwin' or sys_platform == 'linux'",
+        { name = "conflicting", specifier = ">=2", conflict = { package = "project", extra = "foo" } },
+        { name = "direct", url = "https://example.com/direct-1.0.0.tar.gz" },
+        "extra[feature]",
         { name = "group", groups = ["dev"] },
         { name = "index", index = "https://example.com/simple" },
-        { name = "marker", marker = "sys_platform == 'linux'" },
+        "marker ; sys_platform == 'linux'",
         "plain",
         { name = "source", virtual = "child" },
     ]
 
     [package.metadata.dependency-groups]
-    dev = ["plain"]
+    dev = ["plain[feature]>=2 ; sys_platform == 'linux'"]
     "#);
     assert_eq!(Lock::from_canonical_toml(&lock)?.to_toml()?, lock);
     assert_eq!(toml::from_str::<Lock>(&lock)?.to_toml()?, lock);
@@ -1301,43 +1326,155 @@ fn lockfile_v2_requirement_shorthand() -> Result<()> {
     assert_snapshot!(diff_snapshot(&legacy, &lock, 3), @r#"
     --- old
     +++ new
-    @@ -1,15 +1,12 @@
+    @@ -1,24 +1,21 @@
     -version = 1
     +version = 2
      requires-python = ">=3.12"
 
     -[manifest]
-    -requirements = [{ name = "plain" }]
-    -
-    -[manifest.dependency-groups]
-    -dev = [{ name = "plain" }]
-    -docs = [{ name = "plain" }]
+    -requirements = [{ name = "plain", specifier = ">=2" }]
+    -constraints = [{ name = "plain", specifier = "<3" }]
     +[workspace]
-    +dependencies = ["plain"]
+    +dependencies = ["plain>=2"]
+    +constraints = ["plain<3"]
+     overrides = [
+    -    { package = { name = "parent", version = "1.0.0" }, dependencies = [{ name = "plain", specifier = ">=2" }] },
+    -    { name = "bounded", specifier = ">=1" },
+    +    { package = { name = "parent", version = "1.0.0" }, dependencies = ["plain>=2"] },
+    +    "bounded>=1",
+     ]
+     build-constraints = [
+    -    { name = "setuptools", specifier = ">=70" },
+    +    "setuptools>=70",
+         { name = "wheel", specifier = "==0.45.1", hashes = ["sha256:1234"] },
+     ]
 
+    -[manifest.dependency-groups]
+    -dev = [{ name = "plain", extras = ["feature"], marker = "sys_platform == 'linux'", specifier = ">=2" }]
+    -docs = [{ name = "plain", specifier = ">=2" }]
+    -
     -[manifest.group-requires-python]
     -docs = ">=3.13"
     +[workspace.dependency-groups]
-    +dev = ["plain"]
-    +docs = { requires-python = ">=3.13", dependencies = ["plain"] }
+    +dev = ["plain[feature]>=2 ; sys_platform == 'linux'"]
+    +docs = { requires-python = ">=3.13", dependencies = ["plain>=2"] }
 
      [[package]]
      name = "project"
-    @@ -23,9 +20,9 @@
+    @@ -27,17 +24,17 @@
+
+     [package.metadata]
+     requires-dist = [
+    -    { name = "bounded", specifier = ">=1" },
+    -    { name = "combined", extras = ["foo", "bar"], marker = "sys_platform == 'darwin' or sys_platform == 'linux'", specifier = ">=1,<3" },
+    +    "bounded>=1",
+    +    "combined[foo,bar]>=1,<3 ; sys_platform == 'darwin' or sys_platform == 'linux'",
+         { name = "conflicting", specifier = ">=2", conflict = { package = "project", extra = "foo" } },
+         { name = "direct", url = "https://example.com/direct-1.0.0.tar.gz" },
+    -    { name = "extra", extras = ["feature"] },
+    +    "extra[feature]",
          { name = "group", groups = ["dev"] },
          { name = "index", index = "https://example.com/simple" },
-         { name = "marker", marker = "sys_platform == 'linux'" },
+    -    { name = "marker", marker = "sys_platform == 'linux'" },
     -    { name = "plain" },
+    +    "marker ; sys_platform == 'linux'",
     +    "plain",
          { name = "source", virtual = "child" },
      ]
 
     -[package.metadata.requires-dev]
-    -dev = [{ name = "plain" }]
+    -dev = [{ name = "plain", extras = ["feature"], marker = "sys_platform == 'linux'", specifier = ">=2" }]
     +[package.metadata.dependency-groups]
-    +dev = ["plain"]
+    +dev = ["plain[feature]>=2 ; sys_platform == 'linux'"]
     "#);
     Ok(())
+}
+
+/// Registry PEP 508 declarations remain valid during offline lockfile upgrades and revalidation.
+#[test]
+#[cfg(feature = "test-pypi")]
+fn lockfile_v2_pep508_locked() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["idna>=3,<4"]
+    "#})?;
+    context.lock().assert().success();
+    let original = context.read("uv.lock");
+    context
+        .lock()
+        .args(["--offline", "--preview-features", "lockfile-v2"])
+        .assert()
+        .success();
+    let upgraded = context.read("uv.lock");
+    assert_snapshot!(diff_snapshot(&original, &upgraded, 3), @r#"
+    --- old
+    +++ new
+    @@ -1,5 +1,4 @@
+    -version = 1
+    -revision = 5
+    +version = 2
+     requires-python = ">=3.12"
+
+     [options]
+    @@ -19,8 +18,8 @@
+     version = "1.0.0"
+     source = { virtual = "." }
+     dependencies = [
+    -    { name = "idna" },
+    +    "idna",
+     ]
+
+     [package.metadata]
+    -requires-dist = [{ name = "idna", specifier = ">=3,<4" }]
+    +requires-dist = ["idna>=3,<4"]
+    "#);
+    assert_eq!(Lock::from_canonical_toml(&upgraded)?.to_toml()?, upgraded);
+    assert_eq!(toml::from_str::<Lock>(&upgraded)?.to_toml()?, upgraded);
+    context
+        .lock()
+        .args([
+            "--locked",
+            "--offline",
+            "--no-cache",
+            "--preview-features",
+            "lockfile-v2",
+        ])
+        .assert()
+        .success();
+    context
+        .tree()
+        .args(["--frozen", "--offline", "--preview-features", "lockfile-v2"])
+        .assert()
+        .success();
+    assert_eq!(context.read("uv.lock"), upgraded);
+    Ok(())
+}
+
+/// URL requirements retain their structured source representation.
+#[test]
+fn lockfile_v2_pep508_url_rejected() {
+    let input = indoc! {r#"
+        version = 2
+        requires-python = ">=3.12"
+
+        [workspace]
+        dependencies = ["requests @ https://example.com/requests-2.32.3.tar.gz"]
+    "#};
+    assert_snapshot!(Lock::from_canonical_toml(input).unwrap_err(), @"failed to deserialize canonical lock: URL requirements must use a table in the lockfile");
+    assert_snapshot!(toml::from_str::<Lock>(input).unwrap_err(), @r#"
+    TOML parse error at line 5, column 17
+      |
+    5 | dependencies = ["requests @ https://example.com/requests-2.32.3.tar.gz"]
+      |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    URL requirements must use a table in the lockfile
+    "#);
 }
 
 /// Git checkout settings round-trip in package identities, dependency edges, and declarations.
