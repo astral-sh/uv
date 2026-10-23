@@ -15,7 +15,6 @@ use std::str::FromStr;
 
 use glob::Pattern;
 use rustc_hash::{FxBuildHasher, FxHashSet};
-use serde::de::SeqAccess;
 use serde::{Deserialize, Deserializer, Serialize};
 use thiserror::Error;
 use tracing::instrument;
@@ -1150,50 +1149,14 @@ impl IntoIterator for Sources {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, DeserializeUntagged)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema), schemars(untagged))]
+#[serde(expecting = "a single source (as a map) or list of sources")]
 enum SourcesWire {
+    #[untagged(map)]
     One(Source),
+    #[untagged(seq)]
     Many(Vec<Source>),
-}
-
-impl<'de> serde::de::Deserialize<'de> for SourcesWire {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        struct Visitor;
-
-        impl<'de> serde::de::Visitor<'de> for Visitor {
-            type Value = SourcesWire;
-
-            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-                formatter.write_str("a single source (as a map) or list of sources")
-            }
-
-            fn visit_seq<A>(self, seq: A) -> Result<Self::Value, A::Error>
-            where
-                A: SeqAccess<'de>,
-            {
-                let sources = serde::de::Deserialize::deserialize(
-                    serde::de::value::SeqAccessDeserializer::new(seq),
-                )?;
-                Ok(SourcesWire::Many(sources))
-            }
-
-            fn visit_map<M>(self, mut map: M) -> Result<Self::Value, M::Error>
-            where
-                M: serde::de::MapAccess<'de>,
-            {
-                let source = serde::de::Deserialize::deserialize(
-                    serde::de::value::MapAccessDeserializer::new(&mut map),
-                )?;
-                Ok(SourcesWire::One(source))
-            }
-        }
-
-        deserializer.deserialize_any(Visitor)
-    }
 }
 
 impl TryFrom<SourcesWire> for Sources {
