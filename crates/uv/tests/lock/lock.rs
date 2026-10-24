@@ -4948,7 +4948,7 @@ fn lock_build_constraint_archive_hashes() -> Result<()> {
     ");
     assert_snapshot!(context.read("uv.lock"), @r#"
     version = 1
-    revision = 3
+    revision = 5
     requires-python = ">=3.12"
 
     [options]

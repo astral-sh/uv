@@ -19017,7 +19017,7 @@ fn project_build_hashes_repeated_constraints() -> Result<()> {
     insta::with_settings!({filters => context.filters()}, {
         assert_snapshot!(context.read("uv.lock"), @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
 
         [options]
@@ -19154,7 +19154,7 @@ fn project_build_hashes_repeated_constraints_with_markers() -> Result<()> {
     insta::with_settings!({filters => context.filters()}, {
         assert_snapshot!(context.read("uv.lock"), @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.8"
 
         [options]
@@ -19255,7 +19255,7 @@ fn project_build_hashes_repeated_file_urls() -> Result<()> {
     insta::with_settings!({filters => context.filters()}, {
         assert_snapshot!(context.read("uv.lock"), @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
 
         [options]
