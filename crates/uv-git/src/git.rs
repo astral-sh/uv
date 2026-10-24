@@ -636,7 +636,10 @@ fn ls_remote(
     }
     let refs = match reference {
         GitReference::Branch(name) => vec![format!("refs/heads/{name}")],
-        GitReference::Tag(name) => vec![format!("refs/tags/{name}^{{}}"), format!("refs/tags/{name}")],
+        GitReference::Tag(name) => vec![
+            format!("refs/tags/{name}^{{}}"),
+            format!("refs/tags/{name}"),
+        ],
         GitReference::BranchOrTag(name) | GitReference::BranchOrTagOrCommit(name) => vec![
             format!("refs/heads/{name}"),
             format!("refs/tags/{name}^{{}}"),
@@ -651,7 +654,9 @@ fn ls_remote(
     let stdout = str::from_utf8(&output.stdout)?;
     // Prefer branches over tags and peeled commits over annotated tag objects.
     for name in refs {
-        if let Some(oid) = stdout.lines().filter_map(|line| line.split_once('\t'))
+        if let Some(oid) = stdout
+            .lines()
+            .filter_map(|line| line.split_once('\t'))
             .find_map(|(oid, reference)| (reference == name).then_some(oid))
         {
             return Ok(Some(oid.parse()?));
@@ -932,6 +937,40 @@ mod tests {
     use indoc::indoc;
 
     use super::*;
+
+    #[test]
+    fn ls_remote_peels_annotated_tags() -> Result<()> {
+        let repo = tempfile::tempdir()?;
+        let git = |args: &[&str]| -> Result<String> {
+            let output = std::process::Command::new("git")
+                .current_dir(repo.path())
+                .args(["-c", "user.name=uv", "-c", "user.email=uv@example.com"])
+                .args(args)
+                .output()?;
+            anyhow::ensure!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            Ok(String::from_utf8(output.stdout)?.trim().to_owned())
+        };
+        git(&["init", "-q"])?;
+        git(&["commit", "-q", "--allow-empty", "-m", "initial"])?;
+        git(&["tag", "-a", "v1", "-m", "release"])?;
+        let commit = git(&["rev-parse", "HEAD"])?;
+        assert_ne!(commit, git(&["rev-parse", "refs/tags/v1"])?);
+        let url = SafeUrl::from_directory_path(repo.path()).unwrap();
+        for reference in [
+            GitReference::Tag("v1".into()),
+            GitReference::NamedRef("refs/tags/v1".into()),
+        ] {
+            assert_eq!(
+                ls_remote(&url, &reference, false, true)?,
+                Some(commit.parse()?)
+            );
+        }
+        Ok(())
+    }
 
     #[test]
     fn submodule_update_config_strips_credentials_from_origin_override() {
