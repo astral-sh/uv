@@ -10,8 +10,7 @@ use uv_workspace::dependency_groups::FlatDependencyGroups;
 use uv_workspace::pyproject::{Sources, ToolUvSources};
 use uv_workspace::{
     DiscoveryOptions, MemberDiscovery, MemberExclusions, VirtualProject, WorkspaceCache,
-    WorkspaceError,
-    WorkspaceErrorKind,
+    WorkspaceError, WorkspaceErrorKind,
 };
 
 use crate::metadata::{GitWorkspaceMember, LoweredRequirement, MetadataError};

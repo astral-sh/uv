@@ -14639,7 +14639,6 @@ fn frozen_lockfile_member_inside_project() -> Result<()> {
     Ok(())
 }
 
-
 #[test]
 fn export_no_sources_workspace_member_switch() -> Result<()> {
     let context = uv_test::test_context!("3.12");
