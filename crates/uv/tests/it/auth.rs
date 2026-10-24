@@ -1456,10 +1456,7 @@ fn logout_text_store_without_username_uses_unique_match() {
 
     uv_snapshot!(context.auth_logout()
         .arg("example.com"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Removed credentials for testuser@https://example.com/
     "
@@ -1503,10 +1500,7 @@ fn logout_text_store_without_username_prefers_token() {
 
     uv_snapshot!(context.auth_logout()
         .arg("https://example.com/simple"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Removed credentials for https://example.com/
     "
