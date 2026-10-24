@@ -42,12 +42,11 @@ jobs:
       - name: "Install Rust toolchain"
         run: rustup toolchain install --profile minimal
 
-      - uses: astral-sh/github-actions/rust-workspace-cache@374b3d54bd4be0644dd1bb437decde17acd776b8
+      - uses: astral-sh/github-actions/rust-workspace-cache@52ea66bbf7dbe95fc9e2baae530cb3827214c530
         with:
           prefix-key: v1-rust-workspace
           key: ${{ hashFiles('Cargo.toml') }}
           profile: fast-build-nightly
-          restore-build-script-mtimes: "true"
           save-if: ${{ inputs.save-rust-cache == 'true' }}
 
       - name: "Configure Python archive cache"
