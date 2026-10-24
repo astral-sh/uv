@@ -285,8 +285,8 @@ impl HashStrategy {
 
     /// Collect hashes from [`UnresolvedRequirement`] entries and constraints.
     ///
-    /// Repeated constraints intersect allowed hashes for registry pins and local files. Remote
-    /// archive URLs combine hashes across algorithms and reject conflicting digests for the same
+    /// Repeated constraints intersect allowed hashes for registry pins. Direct references
+    /// combine hashes across algorithms and reject conflicting digests for the same
     /// algorithm. Registry pins accept any allowed digest; direct references must match all
     /// supplied digests. When requirements and constraints both supply hashes, registry pins
     /// permit only shared hashes; direct references must match hashes from both sources.
