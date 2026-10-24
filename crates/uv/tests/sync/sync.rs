@@ -1726,19 +1726,16 @@ fn non_root() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "anyio==4.3.0 ; sys_platform == 'darwin'",
-            "anyio==4.2.0 ; sys_platform == 'win32'",
+            "anyio==4.3.0 ; python_version < '3.13'",
+            "anyio==4.2.0 ; python_version >= '3.13'",
         ]
         "#,
     )?;
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.sync().arg("--package").arg("anyio"), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    uv_snapshot!(context.filters(), context.sync().arg("--package").arg("anyio"), @"
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -1748,11 +1745,8 @@ fn non_root() -> Result<()> {
      + sniffio==1.3.1
     ");
 
-    uv_snapshot!(context.filters(), context.sync().arg("--package").arg("iniconfig"), @r"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    uv_snapshot!(context.filters(), context.sync().arg("--package").arg("iniconfig"), @"
+    exit_code: 2 (failure)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     error: Could not find root package `iniconfig`
@@ -1790,11 +1784,8 @@ fn non_root_non_unique() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.sync().arg("--package").arg("anyio"), @r"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    uv_snapshot!(context.filters(), context.sync().arg("--package").arg("anyio"), @"
+    exit_code: 2 (failure)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     error: Found multiple packages matching `anyio`

@@ -117,6 +117,13 @@ pub async fn sync(
         .await?
         {
             DiscoveredProject::Manifest(project) => {
+                let project = if let [name] = package.as_slice()
+                    && frozen.is_none()
+                {
+                    project.with_package_if_member(name)
+                } else {
+                    project
+                };
                 manifest_target = SyncManifest::Project(project);
                 SyncTarget::Manifest(&manifest_target)
             }
