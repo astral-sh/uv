@@ -968,7 +968,7 @@ mod tests {
                 manylinux_compatible: true,
                 gil_disabled: true,
                 debug_enabled: false,
-                is_cross: false,
+                target_override: None,
             },
         )
         .unwrap();
@@ -1004,7 +1004,7 @@ mod tests {
                 manylinux_compatible: true,
                 gil_disabled: true,
                 debug_enabled: false,
-                is_cross: false,
+                target_override: None,
             },
         )
         .unwrap();
@@ -1040,7 +1040,7 @@ mod tests {
                 manylinux_compatible: true,
                 gil_disabled: false,
                 debug_enabled: false,
-                is_cross: false,
+                target_override: None,
             },
         )
         .unwrap();

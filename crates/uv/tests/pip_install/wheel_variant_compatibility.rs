@@ -161,6 +161,57 @@ fn select_variant_by_static_provider_order() -> Result<()> {
     Ok(())
 }
 
+/// An explicit x86-64 target uses the platform defaults even when higher-level wheels exist.
+#[test]
+fn x86_64_target_uses_platform_defaults() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let links = context.temp_dir.child("links");
+    links.create_dir_all()?;
+    let mut metadata = json!({
+        "$schema": PEP_850_SCHEMA,
+        "default-priorities": { "namespace": ["x86_64"] },
+        "providers": { "x86_64": { "requires": ["x86_64-variant-provider==0.2.0"] } },
+    });
+    let mut variants = Map::new();
+    for level in ["v1", "v2", "v3", "v4"] {
+        let properties = json!({ "x86_64": { "level": [level] } });
+        metadata["variants"] = json!({ level: &properties });
+        variants.insert(level.to_owned(), properties);
+        let (_, wheel) = WheelBuilder::new(&"ok".parse()?, &"1.0.0".parse()?)
+            .files(&[
+                ("ok/variant.txt", level),
+                ("ok-1.0.0.dist-info/variant.json", &metadata.to_string()),
+            ])
+            .build();
+        links
+            .child(format!("ok-1.0.0-py3-none-any-{level}.whl"))
+            .write_binary(&wheel)?;
+    }
+    metadata["variants"] = variants.into();
+    links
+        .child("ok-1.0.0-variants.json")
+        .write_str(&metadata.to_string())?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(links.path())
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("--python-platform")
+        .arg("x86_64-unknown-linux-gnu")
+        .arg("ok==1.0.0"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0
+    ");
+    assert_snapshot!(context.read(context.site_packages().join("ok/variant.txt")), @"v2");
+    Ok(())
+}
+
 /// Fall back to an older release and reject its otherwise preferred incompatible NVIDIA variant.
 #[test]
 fn backtrack_to_compatible_nvidia_variant() -> Result<()> {

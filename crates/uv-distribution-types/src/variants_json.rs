@@ -95,6 +95,22 @@ pub struct SupportedVariantFeature {
     pub values: Vec<VariantValue>,
 }
 
+impl SupportedVariantFeature {
+    /// Construct a feature from its name and values, validating each component.
+    pub fn new(
+        name: impl Into<String>,
+        values: impl IntoIterator<Item = String>,
+    ) -> Result<Self, VariantMetadataError> {
+        Ok(Self {
+            name: VariantFeature::try_from(name.into())?,
+            values: values
+                .into_iter()
+                .map(VariantValue::try_from)
+                .collect::<Result<_, _>>()?,
+        })
+    }
+}
+
 /// A non-static provider requested by variant metadata.
 #[derive(Clone, Copy)]
 pub enum VariantProviderRequest<'a> {

@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 
 use uv_configuration::TargetTriple;
-use uv_platform_tags::{Tags, TagsError, TagsOptions};
+use uv_platform_tags::{Tags, TagsError, TagsOptions, TargetOverride};
 use uv_pypi_types::ResolverMarkerEnvironment;
 use uv_python_interpreter::Interpreter;
 use uv_python_types::PythonVersion;
@@ -34,15 +34,17 @@ pub fn resolution_tags<'env>(
         return Ok(Cow::Borrowed(interpreter.tags()?));
     }
 
-    let (platform, manylinux_compatible) = if let Some(python_platform) = python_platform {
+    let (platform, manylinux_compatible, target) = if let Some(python_platform) = python_platform {
         (
             python_platform.platform(),
             python_platform.manylinux_compatible(),
+            TargetOverride::PythonPlatform,
         )
     } else {
         (
             interpreter.platform().clone(),
             interpreter.manylinux_compatible(),
+            TargetOverride::PythonVersion,
         )
     };
 
@@ -61,7 +63,7 @@ pub fn resolution_tags<'env>(
             manylinux_compatible,
             gil_disabled: interpreter.gil_disabled(),
             debug_enabled: interpreter.debug_enabled(),
-            is_cross: true,
+            target_override: Some(target),
         },
     )?;
     Ok(Cow::Owned(tags))
