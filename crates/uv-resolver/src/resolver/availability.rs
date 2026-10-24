@@ -131,9 +131,7 @@ impl UnavailableVersion {
             Self::InvalidStructure => Cow::Borrowed("an invalid package format"),
             Self::PackageNameMismatch {
                 dist_name: wrong_name,
-            } => {
-                format!("the wrong package name in the index page (`{wrong_name}`)")
-            }
+            } => format!("the wrong package name in the index page (`{wrong_name}`)").into(),
             Self::Offline => Cow::Borrowed("to be downloaded from a registry"),
             Self::RequiresPython(requires_python) => {
                 Cow::Owned(format!("Python {requires_python}"))

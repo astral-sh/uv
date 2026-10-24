@@ -1751,7 +1751,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 filename,
             );
 
-            if let Some(incompatibility) = self.visit_candidate(&base_candidate, base_dist, package, name, pins, requests)? {
+            if let Some(incompatibility) =
+                self.visit_candidate(&base_candidate, base_dist, package, name, pins, requests)?
+            {
                 return Ok(Some(incompatibility));
             }
 
@@ -1803,7 +1805,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         {
             return Ok(Some(incompatibility));
         }
-        if let Some(incompatibility) = self.visit_candidate(&base_candidate, base_dist, package, name, pins, requests)? {
+        if let Some(incompatibility) =
+            self.visit_candidate(&base_candidate, base_dist, package, name, pins, requests)?
+        {
             return Ok(Some(incompatibility));
         }
 
@@ -1884,14 +1888,15 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         {
                             return Err(ResolveError::UnhashedPackage(candidate.name().clone()));
                         }
-                        Ok(None)
+                        Ok(())
                     },
                 )
             })
         } else {
             None
         };
-        pins.insert(candidate, dist, variants_json, request)
+        pins.insert(candidate, dist, variants_json, request)?;
+        Ok(None)
     }
 
     /// Check if the distribution is incompatible with the Python requirement, and if so, return

@@ -2425,9 +2425,7 @@ impl std::fmt::Display for PubGrubHint {
                     .join(", ");
                 write!(
                     f,
-                    "{}{} The index `{}` returned a malformed response, the index page for `{}` returned information for {}",
-                    "hint".bold().cyan(),
-                    ":".bold(),
+                    "The index `{}` returned a malformed response, the index page for `{}` returned information for {}",
                     index_url,
                     package.cyan(),
                     names
