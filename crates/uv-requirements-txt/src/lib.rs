@@ -807,7 +807,7 @@ fn parse_entry(
                     VerbatimUrl::from_absolute_path(path).map_err(|err| {
                         RequirementsTxtParserError::VerbatimUrl {
                             source: err,
-                            url: given.to_string(),
+                            url: given.clone(),
                             start,
                             end: s.cursor(),
                         }
@@ -816,7 +816,7 @@ fn parse_entry(
                     VerbatimUrl::parse_url(expanded.as_ref()).map_err(|err| {
                         RequirementsTxtParserError::Url {
                             source: err,
-                            url: given.to_string(),
+                            url: given.clone(),
                             start,
                             end: s.cursor(),
                         }
@@ -1074,10 +1074,7 @@ fn parse_option(
     let mut marker_start = None;
     let mut marker_text = String::new();
 
-    loop {
-        let Some(ch) = s.peek() else {
-            break;
-        };
+    while let Some(ch) = s.peek() {
 
         // Check for terminal characters (always, even when quoted).
         if !escape_next && matches!(ch, '\n' | '\r' | '#') {
