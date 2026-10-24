@@ -391,12 +391,12 @@ impl MemberExclusions {
     }
 
     /// Returns `true` if the given path should be excluded from discovery.
-    pub fn excludes_path(&self, path: &Path) -> bool {
+    fn excludes_path(&self, path: &Path) -> bool {
         self.paths.contains(path)
     }
 
     /// Returns `true` if the given package should be excluded from discovery.
-    pub fn excludes_package(&self, package: &PackageName) -> bool {
+    fn excludes_package(&self, package: &PackageName) -> bool {
         self.packages.contains(package)
     }
 }
@@ -1314,7 +1314,7 @@ impl Workspace {
 
             if !skip {
                 debug!(
-                    "Adding root workspace member: `{}`",
+                    "Adding root workspace member: {}",
                     workspace_root.simplified_display()
                 );
 
