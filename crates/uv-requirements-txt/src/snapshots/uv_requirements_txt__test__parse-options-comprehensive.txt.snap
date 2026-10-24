@@ -101,18 +101,22 @@ RequirementsTxt {
     find_links: [
         VerbatimUrl {
             url: SafeUrl {
-                scheme: "file",
+                scheme: "https",
                 cannot_be_a_base: false,
                 username: "",
                 password: None,
-                host: None,
+                host: Some(
+                    Domain(
+                        "example.com",
+                    ),
+                ),
                 port: None,
                 path: "/path/with%20spaces/packages",
                 query: None,
                 fragment: None,
             },
             given: Some(
-                "file:///path/with spaces/packages",
+                "https://example.com/path/with spaces/packages",
             ),
             expanded: false,
             force_relative: false,

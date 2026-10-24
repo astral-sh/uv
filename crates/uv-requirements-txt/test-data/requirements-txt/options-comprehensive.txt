@@ -5,7 +5,7 @@
 --extra-index-url=https://download.pytorch.org/whl/cpu; sys_platform == "linux"
 
 # Options with quoted values containing spaces.
---find-links "file:///path/with spaces/packages"
+--find-links "https://example.com/path/with spaces/packages"
 
 # Options with quoted values and markers.
 --find-links="https://example.com/simple" ; python_version >= "3.9"
