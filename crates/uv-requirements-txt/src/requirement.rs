@@ -4,8 +4,7 @@ use std::path::Path;
 use uv_errors::{Hinted, Hints};
 use uv_pep508::{
     PathHint, Pep508Error, Pep508ErrorSource, RequirementOrigin, TracingReporter,
-    UnnamedRequirement,
-    VersionOrUrl,
+    UnnamedRequirement, VersionOrUrl,
 };
 use uv_pypi_types::VerbatimParsedUrl;
 
@@ -77,10 +76,17 @@ impl RequirementsTxtRequirement {
         // requirements always refer to local directories (containing a `pyproject.toml` or
         // `setup.py`), so when the path doesn't exist, we should assume it's a directory rather
         // than a file with an unrecognized extension (like `foo.bar`).
-        let hint = if editable {
-            Some(PathHint::Directory)
-        } else {
-            None
+        let parse_unnamed = || {
+            if editable {
+                UnnamedRequirement::parse_with_hint(
+                    input,
+                    &working_dir,
+                    &mut TracingReporter,
+                    Some(PathHint::Directory),
+                )
+            } else {
+                UnnamedRequirement::parse(input, &working_dir, &mut TracingReporter)
+            }
         };
 
         // Attempt to parse as a PEP 508-compliant requirement.
@@ -88,12 +94,7 @@ impl RequirementsTxtRequirement {
             Ok(requirement) => {
                 // As a special-case, interpret `dagster` as `./dagster` if we're in editable mode.
                 if editable && requirement.version_or_url.is_none() {
-                    Ok(Self::Unnamed(UnnamedRequirement::parse_with_hint(
-                        input,
-                        &working_dir,
-                        &mut TracingReporter,
-                        hint,
-                    )?))
+                    Ok(Self::Unnamed(parse_unnamed()?))
                 } else {
                     Ok(Self::Named(requirement))
                 }
@@ -101,12 +102,7 @@ impl RequirementsTxtRequirement {
             Err(err) => match err.message {
                 Pep508ErrorSource::UnsupportedRequirement(_) => {
                     // If that fails, attempt to parse as a direct URL requirement.
-                    Ok(Self::Unnamed(UnnamedRequirement::parse_with_hint(
-                        input,
-                        &working_dir,
-                        &mut TracingReporter,
-                        hint,
-                    )?))
+                    Ok(Self::Unnamed(parse_unnamed()?))
                 }
                 _ => Err(err),
             },
