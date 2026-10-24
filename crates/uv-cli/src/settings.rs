@@ -877,7 +877,9 @@ impl RunSettings {
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
             recursion_depth: environment.run_recursion_depth.unwrap_or_default(),
-            max_recursion_depth: max_recursion_depth.unwrap_or(Self::DEFAULT_MAX_RECURSION_DEPTH),
+            max_recursion_depth: max_recursion_depth
+                .or(environment.run_max_recursion_depth)
+                .unwrap_or(Self::DEFAULT_MAX_RECURSION_DEPTH),
             malware_settings,
             #[cfg(unix)]
             run_rlimit_nofile: environment.run_rlimit_nofile,

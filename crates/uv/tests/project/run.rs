@@ -6044,6 +6044,62 @@ fn run_recursion_depth_invalid() {
 }
 
 #[test]
+fn run_max_recursion_depth_cli_override() {
+    let context = uv_test::test_context!("3.12");
+
+    uv_snapshot!(
+        context.filters(),
+        context.run()
+            .env(EnvVars::UV_RUN_RECURSION_DEPTH, "6")
+            .env(EnvVars::UV_RUN_MAX_RECURSION_DEPTH, "5")
+            .arg("--max-recursion-depth")
+            .arg("6")
+            .arg("python")
+            .arg("-c")
+            .arg("import os; print(os.environ['UV_RUN_RECURSION_DEPTH'])"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    7
+    "
+    );
+}
+
+#[test]
+fn run_max_recursion_depth_empty() {
+    let context = uv_test::test_context_with_versions!(&[]);
+
+    uv_snapshot!(
+        context.filters(),
+        context.run()
+            .env(EnvVars::UV_RUN_RECURSION_DEPTH, "101")
+            .env(EnvVars::UV_RUN_MAX_RECURSION_DEPTH, "")
+            .arg("python"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: `uv run` was recursively invoked 101 times which exceeds the limit of 100
+
+    hint: If you are running a script with `uv run` in the shebang, you may need to include the `--script` flag
+    "
+    );
+}
+
+#[test]
+fn run_max_recursion_depth_invalid() {
+    let context = uv_test::test_context_with_versions!(&[]);
+
+    uv_snapshot!(
+        context.filters(),
+        context.run()
+            .env(EnvVars::UV_RUN_MAX_RECURSION_DEPTH, "invalid")
+            .arg("python"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to parse environment variable `UV_RUN_MAX_RECURSION_DEPTH` with invalid value `invalid`: invalid digit found in string
+    "
+    );
+}
+
+#[test]
 fn run_uv_variable() {
     let context = uv_test::test_context!("3.12");
 
