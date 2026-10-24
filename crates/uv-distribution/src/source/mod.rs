@@ -2313,7 +2313,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                                 });
                             }
                             Err(err) => {
-                                debug!("Ignoring `pyproject.toml` from GitHub for `{source}`: {err}");
+                                debug!(
+                                    "Ignoring `pyproject.toml` from GitHub for `{source}`: {err}"
+                                );
                             }
                         }
                     }

@@ -61,7 +61,7 @@ impl GitSource {
 
     /// Resolve the OID of a reference or a revision from the Git repository.
     #[instrument(skip(self), fields(repository = %self.git.repository(), rev = ?self.git.precise()))]
-    pub fn ls_remote(&self) -> Result<Option<GitOid>> {
+    pub(crate) fn ls_remote(&self) -> Result<Option<GitOid>> {
         // Authenticate the URL, if necessary.
         let remote = if let Some(credentials) = GIT_STORE.get(self.git.repository()) {
             credentials.apply(self.git.url().clone())
