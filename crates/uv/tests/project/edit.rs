@@ -2,6 +2,10 @@
 
 #[cfg(feature = "test-git")]
 mod conditional_imports {
+    #[cfg(feature = "test-git-lfs")]
+    pub(crate) use anyhow::anyhow;
+    #[cfg(feature = "test-git-lfs")]
+    pub(crate) use uv_test::TestContext;
     pub(crate) use uv_test::{READ_ONLY_GITHUB_TOKEN, decode_token};
 }
 
@@ -24,6 +28,8 @@ use wiremock::{
 };
 
 #[cfg(feature = "test-git-lfs")]
+use uv_cache::{Cache, CacheBucket};
+#[cfg(feature = "test-git-lfs")]
 use uv_cache_key::{RepositoryUrl, cache_digest};
 use uv_fs::Simplified;
 use uv_redacted::SafeUrl;
@@ -31,6 +37,30 @@ use uv_static::EnvVars;
 
 use uv_test::package_server::PackageServer;
 use uv_test::{uv_snapshot, venv_bin_path};
+
+#[cfg(feature = "test-git-lfs")]
+fn git(context: &TestContext, repository: &Path, arguments: &[&str]) -> Result<String> {
+    let output = context
+        .external_command("git")
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .args([
+            "-c",
+            "user.name=Alice",
+            "-c",
+            "user.email=alice@example.com",
+            "-c",
+            "commit.gpgsign=false",
+        ])
+        .args(arguments)
+        .current_dir(repository)
+        .output()?
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    Ok(String::from_utf8(output)?.trim().to_owned())
+}
 
 /// Add a PyPI requirement.
 #[test]
@@ -846,6 +876,407 @@ fn add_git_lfs() -> Result<()> {
     Checked 1 package in [TIME]
     ");
 
+    Ok(())
+}
+
+#[test]
+#[cfg(all(feature = "test-git-lfs", feature = "test-pypi"))]
+fn add_git_cache_recovery_lfs() -> Result<()> {
+    let context = uv_test::test_context!("3.13")
+        // The old `uv` binary is installed from PyPI by `uv tool run`.
+        .with_exclude_newer("2026-10-04T00:00:00Z")
+        .with_env("GIT_CONFIG_NOSYSTEM", "1")
+        .with_git_lfs_config();
+
+    let repository = context.temp_dir.child("repository");
+    repository.create_dir_all()?;
+    git(&context, repository.path(), &["init", "--template="])?;
+    git(
+        &context,
+        repository.path(),
+        &["lfs", "install", "--local", "--skip-repo"],
+    )?;
+    repository.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "dependency"
+        version = "0.1.0"
+        requires-python = ">=3.13"
+    "#})?;
+    repository
+        .child(".gitattributes")
+        .write_str("module.py filter=lfs diff=lfs merge=lfs -text\n")?;
+    repository.child("module.py").write_str("VALUE = True\n")?;
+    git(&context, repository.path(), &["add", "."])?;
+    git(
+        &context,
+        repository.path(),
+        &["commit", "-m", "Initial version"],
+    )?;
+    let revision = git(&context, repository.path(), &["rev-parse", "HEAD"])?;
+    let short_revision = git(
+        &context,
+        repository.path(),
+        &["rev-parse", "--short", "HEAD"],
+    )?;
+    let url = SafeUrl::from_directory_path(repository.path())
+        .map_err(|()| anyhow!("invalid repository path"))?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.13"
+        dependencies = ["dependency"]
+
+        [tool.uv.sources]
+        dependency = {{ git = "{url}", rev = "{revision}", lfs = true }}
+    "#})?;
+
+    let repo_url = RepositoryUrl::parse(url.as_str())?;
+    let git_cache = context.cache_dir.child("git-v1");
+    let db_root = git_cache.child("db").child(cache_digest(&repo_url));
+    let checkout_root = git_cache
+        .child("checkouts")
+        .child(cache_digest(&repo_url.with_lfs(Some(true))))
+        .child(short_revision);
+    let lfs_checkout_objects = checkout_root.child(".git").child("lfs");
+    let ok_checkout_file = checkout_root.path().with_extension("ok");
+
+    // An LFS-enabled checkout materializes files even without smudge filters.
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--no-preview")
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .env("GIT_CONFIG_GLOBAL", if cfg!(windows) { "NUL" } else { "/dev/null" })
+        .arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    assert!(ok_checkout_file.exists());
+    assert!(lfs_checkout_objects.exists());
+    assert!(db_root.child(".git/lfs/objects").exists());
+    assert_eq!(
+        fs_err::read_to_string(checkout_root.child("module.py"))?,
+        "VALUE = True\n"
+    );
+    // Recreate the checkout from the cache with no source repository available.
+    fs_err::remove_file(context.temp_dir.child("uv.lock"))?;
+    fs_err::remove_dir_all(
+        Cache::from_path(context.cache_dir.path()).bucket(CacheBucket::SourceDistributions),
+    )?;
+    fs_err::remove_dir_all(checkout_root.path())?;
+    fs_err::rename(
+        repository.path(),
+        context.temp_dir.child("unavailable-repository").path(),
+    )?;
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--no-preview")
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .env("GIT_CONFIG_GLOBAL", if cfg!(windows) { "NUL" } else { "/dev/null" })
+        .arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    assert_eq!(
+        fs_err::read_to_string(checkout_root.child("module.py"))?,
+        "VALUE = True\n"
+    );
+
+    // Older uv versions must be able to reconstruct the same checkout.
+    fs_err::remove_file(context.temp_dir.child("uv.lock"))?;
+    fs_err::remove_dir_all(
+        Cache::from_path(context.cache_dir.path()).bucket(CacheBucket::SourceDistributions),
+    )?;
+    fs_err::remove_dir_all(checkout_root.path())?;
+
+    uv_snapshot!(context.filters(), context.command()
+        .arg("tool")
+        .arg("run")
+        .arg("uv@0.12.23")
+        .arg("lock")
+        .arg("--cache-dir")
+        .arg(context.cache_dir.path())
+        .arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Installed 1 package in [TIME]
+    Resolved 2 packages in [TIME]
+    ");
+
+    assert_eq!(
+        fs_err::read_to_string(checkout_root.child("module.py"))?,
+        "VALUE = True\n"
+    );
+
+    Ok(())
+}
+
+/// Reconstruct a checkout without requesting historical LFS objects absent from the shared database.
+#[test]
+#[cfg(feature = "test-git-lfs")]
+fn git_lfs_local_copy_ignores_recent_history() -> Result<()> {
+    use sha2::{Digest, Sha256};
+
+    let context = uv_test::test_context!("3.12")
+        .with_env("GIT_CONFIG_NOSYSTEM", "1")
+        .with_git_lfs_config();
+    let repository = context.temp_dir.child("repository");
+    repository.create_dir_all()?;
+    git(&context, repository.path(), &["init", "--template="])?;
+    git(
+        &context,
+        repository.path(),
+        &["lfs", "install", "--local", "--skip-repo"],
+    )?;
+    repository.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "dependency"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+    "#})?;
+    repository
+        .child(".gitattributes")
+        .write_str("module.py filter=lfs diff=lfs merge=lfs -text\n")?;
+    repository.child("module.py").write_str("VALUE = False\n")?;
+    git(&context, repository.path(), &["add", "."])?;
+    git(
+        &context,
+        repository.path(),
+        &["commit", "-m", "Initial LFS file"],
+    )?;
+    repository.child("module.py").write_str("VALUE = True\n")?;
+    git(&context, repository.path(), &["add", "module.py"])?;
+    git(
+        &context,
+        repository.path(),
+        &["commit", "-m", "Update LFS file"],
+    )?;
+    let revision = git(&context, repository.path(), &["rev-parse", "HEAD"])?;
+    let short_revision = git(
+        &context,
+        repository.path(),
+        &["rev-parse", "--short", "HEAD"],
+    )?;
+    let url = SafeUrl::from_directory_path(repository.path())
+        .map_err(|()| anyhow!("invalid repository path"))?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dependency"]
+
+        [tool.uv.sources]
+        dependency = {{ git = "{url}", rev = "{revision}", lfs = true }}
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock()
+        .args(["--no-preview", "--offline"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    let repository_url = RepositoryUrl::parse(url.as_str())?;
+    let git_cache = context.cache_dir.child("git-v1");
+    let database = git_cache.child("db").child(cache_digest(&repository_url));
+    let previous = Sha256::digest(b"VALUE = False\n");
+    let previous_object = database.child(format!(
+        ".git/lfs/objects/{:02x}/{:02x}/{}",
+        previous[0],
+        previous[1],
+        hex::encode(previous)
+    ));
+    assert!(!previous_object.exists());
+    fs_err::remove_dir_all(git_cache.child("checkouts"))?;
+    fs_err::remove_file(context.temp_dir.child("uv.lock"))?;
+    fs_err::remove_dir_all(
+        Cache::from_path(context.cache_dir.path()).bucket(CacheBucket::SourceDistributions),
+    )?;
+    fs_err::rename(
+        repository.path(),
+        context.temp_dir.child("unavailable-repository").path(),
+    )?;
+    uv_snapshot!(context.filters(), context.lock()
+        .args(["--no-preview", "--offline"])
+        .env("GIT_CONFIG_COUNT", "3")
+        .env("GIT_CONFIG_KEY_0", "lfs.fetchrecentalways")
+        .env("GIT_CONFIG_VALUE_0", "true")
+        .env("GIT_CONFIG_KEY_1", "lfs.fetchrecentcommitsdays")
+        .env("GIT_CONFIG_VALUE_1", "1")
+        .env("GIT_CONFIG_KEY_2", "lfs.fetchrecentrefsdays")
+        .env("GIT_CONFIG_VALUE_2", "0"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    let checkout = git_cache
+        .child("checkouts")
+        .child(cache_digest(&repository_url.with_lfs(Some(true))))
+        .child(short_revision);
+    assert_eq!(
+        fs_err::read_to_string(checkout.child("module.py"))?,
+        "VALUE = True\n"
+    );
+    assert!(checkout.path().with_extension("ok").exists());
+    assert!(!previous_object.exists());
+    Ok(())
+}
+
+/// Repair a cached checkout using the local LFS adapter despite a configured endpoint and custom adapter.
+#[tokio::test]
+#[cfg(feature = "test-git-lfs")]
+async fn git_lfs_ready_checkout_local_repair() -> Result<()> {
+    let context = uv_test::test_context!("3.13")
+        .with_env("GIT_CONFIG_NOSYSTEM", "1")
+        .with_git_lfs_config()
+        .with_cache_dir("cache=local");
+    let endpoint = MockServer::start().await;
+
+    let repository = context.temp_dir.child("repository");
+    repository.create_dir_all()?;
+    git(&context, repository.path(), &["init", "--template="])?;
+    git(
+        &context,
+        repository.path(),
+        &["lfs", "install", "--local", "--skip-repo"],
+    )?;
+    repository.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "dependency"
+        version = "0.1.0"
+        requires-python = ">=3.13"
+    "#})?;
+    repository
+        .child(".gitattributes")
+        .write_str("module.py filter=lfs diff=lfs merge=lfs -text\n")?;
+    repository.child("module.py").write_str("VALUE = True\n")?;
+    let url = SafeUrl::from_directory_path(repository.path())
+        .map_err(|()| anyhow!("invalid repository path"))?;
+    repository
+        .child(".lfsconfig")
+        .write_str(&format!("[lfs]\nurl = {}\n", endpoint.uri()))?;
+    git(&context, repository.path(), &["add", "."])?;
+    git(
+        &context,
+        repository.path(),
+        &["commit", "-m", "Initial version"],
+    )?;
+    let revision = git(&context, repository.path(), &["rev-parse", "HEAD"])?;
+    let short_revision = git(
+        &context,
+        repository.path(),
+        &["rev-parse", "--short", "HEAD"],
+    )?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.13"
+        dependencies = ["dependency"]
+
+        [tool.uv.sources]
+        dependency = {{ git = "{url}", rev = "{revision}", lfs = true }}
+    "#})?;
+
+    let repo_url = RepositoryUrl::parse(url.as_str())?;
+    let git_cache = context.cache_dir.child("git-v1");
+    let db_root = git_cache.child("db").child(cache_digest(&repo_url));
+    let checkout_root = git_cache
+        .child("checkouts")
+        .child(cache_digest(&repo_url.with_lfs(Some(true))))
+        .child(short_revision);
+    let lfs_checkout_objects = checkout_root.child(".git").child("lfs");
+    let ok_checkout_file = checkout_root.path().with_extension("ok");
+
+    // Prime the database from the local source without installing smudge filters.
+    let gitconfig = context.temp_dir.child("gitconfig");
+    gitconfig.write_str(&format!("[lfs]\nurl = {url}\n"))?;
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--no-preview")
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .env("GIT_CONFIG_GLOBAL", gitconfig.path())
+        .arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    assert!(ok_checkout_file.exists());
+    assert!(lfs_checkout_objects.exists());
+    assert!(db_root.child(".git/lfs/objects").exists());
+    assert_eq!(
+        fs_err::read_to_string(checkout_root.child("module.py"))?,
+        "VALUE = True\n"
+    );
+
+    // If the inherited URL-specific selector wins, the custom adapter writes a sentinel.
+    // Its directory URL differs from the database URL only by a trailing slash.
+    gitconfig.write_str(indoc! {r#"
+        [lfs]
+        standalonetransferagent = remote-adapter
+        [lfs "customtransfer.remote-adapter"]
+        path = git
+        args = config --file adapter-called sentinel.called true
+        concurrent = false
+    "#})?;
+    let database_url = SafeUrl::from_directory_path(db_root.path())
+        .map_err(|()| anyhow!("invalid database path"))?;
+
+    // Repair missing LFS objects from the database without contacting the configured endpoint.
+    fs_err::remove_file(context.temp_dir.child("uv.lock"))?;
+    fs_err::remove_dir_all(
+        Cache::from_path(context.cache_dir.path()).bucket(CacheBucket::SourceDistributions),
+    )?;
+    // Leave the `.ok` marker in place to model a checkout that looks ready after losing its LFS objects.
+    fs_err::remove_dir_all(lfs_checkout_objects.path())?;
+    fs_err::rename(
+        repository.path(),
+        context.temp_dir.child("unavailable-repository").path(),
+    )?;
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--no-preview")
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .env("GIT_CONFIG_GLOBAL", gitconfig.path())
+        .env("GIT_CONFIG_COUNT", "1")
+        .env("GIT_CONFIG_KEY_0", format!("lfs.{database_url}.standalonetransferagent"))
+        .env("GIT_CONFIG_VALUE_0", "remote-adapter")
+        .arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    assert!(lfs_checkout_objects.exists());
+    assert!(!checkout_root.child("adapter-called").exists());
+    assert!(
+        endpoint
+            .received_requests()
+            .await
+            .is_some_and(|requests| requests.is_empty())
+    );
+
+    context
+        .external_command("git")
+        .args(["status", "--porcelain"])
+        .current_dir(checkout_root.path())
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .env(
+            "GIT_CONFIG_GLOBAL",
+            if cfg!(windows) { "NUL" } else { "/dev/null" },
+        )
+        .assert()
+        .success()
+        .stdout("");
+    assert!(ok_checkout_file.exists());
     Ok(())
 }
 
