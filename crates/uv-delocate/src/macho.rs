@@ -48,7 +48,7 @@ impl Arch {
     }
 
     /// Returns the architecture name as used in wheel platform tags.
-    fn as_str(&self) -> &'static str {
+    fn as_str(self) -> &'static str {
         match self {
             Self::X86_64 => "x86_64",
             Self::Arm64 => "arm64",

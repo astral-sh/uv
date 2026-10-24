@@ -761,7 +761,7 @@ mod tests {
         fn update_wheel_macos_version(input: &str, version: MacOSVersion) -> String {
             let filename = WheelFilename::from_str(input).unwrap();
             let platform_tags = filename.platform_tags();
-            let updated = update_platform_tags_version(&platform_tags, version);
+            let updated = update_platform_tags_version(platform_tags, version);
             filename.with_platform_tags(&updated).to_string()
         }
 
