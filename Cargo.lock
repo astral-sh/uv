@@ -6818,9 +6818,9 @@ version = "0.0.97"
 dependencies = [
  "anyhow",
  "assert_fs",
- "cap-primitives",
  "astral-ini",
  "astral-mail-headers",
+ "cap-primitives",
  "csv",
  "data-encoding",
  "fastrand",

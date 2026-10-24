@@ -5,9 +5,9 @@ use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::fixture::ChildPath;
 use assert_fs::prelude::*;
-use indoc::{formatdoc, indoc};
 #[cfg(unix)]
 use fs_err::os::unix::fs::symlink;
+use indoc::{formatdoc, indoc};
 
 #[cfg(unix)]
 use uv_extract::dirhash::dirhash_path;
