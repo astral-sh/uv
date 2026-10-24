@@ -7985,6 +7985,7 @@ dependencies = [
  "tokio-util",
  "toml",
  "uv-cache",
+ "uv-cache-key",
  "uv-client",
  "uv-configuration",
  "uv-distribution-filename",

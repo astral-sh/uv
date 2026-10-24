@@ -11,29 +11,13 @@ use indoc::indoc;
 #[cfg(target_os = "linux")]
 use std::process::Command;
 
-use uv_cache_key::cache_digest;
 #[cfg(unix)]
 use uv_fs::link::{LinkMode, LinkOptions, link_dir};
 use uv_static::EnvVars;
 
 #[cfg(unix)]
 use uv_test::assert_path_missing;
-use uv_test::{TestContext, uv_snapshot};
-
-/// Hold the same shared cache lock as the subprocess.
-fn hold_cache_lock(context: &TestContext) -> Result<fs_err::File> {
-    let key = std::path::absolute(context.cache_dir.join(".lock"))?;
-    let path = context.temp_dir.join("locks").join(cache_digest(&key));
-    fs_err::create_dir_all(path.parent().unwrap())?;
-    let file = fs_err::OpenOptions::new()
-        .read(true)
-        .write(true)
-        .create(true)
-        .truncate(false)
-        .open(path)?;
-    file.lock()?;
-    Ok(file)
-}
+use uv_test::uv_snapshot;
 
 /// `cache clean` should remove all packages.
 #[test]
@@ -341,7 +325,7 @@ fn clean_force() -> Result<()> {
         .success();
 
     // When locked, `--force` should proceed without blocking
-    let _cache = hold_cache_lock(&context)?;
+    let _cache = context.hold_lock(&context.cache_dir.join(".lock"))?;
     uv_snapshot!(context.filters(), context.clean().arg("--verbose").arg("--force"), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -580,17 +564,17 @@ fn clean_package_empty_shard_without_search_permission() -> Result<()> {
 
 #[test]
 fn cache_timeout() -> Result<()> {
-    let context =
-        uv_test::test_context!("3.12").with_filter((r"locks[/\\][0-9a-f]+", "locks/[CACHE_LOCK]"));
+    let context = uv_test::test_context!("3.12");
 
     // Simulate another uv process running and locking the cache, e.g., with a source build.
-    let _cache = hold_cache_lock(&context)?;
+    let cache = context.hold_lock(&context.cache_dir.join(".lock"))?;
+    let context = context.with_filtered_path(cache.path(), "CACHE_LOCK");
 
     uv_snapshot!(context.filters(), context.clean().env(EnvVars::UV_LOCK_TIMEOUT, "1"), @"
     exit_code: 2 (failure)
     ----- stderr -----
     Cache is currently in-use, waiting for other uv processes to finish (use `--force` to override)
-    error: Timeout ([TIME]) when waiting for lock on `[CACHE_DIR]/` at `locks/[CACHE_LOCK]`, is another uv process running? You can set `UV_LOCK_TIMEOUT` to increase the timeout.
+    error: Timeout ([TIME]) when waiting for lock on `[CACHE_DIR]/` at `[CACHE_LOCK]/`, is another uv process running? You can set `UV_LOCK_TIMEOUT` to increase the timeout.
     ");
     Ok(())
 }

@@ -556,6 +556,28 @@ impl TestContext {
         self
     }
 
+    /// Return the physical lock file used by commands in this test context.
+    pub fn lock_path(&self, key: &Path) -> std::io::Result<PathBuf> {
+        Ok(self
+            .root
+            .join("locks")
+            .join(uv_cache_key::cache_digest(&std::path::absolute(key)?)))
+    }
+
+    /// Hold an exclusive lock that a separate uv process can contend for.
+    pub fn hold_lock(&self, key: &Path) -> std::io::Result<fs_err::File> {
+        let path = self.lock_path(key)?;
+        fs_err::create_dir_all(self.root.join("locks"))?;
+        let file = fs_err::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(path)?;
+        file.lock()?;
+        Ok(file)
+    }
+
     /// Add extra standard filtering for a given path.
     #[must_use]
     pub fn with_filtered_path(mut self, path: &Path, name: &str) -> Self {
@@ -1312,7 +1334,7 @@ impl TestContext {
 
     /// Only the environment variables of [`TestContext::add_shared_options`].
     pub fn add_shared_env(&self, command: &mut Command, activate_venv: bool) {
-        command.env(EnvVars::UV_LOCK_DIR, self.temp_dir.join("locks"));
+        command.env(EnvVars::UV_LOCK_DIR, self.root.join("locks"));
         // Push the test context bin to the front of the PATH
         let path = env::join_paths(std::iter::once(self.bin_dir.to_path_buf()).chain(
             env::split_paths(&env::var(EnvVars::PATH).unwrap_or_default()),
