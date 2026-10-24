@@ -6934,7 +6934,6 @@ dependencies = [
  "petgraph",
  "rustc-hash",
  "serde",
- "serde-untagged",
  "serde_json",
  "smallvec",
  "thiserror",

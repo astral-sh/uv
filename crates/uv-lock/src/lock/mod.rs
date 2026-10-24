@@ -9351,20 +9351,34 @@ impl<'de> serde::Deserialize<'de> for DependencyWire {
     where
         D: serde::Deserializer<'de>,
     {
-        serde_untagged::UntaggedEnumVisitor::new()
-            .string(|name| {
-                Ok(Self(DependencyWireTable {
+        struct DependencyVisitor;
+
+        impl<'de> serde::de::Visitor<'de> for DependencyVisitor {
+            type Value = DependencyWire;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                formatter.write_str("a package name or a dependency table")
+            }
+
+            fn visit_str<E: serde::de::Error>(self, name: &str) -> Result<Self::Value, E> {
+                Ok(DependencyWire(DependencyWireTable {
                     package_id: PackageIdForDependency {
-                        name: PackageName::from_str(name).map_err(serde::de::Error::custom)?,
+                        name: PackageName::from_str(name).map_err(E::custom)?,
                         version: None,
                         source: None,
                     },
                     extra: BTreeSet::new(),
                     marker: SimplifiedMarkerTree::default(),
                 }))
-            })
-            .map(|map| map.deserialize().map(Self))
-            .deserialize(deserializer)
+            }
+
+            fn visit_map<M: serde::de::MapAccess<'de>>(self, map: M) -> Result<Self::Value, M::Error> {
+                serde::Deserialize::deserialize(serde::de::value::MapAccessDeserializer::new(map))
+                    .map(DependencyWire)
+            }
+        }
+
+        deserializer.deserialize_any(DependencyVisitor)
     }
 }
 
