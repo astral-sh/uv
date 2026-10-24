@@ -134,6 +134,7 @@ impl InternerShared {
                 | Variable::Version(_)
                 | Variable::In { .. }
                 | Variable::Contains { .. }
+                | Variable::SysAbiFeature(_)
                 | Variable::List(_) => {
                     for child in node.children.nodes() {
                         if !child.is_true() && !child.is_false() && visited.insert(child.index()) {
