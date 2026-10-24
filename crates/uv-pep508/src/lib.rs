@@ -1969,7 +1969,7 @@ mod tests {
     #[test]
     fn wildcard_version_marker_on_rhs() {
         let requirement =
-            Requirement::<Url>::from_str("pytest; '3.7.*' == python_full_version").unwrap();
+            Requirement::<VerbatimUrl>::from_str("pytest; '3.7.*' == python_full_version").unwrap();
         assert_eq!(
             requirement.to_string(),
             "pytest ; python_full_version == '3.7.*'"
