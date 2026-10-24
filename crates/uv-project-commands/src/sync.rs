@@ -128,6 +128,16 @@ pub async fn sync(
                 SyncTarget::Manifest(&manifest_target)
             }
             DiscoveredProject::Lockfile(workspace) => {
+                for name in &package {
+                    if !workspace
+                        .lock()
+                        .packages()
+                        .iter()
+                        .any(|package| package.name() == name)
+                    {
+                        anyhow::bail!("Package `{name}` not found in lockfile workspace");
+                    }
+                }
                 frozen_workspace = workspace;
                 let project_name = frozen_workspace.current_project(project_dir).cloned();
                 SyncTarget::Lockfile {

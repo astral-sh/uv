@@ -2287,6 +2287,7 @@ impl VirtualProject {
     }
 
     /// Select a workspace member, retaining the current project for a transitive package.
+    #[must_use]
     pub fn with_package_if_member(self, package: &PackageName) -> Self {
         let workspace = match &self {
             Self::Project(project) => &project.workspace,
