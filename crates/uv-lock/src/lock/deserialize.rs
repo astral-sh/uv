@@ -16,19 +16,21 @@ use smallvec::SmallVec;
 use toml_parser::decoder::{Encoding, IntegerRadix, ScalarKind};
 use toml_parser::{Raw, Span};
 
-use super::Lock;
+use super::marker_cache::UnparsedMarker;
+use super::{Lock, LockWire};
 
 /// Parses a canonical lock directly into its existing, validated wire format.
 pub(super) fn from_str(input: &str) -> Result<Lock, Error> {
     let mut cursor = Cursor::new(input);
-    let lock = Lock::deserialize(DocumentDeserializer {
+    let wire = LockWire::<UnparsedMarker<'_>>::deserialize(DocumentDeserializer {
         cursor: &mut cursor,
     })?;
     cursor.skip_whitespace();
     if cursor.peek().is_some() {
         return Err(cursor.unsupported("unexpected trailing input"));
     }
-    Ok(lock)
+    let wire = wire.parse_markers().map_err(de::Error::custom)?;
+    Lock::try_from(wire).map_err(de::Error::custom)
 }
 
 /// An error returned when parsing a lockfile without the general TOML fallback.
@@ -927,6 +929,39 @@ dependencies = [
         let actual = from_str(CANONICAL_LOCK).expect("valid canonical lock");
 
         assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn large_borrowed_and_escaped_markers_match_toml() {
+        let marker = format!(
+            "{}python_full_version < '3.14'",
+            "python_full_version >= '3.12' and ".repeat(16)
+        );
+        let escaped_marker = marker.replace("python_full_version", r"python_\u0066ull_version");
+        let input = CANONICAL_LOCK
+            .replace(
+                "requires-python = \">=3.12\"\n",
+                &format!(
+                    "requires-python = \">=3.12\"\nresolution-markers = [\"{marker}\"]\nsupported-markers = [\"{marker}\"]\nrequired-markers = [\"{marker}\"]\n"
+                ),
+            )
+            .replace(
+                "{ name = \"dependency\" }",
+                &format!("{{ name = \"dependency\", marker = \"{escaped_marker}\" }}"),
+            );
+        let expected: Lock = toml::from_str(&input).expect("valid TOML lock");
+        assert_eq!(from_str(&input).expect("valid canonical lock"), expected);
+    }
+
+    #[test]
+    fn invalid_marker_preserves_toml_error() {
+        let input = CANONICAL_LOCK.replace(
+            "{ name = \"dependency\" }",
+            "{ name = \"dependency\", marker = \"python_version >= invalid\" }",
+        );
+        let expected = toml::from_str::<Lock>(&input).expect_err("invalid marker");
+        let actual = Lock::from_toml(&input).expect_err("invalid marker");
+        assert_eq!(actual.to_string(), expected.to_string());
     }
 
     #[test]
