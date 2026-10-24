@@ -1,0 +1,178 @@
+name: Windows segment heap timings
+
+on:
+  push:
+    branches: [charlie/windows-segment-heap]
+    paths:
+      - .github/workflows/windows-segment-heap-timings.yml
+      - .github/scripts/inspect-rustc-heap.py
+
+permissions:
+  contents: read
+
+env:
+  CARGO_INCREMENTAL: 0
+  CARGO_NET_RETRY: 10
+  CARGO_TERM_COLOR: always
+  RUSTUP_MAX_RETRIES: 10
+  UV_INTERNAL__BUILD_GIT_INFO: 1
+  UV_LOCKED: 1
+
+jobs:
+  build-binary-windows-x86_64:
+    name: "x64 / ${{ matrix.heap }} / ${{ matrix.sample }}"
+    timeout-minutes: 55
+    runs-on: windows-latest
+    env:
+      RUSTC_BOOTSTRAP: 1
+    strategy:
+      fail-fast: false
+      matrix:
+        sample: [1, 2, 3]
+        heap: [stock, segment]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Dev Drive
+        run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
+
+      - name: Configure heap policy
+        env:
+          HEAP: ${{ matrix.heap }}
+        run: |
+          $path = 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Segment Heap'
+          $value = Get-ItemPropertyValue -Path $path -Name Enabled -ErrorAction SilentlyContinue
+          Write-Host "Image $Env:ImageOS/$Env:ImageVersion, stock Enabled = '$value'"
+          if ($Env:HEAP -eq 'segment') {
+            reg.exe add 'HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Segment Heap' /v Enabled /t REG_DWORD /d 1 /f
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+          $value = Get-ItemPropertyValue -Path $path -Name Enabled -ErrorAction SilentlyContinue
+          Write-Host "Effective registry Enabled = '$value'"
+          exit 0
+
+      # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
+      - name: Copy Git Repo to Dev Drive
+        run: |
+          Copy-Item -Path "${{ github.workspace }}" -Destination "$Env:UV_WORKSPACE" -Recurse
+
+      - name: "Install Rust toolchain"
+        working-directory: ${{ env.UV_WORKSPACE }}
+        run: rustup toolchain install --profile minimal
+
+      - name: Inspect the compiler heap
+        continue-on-error: true
+        working-directory: ${{ env.UV_WORKSPACE }}
+        env:
+          HEAP: ${{ matrix.heap }}
+        run: python .github/scripts/inspect-rustc-heap.py $Env:HEAP
+
+      - uses: astral-sh/github-actions/rust-workspace-cache@3c9fe5db47e144ea224b57565e3ab1ab769ef41d
+        with:
+          prefix-key: v1-rust-workspace
+          workspace: ${{ env.UV_WORKSPACE }}
+          profile: no-debug-nightly
+          save-if: "false"
+
+      - name: Build with the CI cache
+        working-directory: ${{ env.UV_WORKSPACE }}
+        run: cargo build --locked --profile no-debug-nightly -Z checksum-freshness --bin uv --bin uvx
+
+      - name: Build with an empty target directory
+        working-directory: ${{ env.UV_WORKSPACE }}
+        env:
+          CARGO_TARGET_DIR: ${{ env.UV_WORKSPACE }}/target-empty
+        run: |
+          if (Test-Path $Env:CARGO_TARGET_DIR) { throw "Expected a fresh target directory" }
+          cargo build --locked --profile no-debug-nightly -Z checksum-freshness --bin uv --bin uvx
+
+      - name: Smoke test both builds
+        working-directory: ${{ env.UV_WORKSPACE }}
+        run: |
+          foreach ($dir in 'target', 'target-empty') {
+            foreach ($bin in 'uv', 'uvx') {
+              & "./$dir/no-debug-nightly/$bin.exe" --version
+              if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            }
+          }
+
+  build-binary-windows-aarch64:
+    name: "Arm64 / ${{ matrix.heap }} / ${{ matrix.sample }}"
+    timeout-minutes: 55
+    runs-on: windows-11-arm
+    env:
+      RUSTC_BOOTSTRAP: 1
+    strategy:
+      fail-fast: false
+      matrix:
+        sample: [1, 2, 3]
+        heap: [stock, segment]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Dev Drive
+        run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
+
+      - name: Configure heap policy
+        env:
+          HEAP: ${{ matrix.heap }}
+        run: |
+          $path = 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Segment Heap'
+          $value = Get-ItemPropertyValue -Path $path -Name Enabled -ErrorAction SilentlyContinue
+          Write-Host "Image $Env:ImageOS/$Env:ImageVersion, stock Enabled = '$value'"
+          if ($Env:HEAP -eq 'segment') {
+            reg.exe add 'HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Segment Heap' /v Enabled /t REG_DWORD /d 1 /f
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+          $value = Get-ItemPropertyValue -Path $path -Name Enabled -ErrorAction SilentlyContinue
+          Write-Host "Effective registry Enabled = '$value'"
+          exit 0
+
+      # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
+      - name: Copy Git Repo to Dev Drive
+        run: |
+          Copy-Item -Path "${{ github.workspace }}" -Destination "$Env:UV_WORKSPACE" -Recurse
+
+      - name: "Install Rust toolchain"
+        working-directory: ${{ env.UV_WORKSPACE }}
+        run: rustup toolchain install --profile minimal
+
+      - name: Inspect the compiler heap
+        continue-on-error: true
+        working-directory: ${{ env.UV_WORKSPACE }}
+        env:
+          HEAP: ${{ matrix.heap }}
+        run: python .github/scripts/inspect-rustc-heap.py $Env:HEAP
+
+      - uses: astral-sh/github-actions/rust-workspace-cache@3c9fe5db47e144ea224b57565e3ab1ab769ef41d
+        with:
+          prefix-key: v1-rust-workspace
+          workspace: ${{ env.UV_WORKSPACE }}
+          profile: no-debug-nightly
+          save-if: "false"
+
+      - name: Build with the CI cache
+        working-directory: ${{ env.UV_WORKSPACE }}
+        run: cargo build --locked --profile no-debug-nightly -Z checksum-freshness --bin uv --bin uvx
+
+      - name: Build with an empty target directory
+        working-directory: ${{ env.UV_WORKSPACE }}
+        env:
+          CARGO_TARGET_DIR: ${{ env.UV_WORKSPACE }}/target-empty
+        run: |
+          if (Test-Path $Env:CARGO_TARGET_DIR) { throw "Expected a fresh target directory" }
+          cargo build --locked --profile no-debug-nightly -Z checksum-freshness --bin uv --bin uvx
+
+      - name: Smoke test both builds
+        working-directory: ${{ env.UV_WORKSPACE }}
+        run: |
+          foreach ($dir in 'target', 'target-empty') {
+            foreach ($bin in 'uv', 'uvx') {
+              & "./$dir/no-debug-nightly/$bin.exe" --version
+              if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            }
+          }
