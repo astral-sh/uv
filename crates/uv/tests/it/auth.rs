@@ -1466,12 +1466,9 @@ fn logout_text_store_without_username_uses_unique_match() {
         .arg("example.com")
         .arg("--username")
         .arg("testuser"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to fetch credentials for testuser@https://example.com/
+    error: Failed to fetch credentials for `testuser@https://example.com/`
     "
     );
 }
@@ -1508,12 +1505,9 @@ fn logout_text_store_without_username_prefers_token() {
 
     uv_snapshot!(context.auth_token()
         .arg("https://example.com/simple"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to fetch credentials for https://example.com/simple
+    error: Failed to fetch credentials for `https://example.com/simple`
     "
     );
 
@@ -1521,12 +1515,9 @@ fn logout_text_store_without_username_prefers_token() {
         .arg("https://example.com/simple")
         .arg("--username")
         .arg("testuser"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     testpass
-
-    ----- stderr -----
     "
     );
 }
