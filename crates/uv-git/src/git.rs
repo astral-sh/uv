@@ -1020,9 +1020,8 @@ mod tests {
         let original = database.rev_parse("HEAD")?;
         let remote =
             repository_with_commit(&temporary.path().join("remote"), GitObjectFormat::Sha256)?;
-        let url = Url::from_directory_path(&remote.path)
-            .map_err(|()| anyhow!("failed to convert remote path to URL"))?
-            .into();
+        let url = SafeUrl::from_directory_path(&remote.path)
+            .map_err(|()| anyhow!("failed to convert remote path to URL"))?;
 
         assert!(
             fetch(
@@ -1052,9 +1051,8 @@ mod tests {
             .args(&["symbolic-ref", "HEAD", "refs/heads/missing"])
             .cwd(&remote.path)
             .exec_with_output()?;
-        let url = Url::from_directory_path(&remote.path)
-            .map_err(|()| anyhow!("failed to convert remote path to URL"))?
-            .into();
+        let url = SafeUrl::from_directory_path(&remote.path)
+            .map_err(|()| anyhow!("failed to convert remote path to URL"))?;
 
         let reference = GitReference::Commit(commit);
         fetch(&mut database, &url, &reference, false, true)?;

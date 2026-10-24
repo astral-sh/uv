@@ -170,7 +170,8 @@ impl GitUrl {
 
     /// Set the precise [`GitOid`] to use for this Git URL.
     pub fn with_precise(mut self, precise: GitOid) -> Result<Self, GitUrlParseError> {
-        self.0.reference
+        self.0
+            .reference
             .validate_resolved_commit(&precise, &self.0.url)?;
         if self.0.reference.as_commit().is_none() {
             Arc::make_mut(&mut self.0).resolved = Some(Arc::new(precise));
