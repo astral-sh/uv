@@ -11456,10 +11456,7 @@ fn sync_no_sources_workspace_member_switch() -> Result<()> {
         .touch()?;
 
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -11469,10 +11466,7 @@ fn sync_no_sources_workspace_member_switch() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--no-sources"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -11548,10 +11542,7 @@ fn sync_no_sources_package_workspace_member_switch() -> Result<()> {
             .arg("--no-sources-package")
             .arg("anyio"),
         @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     Prepared 5 packages in [TIME]
@@ -11571,7 +11562,7 @@ fn sync_no_sources_package_workspace_member_switch() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
 
         [options]

@@ -92,7 +92,10 @@ pub async fn tree(
     } else {
         project = DiscoveredProject::discover(
             project_dir,
-            &DiscoveryOptions { members: MemberDiscovery::for_sources(&settings.sources, false), ..DiscoveryOptions::default() },
+            &DiscoveryOptions {
+                members: MemberDiscovery::for_sources(&settings.sources, false),
+                ..DiscoveryOptions::default()
+            },
             None,
             frozen,
             preview,

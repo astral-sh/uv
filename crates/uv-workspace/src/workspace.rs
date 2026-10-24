@@ -17,7 +17,9 @@ use rustc_hash::{FxHashSet, FxHasher};
 use tracing::{debug, trace, warn};
 
 use uv_cache::Cache;
-use uv_configuration::{ActiveEnvironment, DependencyGroupsWithDefaults, ExcludeDependency, NoSources};
+use uv_configuration::{
+    ActiveEnvironment, DependencyGroupsWithDefaults, ExcludeDependency, NoSources,
+};
 use uv_distribution_types::{Index, MinimumLibcVersion, Requirement, RequirementSource};
 use uv_fs::{CWD, Simplified, normalize_path};
 use uv_macros::DebugNoInline;
@@ -236,7 +238,9 @@ impl WorkspaceCache {
                 Some(Ok(workspace)) => Some(Ok(workspace)),
                 Some(Err(_)) | None => None,
             },
-            MemberDiscovery::None | MemberDiscovery::CurrentProjectOnly | MemberDiscovery::Exclude(_) => None,
+            MemberDiscovery::None
+            | MemberDiscovery::CurrentProjectOnly
+            | MemberDiscovery::Exclude(_) => None,
         }
     }
 
@@ -427,7 +431,8 @@ impl MemberDiscovery {
     }
 
     fn ignores_missing(&self) -> bool {
-        matches!(self, Self::Existing) || matches!(self, Self::Exclude(exclusions) if exclusions.ignore_missing)
+        matches!(self, Self::Existing)
+            || matches!(self, Self::Exclude(exclusions) if exclusions.ignore_missing)
     }
 }
 
@@ -1209,7 +1214,9 @@ impl Workspace {
         {
             assert_matches!(
                 options.members,
-                MemberDiscovery::None | MemberDiscovery::CurrentProjectOnly | MemberDiscovery::Exclude(_)
+                MemberDiscovery::None
+                    | MemberDiscovery::CurrentProjectOnly
+                    | MemberDiscovery::Exclude(_)
             );
             debug!(
                 "Adding current workspace member: {}",
@@ -1306,7 +1313,6 @@ impl Workspace {
             };
 
             if !skip {
-
                 debug!(
                     "Adding root workspace member: `{}`",
                     workspace_root.simplified_display()

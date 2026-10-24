@@ -88,7 +88,10 @@ pub async fn lock(
     } else {
         workspace = VirtualProject::discover(
             project_dir,
-            &DiscoveryOptions { members: MemberDiscovery::for_sources(&settings.sources, false), ..DiscoveryOptions::default() },
+            &DiscoveryOptions {
+                members: MemberDiscovery::for_sources(&settings.sources, false),
+                ..DiscoveryOptions::default()
+            },
             cache,
             workspace_cache,
         )

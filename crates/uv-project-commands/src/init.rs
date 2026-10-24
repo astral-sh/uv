@@ -40,7 +40,8 @@ use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
 use uv_warnings::warn_user_once;
 use uv_workspace::{
-    DiscoveryOptions, MemberDiscovery, MemberExclusions, Workspace, WorkspaceCache, WorkspaceErrorKind,
+    DiscoveryOptions, MemberDiscovery, MemberExclusions, Workspace, WorkspaceCache,
+    WorkspaceErrorKind,
 };
 
 /// Add one or more packages to the project requirements.

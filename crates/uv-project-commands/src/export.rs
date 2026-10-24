@@ -219,7 +219,10 @@ pub async fn export(
                 ..DiscoveryOptions::default()
             }
         } else {
-            DiscoveryOptions { members: MemberDiscovery::for_sources(&settings.sources, false), ..DiscoveryOptions::default() }
+            DiscoveryOptions {
+                members: MemberDiscovery::for_sources(&settings.sources, false),
+                ..DiscoveryOptions::default()
+            }
         };
         let selected_package = if let [name] = package.as_slice() {
             Some(name)
