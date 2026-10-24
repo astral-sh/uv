@@ -8,7 +8,7 @@ RequirementsTxt {
     editables: [],
     index_url: Some(
         VerbatimUrl {
-            url: DisplaySafeUrl {
+            url: SafeUrl {
                 scheme: "https",
                 cannot_be_a_base: false,
                 username: "",
@@ -26,11 +26,13 @@ RequirementsTxt {
             given: Some(
                 "https://pypi.org/simple/",
             ),
+            expanded: false,
+            force_relative: false,
         },
     ),
     extra_index_urls: [
         VerbatimUrl {
-            url: DisplaySafeUrl {
+            url: SafeUrl {
                 scheme: "https",
                 cannot_be_a_base: false,
                 username: "",
@@ -48,9 +50,11 @@ RequirementsTxt {
             given: Some(
                 "https://download.pytorch.org/whl/cpu",
             ),
+            expanded: false,
+            force_relative: false,
         },
         VerbatimUrl {
-            url: DisplaySafeUrl {
+            url: SafeUrl {
                 scheme: "https",
                 cannot_be_a_base: false,
                 username: "",
@@ -68,9 +72,11 @@ RequirementsTxt {
             given: Some(
                 "https://example.com/simple",
             ),
+            expanded: false,
+            force_relative: false,
         },
         VerbatimUrl {
-            url: DisplaySafeUrl {
+            url: SafeUrl {
                 scheme: "https",
                 cannot_be_a_base: false,
                 username: "",
@@ -88,11 +94,13 @@ RequirementsTxt {
             given: Some(
                 "https://test.pypi.org/simple/",
             ),
+            expanded: false,
+            force_relative: false,
         },
     ],
     find_links: [
         VerbatimUrl {
-            url: DisplaySafeUrl {
+            url: SafeUrl {
                 scheme: "file",
                 cannot_be_a_base: false,
                 username: "",
@@ -106,9 +114,11 @@ RequirementsTxt {
             given: Some(
                 "file:///path/with spaces/packages",
             ),
+            expanded: false,
+            force_relative: false,
         },
         VerbatimUrl {
-            url: DisplaySafeUrl {
+            url: SafeUrl {
                 scheme: "https",
                 cannot_be_a_base: false,
                 username: "",
@@ -126,9 +136,12 @@ RequirementsTxt {
             given: Some(
                 "https://example.com/simple",
             ),
+            expanded: false,
+            force_relative: false,
         },
     ],
     no_index: false,
+    require_hashes: false,
     no_binary: All,
     only_binary: Packages(
         [

@@ -1075,7 +1075,6 @@ fn parse_option(
     let mut marker_text = String::new();
 
     while let Some(ch) = s.peek() {
-
         // Check for terminal characters (always, even when quoted).
         if !escape_next && matches!(ch, '\n' | '\r' | '#') {
             break;
