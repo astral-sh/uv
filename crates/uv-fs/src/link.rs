@@ -668,7 +668,7 @@ where
                         err
                     );
                     warn_user_once!(
-                        "Failed to hardlink files; falling back to full copy. This may lead to degraded performance.\n         \
+                        "Failed to hardlink files; falling back to full copy. This may lead to degraded performance during environment creation.\n         \
                         If the cache and target directories are on different filesystems, hardlinking may not be supported.\n         \
                         If this is intentional, set `export UV_LINK_MODE=copy` or use `--link-mode=copy` to suppress this warning."
                     );
@@ -727,7 +727,7 @@ where
                         err
                     );
                     warn_user_once!(
-                        "Failed to symlink files; falling back to full copy. This may lead to degraded performance.\n         \
+                        "Failed to symlink files; falling back to full copy. This may lead to degraded performance during environment creation.\n         \
                         If the cache and target directories are on different filesystems, symlinking may not be supported.\n         \
                         If this is intentional, set `export UV_LINK_MODE=copy` or use `--link-mode=copy` to suppress this warning."
                     );
@@ -818,7 +818,7 @@ fn atomic_hardlink_overwrite(
             src.display()
         );
         warn_user_once!(
-            "Failed to hardlink files; falling back to full copy. This may lead to degraded performance.\n         \
+            "Failed to hardlink files; falling back to full copy. This may lead to degraded performance during environment creation.\n         \
             If the cache and target directories are on different filesystems, hardlinking may not be supported.\n         \
             If this is intentional, set `export UV_LINK_MODE=copy` or use `--link-mode=copy` to suppress this warning."
         );
@@ -861,7 +861,7 @@ fn atomic_symlink_overwrite(
             src.display()
         );
         warn_user_once!(
-            "Failed to symlink files; falling back to full copy. This may lead to degraded performance.\n         \
+            "Failed to symlink files; falling back to full copy. This may lead to degraded performance during environment creation.\n         \
             If the cache and target directories are on different filesystems, symlinking may not be supported.\n         \
             If this is intentional, set `export UV_LINK_MODE=copy` or use `--link-mode=copy` to suppress this warning."
         );
