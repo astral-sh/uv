@@ -1,4 +1,3 @@
-use std::collections::BTreeMap;
 use std::fmt::Write;
 
 use anyhow::Result;
@@ -6,21 +5,15 @@ use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
 use indoc::{formatdoc, indoc};
 
-use uv_test::packse::generate_wheel;
+use uv_test::packse::WheelBuilder;
 use uv_test::{TestContext, capture_uv_snapshot, uv_snapshot};
 
 fn wheel(context: &TestContext, version: &str, tag: &str) -> Result<()> {
     let links = context.temp_dir.child("links");
     links.create_dir_all()?;
-    let (filename, bytes) = generate_wheel(
-        &"demo".parse()?,
-        &version.parse()?,
-        &[],
-        &BTreeMap::new(),
-        None,
-        tag,
-        &[],
-    );
+    let (filename, bytes) = WheelBuilder::new(&"demo".parse()?, &version.parse()?)
+        .tag(tag)
+        .build();
     links.child(filename).write_binary(&bytes)?;
     Ok(())
 }
