@@ -39,7 +39,7 @@ jobs:
       - name: "Install Rust toolchain"
         run: rustup toolchain install --profile minimal
 
-      - uses: astral-sh/github-actions/rust-workspace-cache@3c9fe5db47e144ea224b57565e3ab1ab769ef41d
+      - uses: astral-sh/github-actions/rust-workspace-cache@52ea66bbf7dbe95fc9e2baae530cb3827214c530
         with:
           prefix-key: v1-rust-workspace
           key: ${{ hashFiles('Cargo.toml') }}
