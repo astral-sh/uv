@@ -1,4 +1,3 @@
-#[cfg(feature = "test-universal")]
 #[cfg(all(feature = "test-universal", feature = "test-git"))]
 use std::process::Command;
 
@@ -971,10 +970,13 @@ fn lock_git_sha256_abbreviated_commit() -> Result<()> {
     let commit = Command::new("git")
         .arg("-C")
         .arg(repository.path())
-        .args(["rev-parse", "--short=41", "HEAD"])
+        .args(["rev-parse", "HEAD"])
         .assert()
         .success();
-    let revision = std::str::from_utf8(&commit.get_output().stdout)?.trim();
+    let commit = std::str::from_utf8(&commit.get_output().stdout)?.trim();
+    assert_eq!(commit.len(), 64);
+    // Older Git versions cap `rev-parse --short` at 40 even in SHA-256 repositories.
+    let revision = &commit[..41];
     let repository_url = SafeUrl::from_directory_path(repository.path())
         .map_err(|()| anyhow!("failed to convert repository path to file URL"))?;
     context
