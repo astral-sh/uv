@@ -2590,7 +2590,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 Ok(Some(precise)) => return Ok(Some(precise)),
                 Ok(None) => {}
                 Err(err) => {
-                    debug!("Failed to resolve commit via GitHub fast path: {source} ({err})")
+                    debug!("Failed to resolve commit via GitHub fast path: {source} ({err})");
                 }
             }
             match self
@@ -2602,7 +2602,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 Ok(Some(precise)) => return Ok(Some(precise)),
                 Ok(None) => {}
                 Err(err) => {
-                    debug!("Failed to resolve commit via `git ls-remote`: {source} ({err})")
+                    debug!("Failed to resolve commit via `git ls-remote`: {source} ({err})");
                 }
             }
         }
