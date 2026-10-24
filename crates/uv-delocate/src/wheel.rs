@@ -3,19 +3,21 @@
 //! Provides functionality for unpacking, modifying, and repacking wheel files,
 //! including RECORD file updates.
 
-use std::io;
+use std::io::Read;
 use std::path::Path;
 
+use async_zip::base::write::ZipFileWriter;
+use async_zip::{Compression, ZipEntryBuilder};
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use fs_err as fs;
 use fs_err::File;
+use futures::executor::block_on;
+use futures::io::AllowStdIo;
 use sha2::{Digest, Sha256};
 use uv_fs::Simplified;
 use uv_install_wheel::{RecordEntry, write_record_file};
 use walkdir::WalkDir;
-use zip::ZipWriter;
-use zip::write::FileOptions;
 
 use crate::error::DelocateError;
 
@@ -29,11 +31,7 @@ pub fn unpack_wheel(wheel_path: &Path, dest_dir: &Path) -> Result<(), DelocateEr
 /// Repack a directory into a wheel file.
 pub fn pack_wheel(source_dir: &Path, wheel_path: &Path) -> Result<(), DelocateError> {
     let file = File::create(wheel_path)?;
-    let mut zip = ZipWriter::new(file);
-
-    let options = FileOptions::<()>::default()
-        .compression_method(zip::CompressionMethod::Deflated)
-        .unix_permissions(0o644);
+    let mut zip = ZipFileWriter::new(AllowStdIo::new(file));
 
     let walkdir = WalkDir::new(source_dir);
     let mut paths: Vec<_> = walkdir
@@ -54,32 +52,46 @@ pub fn pack_wheel(source_dir: &Path, wheel_path: &Path) -> Result<(), DelocateEr
                     wheel_dir: source_dir.to_path_buf(),
                 })?;
 
-        let relative_str = relative.to_string_lossy();
-
-        // Normalize permissions: 0o755 for executables, 0o644 for non-executable files.
+        let relative = relative.portable_display().to_string();
         #[cfg(unix)]
-        let options = {
+        let mode = {
             use std::os::unix::fs::PermissionsExt;
-            let metadata = fs::metadata(path)?;
-            let is_executable = metadata.permissions().mode() & 0o111 != 0;
-            let permissions = if is_executable { 0o755 } else { 0o644 };
-            options.unix_permissions(permissions)
+            if fs::metadata(path)?.permissions().mode() & 0o111 == 0 {
+                0o100_644
+            } else {
+                0o100_755
+            }
         };
+        #[cfg(not(unix))]
+        let mode = 0o100_644;
 
-        zip.start_file(relative_str.as_ref(), options)?;
-
-        let mut f = File::open(path)?;
-        io::copy(&mut f, &mut zip)?;
+        let entry =
+            ZipEntryBuilder::new(relative.into(), Compression::Deflate).unix_permissions(mode);
+        let mut writer = block_on(zip.write_entry_seekable(entry))?;
+        block_on(futures::io::copy(
+            AllowStdIo::new(File::open(path)?),
+            &mut writer,
+        ))?;
+        block_on(writer.close())?;
     }
 
-    zip.finish()?;
+    block_on(zip.close())?;
     Ok(())
 }
 
 fn hash_file(path: &Path) -> Result<(String, u64), DelocateError> {
     let mut file = File::open(path)?;
     let mut hasher = Sha256::new();
-    let size = io::copy(&mut file, &mut hasher)?;
+    let mut size = 0;
+    let mut buffer = [0; 8192];
+    loop {
+        let n = file.read(&mut buffer)?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buffer[..n]);
+        size += n as u64;
+    }
     let hash = hasher.finalize();
     let hash_str = format!("sha256={}", URL_SAFE_NO_PAD.encode(hash));
     Ok((hash_str, size))

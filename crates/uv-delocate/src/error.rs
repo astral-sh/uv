@@ -12,7 +12,7 @@ pub enum DelocateError {
     Io(#[from] std::io::Error),
 
     #[error(transparent)]
-    Zip(#[from] zip::result::ZipError),
+    Zip(#[from] async_zip::error::ZipError),
 
     #[error(transparent)]
     WalkDir(#[from] walkdir::Error),

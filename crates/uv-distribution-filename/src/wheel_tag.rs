@@ -66,9 +66,11 @@ impl WheelTag {
         python_tags: &[LanguageTag],
         abi_tags: &[AbiTag],
         platform_tags: &[PlatformTag],
+        variant: Option<VariantLabel>,
     ) -> Self {
         // Use the small variant if possible (no build tag and single tags).
         if build_tag.is_none()
+            && variant.is_none()
             && python_tags.len() == 1
             && abi_tags.len() == 1
             && platform_tags.len() == 1
@@ -88,6 +90,7 @@ impl WheelTag {
                 python_tag: python_tags.iter().copied().collect(),
                 abi_tag: abi_tags.iter().copied().collect(),
                 platform_tag: platform_tags.iter().cloned().collect(),
+                variant,
                 repr: None,
             }),
         }

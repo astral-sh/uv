@@ -199,6 +199,7 @@ impl WheelFilename {
                 self.python_tags(),
                 self.abi_tags(),
                 platform_tags,
+                self.variant().cloned(),
             ),
         }
     }

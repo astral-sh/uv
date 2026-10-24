@@ -72,9 +72,10 @@ fn test_unpack_repack_wheel() {
 
     // Verify the output is a valid zip.
     assert!(output_wheel.exists());
-    let file = fs::File::open(&output_wheel).unwrap();
-    let archive = zip::ZipArchive::new(file).unwrap();
-    assert!(!archive.is_empty());
+    let roundtrip = temp_dir.path().join("roundtrip");
+    fs::create_dir(&roundtrip).unwrap();
+    uv_delocate::wheel::unpack_wheel(&output_wheel, &roundtrip).unwrap();
+    assert!(roundtrip.join("fakepkg2-1.0.dist-info/WHEEL").is_file());
 }
 
 #[test]

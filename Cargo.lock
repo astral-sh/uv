@@ -6327,6 +6327,7 @@ dependencies = [
  "uv-normalize",
  "uv-pep440",
  "uv-pep508",
+ "uv-platform",
  "uv-platform-tags",
  "uv-preview",
  "uv-pypi-types",
@@ -6344,14 +6345,16 @@ dependencies = [
 
 [[package]]
 name = "uv-delocate"
-version = "0.0.11"
+version = "0.0.97"
 dependencies = [
+ "astral_async_zip",
  "base64 0.22.1",
  "fs-err",
+ "futures",
  "goblin",
- "sha2",
+ "sha2 0.11.0",
  "tempfile",
- "thiserror 2.0.17",
+ "thiserror",
  "tracing",
  "uv-distribution-filename",
  "uv-extract",
@@ -6361,7 +6364,6 @@ dependencies = [
  "uv-platform-tags",
  "uv-static",
  "walkdir",
- "zip",
 ]
 
 [[package]]
