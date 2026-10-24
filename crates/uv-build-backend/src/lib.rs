@@ -370,11 +370,7 @@ fn find_roots(
             pyproject_toml.name(),
         )?]
     };
-    let mut vcs_ignore = VcsIgnore::new(
-        source_tree,
-        pyproject_toml
-            .settings().respect_ignore,
-    )?;
+    let mut vcs_ignore = VcsIgnore::new(source_tree, pyproject_toml.settings().respect_ignore)?;
     for module_relative in &modules_relative {
         debug!("Module path: {}", module_relative.user_display());
         let stubs = module_relative
@@ -1094,7 +1090,13 @@ mod tests {
         example/nested/
         example/nested/keep.txt
         ");
-        let filtered_source_dist = build_source_dist(&source, dist.path(), MOCK_UV_VERSION, false, TarBackend::default())?;
+        let filtered_source_dist = build_source_dist(
+            &source,
+            dist.path(),
+            MOCK_UV_VERSION,
+            false,
+            TarBackend::default(),
+        )?;
         assert_snapshot!(sdist_contents(&dist.path().join(filtered_source_dist.to_string())).join("\n"), @"
         example-1.0.0/
         example-1.0.0/PKG-INFO

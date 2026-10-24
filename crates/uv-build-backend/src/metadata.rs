@@ -458,10 +458,7 @@ impl PyProjectToml {
     /// <https://packaging.python.org/en/latest/specifications/pyproject-toml/>
     /// <https://packaging.python.org/en/latest/specifications/core-metadata/>
     pub(crate) fn to_metadata(&self, root: &Path) -> Result<Metadata23, Error> {
-        let mut vcs_ignore = VcsIgnore::new(
-            root,
-            self.settings().respect_ignore,
-        )?;
+        let mut vcs_ignore = VcsIgnore::new(root, self.settings().respect_ignore)?;
         vcs_ignore.require(Path::new("pyproject.toml"))?;
         if let Some(readme) = self.readme().and_then(Readme::path) {
             vcs_ignore.require(readme)?;
