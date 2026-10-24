@@ -1024,7 +1024,7 @@ version = "1.0.0"
             assert_eq!(actual, expected);
             assert_eq!(
                 actual
-                    .to_toml(Default::default())
+                    .to_toml(LockFeatures::empty())
                     .expect("lock serializes canonically"),
                 input
             );
