@@ -1712,10 +1712,7 @@ fn logout_text_store_multiple_usernames() {
     // With only one matching credential remaining, logout without a username should remove it.
     uv_snapshot!(context.auth_logout()
         .arg("https://example.com/simple"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Removed credentials for user2@https://example.com/
     "
@@ -1725,12 +1722,9 @@ fn logout_text_store_multiple_usernames() {
         .arg("https://example.com/simple")
         .arg("--username")
         .arg("user2"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to fetch credentials for user2@https://example.com/simple
+    error: Failed to fetch credentials for `user2@https://example.com/simple`
     "
     );
 }

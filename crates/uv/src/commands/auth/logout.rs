@@ -82,7 +82,10 @@ pub(crate) async fn logout(
                 }
                 display_url
             } else if store
-                .remove(service.clone(), Username::from(Some("__token__".to_string())))
+                .remove(
+                    service.clone(),
+                    Username::from(Some("__token__".to_string())),
+                )
                 .is_some()
             {
                 url_without_credentials.to_string()
