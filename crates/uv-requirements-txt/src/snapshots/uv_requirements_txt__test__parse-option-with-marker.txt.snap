@@ -28,7 +28,7 @@ RequirementsTxt {
     index_url: None,
     extra_index_urls: [
         VerbatimUrl {
-            url: DisplaySafeUrl {
+            url: SafeUrl {
                 scheme: "https",
                 cannot_be_a_base: false,
                 username: "",
@@ -46,9 +46,11 @@ RequirementsTxt {
             given: Some(
                 "https://download.pytorch.org/whl/nightly/cpu",
             ),
+            expanded: false,
+            force_relative: false,
         },
         VerbatimUrl {
-            url: DisplaySafeUrl {
+            url: SafeUrl {
                 scheme: "https",
                 cannot_be_a_base: false,
                 username: "",
@@ -66,9 +68,11 @@ RequirementsTxt {
             given: Some(
                 "https://download.pytorch.org/whl/nightly/cpu",
             ),
+            expanded: false,
+            force_relative: false,
         },
         VerbatimUrl {
-            url: DisplaySafeUrl {
+            url: SafeUrl {
                 scheme: "https",
                 cannot_be_a_base: false,
                 username: "",
@@ -86,10 +90,13 @@ RequirementsTxt {
             given: Some(
                 "https://download.pytorch.org/whl/cu129; sys_platform  != 'darwin'",
             ),
+            expanded: false,
+            force_relative: false,
         },
     ],
     find_links: [],
     no_index: false,
+    require_hashes: false,
     no_binary: None,
     only_binary: None,
 }

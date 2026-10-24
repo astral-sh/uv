@@ -1215,7 +1215,7 @@ fn parse_option(
 
         let (line, _) = calculate_row_column(content, start);
         let marker_display = marker_text.trim();
-        if requirements_txt == Path::new("-") {
+        if matches!(requirements_txt, RequirementsInput::Stdin) {
             uv_warnings::warn_user!(
                 "Ignoring environment marker on `{option}` in stdin at line {line}: `{marker_display}`"
             );
