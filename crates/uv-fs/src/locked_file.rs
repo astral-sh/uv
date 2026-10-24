@@ -41,7 +41,11 @@ fn init_lock_directory() -> io::Result<PathBuf> {
         None => std::path::absolute(StateStore::from_settings(None)?.bucket(StateBucket::Locks))?,
     };
     fs_err::create_dir_all(&root)?;
-    match fs_err::OpenOptions::new().write(true).create_new(true).open(root.join(".gitignore")) {
+    match fs_err::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(root.join(".gitignore"))
+    {
         Ok(mut file) => file.write_all(b"*\n")?,
         Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {}
         Err(err) => return Err(err),

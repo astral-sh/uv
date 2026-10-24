@@ -2257,6 +2257,10 @@ fn create_venv_from_executable<P: AsRef<Path>>(
     uv_bin: &Path,
 ) {
     TestContext::new_command_with(uv_bin)
+        .env(
+            EnvVars::UV_LOCK_DIR,
+            cache_dir.path().parent().unwrap().join("locks"),
+        )
         .arg("venv")
         .arg(path.as_ref().as_os_str())
         .arg("--clear")

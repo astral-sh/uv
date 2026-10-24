@@ -11,14 +11,29 @@ use indoc::indoc;
 #[cfg(target_os = "linux")]
 use std::process::Command;
 
-use uv_cache::Cache;
+use uv_cache_key::cache_digest;
 #[cfg(unix)]
 use uv_fs::link::{LinkMode, LinkOptions, link_dir};
 use uv_static::EnvVars;
 
 #[cfg(unix)]
 use uv_test::assert_path_missing;
-use uv_test::uv_snapshot;
+use uv_test::{TestContext, uv_snapshot};
+
+/// Hold the same shared cache lock as the subprocess.
+fn hold_cache_lock(context: &TestContext) -> Result<fs_err::File> {
+    let key = std::path::absolute(context.cache_dir.join(".lock"))?;
+    let path = context.temp_dir.join("locks").join(cache_digest(&key));
+    fs_err::create_dir_all(path.parent().unwrap())?;
+    let file = fs_err::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(path)?;
+    file.lock()?;
+    Ok(file)
+}
 
 /// `cache clean` should remove all packages.
 #[test]
@@ -289,8 +304,8 @@ fn clear_all_alias() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
-async fn clean_force() -> Result<()> {
+#[test]
+fn clean_force() -> Result<()> {
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
         .with_filtered_sizes_and_units();
@@ -326,9 +341,7 @@ async fn clean_force() -> Result<()> {
         .success();
 
     // When locked, `--force` should proceed without blocking
-    let _cache = Cache::from_path(context.cache_dir.path())
-        .with_exclusive_lock()
-        .await?;
+    let _cache = hold_cache_lock(&context)?;
     uv_snapshot!(context.filters(), context.clean().arg("--verbose").arg("--force"), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -565,21 +578,21 @@ fn clean_package_empty_shard_without_search_permission() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
-async fn cache_timeout() {
-    let context = uv_test::test_context!("3.12");
+#[test]
+fn cache_timeout() -> Result<()> {
+    let context =
+        uv_test::test_context!("3.12").with_filter((r"locks[/\\][0-9a-f]+", "locks/[CACHE_LOCK]"));
 
     // Simulate another uv process running and locking the cache, e.g., with a source build.
-    let _cache = Cache::from_path(context.cache_dir.path())
-        .with_exclusive_lock()
-        .await;
+    let _cache = hold_cache_lock(&context)?;
 
     uv_snapshot!(context.filters(), context.clean().env(EnvVars::UV_LOCK_TIMEOUT, "1"), @"
     exit_code: 2 (failure)
     ----- stderr -----
     Cache is currently in-use, waiting for other uv processes to finish (use `--force` to override)
-    error: Timeout ([TIME]) when waiting for lock on `[CACHE_DIR]/` at `[CACHE_DIR]/.lock`, is another uv process running? You can set `UV_LOCK_TIMEOUT` to increase the timeout.
+    error: Timeout ([TIME]) when waiting for lock on `[CACHE_DIR]/` at `locks/[CACHE_LOCK]`, is another uv process running? You can set `UV_LOCK_TIMEOUT` to increase the timeout.
     ");
+    Ok(())
 }
 
 /// `cache clean` should handle file paths normally restricted by Win32 path normalization.
