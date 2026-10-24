@@ -733,17 +733,20 @@ fn install_script(
                     || fs_err::rename(&path, &script_absolute),
                 ))
             })?;
-            if let Err(err) if err.kind() == io::ErrorKind::CrossesDevices = renamed {
+            match renamed {
+                Ok(()) => (),
+                Err(err) if err.kind() == io::ErrorKind::CrossesDevices => {
                     // Fall back to copy only when the rename crosses devices.
-                debug!("Failed to rename, falling back to copy: {err}");
-                let target = uv_fs::tempfile_in(&layout.scheme.scripts)?;
-                uv_fs::with_retry_sync(&path, &script_absolute, "copying", || {
-                    fs_err::copy(&path, &target)?;
-                    Ok(())
-                })?;
-                locks.with_file_write(&script_absolute, || {
-                    persist_with_retry_sync(target, &script_absolute)
-                })?;
+                    debug!("Failed to rename, falling back to copy: {err}");
+                    let target = uv_fs::tempfile_in(&layout.scheme.scripts)?;
+                    uv_fs::with_retry_sync(&path, &script_absolute, "copying", || {
+                        fs_err::copy(&path, &target)?;
+                        Ok(())
+                    })?;
+                    locks.with_file_write(&script_absolute, || {
+                        persist_with_retry_sync(target, &script_absolute)
+                    })?;
+                }
                 Err(err) => return Err(Error::Io(err)),
             }
         }

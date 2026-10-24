@@ -836,7 +836,7 @@ where
                 if err.kind() == io::ErrorKind::AlreadyExists
                     && options.on_existing_directory == OnExistingDirectory::Merge
                 {
-                    atomic_hardlink_overwrite(path, target, state, options)
+                    atomic_hardlink_overwrite(path, target, state)
                 } else {
                     Err(LinkError::Io(err))
                 }
@@ -887,7 +887,7 @@ where
                 if err.kind() == io::ErrorKind::AlreadyExists
                     && options.on_existing_directory == OnExistingDirectory::Merge
                 {
-                    atomic_symlink_overwrite(path, target, state, options)
+                    atomic_symlink_overwrite(path, target, state)
                 } else {
                     Err(LinkError::Symlink {
                         from: path.to_path_buf(),
@@ -948,11 +948,7 @@ fn atomic_hardlink_overwrite(
     src: &Path,
     dst: &Path,
     state: LinkState,
-    options: &LinkOptions<'_, F>,
-) -> Result<LinkState, LinkError>
-where
-    F: Fn(&Path) -> bool,
-{
+) -> Result<LinkState, LinkError> {
     // TODO(zanieb): Consider propagating an error instead of panicking if `dst` has no parent.
     if let Ok(temp_file) = tempfile::Builder::new().make_in(
         dst.parent().expect("Link path must have a parent"),
@@ -978,28 +974,11 @@ where
 }
 
 /// Atomically overwrite an existing file with a copy.
-fn atomic_copy_overwrite<F>(
-    src: &Path,
-    dst: &Path,
-    options: &LinkOptions<'_, F>,
-) -> Result<(), LinkError>
-where
-    F: Fn(&Path) -> bool,
-{
-    // TODO(zanieb): These unwraps were copied from `uv-install-wheel`; consider propagating errors
-    // instead of panicking if `dst` has no parent or file name.
-    let parent = dst.parent().unwrap();
-    let tempdir = tempfile::tempdir_in(parent)?;
-    let tempfile = tempdir.path().join(dst.file_name().unwrap());
-
-    options
-        .copy_file(src, &tempfile)
-        .map_err(|err| LinkError::Copy {
-            to: tempfile.clone(),
-            err,
-        })?;
-    fs_err::rename(&tempfile, dst)?;
-    Ok(())
+fn atomic_copy_overwrite(src: &Path, dst: &Path) -> Result<(), LinkError> {
+    crate::copy_atomic_sync(src, dst).map_err(|err| LinkError::Copy {
+        to: dst.to_path_buf(),
+        err,
+    })
 }
 
 /// Atomically overwrite an existing file with a symlink.
@@ -1007,11 +986,7 @@ fn atomic_symlink_overwrite(
     src: &Path,
     dst: &Path,
     state: LinkState,
-    options: &LinkOptions<'_, F>,
-) -> Result<LinkState, LinkError>
-where
-    F: Fn(&Path) -> bool,
-{
+) -> Result<LinkState, LinkError> {
     // TODO(zanieb): Consider propagating an error instead of panicking if `dst` has no parent.
     if let Ok(temp_file) = tempfile::Builder::new().make_in(
         dst.parent().expect("Link path must have a parent"),
@@ -1061,10 +1036,10 @@ fn create_symlink(original: &Path, link: &Path) -> io::Result<()> {
 #[expect(clippy::print_stderr)]
 mod tests {
     use std::assert_matches;
-    #[cfg(unix)]
-    use std::os::unix::fs::PermissionsExt;
     #[cfg(target_os = "macos")]
     use std::fs::Permissions;
+    #[cfg(unix)]
+    use std::os::unix::fs::PermissionsExt;
 
     use super::*;
     use tempfile::TempDir;
