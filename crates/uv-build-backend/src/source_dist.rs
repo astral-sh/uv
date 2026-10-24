@@ -302,7 +302,7 @@ fn write_source_dist(
     let mut written_directories = FxHashSet::<PathBuf>::default();
     let top_level_directory = PathBuf::from(&top_level).join("");
     write_directory_once(&mut writer, &mut written_directories, &top_level_directory)?;
-    let mut entries = WalkDir::new(source_tree).sort_by_file_name().into_iter();
+    let mut entries = WalkDir::new(source_tree).sort_by(compare_build_entries).into_iter();
     while let Some(entry) = entries.next() {
         let entry = entry.map_err(|err| Error::WalkDir {
             root: source_tree.to_path_buf(),
