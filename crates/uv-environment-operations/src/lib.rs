@@ -5,11 +5,12 @@ use std::fmt::Write;
 use std::io;
 use std::path::{Path, PathBuf};
 
+use anyhow::Context;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::{debug, warn};
 use uv_cache::{Cache, CacheBucket};
-use uv_cache_key::{cache_digest, cache_name};
+use uv_cache_key::cache_digest;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
     ActiveEnvironment, Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun,
@@ -29,13 +30,11 @@ use uv_lock::{Installable, Lock};
 use uv_normalize::PackageName;
 use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{ConflictItem, ConflictKind, ConflictSet, Conflicts};
-use uv_python_discovery::ConfigDiscovery;
-use uv_python_discovery::PythonInstallation;
+use uv_python_discovery::{ConfigDiscovery, ProjectEnvironmentCache, PythonInstallation};
 use uv_python_interpreter::{BrokenLink, Interpreter, InvalidEnvironmentKind, PythonEnvironment};
-use uv_python_managed::{PythonMinorVersionLink, UpgradePolicy};
+use uv_python_managed::UpgradePolicy;
 use uv_python_types::{
-    EnvironmentPreference, LenientImplementationName, PythonArchitecture, PythonDownloads,
-    PythonPreference, PythonRequest,
+    EnvironmentPreference, PythonArchitecture, PythonDownloads, PythonPreference, PythonRequest,
 };
 use uv_requirements::RequirementsSpecification;
 use uv_resolver::{
@@ -431,6 +430,18 @@ impl ProjectEnvironmentRoot {
         }
     }
 
+    /// Compare the active environment with both the reference and its resolved target.
+    fn warn_if_active_mismatch(&self, active: ActiveEnvironment) {
+        if active == ActiveEnvironment::Warn {
+            let (path, target) = match self {
+                Self::Directory(path) => (path, None),
+                Self::Redirect { reference, target } => (reference, Some(target.as_path())),
+                Self::CacheReference { reference, target } => (target, Some(reference.as_path())),
+            };
+            ProjectEnvironmentSelection::warn_if_active_mismatch(path, target);
+        }
+    }
+
     /// Check that the reference still selects the environment inspected during discovery.
     pub fn validate(&self) -> Result<(), EnvironmentError> {
         let (reference, unchanged) = match self {
@@ -521,48 +532,9 @@ pub fn centralized_environment_root(
     upgrade_policy: UpgradePolicy,
     cache: &Cache,
 ) -> PathBuf {
-    let install_path = target.install_path();
-    let workspace_path =
-        fs_err::canonicalize(install_path).unwrap_or_else(|_| install_path.to_path_buf());
-    let interpreter_key = interpreter.key();
-    // Use the workspace path to isolate projects and the interpreter key to maximize intra-project
-    // environment re-use while avoiding clashes with incompatible environments. Ignoring the patch
-    // version allows upgradeable managed environments to be re-used after an upgrade.
-    let (digest, python_version) =
-        if let Some(link) = PythonMinorVersionLink::from_interpreter(interpreter, upgrade_policy) {
-            (
-                cache_digest(&(&workspace_path, link.key())),
-                interpreter.python_minor_version(),
-            )
-        } else {
-            (
-                cache_digest(&(&workspace_path, &interpreter_key)),
-                interpreter.python_version().clone(),
-            )
-        };
-    let name = target
-        .project_name()
-        .and_then(|name| cache_name(name.as_ref(), Some(100)))
-        .or_else(|| {
-            workspace_path
-                .file_name()
-                .and_then(|name| name.to_str())
-                .and_then(|name| cache_name(name, Some(100)))
-        });
-    let implementation = interpreter_key.implementation();
-    let implementation = match implementation.as_ref() {
-        LenientImplementationName::Known(implementation) => implementation
-            .short_name()
-            .unwrap_or_else(|| implementation.long_name()),
-        LenientImplementationName::Unknown(implementation) => implementation,
-    };
-    let entry = name.map_or_else(
-        // A virtual workspace can be nameless if its directory has no cache-safe characters.
-        || format!("{implementation}{python_version}-{digest}"),
-        |name| format!("{name}-{implementation}{python_version}-{digest}"),
-    );
-    cache
-        .shard(CacheBucket::Environments, entry)
+    target
+        .environment_cache(cache)
+        .for_interpreter(interpreter, upgrade_policy)
         .into_path_buf()
 }
 
@@ -575,13 +547,25 @@ pub enum LinkErrorReporting {
     Log,
 }
 
-/// Point the project's `.venv` to the centralized environment, returning whether the link was
-/// successfully updated.
-pub fn update_project_environment_link(
+/// Record the selected centralized environment and update the project's `.venv`.
+///
+/// Returns whether `.venv` was successfully updated to a directory link.
+pub fn update_project_environment(
     environment: &PythonEnvironment,
     target: ProjectEnvironmentTarget<'_>,
     link_error_reporting: LinkErrorReporting,
-) -> bool {
+    cache: &Cache,
+) -> Result<bool, EnvironmentError> {
+    let environment_cache = target.environment_cache(cache);
+    environment_cache
+        .set_current(environment.root())
+        .with_context(|| {
+            format!(
+                "Failed to record the selected project environment at `{}`",
+                environment_cache.current().path().user_display()
+            )
+        })?;
+
     let link = target.install_path().join(".venv");
     let report_error = |message: std::fmt::Arguments<'_>| match link_error_reporting {
         LinkErrorReporting::User => warn_user_once!("{message}"),
@@ -594,7 +578,7 @@ pub fn update_project_environment_link(
                 report_error(format_args!(
                     "Failed to remove existing local virtual environment: {err}"
                 ));
-                return false;
+                return Ok(false);
             }
         } else {
             // On Windows, copying a junction can produce an empty directory.
@@ -603,7 +587,7 @@ pub fn update_project_environment_link(
                 report_error(format_args!(
                     "Failed to create link to project environment: {err}"
                 ));
-                return false;
+                return Ok(false);
             }
         }
     }
@@ -615,7 +599,7 @@ pub fn update_project_environment_link(
     }
 
     let Err(link_error) = uv_fs::replace_symlink(environment.root(), &link) else {
-        return true;
+        return Ok(true);
     };
     warn!("Failed to create link to project environment: {link_error}");
 
@@ -624,7 +608,7 @@ pub fn update_project_environment_link(
             "Failed to write the environment path to `{}`: the path is not valid UTF-8",
             link.simplified_display()
         ));
-        return false;
+        return Ok(false);
     };
 
     if target.contains(['\r', '\n']) {
@@ -632,19 +616,19 @@ pub fn update_project_environment_link(
             "Failed to write the environment path to `{}`: the path contains a newline",
             link.simplified_display()
         ));
-        return false;
+        return Ok(false);
     }
 
     if let Err(err) = uv_fs::write_atomic_sync(&link, format!("{target}\n")) {
         report_error(format_args!("Failed to write the environment path: {err}"));
-        return false;
+        return Ok(false);
     }
 
     report_error(format_args!(
         "Failed to create link to project environment; wrote the environment path to `{}` instead",
         link.simplified_display()
     ));
-    false
+    Ok(false)
 }
 
 /// The project information needed to discover and create an environment.
@@ -667,6 +651,35 @@ impl<'a> ProjectEnvironmentTarget<'a> {
             Self::Workspace(workspace) => workspace.install_path(),
             Self::Lockfile { root, .. } => root,
         }
+    }
+
+    fn environment_cache(self, cache: &Cache) -> ProjectEnvironmentCache<'_> {
+        ProjectEnvironmentCache::new(
+            self.install_path(),
+            self.project_name().map(AsRef::as_ref),
+            cache,
+        )
+    }
+
+    /// Use the cached selection only when its interpreter can be queried.
+    fn discover_current(
+        self,
+        centralized: bool,
+        cache: &Cache,
+    ) -> Result<Option<(ProjectEnvironmentRoot, PythonInstallation)>, EnvironmentError> {
+        if !centralized {
+            return Ok(None);
+        }
+        let environments = self.environment_cache(cache);
+        Ok(environments
+            .discover_current()?
+            .map(|(target, installation)| {
+                let root = ProjectEnvironmentRoot::CacheReference {
+                    reference: environments.current().into_path_buf(),
+                    target,
+                };
+                (root, installation)
+            }))
     }
 
     /// Return the project associated with this environment, if any.
@@ -706,11 +719,22 @@ pub enum ProjectInterpreter {
 impl ProjectInterpreter {
     /// Discover an existing project environment without selecting or downloading an interpreter.
     pub fn discover_existing(
-        install_path: &Path,
+        target: ProjectEnvironmentTarget<'_>,
         active: ActiveEnvironment,
         cache: &Cache,
     ) -> Result<Option<PythonEnvironment>, EnvironmentError> {
+        let install_path = target.install_path();
         let selection = ProjectEnvironmentSelection::from_install_path(install_path, active);
+        let centralized = centralized_environments_enabled(&selection, cache);
+        if let Some((root, installation)) = target.discover_current(centralized, cache)? {
+            root.warn_if_active_mismatch(active);
+            if root.validate().is_err() {
+                return Ok(None);
+            }
+            return Ok(Some(PythonEnvironment::from_interpreter(
+                installation.into_interpreter(),
+            )));
+        }
         let root = selection
             .explicit_path()
             .map_or_else(|| install_path.join(".venv"), Path::to_path_buf);
@@ -722,10 +746,11 @@ impl ProjectInterpreter {
         } else {
             ProjectEnvironmentRoot::from_path(root, cache)
         };
+        root.warn_if_active_mismatch(active);
         let Some(path) = root.discovery_path() else {
             return Ok(None);
         };
-        let centralized = centralized_environments_enabled(&selection, cache)
+        let centralized = centralized
             || match &root {
                 ProjectEnvironmentRoot::Directory(_) | ProjectEnvironmentRoot::Redirect { .. } => {
                     false
@@ -775,7 +800,10 @@ impl ProjectInterpreter {
         let project_environment_path = environment_selection
             .explicit_path()
             .map_or_else(|| target.install_path().join(".venv"), Path::to_path_buf);
-        let root = if centralized {
+        let (current_root, current) = target.discover_current(centralized, cache)?.unzip();
+        let root = if let Some(root) = current_root {
+            Some(root)
+        } else if centralized {
             Some(read_venv_redirect(&project_environment_path).map_or_else(
                 |_| ProjectEnvironmentRoot::from_path(project_environment_path.clone(), cache),
                 |target| ProjectEnvironmentRoot::Redirect {
@@ -798,20 +826,23 @@ impl ProjectInterpreter {
             ))
         };
 
-        // Prefer `.venv`'s interpreter to keep its compatible cached environment selected; derive
-        // the cache root instead of trusting the link target.
+        if let Some(root) = &root {
+            root.warn_if_active_mismatch(active);
+        }
+
+        // Derive the workspace's cache directory from the selected interpreter.
         if centralized {
-            if let Some(path) = root
-                .as_ref()
-                .and_then(ProjectEnvironmentRoot::discovery_path)
-                && let Ok(candidate) = PythonEnvironment::from_root(path, cache)
-            {
-                let environment_root = centralized_environment_root(
-                    target,
-                    candidate.interpreter(),
-                    upgrade_policy,
-                    cache,
-                );
+            let interpreter = current
+                .map(PythonInstallation::into_interpreter)
+                .or_else(|| {
+                    let path = root.as_ref()?.discovery_path()?;
+                    PythonEnvironment::from_root(path, cache)
+                        .ok()
+                        .map(PythonEnvironment::into_interpreter)
+                });
+            if let Some(interpreter) = interpreter {
+                let environment_root =
+                    centralized_environment_root(target, &interpreter, upgrade_policy, cache);
                 if let Some(environment) = discover_project_environment(
                     &environment_root,
                     python_request,
@@ -1094,7 +1125,7 @@ impl ProjectEnvironment {
             // Use the environment accepted by the compatibility policy.
             ProjectInterpreter::Environment(environment) => {
                 if centralized && !dry_run.enabled() {
-                    update_project_environment_link(&environment, target, link_error_reporting);
+                    update_project_environment(&environment, target, link_error_reporting, cache)?;
                 }
                 Ok(Self::Existing(environment))
             }
@@ -1247,7 +1278,7 @@ impl ProjectEnvironment {
                 )?;
 
                 if centralized {
-                    update_project_environment_link(&environment, target, link_error_reporting);
+                    update_project_environment(&environment, target, link_error_reporting, cache)?;
                 }
 
                 if replace_environment {

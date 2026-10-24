@@ -6,15 +6,18 @@ use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{ActiveEnvironment, DependencyGroupsWithDefaults};
 use uv_fs::Simplified;
-use uv_python_discovery::ConfigDiscovery;
-use uv_python_discovery::PythonInstallation;
+use uv_preview::PreviewFeature;
+use uv_python_discovery::{ConfigDiscovery, ProjectEnvironmentDiscovery, PythonInstallation};
 use uv_python_types::{
     EnvironmentPreference, PythonArchitecture, PythonDownloads, PythonPreference, PythonRequest,
 };
 use uv_scripts::Pep723ItemRef;
 use uv_settings::PythonInstallMirrors;
 use uv_warnings::{warn_user, warn_user_once_with_chain};
-use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceErrorKind};
+use uv_workspace::{
+    DiscoveryOptions, ProjectEnvironmentSelection, VirtualProject, WorkspaceCache,
+    WorkspaceErrorKind,
+};
 
 use uv_command_support::ExitStatus;
 use uv_command_support::Printer;
@@ -88,11 +91,30 @@ pub async fn find(
         .python_request
         .as_ref()
         .unwrap_or(&PythonRequest::Default);
-    let python = PythonInstallation::find_existing(
+    let project_environment = if let Some(project) = &project
+        && !system
+        && !cache.is_temporary()
+        && uv_preview::is_enabled(PreviewFeature::CentralizedProjectEnvs)
+        && ProjectEnvironmentSelection::from_install_path(
+            project.workspace().install_path(),
+            ActiveEnvironment::Ignore,
+        )
+        .is_default()
+    {
+        Some(ProjectEnvironmentDiscovery::new(
+            project.workspace(),
+            project_dir,
+            cache,
+        ))
+    } else {
+        None
+    };
+    let python = PythonInstallation::find_existing_with_project_environment(
         python_request,
         environment_preference,
         python_preference,
         python_arch,
+        project_environment.as_ref(),
         cache,
     )?;
     python

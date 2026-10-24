@@ -19,7 +19,7 @@ use tracing::{debug, trace, warn};
 use uv_cache::Cache;
 use uv_configuration::{ActiveEnvironment, DependencyGroupsWithDefaults, ExcludeDependency};
 use uv_distribution_types::{Index, MinimumLibcVersion, Requirement, RequirementSource};
-use uv_fs::{CWD, Simplified, normalize_path, read_venv_redirect};
+use uv_fs::{CWD, Simplified, normalize_path};
 use uv_normalize::{DEV_DEPENDENCIES, DefaultGroups, GroupName, PackageName};
 use uv_once_map::OnceMap;
 use uv_pep440::VersionSpecifiers;
@@ -62,69 +62,53 @@ impl ProjectEnvironmentSelection {
             })
         }
 
-        /// Resolve the `VIRTUAL_ENV` variable, if any.
-        fn from_virtual_env_variable() -> Option<PathBuf> {
-            let value = std::env::var_os(EnvVars::VIRTUAL_ENV)?;
-            if value.is_empty() {
-                return None;
+        if active == ActiveEnvironment::Prefer {
+            if let Some(path) = Self::active_path() {
+                debug!(
+                    "Using active virtual environment at `{}`",
+                    path.user_display()
+                );
+                return Self::Active(path);
             }
-            let path = PathBuf::from(value);
-            Some(if path.is_absolute() {
-                path
-            } else {
-                // Unlike `UV_PROJECT_ENVIRONMENT`, resolve this against the current directory.
-                CWD.join(path)
-            })
-        }
-
-        let selection = from_project_environment_variable(install_path)
-            .map(Self::Override)
-            .unwrap_or(Self::Default);
-        let project_environment_path = selection
-            .explicit_path()
-            .map_or_else(|| install_path.join(".venv"), Path::to_path_buf);
-
-        if let Some(from_virtual_env) = from_virtual_env_variable() {
-            let redirect = if selection.is_default() && project_environment_path.is_file() {
-                read_venv_redirect(&project_environment_path).ok()
-            } else {
-                None
-            };
-            let matches_project =
-                uv_fs::is_same_file_allow_missing(&from_virtual_env, &project_environment_path)
-                    .unwrap_or(false)
-                    || redirect.as_deref().is_some_and(|target| {
-                        uv_fs::is_same_file_allow_missing(&from_virtual_env, target)
-                            .unwrap_or(false)
-                    });
-            match active {
-                ActiveEnvironment::Prefer => {
-                    if !matches_project {
-                        debug!(
-                            "Using active virtual environment `{}` instead of project environment `{}`",
-                            from_virtual_env.user_display(),
-                            project_environment_path.user_display()
-                        );
-                    }
-                    return Self::Active(from_virtual_env);
-                }
-                ActiveEnvironment::Ignore => {}
-                ActiveEnvironment::Warn if !matches_project => {
-                    warn_user_once!(
-                        "`VIRTUAL_ENV={}` does not match the project environment path `{}` and will be ignored; use `--active` to target the active environment instead",
-                        from_virtual_env.user_display(),
-                        project_environment_path.user_display()
-                    );
-                }
-                ActiveEnvironment::Warn => {}
-            }
-        } else if active == ActiveEnvironment::Prefer {
             debug!(
                 "Use of the active virtual environment was requested, but `VIRTUAL_ENV` is not set"
             );
         }
 
-        selection
+        from_project_environment_variable(install_path)
+            .map(Self::Override)
+            .unwrap_or(Self::Default)
+    }
+
+    /// Warn when the active environment differs from the project environment used for discovery.
+    pub fn warn_if_active_mismatch(project_environment: &Path, target: Option<&Path>) {
+        if let Some(active) = Self::active_path()
+            && !uv_fs::is_same_file_allow_missing(&active, project_environment).unwrap_or(false)
+            && !target.is_some_and(|target| {
+                uv_fs::is_same_file_allow_missing(&active, target).unwrap_or(false)
+            })
+        {
+            warn_user_once!(
+                "`VIRTUAL_ENV={}` does not match the project environment path `{}` and will be ignored; use `--active` to target the active environment instead",
+                active.user_display(),
+                project_environment.user_display()
+            );
+        }
+    }
+
+    /// Resolve the `VIRTUAL_ENV` variable, if any.
+    fn active_path() -> Option<PathBuf> {
+        let value = std::env::var_os(EnvVars::VIRTUAL_ENV)?;
+        if value.is_empty() {
+            return None;
+        }
+        let path = PathBuf::from(value);
+        Some(if path.is_absolute() {
+            path
+        } else {
+            // Unlike `UV_PROJECT_ENVIRONMENT`, resolve this against the current directory.
+            CWD.join(path)
+        })
     }
 
     /// Returns `true` if the workspace's default project environment was selected.
@@ -1069,8 +1053,6 @@ impl Workspace {
     /// it is resolved relative to the install path.
     ///
     /// If `active` is [`ActiveEnvironment::Prefer`], the `VIRTUAL_ENV` variable will be preferred.
-    /// If it is [`ActiveEnvironment::Ignore`], warnings about mismatches between the active
-    /// environment and the project environment will be silenced.
     pub fn environment_selection(&self, active: ActiveEnvironment) -> ProjectEnvironmentSelection {
         ProjectEnvironmentSelection::from_install_path(&self.install_path, active)
     }

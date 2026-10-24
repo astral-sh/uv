@@ -21,6 +21,7 @@ mod installation;
 #[cfg(windows)]
 mod microsoft_store;
 mod project;
+mod project_environment;
 mod reporter;
 mod script;
 mod selection_error;
@@ -34,6 +35,7 @@ pub use project::{
     PythonRequirementConflicts, PythonRequirementSource, find_requires_python,
     format_requires_python_sources,
 };
+pub use project_environment::{ProjectEnvironmentCache, ProjectEnvironmentDiscovery};
 pub use reporter::{PythonDownloadReporter, report_interpreter};
 pub use script::{
     EnvironmentIncompatibilityError, EnvironmentKind, ScriptInterpreter,
@@ -979,6 +981,7 @@ mod tests {
                 EnvironmentPreference::OnlySystem,
                 PythonPreference::OnlySystem,
                 None,
+                None,
                 &context.cache,
             );
 
@@ -1184,6 +1187,7 @@ mod tests {
                     &request,
                     EnvironmentPreference::OnlySystem,
                     PythonPreference::OnlySystem,
+                    None,
                     None,
                     &sequential_cache,
                 ) {

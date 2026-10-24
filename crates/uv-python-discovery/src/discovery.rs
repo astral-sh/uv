@@ -25,8 +25,11 @@ use which::which_all;
 use crate::installation::PythonInstallation;
 #[cfg(windows)]
 use crate::microsoft_store::find_microsoft_store_pythons;
+use crate::project_environment::ProjectEnvironmentDiscovery;
 use crate::virtualenv_discovery::CondaEnvironmentKind;
 use crate::virtualenv_discovery::conda_environment_from_env;
+use crate::virtualenv_discovery::virtualenv_containing_directory;
+use crate::virtualenv_discovery::virtualenv_from_dot_venv;
 use crate::virtualenv_discovery::virtualenv_from_env;
 use crate::virtualenv_discovery::virtualenv_from_working_dir;
 #[cfg(windows)]
@@ -62,20 +65,36 @@ pub struct PythonNotFound {
     pub(super) environment_preference: EnvironmentPreference,
 }
 
-/// A non-empty group of equally preferred Python executables.
+/// A non-empty group of equally preferred Python executables, or an already queried installation.
 ///
 /// Minor-version fallback candidates from one `PATH` directory share a group. Preferred executable
 /// names and interpreters from other sources form singleton groups.
-struct PythonExecutableGroup(Vec<(PythonSource, PathBuf)>);
+enum PythonExecutableGroup {
+    Paths(Vec<(PythonSource, PathBuf)>),
+    Queried(Box<PythonInstallation>),
+}
 
 impl PythonExecutableGroup {
     fn new(executables: Vec<(PythonSource, PathBuf)>) -> Option<Self> {
-        (!executables.is_empty()).then_some(Self(executables))
+        (!executables.is_empty()).then_some(Self::Paths(executables))
     }
 
-    fn filter(mut self, mut predicate: impl FnMut(PythonSource, &Path) -> bool) -> Option<Self> {
-        self.0.retain(|(source, path)| predicate(*source, path));
-        (!self.0.is_empty()).then_some(self)
+    fn single(executable: (PythonSource, PathBuf)) -> Self {
+        Self::Paths(vec![executable])
+    }
+
+    fn filter(self, mut predicate: impl FnMut(PythonSource, &Path) -> bool) -> Option<Self> {
+        match self {
+            Self::Paths(mut executables) => {
+                executables.retain(|(source, path)| predicate(*source, path));
+                Self::new(executables)
+            }
+            Self::Queried(installation) => predicate(
+                installation.source,
+                installation.interpreter.sys_executable(),
+            )
+            .then_some(Self::Queried(installation)),
+        }
     }
 }
 
@@ -147,11 +166,12 @@ impl uv_errors::Hinted for Error {
 /// The following sources are supported:
 ///
 /// - Active virtual environment (via `VIRTUAL_ENV`)
-/// - Discovered virtual environment (e.g. `.venv` in a parent directory)
+/// - Discovered virtual environment (e.g. `.venv` or a centralized project environment)
 ///
 /// Notably, "system" environments are excluded. See [`python_executables_from_installed`].
-fn python_executables_from_virtual_environments<'a>()
--> impl Iterator<Item = Result<(PythonSource, PathBuf), Error>> + 'a {
+fn python_executables_from_virtual_environments<'a>(
+    project_environment: Option<&'a ProjectEnvironmentDiscovery<'a>>,
+) -> impl Iterator<Item = Result<PythonExecutableGroup, Error>> + 'a {
     let from_active_environment = iter::once_with(|| {
         virtualenv_from_env()
             .into_iter()
@@ -169,12 +189,20 @@ fn python_executables_from_virtual_environments<'a>()
     })
     .flatten();
 
-    let from_discovered_environment = iter::once_with(|| {
-        virtualenv_from_working_dir()
-            .map(|path| {
-                path.map(virtualenv_python_executable)
-                    .map(|path| (PythonSource::DiscoveredEnvironment, path))
-                    .into_iter()
+    let from_discovered_environment = iter::once_with(move || {
+        if let Some(project_environment) = project_environment
+            && let Some(group) = python_executable_from_project_environment(project_environment)?
+        {
+            return Ok(Some(group));
+        }
+        virtualenv_from_working_dir(project_environment.map(|project| project.start))
+            .map(|root| {
+                root.map(|root| {
+                    PythonExecutableGroup::single((
+                        PythonSource::DiscoveredEnvironment,
+                        virtualenv_python_executable(root),
+                    ))
+                })
             })
             .map_err(Error::from)
     })
@@ -182,7 +210,31 @@ fn python_executables_from_virtual_environments<'a>()
 
     from_active_environment
         .chain(from_conda_environment)
+        .map_ok(PythonExecutableGroup::single)
         .chain(from_discovered_environment)
+}
+
+/// Locate the workspace's selected environment before searching for a nearer `.venv`.
+fn python_executable_from_project_environment(
+    project: &ProjectEnvironmentDiscovery<'_>,
+) -> Result<Option<PythonExecutableGroup>, Error> {
+    let root = if let Some(root) =
+        virtualenv_containing_directory(project.start, project.workspace_root)
+    {
+        root.to_path_buf()
+    } else if let Some((_, installation)) = project.cache.discover_current()? {
+        return Ok(Some(PythonExecutableGroup::Queried(Box::new(installation))));
+    } else {
+        // A missing or unusable workspace environment leaves the normal ancestor search in charge.
+        let Ok(Some(root)) = virtualenv_from_dot_venv(project.workspace_root) else {
+            return Ok(None);
+        };
+        root
+    };
+    Ok(Some(PythonExecutableGroup::single((
+        PythonSource::DiscoveredEnvironment,
+        virtualenv_python_executable(root),
+    ))))
 }
 
 /// Lazily iterate over Python executables installed on the system.
@@ -276,7 +328,7 @@ fn python_executables_from_installed<'a>(
             })
     })
     .flatten_ok()
-    .map_ok(|executable| PythonExecutableGroup(vec![executable]));
+    .map_ok(PythonExecutableGroup::single);
 
     let from_search_path = iter::once_with(move || {
         let mut first = true;
@@ -334,7 +386,7 @@ fn python_executables_from_installed<'a>(
                     .map_err(Error::from)
             })
             .flatten_ok()
-            .map_ok(|executable| PythonExecutableGroup(vec![executable])),
+            .map_ok(PythonExecutableGroup::single),
         ),
         Err(err) => Box::new(iter::once(Err(Error::from(err)))),
     };
@@ -384,16 +436,17 @@ fn python_executables<'a>(
     platform: PlatformRequest,
     environments: EnvironmentPreference,
     preference: PythonPreference,
+    project_environment: Option<&'a ProjectEnvironmentDiscovery<'a>>,
 ) -> Box<dyn Iterator<Item = Result<PythonExecutableGroup, Error>> + 'a> {
     // Always read from `UV_INTERNAL__PARENT_INTERPRETER` — it could be a system interpreter
     let from_parent_interpreter = iter::once_with(|| {
         env::var_os(EnvVars::UV_INTERNAL__PARENT_INTERPRETER)
             .into_iter()
             .map(|path| {
-                Ok(PythonExecutableGroup(vec![(
+                Ok(PythonExecutableGroup::single((
                     PythonSource::ParentInterpreter,
                     PathBuf::from(path),
-                )]))
+                )))
             })
     })
     .flatten();
@@ -404,16 +457,16 @@ fn python_executables<'a>(
             .into_iter()
             .map(virtualenv_python_executable)
             .map(|path| {
-                Ok(PythonExecutableGroup(vec![(
+                Ok(PythonExecutableGroup::single((
                     PythonSource::BaseCondaPrefix,
                     path,
-                )]))
+                )))
             })
     })
     .flatten();
 
-    let from_virtual_environments = python_executables_from_virtual_environments()
-        .map_ok(|executable| PythonExecutableGroup(vec![executable]));
+    let from_virtual_environments =
+        python_executables_from_virtual_environments(project_environment);
     let from_installed =
         python_executables_from_installed(version, implementation, platform, preference);
 
@@ -629,12 +682,19 @@ fn find_all_minor(
 }
 
 /// How to query discovered Python executables.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 enum QueryStrategy {
     /// Lazily query one executable group at a time.
+    #[default]
     Sequential,
     /// Query groups and their executables concurrently before yielding results.
     Parallel,
+}
+
+#[derive(Clone, Copy, Default)]
+struct QueryOptions<'a> {
+    strategy: QueryStrategy,
+    project_environment: Option<&'a ProjectEnvironmentDiscovery<'a>>,
 }
 
 /// Iterate over all discoverable Python interpreters.
@@ -653,24 +713,31 @@ fn python_installations<'a>(
     environments: EnvironmentPreference,
     preference: PythonPreference,
     cache: &'a Cache,
-    strategy: QueryStrategy,
+    options: QueryOptions<'a>,
 ) -> Box<dyn Iterator<Item = Result<PythonInstallation, Error>> + 'a> {
     Box::new(
         python_installations_from_executables(
             // Perform filtering on the discovered executables based on their source. This avoids
             // unnecessary interpreter queries, which are generally expensive. We'll filter again
             // with `PythonInstallation::satisfies_preferences` after querying.
-            python_executables(version, implementation, platform, environments, preference)
-                .filter_map(move |result| match result {
-                    Ok(group) => group
-                        .filter(|source, path| {
-                            source_satisfies_environment_preference(source, path, environments)
-                        })
-                        .map(Ok),
-                    Err(error) => Some(Err(error)),
-                }),
+            python_executables(
+                version,
+                implementation,
+                platform,
+                environments,
+                preference,
+                options.project_environment,
+            )
+            .filter_map(move |result| match result {
+                Ok(group) => group
+                    .filter(|source, path| {
+                        source_satisfies_environment_preference(source, path, environments)
+                    })
+                    .map(Ok),
+                Err(error) => Some(Err(error)),
+            }),
             cache,
-            strategy,
+            options.strategy,
         )
         .filter_ok(move |installation| {
             installation.satisfies_preferences(version, environments, preference)
@@ -681,7 +748,7 @@ fn python_installations<'a>(
 }
 
 /// Query a single Python executable, returning a [`PythonInstallation`] on success.
-fn python_installation_from_executable(
+pub(crate) fn python_installation_from_executable(
     source: PythonSource,
     path: PathBuf,
     cache: &Cache,
@@ -734,7 +801,10 @@ fn python_installations_from_executable_group(
 ) -> impl Iterator<Item = Result<PythonInstallation, Error>> + use<> {
     match group {
         Err(error) => Either::Left(iter::once(Err(error))),
-        Ok(PythonExecutableGroup(executables)) => {
+        Ok(PythonExecutableGroup::Queried(installation)) => {
+            Either::Left(iter::once(Ok(*installation)))
+        }
+        Ok(PythonExecutableGroup::Paths(executables)) => {
             let mut installations = match strategy {
                 QueryStrategy::Sequential => executables
                     .into_iter()
@@ -909,8 +979,7 @@ fn python_installations_with_name<'a>(
     strategy: QueryStrategy,
 ) -> Box<dyn Iterator<Item = Result<PythonInstallation, Error>> + 'a> {
     python_installations_from_executables(
-        python_executables_with_name(name)
-            .map_ok(|executable| PythonExecutableGroup(vec![executable])),
+        python_executables_with_name(name).map_ok(PythonExecutableGroup::single),
         cache,
         strategy,
     )
@@ -922,27 +991,30 @@ pub(crate) fn find_python_installations<'a>(
     environments: EnvironmentPreference,
     preference: PythonPreference,
     arch: Option<PythonArchitecture>,
+    project_environment: Option<&'a ProjectEnvironmentDiscovery<'a>>,
     cache: &'a Cache,
 ) -> Box<dyn Iterator<Item = Result<FindPythonResult, Error>> + 'a> {
-    find_python_installations_with_strategy(
+    find_python_installations_with_options(
         request,
         environments,
         preference,
         arch,
         cache,
-        QueryStrategy::Sequential,
+        QueryOptions {
+            project_environment,
+            ..QueryOptions::default()
+        },
     )
 }
 
-/// Iterate over all Python installations that satisfy the given request using the given query
-/// strategy.
-fn find_python_installations_with_strategy<'a>(
+/// Iterate over all Python installations that satisfy the given request using the given options.
+fn find_python_installations_with_options<'a>(
     request: &'a PythonRequest,
     environments: EnvironmentPreference,
     preference: PythonPreference,
     arch: Option<PythonArchitecture>,
     cache: &'a Cache,
-    strategy: QueryStrategy,
+    options: QueryOptions<'a>,
 ) -> Box<dyn Iterator<Item = Result<FindPythonResult, Error>> + 'a> {
     let arch = arch.map(|arch| {
         PythonDownloadRequest::from_request(request)
@@ -1016,7 +1088,7 @@ fn find_python_installations_with_strategy<'a>(
             if preference.allows_source(PythonSource::SearchPath) {
                 debug!("Searching for Python interpreter with {request}");
                 Box::new(
-                    python_installations_with_name(name, cache, strategy)
+                    python_installations_with_name(name, cache, options.strategy)
                         .filter_ok(move |installation| {
                             installation.satisfies_environment_preference(environments)
                         })
@@ -1039,7 +1111,7 @@ fn find_python_installations_with_strategy<'a>(
                 environments,
                 preference,
                 cache,
-                strategy,
+                options,
             )
             .map_ok(Ok)
         }),
@@ -1052,7 +1124,7 @@ fn find_python_installations_with_strategy<'a>(
                 environments,
                 preference,
                 cache,
-                strategy,
+                options,
             )
             .map_ok(Ok)
         }),
@@ -1069,7 +1141,7 @@ fn find_python_installations_with_strategy<'a>(
                     environments,
                     preference,
                     cache,
-                    strategy,
+                    options,
                 )
                 .map_ok(Ok)
             })
@@ -1083,7 +1155,7 @@ fn find_python_installations_with_strategy<'a>(
                 environments,
                 preference,
                 cache,
-                strategy,
+                options,
             )
             .filter_ok(move |installation| {
                 installation
@@ -1105,7 +1177,7 @@ fn find_python_installations_with_strategy<'a>(
                     environments,
                     preference,
                     cache,
-                    strategy,
+                    options,
                 )
                 .filter_ok(move |installation| {
                     installation
@@ -1131,7 +1203,7 @@ fn find_python_installations_with_strategy<'a>(
                     environments,
                     preference,
                     cache,
-                    strategy,
+                    options,
                 )
                 .filter_ok(move |installation| {
                     installation.interpreter.matches_download_request(request)
@@ -1155,13 +1227,16 @@ pub fn find_all_python_installations(
     arch: Option<PythonArchitecture>,
     cache: &Cache,
 ) -> Result<Vec<PythonInstallation>, Error> {
-    let results = find_python_installations_with_strategy(
+    let results = find_python_installations_with_options(
         request,
         environments,
         preference,
         arch,
         cache,
-        QueryStrategy::Parallel,
+        QueryOptions {
+            strategy: QueryStrategy::Parallel,
+            ..QueryOptions::default()
+        },
     );
     let mut installations = Vec::new();
     for result in results {
@@ -1189,7 +1264,32 @@ pub(crate) fn find_python_installation(
     arch: Option<PythonArchitecture>,
     cache: &Cache,
 ) -> Result<FindPythonResult, Error> {
-    let installations = find_python_installations(request, environments, preference, arch, cache);
+    find_python_installation_with_project_environment(
+        request,
+        environments,
+        preference,
+        arch,
+        None,
+        cache,
+    )
+}
+
+pub(crate) fn find_python_installation_with_project_environment(
+    request: &PythonRequest,
+    environments: EnvironmentPreference,
+    preference: PythonPreference,
+    arch: Option<PythonArchitecture>,
+    project_environment: Option<&ProjectEnvironmentDiscovery<'_>>,
+    cache: &Cache,
+) -> Result<FindPythonResult, Error> {
+    let installations = find_python_installations(
+        request,
+        environments,
+        preference,
+        arch,
+        project_environment,
+        cache,
+    );
     let mut first_prerelease = None;
     let mut first_debug = None;
     let mut first_managed = None;

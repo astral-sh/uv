@@ -959,12 +959,15 @@ pub fn is_virtualenv_base(path: impl AsRef<Path>) -> bool {
 
 /// Read the path in a `.venv` redirect file (PEP 832), relative to the file's directory.
 pub fn read_venv_redirect(path: &Path) -> io::Result<PathBuf> {
+    // Allow enough room for a Windows extended-length path encoded as UTF-8.
+    const MAX_PATH_BYTES: u64 = 128 * 1024;
+
     let mut options = fs_err::OpenOptions::new();
     options.read(true);
     // A redirect may be replaced with a FIFO before it is opened.
     #[cfg(unix)]
     options.custom_flags(rustix::fs::OFlags::NONBLOCK.bits().cast_signed());
-    let mut file = options.open(path)?;
+    let file = options.open(path)?;
     if !file.metadata()?.is_file() {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -972,7 +975,15 @@ pub fn read_venv_redirect(path: &Path) -> io::Result<PathBuf> {
         ));
     }
     let mut contents = String::new();
-    file.read_to_string(&mut contents)?;
+    let len = file
+        .take(MAX_PATH_BYTES + 1)
+        .read_to_string(&mut contents)?;
+    if len as u64 > MAX_PATH_BYTES {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "environment path is too long",
+        ));
+    }
     let line = contents
         .strip_suffix("\r\n")
         .or_else(|| contents.strip_suffix('\n'))

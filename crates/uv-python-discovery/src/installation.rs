@@ -10,8 +10,11 @@ use uv_platform::{Arch, Libc, Os};
 
 use crate::Error;
 use crate::MissingPythonHint;
+use crate::ProjectEnvironmentDiscovery;
 use crate::discovery::find_best_python_installation;
-use crate::discovery::find_python_installation;
+use crate::discovery::{
+    find_python_installation, find_python_installation_with_project_environment,
+};
 use uv_python_interpreter::{EnvironmentNotFound, Interpreter, PythonEnvironment};
 use uv_python_managed::downloads::{
     DownloadResult, ManagedPythonDownload, ManagedPythonDownloadList, Reporter,
@@ -118,11 +121,31 @@ impl PythonInstallation {
         arch: Option<PythonArchitecture>,
         cache: &Cache,
     ) -> Result<Self, Error> {
-        Ok(find_python_installation(
+        Self::find_existing_with_project_environment(
             request,
             environments,
             preference,
             arch,
+            None,
+            cache,
+        )
+    }
+
+    /// Find an installation, considering a cached project environment at its workspace root.
+    pub fn find_existing_with_project_environment(
+        request: &PythonRequest,
+        environments: EnvironmentPreference,
+        preference: PythonPreference,
+        arch: Option<PythonArchitecture>,
+        project_environment: Option<&ProjectEnvironmentDiscovery<'_>>,
+        cache: &Cache,
+    ) -> Result<Self, Error> {
+        Ok(find_python_installation_with_project_environment(
+            request,
+            environments,
+            preference,
+            arch,
+            project_environment,
             cache,
         )??)
     }
