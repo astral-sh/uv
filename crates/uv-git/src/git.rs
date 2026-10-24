@@ -625,7 +625,7 @@ fn ls_remote(
 ) -> Result<Option<GitOid>> {
     debug!("Performing a Git ls-remote for: {remote_url}");
     let mut cmd = GIT.as_ref().cloned()?;
-    cmd.arg("ls-remote");
+    cmd.env(EnvVars::GIT_TERMINAL_PROMPT, "0").arg("ls-remote");
     if disable_ssl {
         debug!("Disabling SSL verification for Git ls-remote via `GIT_SSL_NO_VERIFY`");
         cmd.env(EnvVars::GIT_SSL_NO_VERIFY, "true");
@@ -650,7 +650,9 @@ fn ls_remote(
         GitReference::Commit(commit) => return Ok(Some(*commit)),
     };
     cmd.arg("--").arg(remote_url.as_str()).args(&refs);
-    let output = cmd.exec_with_output()?;
+    let output = cmd
+        .exec_with_output()
+        .map_err(|err| redact_git_error(err, remote_url))?;
     let stdout = str::from_utf8(&output.stdout)?;
     // Prefer branches over tags and peeled commits over annotated tag objects.
     for name in refs {
