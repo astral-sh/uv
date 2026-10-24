@@ -1,10 +1,18 @@
 use std::collections::BTreeMap;
+#[cfg(feature = "test-git")]
+use std::process::Command;
 
 use anyhow::Result;
+#[cfg(feature = "test-git")]
+use anyhow::anyhow;
+#[cfg(feature = "test-git")]
+use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use insta::assert_snapshot;
 use serde_json::{Map, Value, json};
 use uv_distribution_types::PEP_850_SCHEMA;
+#[cfg(feature = "test-git")]
+use uv_redacted::SafeUrl;
 use uv_static::EnvVars;
 use uv_test::find_links::FindLinksServer;
 use uv_test::packse::WheelBuilder;
@@ -147,6 +155,83 @@ fn install_direct_url_variant_wheel() -> Result<()> {
         .arg("--preview-features")
         .arg("wheel-variants")
         .arg(&url), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Failed to determine installation plan
+      cause: Wheel variant `gpu` requires unsupported properties: `nvidia :: cuda_version_lower_bound :: 12` and `nvidia :: sm_arch :: 89_real`
+    ");
+    Ok(())
+}
+
+/// Installing a cached Git wheel checks variant compatibility even at the same pinned commit.
+#[test]
+#[cfg(feature = "test-git")]
+fn install_git_path_variant_wheel() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filter((r"@[0-9a-f]{40}", "@[COMMIT]"));
+    let repository = context.temp_dir.child("repository");
+    repository.create_dir_all()?;
+    let variant = gpu_variant().to_string();
+    let (_, wheel) = WheelBuilder::new(&"ok".parse()?, &"1.0.0".parse()?)
+        .files(&[("ok-1.0.0.dist-info/variant.json", &variant)])
+        .build();
+    let filename = "ok-1.0.0-py3-none-any-gpu.whl";
+    repository.child(filename).write_binary(&wheel)?;
+    Command::new("git")
+        .arg("init")
+        .arg(repository.path())
+        .assert()
+        .success();
+    Command::new("git")
+        .current_dir(repository.path())
+        .args(["add", filename])
+        .assert()
+        .success();
+    Command::new("git")
+        .current_dir(repository.path())
+        .args([
+            "-c",
+            "user.name=ferris",
+            "-c",
+            "user.email=ferris@example.com",
+            "commit",
+            "-m",
+            "Add wheel",
+        ])
+        .assert()
+        .success();
+    let output = Command::new("git")
+        .current_dir(repository.path())
+        .args(["rev-parse", "HEAD"])
+        .output()?;
+    assert!(output.status.success());
+    let commit = String::from_utf8(output.stdout)?;
+    let commit = commit.trim();
+    let repository_url = SafeUrl::from_directory_path(repository.path())
+        .map_err(|()| anyhow!("failed to convert repository path to file URL"))?;
+    let requirement = format!("ok @ git+{repository_url}@{commit}#path={filename}");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .env(EnvVars::NV_VARIANT_PROVIDER_FORCE_CUDA_DRIVER_VERSION, "12")
+        .env(EnvVars::NV_VARIANT_PROVIDER_FORCE_SM_ARCH, "8.9")
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg(&requirement), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0 (from git+file://[TEMP_DIR]/repository/@[COMMIT]#path=ok-1.0.0-py3-none-any-gpu.whl)
+    ");
+
+    context.reset_venv();
+    uv_snapshot!(context.filters(), context.pip_install()
+        .env(EnvVars::NV_VARIANT_PROVIDER_FORCE_CUDA_DRIVER_VERSION, "11")
+        .env(EnvVars::NV_VARIANT_PROVIDER_FORCE_SM_ARCH, "8.8")
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg(&requirement), @"
     exit_code: 2 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
