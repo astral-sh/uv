@@ -314,6 +314,10 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: "Enable the Windows segment heap"
+        if: ${{ matrix.platform.target == 'x86_64-pc-windows-msvc' }}
+        run: reg.exe add 'HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Segment Heap' /v Enabled /t REG_DWORD /d 1 /f
+
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           cache: ""
