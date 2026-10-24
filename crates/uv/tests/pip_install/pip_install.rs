@@ -9495,25 +9495,6 @@ fn require_hashes_build_dependencies() -> Result<()> {
                sha256:872c63aa7e8aca85e8dba07b05c6a9b28d5a149fe00638f1a47e36930197248f
     ");
 
-    // all groups at once
-    context = new_context()?;
-    uv_snapshot!(context.filters(), context.pip_install()
-        .arg("-r").arg("pyproject.toml")
-        .arg("--all-groups"), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Resolved 4 packages in [TIME]
-    Prepared 4 packages in [TIME]
-    Installed 4 packages in [TIME]
-     + iniconfig==2.0.0
-     + sniffio==1.3.1
-     + sortedcontainers==2.4.0
-     + typing-extensions==4.10.0
-    ");
-
     Ok(())
 }
 
@@ -13243,6 +13224,22 @@ fn dependency_group() -> Result<()> {
      + typing-extensions==4.10.0
     ");
 
+    // all groups at once
+    context = new_context(&server)?;
+    uv_snapshot!(context.filters(), command(&context, &server)
+        .arg("-r").arg("pyproject.toml")
+        .arg("--all-groups"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + iniconfig==2.0.0
+     + sniffio==1.3.1
+     + sortedcontainers==2.4.0
+     + typing-extensions==4.10.0
+    ");
+
     Ok(())
 }
 
@@ -16055,9 +16052,13 @@ requires_python = "==3.13.*"
         .arg("--all-extras"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
+    Prepared 5 packages in [TIME]
+    Installed 5 packages in [TIME]
+     + anyio==4.9.0
      + blinker==1.9.0
+     + idna==3.10
+     + iniconfig==2.1.0
+     + sniffio==1.3.1
     "
     );
 
@@ -16083,18 +16084,15 @@ requires_python = "==3.13.*"
         .arg("--preview")
         .arg("-r")
         .arg("pylock.toml")
-        .arg("--all-groups"), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+        .arg("--all-groups"), @"
+    exit_code: 0 (success)
     ----- stderr -----
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + iniconfig==2.1.0
      + pygments==2.19.2
-    // `--group pylock.toml:test` should be rejected.
-    let context = new_context()?;
+    "
+    );
 
     Ok(())
 }

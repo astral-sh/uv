@@ -3681,7 +3681,7 @@ impl PipSyncSettings {
                     extra,
                     all_extras: flag(all_extras, no_all_extras, "all-extras")?,
                     group: Some(group),
-                    all_groups: flag(all_groups, no_all_groups, "all-groups"),
+                    all_groups: flag(all_groups, no_all_groups, "all-groups")?,
                     torch_backend,
                     ..installer.into_pip_options(configured_indexes(filesystem.as_ref()))?
                 },
@@ -3885,7 +3885,7 @@ impl PipInstallSettings {
                     extra,
                     all_extras: flag(all_extras, no_all_extras, "all-extras")?,
                     group: Some(group),
-                    all_groups: flag(all_groups, no_all_groups, "all-groups"),
+                    all_groups: flag(all_groups, no_all_groups, "all-groups")?,
                     no_deps: flag(no_deps, deps, "deps")?,
                     python_version,
                     python_platform,

@@ -6053,6 +6053,16 @@ fn pep_751_default_groups_overlapping_public_groups() -> Result<()> {
      + iniconfig==2.0.0
     ");
 
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .args(["--preview", "--offline", "--dry-run", "--all-groups", "pylock.toml"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Would download 2 packages
+    Would install 2 packages
+     + iniconfig==2.0.0
+     + typing-extensions==4.10.0
+    ");
+
     Ok(())
 }
 

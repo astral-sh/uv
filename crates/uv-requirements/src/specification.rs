@@ -502,28 +502,14 @@ impl RequirementsSpecification {
                     names.push(group.name.clone());
                 }
 
-                if groups.all_groups {
-                    spec.groups.insert(
-                        pylock_toml.clone(),
-                        DependencyGroups::from_args(
-                            false,
-                            false,
-                            false,
-                            Vec::new(),
-                            Vec::new(),
-                            false,
-                            Vec::new(),
-                            true,
-                        ),
-                    );
-                } else if !names.is_empty() {
+                if groups.all_groups || !names.is_empty() {
                     spec.pylock_groups = DependencyGroups::from_args(
                         None,
                         Vec::new(),
                         Vec::new(),
                         false,
                         names,
-                        false,
+                        groups.all_groups,
                     );
                 }
             }
@@ -546,8 +532,14 @@ impl RequirementsSpecification {
 
             let mut group_specs = BTreeMap::new();
             for (path, group_names) in groups_by_path {
-                let group_spec =
-                    DependencyGroups::from_args(None, Vec::new(), Vec::new(), false, group_names, false);
+                let group_spec = DependencyGroups::from_args(
+                    None,
+                    Vec::new(),
+                    Vec::new(),
+                    false,
+                    group_names,
+                    false,
+                );
                 group_specs.insert(path, group_spec);
             }
 
@@ -556,9 +548,7 @@ impl RequirementsSpecification {
                 group_specs.insert(
                     groups.root.join("pyproject.toml"),
                     DependencyGroups::from_args(
-                        false,
-                        false,
-                        false,
+                        None,
                         Vec::new(),
                         Vec::new(),
                         false,
