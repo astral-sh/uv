@@ -354,3 +354,32 @@ reason = "kept public alongside the other wheel variant component constructors"
 crate = "uv_extract"
 module = "dirhash"
 reason = "intentionally public"
+
+[[override]]
+lint = "hawk::unnecessary_public"
+crate = "uv_delocate"
+item = "macho::change_install_name"
+kind = "function"
+level = "expect"
+target = 'cfg(not(target_os = "macos"))'
+reason = "called by the macOS integration tests that run install_name_tool"
+
+
+[[override]]
+lint = "hawk::unnecessary_public"
+crate = "uv_delocate"
+item = "macho::change_install_id"
+kind = "function"
+level = "expect"
+target = 'cfg(not(target_os = "macos"))'
+reason = "called by the macOS integration tests that run install_name_tool"
+
+
+[[override]]
+lint = "hawk::unnecessary_public"
+crate = "uv_delocate"
+item = "macho::delete_rpath"
+kind = "function"
+level = "expect"
+target = 'cfg(not(target_os = "macos"))'
+reason = "called by the macOS integration tests that run install_name_tool"

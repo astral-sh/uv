@@ -259,7 +259,7 @@ fn update_platform_tags_version(
         .collect();
 
     // Sort the compressed tag sets.
-    tags.sort_unstable_by_key(|tag| tag.to_string());
+    tags.sort_unstable_by_key(ToString::to_string);
     tags
 }
 

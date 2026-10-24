@@ -48,7 +48,7 @@ impl Arch {
     }
 
     /// Returns the architecture name as used in wheel platform tags.
-    pub fn as_str(&self) -> &'static str {
+    fn as_str(&self) -> &'static str {
         match self {
             Self::X86_64 => "x86_64",
             Self::Arm64 => "arm64",
@@ -121,7 +121,7 @@ pub fn parse_macho(path: &Path) -> Result<MachOFile, DelocateError> {
 }
 
 /// Parse Mach-O data from bytes.
-pub fn parse_macho_bytes(data: &[u8]) -> Result<MachOFile, DelocateError> {
+fn parse_macho_bytes(data: &[u8]) -> Result<MachOFile, DelocateError> {
     let mach = Mach::parse(data).map_err(|err| DelocateError::MachOParse(err.to_string()))?;
 
     match mach {

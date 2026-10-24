@@ -685,7 +685,9 @@ mod tests {
                                 arch: X86_64,
                             },
                         ],
-                        repr: "cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64",
+                        repr: Some(
+                            "cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64",
+                        ),
                     },
                 },
             },
@@ -724,7 +726,9 @@ mod tests {
                         platform_tag: [
                             Any,
                         ],
-                        repr: "202206090410-py3-none-any",
+                        repr: Some(
+                            "202206090410-py3-none-any",
+                        ),
                     },
                 },
             },

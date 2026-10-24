@@ -98,7 +98,7 @@ fn hash_file(path: &Path) -> Result<(String, u64), DelocateError> {
 }
 
 /// Update the RECORD file in a wheel directory.
-pub fn update_record(wheel_dir: &Path, dist_info_dir: &str) -> Result<(), DelocateError> {
+pub(crate) fn update_record(wheel_dir: &Path, dist_info_dir: &str) -> Result<(), DelocateError> {
     let record_path = wheel_dir.join(dist_info_dir).join("RECORD");
 
     let mut records = Vec::new();

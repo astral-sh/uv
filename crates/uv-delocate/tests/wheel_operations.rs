@@ -10,6 +10,16 @@ fn test_data_dir() -> PathBuf {
 }
 
 #[test]
+fn pure_python_wheel_has_no_shared_library_dependencies() {
+    let wheel = test_data_dir().join("fakepkg2-1.0-py3-none-any.whl");
+    assert!(
+        uv_delocate::list_wheel_dependencies(&wheel)
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
 fn test_unpack_wheel() {
     let data_dir = test_data_dir();
     let temp_dir = TempDir::new().unwrap();
