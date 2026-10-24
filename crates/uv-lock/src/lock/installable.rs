@@ -1406,8 +1406,8 @@ provides-extras = ["cli"]
     fn unrelated_packages_do_not_change_dependency_identity() {
         let original = lock();
         let original_toml = original
-                .to_toml(LockFeatures::empty())
-                .expect("valid lock TOML");
+            .to_toml(LockFeatures::empty())
+            .expect("valid lock TOML");
         let input = formatdoc! {r#"
             {original_toml}
 

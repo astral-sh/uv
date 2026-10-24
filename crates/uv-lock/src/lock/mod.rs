@@ -9372,7 +9372,10 @@ impl<'de> serde::Deserialize<'de> for DependencyWire {
                 }))
             }
 
-            fn visit_map<M: serde::de::MapAccess<'de>>(self, map: M) -> Result<Self::Value, M::Error> {
+            fn visit_map<M: serde::de::MapAccess<'de>>(
+                self,
+                map: M,
+            ) -> Result<Self::Value, M::Error> {
                 serde::Deserialize::deserialize(serde::de::value::MapAccessDeserializer::new(map))
                     .map(DependencyWire)
             }

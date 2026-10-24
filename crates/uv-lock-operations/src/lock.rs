@@ -270,7 +270,9 @@ impl<'env> LockOperation<'env> {
                 // If the lockfile changed, write it to disk.
                 if !matches!(self.mode, LockMode::DryRun(_)) {
                     if let LockResult::Changed(_, lock) = &result {
-                        target.commit(lock, LockFeatures::from(self.preview)).await?;
+                        target
+                            .commit(lock, LockFeatures::from(self.preview))
+                            .await?;
                     }
                 }
 
@@ -1028,7 +1030,9 @@ async fn do_lock(
             };
 
             let unchanged = if let Some(check_lockfile_contents) = check_lockfile_contents {
-                previous.is_some() && check_lockfile_contents == lock.to_toml(LockFeatures::from(preview))?.as_str()
+                previous.is_some()
+                    && check_lockfile_contents
+                        == lock.to_toml(LockFeatures::from(preview))?.as_str()
             } else {
                 previous.as_ref().is_some_and(|previous| *previous == lock)
             };
