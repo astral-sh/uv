@@ -54,16 +54,23 @@ impl GitSource {
     pub(crate) fn fetch(self) -> Result<Fetch> {
         let lfs_requested = self.git.lfs().enabled();
 
-        // The path to the repo, within the Git database.
-        let ident = cache_digest(self.git.repository());
-        let db_path = self.cache.join("db").join(&ident);
-
-        // Authenticate the URL, if necessary.
         let remote = if let Some(credentials) = GIT_STORE.get(self.git.repository()) {
             Cow::Owned(credentials.apply(self.git.url().clone()))
         } else {
             Cow::Borrowed(self.git.url())
         };
+        let settings = &self.settings;
+
+        // Older cache readers require complete repositories, including historical trees.
+        let cache = if settings.allows_partial_fetches(&remote) {
+            self.cache.join("partial")
+        } else {
+            self.cache
+        };
+
+        // The path to the repo, within the Git database.
+        let ident = cache_digest(self.git.repository());
+        let db_path = cache.join("db").join(&ident);
 
         // Fetch the commit, if we don't already have it. Wrapping this section in a closure makes
         // it easier to short-circuit this in the cases where we do have the commit.
@@ -102,7 +109,7 @@ impl GitSource {
                 maybe_db,
                 self.git.reference(),
                 self.git.precise(),
-                &self.settings,
+                settings,
                 lfs_requested,
             )?;
 
@@ -125,16 +132,12 @@ impl GitSource {
         } else {
             ident
         };
-        let checkout_path = self
-            .cache
-            .join("checkouts")
-            .join(&ident)
-            .join(short_id.as_str());
+        let checkout_path = cache.join("checkouts").join(&ident).join(short_id.as_str());
 
         // Check out `actual_rev` from the database to a scoped location on the
         // filesystem. This will use hard links and such to ideally make the
         // checkout operation here pretty fast.
-        let checkout = db.copy_to(actual_rev, &checkout_path, &self.settings)?;
+        let checkout = db.copy_to(actual_rev, &checkout_path, settings)?;
 
         // Report the checkout operation to the reporter.
         if let Some(task) = maybe_task {

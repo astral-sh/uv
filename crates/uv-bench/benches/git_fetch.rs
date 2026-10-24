@@ -18,6 +18,7 @@ use criterion::{
 };
 use uv_git::{Fetch, GitHttpSettings, GitResolver};
 use uv_git_types::{GitLfs, GitOid, GitReference, GitUrl};
+use uv_preview::{MaybePreviewFeature, Preview, PreviewFeature};
 use uv_redacted::SafeUrl;
 
 use git_fixture::GIT_FIXTURES;
@@ -55,6 +56,11 @@ fn git_fetch(criterion: &mut Criterion<WallTime>) {
     if is_codspeed_simulation() {
         return;
     }
+    uv_preview::set(Preview::from_feature_names(&[MaybePreviewFeature::Known(
+        PreviewFeature::GitPartialFetches,
+    )]))
+    .expect("Failed to configure preview features");
+    uv_preview::finalize().expect("Failed to finalize preview features");
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()

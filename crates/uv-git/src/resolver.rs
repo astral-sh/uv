@@ -12,6 +12,7 @@ use uv_auth::TrustedHost;
 use uv_cache_key::{RepositoryUrl, cache_digest};
 use uv_fs::{LockedFile, LockedFileError, LockedFileMode};
 use uv_git_types::{GitHubRepository, GitOid, GitReference, GitUrl};
+use uv_preview::PreviewFeature;
 use uv_redacted::SafeUrl;
 use uv_static::EnvVars;
 use uv_version::version;
@@ -86,6 +87,17 @@ impl GitHttpSettings {
     pub fn with_offline(mut self, offline: bool) -> Self {
         self.offline = offline;
         self
+    }
+
+    /// Whether this remote supports the partial-fetch preview's lazy object retrieval.
+    pub(crate) fn allows_partial_fetches(&self, url: &SafeUrl) -> bool {
+        if !uv_preview::is_enabled(PreviewFeature::GitPartialFetches) || self.disable_ssl(url) {
+            return false;
+        }
+        // Partial repositories persist the remote URL for lazy fetches, which cannot use uv's
+        // transient credentials or TLS exceptions. Query parameters may contain credentials
+        // even without a username or password.
+        url.query_pairs().next().is_none() && url.without_credentials().as_str() == url.as_str()
     }
 }
 
