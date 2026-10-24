@@ -4172,7 +4172,7 @@ fn build_workspace_constraint_hashes() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to build `[TEMP_DIR]/`
-      cause: Conflicting hashes for `build-dependency @ file://[TEMP_DIR]/wheels/build_dependency-1.0.0-py3-none-any.whl`: no hash is allowed by all requirements and constraints
+      cause: Conflicting archive URL hashes for `build-dependency @ file://[TEMP_DIR]/wheels/build_dependency-1.0.0-py3-none-any.whl`: `sha256:0000000000000000000000000000000000000000000000000000000000000000` conflicts with `sha256:[BUILD_HASH]`
     ");
     context
         .temp_dir
@@ -4244,6 +4244,11 @@ fn build_workspace_constraint_hashes() -> Result<()> {
     Building wheel...
     Successfully built dist/project-0.1.0-py3-none-any.whl
     ");
+
+    // Use matching static constraints while exercising the dynamic build requirement.
+    constraints.write_str(&formatdoc! {"
+        build-dependency==1.0.0 --hash=sha256:{build_hash}
+    "})?;
 
     let dynamic_wheel = context
         .temp_dir
