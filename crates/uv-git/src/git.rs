@@ -856,7 +856,7 @@ fn fetch_with_cli(
 /// Return [`None`] when no matching ref advertises a supported object ID or the probe fails.
 fn remote_object_format(
     repo: &GitRepository,
-    url: &DisplaySafeUrl,
+    url: &SafeUrl,
     refspecs: &[String],
     disable_ssl: bool,
     offline: bool,

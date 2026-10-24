@@ -3,7 +3,7 @@ use std::fmt::Display;
 use std::str;
 
 use percent_encoding::{AsciiSet, NON_ALPHANUMERIC, utf8_percent_encode};
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 
 use crate::{GitOid, GitUrlParseError};
 
@@ -101,7 +101,7 @@ impl GitReference {
     pub fn validate_resolved_commit(
         &self,
         precise: &GitOid,
-        url: &DisplaySafeUrl,
+        url: &SafeUrl,
     ) -> Result<(), GitUrlParseError> {
         if let Self::Commit(commit) = self
             && commit != precise
