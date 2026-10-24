@@ -300,6 +300,9 @@ jobs:
   windows:
     name: ${{ matrix.platform.target }}
     runs-on: namespace-profile-windows-2022-x86-64-16x32
+    env:
+      # Seed from the OS because AWS-LC's CPU jitter collector can abort on x86-64 Windows VMs.
+      AWS_LC_SYS_NO_JITTER_ENTROPY_x86_64_pc_windows_msvc: "1"
     strategy:
       matrix:
         platform:
