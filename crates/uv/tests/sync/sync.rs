@@ -12442,15 +12442,7 @@ fn sync_git_locked_commit_rejects_tag_name() -> Result<()> {
             shutil.copy(pathlib.Path(__file__).parent / filename, wheel_directory)
             return filename
     "#})?;
-    let (filename, wheel) = generate_wheel(
-        &"dependency".parse()?,
-        &"0.1.0".parse()?,
-        &[],
-        &BTreeMap::new(),
-        None,
-        "py3-none-any",
-        &[],
-    );
+    let (filename, wheel) = WheelBuilder::new(&"dependency".parse()?, &"0.1.0".parse()?).build();
     repository.child(filename).write_binary(&wheel)?;
 
     Command::new("git")
@@ -12491,7 +12483,7 @@ fn sync_git_locked_commit_rejects_tag_name() -> Result<()> {
         .assert()
         .success();
     let commit = std::str::from_utf8(&commit.get_output().stdout)?.trim();
-    let repository_url = Url::from_directory_path(repository.path())
+    let repository_url = SafeUrl::from_directory_path(repository.path())
         .map_err(|()| anyhow!("failed to convert repository path to file URL"))?;
     context
         .temp_dir

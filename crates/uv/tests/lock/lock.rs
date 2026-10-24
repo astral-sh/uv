@@ -975,7 +975,7 @@ fn lock_git_sha256_abbreviated_commit() -> Result<()> {
         .assert()
         .success();
     let revision = std::str::from_utf8(&commit.get_output().stdout)?.trim();
-    let repository_url = Url::from_directory_path(repository.path())
+    let repository_url = SafeUrl::from_directory_path(repository.path())
         .map_err(|()| anyhow!("failed to convert repository path to file URL"))?;
     context
         .temp_dir
