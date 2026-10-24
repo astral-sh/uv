@@ -15,6 +15,9 @@ doctest = false
 [lints]
 workspace = true
 
+[features]
+test-git = []
+
 [dependencies]
 uv-auth = { workspace = true }
 uv-cache-key = { workspace = true }

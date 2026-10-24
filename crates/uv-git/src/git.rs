@@ -10,11 +10,14 @@ use cargo_util::{ProcessBuilder, ProcessError, paths};
 use owo_colors::OwoColorize;
 use tracing::{debug, instrument, warn};
 
+use uv_auth::TrustedHost;
 use uv_fs::Simplified;
 use uv_git_types::{GitOid, GitReference};
 use uv_redacted::SafeUrl;
 use uv_static::EnvVars;
 use uv_warnings::warn_user_once;
+
+use crate::GitHttpSettings;
 
 /// Extension for the marker beside a completed checkout.
 /// See [`GitCheckout::reset`] for why we need this.
@@ -104,6 +107,13 @@ pub(crate) struct GitCheckout {
 pub(crate) struct GitRepository {
     /// Path to the underlying Git repository on the local filesystem.
     path: PathBuf,
+}
+
+/// The outcome of validating the LFS objects required by a revision.
+enum LfsValidation {
+    Passed,
+    Failed,
+    Unsupported,
 }
 
 impl GitRepository {
@@ -204,14 +214,91 @@ impl GitRepository {
         Ok(())
     }
 
-    /// Verifies LFS artifacts have been initialized for a given `refname`.
-    #[instrument(skip_all, fields(path = %self.path.user_display(), refname = %refname))]
+    /// Resolve the LFS endpoint using Git LFS's configuration and URL rewriting rules.
+    fn lfs_endpoint(&self, remote: &str) -> Result<SafeUrl> {
+        let mut cmd = GIT.as_ref().cloned()?;
+        // Make the exact fetch argument appear in `git lfs env` without changing its URL.
+        append_git_config(&mut cmd, &format!("remote.{remote}.uv-lfs-probe"), "true");
+        let prefix = if remote == "origin" {
+            append_git_config(&mut cmd, "remote.lfsdefault", "origin");
+            "Endpoint=".to_owned()
+        } else {
+            format!("Endpoint ({remote})=")
+        };
+        let output = cmd
+            .args(&["lfs", "env"])
+            .env("GIT_NO_LAZY_FETCH", "1")
+            .env(EnvVars::GIT_ALLOW_PROTOCOL, "file")
+            .cwd(&self.path)
+            .exec_with_output()
+            // The remaining output can contain credentials and arbitrary environment values.
+            .map_err(|_| anyhow!("failed to determine Git LFS endpoint"))?;
+        let endpoint = str::from_utf8(&output.stdout)?
+            .lines()
+            .find_map(|line| line.strip_prefix(&prefix))
+            .and_then(|line| line.rsplit_once(" (auth=").map(|(url, _)| url))
+            .context("Git LFS did not report its endpoint")?;
+        Ok(SafeUrl::parse(endpoint)?)
+    }
+
+    /// Return whether an LFS smudge or process filter is configured.
+    fn has_lfs_smudge_filter(&self) -> Result<bool> {
+        let filters = GIT
+            .as_ref()
+            .cloned()?
+            .args(&[
+                "config",
+                "--null",
+                "--get-regexp",
+                r"^filter\.lfs\.(process|smudge)$",
+            ])
+            .cwd(&self.path)
+            .exec_with_output();
+        match filters {
+            Ok(output) => {
+                let mut process = false;
+                let mut smudge = false;
+                for entry in output.stdout.split(|&byte| byte == 0) {
+                    let mut fields = entry.splitn(2, |&byte| byte == b'\n');
+                    let key = fields.next().unwrap_or_default();
+                    let enabled = fields
+                        .next()
+                        .is_some_and(|value| !value.trim_ascii().is_empty());
+                    match key {
+                        b"filter.lfs.process" => process = enabled,
+                        b"filter.lfs.smudge" => smudge = enabled,
+                        _ => {}
+                    }
+                }
+                Ok(process || smudge)
+            }
+            Err(error)
+                if error
+                    .downcast_ref::<ProcessError>()
+                    .is_some_and(|error| error.code == Some(1)) =>
+            {
+                Ok(false)
+            }
+            Err(error) => Err(error),
+        }
+    }
+
+    /// Verifies LFS artifacts when supported, warning when the installed LFS cannot check them.
     fn lfs_fsck_objects(&self, refname: &str) -> bool {
+        match self.check_lfs_objects(refname) {
+            LfsValidation::Passed | LfsValidation::Unsupported => true,
+            LfsValidation::Failed => false,
+        }
+    }
+
+    /// Check LFS objects, distinguishing an unsupported `fsck --objects` from failure.
+    #[instrument(skip_all, fields(path = %self.path.user_display(), refname = %refname))]
+    fn check_lfs_objects(&self, refname: &str) -> LfsValidation {
         let mut cmd = if let Ok(lfs) = GIT_LFS.as_ref() {
             lfs.clone()
         } else {
             warn!("Git LFS is not available, skipping LFS fetch");
-            return false;
+            return LfsValidation::Failed;
         };
 
         // Requires Git LFS 3.x (2021 release)
@@ -223,7 +310,7 @@ impl GitRepository {
             .exec_with_output();
 
         match result {
-            Ok(_) => true,
+            Ok(_) => LfsValidation::Passed,
             Err(err) => {
                 let lfs_error = err.to_string();
                 if lfs_error.contains("unknown flag: --objects") {
@@ -232,10 +319,10 @@ impl GitRepository {
                         Upgrade to `git-lfs>=3.0.2` or manually verify git-lfs objects were \
                         properly fetched after the current operation finishes."
                     );
-                    true
+                    LfsValidation::Unsupported
                 } else {
                     debug!("Git LFS validation failed: {err}");
-                    false
+                    LfsValidation::Failed
                 }
             }
         }
@@ -271,20 +358,19 @@ impl GitRemote {
         db: Option<GitDatabase>,
         reference: &GitReference,
         locked_rev: Option<GitOid>,
-        disable_ssl: bool,
-        offline: bool,
+        settings: &GitHttpSettings,
         with_lfs: bool,
     ) -> Result<(GitDatabase, GitOid)> {
         let locked_reference = locked_rev.map(GitReference::Commit);
         let reference = locked_reference.as_ref().unwrap_or(reference);
         if let Some(mut db) = db {
-            fetch(&mut db.repo, &self.url, reference, disable_ssl, offline)
+            fetch(&mut db.repo, &self.url, reference, settings)
                 .with_context(|| format!("failed to fetch into: {}", into.user_display()))?;
 
             if let Ok(rev) = db.repo.resolve(reference) {
                 if with_lfs {
                     let lfs_ready =
-                        fetch_lfs(&db.repo, &rev, LfsSource::Remote(&self.url, disable_ssl))
+                        fetch_lfs(&db.repo, &rev, LfsSource::Remote(&self.url, settings))
                             .with_context(|| format!("failed to fetch LFS objects at {rev}"))?;
                     db = db.with_lfs_ready(Some(lfs_ready));
                 }
@@ -303,12 +389,12 @@ impl GitRemote {
 
         fs_err::create_dir_all(into)?;
         let mut repo = GitRepository::init(into)?;
-        fetch(&mut repo, &self.url, reference, disable_ssl, offline)
+        fetch(&mut repo, &self.url, reference, settings)
             .with_context(|| format!("failed to clone into: {}", into.user_display()))?;
         let rev = repo.resolve(reference)?;
         let lfs_ready = with_lfs
             .then(|| {
-                fetch_lfs(&repo, &rev, LfsSource::Remote(&self.url, disable_ssl))
+                fetch_lfs(&repo, &rev, LfsSource::Remote(&self.url, settings))
                     .with_context(|| format!("failed to fetch LFS objects at {rev}"))
             })
             .transpose()?;
@@ -336,14 +422,19 @@ impl GitRemote {
 
 impl GitDatabase {
     /// Checkouts to a revision at `destination` from this database.
-    pub(crate) fn copy_to(&self, rev: GitOid, destination: &Path) -> Result<GitCheckout> {
+    pub(crate) fn copy_to(
+        &self,
+        rev: GitOid,
+        destination: &Path,
+        settings: &GitHttpSettings,
+    ) -> Result<GitCheckout> {
         // Interrupted checkouts lack the ready marker and must be cloned again.
         let Some(checkout) = GitRepository::open(destination)
             .ok()
             .map(|repo| GitCheckout::new(rev, repo))
             .filter(GitCheckout::is_fresh)
         else {
-            return GitCheckout::clone_into(destination, self, rev);
+            return GitCheckout::clone_into(destination, self, rev, settings);
         };
         if self.lfs_ready != Some(true) {
             return Ok(checkout.with_lfs_ready(self.lfs_ready));
@@ -351,7 +442,7 @@ impl GitDatabase {
 
         GitCheckout::invalidate_ready(&checkout.repo.path)?;
         if !checkout.repo.lfs_fsck_objects(rev.as_str()) {
-            return checkout.reset(self);
+            return checkout.reset(self, settings);
         }
         let ready = checkout.materialize_lfs()?;
         if ready {
@@ -368,12 +459,7 @@ impl GitDatabase {
         let path = absolute(&self.repo.path)?;
         let url = SafeUrl::from_file_path(&path)
             .map_err(|()| anyhow!("Invalid Git database path: {}", path.user_display()))?;
-        fetch_lfs(
-            &checkout.repo,
-            &checkout.revision,
-            LfsSource::Database(&url),
-        )
-        .map(Some)
+        fetch_lfs(&checkout.repo, &checkout.revision, LfsSource::Local(&url)).map(Some)
     }
 
     /// Get a short OID for a `revision`, usually 7 chars or more if ambiguous.
@@ -436,7 +522,12 @@ impl GitCheckout {
 
     /// Clone a repo for a `revision` into a local path from a `database`.
     /// This is a filesystem-to-filesystem clone.
-    fn clone_into(into: &Path, database: &GitDatabase, revision: GitOid) -> Result<Self> {
+    fn clone_into(
+        into: &Path,
+        database: &GitDatabase,
+        revision: GitOid,
+        settings: &GitHttpSettings,
+    ) -> Result<Self> {
         Self::invalidate_ready(into)?;
 
         let dirname = into.parent().unwrap();
@@ -476,7 +567,7 @@ impl GitCheckout {
                 .exec_with_output()?;
         }
 
-        Self::new(revision, GitRepository::open(into)?).reset(database)
+        Self::new(revision, GitRepository::open(into)?).reset(database, settings)
     }
 
     /// Checks if the `HEAD` of this checkout points to the expected revision.
@@ -496,8 +587,38 @@ impl GitCheckout {
     /// Materialize available local LFS objects and check initialized submodules recursively when supported.
     fn materialize_lfs(&self) -> Result<bool> {
         self.repo.materialize_lfs()?;
+        let mut ready = true;
+        for repo in self.submodules()? {
+            repo.materialize_lfs()?;
+            // `git lfs checkout` skips missing objects without failing.
+            ready &= repo.lfs_fsck_objects("HEAD");
+        }
+        Ok(ready)
+    }
+
+    /// Fetch submodule LFS objects from file endpoints during offline checkout.
+    fn fetch_local_submodule_lfs(&self) -> Result<()> {
+        for repo in self.submodules()? {
+            match repo.check_lfs_objects("HEAD") {
+                LfsValidation::Passed => continue,
+                LfsValidation::Failed | LfsValidation::Unsupported => {}
+            }
+            if !repo.has_lfs_smudge_filter()? {
+                continue;
+            }
+            let endpoint = repo.lfs_endpoint("origin")?;
+            if endpoint.scheme() != "file" {
+                return Err(GitError::TransportNotAllowed.into());
+            }
+            fetch_lfs(&repo, &repo.rev_parse("HEAD")?, LfsSource::Local(&endpoint))?;
+        }
+        Ok(())
+    }
+
+    /// Open every initialized submodule, including nested submodules.
+    fn submodules(&self) -> Result<Vec<GitRepository>> {
         if !self.repo.path.join(".gitmodules").exists() {
-            return Ok(true);
+            return Ok(Vec::new());
         }
         let submodules = GIT
             .as_ref()
@@ -513,18 +634,12 @@ impl GitCheckout {
             .env(EnvVars::GIT_ALLOW_PROTOCOL, "file")
             .cwd(&self.repo.path)
             .exec_with_output()?;
-        let mut ready = true;
-        for path in submodules
+        submodules
             .stdout
             .split(|&byte| byte == 0)
             .filter(|path| !path.is_empty())
-        {
-            let repo = GitRepository::open(&self.repo.path.join(paths::bytes2path(path)?))?;
-            repo.materialize_lfs()?;
-            // `git lfs checkout` skips missing objects without failing.
-            ready &= repo.lfs_fsck_objects("HEAD");
-        }
-        Ok(ready)
+            .map(|path| GitRepository::open(&self.repo.path.join(paths::bytes2path(path)?)))
+            .collect()
     }
 
     /// Indicates Git LFS artifacts have been initialized (when requested).
@@ -555,7 +670,7 @@ impl GitCheckout {
     /// [`.ok` extension]: CHECKOUT_READY_EXTENSION
     /// `git reset --hard [<commit>]` can break relative submodule URLs, so we update submodules
     /// using the original remote URL.
-    fn reset(self, database: &GitDatabase) -> Result<Self> {
+    fn reset(self, database: &GitDatabase, settings: &GitHttpSettings) -> Result<Self> {
         Self::invalidate_ready(&self.repo.path)?;
         let with_lfs = database.copy_lfs_to(&self)?;
         let original_remote_url = database.remote.url();
@@ -563,19 +678,33 @@ impl GitCheckout {
         // We want to skip smudge if lfs was disabled for the repository
         // as smudge filters can trigger on a reset even if lfs artifacts
         // were not originally "fetched".
-        let lfs_skip_smudge = if with_lfs == Some(true) { "0" } else { "1" };
+        // LFS smudge requests do not honor Git's protocol restriction. Fetch local submodule
+        // objects explicitly after checkout when offline.
+        let lfs_skip_smudge = if with_lfs == Some(true) && !settings.offline {
+            "0"
+        } else {
+            "1"
+        };
 
         debug!("Reset `{}` to {}", self.repo.path.display(), self.revision);
 
+        let mut command =
+            configure_git_network(GIT.as_ref().cloned()?, original_remote_url, settings);
+        if with_lfs == Some(true) && !settings.offline {
+            configure_lfs_tls(&mut command, &settings.insecure_hosts);
+        }
+        command
+            .env(EnvVars::GIT_LFS_SKIP_SMUDGE, lfs_skip_smudge)
+            .cwd(&self.repo.path);
+
         // Perform the hard reset.
-        GIT.as_ref()
-            .cloned()?
+        command
+            .clone()
             .arg("reset")
             .arg("--hard")
             .arg(self.revision.as_str())
-            .env(EnvVars::GIT_LFS_SKIP_SMUDGE, lfs_skip_smudge)
-            .cwd(&self.repo.path)
-            .exec_with_output()?;
+            .exec_with_output()
+            .map_err(|err| git_command_error(err, original_remote_url, settings.offline))?;
 
         // Initialize direct submodules using the original remote URL so Git can resolve relative
         // submodule URLs, but don't write it to `remote.origin.url`. Git persists resolved submodule
@@ -585,7 +714,7 @@ impl GitCheckout {
         // Do not use `--recursive` here: command-local `remote.origin.url` config is inherited by
         // Git commands run inside submodules, which would make nested relative URLs resolve against
         // the top-level remote instead of their immediate parent submodule.
-        let mut submodule_update = GIT.as_ref().cloned()?;
+        let mut submodule_update = command.clone();
         for config in submodule_update_config(original_remote_url) {
             submodule_update.arg("-c").arg(config);
         }
@@ -594,16 +723,13 @@ impl GitCheckout {
             .arg("submodule")
             .arg("update")
             .arg("--init")
-            .env(EnvVars::GIT_LFS_SKIP_SMUDGE, lfs_skip_smudge)
-            .cwd(&self.repo.path)
             .exec_with_output()
-            .map_err(|err| redact_git_error(err, original_remote_url))
-            .map(drop)?;
+            .map_err(|err| git_command_error(err, original_remote_url, settings.offline))?;
 
         // Recursively update nested submodules without overriding `remote.origin.url`, so each
         // nested relative URL resolves against its immediate parent submodule. The transient
         // credential rewrite is still safe to inherit because it only affects transport.
-        let mut submodule_update = GIT.as_ref().cloned()?;
+        let mut submodule_update = command;
         for config in submodule_auth_config(original_remote_url) {
             submodule_update.arg("-c").arg(config);
         }
@@ -613,11 +739,12 @@ impl GitCheckout {
             .arg("update")
             .arg("--recursive")
             .arg("--init")
-            .env(EnvVars::GIT_LFS_SKIP_SMUDGE, lfs_skip_smudge)
-            .cwd(&self.repo.path)
             .exec_with_output()
-            .map_err(|err| redact_git_error(err, original_remote_url))
-            .map(drop)?;
+            .map_err(|err| git_command_error(err, original_remote_url, settings.offline))?;
+
+        if with_lfs == Some(true) && settings.offline {
+            self.fetch_local_submodule_lfs()?;
+        }
 
         let lfs_validation = match with_lfs {
             None => None,
@@ -689,6 +816,52 @@ fn remote_url_root(mut url: SafeUrl) -> SafeUrl {
     url
 }
 
+/// Apply network settings to Git commands.
+fn configure_git_network(
+    mut cmd: ProcessBuilder,
+    url: &SafeUrl,
+    settings: &GitHttpSettings,
+) -> ProcessBuilder {
+    // Terminal prompts would be hidden by the progress bar. GUI prompts remain available.
+    cmd.env(EnvVars::GIT_TERMINAL_PROMPT, "0");
+    if settings.disable_ssl(url) {
+        let remote_url = url.without_credentials();
+        let origin = remote_url_root(remote_url.clone().into_owned());
+        append_git_config(&mut cmd, &format!("http.{origin}.sslVerify"), "false");
+        // Git prefers URL path specificity over configuration scope.
+        append_git_config(&mut cmd, &format!("http.{remote_url}.sslVerify"), "false");
+        // Username matching breaks ties between equally specific paths; passwords are ignored.
+        let mut username_url = url.clone();
+        if !username_url.username().is_empty() && username_url.set_password(None).is_ok() {
+            append_git_config(
+                &mut cmd,
+                &format!("http.{}.sslVerify", username_url.as_str()),
+                "false",
+            );
+        }
+    }
+    if settings.offline {
+        cmd.env(EnvVars::GIT_ALLOW_PROTOCOL, "file");
+    }
+    cmd
+}
+
+/// Converts an offline transport failure and redacts credentials from other errors.
+fn git_command_error(error: anyhow::Error, url: &SafeUrl, offline: bool) -> anyhow::Error {
+    let message = error.to_string();
+    if offline && message.contains("transport '") && message.contains("' not allowed") {
+        GitError::TransportNotAllowed.into()
+    } else if url.as_str().contains('=')
+        && message.contains("bogus format in GIT_CONFIG_PARAMETERS")
+    {
+        redact_git_error(error, url).context(
+            "If Git is older than 2.31, upgrade it to use URL-specific settings containing `=`",
+        )
+    } else {
+        redact_git_error(error, url)
+    }
+}
+
 /// Attempts to fetch the given git `reference` for a Git repository.
 ///
 /// This is the main entry for git clone/fetch. It does the following:
@@ -701,8 +874,7 @@ fn fetch(
     repo: &mut GitRepository,
     remote_url: &SafeUrl,
     reference: &GitReference,
-    disable_ssl: bool,
-    offline: bool,
+    settings: &GitHttpSettings,
 ) -> Result<()> {
     if let GitReference::Commit(commit) = reference
         && repo
@@ -764,14 +936,9 @@ fn fetch(
 
     debug!("Performing a Git fetch for: {remote_url}");
     let result = match refspec_strategy {
-        RefspecStrategy::All => fetch_with_cli(
-            repo,
-            remote_url,
-            refspecs.as_slice(),
-            tags,
-            disable_ssl,
-            offline,
-        ),
+        RefspecStrategy::All => {
+            fetch_with_cli(repo, remote_url, refspecs.as_slice(), tags, settings)
+        }
         RefspecStrategy::First => {
             // Try each refspec
             let mut errors = refspecs
@@ -782,8 +949,7 @@ fn fetch(
                         remote_url,
                         std::slice::from_ref(refspec),
                         tags,
-                        disable_ssl,
-                        offline,
+                        settings,
                     );
 
                     // Stop after the first success and log failures
@@ -828,32 +994,19 @@ fn fetch(
     }
 }
 
-/// Attempts to use `git` CLI installed on the system to fetch a repository.
+/// Attempts to use `git` CLI installed on the system to fetch the given refspecs from a remote repository.
 fn fetch_with_cli(
     repo: &mut GitRepository,
     url: &SafeUrl,
     refspecs: &[String],
     tags: bool,
-    disable_ssl: bool,
-    offline: bool,
+    settings: &GitHttpSettings,
 ) -> Result<()> {
-    let mut cmd = GIT.as_ref().cloned()?;
-    // Disable interactive prompts in the terminal, as they'll be erased by the progress bar
-    // animation and the process will "hang". Interactive prompts via the GUI like `SSH_ASKPASS`
-    // are still usable.
-    cmd.env(EnvVars::GIT_TERMINAL_PROMPT, "0");
+    let mut cmd = configure_git_network(GIT.as_ref().cloned()?, url, settings);
 
     cmd.arg("fetch");
     if tags {
         cmd.arg("--tags");
-    }
-    if disable_ssl {
-        debug!("Disabling SSL verification for Git fetch via `GIT_SSL_NO_VERIFY`");
-        cmd.env(EnvVars::GIT_SSL_NO_VERIFY, "true");
-    }
-    if offline {
-        debug!("Disabling remote protocols for Git fetch via `GIT_ALLOW_PROTOCOL=file`");
-        cmd.env(EnvVars::GIT_ALLOW_PROTOCOL, "file");
     }
     cmd.arg("--force") // handle force pushes
         .arg("--update-head-ok") // see discussion in #2078
@@ -864,13 +1017,8 @@ fn fetch_with_cli(
     // We capture the output to avoid streaming it to the user's console during clones.
     // The required `on...line` callbacks currently do nothing.
     // The output appears to be included in error messages by default.
-    cmd.exec_with_output().map_err(|err| {
-        let msg = err.to_string();
-        if msg.contains("transport '") && msg.contains("' not allowed") && offline {
-            return GitError::TransportNotAllowed.into();
-        }
-        redact_git_error(err, url)
-    })?;
+    cmd.exec_with_output()
+        .map_err(|err| git_command_error(err, url, settings.offline))?;
 
     Ok(())
 }
@@ -922,8 +1070,8 @@ fn quote_git_config(value: &str) -> String {
 
 #[derive(Clone, Copy)]
 enum LfsSource<'a> {
-    Remote(&'a SafeUrl, bool),
-    Database(&'a SafeUrl),
+    Remote(&'a SafeUrl, &'a GitHttpSettings),
+    Local(&'a SafeUrl),
 }
 
 /// Attempts to use `git-lfs` CLI to fetch required LFS objects for a given revision.
@@ -937,54 +1085,33 @@ fn fetch_lfs(repo: &GitRepository, revision: &GitOid, source: LfsSource<'_>) -> 
         return Ok(false);
     };
 
-    let (url, disable_ssl) = match source {
-        LfsSource::Remote(url, disable_ssl) => (url, disable_ssl),
-        LfsSource::Database(url) => {
-            // Use the database as the LFS endpoint and force the built-in file adapter.
-            cmd.arg("-c").arg(format!("lfs.url={url}"));
-            // The shared database may lack LFS objects from other recent revisions.
-            cmd.arg("-c").arg("lfs.fetchrecentalways=false");
-            append_git_config(
-                &mut cmd,
-                "lfs.standalonetransferagent",
-                "lfs-standalone-file",
-            );
-            // A URL-specific selector can match an equivalent spelling of the database URL.
-            // Override the configured selectors so a custom adapter cannot win for this copy.
-            let adapters = GIT
-                .as_ref()
-                .cloned()?
-                .args(&[
-                    "config",
-                    "--null",
-                    "--name-only",
-                    "--get-regexp",
-                    r"^lfs\..*\.standalonetransferagent$",
-                ])
-                .cwd(&repo.path)
-                .exec_with_output();
-            match adapters {
-                Ok(output) => {
-                    for key in str::from_utf8(&output.stdout)?
-                        .split('\0')
-                        .filter(|key| !key.is_empty())
-                    {
-                        append_git_config(&mut cmd, key, "lfs-standalone-file");
-                    }
-                }
-                Err(error)
-                    if error
-                        .downcast_ref::<ProcessError>()
-                        .is_some_and(|error| error.code == Some(1)) => {}
-                Err(error) => return Err(redact_git_error(error, url)),
+    let local_settings = GitHttpSettings::default().with_offline(true);
+    let endpoint;
+    let (url, settings, local) = match source {
+        LfsSource::Remote(url, settings) if settings.offline => {
+            match repo.check_lfs_objects(revision.as_str()) {
+                LfsValidation::Passed => return Ok(true),
+                LfsValidation::Failed | LfsValidation::Unsupported => {}
             }
-            (url, false)
+            endpoint = repo.lfs_endpoint(url.as_str())?;
+            if endpoint.scheme() != "file" {
+                return Err(GitError::TransportNotAllowed.into());
+            }
+            (&endpoint, settings, true)
         }
+        LfsSource::Remote(url, settings) => (url, settings, false),
+        LfsSource::Local(url) => (url, &local_settings, true),
     };
-    if disable_ssl {
-        debug!("Disabling SSL verification for Git LFS");
-        cmd.env(EnvVars::GIT_SSL_NO_VERIFY, "true");
+    if local {
+        cmd = configure_local_lfs(cmd, repo, url)?;
+    } else if !settings.insecure_hosts.is_empty() {
+        configure_lfs_tls(&mut cmd, &settings.insecure_hosts);
+        if !settings.insecure_hosts.contains(&TrustedHost::Wildcard) {
+            let endpoint = repo.lfs_endpoint(url.as_str())?;
+            cmd = configure_git_network(cmd, &endpoint, settings);
+        }
     }
+    let mut cmd = configure_git_network(cmd, url, settings);
 
     cmd.arg("lfs")
         .arg("fetch")
@@ -994,9 +1121,89 @@ fn fetch_lfs(repo: &GitRepository, revision: &GitOid, source: LfsSource<'_>) -> 
         .cwd(&repo.path);
 
     cmd.exec_with_output()
-        .map_err(|err| redact_git_error(err, url))?;
+        .map_err(|err| git_command_error(err, url, settings.offline))?;
 
     Ok(repo.lfs_fsck_objects(revision.as_str()))
+}
+
+/// Apply HTTPS exceptions for explicitly trusted LFS endpoints and object origins.
+fn configure_lfs_tls(cmd: &mut ProcessBuilder, insecure_hosts: &[TrustedHost]) {
+    for trusted_host in insecure_hosts {
+        let (scheme, host, port) = match trusted_host {
+            TrustedHost::Wildcard => {
+                cmd.env(EnvVars::GIT_SSL_NO_VERIFY, "true");
+                continue;
+            }
+            TrustedHost::Host { scheme, host, port } => (scheme, host, port),
+        };
+        if scheme.as_ref().is_some_and(|scheme| scheme != "https") {
+            continue;
+        }
+        // A `*` in a host entry is not uv's wildcard, but Git LFS would interpret it as one.
+        if host.contains('*') {
+            continue;
+        }
+        // Git LFS matches an omitted port only against the default HTTPS port.
+        let authority = if let Some(port) = port {
+            format!("{host}:{port}")
+        } else {
+            host.clone()
+        };
+        let Ok(origin) = SafeUrl::parse(&format!("https://{authority}/")) else {
+            continue;
+        };
+        if origin.host_str() != Some(host.as_str()) {
+            continue;
+        }
+        append_git_config(cmd, &format!("http.{origin}.sslVerify"), "false");
+    }
+}
+
+/// Force the built-in local LFS transfer, regardless of inherited endpoint or adapter settings.
+fn configure_local_lfs(
+    mut cmd: ProcessBuilder,
+    repo: &GitRepository,
+    url: &SafeUrl,
+) -> Result<ProcessBuilder> {
+    // Use the local path as the LFS endpoint and force the built-in file adapter.
+    cmd.arg("-c").arg(format!("lfs.url={url}"));
+    // The shared database may lack LFS objects from other recent revisions.
+    cmd.arg("-c").arg("lfs.fetchrecentalways=false");
+    append_git_config(
+        &mut cmd,
+        "lfs.standalonetransferagent",
+        "lfs-standalone-file",
+    );
+    // A URL-specific selector can match an equivalent spelling of the local URL.
+    // Override the configured selectors so a custom adapter cannot win for this copy.
+    let adapters = GIT
+        .as_ref()
+        .cloned()?
+        .args(&[
+            "config",
+            "--null",
+            "--name-only",
+            "--get-regexp",
+            r"^lfs\..*\.standalonetransferagent$",
+        ])
+        .cwd(&repo.path)
+        .exec_with_output();
+    match adapters {
+        Ok(output) => {
+            for key in str::from_utf8(&output.stdout)?
+                .split('\0')
+                .filter(|key| !key.is_empty())
+            {
+                append_git_config(&mut cmd, key, "lfs-standalone-file");
+            }
+        }
+        Err(error)
+            if error
+                .downcast_ref::<ProcessError>()
+                .is_some_and(|error| error.code == Some(1)) => {}
+        Err(error) => return Err(git_command_error(error, url, true)),
+    }
+    Ok(cmd)
 }
 
 /// Redact a credentialed remote URL from a Git process error.
@@ -1039,6 +1246,183 @@ mod tests {
             submodule_update_config(&url),
             vec!["remote.origin.url=ssh://git@example.com/org/repo.git".to_string()]
         );
+    }
+
+    #[test]
+    #[cfg(feature = "test-git")]
+    fn git_command_config_preserves_inherited_entries() -> Result<()> {
+        let mut command = GIT.as_ref().cloned()?;
+        command
+            .env("GIT_CONFIG_NOSYSTEM", "1")
+            .env(
+                "GIT_CONFIG_GLOBAL",
+                if cfg!(windows) { "NUL" } else { "/dev/null" },
+            )
+            .env("GIT_CONFIG_COUNT", "0")
+            .env(
+                "GIT_CONFIG_PARAMETERS",
+                "'test.parameter=inherited parameter value'",
+            );
+        let value = "spaces, apostrophes ' and exclamations ! with equals =";
+        append_git_config(&mut command, "test.value", value);
+        let inherited = command
+            .clone()
+            .args(&["config", "--get", "test.parameter"])
+            .exec_with_output()?;
+        assert_eq!(
+            str::from_utf8(&inherited.stdout)?.trim(),
+            "inherited parameter value"
+        );
+        let escaped = command
+            .clone()
+            .args(&["config", "--get", "test.value"])
+            .exec_with_output()?;
+        assert_eq!(str::from_utf8(&escaped.stdout)?.trim(), value);
+        // Split keys and counted configuration require Git 2.31.
+        let split_support = command
+            .clone()
+            .env("GIT_CONFIG_PARAMETERS", "'test.split'='true'")
+            .args(&["config", "--get", "test.split"])
+            .exec_with_output();
+        if let Err(error) = split_support {
+            if error
+                .to_string()
+                .contains("bogus format in GIT_CONFIG_PARAMETERS")
+            {
+                return Ok(());
+            }
+            return Err(error);
+        }
+        command
+            .env("GIT_CONFIG_COUNT", "1")
+            .env("GIT_CONFIG_KEY_0", "test.counted")
+            .env("GIT_CONFIG_VALUE_0", "inherited counted value");
+        append_git_config(
+            &mut command,
+            "http.https://example.invalid/a=b.sslVerify",
+            "false",
+        );
+        let inherited = command
+            .clone()
+            .args(&["config", "--get", "test.counted"])
+            .exec_with_output()?;
+        assert_eq!(
+            str::from_utf8(&inherited.stdout)?.trim(),
+            "inherited counted value"
+        );
+        let matching = command
+            .args(&[
+                "config",
+                "--get-urlmatch",
+                "http.sslVerify",
+                "https://example.invalid/a=b",
+            ])
+            .exec_with_output()?;
+        assert_eq!(str::from_utf8(&matching.stdout)?.trim(), "false");
+        Ok(())
+    }
+
+    #[cfg(feature = "test-git")]
+    fn git_tls_command() -> Result<ProcessBuilder> {
+        let mut command = GIT.as_ref().cloned()?;
+        command
+            .args(&["-c", "http.sslVerify=true"])
+            .env("GIT_CONFIG_NOSYSTEM", "1")
+            .env(
+                "GIT_CONFIG_GLOBAL",
+                if cfg!(windows) { "NUL" } else { "/dev/null" },
+            )
+            .env("GIT_CONFIG_COUNT", "0")
+            .env_remove("GIT_CONFIG_PARAMETERS")
+            .env_remove(EnvVars::GIT_SSL_NO_VERIFY);
+        Ok(command)
+    }
+
+    #[test]
+    #[cfg(feature = "test-git")]
+    fn git_tls_exception_is_scoped_to_remote_host() -> Result<()> {
+        let url = SafeUrl::parse("https://user:password@allowed.example/org/repo.git")?;
+        let settings =
+            GitHttpSettings::default().with_insecure_hosts(vec!["allowed.example".parse()?]);
+        let mut command = git_tls_command()?;
+        command
+            .args(&["-c", "http.https://allowed.example/org/.sslVerify=true"])
+            .env("GIT_CONFIG_COUNT", "1")
+            .env(
+                "GIT_CONFIG_KEY_0",
+                "http.https://user@allowed.example/org/repo.git.sslVerify",
+            )
+            .env("GIT_CONFIG_VALUE_0", "true");
+        let command = configure_git_network(command, &url, &settings);
+
+        for (url, expected) in [
+            (url.as_str(), "false"),
+            ("https://allowed.example/org/repo.git", "false"),
+            ("https://allowed.example/other.git", "false"),
+            ("https://untrusted.example/submodule.git", "true"),
+        ] {
+            let output = command
+                .clone()
+                .args(&["config", "--get-urlmatch", "http.sslVerify", url])
+                .exec_with_output()?;
+            assert_eq!(str::from_utf8(&output.stdout)?.trim(), expected, "{url}");
+        }
+        Ok(())
+    }
+
+    #[test]
+    #[cfg(feature = "test-git")]
+    fn lfs_tls_exception_is_scoped_to_object_origin() -> Result<()> {
+        let mut command = git_tls_command()?;
+        configure_lfs_tls(
+            &mut command,
+            &[
+                "https://objects.example:9443".parse()?,
+                "default.example".parse()?,
+            ],
+        );
+
+        for (url, expected) in [
+            ("https://objects.example:9443/file", "false"),
+            ("https://objects.example:8443/file", "true"),
+            ("http://objects.example:9443/file", "true"),
+            ("https://default.example/file", "false"),
+            ("https://default.example:9443/file", "true"),
+            ("https://other.example:9443/file", "true"),
+        ] {
+            let output = command
+                .clone()
+                .args(&["config", "--get-urlmatch", "http.sslVerify", url])
+                .exec_with_output()?;
+            assert_eq!(str::from_utf8(&output.stdout)?.trim(), expected, "{url}");
+        }
+        Ok(())
+    }
+
+    #[test]
+    #[cfg(feature = "test-git")]
+    fn lfs_tls_exception_does_not_expand_literal_hosts() -> Result<()> {
+        let mut command = git_tls_command()?;
+        configure_lfs_tls(
+            &mut command,
+            &["*.example", "user@objects.example", "objects.example/path"].map(|host| {
+                TrustedHost::Host {
+                    scheme: None,
+                    host: host.to_owned(),
+                    port: None,
+                }
+            }),
+        );
+        let literal = command
+            .args(&[
+                "config",
+                "--get-urlmatch",
+                "http.sslVerify",
+                "https://user@objects.example/path/file",
+            ])
+            .exec_with_output()?;
+        assert_eq!(str::from_utf8(&literal.stdout)?.trim(), "true");
+        Ok(())
     }
 
     #[test]

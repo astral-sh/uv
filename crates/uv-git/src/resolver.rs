@@ -8,9 +8,11 @@ use papaya::{HashMap, ResizeMode};
 use reqwest_middleware::ClientWithMiddleware;
 use tracing::debug;
 
+use uv_auth::TrustedHost;
 use uv_cache_key::{RepositoryUrl, cache_digest};
 use uv_fs::{LockedFile, LockedFileError, LockedFileMode};
 use uv_git_types::{GitHubRepository, GitOid, GitReference, GitUrl};
+use uv_redacted::SafeUrl;
 use uv_static::EnvVars;
 use uv_version::version;
 
@@ -59,19 +61,24 @@ impl GitResolverError {
     }
 }
 
-/// HTTP settings for fetching a Git repository.
-#[derive(Debug, Clone, Copy, Default)]
+/// Transport settings for fetching and checking out a Git repository.
+#[derive(Debug, Clone, Default)]
 pub struct GitHttpSettings {
-    disable_ssl: bool,
-    offline: bool,
+    pub(crate) insecure_hosts: Vec<TrustedHost>,
+    pub(crate) offline: bool,
 }
 
 impl GitHttpSettings {
-    /// Configure whether certificate verification should be disabled.
+    /// Configure the hosts for which certificate verification is disabled.
     #[must_use]
-    pub fn with_disabled_ssl(mut self, disable_ssl: bool) -> Self {
-        self.disable_ssl = disable_ssl;
+    pub fn with_insecure_hosts(mut self, insecure_hosts: Vec<TrustedHost>) -> Self {
+        self.insecure_hosts = insecure_hosts;
         self
+    }
+
+    /// Return whether uv disables certificate verification for this endpoint.
+    pub(crate) fn disable_ssl(&self, url: &SafeUrl) -> bool {
+        self.insecure_hosts.iter().any(|host| host.matches(url))
     }
 
     /// Configure whether network access should be disabled.
@@ -207,7 +214,7 @@ impl GitResolver {
     pub async fn fetch(
         &self,
         url: &GitUrl,
-        http_settings: GitHttpSettings,
+        settings: GitHttpSettings,
         cache: PathBuf,
         reporter: Option<Arc<dyn Reporter>>,
     ) -> Result<Fetch, GitResolverError> {
@@ -241,16 +248,9 @@ impl GitResolver {
         .await?;
 
         // Fetch the Git repository.
+        let source = GitSource::new(url.as_ref().clone(), cache, settings);
         let source = if let Some(reporter) = reporter {
-            GitSource::new(url.as_ref().clone(), cache, http_settings.offline)
-                .with_reporter(reporter)
-        } else {
-            GitSource::new(url.as_ref().clone(), cache, http_settings.offline)
-        };
-
-        // If necessary, disable SSL.
-        let source = if http_settings.disable_ssl {
-            source.dangerous()
+            source.with_reporter(reporter)
         } else {
             source
         };

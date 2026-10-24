@@ -36,8 +36,8 @@ pub use resolution_mode::*;
 pub use sources::*;
 pub use target_triple::*;
 pub use tool_run::*;
-pub use trusted_host::*;
 pub use trusted_publishing::*;
+pub use uv_auth::{TrustedHost, TrustedHostError};
 pub use vcs::*;
 pub use version_bump::*;
 
@@ -79,7 +79,6 @@ mod resolution_mode;
 mod sources;
 mod target_triple;
 mod tool_run;
-mod trusted_host;
 mod trusted_publishing;
 mod vcs;
 mod version_bump;
