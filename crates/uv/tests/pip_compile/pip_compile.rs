@@ -5561,10 +5561,10 @@ fn generate_hashes_binary_package_overrides_preview() -> Result<()> {
         --hash=sha256:f936eedc194aa91ca01a4c6c9981136ca6c75ce6df47e3951b12522881dce809
         # via -r requirements.in
     b==1.0.0 \
-        --hash=sha256:9b42692ac74b4da0eed1ef248b9be6bb0557c49507ba3b38f862b191a06d959c
+        --hash=sha256:0da2f555438d562120a831bdff77162c6165fd2a27d173b93c83b6104175b8b1
         # via -r requirements.in
     c==1.0.0 \
-        --hash=sha256:699a07ff61aab66fcba4883a94c6d2b61afb7797fa956ae36f2efdf30d9dfbc7 \
+        --hash=sha256:52da980191f2f70ea8192cea1f15d0eab485cf3a4373e44f21a8f537db121751 \
         --hash=sha256:78c0da7c5681d751d38b2e60c78d1e29d6125d91e68e5aeb22372fa66527ff95
         # via -r requirements.in
 
@@ -5589,7 +5589,7 @@ fn generate_hashes_binary_package_overrides_preview() -> Result<()> {
         --hash=sha256:f936eedc194aa91ca01a4c6c9981136ca6c75ce6df47e3951b12522881dce809
         # via -r requirements.in
     b==1.0.0 \
-        --hash=sha256:9b42692ac74b4da0eed1ef248b9be6bb0557c49507ba3b38f862b191a06d959c
+        --hash=sha256:0da2f555438d562120a831bdff77162c6165fd2a27d173b93c83b6104175b8b1
         # via -r requirements.in
     c==1.0.0 \
         --hash=sha256:78c0da7c5681d751d38b2e60c78d1e29d6125d91e68e5aeb22372fa66527ff95
@@ -18722,7 +18722,7 @@ fn pep_751_compile_url_sdist() -> Result<()> {
     [[packages]]
     name = "a"
     version = "1.0.0"
-    archive = { url = "http://[LOCALHOST]/files/a-1.0.0.tar.gz", hashes = { sha256 = "957f99ff1d65ce0d7883d50f4e67ed8d4b42e76d2c2b5e62384ff0ba538647b5" } }
+    archive = { url = "http://[LOCALHOST]/files/a-1.0.0.tar.gz", hashes = { sha256 = "b6fcc90d9bb90ce9e15d43522f038bb3fe338e6ab0260e2dd4b220d2a1872b37" } }
 
     ----- stderr -----
     Resolved 1 package in [TIME]
@@ -18789,7 +18789,7 @@ fn pep_751_compile_missing_hashes() -> Result<()> {
     [[packages]]
     name = "markupsafe"
     version = "2.1.5"
-    sdist = { url = "http://[LOCALHOST]/files/markupsafe-2.1.5.tar.gz", upload-time = 2024-03-24T00:00:00Z, hashes = { sha256 = "0f037d1ac33289835e012412c0de81872d9479359e280c713d9deb2ccf30ac34" } }
+    sdist = { url = "http://[LOCALHOST]/files/markupsafe-2.1.5.tar.gz", upload-time = 2024-03-24T00:00:00Z, hashes = { sha256 = "c2cb3b1782f3166cdb04fa78be4a8eb6ad2a71a5fbe827e64dbeeaaa1b2eb90b" } }
     wheels = [{ url = "http://[LOCALHOST]/files/markupsafe-2.1.5-py3-none-any.whl", upload-time = 2024-03-24T00:00:00Z, hashes = { sha256 = "d0fe66b2745bbd943b48f3229667cf4506d88136363578b94e63d384e61d4984" } }]
 
     ----- stderr -----

@@ -9404,18 +9404,42 @@ fn require_hashes() -> Result<()> {
 /// Use `--require-hashes` when there are no hashes for build dependencies.
 #[test]
 fn require_hashes_build_dependencies() -> Result<()> {
-    let server = PackseServer::new("simple/single-package.toml");
+    let server = PackseServer::empty();
     let context = uv_test::test_context!("3.12").with_filtered_http_retries();
 
-    // Write to a requirements file.
+    let links = context.temp_dir.child("links");
+    let mut source = Vec::new();
+    write_tar_gz(
+        &mut source,
+        &[
+            (
+                "a-1.0.0/pyproject.toml",
+                indoc! {r#"
+                    [project]
+                    name = "a"
+                    version = "1.0.0"
+
+                    [build-system]
+                    requires = ["hatchling"]
+                    build-backend = "hatchling.build"
+                "#},
+            ),
+            (
+                "a-1.0.0/PKG-INFO",
+                "Metadata-Version: 2.3\nName: a\nVersion: 1.0.0\n",
+            ),
+            ("a-1.0.0/src/a/__init__.py", ""),
+        ],
+    )?;
+    links.child("a-1.0.0.tar.gz").write_binary(&source)?;
+    let hash = hex::encode(Sha256::digest(&source));
+
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str(indoc::indoc! {r"
-        a==1.0.0 \
-            --hash=sha256:957f99ff1d65ce0d7883d50f4e67ed8d4b42e76d2c2b5e62384ff0ba538647b5
-    "})?;
+    requirements_txt.write_str(&format!("a==1.0.0 --hash=sha256:{hash}\n"))?;
 
     uv_snapshot!(context.pip_install()
         .arg("--index-url").arg(server.index_url())
+        .arg("--find-links").arg(links.path())
         .arg("--no-binary").arg("a")
         .arg("-r").arg("requirements.txt")
         .arg("--require-hashes")
@@ -9432,6 +9456,7 @@ fn require_hashes_build_dependencies() -> Result<()> {
 
     uv_snapshot!(context.pip_install()
         .arg("--index-url").arg(server.index_url())
+        .arg("--find-links").arg(links.path())
         .arg("--no-binary").arg("a")
         .arg("-r")
         .arg("requirements.txt")
@@ -9451,6 +9476,7 @@ fn require_hashes_build_dependencies() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--index-url").arg(server.index_url())
+        .arg("--find-links").arg(links.path())
         .arg("--no-binary").arg("a")
         .arg("-r").arg("requirements.txt")
         .arg("--require-hashes")
@@ -9474,6 +9500,7 @@ fn require_hashes_build_dependencies() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--index-url").arg(server.index_url())
+        .arg("--find-links").arg(links.path())
         .arg("--no-binary").arg("a")
         .arg("-r").arg("requirements.txt")
         .arg("--no-require-hashes")
