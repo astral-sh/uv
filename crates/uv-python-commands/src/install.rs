@@ -328,7 +328,7 @@ async fn perform_install(
     let installations = ManagedPythonInstallations::from_settings(install_dir.clone())?.init()?;
     let installations_dir = installations.root();
     let scratch_dir = installations.scratch();
-    let _lock = installations.lock().await?;
+    let _lock = installations.lock_for_install().await?;
     let existing_installations: Vec<_> = installations
         .find_all()?
         .inspect(|installation| trace!("Found existing installation {}", installation.key()))
