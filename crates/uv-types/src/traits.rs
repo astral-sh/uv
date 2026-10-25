@@ -10,9 +10,9 @@ use uv_cache::Cache;
 use uv_configuration::{BuildKind, BuildOptions, BuildOutput, NoSources};
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
-    CachedDist, ConfigSettings, DependencyMetadata, DistributionId, ExtraBuildRequires,
-    ExtraBuildVariables, IndexCapabilities, IndexLocations, InstalledDist, IsBuildBackendError,
-    PackageConfigSettings, Requirement, SourceDist,
+    BuildableSource, CachedDist, ConfigSettings, DependencyMetadata, DistributionId,
+    ExtraBuildRequires, ExtraBuildVariables, Identifier, IndexCapabilities, IndexLocations,
+    InstalledDist, IsBuildBackendError, PackageConfigSettings, Requirement,
 };
 use uv_git::GitResolver;
 use uv_normalize::PackageName;
@@ -180,7 +180,7 @@ pub trait BuildContext {
     /// Build dependencies are still resolved and installed using [`Self::build_options`].
     ///
     /// `version_id` is for error reporting only.
-    /// `dist` is for safety checks and may be null for editable builds.
+    /// `buildable_source` identifies the source for safety checks and transport settings.
     fn setup_build<'a>(
         &'a self,
         source: &'a Path,
@@ -188,7 +188,7 @@ pub trait BuildContext {
         install_path: &'a Path,
         stop_discovery_at: Option<&'a Path>,
         version_id: Option<&'a str>,
-        dist: Option<&'a SourceDist>,
+        buildable_source: Option<&'a BuildableSource<'a>>,
         sources: &'a NoSources,
         build_kind: BuildKind,
         build_output: BuildOutput,
@@ -335,15 +335,26 @@ impl Deref for AnyErrorBuild {
 
 /// The stack of packages being built.
 #[derive(Debug, Clone, Default)]
-pub struct BuildStack(FxHashSet<DistributionId>);
+pub struct BuildStack {
+    distributions: FxHashSet<DistributionId>,
+    contains_git_checkout: bool,
+}
 
 impl BuildStack {
     pub fn contains(&self, id: &DistributionId) -> bool {
-        self.0.contains(id)
+        self.distributions.contains(id)
     }
 
-    /// Push a package onto the stack.
-    pub fn insert(&mut self, id: DistributionId) -> bool {
-        self.0.insert(id)
+    /// Push a source onto the build stack.
+    pub fn insert(&mut self, source: &BuildableSource<'_>) {
+        if let Some(dist) = source.as_dist() {
+            self.distributions.insert(dist.distribution_id());
+        }
+        self.contains_git_checkout |= source.is_git_checkout();
+    }
+
+    /// Whether any build on the stack runs from a Git checkout.
+    pub fn contains_git_checkout(&self) -> bool {
+        self.contains_git_checkout
     }
 }

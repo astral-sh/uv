@@ -6734,6 +6734,7 @@ dependencies = [
  "uv-cache-key",
  "uv-fs",
  "uv-git-types",
+ "uv-preview",
  "uv-redacted",
  "uv-static",
  "uv-version",

@@ -4024,6 +4024,38 @@ fn install_git_private_https_pat_and_username() {
     context.assert_installed("uv_private_pypackage", "0.1.0");
 }
 
+/// Credentialed URLs use a complete repository even when partial fetches are enabled.
+#[test]
+#[cfg(feature = "test-git")]
+fn install_git_private_https_pat_partial_fetches() {
+    let context = uv_test::test_context!(DEFAULT_PYTHON_VERSION)
+        .with_env(EnvVars::UV_PREVIEW_FEATURES, "git-partial-fetches")
+        .with_unset_git_credential_helper();
+    let token = decode_token(uv_test::READ_ONLY_GITHUB_TOKEN);
+    let user = "astral-test-bot";
+
+    uv_snapshot!(context.filters(), context.pip_install().arg(format!("uv-private-pypackage @ git+https://{user}:{token}@github.com/astral-test/uv-private-pypackage"))
+        , @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + uv-private-pypackage==0.1.0 (from git+https://astral-test-bot:****@github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071)
+    ");
+
+    context.assert_installed("uv_private_pypackage", "0.1.0");
+    let config = fs::read_to_string(
+        context
+            .cache_dir
+            .child("git-v1/db/8401f5508e3e612d/.git/config"),
+    )
+    .expect("Git config should exist");
+    assert!(!config.contains(&token));
+    assert!(!config.contains("promisor = true"));
+    assert!(!context.cache_dir.child("git-v1/partial").exists());
+}
+
 /// Install a package from a private GitHub repository using a PAT
 #[test]
 #[cfg(all(not(windows), feature = "test-git"))]
