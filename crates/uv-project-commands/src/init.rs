@@ -6,7 +6,7 @@ use std::str::FromStr;
 
 use anyhow::{Context, Result, bail};
 use owo_colors::OwoColorize;
-use toml_edit::{InlineTable, Value};
+use toml_edit::{DocumentMut, InlineTable, Value};
 use tracing::{debug, trace, warn};
 
 use uv_cache::Cache;
@@ -108,9 +108,43 @@ pub async fn init(
             };
 
             // Make sure a project does not already exist in the given directory.
-            if path.join("pyproject.toml").exists() {
+            let pyproject_path = path.join("pyproject.toml");
+            if pyproject_path.exists() {
                 let path =
                     std::path::absolute(&path).unwrap_or_else(|_| path.simplified().to_path_buf());
+
+                // If a `pyproject.toml` exists, inspect it to provide contextual advice if `[project]` is missing.
+                if let Ok(content) = fs_err::read_to_string(&pyproject_path) {
+                    if let Ok(doc) = content.parse::<DocumentMut>() {
+                        if doc.get("project").is_none() {
+                            let has_poetry = doc
+                                .get("tool")
+                                .and_then(toml_edit::Item::as_table_like)
+                                .and_then(|tool| tool.get("poetry"))
+                                .is_some();
+
+                            if has_poetry {
+                                anyhow::bail!(
+                                    "`pyproject.toml` already exists in `{}` without a `[project]` table (found `[tool.poetry]`)\n\
+                                      {} If migrating from Poetry, run `{}` to convert Poetry metadata to standard PEP 621\n\
+                                      {} Otherwise, manually add a `[project]` table to your `pyproject.toml`",
+                                    path.display().cyan(),
+                                    "hint:".cyan().bold(),
+                                    "uvx pdm import".green(),
+                                    "hint:".cyan().bold(),
+                                );
+                            }
+
+                            anyhow::bail!(
+                                "`pyproject.toml` already exists in `{}` without a `[project]` table\n\
+                                  {} Manually add a `[project]` table to your `pyproject.toml`",
+                                path.display().cyan(),
+                                "hint:".cyan().bold(),
+                            );
+                        }
+                    }
+                }
+
                 anyhow::bail!(
                     "Project is already initialized in `{}` (`pyproject.toml` file exists)",
                     path.display().cyan()
