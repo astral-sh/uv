@@ -381,7 +381,8 @@ impl RequiresPython {
             if abi_tag.is_stable_abi() {
                 // Universal tags are allowed.
                 true
-            } else if *abi_tag == AbiTag::None {
+            } else if matches!(abi_tag, AbiTag::None | AbiTag::Imre1) {
+                // Imre records its Python language version in the Python tag.
                 wheel.python_tags().iter().any(|python_tag| {
                     // Remove `py2-none-any` and `py27-none-any` and analogous `cp` and `pp` tags.
                     if matches!(
@@ -397,6 +398,9 @@ impl RequiresPython {
                                 python_version: (2, ..)
                             }
                             | LanguageTag::Pyston {
+                                python_version: (2, ..)
+                            }
+                            | LanguageTag::Imre {
                                 python_version: (2, ..)
                             }
                     ) {
@@ -432,6 +436,9 @@ impl RequiresPython {
                         python_version: (3, minor),
                     }
                     | LanguageTag::Pyston {
+                        python_version: (3, minor),
+                    }
+                    | LanguageTag::Imre {
                         python_version: (3, minor),
                     } = python_tag
                     {
@@ -653,7 +660,10 @@ mod tests {
 
         let version_specifiers = VersionSpecifiers::from_str(">=3.12.3").unwrap();
         let requires_python = RequiresPython::from_specifiers(version_specifiers);
-        let wheel_names = &["dearpygui-1.11.1-cp312-cp312-win_amd64.whl"];
+        let wheel_names = &[
+            "dearpygui-1.11.1-cp312-cp312-win_amd64.whl",
+            "example-1.0-imre312-imre1-linux_x86_64.whl",
+        ];
         for wheel_name in wheel_names {
             assert!(
                 requires_python.matches_wheel_tag(&WheelFilename::from_str(wheel_name).unwrap()),
@@ -690,6 +700,7 @@ mod tests {
             "PySocks-1.7.1-py27-none-any.whl",
             "black-24.4.2-cp39-cp39-win_amd64.whl",
             "dearpygui-1.11.1-cp312-cp312-win_amd64.whl",
+            "example-1.0-imre312-imre1-linux_x86_64.whl",
             "psutil-6.0.0-cp27-none-win32.whl",
             "psutil-6.0.0-cp36-cp36m-win32.whl",
             "pydantic_core-2.20.1-pp39-pypy39_pp73-win_amd64.whl",

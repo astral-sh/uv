@@ -226,21 +226,17 @@ impl PythonVersion {
     }
 }
 
-/// Get the environment variable name for the build constraint for a given implementation.
-fn python_build_version_variable(implementation: ImplementationName) -> &'static str {
-    match implementation {
-        ImplementationName::CPython => EnvVars::UV_PYTHON_CPYTHON_BUILD,
-        ImplementationName::PyPy => EnvVars::UV_PYTHON_PYPY_BUILD,
-        ImplementationName::GraalPy => EnvVars::UV_PYTHON_GRAALPY_BUILD,
-        ImplementationName::Pyodide => EnvVars::UV_PYTHON_PYODIDE_BUILD,
-    }
-}
-
 /// Get the build version number from the environment variable for a given implementation.
 pub(crate) fn python_build_version_from_env(
     implementation: ImplementationName,
 ) -> Result<Option<String>, BuildVersionError> {
-    let variable = python_build_version_variable(implementation);
+    let variable = match implementation {
+        ImplementationName::CPython => EnvVars::UV_PYTHON_CPYTHON_BUILD,
+        ImplementationName::PyPy => EnvVars::UV_PYTHON_PYPY_BUILD,
+        ImplementationName::GraalPy => EnvVars::UV_PYTHON_GRAALPY_BUILD,
+        ImplementationName::Pyodide => EnvVars::UV_PYTHON_PYODIDE_BUILD,
+        ImplementationName::Imre => return Ok(None),
+    };
 
     let Some(build_os) = env::var_os(variable) else {
         return Ok(None);

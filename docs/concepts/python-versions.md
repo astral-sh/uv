@@ -428,7 +428,7 @@ The following alternative options are available:
 
 ## Python implementation support
 
-uv supports the CPython, PyPy, Pyodide, and GraalPy Python implementations. If a Python
+uv supports the CPython, PyPy, Pyodide, GraalPy, and Imre Python implementations. If a Python
 implementation is not supported, uv will fail to discover its interpreter.
 
 The implementations may be requested with either the long or short name:
@@ -437,8 +437,14 @@ The implementations may be requested with either the long or short name:
 - PyPy: `pypy`, `pp`
 - GraalPy: `graalpy`, `gp`
 - Pyodide: `pyodide`
+- Imre: `imre`
 
 Implementation name requests are not case-sensitive.
+
+To select a locally installed [Imre](https://github.com/astral-sh/imre) interpreter, use
+`uv python find imre` or request its Python language version with `uv python find imre@3.12`.
+Imre 3.12 native wheels use the `imre312-imre1` tags. CPython extension wheels cannot be installed
+in an Imre environment.
 
 See the [Python version request](#requesting-a-version) documentation for more details on the
 supported formats.

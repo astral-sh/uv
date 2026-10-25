@@ -1239,7 +1239,7 @@ async fn compile_stdlib_bytecode(
 
     // Explicit matching so this heuristic is updated for future additions
     match installation.implementation() {
-        ImplementationName::Pyodide => return Ok(None),
+        ImplementationName::Pyodide | ImplementationName::Imre => return Ok(None),
         ImplementationName::GraalPy | ImplementationName::PyPy | ImplementationName::CPython => (),
     }
 
