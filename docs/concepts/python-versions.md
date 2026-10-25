@@ -442,9 +442,9 @@ The implementations may be requested with either the long or short name:
 Implementation name requests are not case-sensitive.
 
 To select a locally installed [Imre](https://github.com/astral-sh/imre) interpreter, use
-`uv python find imre` or request its Python language version with `uv python find imre@3.12`.
-Imre 3.12 native wheels use the `imre312-imre1` tags. CPython extension wheels cannot be installed
-in an Imre environment.
+`uv python find imre` or request its Python language version with `uv python find imre@3.12`. Imre
+3.12 native wheels use the `imre312-imre1` tags. CPython extension wheels cannot be installed in an
+Imre environment.
 
 See the [Python version request](#requesting-a-version) documentation for more details on the
 supported formats.
