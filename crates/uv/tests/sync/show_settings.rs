@@ -4040,6 +4040,7 @@ fn preview_features() {
     +            IndexByName,
     +            ArtifactHashFiltering,
     +            ContentAddressedCache,
+    +            GitPartialFetches,
     +            MissingExcludeNewerPackageLock,
     +            ResolutionInputs,
     +            BatchExport,

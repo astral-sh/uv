@@ -2894,15 +2894,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         source: &BuildableSource<'_>,
         source_root: &'path Path,
     ) -> Option<&'path Path> {
-        if matches!(
-            source,
-            BuildableSource::Dist(SourceDist::GitDirectory(_))
-                | BuildableSource::Url(SourceUrl::GitDirectory(_))
-        ) {
-            Some(source_root)
-        } else {
-            None
-        }
+        source.is_git_checkout().then_some(source_root)
     }
 
     /// Build a source distribution, storing the built wheel in the cache.
@@ -3022,7 +3014,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         &install_path,
                         stop_discovery_at,
                         Some(&source.to_string()),
-                        source.as_dist(),
+                        Some(source),
                         &no_sources,
                         if source.is_editable() {
                             BuildKind::Editable
@@ -3156,7 +3148,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 &install_path,
                 stop_discovery_at,
                 Some(&source.to_string()),
-                source.as_dist(),
+                Some(source),
                 &no_sources,
                 build_kind,
                 if uv_flags::contains(uv_flags::EnvironmentFlags::HIDE_BUILD_OUTPUT) {
