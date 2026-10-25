@@ -3583,3 +3583,38 @@ fn workspace_metadata_various_dependency_rainbow() -> Result<()> {
 
     Ok(())
 }
+
+/// Regression test for <https://github.com/astral-sh/uv/issues/22796>
+///
+/// Ensure `uv workspace metadata` does not fail when conflicting extras are present.
+#[test]
+fn workspace_metadata_conflicting_extras() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "mre"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+
+        [project.optional-dependencies]
+        a = []
+        b = []
+
+        [tool.uv]
+        conflicts = [[{ extra = "a" }, { extra = "b" }]]
+    "#})?;
+
+    context.lock().assert().success();
+    context.sync().arg("--extra").arg("a").assert().success();
+
+    context
+        .workspace_metadata()
+        .arg("--preview-features")
+        .arg("workspace-metadata")
+        .assert()
+        .success();
+
+    Ok(())
+}

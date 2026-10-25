@@ -19,7 +19,7 @@ use uv_fs::PortablePathBuf;
 use uv_install_operations::loggers::DefaultInstallLogger;
 use uv_installer::SitePackages;
 use uv_lock::{Installable, Metadata};
-use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
+use uv_normalize::{DefaultExtras, DefaultGroups, ExtraName, GroupName, PackageName};
 use uv_preview::Preview;
 use uv_pypi_types::ModuleName;
 use uv_python_interpreter::PythonEnvironment;
@@ -212,10 +212,41 @@ fn target_selection(
         | InstallTarget::Projects { .. }
         | InstallTarget::Workspace { .. }
         | InstallTarget::Lockfile { .. }
-        | InstallTarget::NonProjectWorkspace { .. } => (
-            ExtrasSpecification::from_all_extras().with_defaults(DefaultExtras::default()),
-            DependencyGroups::from_all_groups().with_defaults(DefaultGroups::default()),
-        ),
+        | InstallTarget::NonProjectWorkspace { .. } => {
+            let (extras, groups) = if target.lock().conflicts().is_empty() {
+                (
+                    ExtrasSpecification::from_all_extras().with_defaults(DefaultExtras::default()),
+                    DependencyGroups::from_all_groups().with_defaults(DefaultGroups::default()),
+                )
+            } else {
+                let conflicting_extras: Vec<ExtraName> = target
+                    .lock()
+                    .conflicts()
+                    .iter()
+                    .flat_map(|set| set.iter().filter_map(|item| item.extra().cloned()))
+                    .collect();
+                let conflicting_groups: Vec<GroupName> = target
+                    .lock()
+                    .conflicts()
+                    .iter()
+                    .flat_map(|set| set.iter().filter_map(|item| item.group().cloned()))
+                    .collect();
+                (
+                    ExtrasSpecification::from_args(vec![], conflicting_extras, false, vec![], true)
+                        .with_defaults(DefaultExtras::default()),
+                    DependencyGroups::from_args(
+                        None,
+                        vec![],
+                        conflicting_groups,
+                        false,
+                        vec![],
+                        true,
+                    )
+                    .with_defaults(DefaultGroups::default()),
+                )
+            };
+            (extras, groups)
+        }
     }
 }
 
