@@ -1,4 +1,3 @@
-use std::collections::BTreeMap;
 use std::fmt::{self, Debug, Formatter};
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
@@ -7,6 +6,7 @@ use std::thread;
 use std::time::Duration;
 
 use async_http_range_reader::AsyncHttpRangeReader;
+use bbtree::unsync::{BBTreeMap, bbtree_map::Entry};
 use futures::{FutureExt, StreamExt, TryStreamExt};
 use http::{HeaderMap, StatusCode};
 use itertools::Either;
@@ -1752,7 +1752,7 @@ impl SimpleDetailMetadata {
         project_status: ProjectStatus,
         base: &SafeUrl,
     ) -> Self {
-        let mut version_map: BTreeMap<Version, VersionFiles> = BTreeMap::default();
+        let mut version_map: BBTreeMap<Version, VersionFiles> = BBTreeMap::default();
 
         // Convert to a reference-counted string.
         let base = SmallString::from(base.as_str());
@@ -1781,10 +1781,10 @@ impl SimpleDetailMetadata {
                 }
             };
             match version_map.entry(filename.version().clone()) {
-                std::collections::btree_map::Entry::Occupied(mut entry) => {
+                Entry::Occupied(mut entry) => {
                     entry.get_mut().push(&filename, file);
                 }
-                std::collections::btree_map::Entry::Vacant(entry) => {
+                Entry::Vacant(entry) => {
                     let mut files = VersionFiles::default();
                     files.push(&filename, file);
                     entry.insert(files);
