@@ -57,8 +57,9 @@ use uv_platform_tags::{
 };
 use uv_preview::PreviewFeature;
 use uv_pypi_types::{
-    ConflictItem, ConflictKindRef, ConflictSet, Conflicts, HashAlgorithm, HashDigest, HashDigests,
-    ParsedArchiveUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl, PyProjectToml,
+    ArchiveUrlFilename, ConflictItem, ConflictKindRef, ConflictSet, Conflicts, HashAlgorithm,
+    HashDigest, HashDigests, ParsedArchiveUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl,
+    PyProjectToml,
 };
 use uv_redacted::{SafeUrl, SafeUrlError};
 use uv_resolver_types::{
@@ -6758,9 +6759,10 @@ impl Package {
                         let url = SafeUrl::from(ParsedArchiveUrl {
                             url: url.to_url().map_err(LockErrorKind::InvalidUrl)?,
                             subdirectory: direct.subdirectory.clone(),
-                            ext: DistExtension::Wheel,
+                            archive: ArchiveUrlFilename::Url(DistExtension::Wheel),
                         });
                         let direct_dist = DirectUrlBuiltDist {
+                            header_filename: None,
                             filename,
                             location: Box::new(url.clone()),
                             url: VerbatimUrl::from_url(url),
@@ -7063,9 +7065,10 @@ impl Package {
                 let url = SafeUrl::from(ParsedArchiveUrl {
                     url: location.clone(),
                     subdirectory: direct.subdirectory.clone(),
-                    ext: DistExtension::Source(ext),
+                    archive: ArchiveUrlFilename::Url(DistExtension::Source(ext)),
                 });
                 let direct_dist = DirectUrlSourceDist {
+                    header_filename: None,
                     name: self.id.name.clone(),
                     location: Box::new(location),
                     subdirectory: direct.subdirectory.clone(),

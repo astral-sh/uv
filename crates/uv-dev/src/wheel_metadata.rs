@@ -50,6 +50,7 @@ pub(crate) async fn wheel_metadata(
     let metadata = client
         .wheel_metadata(
             &BuiltDist::DirectUrl(DirectUrlBuiltDist {
+                header_filename: None,
                 filename,
                 location: Box::new(archive.url),
                 url: args.url,

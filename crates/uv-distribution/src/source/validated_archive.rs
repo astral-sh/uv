@@ -201,6 +201,7 @@ mod tests {
             url: &url,
             subdirectory: None,
             ext: SourceDistExtension::TarGz,
+            header_filename: None,
         }));
         ValidatedSourceArchive::extract(
             reader,

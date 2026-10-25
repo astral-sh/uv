@@ -414,7 +414,48 @@ impl TryFrom<SafeUrl> for ParsedGitPathUrl {
 pub struct ParsedArchiveUrl {
     pub url: SafeUrl,
     pub subdirectory: Option<Box<Path>>,
-    pub ext: DistExtension,
+    pub archive: ArchiveUrlFilename,
+}
+
+/// The information used to identify the format of a remote archive.
+///
+/// A server-provided filename is independent of the URL used to retrieve the archive.
+#[derive(Debug, Clone, Eq, PartialEq, Hash, PartialOrd, Ord)]
+pub enum ArchiveUrlFilename {
+    /// The original URL has a recognized archive extension.
+    Url(DistExtension),
+    /// The server supplied a filename for an otherwise opaque URL.
+    Header {
+        filename: Box<str>,
+        ext: DistExtension,
+    },
+    /// The archive format must be discovered before constructing a distribution.
+    Unknown,
+}
+
+impl ArchiveUrlFilename {
+    /// Validate the extension of a server-provided filename.
+    pub fn from_header(filename: impl Into<Box<str>>) -> Result<Self, ExtensionError> {
+        let filename = filename.into();
+        let ext = DistExtension::from_path(filename.as_ref())?;
+        Ok(Self::Header { filename, ext })
+    }
+
+    /// Return the archive extension, if it is known.
+    pub fn extension(&self) -> Option<DistExtension> {
+        match self {
+            Self::Url(ext) | Self::Header { ext, .. } => Some(*ext),
+            Self::Unknown => None,
+        }
+    }
+
+    /// Return the server-provided filename, if any.
+    pub fn header_filename(&self) -> Option<&str> {
+        match self {
+            Self::Header { filename, .. } => Some(filename),
+            Self::Url(_) | Self::Unknown => None,
+        }
+    }
 }
 
 impl ParsedArchiveUrl {
@@ -422,12 +463,12 @@ impl ParsedArchiveUrl {
     pub fn from_source(
         location: SafeUrl,
         subdirectory: Option<Box<Path>>,
-        ext: DistExtension,
+        archive: ArchiveUrlFilename,
     ) -> Self {
         Self {
             url: location,
             subdirectory,
-            ext,
+            archive,
         }
     }
 }
@@ -452,7 +493,7 @@ impl TryFrom<SafeUrl> for ParsedArchiveUrl {
         Ok(Self {
             url,
             subdirectory,
-            ext,
+            archive: ArchiveUrlFilename::Url(ext),
         })
     }
 }
