@@ -8,6 +8,7 @@ pub use providers::AzureEndpointProvider;
 pub use realm::{Realm, RealmRef};
 pub use service::Service;
 pub use store::{AuthBackend, TextCredentialStore, TomlCredentialError};
+pub use trusted_host::{TrustedHost, TrustedHostError};
 
 mod cache;
 mod credentials;
@@ -19,3 +20,4 @@ mod providers;
 mod realm;
 mod service;
 mod store;
+mod trusted_host;

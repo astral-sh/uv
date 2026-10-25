@@ -13,6 +13,7 @@ use uv_cache_key::cache_digest;
 use uv_git_types::{GitOid, GitUrl};
 use uv_redacted::SafeUrl;
 
+use crate::GitHttpSettings;
 use crate::credentials::GIT_STORE;
 use crate::git::{GitCheckout, GitDatabase, GitRemote};
 
@@ -20,10 +21,8 @@ use crate::git::{GitCheckout, GitDatabase, GitRemote};
 pub(crate) struct GitSource {
     /// The Git reference from the manifest file.
     git: GitUrl,
-    /// Whether to disable SSL verification.
-    disable_ssl: bool,
-    /// Whether to operate without network connectivity.
-    offline: bool,
+    /// Settings for fetching and checking out the repository.
+    settings: GitHttpSettings,
     /// The path to the Git source database.
     cache: PathBuf,
     /// The reporter to use for this source.
@@ -31,23 +30,13 @@ pub(crate) struct GitSource {
 }
 
 impl GitSource {
-    /// Initialize a [`GitSource`] with the given Git URL, HTTP client, and cache path.
-    pub(crate) fn new(git: GitUrl, cache: impl Into<PathBuf>, offline: bool) -> Self {
+    /// Initialize a [`GitSource`] with the given Git URL, cache path, and fetch settings.
+    pub(crate) fn new(git: GitUrl, cache: impl Into<PathBuf>, settings: GitHttpSettings) -> Self {
         Self {
             git,
-            disable_ssl: false,
-            offline,
+            settings,
             cache: cache.into(),
             reporter: None,
-        }
-    }
-
-    /// Disable SSL verification for this [`GitSource`].
-    #[must_use]
-    pub(crate) fn dangerous(self) -> Self {
-        Self {
-            disable_ssl: true,
-            ..self
         }
     }
 
@@ -94,7 +83,10 @@ impl GitSource {
         };
 
         let git_remote = GitRemote::new(remote.clone().into_owned());
-        let maybe_db = match (self.git.precise(), git_remote.db_at(&db_path).ok()) {
+        let maybe_db = match (
+            self.git.precise(),
+            git_remote.db_at(&db_path, &self.settings)?,
+        ) {
             (Some(rev), Some(db)) if db.contains(rev) => {
                 let path = checkouts.join(db.to_short_id(rev)?);
                 // A completed checkout can serve this revision without reading the shared LFS store.
@@ -123,8 +115,7 @@ impl GitSource {
             maybe_db,
             self.git.reference(),
             self.git.precise(),
-            self.disable_ssl,
-            self.offline,
+            &self.settings,
             lfs_requested,
         )?;
         // Git's abbreviated revision keeps checkout paths short on Windows.
