@@ -3467,8 +3467,6 @@ fn tool_install_git_lfs() {
     Hello from test-lfs-repo! LFS_TEST=True ANOTHER_LFS_TEST=True
     ");
 
-    // Attempt to install when LFS artifacts are missing and LFS is requested.
-
     // The filters below will remove any boilerplate before what we actually want to match.
     // They help handle slightly different output in uv-distribution/src/source/mod.rs between
     // calls to `git` and `git_metadata` functions which don't have guaranteed execution order.
@@ -3484,8 +3482,10 @@ fn tool_install_git_lfs() {
             },
         ));
 
+    // A fresh cache forces a checkout that requires Git LFS, despite the earlier verified checkout.
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("--reinstall")
+        .arg("--no-cache")
         .arg("--lfs")
         .arg("test-lfs-repo @ git+https://github.com/astral-sh/test-lfs-repo@e282f5be233e3f1d44934164895a043fc534b8aa")
         .env(EnvVars::UV_INTERNAL__TEST_LFS_DISABLED, "1")
