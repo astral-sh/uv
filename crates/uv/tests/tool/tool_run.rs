@@ -7,9 +7,8 @@ use assert_fs::prelude::*;
 #[cfg(unix)]
 use fs_err::{metadata, set_permissions};
 use indoc::indoc;
-use uv_fs::copy_dir_all;
 use uv_static::EnvVars;
-use uv_test::{uv_snapshot, venv_bin_path};
+use uv_test::{copy_dir_ignore, uv_snapshot, venv_bin_path};
 
 #[test]
 fn tool_run_args() {
@@ -97,9 +96,9 @@ fn tool_run_at_version() {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse: `pytest@`
-      Caused by: Expected URL
-        pytest@
-               ^
+      cause: Expected URL
+             pytest@
+                    ^
     ");
 
     // Invalid versions are just treated as package and command names
@@ -108,8 +107,8 @@ fn tool_run_at_version() {
         .arg("--version"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to resolve tool requirement
-      ╰─▶ Distribution not found at: file://[TEMP_DIR]/invalid
+    error: Failed to resolve tool requirement
+      cause: Distribution not found at: file://[TEMP_DIR]/invalid
     ");
 
     let filters = context
@@ -117,8 +116,8 @@ fn tool_run_at_version() {
         .into_iter()
         .chain([(
             // The error message is different on Windows
-            "Caused by: program not found",
-            "Caused by: No such file or directory (os error 2)",
+            "cause: program not found",
+            "cause: No such file or directory (os error 2)",
         )])
         .collect::<Vec<_>>();
 
@@ -847,40 +846,29 @@ fn tool_run_url() {
 #[test]
 #[cfg(feature = "test-git")]
 fn tool_run_git() {
-    let context = uv_test::test_context!("3.12")
-        .with_filtered_counts()
-        .with_tool_dirs();
+    let context = uv_test::test_context!("3.12").with_tool_dirs();
 
     uv_snapshot!(context.filters(), context.tool_run()
-        .arg("git+https://github.com/psf/black@24.2.0")
-        .arg("--version"), @"
+        .arg("git+https://github.com/astral-sh/uv-dynamic-requires-python-test@75a612dc87fc215e999a25a0efc376cbf9831afa#subdirectory=static"), @"
     exit_code: 0 (success)
     ----- stdout -----
-    black, 24.2.0 (compiled: no)
-    Python (CPython) 3.12.[X]
+    3.12
 
     ----- stderr -----
-    Resolved [N] packages in [TIME]
-    Prepared [N] packages in [TIME]
-    Installed [N] packages in [TIME]
-     + black==24.2.0 (from git+https://github.com/psf/black@6fdf8a4af28071ed1d079c01122b34c5d587207a)
-     + click==8.1.7
-     + mypy-extensions==1.0.0
-     + packaging==24.0
-     + pathspec==0.12.1
-     + platformdirs==4.2.0
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + static-requires-python-tool==0.1.0 (from git+https://github.com/astral-sh/uv-dynamic-requires-python-test@75a612dc87fc215e999a25a0efc376cbf9831afa#subdirectory=static)
     ");
 
     uv_snapshot!(context.filters(), context.tool_run()
-        .arg("black @ git+https://github.com/psf/black@24.2.0")
-        .arg("--version"), @"
+        .arg("static-requires-python-tool @ git+https://github.com/astral-sh/uv-dynamic-requires-python-test@75a612dc87fc215e999a25a0efc376cbf9831afa#subdirectory=static"), @"
     exit_code: 0 (success)
     ----- stdout -----
-    black, 24.2.0 (compiled: no)
-    Python (CPython) 3.12.[X]
+    3.12
 
     ----- stderr -----
-    Resolved [N] packages in [TIME]
+    Resolved 1 package in [TIME]
     ");
 
     // Clear the cache.
@@ -888,38 +876,29 @@ fn tool_run_git() {
 
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("--from")
-        .arg("git+https://github.com/psf/black@24.2.0")
-        .arg("black")
-        .arg("--version"), @"
+        .arg("git+https://github.com/astral-sh/uv-dynamic-requires-python-test@75a612dc87fc215e999a25a0efc376cbf9831afa#subdirectory=static")
+        .arg("static-requires-python-tool"), @"
     exit_code: 0 (success)
     ----- stdout -----
-    black, 24.2.0 (compiled: no)
-    Python (CPython) 3.12.[X]
+    3.12
 
     ----- stderr -----
-    Resolved [N] packages in [TIME]
-    Prepared [N] packages in [TIME]
-    Installed [N] packages in [TIME]
-     + black==24.2.0 (from git+https://github.com/psf/black@6fdf8a4af28071ed1d079c01122b34c5d587207a)
-     + click==8.1.7
-     + mypy-extensions==1.0.0
-     + packaging==24.0
-     + pathspec==0.12.1
-     + platformdirs==4.2.0
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + static-requires-python-tool==0.1.0 (from git+https://github.com/astral-sh/uv-dynamic-requires-python-test@75a612dc87fc215e999a25a0efc376cbf9831afa#subdirectory=static)
     ");
 
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("--from")
-        .arg("black @ git+https://github.com/psf/black@24.2.0")
-        .arg("black")
-        .arg("--version"), @"
+        .arg("static-requires-python-tool @ git+https://github.com/astral-sh/uv-dynamic-requires-python-test@75a612dc87fc215e999a25a0efc376cbf9831afa#subdirectory=static")
+        .arg("static-requires-python-tool"), @"
     exit_code: 0 (success)
     ----- stdout -----
-    black, 24.2.0 (compiled: no)
-    Python (CPython) 3.12.[X]
+    3.12
 
     ----- stderr -----
-    Resolved [N] packages in [TIME]
+    Resolved 1 package in [TIME]
     ");
 }
 
@@ -976,9 +955,9 @@ fn tool_run_git_does_not_infer_dynamic_requires_python() {
         .arg("dynamic-requires-python-tool"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving tool dependencies:
-      ╰─▶ Because the current Python version (3.11.[X]) does not satisfy Python>=3.12,<3.13 and dynamic-requires-python-tool==0.1.0 depends on Python>=3.12,<3.13, we can conclude that dynamic-requires-python-tool==0.1.0 cannot be used.
-          And because only dynamic-requires-python-tool==0.1.0 is available and you require dynamic-requires-python-tool, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving tool dependencies
+      cause: Because the current Python version (3.11.[X]) does not satisfy Python>=3.12,<3.13 and dynamic-requires-python-tool==0.1.0 depends on Python>=3.12,<3.13, we can conclude that dynamic-requires-python-tool==0.1.0 cannot be used.
+             And because only dynamic-requires-python-tool==0.1.0 is available and you require dynamic-requires-python-tool, we can conclude that your requirements are unsatisfiable.
     ");
 }
 
@@ -1063,7 +1042,10 @@ fn tool_run_git_lfs() {
         .with_filter((r"exit_code: -?[1-9]\d*", "exit_code: [ERROR_CODE]"))
         .with_filter((
             "(?s)(----- stderr -----).*?The source distribution `[^`]+` is missing Git LFS artifacts.*",
-            "$1\n[PREFIX]The source distribution `[DISTRIBUTION]` is missing Git LFS artifacts",
+            indoc! {"
+                $1
+                [PREFIX]The source distribution `[DISTRIBUTION]` is missing Git LFS artifacts"
+            },
         ));
 
     uv_snapshot!(context.filters(), context.tool_run()
@@ -1192,7 +1174,7 @@ fn tool_run_requirements_txt_arguments() {
     Werkzeug 3.0.1
 
     ----- stderr -----
-    warning: Ignoring `--index-url` from requirements file: `https://test.pypi.org/simple`. Instead, use the `--index-url` command-line argument, or set `index-url` in a `uv.toml` or `pyproject.toml` file.
+    warning: Ignoring `--index-url` value `https://test.pypi.org/simple` from requirements file. Instead, use the `--index-url` command-line argument, or set `index-url` in a `uv.toml` or `pyproject.toml` file.
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
@@ -1285,13 +1267,13 @@ fn tool_run_csv_with_shorthand() -> anyhow::Result<()> {
         .with_tool_dirs();
 
     let anyio_local = context.temp_dir.child("src").child("anyio_local");
-    copy_dir_all(
+    copy_dir_ignore(
         context.workspace_root.join("test/packages/anyio_local"),
         &anyio_local,
     )?;
 
     let black_editable = context.temp_dir.child("src").child("black_editable");
-    copy_dir_all(
+    copy_dir_ignore(
         context.workspace_root.join("test/packages/black_editable"),
         &black_editable,
     )?;
@@ -1344,13 +1326,13 @@ fn tool_run_csv_with() -> anyhow::Result<()> {
         .with_tool_dirs();
 
     let anyio_local = context.temp_dir.child("src").child("anyio_local");
-    copy_dir_all(
+    copy_dir_ignore(
         context.workspace_root.join("test/packages/anyio_local"),
         &anyio_local,
     )?;
 
     let black_editable = context.temp_dir.child("src").child("black_editable");
-    copy_dir_all(
+    copy_dir_ignore(
         context.workspace_root.join("test/packages/black_editable"),
         &black_editable,
     )?;
@@ -1403,13 +1385,13 @@ fn tool_run_csv_with() -> anyhow::Result<()> {
         .with_tool_dirs();
 
     let anyio_local = context.temp_dir.child("src").child("anyio_local");
-    copy_dir_all(
+    copy_dir_ignore(
         context.workspace_root.join("test/packages/anyio_local"),
         &anyio_local,
     )?;
 
     let black_editable = context.temp_dir.child("src").child("black_editable");
-    copy_dir_all(
+    copy_dir_ignore(
         context.workspace_root.join("test/packages/black_editable"),
         &black_editable,
     )?;
@@ -1462,13 +1444,13 @@ fn tool_run_repeated_with() -> anyhow::Result<()> {
         .with_tool_dirs();
 
     let anyio_local = context.temp_dir.child("src").child("anyio_local");
-    copy_dir_all(
+    copy_dir_ignore(
         context.workspace_root.join("test/packages/anyio_local"),
         &anyio_local,
     )?;
 
     let black_editable = context.temp_dir.child("src").child("black_editable");
-    copy_dir_all(
+    copy_dir_ignore(
         context.workspace_root.join("test/packages/black_editable"),
         &black_editable,
     )?;
@@ -1523,13 +1505,13 @@ fn tool_run_repeated_with() -> anyhow::Result<()> {
         .with_tool_dirs();
 
     let anyio_local = context.temp_dir.child("src").child("anyio_local");
-    copy_dir_all(
+    copy_dir_ignore(
         context.workspace_root.join("test/packages/anyio_local"),
         &anyio_local,
     )?;
 
     let black_editable = context.temp_dir.child("src").child("black_editable");
-    copy_dir_all(
+    copy_dir_ignore(
         context.workspace_root.join("test/packages/black_editable"),
         &black_editable,
     )?;
@@ -1583,13 +1565,13 @@ fn tool_run_with_editable() -> anyhow::Result<()> {
         .with_tool_dirs();
 
     let anyio_local = context.temp_dir.child("src").child("anyio_local");
-    copy_dir_all(
+    copy_dir_ignore(
         context.workspace_root.join("test/packages/anyio_local"),
         &anyio_local,
     )?;
 
     let black_editable = context.temp_dir.child("src").child("black_editable");
-    copy_dir_all(
+    copy_dir_ignore(
         context.workspace_root.join("test/packages/black_editable"),
         &black_editable,
     )?;
@@ -1704,7 +1686,7 @@ fn tool_run_invalid_with() {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to resolve `--with` requirement
-      Caused by: Distribution not found at: file://[TEMP_DIR]/foo
+      cause: Distribution not found at: file://[TEMP_DIR]/foo
     ");
 }
 
@@ -1790,8 +1772,8 @@ fn tool_run_resolution_error() {
         .arg("add"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving tool dependencies:
-      ╰─▶ Because there are no versions of add and you require add, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving tool dependencies
+      cause: Because there are no versions of add and you require add, we can conclude that your requirements are unsatisfiable.
     ");
 }
 
@@ -2070,8 +2052,8 @@ fn tool_run_python_at_version() {
         .arg("--version"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving tool dependencies:
-      ╰─▶ Because cp311 was not found in the package registry and you require cp311, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving tool dependencies
+      cause: Because cp311 was not found in the package registry and you require cp311, we can conclude that your requirements are unsatisfiable.
     ");
 
     // Bare versions don't work either. Again we interpret them as package names.
@@ -2080,8 +2062,8 @@ fn tool_run_python_at_version() {
         .arg("--version"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving tool dependencies:
-      ╰─▶ Because 311 was not found in the package registry and you require 311, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving tool dependencies
+      cause: Because 311 was not found in the package registry and you require 311, we can conclude that your requirements are unsatisfiable.
     ");
 
     // Request a version via `-p`
@@ -2880,9 +2862,9 @@ fn tool_run_with_url_ending_in_py() {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to resolve `--with` requirement
-      Caused by: Git operation failed
-      Caused by: failed to fetch into: [CACHE_DIR]/git-v0/db/efbd3507bcbea33c
-      Caused by: Remote Git fetches are not allowed because network connectivity is disabled (i.e., with `--offline`)
+      cause: Git operation failed
+      cause: failed to fetch into: [CACHE_DIR]/git-v1/db/efbd3507bcbea33c
+      cause: Remote Git fetches are not allowed because network connectivity is disabled (i.e., with `--offline`)
     ");
 
     uv_snapshot!(context.filters(), context.tool_run()
@@ -2890,10 +2872,11 @@ fn tool_run_with_url_ending_in_py() {
         .arg("easyeda2kicad @ git+https://github.com/uPesy/easyeda2kicad.py"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to download and build `easyeda2kicad @ git+https://github.com/uPesy/easyeda2kicad.py`
-      ├─▶ Git operation failed
-      ├─▶ failed to fetch into: [CACHE_DIR]/git-v0/db/efbd3507bcbea33c
-      ╰─▶ Remote Git fetches are not allowed because network connectivity is disabled (i.e., with `--offline`)
+    error: Failed to resolve tool requirement
+      cause: Failed to download and build `easyeda2kicad @ git+https://github.com/uPesy/easyeda2kicad.py`
+      cause: Git operation failed
+      cause: failed to fetch into: [CACHE_DIR]/git-v1/db/efbd3507bcbea33c
+      cause: Remote Git fetches are not allowed because network connectivity is disabled (i.e., with `--offline`)
     ");
 }
 
@@ -2911,9 +2894,9 @@ fn tool_run_with_from_url_ending_in_py() {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to resolve `--with` requirement
-      Caused by: Git operation failed
-      Caused by: failed to fetch into: [CACHE_DIR]/git-v0/db/efbd3507bcbea33c
-      Caused by: Remote Git fetches are not allowed because network connectivity is disabled (i.e., with `--offline`)
+      cause: Git operation failed
+      cause: failed to fetch into: [CACHE_DIR]/git-v1/db/efbd3507bcbea33c
+      cause: Remote Git fetches are not allowed because network connectivity is disabled (i.e., with `--offline`)
     ");
 
     uv_snapshot!(context.filters(), context.tool_run()
@@ -2923,10 +2906,11 @@ fn tool_run_with_from_url_ending_in_py() {
         .arg("easyeda2kicad"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to download and build `easyeda2kicad @ git+https://github.com/uPesy/easyeda2kicad.py`
-      ├─▶ Git operation failed
-      ├─▶ failed to fetch into: [CACHE_DIR]/git-v0/db/efbd3507bcbea33c
-      ╰─▶ Remote Git fetches are not allowed because network connectivity is disabled (i.e., with `--offline`)
+    error: Failed to resolve tool requirement
+      cause: Failed to download and build `easyeda2kicad @ git+https://github.com/uPesy/easyeda2kicad.py`
+      cause: Git operation failed
+      cause: failed to fetch into: [CACHE_DIR]/git-v1/db/efbd3507bcbea33c
+      cause: Remote Git fetches are not allowed because network connectivity is disabled (i.e., with `--offline`)
     ");
 }
 
@@ -2944,8 +2928,9 @@ fn tool_run_verbose_hint() {
         .arg("--verbose"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because nonexistent-package-foo was not found in the package registry and you require nonexistent-package-foo, we can conclude that your requirements are unsatisfiable.
+    error: Failed to run tool
+      cause: No solution found when resolving dependencies
+      cause: Because nonexistent-package-foo was not found in the package registry and you require nonexistent-package-foo, we can conclude that your requirements are unsatisfiable.
 
     hint: You provided `--verbose` to `nonexistent-package-foo`. Did you mean to provide it to `uv tool run`? e.g., `uv tool run --verbose nonexistent-package-foo`
     ");
@@ -2956,8 +2941,9 @@ fn tool_run_verbose_hint() {
         .arg("-v"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because nonexistent-package-bar was not found in the package registry and you require nonexistent-package-bar, we can conclude that your requirements are unsatisfiable.
+    error: Failed to run tool
+      cause: No solution found when resolving dependencies
+      cause: Because nonexistent-package-bar was not found in the package registry and you require nonexistent-package-bar, we can conclude that your requirements are unsatisfiable.
 
     hint: You provided `-v` to `nonexistent-package-bar`. Did you mean to provide it to `uv tool run`? e.g., `uv tool run -v nonexistent-package-bar`
     ");
@@ -2968,8 +2954,9 @@ fn tool_run_verbose_hint() {
         .arg("-vv"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because nonexistent-package-baz was not found in the package registry and you require nonexistent-package-baz, we can conclude that your requirements are unsatisfiable.
+    error: Failed to run tool
+      cause: No solution found when resolving dependencies
+      cause: Because nonexistent-package-baz was not found in the package registry and you require nonexistent-package-baz, we can conclude that your requirements are unsatisfiable.
 
     hint: You provided `-vv` to `nonexistent-package-baz`. Did you mean to provide it to `uv tool run`? e.g., `uv tool run -vv nonexistent-package-baz`
     ");
@@ -2980,9 +2967,57 @@ fn tool_run_verbose_hint() {
         .arg("-version"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving tool dependencies:
-      ╰─▶ Because nonexistent-package-quux was not found in the package registry and you require nonexistent-package-quux, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving tool dependencies
+      cause: Because nonexistent-package-quux was not found in the package registry and you require nonexistent-package-quux, we can conclude that your requirements are unsatisfiable.
     ");
+}
+
+/// Include the invocation hint when resolution succeeds but building the tool fails.
+#[test]
+fn tool_run_verbose_hint_install_failure() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_tool_dirs();
+
+    // Create a tool whose metadata can be resolved without running the build backend.
+    let project = context.temp_dir.child("broken-tool");
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "broken-tool"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = []
+        build-backend = "backend"
+        backend-path = ["."]
+    "#})?;
+
+    // Fail when installation tries to build the tool's wheel.
+    project.child("backend.py").write_str(indoc! {r"
+        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+            raise SystemExit(1)
+    "})?;
+
+    // Include the invocation hint even though the failure occurs after resolution.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--offline")
+        .arg("--from")
+        .arg("./broken-tool")
+        .arg("broken-tool")
+        .arg("--verbose"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Failed to run tool
+      cause: Failed to build `broken-tool @ file://[TEMP_DIR]/broken-tool`
+      cause: The build backend returned an error
+      cause: Call to `backend.build_wheel` failed (exit status: 1)
+
+    hint: Build failures usually indicate a problem with the package or the build environment
+
+    hint: You provided `--verbose` to `broken-tool`. Did you mean to provide it to `uv tool run`? e.g., `uv tool run --verbose broken-tool`
+    ");
+
+    Ok(())
 }
 
 #[test]
@@ -3043,10 +3078,10 @@ fn tool_run_with_incompatible_build_constraints() -> Result<()> {
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to download and build `requests==1.2.0`
-      ├─▶ Failed to resolve requirements from `setup.py` build
-      ├─▶ No solution found when resolving: `setuptools>=40.8.0`
-      ╰─▶ Because you require setuptools>=40.8.0 and setuptools==2, we can conclude that your requirements are unsatisfiable.
+    error: Failed to download and build `requests==1.2.0`
+      cause: Failed to resolve requirements from `setup.py` build
+      cause: No solution found when resolving: `setuptools>=40.8.0`
+      cause: Because you require setuptools>=40.8.0 and setuptools==2, we can conclude that your requirements are unsatisfiable.
     ");
 
     Ok(())
@@ -3478,9 +3513,9 @@ fn tool_run_reresolve_python() -> anyhow::Result<()> {
         .arg("foo"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving tool dependencies:
-      ╰─▶ Because the current Python version (3.11.[X]) does not satisfy Python>=3.12 and foo==1.0.0 depends on Python>=3.12, we can conclude that foo==1.0.0 cannot be used.
-          And because only foo==1.0.0 is available and you require foo, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving tool dependencies
+      cause: Because the current Python version (3.11.[X]) does not satisfy Python>=3.12 and foo==1.0.0 depends on Python>=3.12, we can conclude that foo==1.0.0 cannot be used.
+             And because only foo==1.0.0 is available and you require foo, we can conclude that your requirements are unsatisfiable.
     ");
 
     // Unless the discovered interpreter is compatible with the request
@@ -3516,7 +3551,7 @@ fn tool_run_windows_dotted_package_name() -> anyhow::Result<()> {
     let test_package_source = workspace_packages.join("package.name.with.dots");
     let test_package_dest = context.temp_dir.child("package.name.with.dots");
 
-    copy_dir_all(&test_package_source, &test_package_dest)?;
+    copy_dir_ignore(&test_package_source, &test_package_dest)?;
 
     // Test that uv tool run can find and execute the dotted package name
     uv_snapshot!(context.filters(), context.tool_run()

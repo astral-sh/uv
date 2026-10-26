@@ -7,16 +7,15 @@ use serde::{Deserialize, Serialize};
 use tracing::debug;
 
 use uv_auth::{AuthBackend, Credentials};
+use uv_command_support::{ExitStatus, Printer};
 use uv_preview::{Preview, PreviewFeature};
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 use uv_warnings::warn_user;
-
-use crate::{commands::ExitStatus, printer::Printer};
 
 /// Request format for the Bazel credential helper protocol.
 #[derive(Debug, Deserialize)]
 struct BazelCredentialRequest {
-    uri: DisplaySafeUrl,
+    uri: SafeUrl,
 }
 
 impl BazelCredentialRequest {
@@ -58,10 +57,7 @@ impl TryFrom<Credentials> for BazelCredentialResponse {
     type Error = anyhow::Error;
 }
 
-async fn credentials_for_url(
-    url: &DisplaySafeUrl,
-    preview: Preview,
-) -> Result<Option<Credentials>> {
+async fn credentials_for_url(url: &SafeUrl, preview: Preview) -> Result<Option<Credentials>> {
     // Use only the username from the URL, if present - discarding the password
     let url_credentials = Credentials::from_url(url)?;
     let username = url_credentials.as_ref().and_then(|c| c.username());
@@ -69,7 +65,7 @@ async fn credentials_for_url(
         .as_ref()
         .is_some_and(|credentials| credentials.password().is_some())
     {
-        debug!("URL '{url}' contain a password; ignoring");
+        debug!("URL `{url}` contain a password; ignoring");
     }
 
     let backend = AuthBackend::from_settings(preview).await?;

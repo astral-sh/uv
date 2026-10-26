@@ -1,15 +1,18 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.11"
 
 [options]
 exclude-newer = "0001-01-01T00:00:00Z" # This has no effect and is included for backwards compatibility when using relative exclude-newer values.
 exclude-newer-span = "P7D"
 
+[options.exclude-newer-package]
+astral-dev-toolchain-hyperfine = "2026-10-08T08:11:00Z"
+certifi = "2026-10-20T02:24:17Z"
+pip = "2026-10-20T16:36:30Z"
+
 [manifest]
-build-constraints = [
-    { name = "uv-build", specifier = "==0.12.3" },
-]
+build-constraints = [{ name = "uv-build", specifier = "==0.12.3", hashes = ["sha256:322d634f2fbf8c7965dde52106db8040b0cc23dbc07b6508d900f217843bd129", "sha256:39adb84a210edaffc4eab8f59a2fc66579d08ea4e75acd3f36548f33f4a3eefc", "sha256:3bdf349e221a93544c940157361d22e5b6d73bc9bd1b302364461d8afd46479a", "sha256:3f6cda73d200e755d8aec6492af22c279ce69e460241a5f7507eba4aeb08abb7", "sha256:48117d0f8d7be3e88f2e8e63e608873bc2aa950f5d9c3a845650e41632dfd0e9", "sha256:52d1bb3e76217f4ece4fb2b89a7536d481af087567d83428cc72d570b540f3df", "sha256:6d0d59550fc9498087c071e9c842c87cd5288e0f8bda4888a633d6be79c3178c", "sha256:7b9bd7b737e8e79370684c959e9500eb32fee44efc396d51ab11ca598d1596a2", "sha256:7f13598c88b44a9b46c5d74370a0c12954f2e328d9193e80358a38edf95c7608", "sha256:855dbaf6912805e70ae1c788a282dc023d69f6acaec0955d14e57759017e11de", "sha256:9bc47530837f8a544c7a9e11e6636a950bc68aac1837462052dc180f45318f96", "sha256:aa2c683d59b2c593b3b3f20e9bdc949131f3e6dd11250f214093a4b800e2472d", "sha256:ad894d87c4e048973ba975aa85f9c8b30fe1065b8c10ec2adfd8395333a6df4f", "sha256:b294990201d431fb0e7cfada5a00e7e5d4c520c32c86a437a11825f73960c441", "sha256:b6f51ed4411a35f008c9ef6e28016ac8f167f5c14fb2d0e453a9a97246b14206", "sha256:b92f3c999dceaa1ba544587be5e85708bbc7a584f4e22dbb770409699eeffe80", "sha256:c821185380be7573bed6e653f995c6211258bd5351cbccf4072cef3ebfcf1a5c", "sha256:cf304c80cf6200aad0956bbc2cdb1e23dd49bfeb74e036a263050de2b0e54f91", "sha256:d1d47f328fb52f62cbc4915c82c96850d246d9029e6f461bfd01f31f43a13451"] }]
 
 [[package]]
 name = "anyio"
@@ -43,6 +46,19 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/75/33/a3d23a2e9ac78f9eaf1fce7490fee430d43ca7d42c65adabbb36a2b28ff6/argcomplete-3.5.0.tar.gz", hash = "sha256:4349400469dccfb7950bb60334a680c58d88699bff6159df61251878dc6bf74b", size = 82237, upload-time = "2024-08-06T15:37:49.12Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/41/e8/ba56bcc0d48170c0fc5a7f389488eddce47f98ed976a24ae62db402f33ae/argcomplete-3.5.0-py3-none-any.whl", hash = "sha256:d4bcf3ff544f51e16e54228a7ac7f486ed70ebf2ecfe49a63a91171c76bf029b", size = 43475, upload-time = "2024-08-06T15:37:46.45Z" },
+]
+
+[[package]]
+name = "astral-dev-toolchain-hyperfine"
+version = "2.0.0"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/84/3b/25e80ed9a04eae4c9ac5d1b9dcedcb96a8ec3478aeca7506945bb3eb3bcc/astral_dev_toolchain_hyperfine-2.0.0-py3-none-macosx_10_12_x86_64.whl", hash = "sha256:4fd3f4cff5e9413275bdde45d29cc1081c4ee260f293fa4b893887e53dbf6b28", size = 655687, upload-time = "2026-10-08T08:10:08.235Z" },
+    { url = "https://files.pythonhosted.org/packages/c3/28/8152c563ddcd8a631541b43951fab09fc116a541c3e1264acbfbf5129af9/astral_dev_toolchain_hyperfine-2.0.0-py3-none-macosx_11_0_arm64.whl", hash = "sha256:8f24a90d6df228b7052af92591af84d381f50f17b49b5a738b281d4ee5f603f1", size = 617771, upload-time = "2026-10-08T08:10:09.895Z" },
+    { url = "https://files.pythonhosted.org/packages/d1/9d/71cb2a4efece9a45a75f25dd86d031b0f0fddf9b7627bd916912dae10f42/astral_dev_toolchain_hyperfine-2.0.0-py3-none-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:bd976277bb45cf9395e54fdf2b5569ded300188324bc898679514cc5b4f7a988", size = 656479, upload-time = "2026-10-08T08:10:11.477Z" },
+    { url = "https://files.pythonhosted.org/packages/50/5e/b1318e8fd7b66d5c47ca79cf4b9ea9e24e135f6c03dd4387c3e65ee5dbc9/astral_dev_toolchain_hyperfine-2.0.0-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:ca06019e2064799b1c69f756ec2666d63a3e3a5f6c1277c29097f508a74d2eed", size = 700573, upload-time = "2026-10-08T08:10:13.062Z" },
+    { url = "https://files.pythonhosted.org/packages/5d/5f/163ad1062456a66821b10e5507a5c2e7bc46a22d6da9311b25b648d904c5/astral_dev_toolchain_hyperfine-2.0.0-py3-none-win_amd64.whl", hash = "sha256:b9e5af78f045aa6e73a1a1cec2cc681c28531b56e4b4e90ada6ff124a23b207b", size = 646496, upload-time = "2026-10-08T08:10:14.509Z" },
+    { url = "https://files.pythonhosted.org/packages/8f/24/dfb55c4cec42e777ba1327cfecffdf09cf1da245735a5ee8f0e933d8428d/astral_dev_toolchain_hyperfine-2.0.0-py3-none-win_arm64.whl", hash = "sha256:77db7b13877b8d3820a32c71bcca56e4068ba11f820ab99caa8ae84ac838dfd8", size = 603453, upload-time = "2026-10-08T08:10:16.179Z" },
 ]
 
 [[package]]
@@ -129,6 +145,7 @@ name = "benchmark"
 version = "0.0.1"
 source = { editable = "." }
 dependencies = [
+    { name = "astral-dev-toolchain-hyperfine" },
     { name = "pdm" },
     { name = "pip-tools" },
     { name = "pipx" },
@@ -140,6 +157,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "astral-dev-toolchain-hyperfine", specifier = "==2.0.0" },
     { name = "pdm" },
     { name = "pip-tools" },
     { name = "pipx" },
@@ -192,11 +210,11 @@ filecache = [
 
 [[package]]
 name = "certifi"
-version = "2026.7.22"
+version = "2026.10.19"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/a3/c2/24167ea9858356b47a87a50d39908bfdb72ceeefe0041586e704e5376b3a/certifi-2026.7.22.tar.gz", hash = "sha256:741e2c3b351ddf169a738da9f2c048608ff7f2c5cc02f1ebc6b118bb090d5d55", size = 138112, upload-time = "2026-07-22T03:35:12.644Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/a6/bd/1436c50cc46699de0230fbaacc1d1de7bfec413176099949e9d5112e88f2/certifi-2026.10.19.tar.gz", hash = "sha256:035c1e85572b141bf1c3a3eff0e33a8eb74917522f2559075ff8d2fea780a1ae", size = 137598, upload-time = "2026-10-20T02:24:16.604Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/0b/a7/71ac2cff56fec219ed242bb11b8efb69fcc4bec75db06fb7bfe35de520e6/certifi-2026.7.22-py3-none-any.whl", hash = "sha256:62f22742b58a1a33014a2b6b706588a8d7e2a88ae7bd1a6ebe8c992928483775", size = 136983, upload-time = "2026-07-22T03:35:11.276Z" },
+    { url = "https://files.pythonhosted.org/packages/c4/51/29046e48f693c54e5b7412216d447a1d8362c9653148d98c02cdf65fa733/certifi-2026.10.19-py3-none-any.whl", hash = "sha256:42d35340cc5b9ba78e818ddbff0c5b1c2b779de448a340fd1b989f5fa8670e1b", size = 136464, upload-time = "2026-10-20T02:24:15.072Z" },
 ]
 
 [[package]]
@@ -826,11 +844,11 @@ wheels = [
 
 [[package]]
 name = "pip"
-version = "26.1.2"
+version = "26.2.2"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/01/91/47e7d486260f618783899587af63ccf7980fb60245c3e63dd4571c6b57ad/pip-26.1.2.tar.gz", hash = "sha256:f49cd134c61cf2fd75e0ce2676db03e4054504a5a4986d00f8299ae632dc4605", size = 1840799, upload-time = "2026-05-31T17:33:58.56Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/fa/e8/0842d757e483e895e670f655084cfe8b8c72580c6769a76b30b2789a0608/pip-26.2.2.tar.gz", hash = "sha256:3a8e5c800492787f33a4114ef54444546c340df428974ebba17e0fd47e11af2f", size = 1863336, upload-time = "2026-10-20T16:36:29.008Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/5d/95/6b5cb3461ea5673ba0995989746db58eb18b91b54dbf331e72f569540946/pip-26.1.2-py3-none-any.whl", hash = "sha256:382ff9f685ee3bc25864f820aa50505825f10f5458ffff07e30a6d96e5715cab", size = 1813144, upload-time = "2026-05-31T17:33:56.772Z" },
+    { url = "https://files.pythonhosted.org/packages/3f/06/3e4420302363fbb71be3c7f35ce042f54bfca330e3e66b3a2e3c4cca579f/pip-26.2.2-py3-none-any.whl", hash = "sha256:fd7f4dfa8190e014013b9f08f3e973f4e4c26ffd179a204895533a7254813a70", size = 1819850, upload-time = "2026-10-20T16:36:27.046Z" },
 ]
 
 [[package]]

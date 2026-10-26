@@ -4,21 +4,24 @@ use anyhow::{Ok, Result};
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use indoc::{formatdoc, indoc};
-#[cfg(feature = "test-universal")]
 use insta::assert_snapshot;
+#[cfg(all(unix, feature = "test-universal"))]
+use std::os::unix::fs::FileTypeExt;
 #[cfg(all(feature = "test-universal", feature = "test-git"))]
 use std::path::Path;
-use std::process::Stdio;
+use std::process::{Command, Stdio};
+#[cfg(all(unix, feature = "test-universal"))]
+use std::thread;
 #[cfg(feature = "test-universal")]
 use uv_fs::Simplified;
 use uv_static::EnvVars;
+use uv_test::archive::generate_source_archive;
 #[cfg(feature = "test-universal")]
 use uv_test::copy_dir_ignore;
-use uv_test::packse::PackseServer;
-use uv_test::packse::scenario::Scenario;
+use uv_test::packse::{PackseServer, WheelBuilder, scenario::Scenario};
 #[cfg(all(feature = "test-universal", feature = "test-git"))]
 use uv_test::{READ_ONLY_GITHUB_SSH_DEPLOY_KEY, READ_ONLY_GITHUB_TOKEN, decode_token};
-use uv_test::{apply_filters, uv_snapshot};
+use uv_test::{TestContext, apply_filters, uv_snapshot};
 
 /// The workspace discovered while resolving settings is reused by a normal `uv export`.
 #[test]
@@ -38,9 +41,11 @@ fn export_reuses_settings_workspace_discovery() -> Result<()> {
         "#})?;
     let member = context.temp_dir.child("member");
     member.create_dir_all()?;
-    member
-        .child("pyproject.toml")
-        .write_str("[project]\nname = \"member\"\nversion = \"0.1.0\"\n")?;
+    member.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "member"
+        version = "0.1.0"
+    "#})?;
 
     context.lock().assert().success();
 
@@ -53,12 +58,84 @@ fn export_reuses_settings_workspace_discovery() -> Result<()> {
     #    uv export --cache-dir [CACHE_DIR] --no-hashes
 
     ----- stderr -----
-    DEBUG Found workspace root: `[TEMP_DIR]/`
-    TRACE Discovering workspace members for: `[TEMP_DIR]/`
-    DEBUG Adding root workspace member: `[TEMP_DIR]/`
-    TRACE Processing workspace member: `member`
-    DEBUG Adding discovered workspace member: `[TEMP_DIR]/member`
-    DEBUG Found project root: `[TEMP_DIR]/`
+    DEBUG Found workspace root: [TEMP_DIR]/
+    TRACE Discovering workspace members for: [TEMP_DIR]/
+    DEBUG Adding root workspace member: [TEMP_DIR]/
+    TRACE Processing workspace member: member
+    DEBUG Adding discovered workspace member: [TEMP_DIR]/member
+    DEBUG Found project root: [TEMP_DIR]/
+    Resolved 2 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Filter the current project when exporting every workspace member.
+#[test]
+fn export_no_emit_project_all_packages() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child"]
+
+        [tool.uv.workspace]
+        members = ["child"]
+
+        [tool.uv.sources]
+        child = { workspace = true }
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#,
+    )?;
+    let child = context.temp_dir.child("child");
+    child.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#,
+    )?;
+
+    // Exclude the root project, but emit its child dependency.
+    uv_snapshot!(context.filters(), context.export().arg("--all-packages").arg("--no-emit-project").arg("--no-header").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./child
+        # via project
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    // From the child, exclude the child, even though the root depends on it.
+    uv_snapshot!(context.filters(), context.export().current_dir(child.path()).arg("--all-packages").arg("--no-emit-project").arg("--no-header").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e .
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    // The inverse filter should emit only the current project.
+    uv_snapshot!(context.filters(), context.export().current_dir(child.path()).arg("--all-packages").arg("--only-emit-project").arg("--no-header").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./child
+        # via project
+
+    ----- stderr -----
     Resolved 2 packages in [TIME]
     ");
 
@@ -278,6 +355,1333 @@ fn requirements_txt_conditional_transitive_extra() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// An extra requested through an incompatible path must not activate another package version.
+/// A leaf also reached by an unconditional dependency remains unconditional.
+#[cfg(feature = "test-universal")]
+#[test]
+fn requirements_txt_does_not_activate_extra_through_incompatible_path() -> Result<()> {
+    let context = uv_test::test_context!("3.13");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = [
+            "shared==1.0.0 ; sys_platform == 'linux'",
+            "shared==2.0.0 ; sys_platform != 'linux'",
+        ]
+
+        [project.optional-dependencies]
+        feature = ["bridge==1.0.0 ; sys_platform == 'linux'"]
+        "#,
+    )?;
+
+    context.temp_dir.child("uv.lock").write_str(
+        r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.9"
+
+        [manifest]
+        members = ["root"]
+
+        [[package]]
+        name = "root"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "shared", version = "1.0.0", source = { registry = "https://example.com/simple" }, marker = "sys_platform == 'linux'" },
+            { name = "shared", version = "2.0.0", source = { registry = "https://other.example/simple" }, marker = "sys_platform != 'linux'" },
+        ]
+
+        [package.optional-dependencies]
+        feature = [{ name = "bridge", version = "1.0.0", source = { registry = "https://example.com/simple" }, marker = "sys_platform == 'linux'" }]
+
+        [package.metadata]
+        provides-extras = ["feature"]
+
+        [[package]]
+        name = "bridge"
+        version = "1.0.0"
+        source = { registry = "https://example.com/simple" }
+        dependencies = [
+            { name = "shared", version = "1.0.0", source = { registry = "https://example.com/simple" }, marker = "sys_platform == 'linux'", extra = ["a"] },
+            { name = "shared", version = "2.0.0", source = { registry = "https://other.example/simple" }, marker = "sys_platform != 'linux'", extra = ["a"] },
+        ]
+
+        [[package]]
+        name = "shared"
+        version = "1.0.0"
+        source = { registry = "https://example.com/simple" }
+        resolution-markers = ["sys_platform == 'linux'"]
+
+        [package.optional-dependencies]
+        a = [{ name = "leaf-b", version = "1.0.0", source = { registry = "https://example.com/simple" } }]
+
+        [package.metadata]
+        provides-extras = ["a"]
+
+        [[package]]
+        name = "shared"
+        version = "2.0.0"
+        source = { registry = "https://other.example/simple" }
+        resolution-markers = ["sys_platform != 'linux'"]
+        dependencies = [{ name = "leaf-b", version = "1.0.0", source = { registry = "https://example.com/simple" } }]
+
+        [package.optional-dependencies]
+        a = [{ name = "leaf-c", version = "1.0.0", source = { registry = "https://example.com/simple" } }]
+
+        [package.metadata]
+        provides-extras = ["a"]
+
+        [[package]]
+        name = "leaf-b"
+        version = "1.0.0"
+        source = { registry = "https://example.com/simple" }
+
+        [[package]]
+        name = "leaf-c"
+        version = "1.0.0"
+        source = { registry = "https://example.com/simple" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--extra").arg("feature")
+        .arg("--frozen")
+        .arg("--no-header")
+        .arg("--no-annotate")
+        .arg("--no-hashes"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    bridge==1.0.0 ; sys_platform == 'linux'
+    leaf-b==1.0.0
+    shared==1.0.0 ; sys_platform == 'linux'
+    shared==2.0.0 ; sys_platform != 'linux'
+    ");
+
+    Ok(())
+}
+
+/// Extra activation must propagate through a dependency cycle even when the base package is
+/// already unconditionally reachable. Compatible paths contribute distinct activation markers.
+/// Scoped and encoded extras from a separate path must also constrain optional dependencies.
+#[cfg(feature = "test-universal")]
+#[test]
+fn requirements_txt_transitive_extra_activation_cycle() -> Result<()> {
+    let context = uv_test::test_context!("3.13");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = [
+            "shared==1.0.0",
+            "bridge-linux==1.0.0 ; sys_platform == 'linux'",
+            "bridge-macos==1.0.0 ; sys_platform == 'darwin'",
+            "context[enabled]==1.0.0 ; python_version >= '3.11'",
+        ]
+        "#,
+    )?;
+
+    context.temp_dir.child("uv.lock").write_str(
+        r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.9"
+
+        [manifest]
+        members = ["root"]
+
+        [[package]]
+        name = "root"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "shared" },
+            { name = "bridge-linux", marker = "sys_platform == 'linux'" },
+            { name = "bridge-macos", marker = "sys_platform == 'darwin'" },
+            { name = "context", extra = ["enabled"], marker = "python_full_version >= '3.11'" },
+        ]
+
+        [[package]]
+        name = "bridge-linux"
+        version = "1.0.0"
+        source = { registry = "https://example.com/simple" }
+        dependencies = [{ name = "shared", extra = ["a"] }]
+
+        [[package]]
+        name = "bridge-macos"
+        version = "1.0.0"
+        source = { registry = "https://example.com/simple" }
+        dependencies = [{ name = "shared", extra = ["a"] }]
+
+        [[package]]
+        name = "context"
+        version = "1.0.0"
+        source = { registry = "https://example.com/simple" }
+        dependencies = [{ name = "shared", extra = ["c"] }]
+
+        [package.optional-dependencies]
+        enabled = []
+
+        [package.metadata]
+        provides-extras = ["enabled"]
+
+        [[package]]
+        name = "shared"
+        version = "1.0.0"
+        source = { registry = "https://example.com/simple" }
+
+        [package.optional-dependencies]
+        a = [{ name = "relay" }]
+        # The self-cycle must not activate b outside the paths that requested it.
+        b = [
+            { name = "leaf", marker = "extra == 'c' and extra == 'extra-7-context-enabled'" },
+            { name = "shared", extra = ["b"] },
+        ]
+        c = []
+
+        [package.metadata]
+        provides-extras = ["a", "b", "c"]
+
+        [[package]]
+        name = "relay"
+        version = "1.0.0"
+        source = { registry = "https://example.com/simple" }
+        dependencies = [{ name = "shared", extra = ["b"] }]
+
+        [[package]]
+        name = "leaf"
+        version = "1.0.0"
+        source = { registry = "https://example.com/simple" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--frozen")
+        .arg("--no-header")
+        .arg("--no-annotate")
+        .arg("--no-hashes"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    bridge-linux==1.0.0 ; sys_platform == 'linux'
+    bridge-macos==1.0.0 ; sys_platform == 'darwin'
+    context==1.0.0 ; python_full_version >= '3.11'
+    leaf==1.0.0 ; (python_full_version >= '3.11' and sys_platform == 'darwin') or (python_full_version >= '3.11' and sys_platform == 'linux')
+    relay==1.0.0 ; sys_platform == 'darwin' or sys_platform == 'linux'
+    shared==1.0.0
+    ");
+
+    Ok(())
+}
+
+/// A transitive request for shared[a] selects one of two conflicting versions only on Linux.
+/// The other version's negative marker must account for that request before it contributes output.
+#[cfg(feature = "test-universal")]
+#[test]
+fn requirements_txt_transitive_extra_negative_marker() -> Result<()> {
+    let context = uv_test::test_context!("3.13");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = ["shared", "aa ; sys_platform == 'linux'"]
+
+        [tool.uv]
+        package = false
+        conflicts = [[{ package = "shared", extra = "a" }, { package = "shared", extra = "b" }]]
+
+        [tool.uv.workspace]
+        members = ["aa", "ab", "shared"]
+
+        [tool.uv.sources]
+        aa = { workspace = true }
+        ab = { workspace = true }
+        shared = { workspace = true }
+        "#,
+    )?;
+
+    context.temp_dir.child("aa/pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "aa"
+        version = "1.0.0"
+        requires-python = ">=3.11"
+        dependencies = ["ab"]
+
+        [tool.uv]
+        package = false
+        "#,
+    )?;
+
+    context.temp_dir.child("ab/pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "ab"
+        version = "1.0.0"
+        requires-python = ">=3.11"
+        dependencies = ["shared[a]"]
+
+        [tool.uv]
+        package = false
+        "#,
+    )?;
+
+    context.temp_dir.child("shared/pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "shared"
+        version = "1.0.0"
+        requires-python = ">=3.11"
+        dependencies = ["leaf>=1"]
+
+        [project.optional-dependencies]
+        a = ["leaf==1.0.0"]
+        b = ["leaf==2.0.0"]
+
+        [tool.uv]
+        package = false
+        "#,
+    )?;
+
+    // The dependency markers match those generated for the workspace's conflicting extras.
+    context.temp_dir.child("uv.lock").write_str(
+        r#"
+        version = 1
+        revision = 5
+        requires-python = ">=3.11"
+        conflicts = [[
+            { package = "shared", extra = "a" },
+            { package = "shared", extra = "b" },
+        ]]
+
+        [manifest]
+        members = ["aa", "ab", "root", "shared"]
+
+        [[package]]
+        name = "aa"
+        version = "1.0.0"
+        source = { virtual = "aa" }
+        dependencies = [{ name = "ab" }]
+
+        [[package]]
+        name = "ab"
+        version = "1.0.0"
+        source = { virtual = "ab" }
+        dependencies = [
+            { name = "shared" },
+            { name = "shared", extra = ["a"], marker = "extra == 'extra-6-shared-a'" },
+        ]
+
+        [[package]]
+        name = "leaf"
+        version = "1.0.0"
+        source = { registry = "https://example.com/simple" }
+
+        [[package]]
+        name = "leaf"
+        version = "2.0.0"
+        source = { registry = "https://example.com/simple" }
+
+        [[package]]
+        name = "root"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "aa", marker = "sys_platform == 'linux'" },
+            { name = "shared" },
+        ]
+
+        [[package]]
+        name = "shared"
+        version = "1.0.0"
+        source = { virtual = "shared" }
+        dependencies = [
+            { name = "leaf", version = "1.0.0", source = { registry = "https://example.com/simple" }, marker = "extra == 'extra-6-shared-a'" },
+            { name = "leaf", version = "2.0.0", source = { registry = "https://example.com/simple" }, marker = "extra != 'extra-6-shared-a' or extra == 'extra-6-shared-b'" },
+        ]
+
+        [package.optional-dependencies]
+        a = [{ name = "leaf", version = "1.0.0", source = { registry = "https://example.com/simple" } }]
+        b = [{ name = "leaf", version = "2.0.0", source = { registry = "https://example.com/simple" } }]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--frozen")
+        .arg("--no-header")
+        .arg("--no-annotate")
+        .arg("--no-hashes"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    leaf==1.0.0 ; sys_platform == 'linux'
+    leaf==2.0.0 ; sys_platform != 'linux'
+    ");
+
+    Ok(())
+}
+
+/// A transitive extra selects the dependency version on a sibling branch as well as its own path.
+/// The selector is reachable only on Linux, so each leaf version has a different platform marker.
+#[cfg(feature = "test-universal")]
+#[test]
+fn requirements_txt_extra_activation_on_sibling_branch() -> Result<()> {
+    let context = uv_test::test_context!("3.13");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = ["shared", "other", "selector ; sys_platform == 'linux'"]
+
+        [tool.uv]
+        package = false
+        conflicts = [[{ package = "shared", extra = "a" }, { package = "shared", extra = "b" }]]
+
+        [tool.uv.workspace]
+        members = ["shared", "other", "selector"]
+
+        [tool.uv.sources]
+        shared = { workspace = true }
+        other = { workspace = true }
+        selector = { workspace = true }
+        "#,
+    )?;
+
+    context.temp_dir.child("other/pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "other"
+        version = "1.0.0"
+        requires-python = ">=3.11"
+        dependencies = ["leaf>=1"]
+
+        [tool.uv]
+        package = false
+        "#,
+    )?;
+
+    context
+        .temp_dir
+        .child("selector/pyproject.toml")
+        .write_str(
+            r#"
+            [project]
+            name = "selector"
+            version = "1.0.0"
+            requires-python = ">=3.11"
+            dependencies = ["shared[a]"]
+
+            [tool.uv]
+            package = false
+            "#,
+        )?;
+
+    context.temp_dir.child("shared/pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "shared"
+        version = "1.0.0"
+        requires-python = ">=3.11"
+
+        [project.optional-dependencies]
+        a = ["leaf==1"]
+        b = ["leaf==2"]
+
+        [tool.uv]
+        package = false
+        "#,
+    )?;
+
+    // Include both leaf versions so the lock records both conflicting branches.
+    let wheels = context.temp_dir.child("wheels");
+
+    let (filename, wheel) = WheelBuilder::new(&"leaf".parse()?, &"1.0.0".parse()?).build();
+    wheels.child(filename).write_binary(&wheel)?;
+
+    let (filename, wheel) = WheelBuilder::new(&"leaf".parse()?, &"2.0.0".parse()?).build();
+    wheels.child(filename).write_binary(&wheel)?;
+
+    context
+        .lock()
+        .arg("--offline")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg("wheels")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--frozen")
+        .arg("--no-header")
+        .arg("--no-annotate")
+        .arg("--no-hashes"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    leaf==1.0.0 ; sys_platform == 'linux'
+    leaf==2.0.0 ; sys_platform != 'linux'
+    ");
+
+    Ok(())
+}
+
+/// With b disabled, the paths with and without a reach a bridge that requests a. Their union
+/// establishes a even though following either path creates a dependency cycle.
+#[cfg(feature = "test-universal")]
+#[test]
+fn requirements_txt_extra_activation_through_complementary_paths() -> Result<()> {
+    let context = uv_test::test_context!("3.13");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = ["shared"]
+
+        [tool.uv]
+        package = false
+        conflicts = [[{ package = "shared", extra = "a" }, { package = "shared", extra = "b" }]]
+
+        [tool.uv.workspace]
+        members = ["shared"]
+
+        [tool.uv.sources]
+        shared = { workspace = true }
+        "#,
+    )?;
+
+    context.temp_dir.child("shared/pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "shared"
+        version = "1.0.0"
+        requires-python = ">=3.11"
+        dependencies = ["leaf>=1"]
+
+        [project.optional-dependencies]
+        a = ["leaf==1", "bridge>=3"]
+        b = ["leaf==2", "bridge==2"]
+
+        [tool.uv]
+        package = false
+        "#,
+    )?;
+
+    // The newer bridge requests shared[a], closing the cycle through either leaf version.
+    let wheels = context.temp_dir.child("wheels");
+
+    let (filename, wheel) = WheelBuilder::new(&"leaf".parse()?, &"1.0.0".parse()?)
+        .requires(&["bridge>=1".parse()?])
+        .build();
+    wheels.child(filename).write_binary(&wheel)?;
+
+    let (filename, wheel) = WheelBuilder::new(&"leaf".parse()?, &"2.0.0".parse()?)
+        .requires(&["bridge>=1".parse()?])
+        .build();
+    wheels.child(filename).write_binary(&wheel)?;
+
+    let (filename, wheel) = WheelBuilder::new(&"bridge".parse()?, &"2.0.0".parse()?).build();
+    wheels.child(filename).write_binary(&wheel)?;
+
+    let (filename, wheel) = WheelBuilder::new(&"bridge".parse()?, &"3.0.0".parse()?)
+        .requires(&["shared[a]".parse()?])
+        .build();
+    wheels.child(filename).write_binary(&wheel)?;
+
+    context
+        .lock()
+        .arg("--offline")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg("wheels")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--frozen")
+        .arg("--no-header")
+        .arg("--no-annotate")
+        .arg("--no-hashes"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    bridge==3.0.0
+    leaf==1.0.0
+    ");
+
+    Ok(())
+}
+
+/// Mutually recursive extra requests cannot be resolved from their activation bounds.
+/// Export reports the unresolved condition even when the lock has one consistent selection.
+#[cfg(feature = "test-universal")]
+#[test]
+fn requirements_txt_extra_activation_unresolved_recursive_selection() -> Result<()> {
+    let context = uv_test::test_context!("3.13");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = ["shared"]
+
+        [tool.uv]
+        package = false
+        conflicts = [
+            [{ package = "shared", extra = "a" }, { package = "shared", extra = "adummy" }],
+            [{ package = "shared", extra = "b" }, { package = "shared", extra = "bdummy" }],
+        ]
+
+        [tool.uv.workspace]
+        members = ["shared"]
+
+        [tool.uv.sources]
+        shared = { workspace = true }
+        "#,
+    )?;
+
+    context.temp_dir.child("shared/pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "shared"
+        version = "1.0.0"
+        requires-python = ">=3.11"
+        dependencies = ["choice-a>=1", "choice-b>=2"]
+
+        [project.optional-dependencies]
+        a = ["choice-a!=2", "choice-b==2"]
+        adummy = []
+        b = ["choice-a<=2"]
+        bdummy = []
+
+        [tool.uv]
+        package = false
+        "#,
+    )?;
+
+    // The choices request the extras that constrain their own versions.
+    let wheels = context.temp_dir.child("wheels");
+
+    let (filename, wheel) = WheelBuilder::new(&"choice-a".parse()?, &"1.0.0".parse()?)
+        .requires(&["shared[a]".parse()?])
+        .build();
+    wheels.child(filename).write_binary(&wheel)?;
+
+    let (filename, wheel) = WheelBuilder::new(&"choice-a".parse()?, &"2.0.0".parse()?).build();
+    wheels.child(filename).write_binary(&wheel)?;
+
+    let (filename, wheel) = WheelBuilder::new(&"choice-a".parse()?, &"3.0.0".parse()?)
+        .requires(&["shared[a]".parse()?])
+        .build();
+    wheels.child(filename).write_binary(&wheel)?;
+
+    let (filename, wheel) = WheelBuilder::new(&"choice-b".parse()?, &"2.0.0".parse()?)
+        .requires(&["shared[b]".parse()?])
+        .build();
+    wheels.child(filename).write_binary(&wheel)?;
+
+    let (filename, wheel) = WheelBuilder::new(&"choice-b".parse()?, &"3.0.0".parse()?).build();
+    wheels.child(filename).write_binary(&wheel)?;
+
+    context
+        .lock()
+        .arg("--offline")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg("wheels")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--frozen")
+        .arg("--no-header")
+        .arg("--no-annotate")
+        .arg("--no-hashes"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Cannot determine whether to export `choice-a==1.0.0 @ registry+wheels` because its dependency markers contain recursive extra conditions
+    ");
+
+    Ok(())
+}
+
+/// An unsupported positive cycle must not enable a when the default selection already determines
+/// the export. Enabling a would select another consistent pair of versions and disable b.
+#[cfg(feature = "test-universal")]
+#[test]
+fn requirements_txt_extra_activation_retains_default_selection() -> Result<()> {
+    let context = uv_test::test_context!("3.13");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = ["shared"]
+
+        [tool.uv]
+        package = false
+        conflicts = [
+            [{ package = "shared", extra = "a" }, { package = "shared", extra = "adummy" }],
+            [{ package = "shared", extra = "b" }, { package = "shared", extra = "bdummy" }],
+        ]
+
+        [tool.uv.workspace]
+        members = ["shared"]
+
+        [tool.uv.sources]
+        shared = { workspace = true }
+        "#,
+    )?;
+
+    context.temp_dir.child("shared/pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "shared"
+        version = "1.0.0"
+        requires-python = ">=3.11"
+        dependencies = ["choice-a>=1", "choice-b>=1"]
+
+        [project.optional-dependencies]
+        a = ["choice-a==1", "choice-b==1"]
+        adummy = []
+        b = ["leaf==1"]
+        bdummy = []
+
+        [tool.uv]
+        package = false
+        "#,
+    )?;
+
+    // The older choice-a requests a, while the newer choice-b requests b.
+    let wheels = context.temp_dir.child("wheels");
+
+    let (filename, wheel) = WheelBuilder::new(&"choice-a".parse()?, &"1.0.0".parse()?)
+        .requires(&["shared[a]".parse()?])
+        .build();
+    wheels.child(filename).write_binary(&wheel)?;
+
+    let (filename, wheel) = WheelBuilder::new(&"choice-a".parse()?, &"2.0.0".parse()?).build();
+    wheels.child(filename).write_binary(&wheel)?;
+
+    let (filename, wheel) = WheelBuilder::new(&"choice-b".parse()?, &"1.0.0".parse()?).build();
+    wheels.child(filename).write_binary(&wheel)?;
+
+    let (filename, wheel) = WheelBuilder::new(&"choice-b".parse()?, &"2.0.0".parse()?)
+        .requires(&["shared[b]".parse()?])
+        .build();
+    wheels.child(filename).write_binary(&wheel)?;
+
+    let (filename, wheel) = WheelBuilder::new(&"leaf".parse()?, &"1.0.0".parse()?).build();
+    wheels.child(filename).write_binary(&wheel)?;
+
+    context
+        .lock()
+        .arg("--offline")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg("wheels")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--frozen")
+        .arg("--no-header")
+        .arg("--no-annotate")
+        .arg("--no-hashes"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    choice-a==2.0.0
+    choice-b==2.0.0
+    leaf==1.0.0
+    ");
+
+    Ok(())
+}
+
+/// Selecting an empty group activates its encoded marker even without group dependency edges.
+#[cfg(feature = "test-universal")]
+#[test]
+fn requirements_txt_empty_group_activation() -> Result<()> {
+    let context = uv_test::test_context!("3.13");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["shared==1.0.0"]
+
+        [dependency-groups]
+        dev = []
+        "#,
+    )?;
+
+    context.temp_dir.child("uv.lock").write_str(
+        r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.9"
+
+        [manifest]
+        members = ["root"]
+
+        [[package]]
+        name = "root"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [{ name = "shared" }]
+
+        [package.dependency-groups]
+        dev = []
+
+        [[package]]
+        name = "shared"
+        version = "1.0.0"
+        source = { registry = "https://example.com/simple" }
+        dependencies = [{ name = "leaf", marker = "extra == 'group-4-root-dev'" }]
+
+        [[package]]
+        name = "leaf"
+        version = "1.0.0"
+        source = { registry = "https://example.com/simple" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--frozen")
+        .arg("--group")
+        .arg("dev")
+        .arg("--no-header")
+        .arg("--no-annotate")
+        .arg("--no-hashes"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    leaf==1.0.0
+    shared==1.0.0
+    ");
+
+    Ok(())
+}
+
+/// A group-only export leaves the production project's encoded marker inactive.
+#[cfg(feature = "test-universal")]
+#[test]
+fn requirements_txt_only_group_project_activation() -> Result<()> {
+    let context = uv_test::test_context!("3.13");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = []
+
+        [dependency-groups]
+        dev = ["shared==1.0.0"]
+        "#,
+    )?;
+
+    context.temp_dir.child("uv.lock").write_str(
+        r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.9"
+
+        [manifest]
+        members = ["root"]
+
+        [[package]]
+        name = "root"
+        version = "0.1.0"
+        source = { virtual = "." }
+
+        [package.dependency-groups]
+        dev = [{ name = "shared" }]
+
+        [[package]]
+        name = "shared"
+        version = "1.0.0"
+        source = { registry = "https://example.com/simple" }
+        dependencies = [{ name = "leaf", marker = "extra != 'project-4-root'" }]
+
+        [[package]]
+        name = "leaf"
+        version = "1.0.0"
+        source = { registry = "https://example.com/simple" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--frozen")
+        .arg("--only-group")
+        .arg("dev")
+        .arg("--no-header")
+        .arg("--no-annotate")
+        .arg("--no-hashes"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    leaf==1.0.0
+    shared==1.0.0
+    ");
+
+    Ok(())
+}
+
+/// An encoded conflict takes precedence over a literal extra only when its request can reach
+/// the marker's context, including through an incompatible path.
+#[cfg(feature = "test-universal")]
+#[test]
+fn requirements_txt_encoded_extra_name_precedence() -> Result<()> {
+    let context = uv_test::test_context!("3.13");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = [
+            "other[a]==1.0.0",
+            "shared[extra-6-shared-a]==1.0.0",
+            "shared[extra-5-other-a]==1.0.0 ; sys_platform == 'linux'",
+        ]
+
+        [project.optional-dependencies]
+        feature = ["aaa-bridge==1.0.0 ; sys_platform == 'linux'"]
+        "#,
+    )?;
+
+    context.temp_dir.child("uv.lock").write_str(
+        r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.9"
+
+        [manifest]
+        members = ["root"]
+
+        [[package]]
+        name = "root"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "other", extra = ["a"] },
+            { name = "shared", extra = ["extra-6-shared-a"] },
+            { name = "shared", extra = ["extra-5-other-a"], marker = "sys_platform == 'linux'" },
+        ]
+
+        [package.optional-dependencies]
+        feature = [{ name = "aaa-bridge", marker = "sys_platform == 'linux'" }]
+
+        [package.metadata]
+        provides-extras = ["feature"]
+
+        [[package]]
+        name = "aaa-bridge"
+        version = "1.0.0"
+        source = { registry = "https://example.com/simple" }
+        dependencies = [{ name = "shared", extra = ["a"], marker = "sys_platform != 'linux'" }]
+
+        [[package]]
+        name = "other"
+        version = "1.0.0"
+        source = { registry = "https://example.com/simple" }
+
+        [package.optional-dependencies]
+        a = []
+
+        [[package]]
+        name = "shared"
+        version = "1.0.0"
+        source = { registry = "https://example.com/simple" }
+        dependencies = [{ name = "leaf-other", marker = "extra == 'extra-5-other-a'" }]
+
+        [package.optional-dependencies]
+        a = []
+        extra-5-other-a = []
+        extra-6-shared-a = [{ name = "leaf", marker = "extra == 'extra-6-shared-a'" }]
+
+        [package.metadata]
+        provides-extras = ["a", "extra-5-other-a", "extra-6-shared-a"]
+
+        [[package]]
+        name = "leaf"
+        version = "1.0.0"
+        source = { registry = "https://example.com/simple" }
+
+        [[package]]
+        name = "leaf-other"
+        version = "1.0.0"
+        source = { registry = "https://example.com/simple" }
+        "#,
+    )?;
+
+    // No dependency requests shared[a], so the marker refers to the literal extra.
+    // The unrelated other[a] request cannot widen the Linux-only literal extra.
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--frozen")
+        .arg("--no-header")
+        .arg("--no-annotate")
+        .arg("--no-hashes"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    leaf==1.0.0
+    leaf-other==1.0.0 ; sys_platform == 'linux'
+    other==1.0.0
+    shared==1.0.0
+    ");
+
+    // The encoded shared[a] fact is present but false, and takes precedence over the literal extra.
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--extra").arg("feature")
+        .arg("--frozen")
+        .arg("--no-header")
+        .arg("--no-annotate")
+        .arg("--no-hashes"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    aaa-bridge==1.0.0 ; sys_platform == 'linux'
+    leaf-other==1.0.0 ; sys_platform == 'linux'
+    other==1.0.0
+    shared==1.0.0
+    ");
+
+    Ok(())
+}
+
+/// A negative encoded marker must wait for a transitive activation even when a literal extra has
+/// the same name. Resolving the encoded fact's presence does not establish its final value.
+/// The leaf's self-cycle cannot retain reachability after that guard closes.
+#[cfg(feature = "test-universal")]
+#[test]
+fn requirements_txt_encoded_extra_negative_marker() -> Result<()> {
+    let context = uv_test::test_context!("3.13");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["shared[extra-6-shared-a]==1.0.0", "bridge-0==1.0.0"]
+        "#,
+    )?;
+
+    context.temp_dir.child("uv.lock").write_str(
+        r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.9"
+
+        [manifest]
+        members = ["root"]
+
+        [[package]]
+        name = "root"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "shared", extra = ["extra-6-shared-a"] },
+            { name = "bridge-0" },
+        ]
+
+        [[package]]
+        name = "bridge-0"
+        version = "1.0.0"
+        source = { registry = "https://example.com/simple" }
+        dependencies = [{ name = "bridge-1" }]
+
+        [[package]]
+        name = "bridge-1"
+        version = "1.0.0"
+        source = { registry = "https://example.com/simple" }
+        dependencies = [{ name = "bridge-2" }]
+
+        [[package]]
+        name = "bridge-2"
+        version = "1.0.0"
+        source = { registry = "https://example.com/simple" }
+        dependencies = [{ name = "shared", extra = ["a"] }]
+
+        [[package]]
+        name = "shared"
+        version = "1.0.0"
+        source = { registry = "https://example.com/simple" }
+        dependencies = [{ name = "leaf", marker = "extra != 'extra-6-shared-a'" }]
+
+        [package.optional-dependencies]
+        a = []
+        extra-6-shared-a = []
+
+        [package.metadata]
+        provides-extras = ["a", "extra-6-shared-a"]
+
+        [[package]]
+        name = "leaf"
+        version = "1.0.0"
+        source = { registry = "https://example.com/simple" }
+        dependencies = [{ name = "leaf" }]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--frozen")
+        .arg("--no-header")
+        .arg("--no-annotate")
+        .arg("--no-hashes"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    bridge-0==1.0.0
+    bridge-1==1.0.0
+    bridge-2==1.0.0
+    shared==1.0.0
+    ");
+
+    Ok(())
+}
+
+/// The only path that activates shared[a] depends on that extra being inactive.
+/// Export must report the recursive condition instead of choosing a traversal-dependent result.
+#[cfg(feature = "test-universal")]
+#[test]
+fn requirements_txt_recursive_negative_extra_marker() -> Result<()> {
+    let context = uv_test::test_context!("3.13");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["shared==1.0.0"]
+        "#,
+    )?;
+
+    context.temp_dir.child("uv.lock").write_str(
+        r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.9"
+
+        [manifest]
+        members = ["root"]
+
+        [[package]]
+        name = "root"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [{ name = "shared" }]
+
+        [[package]]
+        name = "shared"
+        version = "1.0.0"
+        source = { registry = "https://example.com/simple" }
+        dependencies = [{ name = "bridge", marker = "extra != 'a'" }]
+
+        [package.optional-dependencies]
+        a = []
+
+        [[package]]
+        name = "bridge"
+        version = "1.0.0"
+        source = { registry = "https://example.com/simple" }
+        dependencies = [{ name = "shared", extra = ["a"] }]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--frozen")
+        .arg("--no-header")
+        .arg("--no-annotate")
+        .arg("--no-hashes"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Cannot determine whether to export `bridge==1.0.0 @ registry+https://example.com/simple` because its dependency markers contain recursive extra conditions
+    ");
+
+    // The unresolved bridge does not affect the reachability of the emitted package.
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--frozen")
+        .arg("--no-header")
+        .arg("--no-annotate")
+        .arg("--no-hashes")
+        .arg("--no-emit-package").arg("bridge"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    shared==1.0.0
+    ");
+
+    Ok(())
+}
+
+/// The two possible extra selections reach different virtual packages. Installable formats omit
+/// both virtual packages, while CycloneDX must distinguish which virtual component is present.
+#[cfg(feature = "test-universal")]
+#[test]
+fn export_recursive_extra_marker_on_virtual_packages() -> Result<()> {
+    let context = uv_test::test_context!("3.13");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["shared"]
+
+        [tool.uv.workspace]
+        members = ["shared", "bridge-a", "bridge-b"]
+
+        [tool.uv.sources]
+        shared = { workspace = true }
+        "#,
+    )?;
+
+    context.temp_dir.child("shared/pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "shared"
+        version = "1.0.0"
+        requires-python = ">=3.9"
+        dependencies = ["bridge-a", "bridge-b"]
+
+        [project.optional-dependencies]
+        a = []
+        b = []
+        "#,
+    )?;
+
+    context
+        .temp_dir
+        .child("bridge-a/pyproject.toml")
+        .write_str(
+            r#"
+            [project]
+            name = "bridge-a"
+            version = "1.0.0"
+            requires-python = ">=3.9"
+            dependencies = ["shared[a]"]
+
+            [tool.uv]
+            package = false
+            "#,
+        )?;
+
+    context
+        .temp_dir
+        .child("bridge-b/pyproject.toml")
+        .write_str(
+            r#"
+            [project]
+            name = "bridge-b"
+            version = "1.0.0"
+            requires-python = ">=3.9"
+            dependencies = ["shared[b]"]
+
+            [tool.uv]
+            package = false
+            "#,
+        )?;
+
+    context.temp_dir.child("uv.lock").write_str(
+        r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.9"
+
+        [manifest]
+        members = ["root", "shared", "bridge-a", "bridge-b"]
+
+        [[package]]
+        name = "root"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [{ name = "shared" }]
+
+        [[package]]
+        name = "shared"
+        version = "1.0.0"
+        source = { editable = "shared" }
+        dependencies = [
+            { name = "bridge-a", marker = "extra != 'b'" },
+            { name = "bridge-b", marker = "extra != 'a'" },
+        ]
+
+        [package.optional-dependencies]
+        a = []
+        b = []
+
+        [[package]]
+        name = "bridge-a"
+        version = "1.0.0"
+        source = { virtual = "bridge-a" }
+        dependencies = [{ name = "shared", extra = ["a"] }]
+
+        [[package]]
+        name = "bridge-b"
+        version = "1.0.0"
+        source = { virtual = "bridge-b" }
+        dependencies = [{ name = "shared", extra = ["b"] }]
+        "#,
+    )?;
+
+    // Requirements and pylock omit the virtual bridges, whose selection is unresolved.
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--frozen")
+        .arg("--no-header")
+        .arg("--no-annotate")
+        .arg("--no-hashes"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./shared
+    ");
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--frozen")
+        .arg("--no-header")
+        .arg("--format").arg("pylock.toml"), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    lock-version = "1.0"
+    created-by = "uv"
+    requires-python = ">=3.9"
+
+    [[packages]]
+    name = "shared"
+    directory = { path = "shared", editable = true }
+    "#);
+
+    // CycloneDX includes virtual packages, so it must resolve which bridge is present.
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--frozen")
+        .arg("--no-header")
+        .arg("--format").arg("cyclonedx1.5"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
+    error: Cannot determine whether to export `bridge-a==1.0.0 @ virtual+bridge-a` because its dependency markers contain recursive extra conditions
     ");
 
     Ok(())
@@ -743,7 +2147,7 @@ fn requirements_txt_dependency_conflicting_markers() -> Result<()> {
             insta::assert_snapshot!(
                 lock, @r#"
             version = 1
-            revision = 3
+            revision = 5
             requires-python = ">=3.12"
             resolution-markers = [
                 "sys_platform == 'darwin'",
@@ -1289,9 +2693,9 @@ fn requirements_txt_frozen() -> Result<()> {
     uv_snapshot!(context.filters(), context.export().arg("--all-packages"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to build `project @ file://[TEMP_DIR]/`
-      ├─▶ Failed to parse entry: `child`
-      ╰─▶ `child` references a workspace in `tool.uv.sources` (e.g., `child = { workspace = true }`), but is not a workspace member
+    error: Failed to build `project @ file://[TEMP_DIR]/`
+      cause: Failed to parse entry: `child`
+      cause: `child` references a workspace in `tool.uv.sources` (e.g., `child = { workspace = true }`), but is not a workspace member
     ");
 
     uv_snapshot!(context.filters(), context.export().arg("--all-packages").arg("--frozen"), @r"
@@ -1318,6 +2722,53 @@ fn requirements_txt_frozen() -> Result<()> {
         --hash=sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2 \
         --hash=sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc
         # via anyio
+    ");
+
+    Ok(())
+}
+
+#[cfg(feature = "test-universal")]
+#[test]
+fn requirements_txt_frozen_invalid_git_scheme() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["example"]
+    "#})?;
+
+    context.temp_dir.child("uv.lock").write_str(indoc! {r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [[package]]
+        name = "example"
+        version = "1.0.0"
+        source = { git = "git+https://example.com/pkg.git#0000000000000000000000000000000000000000" }
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [{ name = "example" }]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.export().arg("--frozen").arg("--offline"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to parse `uv.lock`
+      cause: TOML parse error at line 5, column 1
+               |
+             5 | [[package]]
+               | ^^^^^^^^^^^
+             Unsupported Git URL scheme `git+https:` in `git+https://example.com/pkg.git` (expected one of `https:`, `ssh:`, or `file:`)
     ");
 
     Ok(())
@@ -1372,13 +2823,7 @@ fn requirements_txt_create_missing_dir() -> Result<()> {
     //
     // Read the file contents.
     let contents = apply_filters(
-        fs_err::read_to_string(
-            context
-                .temp_dir
-                .child("requirements")
-                .child("requirements.txt"),
-        )
-        .unwrap(),
+        context.read("requirements/requirements.txt"),
         context.filters(),
     );
     insta::assert_snapshot!(contents, @r"
@@ -1549,6 +2994,67 @@ fn virtual_dependency_group() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
+#[test]
+fn requirements_txt_frozen_invalid_git_path() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["example"]
+    "#})?;
+
+    context.temp_dir.child("uv.lock").write_str(indoc! {r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [[package]]
+        name = "example"
+        version = "1.0.0"
+        source = { git = "https://example.com/pkg.git?path=foo#0000000000000000000000000000000000000000" }
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [{ name = "example" }]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.export().arg("--frozen").arg("--offline"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to parse `uv.lock`
+      cause: Git archive path `foo` for `example==1.0.0 @ git+https://example.com/pkg.git?path=foo#0000000000000000000000000000000000000000` must end in a supported file extension: `.whl`, `.tar.gz`, `.zip`, `.tar.bz2`, `.tar.lz`, `.tar.lzma`, `.tar.xz`, `.tar.zst`, `.tar`, `.tbz`, `.tgz`, `.tlz`, or `.txz`
+    ");
+
+    // Without a commit fragment, the Git source is rejected before checking the archive path.
+    context.temp_dir.child("uv.lock").write_str(
+        &context
+            .read("uv.lock")
+            .replace("#0000000000000000000000000000000000000000", ""),
+    )?;
+
+    uv_snapshot!(context.filters(), context.export().arg("--frozen").arg("--offline"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to parse `uv.lock`
+      cause: TOML parse error at line 5, column 1
+               |
+             5 | [[package]]
+               | ^^^^^^^^^^^
+             Failed to parse Git URL
+    ");
+
+    Ok(())
+}
+
 #[cfg(all(feature = "test-universal", feature = "test-git"))]
 #[test]
 fn requirements_txt_https_git_credentials() -> Result<()> {
@@ -1658,18 +3164,18 @@ fn requirements_txt_ssh_git_username() -> Result<()> {
     uv_snapshot!(filters, context.export().env(EnvVars::GIT_SSH_COMMAND, failing_git_ssh_command), @r#"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to download and build `uv-private-pypackage @ git+ssh://git@github.com/astral-test/uv-private-pypackage.git@d780faf0ac91257d4d5a4f0c5a0e4509608c0071`
-      ├─▶ Git operation failed
-      ├─▶ failed to clone into: [PATH]
-      ├─▶ failed to fetch commit `d780faf0ac91257d4d5a4f0c5a0e4509608c0071`
-      ╰─▶ process didn't exit successfully: [GIT_COMMAND_ERROR]
-          --- stderr
-          Load key "[TEMP_DIR]/fake_deploy_key": [ERROR]
-          git@github.com: Permission denied (publickey).
-          fatal: Could not read from remote repository.
+    error: Failed to download and build `uv-private-pypackage @ git+ssh://git@github.com/astral-test/uv-private-pypackage.git@d780faf0ac91257d4d5a4f0c5a0e4509608c0071`
+      cause: Git operation failed
+      cause: failed to clone into: [PATH]
+      cause: failed to fetch commit `d780faf0ac91257d4d5a4f0c5a0e4509608c0071`
+      cause: process didn't exit successfully: [GIT_COMMAND_ERROR]
+             --- stderr
+             Load key "[TEMP_DIR]/fake_deploy_key": [ERROR]
+             git@github.com: Permission denied (publickey).
+             fatal: Could not read from remote repository.
 
-          Please make sure you have the correct access rights
-          and the repository exists.
+             Please make sure you have the correct access rights
+             and the repository exists.
     "#);
 
     let ssh_deploy_key = context.temp_dir.child("uv_test_key");
@@ -1907,7 +3413,7 @@ fn requirements_txt_non_project_fork() -> Result<()> {
             insta::assert_snapshot!(
                 lock, @r#"
             version = 1
-            revision = 3
+            revision = 5
             requires-python = ">=3.12"
             resolution-markers = [
                 "sys_platform == 'win32'",
@@ -2147,10 +3653,7 @@ fn requirements_txt_relative_path() -> Result<()> {
     ");
 
     // Read the file contents.
-    let contents = apply_filters(
-        fs_err::read_to_string(project.child("requirements.txt")).unwrap(),
-        context.filters(),
-    );
+    let contents = apply_filters(context.read("project/requirements.txt"), context.filters());
     insta::assert_snapshot!(contents, @r"
     # This file was autogenerated by uv via the following command:
     #    uv export --cache-dir [CACHE_DIR]
@@ -2376,6 +3879,59 @@ fn requirements_txt_output_file() -> Result<()> {
         --hash=sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2 \
         --hash=sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc
         # via anyio
+    ");
+
+    Ok(())
+}
+
+/// Exported requirements are written into a FIFO without replacing it.
+#[cfg(all(unix, feature = "test-universal"))]
+#[test]
+fn output_file_fifo() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+        "#,
+    )?;
+    context.lock().assert().success();
+
+    let output_file = context.temp_dir.child("requirements.txt");
+    context
+        .assert_command("import os; os.mkfifo('requirements.txt')")
+        .success();
+    let fifo = output_file.to_path_buf();
+    let reader = thread::spawn(move || fs_err::read_to_string(fifo));
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--no-hashes")
+        .arg("--output-file")
+        .arg("requirements.txt"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv export --cache-dir [CACHE_DIR] --no-hashes --output-file requirements.txt
+    iniconfig==2.0.0
+        # via project
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    assert!(fs_err::metadata(output_file.path())?.file_type().is_fifo());
+    let contents = apply_filters(
+        reader.join().expect("FIFO reader panicked")?,
+        context.filters(),
+    );
+    insta::assert_snapshot!(contents, @"
+    # This file was autogenerated by uv via the following command:
+    #    uv export --cache-dir [CACHE_DIR] --no-hashes --output-file requirements.txt
+    iniconfig==2.0.0
+        # via project
     ");
 
     Ok(())
@@ -3081,7 +4637,7 @@ fn requirements_txt_script() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.11"
         resolution-markers = [
             "sys_platform == 'win32'",
@@ -3199,7 +4755,7 @@ fn requirements_txt_script() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.11"
         resolution-markers = [
             "sys_platform == 'win32'",
@@ -4215,6 +5771,42 @@ fn pep_751_no_packages() -> Result<()> {
     #    uv export --cache-dir [CACHE_DIR] --format pylock.toml --no-emit-project
     lock-version = "1.0"
     created-by = "uv"
+    requires-python = ">=3.12"
+    packages = []
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    "#);
+
+    Ok(())
+}
+
+#[cfg(feature = "test-universal")]
+#[test]
+fn pep_751_supported_environments() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+
+            [tool.uv]
+            environments = [
+                "sys_platform == 'linux' and python_full_version >= '3.12'",
+                "sys_platform == 'darwin'",
+            ]
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.export().args(["--format", "pylock.toml", "--no-header"]), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    lock-version = "1.0"
+    created-by = "uv"
+    environments = ["sys_platform == 'linux'", "sys_platform == 'darwin'"]
     requires-python = ">=3.12"
     packages = []
 
@@ -5288,6 +6880,56 @@ async fn pep_751_https_credentials() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
+#[test]
+fn pep_751_index_strips_userinfo_and_preserves_query() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["example"]
+    "#})?;
+    context.temp_dir.child("uv.lock").write_str(indoc! {r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [[package]]
+        name = "example"
+        version = "1.0.0"
+        source = { registry = "https://user:password@example.com/simple?st=2026-09-15T16:34:14Z&sig=abc%2Bdef%3D" }
+        wheels = [{ url = "https://example.com/example-1.0.0-py3-none-any.whl", hash = "sha256:0000000000000000000000000000000000000000000000000000000000000000" }]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [{ name = "example" }]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.export()
+        .args(["--frozen", "--offline", "--no-header", "--format", "pylock.toml"]), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    lock-version = "1.0"
+    created-by = "uv"
+    requires-python = ">=3.12"
+
+    [[packages]]
+    name = "example"
+    version = "1.0.0"
+    index = "https://example.com/simple?st=2026-09-15T16:34:14Z&sig=abc%2Bdef%3D"
+    wheels = [{ url = "https://example.com/example-1.0.0-py3-none-any.whl", hashes = { sha256 = "0000000000000000000000000000000000000000000000000000000000000000" } }]
+    "#);
+
+    Ok(())
+}
+
 /// Check that relative and absolute paths are preserved in pylock.toml export.
 ///
 /// See: <https://github.com/astral-sh/uv/issues/16514>
@@ -5375,6 +7017,151 @@ fn pep_751_relative_and_absolute_paths() -> Result<()> {
     Resolved 3 packages in [TIME]
     "#);
 
+    uv_snapshot!(context.filters(), context.export()
+        .args(["--frozen", "--no-header", "--output-file", "b/pylock.toml"]), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    lock-version = "1.0"
+    created-by = "uv"
+    requires-python = ">=3.12"
+
+    [[packages]]
+    name = "a"
+    directory = { path = "../", editable = true }
+
+    [[packages]]
+    name = "b"
+    directory = { path = ".", editable = false }
+
+    [[packages]]
+    name = "c"
+    directory = { path = "[TEMP_DIR]/c", editable = false }
+    "#);
+
+    Ok(())
+}
+
+/// Resolve local paths relative to the exported lockfile.
+#[test]
+fn pep_751_output_file_relative_paths() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["child", "helper", "sdist"]
+
+        [tool.uv.sources]
+        child = { path = "child" }
+        helper = { path = "helper-1.0.0-py3-none-any.whl" }
+        sdist = { path = "sdist-1.0.0.tar.gz" }
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    context.temp_dir.child("src/root/__init__.py").touch()?;
+    context
+        .temp_dir
+        .child("child/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    context
+        .temp_dir
+        .child("child/src/child/__init__.py")
+        .touch()?;
+    let (filename, wheel) = WheelBuilder::new(&"helper".parse()?, &"1.0.0".parse()?).build();
+    context.temp_dir.child(filename).write_binary(&wheel)?;
+    let sdist = generate_source_archive(&"sdist".parse()?, &"1.0.0".parse()?, "", None)?;
+    context
+        .temp_dir
+        .child("sdist-1.0.0.tar.gz")
+        .write_binary(&sdist)?;
+    context.temp_dir.child("dist").create_dir_all()?;
+    context.lock().arg("--offline").assert().success();
+
+    uv_snapshot!(context.filters(), context.export()
+        .args(["--frozen", "--offline", "--no-header", "--output-file", "dist/pylock.toml"]), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    lock-version = "1.0"
+    created-by = "uv"
+    requires-python = ">=3.12"
+
+    [[packages]]
+    name = "child"
+    directory = { path = "../child", editable = false }
+
+    [[packages]]
+    name = "helper"
+    version = "1.0.0"
+    archive = { path = "../helper-1.0.0-py3-none-any.whl", hashes = { sha256 = "8e4243504d8d0640496e8ed29c485bc6063c738abbb25b9d028b1c9376bcdc56" } }
+
+    [[packages]]
+    name = "root"
+    directory = { path = "../", editable = true }
+
+    [[packages]]
+    name = "sdist"
+    version = "1.0.0"
+    archive = { path = "../sdist-1.0.0.tar.gz", hashes = { sha256 = "1ebc99ffe50ccc03be5d12fe5e20907a97e7ba3bf110d7fab705a8d43ccabcbd" } }
+    "#);
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .args(["--offline", "--preview", "dist/pylock.toml"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Prepared 3 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + child==1.0.0 (from file://[TEMP_DIR]/child)
+     + helper==1.0.0 (from file://[TEMP_DIR]/helper-1.0.0-py3-none-any.whl)
+     + root==1.0.0 (from file://[TEMP_DIR]/)
+     + sdist==1.0.0 (from file://[TEMP_DIR]/sdist-1.0.0.tar.gz)
+    ");
+
+    context
+        .temp_dir
+        .child("dist/batch.toml")
+        .write_str(indoc! {r#"
+        [[export]]
+        output-file = "pylock.batch.toml"
+    "#})?;
+    uv_snapshot!(context.filters(), context.export()
+        .args(["--frozen", "--offline", "--no-header", "--batch", "dist/batch.toml", "--preview-features", "batch-export"]), @"exit_code: 0 (success)");
+    assert_eq!(
+        context.read_bytes("dist/pylock.toml"),
+        context.read_bytes("dist/pylock.batch.toml")
+    );
+
+    uv_snapshot!(context.filters(), context.export()
+        .current_dir(context.temp_dir.child("dist"))
+        .args(["--project", "..", "--frozen", "--offline", "--format", "pylock.toml", "--no-header", "--no-emit-project", "--no-emit-package", "helper"]), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    lock-version = "1.0"
+    created-by = "uv"
+    requires-python = ">=3.12"
+
+    [[packages]]
+    name = "child"
+    directory = { path = "../child", editable = false }
+
+    [[packages]]
+    name = "sdist"
+    version = "1.0.0"
+    archive = { path = "../sdist-1.0.0.tar.gz", hashes = { sha256 = "1ebc99ffe50ccc03be5d12fe5e20907a97e7ba3bf110d7fab705a8d43ccabcbd" } }
+    "#);
     Ok(())
 }
 
@@ -5499,7 +7286,7 @@ fn export_lock_workspace_mismatch_with_frozen() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.export().arg("--frozen"), @"
-    exit_code: 2 (failure)
+    exit_code: 1 (failure)
     ----- stderr -----
     error: The lockfile at `uv.lock` needs to be updated, but `--frozen` was provided: Missing workspace member `foo`.
 
@@ -6950,9 +8737,9 @@ fn cyclonedx_export_workspace_frozen() -> Result<()> {
     uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--all-packages"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to build `project @ file://[TEMP_DIR]/`
-      ├─▶ Failed to parse entry: `child`
-      ╰─▶ `child` references a workspace in `tool.uv.sources` (e.g., `child = { workspace = true }`), but is not a workspace member
+    error: Failed to build `project @ file://[TEMP_DIR]/`
+      cause: Failed to parse entry: `child`
+      cause: `child` references a workspace in `tool.uv.sources` (e.g., `child = { workspace = true }`), but is not a workspace member
     ");
 
     uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--all-packages").arg("--frozen").arg("--no-hashes"), @r#"
@@ -10253,6 +12040,2600 @@ fn requirements_txt_emit_indexes() -> Result<()> {
 
     ----- stderr -----
     warning: `requirements.txt` does not support per-package index pinning; explicit indexes were emitted globally via `--extra-index-url`.
+    ");
+
+    Ok(())
+}
+
+/// Each batch entry applies its own package, extra, and dependency-group selections.
+#[cfg(feature = "test-universal")]
+#[test]
+fn export_batch_selections() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["idna"]
+
+        [dependency-groups]
+        dev = ["sniffio"]
+        root-only = ["idna"]
+
+        [tool.uv.workspace]
+        members = ["child"]
+    "#})?;
+
+    // The child overrides `dev` and defaults to `lint`, while inheriting `root-only`.
+    context
+        .temp_dir
+        .child("child/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions"]
+
+        [project.optional-dependencies]
+        test = ["iniconfig"]
+
+        [dependency-groups]
+        dev = ["iniconfig"]
+        lint = ["packaging"]
+
+        [tool.uv]
+        default-groups = ["lint"]
+    "#})?;
+
+    context.lock().assert().success();
+
+    // Output paths are relative to the manifest, so they should also be under `exports/`.
+    context
+        .temp_dir
+        .child("exports/batch.toml")
+        .write_str(indoc! {r#"
+        [[export]]
+        output-file = "root.txt"
+
+        [[export]]
+        output-file = "root-no-dev.txt"
+        no-group = ["dev"]
+
+        [[export]]
+        output-file = "child.txt"
+        package = ["child"]
+
+        [[export]]
+        output-file = "child-no-default-groups.txt"
+        package = ["child"]
+        no-default-groups = true
+
+        [[export]]
+        output-file = "child-test.txt"
+        package = ["child"]
+        extra = ["test"]
+        no-default-groups = true
+
+        [[export]]
+        output-file = "child-dev.txt"
+        package = ["child"]
+        only-group = ["dev"]
+
+        [[export]]
+        output-file = "child-root-group.txt"
+        package = ["child"]
+        group = ["root-only"]
+
+        [[export]]
+        output-file = "child-all-groups.txt"
+        package = ["child"]
+        all-groups = true
+        no-group = ["lint"]
+
+        [[export]]
+        output-file = "packages.txt"
+        package = ["root", "child"]
+        no-default-groups = true
+
+        [[export]]
+        output-file = "workspace.txt"
+        all-packages = true
+
+        [[export]]
+        output-file = "child-no-test.txt"
+        package = ["child"]
+        all-extras = true
+        no-extra = ["test"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--frozen")
+        .arg("--no-header")
+        .arg("--no-hashes")
+        .arg("--no-annotate")
+        .arg("--batch").arg("exports/batch.toml"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: `uv export --batch` is experimental and may change without warning. Pass `--preview-features batch-export` to disable this warning.
+    ");
+
+    assert_snapshot!(context.read("exports/root.txt"), @"
+    idna==3.6
+    sniffio==1.3.1
+    ");
+    assert_snapshot!(context.read("exports/root-no-dev.txt"), @"idna==3.6");
+    assert_snapshot!(context.read("exports/child.txt"), @"
+    packaging==24.0
+    typing-extensions==4.10.0
+    ");
+    assert_snapshot!(context.read("exports/child-no-default-groups.txt"), @"typing-extensions==4.10.0");
+    assert_snapshot!(context.read("exports/child-test.txt"), @"
+    iniconfig==2.0.0
+    typing-extensions==4.10.0
+    ");
+    assert_snapshot!(context.read("exports/child-dev.txt"), @"iniconfig==2.0.0");
+    assert_snapshot!(context.read("exports/child-root-group.txt"), @"
+    idna==3.6
+    packaging==24.0
+    typing-extensions==4.10.0
+    ");
+    assert_snapshot!(context.read("exports/child-all-groups.txt"), @"
+    idna==3.6
+    iniconfig==2.0.0
+    typing-extensions==4.10.0
+    ");
+    assert_snapshot!(context.read("exports/packages.txt"), @"
+    idna==3.6
+    typing-extensions==4.10.0
+    ");
+    assert_snapshot!(context.read("exports/workspace.txt"), @"
+    idna==3.6
+    iniconfig==2.0.0
+    sniffio==1.3.1
+    typing-extensions==4.10.0
+    ");
+    assert_snapshot!(context.read("exports/child-no-test.txt"), @"
+    packaging==24.0
+    typing-extensions==4.10.0
+    ");
+
+    Ok(())
+}
+
+/// Batch exports create or check the lock once, independently of per-entry Python requirements.
+#[test]
+fn export_batch_lock_modes() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    // The groups have disjoint Python requirements, but share a universal lock.
+    let pyproject = indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [dependency-groups]
+        dev = []
+        legacy = []
+
+        [tool.uv.dependency-groups]
+        dev = { requires-python = ">=3.13" }
+        legacy = { requires-python = "<3.13" }
+    "#};
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(pyproject)?;
+    context.temp_dir.child("batch.toml").write_str(indoc! {r#"
+        [[export]]
+        output-file = "dev.txt"
+
+        [[export]]
+        output-file = "legacy.txt"
+        only-group = ["legacy"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--batch").arg("batch.toml").arg("--no-header")
+        .arg("--preview-features").arg("batch-export"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    let lock = context.read("uv.lock");
+    assert_snapshot!(context.read("dev.txt"), @"");
+    assert_snapshot!(context.read("legacy.txt"), @"");
+
+    // Make the lock stale and seed an output to check that `--locked` leaves both untouched.
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&pyproject.replace("0.1.0", "0.2.0"))?;
+    context.temp_dir.child("dev.txt").write_str("original")?;
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--locked").arg("--batch").arg("batch.toml")
+        .arg("--preview-features").arg("batch-export"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+    assert_eq!(context.read("uv.lock"), lock);
+    assert_snapshot!(context.read("dev.txt"), @"original");
+
+    // `--frozen` exports from the stale lock without updating it.
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--frozen").arg("--batch").arg("batch.toml").arg("--no-header")
+        .arg("--preview-features").arg("batch-export"), @"exit_code: 0 (success)");
+    assert_eq!(context.read("uv.lock"), lock);
+    assert_snapshot!(context.read("dev.txt"), @"");
+
+    // A normal export refreshes the lock, so a subsequent `--locked` export succeeds.
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--batch").arg("batch.toml")
+        .arg("--preview-features").arg("batch-export"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--locked").arg("--batch").arg("batch.toml")
+        .arg("--preview-features").arg("batch-export"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// A later invalid selection must not replace outputs rendered earlier in the batch.
+#[test]
+fn export_batch_invalid_selection() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+    "#})?;
+
+    context.lock().assert().success();
+
+    // Seed the first output, then make the second entry fail after the first has rendered.
+    context
+        .temp_dir
+        .child("requirements.txt")
+        .write_str("original")?;
+    context.temp_dir.child("batch.toml").write_str(indoc! {r#"
+        [[export]]
+        output-file = "requirements.txt"
+
+        [[export]]
+        output-file = "missing.txt"
+        only-group = ["missing"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--frozen").arg("--batch").arg("batch.toml"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    warning: `uv export --batch` is experimental and may change without warning. Pass `--preview-features batch-export` to disable this warning.
+    error: Failed to export `[TEMP_DIR]/missing.txt`
+      cause: Group `missing` is not defined in the project's `dependency-groups` table
+    ");
+    assert_snapshot!(context.read("requirements.txt"), @"original");
+    assert!(!context.temp_dir.child("missing.txt").exists());
+
+    Ok(())
+}
+
+#[test]
+fn export_batch_missing_package() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+        "#})?;
+
+    context.lock().assert().success();
+
+    let manifest = context.temp_dir.child("batch.toml");
+    manifest.write_str(indoc! {r#"
+        [[export]]
+        output-file = "requirements.txt"
+        package = ["missing"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--frozen")
+        .arg("--batch").arg("batch.toml")
+        .arg("--preview-features").arg("batch-export"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Package `missing` not found in workspace
+    ");
+
+    // Multiple selections must also validate every package name.
+    manifest.write_str(indoc! {r#"
+        [[export]]
+        output-file = "requirements.txt"
+        package = ["project", "missing"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--frozen")
+        .arg("--batch").arg("batch.toml")
+        .arg("--preview-features").arg("batch-export"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Package `missing` not found in workspace
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn export_batch_manifest_validation() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let manifest = context.temp_dir.child("batch.toml");
+    manifest.write_str("export = []")?;
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--batch").arg("batch.toml"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    warning: `uv export --batch` is experimental and may change without warning. Pass `--preview-features batch-export` to disable this warning.
+    error: Export manifest must contain at least one `[[export]]` entry
+    ");
+
+    // Selection names use the singular CLI spelling (`extra`, not `extras`).
+    manifest.write_str(indoc! {r#"
+        [[export]]
+        output-file = "requirements.txt"
+        extras = ["test"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--batch").arg("batch.toml"), @r#"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    warning: `uv export --batch` is experimental and may change without warning. Pass `--preview-features batch-export` to disable this warning.
+    error: Failed to parse export manifest `batch.toml`
+      cause: TOML parse error at line 3, column 1
+               |
+             3 | extras = ["test"]
+               | ^^^^^^
+             unknown field `extras`, expected one of `output-file`, `package`, `all-packages`, `extra`, `no-extra`, `all-extras`, `group`, `no-group`, `only-group`, `all-groups`, `no-default-groups`
+    "#);
+
+    // These paths refer to the same output after normalization.
+    manifest.write_str(indoc! {r#"
+        [[export]]
+        output-file = "requirements.txt"
+        [[export]]
+        output-file = "./requirements.txt"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--batch").arg("batch.toml"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    warning: `uv export --batch` is experimental and may change without warning. Pass `--preview-features batch-export` to disable this warning.
+    error: Duplicate export output: [TEMP_DIR]/requirements.txt
+    ");
+
+    // Group-only exports cannot include project extras.
+    manifest.write_str(indoc! {r#"
+        [[export]]
+        output-file = "requirements.txt"
+        only-group = ["dev"]
+        extra = ["test"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--batch").arg("batch.toml"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    warning: `uv export --batch` is experimental and may change without warning. Pass `--preview-features batch-export` to disable this warning.
+    error: `only-group` cannot be combined with `extra` or `all-extras`
+    ");
+
+    Ok(())
+}
+
+/// Export a frozen lockfile offline, omitting headers, annotations, and hashes from snapshots.
+fn frozen_export(context: &TestContext) -> Command {
+    let mut command = context.export();
+    command.args([
+        "--frozen",
+        "--offline",
+        "--preview-features",
+        "frozen-lockfile",
+        "--no-header",
+        "--no-annotate",
+        "--no-hashes",
+    ]);
+    command
+}
+
+/// A frozen lock can be exported and inspected without any project manifests.
+#[test]
+fn frozen_lockfile_without_manifests() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_python_names()
+        .with_filtered_virtualenv_bin();
+    let root = context.temp_dir.path();
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["member"]
+
+        [dependency-groups]
+        shared = ["root-dep"]
+        dev = ["root-dep"]
+        empty = []
+
+        [tool.uv]
+        package = false
+
+        [tool.uv.workspace]
+        members = ["member", "dep", "member-dep", "root-dep"]
+
+        [tool.uv.sources]
+        member = { workspace = true }
+        dep = { workspace = true }
+        member-dep = { workspace = true }
+        root-dep = { workspace = true }
+    "#})?;
+
+    context
+        .temp_dir
+        .child("dep/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "dep"
+        version = "1.0.0"
+
+        [build-system]
+        requires = []
+        build-backend = "example"
+    "#})?;
+
+    context
+        .temp_dir
+        .child("member-dep/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "member-dep"
+        version = "1.0.0"
+
+        [build-system]
+        requires = []
+        build-backend = "example"
+    "#})?;
+
+    context
+        .temp_dir
+        .child("root-dep/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root-dep"
+        version = "1.0.0"
+
+        [build-system]
+        requires = []
+        build-backend = "example"
+    "#})?;
+
+    let member = context.temp_dir.child("member");
+    member.create_dir_all()?;
+    member.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "member"
+        version = "1.0.0"
+        dependencies = ["dep"]
+
+        [project.optional-dependencies]
+        feature = ["member-dep"]
+
+        [dependency-groups]
+        shared = ["member-dep"]
+        empty = []
+
+        [tool.uv]
+        package = false
+    "#})?;
+
+    context.lock().arg("--offline").assert().success();
+
+    context.temp_dir.child("batch.toml").write_str(indoc! {r#"
+        [[export]]
+        output-file = "batch-extra.txt"
+        package = ["member"]
+        extra = ["feature"]
+        no-default-groups = true
+
+        [[export]]
+        output-file = "batch-group.txt"
+        package = ["member"]
+        only-group = ["shared"]
+    "#})?;
+
+    // Multiple selected members do not inherit groups from the workspace root.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .args(["--package", "member", "--package", "dep", "--only-group", "dev"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Group `dev` is not defined in any project's `dependency-groups` table
+    ");
+
+    // Remove every manifest so package, extra, and group selection must come from the lockfile.
+    fs_err::remove_file(root.join("pyproject.toml"))?;
+    fs_err::remove_file(root.join("member/pyproject.toml"))?;
+    fs_err::remove_file(root.join("dep/pyproject.toml"))?;
+    fs_err::remove_file(root.join("member-dep/pyproject.toml"))?;
+    fs_err::remove_file(root.join("root-dep/pyproject.toml"))?;
+
+    // Select a member.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .args(["--package", "member", "--no-default-groups"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./dep
+    ");
+
+    // Select an extra.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .args(["--package", "member", "--no-default-groups", "--extra", "feature"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./dep
+    -e ./member-dep
+    ");
+
+    // Select a member group.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .args(["--package", "member", "--only-group", "shared"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./member-dep
+    ");
+
+    // Select an empty group.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .args(["--package", "member", "--only-group", "empty"]), @"exit_code: 0 (success)");
+
+    // Select an inherited group.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .args(["--package", "member", "--only-group", "dev"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./root-dep
+    ");
+
+    // Select multiple packages.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .args(["--package", "member", "--package", "dep", "--no-default-groups"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./dep
+    ");
+
+    // Root-only groups remain invalid for multiple selected members without manifests.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .args(["--package", "member", "--package", "dep", "--only-group", "dev"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Group `dev` is not defined in any project's `dependency-groups` table
+    ");
+
+    // Excluded groups are validated against the same selected members.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .args(["--package", "member", "--package", "dep", "--no-group", "dev"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Group `dev` is not defined in any project's `dependency-groups` table
+    ");
+
+    // A group defined by one of the selected members is valid.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .args(["--package", "member", "--package", "dep", "--only-group", "shared"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./member-dep
+    ");
+
+    // Select the workspace.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .args(["--all-packages", "--no-default-groups"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./dep
+    -e ./member-dep
+    -e ./root-dep
+    ");
+
+    // Export several selections in a batch.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .args(["--batch", "batch.toml", "--preview-features", "batch-export"]), @"exit_code: 0 (success)");
+
+    insta::assert_snapshot!(context.read("batch-extra.txt"), @"
+    -e ./dep
+    -e ./member-dep
+    ");
+
+    insta::assert_snapshot!(context.read("batch-group.txt"), @"-e ./member-dep");
+
+    // A missing group is an error.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .args(["--no-default-groups", "--package", "member", "--only-group", "missing"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Group `missing` is not defined in the project's `dependency-groups` table
+    ");
+
+    // A missing extra is an error.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .args(["--no-default-groups", "--package", "member", "--extra", "missing"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Extra `missing` is not defined in any project's `optional-dependencies` table
+    ");
+
+    // A missing package is an error.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .args(["--no-default-groups", "--package", "missing"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Package `missing` not found in lockfile workspace
+    ");
+
+    // Inspect the locked tree.
+    uv_snapshot!(context.filters(), context.tree()
+        .args(["--frozen", "--universal", "--all-groups", "--format", "json", "--preview-features", "json-output", "--preview-features", "frozen-lockfile"]), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "workspace_root": "[TEMP_DIR]/",
+      "workspace": {
+        "path": "[TEMP_DIR]/",
+        "id": "workspace+[TEMP_DIR]/"
+      },
+      "roots": [
+        {
+          "id": "dep==1.0.0@editable+[TEMP_DIR]/dep"
+        },
+        {
+          "id": "member-dep==1.0.0@editable+[TEMP_DIR]/member-dep"
+        },
+        {
+          "id": "member:shared==1.0.0@virtual+[TEMP_DIR]/member"
+        },
+        {
+          "id": "member==1.0.0@virtual+[TEMP_DIR]/member"
+        },
+        {
+          "id": "member[feature]==1.0.0@virtual+[TEMP_DIR]/member"
+        },
+        {
+          "id": "root-dep==1.0.0@editable+[TEMP_DIR]/root-dep"
+        },
+        {
+          "id": "root:dev==1.0.0@virtual+[TEMP_DIR]/"
+        },
+        {
+          "id": "root:shared==1.0.0@virtual+[TEMP_DIR]/"
+        },
+        {
+          "id": "root==1.0.0@virtual+[TEMP_DIR]/"
+        }
+      ],
+      "inverted": false,
+      "members": [
+        {
+          "name": "dep",
+          "path": "[TEMP_DIR]/dep",
+          "id": "dep==1.0.0@editable+[TEMP_DIR]/dep"
+        },
+        {
+          "name": "member",
+          "path": "[TEMP_DIR]/member",
+          "id": "member==1.0.0@virtual+[TEMP_DIR]/member"
+        },
+        {
+          "name": "member-dep",
+          "path": "[TEMP_DIR]/member-dep",
+          "id": "member-dep==1.0.0@editable+[TEMP_DIR]/member-dep"
+        },
+        {
+          "name": "root",
+          "path": "[TEMP_DIR]/",
+          "id": "root==1.0.0@virtual+[TEMP_DIR]/"
+        },
+        {
+          "name": "root-dep",
+          "path": "[TEMP_DIR]/root-dep",
+          "id": "root-dep==1.0.0@editable+[TEMP_DIR]/root-dep"
+        }
+      ],
+      "resolution": {
+        "dep==1.0.0@editable+[TEMP_DIR]/dep": {
+          "name": "dep",
+          "version": "1.0.0",
+          "source": {
+            "editable": "[TEMP_DIR]/dep"
+          },
+          "kind": "package",
+          "dependencies": []
+        },
+        "member-dep==1.0.0@editable+[TEMP_DIR]/member-dep": {
+          "name": "member-dep",
+          "version": "1.0.0",
+          "source": {
+            "editable": "[TEMP_DIR]/member-dep"
+          },
+          "kind": "package",
+          "dependencies": []
+        },
+        "member:shared==1.0.0@virtual+[TEMP_DIR]/member": {
+          "name": "member",
+          "version": "1.0.0",
+          "source": {
+            "virtual": "[TEMP_DIR]/member"
+          },
+          "kind": {
+            "group": "shared"
+          },
+          "dependencies": [
+            {
+              "id": "member-dep==1.0.0@editable+[TEMP_DIR]/member-dep"
+            }
+          ]
+        },
+        "member==1.0.0@virtual+[TEMP_DIR]/member": {
+          "name": "member",
+          "version": "1.0.0",
+          "source": {
+            "virtual": "[TEMP_DIR]/member"
+          },
+          "kind": "package",
+          "dependencies": [
+            {
+              "id": "dep==1.0.0@editable+[TEMP_DIR]/dep"
+            }
+          ],
+          "optional_dependencies": [
+            {
+              "name": "feature",
+              "id": "member[feature]==1.0.0@virtual+[TEMP_DIR]/member"
+            }
+          ],
+          "dependency_groups": [
+            {
+              "name": "shared",
+              "id": "member:shared==1.0.0@virtual+[TEMP_DIR]/member"
+            }
+          ]
+        },
+        "member[feature]==1.0.0@virtual+[TEMP_DIR]/member": {
+          "name": "member",
+          "version": "1.0.0",
+          "source": {
+            "virtual": "[TEMP_DIR]/member"
+          },
+          "kind": {
+            "extra": "feature"
+          },
+          "dependencies": [
+            {
+              "id": "member-dep==1.0.0@editable+[TEMP_DIR]/member-dep"
+            },
+            {
+              "id": "member==1.0.0@virtual+[TEMP_DIR]/member"
+            }
+          ]
+        },
+        "root-dep==1.0.0@editable+[TEMP_DIR]/root-dep": {
+          "name": "root-dep",
+          "version": "1.0.0",
+          "source": {
+            "editable": "[TEMP_DIR]/root-dep"
+          },
+          "kind": "package",
+          "dependencies": []
+        },
+        "root:dev==1.0.0@virtual+[TEMP_DIR]/": {
+          "name": "root",
+          "version": "1.0.0",
+          "source": {
+            "virtual": "[TEMP_DIR]/"
+          },
+          "kind": {
+            "group": "dev"
+          },
+          "dependencies": [
+            {
+              "id": "root-dep==1.0.0@editable+[TEMP_DIR]/root-dep"
+            }
+          ]
+        },
+        "root:shared==1.0.0@virtual+[TEMP_DIR]/": {
+          "name": "root",
+          "version": "1.0.0",
+          "source": {
+            "virtual": "[TEMP_DIR]/"
+          },
+          "kind": {
+            "group": "shared"
+          },
+          "dependencies": [
+            {
+              "id": "root-dep==1.0.0@editable+[TEMP_DIR]/root-dep"
+            }
+          ]
+        },
+        "root==1.0.0@virtual+[TEMP_DIR]/": {
+          "name": "root",
+          "version": "1.0.0",
+          "source": {
+            "virtual": "[TEMP_DIR]/"
+          },
+          "kind": "package",
+          "dependencies": [
+            {
+              "id": "member==1.0.0@virtual+[TEMP_DIR]/member"
+            }
+          ],
+          "dependency_groups": [
+            {
+              "name": "dev",
+              "id": "root:dev==1.0.0@virtual+[TEMP_DIR]/"
+            },
+            {
+              "name": "shared",
+              "id": "root:shared==1.0.0@virtual+[TEMP_DIR]/"
+            }
+          ]
+        },
+        "workspace+[TEMP_DIR]/": {
+          "kind": "workspace",
+          "path": "[TEMP_DIR]/",
+          "dependencies": []
+        }
+      }
+    }
+    "#);
+
+    // Workspace members come from the lockfile after their manifests are removed.
+    let output = context
+        .workspace_metadata()
+        .args(["--frozen", "--preview-features", "frozen-lockfile"])
+        .assert()
+        .success();
+    let metadata: serde_json::Value = serde_json::from_slice(&output.get_output().stdout)?;
+    insta::with_settings!({ filters => context.filters() }, {
+        insta::assert_json_snapshot!(metadata["members"], @r#"
+        [
+          {
+            "id": "dep==1.0.0@editable+[TEMP_DIR]/dep",
+            "name": "dep",
+            "path": "[TEMP_DIR]/dep"
+          },
+          {
+            "id": "member==1.0.0@virtual+[TEMP_DIR]/member",
+            "name": "member",
+            "path": "[TEMP_DIR]/member"
+          },
+          {
+            "id": "member-dep==1.0.0@editable+[TEMP_DIR]/member-dep",
+            "name": "member-dep",
+            "path": "[TEMP_DIR]/member-dep"
+          },
+          {
+            "id": "root==1.0.0@virtual+[TEMP_DIR]/",
+            "name": "root",
+            "path": "[TEMP_DIR]/"
+          },
+          {
+            "id": "root-dep==1.0.0@editable+[TEMP_DIR]/root-dep",
+            "name": "root-dep",
+            "path": "[TEMP_DIR]/root-dep"
+          }
+        ]
+        "#);
+    });
+
+    Ok(())
+}
+
+/// Configured index locations cannot be inferred from a lockfile alone.
+#[cfg(feature = "test-universal")]
+#[test]
+fn frozen_lockfile_rejects_index_emission() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("uv.lock").write_str(indoc! {r#"
+        version = 1
+        revision = 5
+        requires-python = ">=3.12"
+
+        [[package]]
+        name = "root"
+        version = "1.0.0"
+        source = { virtual = "." }
+    "#})?;
+
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .args(["--no-default-groups", "--emit-index-url"]), @r"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: `--emit-index-url` and `--emit-find-links` are not supported without a `pyproject.toml`
+    ");
+
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .args(["--no-default-groups", "--emit-find-links"]), @r"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: `--emit-index-url` and `--emit-find-links` are not supported without a `pyproject.toml`
+    ");
+
+    Ok(())
+}
+
+/// Frozen exports use index configuration from an available project manifest.
+#[test]
+fn frozen_lockfile_project_index_emission() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [tool.uv]
+        package = false
+        index-url = "https://example.com/simple"
+        find-links = ["wheels"]
+    "#})?;
+
+    context.temp_dir.child("wheels").create_dir_all()?;
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .args(["--emit-index-url", "--emit-find-links"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    --index-url https://example.com/simple
+    --find-links wheels
+    ");
+
+    Ok(())
+}
+
+/// Frozen commands use the default groups recorded for each workspace member.
+#[test]
+fn frozen_lockfile_recorded_default_groups() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [dependency-groups]
+        docs = ["root-dep"]
+
+        [tool.uv]
+        package = false
+        default-groups = ["docs"]
+
+        [tool.uv.workspace]
+        members = ["member", "all", "empty", "implicit", "root-dep", "member-dep"]
+
+        [tool.uv.sources]
+        root-dep = { workspace = true }
+        member-dep = { workspace = true }
+    "#})?;
+
+    context
+        .temp_dir
+        .child("member/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "member"
+        version = "1.0.0"
+
+        [dependency-groups]
+        docs = ["member-dep"]
+
+        [tool.uv]
+        package = false
+        default-groups = ["docs"]
+    "#})?;
+
+    context
+        .temp_dir
+        .child("all/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "all"
+        version = "1.0.0"
+
+        [dependency-groups]
+        dev = ["root-dep"]
+        docs = ["member-dep"]
+
+        [tool.uv]
+        package = false
+        default-groups = "all"
+    "#})?;
+
+    context
+        .temp_dir
+        .child("empty/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "empty"
+        version = "1.0.0"
+
+        [dependency-groups]
+        dev = ["root-dep"]
+
+        [tool.uv]
+        package = false
+        default-groups = []
+    "#})?;
+
+    context
+        .temp_dir
+        .child("implicit/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "implicit"
+        version = "1.0.0"
+
+        [dependency-groups]
+        dev = ["root-dep"]
+
+        [tool.uv]
+        package = false
+    "#})?;
+
+    context
+        .temp_dir
+        .child("root-dep/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root-dep"
+        version = "1.0.0"
+
+        [build-system]
+        requires = []
+        build-backend = "example"
+    "#})?;
+
+    context
+        .temp_dir
+        .child("member-dep/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "member-dep"
+        version = "1.0.0"
+
+        [build-system]
+        requires = []
+        build-backend = "example"
+    "#})?;
+
+    context.lock().arg("--offline").assert().success();
+
+    uv_snapshot!(context.filters(), context.export()
+        .args(["--frozen", "--offline", "--no-header", "--no-annotate", "--no-hashes", "--package", "member"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./member-dep
+    ");
+
+    uv_snapshot!(context.filters(), context.tree()
+        .args(["--frozen", "--universal"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    root-dep v1.0.0
+    root v1.0.0
+    └── root-dep v1.0.0 (group: docs)
+    member-dep v1.0.0
+    member v1.0.0
+    └── member-dep v1.0.0 (group: docs)
+    implicit v1.0.0
+    empty v1.0.0
+    all v1.0.0
+    └── member-dep v1.0.0 (group: docs)
+    ");
+
+    context.temp_dir.child("batch.toml").write_str(indoc! {r#"
+        [[export]]
+        output-file = "root.txt"
+
+        [[export]]
+        output-file = "member.txt"
+        package = ["member"]
+
+        [[export]]
+        output-file = "all.txt"
+        package = ["all"]
+
+        [[export]]
+        output-file = "empty.txt"
+        package = ["empty"]
+
+        [[export]]
+        output-file = "implicit.txt"
+        package = ["implicit"]
+    "#})?;
+
+    // Remove the manifests so each export must use its recorded default groups.
+    fs_err::remove_file(context.temp_dir.join("pyproject.toml"))?;
+    fs_err::remove_file(context.temp_dir.join("member/pyproject.toml"))?;
+    fs_err::remove_file(context.temp_dir.join("all/pyproject.toml"))?;
+    fs_err::remove_file(context.temp_dir.join("empty/pyproject.toml"))?;
+    fs_err::remove_file(context.temp_dir.join("implicit/pyproject.toml"))?;
+    fs_err::remove_file(context.temp_dir.join("root-dep/pyproject.toml"))?;
+    fs_err::remove_file(context.temp_dir.join("member-dep/pyproject.toml"))?;
+
+    // The selected member's defaults take precedence over the root's defaults.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .args(["--package", "member"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./member-dep
+    ");
+
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .current_dir(context.temp_dir.child("member")), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./member-dep
+    ");
+
+    uv_snapshot!(context.filters(), context.tree()
+        .args(["--frozen", "--universal", "--preview-features", "frozen-lockfile"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    root-dep v1.0.0
+    root v1.0.0
+    └── root-dep v1.0.0 (group: docs)
+    member-dep v1.0.0
+    member v1.0.0
+    └── member-dep v1.0.0 (group: docs)
+    implicit v1.0.0
+    empty v1.0.0
+    all v1.0.0
+    └── member-dep v1.0.0 (group: docs)
+    ");
+
+    // Each batch entry uses its own selected member's defaults.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .args(["--batch", "batch.toml", "--preview-features", "batch-export"]), @"exit_code: 0 (success)");
+    insta::assert_snapshot!(context.read("root.txt"), @"-e ./root-dep");
+    insta::assert_snapshot!(context.read("member.txt"), @"-e ./member-dep");
+    insta::assert_snapshot!(context.read("all.txt"), @"
+    -e ./member-dep
+    -e ./root-dep
+    ");
+
+    insta::assert_snapshot!(context.read("empty.txt"), @"");
+    insta::assert_snapshot!(context.read("implicit.txt"), @"-e ./root-dep");
+
+    Ok(())
+}
+
+/// Empty member groups take precedence over groups on the workspace root.
+#[test]
+fn frozen_lockfile_empty_member_group() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [dependency-groups]
+        shared = ["dep"]
+
+        [tool.uv]
+        package = false
+
+        [tool.uv.workspace]
+        members = ["member", "dep"]
+
+        [tool.uv.sources]
+        dep = { workspace = true }
+    "#})?;
+
+    context
+        .temp_dir
+        .child("member/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "member"
+        version = "1.0.0"
+
+        [dependency-groups]
+        shared = []
+
+        [tool.uv]
+        package = false
+    "#})?;
+
+    context
+        .temp_dir
+        .child("dep/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "dep"
+        version = "1.0.0"
+
+        [build-system]
+        requires = []
+        build-backend = "example"
+    "#})?;
+
+    context
+        .lock()
+        .args(["--offline", "--preview-features", "lock-without-metadata"])
+        .assert()
+        .success();
+
+    // Remove the manifests to verify that empty member groups survive in the lockfile.
+    fs_err::remove_file(context.temp_dir.join("pyproject.toml"))?;
+    fs_err::remove_file(context.temp_dir.join("member/pyproject.toml"))?;
+    fs_err::remove_file(context.temp_dir.join("dep/pyproject.toml"))?;
+
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .args(["--package", "member", "--only-group", "shared"]), @"exit_code: 0 (success)");
+
+    Ok(())
+}
+
+/// Metadata-free locks retain the defaults needed by frozen commands.
+#[test]
+fn frozen_lockfile_metadata_free_default_groups() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [dependency-groups]
+        docs = ["dep"]
+
+        [tool.uv]
+        package = false
+        default-groups = ["docs"]
+
+        [tool.uv.workspace]
+        members = ["dep"]
+
+        [tool.uv.sources]
+        dep = { workspace = true }
+    "#})?;
+
+    context
+        .temp_dir
+        .child("dep/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "dep"
+        version = "1.0.0"
+
+        [build-system]
+        requires = []
+        build-backend = "example"
+    "#})?;
+
+    context
+        .lock()
+        .args(["--offline", "--preview-features", "lock-without-metadata"])
+        .assert()
+        .success();
+
+    // Remove the manifests to verify that defaults are available without package metadata.
+    fs_err::remove_file(context.temp_dir.join("pyproject.toml"))?;
+    fs_err::remove_file(context.temp_dir.join("dep/pyproject.toml"))?;
+
+    uv_snapshot!(context.filters(), frozen_export(&context), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./dep
+    ");
+
+    uv_snapshot!(context.filters(), context.tree()
+        .args(["--frozen", "--universal", "--preview-features", "frozen-lockfile"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    root v1.0.0
+    └── dep v1.0.0 (group: docs)
+    dep v1.0.0
+    ");
+
+    uv_snapshot!(context.filters(), context.sync()
+        .args(["--frozen", "--offline", "--dry-run", "--no-install-workspace", "--preview-features", "frozen-lockfile"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Would use project environment at: .venv
+    Checked in [TIME]
+    Would make no changes
+    ");
+
+    Ok(())
+}
+
+/// Export requires a lockfile with revision 5 or later.
+#[test]
+fn frozen_lockfile_requires_revision() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("uv.lock").write_str(indoc! {r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [[package]]
+        name = "root"
+        version = "1.0.0"
+        source = { virtual = "." }
+    "#})?;
+
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .args(["--no-default-groups"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Frozen lockfile discovery requires a lockfile with revision 5 or later; run `uv lock` to update it
+    ");
+
+    context.temp_dir.child("uv.lock").write_str(indoc! {r#"
+        version = 1
+        revision = 4
+        requires-python = ">=3.12"
+
+        [[package]]
+        name = "root"
+        version = "1.0.0"
+        source = { virtual = "." }
+    "#})?;
+
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .args(["--only-group", "dev"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Frozen lockfile discovery requires a lockfile with revision 5 or later; run `uv lock` to update it
+    ");
+
+    Ok(())
+}
+
+/// Lockfile exports select the current workspace member without reading its manifest.
+#[test]
+fn frozen_lockfile_current_project() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let root = context.temp_dir.path();
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "1.0.0"
+        dependencies = ["member"]
+
+        [dependency-groups]
+        shared = ["root-dep"]
+        dev = ["root-dep"]
+
+        [tool.uv.workspace]
+        members = ["member", "member/nested", "root-dep", "member-dep"]
+
+        [tool.uv.sources]
+        member = { workspace = true }
+        root-dep = { workspace = true }
+        member-dep = { workspace = true }
+
+        [build-system]
+        requires = []
+        build-backend = "example"
+    "#})?;
+
+    let member = context.temp_dir.child("member");
+    member.create_dir_all()?;
+    let member_subdir = member.child("subdir");
+    member_subdir.create_dir_all()?;
+    member.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "member"
+        version = "1.0.0"
+
+        [dependency-groups]
+        shared = ["member-dep"]
+
+        [build-system]
+        requires = []
+        build-backend = "example"
+    "#})?;
+
+    let nested = member.child("nested");
+    nested.create_dir_all()?;
+    nested.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "nested"
+        version = "1.0.0"
+
+        [build-system]
+        requires = []
+        build-backend = "example"
+    "#})?;
+
+    context
+        .temp_dir
+        .child("root-dep/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root-dep"
+        version = "1.0.0"
+
+        [build-system]
+        requires = []
+        build-backend = "example"
+    "#})?;
+
+    context
+        .temp_dir
+        .child("member-dep/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "member-dep"
+        version = "1.0.0"
+
+        [build-system]
+        requires = []
+        build-backend = "example"
+    "#})?;
+
+    context.lock().arg("--offline").assert().success();
+
+    context.temp_dir.child("batch.toml").write_str(indoc! {r#"
+        [[export]]
+        output-file = "batch-current.txt"
+        no-default-groups = true
+
+        [[export]]
+        output-file = "batch-shared.txt"
+        only-group = ["shared"]
+    "#})?;
+
+    let outside = assert_fs::TempDir::new()?;
+
+    // Remove the manifests so the current member must be identified from its locked path.
+    fs_err::remove_file(root.join("pyproject.toml"))?;
+    fs_err::remove_file(root.join("member/pyproject.toml"))?;
+    fs_err::remove_file(root.join("member/nested/pyproject.toml"))?;
+    fs_err::remove_file(root.join("root-dep/pyproject.toml"))?;
+    fs_err::remove_file(root.join("member-dep/pyproject.toml"))?;
+
+    // From the workspace root.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .current_dir(root)
+        .args(["--no-default-groups"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e .
+    -e ./member
+    ");
+
+    // From a member.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .current_dir(member.path())
+        .args(["--no-default-groups"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./member
+    ");
+
+    // From within a member.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .current_dir(member_subdir.path())
+        .args(["--no-default-groups"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./member
+    ");
+
+    // The member group takes precedence.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .current_dir(member.path())
+        .args(["--only-group", "shared"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./member-dep
+    ");
+
+    // A root group is inherited.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .current_dir(member.path())
+        .args(["--only-group", "dev"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./root-dep
+    ");
+
+    // An explicit package overrides the current member.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .current_dir(member.path())
+        .args(["--no-default-groups", "--package", "root"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e .
+    -e ./member
+    ");
+
+    // Omit the current member.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .current_dir(member.path())
+        .args(["--no-default-groups", "--no-emit-project"]), @"exit_code: 0 (success)");
+
+    // Omit the current member when exporting the workspace.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .current_dir(member.path())
+        .args(["--no-default-groups", "--all-packages", "--no-emit-project"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e .
+    -e ./member/nested
+    -e ./member-dep
+    -e ./root-dep
+    ");
+
+    // Emit only the current member.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .current_dir(member.path())
+        .args(["--no-default-groups", "--all-packages", "--only-emit-project"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./member
+    ");
+
+    // Omit the root project when exporting the workspace from the root.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .current_dir(root)
+        .args(["--no-default-groups", "--all-packages", "--no-emit-project"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./member
+    -e ./member/nested
+    -e ./member-dep
+    -e ./root-dep
+    ");
+
+    // Select the nearest nested member.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .current_dir(nested.path())
+        .args(["--no-default-groups"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./member/nested
+    ");
+
+    // Outside the workspace, select the root.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .current_dir(outside.path())
+        .arg("--project").arg(root)
+        .args(["--no-default-groups"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e .
+    -e ./member
+    ");
+
+    // Outside the workspace, omit the root.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .current_dir(outside.path())
+        .arg("--project").arg(root)
+        .args(["--no-default-groups", "--all-packages", "--no-emit-project"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./member
+    -e ./member/nested
+    -e ./member-dep
+    -e ./root-dep
+    ");
+
+    // Batch exports use the current member.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .current_dir(member.path())
+        .args(["--preview-features", "batch-export", "--batch"])
+        .arg(root.join("batch.toml")), @"exit_code: 0 (success)");
+
+    insta::assert_snapshot!(context.read("batch-current.txt"), @"-e ./member");
+    insta::assert_snapshot!(context.read("batch-shared.txt"), @"-e ./member-dep");
+
+    // An explicit project directory takes precedence over the working directory.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .current_dir(outside.path())
+        .arg("--project").arg(member.path())
+        .args(["--no-default-groups"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./member
+    ");
+
+    #[cfg(unix)]
+    {
+        let alias = outside.path().join("workspace-alias");
+        fs_err::os::unix::fs::symlink(root, &alias)?;
+        uv_snapshot!(context.filters(), frozen_export(&context)
+            .current_dir(member.path())
+            .args(["--no-default-groups"])
+            .arg("--project").arg(alias.join("member")), @"
+        exit_code: 0 (success)
+        ----- stdout -----
+        -e ./member
+        ");
+    }
+
+    Ok(())
+}
+
+/// A single-project lockfile omits the workspace member list, even with `--all-packages`.
+#[test]
+fn frozen_lockfile_single_project() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let root = context.temp_dir.path();
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "1.0.0"
+
+        [build-system]
+        requires = []
+        build-backend = "example"
+    "#})?;
+
+    context.lock().arg("--offline").assert().success();
+
+    // A present manifest does not trigger the preview warning.
+    uv_snapshot!(context.filters(), context.export()
+        .args(["--frozen", "--offline", "--no-header", "--no-annotate", "--no-hashes", "--no-default-groups"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e .
+    ");
+
+    // Remove the manifest to exercise selection without a workspace member list.
+    fs_err::remove_file(root.join("pyproject.toml"))?;
+
+    // Without the preview flag, the lockfile is used with a warning.
+    uv_snapshot!(context.filters(), context.export()
+        .args(["--frozen", "--offline", "--no-header", "--no-annotate", "--no-hashes", "--no-default-groups"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e .
+
+    ----- stderr -----
+    warning: Using `uv.lock` without a `pyproject.toml` is experimental and may change without warning. Pass `--preview-features frozen-lockfile` to disable this warning.
+    ");
+
+    // Select the only project.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .args(["--no-default-groups"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e .
+    ");
+
+    // Select all packages.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .args(["--no-default-groups", "--all-packages"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e .
+    ");
+
+    // Select the project explicitly.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .args(["--no-default-groups", "--package", "root"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e .
+    ");
+
+    // Omit the only project.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .args(["--no-default-groups", "--all-packages", "--no-emit-project"]), @"exit_code: 0 (success)");
+
+    // Universal tree.
+    uv_snapshot!(context.filters(), context.tree()
+        .args(["--frozen", "--no-default-groups", "--preview-features", "frozen-lockfile"])
+        .arg("--python").arg(&context.python_versions[0].1)
+        .args(["--universal"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    root v1.0.0
+    ");
+
+    // Filtered tree.
+    uv_snapshot!(context.filters(), context.tree()
+        .args(["--frozen", "--no-default-groups", "--preview-features", "frozen-lockfile"])
+        .arg("--python").arg(&context.python_versions[0].1), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    root v1.0.0
+    ");
+
+    // Universal JSON tree.
+    uv_snapshot!(context.filters(), context.tree()
+        .args(["--frozen", "--no-default-groups", "--preview-features", "frozen-lockfile"])
+        .arg("--python").arg(&context.python_versions[0].1)
+        .args(["--universal", "--format", "json", "--preview-features", "json-output"]), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "workspace_root": "[TEMP_DIR]/",
+      "workspace": {
+        "path": "[TEMP_DIR]/",
+        "id": "workspace+[TEMP_DIR]/"
+      },
+      "roots": [
+        {
+          "id": "root==1.0.0@editable+[TEMP_DIR]/"
+        }
+      ],
+      "inverted": false,
+      "members": [
+        {
+          "name": "root",
+          "path": "[TEMP_DIR]/",
+          "id": "root==1.0.0@editable+[TEMP_DIR]/"
+        }
+      ],
+      "resolution": {
+        "root==1.0.0@editable+[TEMP_DIR]/": {
+          "name": "root",
+          "version": "1.0.0",
+          "source": {
+            "editable": "[TEMP_DIR]/"
+          },
+          "kind": "package",
+          "dependencies": []
+        },
+        "workspace+[TEMP_DIR]/": {
+          "kind": "workspace",
+          "path": "[TEMP_DIR]/",
+          "dependencies": []
+        }
+      }
+    }
+    "#);
+
+    // Filtered JSON tree.
+    uv_snapshot!(context.filters(), context.tree()
+        .args(["--frozen", "--no-default-groups", "--preview-features", "frozen-lockfile"])
+        .arg("--python").arg(&context.python_versions[0].1)
+        .args(["--format", "json", "--preview-features", "json-output"]), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "workspace_root": "[TEMP_DIR]/",
+      "workspace": {
+        "path": "[TEMP_DIR]/",
+        "id": "workspace+[TEMP_DIR]/"
+      },
+      "roots": [
+        {
+          "id": "root==1.0.0@editable+[TEMP_DIR]/"
+        }
+      ],
+      "inverted": false,
+      "members": [
+        {
+          "name": "root",
+          "path": "[TEMP_DIR]/",
+          "id": "root==1.0.0@editable+[TEMP_DIR]/"
+        }
+      ],
+      "resolution": {
+        "root==1.0.0@editable+[TEMP_DIR]/": {
+          "name": "root",
+          "version": "1.0.0",
+          "source": {
+            "editable": "[TEMP_DIR]/"
+          },
+          "kind": "package",
+          "dependencies": []
+        },
+        "workspace+[TEMP_DIR]/": {
+          "kind": "workspace",
+          "path": "[TEMP_DIR]/",
+          "dependencies": []
+        }
+      }
+    }
+    "#);
+
+    Ok(())
+}
+
+/// A workspace root can be recorded as a non-editable directory.
+#[test]
+fn frozen_lockfile_non_editable_root() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let root = context.temp_dir.path();
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "1.0.0"
+
+        [dependency-groups]
+        dev = ["dep"]
+
+        [tool.uv.workspace]
+        members = ["member", "dep"]
+
+        [tool.uv.sources]
+        dep = { workspace = true }
+
+        [build-system]
+        requires = []
+        build-backend = "example"
+    "#})?;
+
+    let member = context.temp_dir.child("member");
+    member.create_dir_all()?;
+    member.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "member"
+        version = "1.0.0"
+        dependencies = ["root"]
+
+        [tool.uv.sources]
+        root = { workspace = true, editable = false }
+
+        [build-system]
+        requires = []
+        build-backend = "example"
+    "#})?;
+
+    let dep = context.temp_dir.child("dep");
+    dep.create_dir_all()?;
+    dep.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "dep"
+        version = "1.0.0"
+
+        [build-system]
+        requires = []
+        build-backend = "example"
+    "#})?;
+
+    context.lock().arg("--offline").assert().success();
+    insta::assert_snapshot!(context.read("uv.lock"), @r#"
+    version = 1
+    revision = 5
+    requires-python = ">=3.12"
+
+    [options]
+    exclude-newer = "2024-03-25T00:00:00Z"
+
+    [manifest]
+    members = [
+        "dep",
+        "member",
+        "root",
+    ]
+
+    [[package]]
+    name = "dep"
+    version = "1.0.0"
+    source = { editable = "dep" }
+
+    [[package]]
+    name = "member"
+    version = "1.0.0"
+    source = { editable = "member" }
+    dependencies = [
+        { name = "root" },
+    ]
+
+    [package.metadata]
+    requires-dist = [{ name = "root", directory = "." }]
+
+    [[package]]
+    name = "root"
+    version = "1.0.0"
+    source = { directory = "." }
+
+    [package.dev-dependencies]
+    dev = [
+        { name = "dep" },
+    ]
+
+    [package.metadata]
+
+    [package.metadata.requires-dev]
+    dev = [{ name = "dep", editable = "dep" }]
+    "#);
+
+    let outside = assert_fs::TempDir::new()?;
+
+    // Remove the manifests to verify that a directory source can identify the workspace root.
+    fs_err::remove_file(root.join("pyproject.toml"))?;
+    fs_err::remove_file(root.join("member/pyproject.toml"))?;
+    fs_err::remove_file(root.join("dep/pyproject.toml"))?;
+
+    // Select a non-editable root project.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .current_dir(root)
+        .args(["--no-default-groups"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    .
+    ");
+
+    // Fall back to that root outside the workspace.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .current_dir(outside.path())
+        .arg("--project").arg(root)
+        .args(["--no-default-groups"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    .
+    ");
+
+    // Select an inherited group from the non-editable root.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .current_dir(member.path())
+        .args(["--only-group", "dev"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./dep
+    ");
+
+    Ok(())
+}
+
+/// Workspace-level dependency groups can be selected without a root project.
+#[test]
+fn frozen_lockfile_non_project_workspace() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_python_names()
+        .with_filtered_virtualenv_bin();
+    let root = context.temp_dir.path();
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["member", "other"]
+
+        [tool.uv.sources]
+        member = { workspace = true }
+
+        [dependency-groups]
+        root-only = ["member"]
+    "#})?;
+
+    let member = context.temp_dir.child("member");
+    member.create_dir_all()?;
+    member.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "member"
+        version = "1.0.0"
+
+        [build-system]
+        requires = []
+        build-backend = "example"
+    "#})?;
+
+    let other = context.temp_dir.child("other");
+    other.create_dir_all()?;
+    other.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "other"
+        version = "1.0.0"
+
+        [build-system]
+        requires = []
+        build-backend = "example"
+    "#})?;
+
+    context.lock().arg("--offline").assert().success();
+
+    let outside = assert_fs::TempDir::new()?;
+
+    // Remove the manifests to exercise workspace-level groups without a root project.
+    fs_err::remove_file(root.join("pyproject.toml"))?;
+    fs_err::remove_file(root.join("member/pyproject.toml"))?;
+    fs_err::remove_file(root.join("other/pyproject.toml"))?;
+
+    // The root's recorded defaults are available without its manifest.
+    uv_snapshot!(context.filters(), frozen_export(&context), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./member
+    -e ./other
+    ");
+
+    uv_snapshot!(context.filters(), context.tree()
+        .args(["--frozen", "--universal", "--preview-features", "frozen-lockfile"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    other v1.0.0
+    member v1.0.0
+    ");
+
+    uv_snapshot!(context.filters(), context.sync()
+        .args(["--frozen", "--offline", "--dry-run", "--preview-features", "frozen-lockfile"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Would use project environment at: .venv
+    Would download 2 packages
+    Would install 2 packages
+     + member @ file://[TEMP_DIR]/member
+     + other @ file://[TEMP_DIR]/other
+    ");
+
+    uv_snapshot!(context.filters(), context.sync()
+        .args(["--frozen", "--offline", "--dry-run", "--package", "member", "--preview-features", "frozen-lockfile"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Would use project environment at: .venv
+    Would download 1 package
+    Would install 1 package
+     + member @ file://[TEMP_DIR]/member
+    ");
+
+    // A selected member has its own recorded defaults.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .args(["--package", "member"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./member
+    ");
+
+    // Select a workspace group.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .args(["--only-group", "root-only"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./member
+    ");
+
+    // Select a workspace group and member.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .args(["--only-group", "root-only", "--package", "member"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./member
+    ");
+
+    // Select a workspace group and all members.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .args(["--only-group", "root-only", "--all-packages"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./member
+    ");
+
+    // Select the current member.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .current_dir(member.path())
+        .args(["--no-default-groups"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./member
+    ");
+
+    // Omit the current member.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .current_dir(member.path())
+        .args(["--no-default-groups", "--all-packages", "--no-emit-project"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./other
+    ");
+
+    // Outside the workspace, select all members.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .current_dir(outside.path())
+        .arg("--project").arg(root)
+        .args(["--no-default-groups"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./member
+    -e ./other
+    ");
+
+    // Inspect the non-project workspace metadata.
+    uv_snapshot!(context.filters(), context.workspace_metadata()
+        .args(["--frozen", "--preview-features", "workspace-metadata"]), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "workspace_root": "[TEMP_DIR]/",
+      "environment": {
+        "root": "[VENV]/",
+        "python": {
+          "path": "[VENV]/[BIN]/[PYTHON]",
+          "version": "3.12.[X]",
+          "implementation": "cpython"
+        },
+        "packages": {}
+      },
+      "workspace": {
+        "path": "[TEMP_DIR]/",
+        "id": "workspace+[TEMP_DIR]/"
+      },
+      "requires_python": ">=3.12",
+      "conflicts": {
+        "sets": []
+      },
+      "members": [
+        {
+          "name": "member",
+          "path": "[TEMP_DIR]/member",
+          "id": "member==1.0.0@editable+[TEMP_DIR]/member"
+        },
+        {
+          "name": "other",
+          "path": "[TEMP_DIR]/other",
+          "id": "other==1.0.0@editable+[TEMP_DIR]/other"
+        }
+      ],
+      "resolution": {
+        "member==1.0.0@editable+[TEMP_DIR]/member": {
+          "name": "member",
+          "version": "1.0.0",
+          "source": {
+            "editable": "[TEMP_DIR]/member"
+          },
+          "kind": "package",
+          "dependencies": []
+        },
+        "other==1.0.0@editable+[TEMP_DIR]/other": {
+          "name": "other",
+          "version": "1.0.0",
+          "source": {
+            "editable": "[TEMP_DIR]/other"
+          },
+          "kind": "package",
+          "dependencies": []
+        },
+        "workspace+[TEMP_DIR]/": {
+          "kind": "workspace",
+          "path": "[TEMP_DIR]/",
+          "dependencies": [],
+          "dependency_groups": [
+            {
+              "name": "root-only",
+              "id": "workspace+[TEMP_DIR]/:root-only"
+            }
+          ]
+        },
+        "workspace+[TEMP_DIR]/:root-only": {
+          "kind": {
+            "group": "root-only"
+          },
+          "path": "[TEMP_DIR]/",
+          "dependencies": [
+            {
+              "id": "member==1.0.0@editable+[TEMP_DIR]/member"
+            }
+          ]
+        }
+      }
+    }
+
+    ----- stderr -----
+    warning: Using `uv.lock` without a `pyproject.toml` is experimental and may change without warning. Pass `--preview-features frozen-lockfile` to disable this warning.
+    "#);
+
+    Ok(())
+}
+
+/// Root defaults select groups without a manifest, including the implicit dev default.
+#[test]
+fn frozen_lockfile_root_default_groups() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let lockfile = context.temp_dir.child("uv.lock");
+    lockfile.write_str(indoc! {r#"
+        version = 1
+        revision = 5
+        requires-python = ">=3.12"
+
+        [manifest]
+        default-groups = ["docs"]
+
+        [manifest.dependency-groups]
+        docs = [{ name = "documentation" }]
+        lint = []
+
+        [manifest.group-requires-python]
+        docs = ">=3.13"
+
+        [[package]]
+        name = "documentation"
+        version = "1.0.0"
+        source = { directory = "documentation" }
+    "#})?;
+
+    // The recorded default activates a group other than dev.
+    uv_snapshot!(context.filters(), frozen_export(&context), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    ./documentation
+    ");
+
+    // Disabling defaults leaves the dependency unselected.
+    uv_snapshot!(context.filters(), frozen_export(&context).arg("--no-default-groups"), @"
+    exit_code: 0 (success)
+    ");
+
+    // Frozen sync applies the selected root group's Python requirement without a manifest.
+    uv_snapshot!(context.filters(), context.sync().args([
+        "--frozen", "--offline", "--dry-run", "--python", "3.12",
+        "--preview-features", "frozen-lockfile",
+    ]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    error: The requested interpreter resolved to Python 3.12.[X], which is incompatible with the project's Python requirement: `>=3.13` (from `workspace:docs` in `uv.lock`).
+    ");
+
+    // Revision 5 infers the dev default when it is omitted from the manifest.
+    lockfile.write_str(indoc! {r#"
+        version = 1
+        revision = 5
+        requires-python = ">=3.12"
+
+        [manifest.dependency-groups]
+        dev = [{ name = "development" }]
+        docs = [{ name = "documentation" }]
+
+        [manifest.group-requires-python]
+        dev = ">=3.13"
+
+        [[package]]
+        name = "development"
+        version = "1.0.0"
+        source = { directory = "development" }
+
+        [[package]]
+        name = "documentation"
+        version = "1.0.0"
+        source = { directory = "documentation" }
+    "#})?;
+
+    uv_snapshot!(context.filters(), frozen_export(&context), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    ./development
+    ");
+
+    // The inferred default also activates its Python requirement during frozen sync.
+    uv_snapshot!(context.filters(), context.sync().args([
+        "--frozen", "--offline", "--dry-run", "--python", "3.12",
+        "--preview-features", "frozen-lockfile",
+    ]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    error: The requested interpreter resolved to Python 3.12.[X], which is incompatible with the project's Python requirement: `>=3.13` (from `workspace:dev` in `uv.lock`).
+    ");
+
+    Ok(())
+}
+
+/// A nested project must not use an unrelated parent project's lockfile.
+#[test]
+fn frozen_lockfile_nested_project() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [tool.uv]
+        package = false
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    let nested = context.temp_dir.child("nested");
+    nested.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "nested"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [tool.uv]
+        package = false
+    "#})?;
+
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .current_dir(nested.path()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
+    ");
+
+    // Remove the ancestor manifest to ensure the nested project still takes precedence.
+    fs_err::remove_file(context.temp_dir.join("pyproject.toml"))?;
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .current_dir(nested.path()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
+    ");
+
+    uv_snapshot!(context.filters(), context.lock().current_dir(nested.path()).arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 1 package in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .current_dir(nested.path()), @"exit_code: 0 (success)");
+
+    Ok(())
+}
+
+/// Recognize a member manifest when the workspace manifest is unavailable.
+#[test]
+fn frozen_lockfile_member_manifest() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [tool.uv]
+        package = false
+
+        [tool.uv.workspace]
+        members = ["member"]
+    "#})?;
+
+    let member = context.temp_dir.child("member");
+    member.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "member"
+        version = "1.0.0"
+
+        [build-system]
+        requires = []
+        build-backend = "example"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    // Remove only the workspace manifest so discovery must recognize the remaining member.
+    fs_err::remove_file(context.temp_dir.join("pyproject.toml"))?;
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .current_dir(member.path()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./member
+    ");
+
+    Ok(())
+}
+
+/// An explicit workspace root takes precedence over an ancestor's lockfile.
+#[test]
+fn frozen_lockfile_workspace_root_without_lock() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["nested/member"]
+    "#})?;
+    let nested = context.temp_dir.child("nested");
+    let member = nested.child("member");
+    member.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "member"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [tool.uv]
+        package = false
+    "#})?;
+    context.lock().arg("--offline").assert().success();
+
+    // Leave the old lockfile behind and make the member its own workspace root.
+    fs_err::remove_file(context.temp_dir.child("pyproject.toml"))?;
+    member.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "member"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [tool.uv]
+        package = false
+
+        [tool.uv.workspace]
+        members = []
+    "#})?;
+    uv_snapshot!(context.filters(), frozen_export(&context).current_dir(member.path()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
+    ");
+
+    // An intervening workspace root must also stop discovery from a member directory.
+    member.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "member"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [tool.uv]
+        package = false
+    "#})?;
+    nested.child("pyproject.toml").write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["member"]
+    "#})?;
+    uv_snapshot!(context.filters(), frozen_export(&context).current_dir(member.path()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
+    ");
+
+    Ok(())
+}
+
+/// An intervening project prevents a nested member from using an ancestor's lockfile.
+#[test]
+fn frozen_lockfile_member_inside_project() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["nested/member"]
+    "#})?;
+
+    context
+        .temp_dir
+        .child("nested/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "nested"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = []
+        build-backend = "example"
+    "#})?;
+
+    context
+        .temp_dir
+        .child("nested/member/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "member"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = []
+        build-backend = "example"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), frozen_export(&context).arg("--project").arg("nested/member"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
+    ");
+
+    // The intervening project remains a boundary when the workspace manifest is absent.
+    fs_err::remove_file(context.temp_dir.child("pyproject.toml"))?;
+    uv_snapshot!(context.filters(), frozen_export(&context).arg("--project").arg("nested/member"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
+    ");
+
+    // With the boundary removed, the remaining member manifest belongs to the frozen workspace.
+    fs_err::remove_file(context.temp_dir.child("nested/pyproject.toml"))?;
+    uv_snapshot!(context.filters(), frozen_export(&context).arg("--project").arg("nested/member"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./nested/member
     ");
 
     Ok(())

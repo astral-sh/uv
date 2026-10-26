@@ -1,9 +1,9 @@
 # Workspace metadata
 
 `uv workspace metadata` exports the information uv has about your workspace or PEP 723 script as
-JSON so other tools can use it. In particular, if you want access to the information in a `uv.lock`
-or script lockfile, you should prefer this command's output, as lockfiles are not a stable format we
-guarantee anything about. Pass `--script path/to/script.py` to request metadata for a script.
+JSON so other tools can use it. If you want access to the information in a `uv.lock` or script
+lockfile, prefer this command's output: the lockfile format is not guaranteed to be stable. Pass
+`--script path/to/script.py` to request metadata for a script.
 
 Pass `--sync` to install the selected packages before collecting module ownership information.
 Synchronization preserves unrelated installed packages by default; add `--exact` to remove them.
@@ -11,10 +11,9 @@ Synchronization preserves unrelated installed packages by default; add `--exact`
 The primary structure is the "resolution" field which contains the dependency graph with exact
 package versions that a `uv.lock` encodes.
 
-The edges of the graph are the `dependencies` every node defines. These are the things that must
-also be installed for it to be installed (and their `dependencies` recursively, keeping in mind that
-cycles are perfectly normal to encounter in this graph). Each dependency entry will include an `id`
-for the node it refers to, and an optional `marker` that
+The edges of the graph are the `dependencies` each node defines. These must also be installed when
+the node is installed, along with their `dependencies` recursively. Cycles are normal in this graph.
+Each dependency entry will include an `id` for the node it refers to, and an optional `marker` that
 [specifies on what platforms the dependency is required](https://packaging.python.org/en/latest/specifications/dependency-specifiers/#dependency-specifiers)
 (if there is no marker the dependency is always required).
 
@@ -49,9 +48,23 @@ dependency groups are just lists of things you might want when working on the pa
 If the workspace root defines dependency groups but is not itself a package, its `"workspace"` node
 provides the corresponding group node ids through `dependency_groups`.
 
+## Installed packages
+
+When an environment exists, `environment.packages` is an inventory of its installed distributions,
+including those absent from the lockfile. Each entry contains the installed name, version, metadata
+path, and editable status.
+
+An installed distribution is matched by normalized name to a package in the selected resolution. A
+matched entry then uses that package's resolution node ID. The entry's `version` reports the actual
+installed version; node IDs should be treated as opaque.
+
+`modules` maps importable module names to objects whose `owners` array contains `package_id`
+references to `environment.packages`. IDs for packages outside the selected resolution do not appear
+in `resolution`. The map is omitted when empty.
+
 ## Handling multiple versions of a package
 
-Two versions of a package cannot be installed into a python environment, but the dependency graph
+Two versions of a package cannot be installed into a Python environment, but the dependency graph
 may still include multiple versions of a package. This can happen for two different reasons.
 
 The first way is for
@@ -183,6 +196,15 @@ Here is a human-readable annotated example:
       "version": "3.12.12",
       // The Python implementation name
       "implementation": "cpython"
+    },
+    // Installed distributions, keyed by opaque node IDs
+    "packages": {
+      "idna==3.10@unmanaged+/workspace/.venv/lib/python3.12/site-packages/idna-3.10.dist-info": {
+        "name": "idna",
+        "version": "3.10",
+        "path": "/workspace/.venv/lib/python3.12/site-packages/idna-3.10.dist-info",
+        "editable": false
+      }
     }
   },
   // Information about the script target, only present with `--script`.
@@ -204,6 +226,17 @@ Here is a human-readable annotated example:
   //
   // `marker` fields all have this as an implicit constraint that is omitted for cleanliness
   "requires_python": ">=3.12",
+  // Module owners refer to entries in `environment.packages`.
+  // Matched package IDs also refer to nodes in `resolution`.
+  "modules": {
+    "idna": {
+      "owners": [
+        {
+          "package_id": "idna==3.10@unmanaged+/workspace/.venv/lib/python3.12/site-packages/idna-3.10.dist-info"
+        }
+      ]
+    }
+  },
   // A list of workspace members
   "members": [
     {

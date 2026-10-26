@@ -6,7 +6,7 @@ uv itself.
 
 ## Recognizing a build failure
 
-An example build failure can be produced by trying to install and old version of numpy on a new,
+An example build failure can be produced by trying to install an old version of numpy on a new,
 unsupported version of Python:
 
 ```console
@@ -94,19 +94,18 @@ make the necessary adjustments to your system for the build to succeed.
 
 When generating the cross-platform lockfile, uv needs to determine the dependencies of all packages,
 even those only installed on other platforms. uv tries to avoid package builds during resolution. It
-uses any wheel if exist for that version, then tries to find static metadata in the source
+uses a wheel if one exists for that version, then tries to find static metadata in the source
 distribution (mainly pyproject.toml with static `project.version`, `project.dependencies` and
-`project.optional-dependencies` or METADATA v2.2+). Only if all of that fails, it builds the
-package.
+`project.optional-dependencies` or METADATA v2.2+). If both approaches fail, uv builds the package.
 
 When installing, uv needs to have a wheel for the current platform for each package. If no matching
 wheel exists in the index, uv tries to build the source distribution.
 
-You can check which wheels exist for a PyPI project under “Download Files”, e.g.
-https://pypi.org/project/numpy/2.1.1.md#files. Wheels with `...-py3-none-any.whl` filenames work
-everywhere, others have the operating system and platform in the filename. In the linked `numpy`
-example, you can see that there are pre-built distributions for Python 3.10 to 3.13 on macOS, Linux
-and Windows.
+You can check which wheels exist for a PyPI project under “Download Files”, e.g.,
+[NumPy 2.1.1](https://pypi.org/project/numpy/2.1.1/#files). Wheels with `...-py3-none-any.whl`
+filenames work everywhere, others have the operating system and platform in the filename. In the
+linked `numpy` example, you can see that there are pre-built distributions for Python 3.10 to 3.13
+on macOS, Linux and Windows.
 
 ## Common build failures
 
@@ -191,7 +190,7 @@ For example, installing `pygraphviz` requires Graphviz to be installed:
   compilation terminated.
   error: command '/usr/bin/gcc' failed with exit code 1
 
-  hint: This error likely indicates that you need to install a library that provides "graphviz/cgraph.h" for `pygraphviz@1.14`
+  hint: This error likely indicates that you need to install a library that provides `graphviz/cgraph.h` for `pygraphviz@1.14`
 ```
 
 To resolve this error on Debian, you'd install the `libgraphviz-dev` package:
@@ -294,7 +293,7 @@ If a package fails to build because `uv` selects an incompatible or outdated ver
 dependency, you can enforce constraints specifically for build dependencies. The
 [`build-constraint-dependencies`](../settings.md#build-constraint-dependencies) setting (or an
 analogous `build-constraints.txt` file) can be used to ensure that `uv` selects an appropriate
-version of a given build requirements.
+version of a given build requirement.
 
 For example, the issue described in
 [#5551](https://github.com/astral-sh/uv/issues/5551#issuecomment-2256055975) could be addressed by
@@ -319,8 +318,8 @@ supported platforms.
 ### Package does not support all Python versions
 
 If you support a large range of Python versions, consider using markers to use older versions for
-older Python versions and newer versions for newer Python version. For example, `numpy` only
-supports four Python minor version at a time, so to support a wider range of Python versions, e.g.,
+older Python versions and newer versions for newer Python versions. For example, `numpy` only
+supports four Python minor versions at a time, so to support a wider range of Python versions, e.g.,
 Python 3.8 to 3.13, the `numpy` requirement needs to be split:
 
 ```

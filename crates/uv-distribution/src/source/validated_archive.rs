@@ -7,10 +7,11 @@ use tracing::warn;
 
 use uv_cache::{Cache, CacheBucket};
 use uv_distribution_filename::SourceDistExtension;
-use uv_distribution_types::{ArchiveHashPolicy, BuildableSource};
+use uv_distribution_types::{ArchiveHashPolicy, BuildableSource, SourceDist};
 use uv_extract::hash::{HashReader, Hasher};
 use uv_fs::rename_with_retry;
 use uv_pypi_types::{HashAlgorithm, HashDigest};
+use uv_static::TarBackend;
 
 use crate::error::Error;
 
@@ -48,13 +49,23 @@ impl ValidatedSourceArchive {
         source: &BuildableSource<'_>,
         ext: SourceDistExtension,
         cache: &Cache,
+        tar_backend: TarBackend,
         validation: ArchiveValidation<'_>,
     ) -> Result<Self, Error> {
         let staging_dir = tempfile::tempdir_in(cache.bucket(CacheBucket::SourceDistributions))
             .map_err(Error::CacheWrite)?;
 
-        // Include every algorithm needed to validate the caller's policy or repair an old revision.
+        let hash_policy = if let BuildableSource::Dist(SourceDist::Registry(dist)) = source {
+            validation
+                .hash_policy
+                .with_index_hashes(dist.file.hashes.as_slice())
+        } else {
+            validation.hash_policy
+        };
+
+        // Include the caller's algorithms alongside any index algorithms selected for validation.
         let mut algorithms = validation.hash_policy.algorithms();
+        algorithms.extend(hash_policy.algorithms());
         algorithms.extend_from_slice(validation.extra_algorithms);
         algorithms.extend(validation.existing_hashes.iter().map(HashDigest::algorithm));
         algorithms.sort();
@@ -66,9 +77,10 @@ impl ValidatedSourceArchive {
             .collect::<Vec<_>>();
         let mut hasher = HashReader::new(reader, &mut hashers);
 
-        let (staging_dir, _) = uv_extract::stream::archive(&mut hasher, ext, staging_dir)
-            .await
-            .map_err(|err| Error::Extract(source.to_string(), err))?;
+        let (staging_dir, _) =
+            uv_extract::stream::archive(&mut hasher, ext, staging_dir, tar_backend)
+                .await
+                .map_err(|err| Error::Extract(source.to_string(), err))?;
 
         if !algorithms.is_empty() || validation.expected_size.is_some() {
             hasher.finish().await.map_err(Error::HashExhaustion)?;
@@ -88,11 +100,10 @@ impl ValidatedSourceArchive {
             .into_iter()
             .map(HashDigest::from)
             .collect::<Vec<_>>();
-        if validation.hash_policy.requires_validation() && !validation.hash_policy.matches(&hashes)
-        {
+        if hash_policy.requires_validation() && !hash_policy.matches(&hashes) {
             return Err(Error::hash_mismatch(
                 source.to_string(),
-                validation.hash_policy.digests(),
+                hash_policy.digests(),
                 &hashes,
             ));
         }
@@ -153,7 +164,7 @@ mod tests {
     use tokio_util::compat::FuturesAsyncReadCompatExt;
 
     use uv_distribution_types::{DirectSourceUrl, SourceUrl};
-    use uv_redacted::DisplaySafeUrl;
+    use uv_redacted::SafeUrl;
 
     use super::*;
 
@@ -185,8 +196,7 @@ mod tests {
         reader: impl AsyncRead + Unpin,
         validation: ArchiveValidation<'_>,
     ) -> Result<ValidatedSourceArchive, Error> {
-        let url =
-            DisplaySafeUrl::parse("https://example.com/source.tar.gz").expect("valid test URL");
+        let url = SafeUrl::parse("https://example.com/source.tar.gz").expect("valid test URL");
         let source = BuildableSource::Url(SourceUrl::Direct(DirectSourceUrl {
             url: &url,
             subdirectory: None,
@@ -197,6 +207,7 @@ mod tests {
             &source,
             SourceDistExtension::TarGz,
             cache,
+            TarBackend::default(),
             validation,
         )
         .await
@@ -289,10 +300,10 @@ mod tests {
                 .is_none()
         );
 
-        let existing_hash = HashDigest {
-            algorithm: HashAlgorithm::Sha512,
-            digest: "f754f5955ce76c8fbdccdacd6e0e34977354b04d062d7f993fa84f3301309257fd225c85ebc99571b8b8ad711b37c407af65c5eae73599802ea3b4d3082d2f32".into(),
-        };
+        let existing_hash = HashDigest::new(
+            HashAlgorithm::Sha512,
+            "f754f5955ce76c8fbdccdacd6e0e34977354b04d062d7f993fa84f3301309257fd225c85ebc99571b8b8ad711b37c407af65c5eae73599802ea3b4d3082d2f32",
+        )?;
         let archive = extract(
             &cache,
             &bytes[..],

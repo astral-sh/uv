@@ -118,27 +118,21 @@ jobs:
             "alpine:3.22,alpine3.22"
             "debian:trixie-slim,trixie-slim,debian-slim"
             "buildpack-deps:trixie,trixie,debian"
-            "python:3.15-rc-alpine3.23,python3.15-rc-alpine3.23,python3.15-rc-alpine"
+            "python:3.15-alpine3.23,python3.15-alpine3.23,python3.15-alpine"
             "python:3.14-alpine3.23,python3.14-alpine3.23,python3.14-alpine"
             "python:3.13-alpine3.23,python3.13-alpine3.23,python3.13-alpine"
             "python:3.12-alpine3.23,python3.12-alpine3.23,python3.12-alpine"
             "python:3.11-alpine3.23,python3.11-alpine3.23,python3.11-alpine"
-            "python:3.10-alpine3.23,python3.10-alpine3.23,python3.10-alpine"
-            "python:3.9-alpine3.22,python3.9-alpine3.22,python3.9-alpine"
-            "python:3.15-rc-trixie,python3.15-rc-trixie"
+            "python:3.15-trixie,python3.15-trixie"
             "python:3.14-trixie,python3.14-trixie"
             "python:3.13-trixie,python3.13-trixie"
             "python:3.12-trixie,python3.12-trixie"
             "python:3.11-trixie,python3.11-trixie"
-            "python:3.10-trixie,python3.10-trixie"
-            "python:3.9-trixie,python3.9-trixie"
-            "python:3.15-rc-slim-trixie,python3.15-rc-trixie-slim"
+            "python:3.15-slim-trixie,python3.15-trixie-slim"
             "python:3.14-slim-trixie,python3.14-trixie-slim"
             "python:3.13-slim-trixie,python3.13-trixie-slim"
             "python:3.12-slim-trixie,python3.12-trixie-slim"
             "python:3.11-slim-trixie,python3.11-trixie-slim"
-            "python:3.10-slim-trixie,python3.10-trixie-slim"
-            "python:3.9-slim-trixie,python3.9-trixie-slim"
           )
 
           if [ "${LOGIN}" == "true" ]; then
@@ -182,7 +176,7 @@ jobs:
           username: astralshbot
           password: ${{ secrets.DOCKERHUB_TOKEN_RO }}
 
-      - uses: depot/setup-action@15c09a5f77a0840ad4bce955686522a257853461 # v1.7.1
+      - uses: depot/setup-action@91bc8495a33ebfc504ffc89e5674379ccf23c29c # v1.7.2
 
       - name: Check tag consistency
         if: ${{ needs.docker-plan.outputs.push-version == 'true' }}
@@ -245,7 +239,7 @@ jobs:
               tags: ($tags | split("\n")), annotations: ($annotations | split("\n"))}
               | select(.build_id != "" and (.digest | test("^sha256:[0-9a-f]{64}$")))' > uv.json
 
-      - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ needs.docker-plan.outputs.save == 'true' }}
         with:
           name: docker-image-uv
@@ -281,7 +275,7 @@ jobs:
           username: astralshbot
           password: ${{ secrets.DOCKERHUB_TOKEN_RO }}
 
-      - uses: depot/setup-action@15c09a5f77a0840ad4bce955686522a257853461 # v1.7.1
+      - uses: depot/setup-action@91bc8495a33ebfc504ffc89e5674379ccf23c29c # v1.7.2
 
       - name: Authenticate to Depot Registry
         if: ${{ needs.docker-plan.outputs.save == 'true' }}
@@ -297,6 +291,7 @@ jobs:
         env:
           VERSION: ${{ needs.docker-plan.outputs.tag }}
           PUSH_DEV: ${{ inputs.push-dev }}
+          PUSH_VERSION: ${{ needs.docker-plan.outputs.push-version }}
           # When the new base image is not saved, use the registry's `latest` tag.
           UV_BASE_IMAGE: ${{ needs.docker-plan.outputs.save == 'true' && format('registry.depot.dev/{0}@{1}', env.DEPOT_PROJECT_ID, needs.docker-build-base.outputs.image-digest) || format('{0}:latest', env.UV_GHCR_IMAGE) }}
           IMAGE_MAPPING: ${{ matrix.image-mapping }}
@@ -326,8 +321,8 @@ jobs:
             if [ "${PUSH_DEV}" == "true" ]; then
               TAG_PATTERNS="${TAG_PATTERNS}type=sha,suffix=-${TAG}\n"
             else
-              TAG_PATTERNS="${TAG_PATTERNS}type=pep440,pattern={{ version }},suffix=-${TAG},value=${VERSION}\n"
-              TAG_PATTERNS="${TAG_PATTERNS}type=pep440,pattern={{ major }}.{{ minor }},suffix=-${TAG},value=${VERSION}\n"
+              TAG_PATTERNS="${TAG_PATTERNS}type=pep440,pattern={{ version }},suffix=-${TAG},value=${VERSION},enable=${PUSH_VERSION}\n"
+              TAG_PATTERNS="${TAG_PATTERNS}type=pep440,pattern={{ major }}.{{ minor }},suffix=-${TAG},value=${VERSION},enable=${PUSH_VERSION}\n"
               TAG_PATTERNS="${TAG_PATTERNS}type=raw,value=${TAG}\n"
             fi
           done
@@ -388,7 +383,7 @@ jobs:
               tags: ($tags | split("\n")), annotations: ($annotations | split("\n"))}
               | select(.build_id != "" and (.digest | test("^sha256:[0-9a-f]{64}$")))' > "$NAME.json"
 
-      - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ needs.docker-plan.outputs.save == 'true' }}
         with:
           name: docker-image-${{ steps.dockerfile.outputs.name }}
@@ -430,7 +425,7 @@ jobs:
             end
           ' images/*.json > docker-manifest.json
 
-      - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         id: upload
         with:
           name: docker-manifest

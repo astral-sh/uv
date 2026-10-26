@@ -52,13 +52,21 @@ jobs:
       # uv
       - name: "Prep README.md"
         run: python scripts/transform_readme.py --target pypi
+      - name: "Check Cargo.lock"
+        # `maturin sdist` resolves the workspace without --locked.
+        run: cargo metadata --locked --format-version 1 > /dev/null
       - name: "Build sdist"
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           sccache: false
-          maturin-version: v1.14.1
+          maturin-version: v1.15.0
           command: sdist
           args: --out dist
+      - name: "Fix Cargo.lock in sdist"
+        run: |
+          # Ensure maturin did not update the workspace Cargo.lock.
+          git diff --exit-code -- Cargo.lock
+          python scripts/repair-sdist-cargo-lock.py dist/${PACKAGE_NAME}-*.tar.gz
       - name: "Test sdist"
         uses: astral-sh/github-actions/release-smoke-test@76d2758fc5c4394ada46510f46605deb7cec477e
         with:
@@ -70,7 +78,7 @@ jobs:
             apt-get install -y --no-install-recommends cmake
             # We can't use `--find-links` here, since we need maturin, which means no `--no-index`, and without that option
             # we run the risk that pip pull uv from PyPI instead.
-            pip install /dist/${PACKAGE_NAME}-*.tar.gz --force-reinstall
+            pip install /dist/${PACKAGE_NAME}-*.tar.gz --force-reinstall --config-settings=maturin.build-args=--locked
             ${MODULE_NAME} --help
             python -m ${MODULE_NAME} --help
             uvx --help
@@ -85,11 +93,14 @@ jobs:
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           sccache: false
-          maturin-version: v1.14.1
+          maturin-version: v1.15.0
           command: sdist
           args: --out crates/uv-build/dist -m crates/uv-build/Cargo.toml
       - name: "Fix Cargo.lock in sdist uv-build"
-        run: python scripts/repair-sdist-cargo-lock.py crates/uv-build/dist/${PACKAGE_NAME}_build-*.tar.gz
+        run: |
+          # Ensure maturin did not update the workspace Cargo.lock.
+          git diff --exit-code -- Cargo.lock
+          python scripts/repair-sdist-cargo-lock.py crates/uv-build/dist/${PACKAGE_NAME}_build-*.tar.gz
       - name: "Test sdist uv-build"
         uses: astral-sh/github-actions/release-smoke-test@76d2758fc5c4394ada46510f46605deb7cec477e
         with:
@@ -99,7 +110,7 @@ jobs:
           run: |
             apt-get update
             apt-get install -y --no-install-recommends cmake
-            pip install /dist/${PACKAGE_NAME}_build-*.tar.gz --force-reinstall
+            pip install /dist/${PACKAGE_NAME}_build-*.tar.gz --force-reinstall --config-settings=maturin.build-args=--locked
             ${MODULE_NAME}-build --help
             python -m ${MODULE_NAME}_build --help
       - name: "Upload sdist uv-build"
@@ -132,7 +143,7 @@ jobs:
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           sccache: false
-          maturin-version: v1.14.1
+          maturin-version: v1.15.0
           target: x86_64
           args: --release --locked --out dist --features self-update --compatibility pypi
         env:
@@ -169,7 +180,7 @@ jobs:
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           sccache: false
-          maturin-version: v1.14.1
+          maturin-version: v1.15.0
           target: x86_64
           args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml --compatibility pypi
         env:
@@ -212,6 +223,8 @@ jobs:
             --train-only
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
+          # Match maturin's deployment target for the release build.
+          MACOSX_DEPLOYMENT_TARGET: "11.0"
           RUSTFLAGS: "-C linker=rust-lld -C linker-flavor=ld64.lld -C link-arg=--icf=safe"
 
       # uv
@@ -219,7 +232,7 @@ jobs:
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           sccache: false
-          maturin-version: v1.14.1
+          maturin-version: v1.15.0
           target: aarch64
           manylinux: 2_17
           args: --release --locked --out dist --features self-update --compatibility pypi
@@ -265,7 +278,7 @@ jobs:
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           sccache: false
-          maturin-version: v1.14.1
+          maturin-version: v1.15.0
           target: aarch64
           args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml --compatibility pypi
         env:
@@ -351,7 +364,7 @@ jobs:
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           sccache: false
-          maturin-version: v1.14.1
+          maturin-version: v1.15.0
           target: ${{ matrix.platform.target }}
           args: --release --locked --out dist --features self-update,windows-gui-bin --compatibility pypi
         env:
@@ -413,7 +426,7 @@ jobs:
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           sccache: false
-          maturin-version: v1.14.1
+          maturin-version: v1.15.0
           target: ${{ matrix.platform.target }}
           args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml --compatibility pypi
         env:
@@ -488,7 +501,7 @@ jobs:
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           sccache: false
-          maturin-version: v1.14.1
+          maturin-version: v1.15.0
           target: ${{ matrix.target }}
           # Generally, we try to build in a target docker container. In this case however, a
           # 32-bit compiler runs out of memory (4GB memory limit for 32-bit), so we cross compile
@@ -519,6 +532,15 @@ jobs:
             fi
             # Install cargo extensions as a static musl binary so it runs in any container.
             scripts/install-cargo-extensions.sh
+
+            # Keep package/version/file information in diagnostics without embedding
+            # the build machine's Cargo home and registry index directory in every path.
+            # TODO: Use Cargo's profile-level `trim-paths` once it is stable.
+            cargo fetch --locked --target "${{ matrix.target }}"
+            for registry in "${CARGO_HOME:-$HOME/.cargo}"/registry/src/*; do
+                [[ -d "$registry" ]] || continue
+                export RUSTFLAGS="${RUSTFLAGS:+${RUSTFLAGS} }--remap-path-prefix=$registry/=registry/"
+            done
 
             if [[ "${{ matrix.target }}" == "x86_64-unknown-linux-gnu" ]]; then
                 rustup component add llvm-tools-preview
@@ -570,13 +592,27 @@ jobs:
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           sccache: false
-          maturin-version: v1.14.1
+          maturin-version: v1.15.0
           target: ${{ matrix.target }}
           manylinux: 2_17
           docker-options: -e CARGO -e AWS_LC_SYS_USE_SYSTEM
           args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml --compatibility pypi
           before-script-linux: |
             scripts/install-cargo-extensions.sh
+
+            # TODO: Use Cargo's profile-level `trim-paths` once it is stable.
+            cargo fetch --locked --target "${{ matrix.target }}"
+            for registry in "${CARGO_HOME:-$HOME/.cargo}"/registry/src/*; do
+                [[ -d "$registry" ]] || continue
+                export RUSTFLAGS="${RUSTFLAGS:+${RUSTFLAGS} }--remap-path-prefix=$registry/=registry/"
+            done
+
+            if [[ "${{ matrix.target }}" == "x86_64-unknown-linux-gnu" ]]; then
+                # Fold identical functions with Rust's bundled LLD.
+                bundled_lld_dir="$(rustc --print sysroot)/lib/rustlib/${{ matrix.target }}/bin/gcc-ld"
+                test -x "${bundled_lld_dir}/ld.lld"
+                export RUSTFLAGS="${RUSTFLAGS:+${RUSTFLAGS} }-C link-arg=-B${bundled_lld_dir} -C link-arg=-fuse-ld=lld -C link-arg=-Wl,--icf=all"
+            fi
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
       - name: "Test wheel uv-build"
@@ -603,7 +639,9 @@ jobs:
             arch: aarch64
             test_image: arm64v8/ubuntu:20.04@sha256:0908a765aeb02fe4e564b543eaed1d77839b7a08de94041e24328b2cb62ac553
             test_platform: linux/arm64
-            runner: depot-ubuntu-24.04-arm-8
+            # The instrumented PGO build can exceed 32 GB of RAM and be reaped
+            # so we use a 64 GB runner for headroom
+            runner: depot-ubuntu-24.04-arm-16
             pgo: true
             # see https://github.com/astral-sh/ruff/issues/3791
             # and https://github.com/gnzlbg/jemallocator/issues/170#issuecomment-1503228963
@@ -644,7 +682,7 @@ jobs:
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           sccache: false
-          maturin-version: v1.14.1
+          maturin-version: v1.15.0
           target: ${{ matrix.platform.target }}
           manylinux: ${{ matrix.platform.manylinux }}
           docker-options: -e CARGO -e AWS_LC_SYS_USE_SYSTEM ${{ matrix.platform.maturin_docker_options }}
@@ -714,7 +752,7 @@ jobs:
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           sccache: false
-          maturin-version: v1.14.1
+          maturin-version: v1.15.0
           target: ${{ matrix.platform.target }}
           manylinux: ${{ matrix.platform.manylinux }}
           docker-options: -e CARGO -e AWS_LC_SYS_USE_SYSTEM ${{ matrix.platform.maturin_docker_options }}
@@ -771,7 +809,7 @@ jobs:
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           sccache: false
-          maturin-version: v1.14.1
+          maturin-version: v1.15.0
           target: ${{ matrix.platform.target }}
           manylinux: 2_17
           docker-options: -e CARGO -e AWS_LC_SYS_USE_SYSTEM ${{ matrix.platform.maturin_docker_options }}
@@ -831,7 +869,7 @@ jobs:
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           sccache: false
-          maturin-version: v1.14.1
+          maturin-version: v1.15.0
           target: ${{ matrix.platform.target }}
           manylinux: 2_17
           docker-options: -e CARGO -e AWS_LC_SYS_USE_SYSTEM ${{ matrix.platform.maturin_docker_options }}
@@ -892,7 +930,7 @@ jobs:
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           sccache: false
-          maturin-version: v1.14.1
+          maturin-version: v1.15.0
           target: ${{ matrix.platform.target }}
           manylinux: 2_17
           docker-options: -e CARGO -e AWS_LC_SYS_USE_SYSTEM ${{ matrix.platform.maturin_docker_options }}
@@ -954,7 +992,7 @@ jobs:
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           sccache: false
-          maturin-version: v1.14.1
+          maturin-version: v1.15.0
           target: ${{ matrix.platform.target }}
           manylinux: 2_17
           docker-options: -e CARGO -e AWS_LC_SYS_USE_SYSTEM ${{ matrix.platform.maturin_docker_options }}
@@ -1004,7 +1042,7 @@ jobs:
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           sccache: false
-          maturin-version: v1.14.1
+          maturin-version: v1.15.0
           target: ${{ matrix.platform.target }}
           manylinux: 2_31
           docker-options: -e CARGO -e AWS_LC_SYS_USE_SYSTEM ${{ matrix.platform.maturin_docker_options }}
@@ -1059,7 +1097,7 @@ jobs:
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           sccache: false
-          maturin-version: v1.14.1
+          maturin-version: v1.15.0
           target: ${{ matrix.platform.target }}
           manylinux: 2_31
           docker-options: -e CARGO -e AWS_LC_SYS_USE_SYSTEM ${{ matrix.platform.maturin_docker_options }}
@@ -1114,7 +1152,7 @@ jobs:
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           sccache: false
-          maturin-version: v1.14.1
+          maturin-version: v1.15.0
           target: ${{ matrix.target }}
           manylinux: musllinux_1_1
           docker-options: -e CARGO -e AWS_LC_SYS_USE_SYSTEM
@@ -1169,7 +1207,7 @@ jobs:
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           sccache: false
-          maturin-version: v1.14.1
+          maturin-version: v1.15.0
           target: ${{ matrix.target }}
           manylinux: musllinux_1_1
           docker-options: -e CARGO -e AWS_LC_SYS_USE_SYSTEM
@@ -1238,7 +1276,7 @@ jobs:
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           sccache: false
-          maturin-version: v1.14.1
+          maturin-version: v1.15.0
           target: ${{ matrix.platform.target }}
           manylinux: musllinux_1_1
           # Tag the musl builds as manylinux 2_17 fallback cause the aarch64 build only support 2_28
@@ -1311,7 +1349,7 @@ jobs:
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           sccache: false
-          maturin-version: v1.14.1
+          maturin-version: v1.15.0
           target: ${{ matrix.platform.target }}
           manylinux: musllinux_1_1
           args: --profile minimal-size --locked ${{ matrix.platform.arch == 'aarch64' && '--compatibility 2_17' || ''}} --out crates/uv-build/dist -m crates/uv-build/Cargo.toml --compatibility pypi
@@ -1358,6 +1396,8 @@ jobs:
   check-wheels:
     name: "check wheel contents"
     runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-2' || 'ubuntu-slim' }}
+    env:
+      UV_PYTHON_DOWNLOADS_JSON_URL: ${{ github.workspace }}/crates/uv-python-managed/download-metadata.json
     needs:
       - macos-x86_64
       - macos-aarch64
@@ -1374,8 +1414,11 @@ jobs:
         with:
           persist-credentials: false
       - name: "Install uv"
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
+          # renovate: datasource=github-release-attachments depName=astral-sh/uv
+          version: "0.13.5"
+          checksum: "f68d291c75783122dad58ab77def0e13f3233f358731db5d6d7e8715603b928f"
           enable-cache: false
       - name: "Download built wheels"
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -1384,4 +1427,4 @@ jobs:
           path: wheels
           merge-multiple: true
       - name: "check wheel contents"
-        run: uv run --no-project scripts/check_uv_wheel_contents.py wheels/*
+        run: uv run scripts/check_uv_wheel_contents.py wheels/*

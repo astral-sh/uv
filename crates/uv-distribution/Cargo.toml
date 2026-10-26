@@ -1,6 +1,6 @@
 [package]
 name = "uv-distribution"
-version = "0.0.80"
+version = "0.0.97"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -16,6 +16,8 @@ doctest = false
 workspace = true
 
 [dependencies]
+uv-macros = { workspace = true }
+uv-python-types = { workspace = true }
 uv-auth = { workspace = true }
 uv-cache = { workspace = true }
 uv-cache-info = { workspace = true }
@@ -25,7 +27,7 @@ uv-distribution-filename = { workspace = true }
 uv-distribution-types = { workspace = true }
 uv-errors = { workspace = true }
 uv-extract = { workspace = true }
-uv-fastid = { workspace = true }
+uv-fastid = { workspace = true, features = ["serde"] }
 uv-flags = { workspace = true }
 uv-fs = { workspace = true, features = ["tokio"] }
 uv-git = { workspace = true }
@@ -38,8 +40,10 @@ uv-pep508 = { workspace = true }
 uv-platform-tags = { workspace = true }
 uv-preview = { workspace = true }
 uv-pypi-types = { workspace = true }
-uv-python = { workspace = true }
 uv-redacted = { workspace = true }
+uv-static = { workspace = true }
+uv-threads = { workspace = true }
+uv-torch = { workspace = true }
 uv-types = { workspace = true }
 uv-workspace = { workspace = true }
 
@@ -47,6 +51,7 @@ anyhow = { workspace = true }
 either = { workspace = true }
 fs-err = { workspace = true }
 futures = { workspace = true }
+http-content-range = { workspace = true }
 owo-colors = { workspace = true }
 rayon = { workspace = true }
 reqwest = { workspace = true }
@@ -54,13 +59,14 @@ reqwest-middleware = { workspace = true }
 rmp-serde = { workspace = true }
 rustc-hash = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true, features = ["compat"] }
 toml = { workspace = true }
 tracing = { workspace = true }
-url = { workspace = true }
+version-ranges = { workspace = true }
 walkdir = { workspace = true }
 
 [dev-dependencies]

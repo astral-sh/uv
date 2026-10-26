@@ -45,7 +45,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.plan.outputs.extra-images) }}
-    uses: ./.github/workflows/publish-docker-image.yml
+    uses: $/.github/workflows/publish-docker-image.yml
     with:
       image: ${{ toJson(matrix) }}
       push-dev: ${{ inputs.push-dev }}
@@ -64,7 +64,7 @@ jobs:
     needs:
       - plan
       - publish-extra
-    uses: ./.github/workflows/publish-docker-image.yml
+    uses: $/.github/workflows/publish-docker-image.yml
     with:
       image: ${{ needs.plan.outputs.base-image }}
       push-dev: ${{ inputs.push-dev }}

@@ -4,6 +4,7 @@ use assert_fs::fixture::ChildPath;
 use assert_fs::fixture::FileWriteStr;
 use assert_fs::fixture::PathChild;
 use assert_fs::prelude::*;
+use indoc::{formatdoc, indoc};
 
 use uv_static::EnvVars;
 use uv_test::uv_snapshot;
@@ -52,9 +53,11 @@ fn list_editable_non_file_url() -> Result<()> {
 
     let dist_info = ChildPath::new(context.site_packages()).child("project-1.0.0.dist-info");
     dist_info.create_dir_all()?;
-    dist_info
-        .child("METADATA")
-        .write_str("Metadata-Version: 2.1\nName: project\nVersion: 1.0.0\n")?;
+    dist_info.child("METADATA").write_str(indoc! {"
+        Metadata-Version: 2.1
+        Name: project
+        Version: 1.0.0
+    "})?;
     dist_info
         .child("direct_url.json")
         .write_str(r#"{"url":"https://example.com/project","dir_info":{"editable":true}}"#)?;
@@ -73,6 +76,113 @@ fn list_editable_non_file_url() -> Result<()> {
     [{"name":"project","version":"1.0.0"}]
     "#);
 
+    Ok(())
+}
+
+/// An invalid direct URL emits a warning and leaves the installed distribution usable by version.
+#[test]
+#[cfg(feature = "test-python")]
+fn list_invalid_direct_url() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let dist_info = ChildPath::new(context.site_packages()).child("project-1.0.0.dist-info");
+    dist_info.create_dir_all()?;
+    dist_info.child("METADATA").write_str(indoc! {"
+        Metadata-Version: 2.1
+        Name: project
+        Version: 1.0.0
+    "})?;
+    dist_info
+        .child("direct_url.json")
+        .write_str(r#"{"url":"not-a-url","archive_info":{}}"#)?;
+
+    uv_snapshot!(context.pip_list()
+        .arg("--format=freeze")
+        .env(EnvVars::RUST_LOG, "uv_distribution_types::installed=warn"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    project==1.0.0
+
+    ----- stderr -----
+    WARN Failed to parse direct URL: relative URL without a base
+    ");
+    Ok(())
+}
+
+/// An ambiguous VCS URL emits a warning with credentials redacted and treats the installed
+/// distribution as a registry distribution.
+#[test]
+#[cfg(feature = "test-python")]
+fn list_ambiguous_direct_url() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let dist_info = ChildPath::new(context.site_packages()).child("project-1.0.0.dist-info");
+    dist_info.create_dir_all()?;
+    dist_info.child("METADATA").write_str(indoc! {"
+        Metadata-Version: 2.1
+        Name: project
+        Version: 1.0.0
+    "})?;
+    dist_info.child("direct_url.json").write_str(
+        r#"{"url":"https://user/name:password@example.com/project.git","vcs_info":{"vcs":"git"}}"#,
+    )?;
+
+    uv_snapshot!(context.pip_list()
+        .arg("--format=freeze")
+        .env(EnvVars::RUST_LOG, "uv_distribution_types::installed=warn"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    project==1.0.0
+
+    ----- stderr -----
+    WARN Failed to parse direct URL: ambiguous user/pass authority in URL (not percent-encoded?): git+https:***@example.com/project.git
+    ");
+    Ok(())
+}
+
+/// Malformed JSON is an error, unlike an invalid URL in otherwise valid metadata.
+#[test]
+#[cfg(feature = "test-python")]
+fn list_invalid_direct_url_json() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let dist_info = ChildPath::new(context.site_packages()).child("project-1.0.0.dist-info");
+    dist_info.create_dir_all()?;
+    dist_info.child("METADATA").write_str(indoc! {"
+        Metadata-Version: 2.1
+        Name: project
+        Version: 1.0.0
+    "})?;
+    dist_info.child("direct_url.json").write_str("{")?;
+
+    uv_snapshot!(context.filters(), context.pip_list().arg("--format=freeze"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to read metadata from: [SITE_PACKAGES]/project-1.0.0.dist-info
+      cause: EOF while parsing an object at line 1 column 1
+    ");
+    Ok(())
+}
+
+/// A missing metadata discriminator produces a schema error.
+#[test]
+#[cfg(feature = "test-python")]
+fn list_invalid_direct_url_metadata() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let dist_info = ChildPath::new(context.site_packages()).child("project-1.0.0.dist-info");
+    dist_info.create_dir_all()?;
+    dist_info.child("METADATA").write_str(indoc! {"
+        Metadata-Version: 2.1
+        Name: project
+        Version: 1.0.0
+    "})?;
+    dist_info
+        .child("direct_url.json")
+        .write_str(r#"{"url":"https://example.com/project"}"#)?;
+
+    uv_snapshot!(context.filters(), context.pip_list().arg("--format=freeze"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to read metadata from: [SITE_PACKAGES]/project-1.0.0.dist-info
+      cause: data did not match any variant of untagged enum DirectUrl
+    ");
     Ok(())
 }
 
@@ -613,10 +723,15 @@ Version: 0.22.0
         .child("zstandard.egg-link")
         .write_str(target.path().to_str().unwrap())?;
 
-    site_packages.child("easy-install.pth").write_str(&format!(
-        "something\n{}\nanother thing\n",
-        target.path().to_str().unwrap()
-    ))?;
+    site_packages
+        .child("easy-install.pth")
+        .write_str(&formatdoc! {"
+            something
+            {}
+            another thing
+        ",
+            target.path().to_str().unwrap()
+        })?;
 
     uv_snapshot!(context.filters(), context.pip_list()
         .arg("--editable"), @"
@@ -656,8 +771,8 @@ Version: 0.1-bulbasaur
         .arg("--editable"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to read metadata from: `[SITE_PACKAGES]/paramiko.egg-link`
-     Caused by: after parsing `0.1-b`, found `ulbasaur`, which is not part of a valid version
+    error: Failed to read metadata from: [SITE_PACKAGES]/paramiko.egg-link
+     cause: after parsing `0.1-b`, found `ulbasaur`, which is not part of a valid version
     "
     );
 
@@ -727,7 +842,10 @@ fn list_target() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
+    requirements_txt.write_str(indoc! {"
+        MarkupSafe==2.1.3
+        tomli==2.0.1
+    "})?;
 
     let target = context.temp_dir.child("target");
 
@@ -769,7 +887,10 @@ fn list_prefix() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
+    requirements_txt.write_str(indoc! {"
+        MarkupSafe==2.1.3
+        tomli==2.0.1
+    "})?;
 
     let prefix = context.temp_dir.child("prefix");
 

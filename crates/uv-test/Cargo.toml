@@ -1,6 +1,6 @@
 [package]
 name = "uv-test"
-version = "0.0.80"
+version = "0.0.97"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -22,23 +22,27 @@ git = []
 tracing-durations-export = []
 
 [dependencies]
+uv-python-types = { workspace = true }
+uv-python-managed = { workspace = true }
 uv-cache = { workspace = true, features = ["clap"] }
 uv-client = { workspace = true }
 uv-configuration = { workspace = true }
 uv-distribution-filename = { workspace = true }
 uv-fs = { workspace = true, features = ["tokio"] }
+uv-macros = { workspace = true }
 uv-normalize = { workspace = true }
 uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
 uv-preview = { workspace = true, features = ["testing"] }
-uv-python = { workspace = true }
+uv-python-discovery = { workspace = true }
+uv-redacted = { workspace = true }
 uv-static = { workspace = true }
 uv-version = { workspace = true }
 
 anyhow = { workspace = true }
 assert_cmd = { workspace = true }
 assert_fs = { workspace = true }
-async_zip = { workspace = true }
+async_zip = { workspace = true, features = ["zstd"] }
 base64 = { workspace = true }
 flate2 = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
@@ -50,7 +54,7 @@ indoc = { workspace = true }
 insta = { workspace = true, features = ["filters"] }
 itertools = { workspace = true }
 predicates = { workspace = true }
-regex = { workspace = true }
+regex = { workspace = true, features = ["perf", "unicode"] }
 reqwest = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -61,7 +65,6 @@ tempfile = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 toml = { workspace = true }
-url = { workspace = true }
 walkdir = { workspace = true }
 wiremock = { workspace = true }
 

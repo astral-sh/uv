@@ -1,5 +1,5 @@
 use uv_pypi_types::{HashAlgorithm, HashDigest, HashDigests, Hashes};
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 
 /// Hash generation and validation policy for an archive.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -17,7 +17,25 @@ pub enum ArchiveHashPolicy<'a> {
     All(&'a [HashDigest]),
 }
 
-impl ArchiveHashPolicy<'_> {
+impl<'a> ArchiveHashPolicy<'a> {
+    /// Use the hashes advertised for an individual index file when no verification policy is set.
+    ///
+    /// Explicit [`Self::Any`] and [`Self::All`] policies take precedence, including empty policies
+    /// that must reject the distribution. If the index provides no hashes, preserve the policy.
+    #[must_use]
+    pub fn with_index_hashes(self, hashes: &'a [HashDigest]) -> Self {
+        match self {
+            Self::Any(_) | Self::All(_) => self,
+            Self::None | Self::Generate => {
+                if hashes.is_empty() {
+                    self
+                } else {
+                    Self::All(hashes)
+                }
+            }
+        }
+    }
+
     /// Returns `true` if the hash policy is `None`.
     pub fn is_none(&self) -> bool {
         matches!(self, Self::None)
@@ -57,7 +75,7 @@ impl ArchiveHashPolicy<'_> {
             Self::None => true,
             Self::Generate => hashes
                 .iter()
-                .any(|hash| hash.algorithm == HashAlgorithm::Sha256),
+                .any(|hash| hash.algorithm() == HashAlgorithm::Sha256),
             Self::Any(required) => {
                 !required.is_empty() && hashes.iter().any(|hash| required.contains(hash))
             }
@@ -73,20 +91,20 @@ impl ArchiveHashPolicy<'_> {
             Self::None => true,
             Self::Generate => hashes
                 .iter()
-                .any(|hash| hash.algorithm == HashAlgorithm::Sha256),
+                .any(|hash| hash.algorithm() == HashAlgorithm::Sha256),
             Self::Any(required) => {
                 !required.is_empty()
                     && required
                         .iter()
                         .map(HashDigest::algorithm)
-                        .any(|algorithm| hashes.iter().any(|hash| hash.algorithm == algorithm))
+                        .any(|algorithm| hashes.iter().any(|hash| hash.algorithm() == algorithm))
             }
             Self::All(required) => {
                 !required.is_empty()
                     && required
                         .iter()
                         .map(HashDigest::algorithm)
-                        .all(|algorithm| hashes.iter().any(|hash| hash.algorithm == algorithm))
+                        .all(|algorithm| hashes.iter().any(|hash| hash.algorithm() == algorithm))
             }
         }
     }
@@ -150,12 +168,14 @@ pub enum HashCollection {
 }
 
 /// Read a URL's declared hash for resolution, excluding MD5, which `--require-hashes` rejects.
-pub fn parse_url_hashes(url: &DisplaySafeUrl) -> Option<HashDigests> {
+pub fn parse_url_hashes(url: &SafeUrl) -> Option<HashDigests> {
     let hashes = url
         .fragment()?
         .split('&')
         .find_map(|fragment| Hashes::parse_fragment(fragment).ok())?;
-    hashes.md5.is_none().then(|| HashDigests::from(hashes))
+    let hashes = HashDigests::from(hashes);
+    let contains_md5 = hashes.iter().any(|hash| matches!(hash, HashDigest::Md5(_)));
+    (!contains_md5).then_some(hashes)
 }
 
 pub trait Hashed {
@@ -189,9 +209,28 @@ impl Hashed for &[HashDigest] {
 mod tests {
     use std::str::FromStr;
 
-    use uv_pypi_types::HashDigest;
+    use uv_pypi_types::{HashDigest, HashError};
 
     use super::ArchiveHashPolicy;
+
+    /// Current call paths reject missing required hashes before reaching this helper, so test
+    /// the defensive empty-policy case directly.
+    #[test]
+    fn index_hashes_preserve_empty_required_policies() -> Result<(), HashError> {
+        let index_hashes = [HashDigest::from_str(
+            "sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f",
+        )?];
+        assert_eq!(
+            ArchiveHashPolicy::Any(&[]).with_index_hashes(&index_hashes),
+            ArchiveHashPolicy::Any(&[])
+        );
+        assert_eq!(
+            ArchiveHashPolicy::All(&[]).with_index_hashes(&index_hashes),
+            ArchiveHashPolicy::All(&[])
+        );
+
+        Ok(())
+    }
 
     #[test]
     fn validate_all_requires_every_digest() {

@@ -13,10 +13,11 @@ use serde::Deserialize;
 
 use uv_configuration::TargetTriple;
 use uv_distribution_filename::WheelFilename;
+use uv_macros::DeserializeUntagged;
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::{MarkerTree, Requirement};
-use uv_python::PythonVersion;
+use uv_python_types::PythonVersion;
 
 /// A complete packse scenario definition.
 #[derive(Debug, Deserialize)]
@@ -106,6 +107,10 @@ pub struct PackageMetadata {
     #[serde(default)]
     pub extras: BTreeMap<ExtraName, Vec<Requirement>>,
 
+    /// Console script names that invoke the package's generated stub.
+    #[serde(default)]
+    pub entry_points: Vec<String>,
+
     /// Whether to produce a source distribution, and optionally its metadata.
     #[serde(
         default = "default_artifact",
@@ -136,10 +141,11 @@ fn deserialize_artifact<'de, D>(
 where
     D: serde::Deserializer<'de>,
 {
-    #[derive(Debug, Deserialize)]
-    #[serde(untagged)]
+    #[derive(DeserializeUntagged)]
     enum Helper {
+        #[untagged(bool)]
         Bool(bool),
+        #[untagged(map)]
         Metadata(ArtifactMetadata),
     }
 

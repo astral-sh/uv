@@ -15,6 +15,9 @@ reason = "developer binary shipped from this workspace"
 # Keep this list in sync with workspace packages that define doctests.
 
 [[doctest]]
+package = "uv-once-map"
+
+[[doctest]]
 package = "uv-pep440"
 
 [[doctest]]
@@ -24,14 +27,6 @@ package = "uv-pep508"
 package = "uv-redacted"
 
 # Keep public APIs that are consumed by downstream Rust integrations.
-
-[[override]]
-lint = "hawk::unnecessary_public"
-crate = "uv_client"
-item = "base_client::BaseClientBuilder::<'a>::custom_client"
-kind = "inherent_method"
-level = "expect"
-reason = "used by Pixi to provide its own HTTP client"
 
 [[override]]
 lint = "hawk::dead_public"
@@ -72,6 +67,22 @@ item = "index::registry_wheel_index::RegistryWheelIndex::<'a>::get"
 kind = "inherent_method"
 level = "expect"
 reason = "used by Pixi to inspect cached registry wheels"
+
+[[override]]
+lint = "hawk::unnecessary_public"
+crate = "uv_resolver"
+item = "FlatDistributions"
+kind = "reexport"
+level = "expect"
+reason = "used by Pixi to construct a `VersionMap` from custom distributions"
+
+[[override]]
+lint = "hawk::unnecessary_public"
+crate = "uv_resolver"
+item = "prioritized_distribution::PrioritizedDist::insert_source"
+kind = "inherent_method"
+level = "expect"
+reason = "used by Pixi to construct a prioritized distribution for its resolver provider"
 
 [[override]]
 lint = "hawk::unnecessary_public"
@@ -124,7 +135,7 @@ reason = "used by Pixi to distinguish packages installed through its uv integrat
 # Keep APIs that are consumed by another platform or by non-Rust components.
 
 [[override]]
-lint = "hawk::dead_public"
+lint = "hawk::unnecessary_public"
 crate = "uv_fs"
 item = "with_retry_sync"
 kind = "function"
@@ -275,7 +286,7 @@ reason = "read by the AWS request signer"
 
 [[override]]
 lint = "hawk::dead_public"
-crate = "uv_resolver"
+crate = "uv_lock"
 item = "lock::Lock::is_empty"
 kind = "inherent_method"
 level = "expect"
@@ -283,15 +294,15 @@ reason = "kept public alongside Lock::len"
 
 [[override]]
 lint = "hawk::dead_public"
-crate = "uv_resolver"
-item = "resolution::output::ResolverOutput::is_empty"
+crate = "uv_resolver_types"
+item = "output::ResolverOutput::is_empty"
 kind = "inherent_method"
 level = "expect"
 reason = "kept public alongside ResolverOutput::len"
 
 [[override]]
 lint = "hawk::dead_public"
-crate = "uv_python"
+crate = "uv_python_discovery"
 item = "installation::PythonInstallation::arch"
 kind = "inherent_method"
 level = "expect"
@@ -299,7 +310,7 @@ reason = "retained as part of the PythonInstallation platform accessors"
 
 [[override]]
 lint = "hawk::dead_public"
-crate = "uv_python"
+crate = "uv_python_discovery"
 item = "installation::PythonInstallation::libc"
 kind = "inherent_method"
 level = "expect"
@@ -307,7 +318,7 @@ reason = "retained as part of the PythonInstallation platform accessors"
 
 [[override]]
 lint = "hawk::unnecessary_public"
-crate = "uv_python"
+crate = "uv_python_discovery"
 item = "installation::PythonInstallation::os"
 kind = "inherent_method"
 level = "expect"
@@ -315,7 +326,7 @@ reason = "kept public alongside the other PythonInstallation platform accessors"
 
 [[override]]
 lint = "hawk::dead_public"
-crate = "uv_python"
+crate = "uv_python_interpreter"
 item = "virtualenv::PyVenvConfiguration::is_virtualenv"
 kind = "inherent_method"
 level = "expect"
@@ -323,11 +334,21 @@ reason = "retained as part of the PyVenvConfiguration accessors"
 
 [[override]]
 lint = "hawk::unnecessary_public"
-crate = "uv_python"
+crate = "uv_python_interpreter"
 item = "virtualenv::PyVenvConfiguration::set"
 kind = "inherent_method"
 level = "expect"
 reason = "retained as a public pyvenv.cfg editing helper"
+
+# Keep wheel variant component APIs consistent.
+
+[[override]]
+lint = "hawk::dead_public"
+crate = "uv_distribution_types"
+item = "variants_json::VariantValue::from_static"
+kind = "inherent_method"
+level = "expect"
+reason = "kept public alongside the other wheel variant component constructors"
 
 [[exclude]]
 crate = "uv_extract"

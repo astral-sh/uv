@@ -51,4 +51,4 @@ httpx
 ruff>=0.3.0
 ```
 
-Optional dependencies groups are not supported in this format.
+Optional dependency groups are not supported in this format.

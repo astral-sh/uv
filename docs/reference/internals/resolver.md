@@ -7,7 +7,7 @@
 
 ## Resolver
 
-As defined in a textbook, resolution, or finding a set of version to install from a given set of
+As defined in a textbook, resolution, or finding a set of versions to install from a given set of
 requirements, is equivalent to the
 [SAT problem](https://en.wikipedia.org/wiki/Boolean_satisfiability_problem) and thereby NP-complete:
 in the worst case you have to try all possible combinations of all versions of all packages and
@@ -24,7 +24,7 @@ there are no general, fast algorithms. In practice, this is misleading for a num
   be done.
 - When resolution fails, more information is needed than a message that there is no solution (as is
   seen in SAT solvers). Instead, the resolver should produce an understandable error trace that
-  states which packages are involved in away to allows a user to remove the conflict.
+  states which packages are involved so the user can remove the conflict.
 - The most important heuristic for performance and user experience is determining the order in which
   decisions are made through prioritization.
 
@@ -38,7 +38,7 @@ works in the following steps:
   (including file, git, etc.) have the highest priority, then those with more exact specifiers (such
   as `==`), then those with less strict specifiers. Inside each category, packages are ordered by
   when they were first seen (i.e. order in a file), making the resolution deterministic.
-- A version is picked for the selected package. The version must works with all specifiers from the
+- A version is picked for the selected package. The version must work with all specifiers from the
   requirements in the partial solution and must not be previously marked as incompatible. The
   resolver prefers versions from a lockfile (`uv.lock` or `-o requirements.txt`) and those installed
   in the current environment. Versions are checked from highest to lowest (unless using an
@@ -71,7 +71,7 @@ order of two packages if they have been conflicting too much.
 ## Forking
 
 Python resolvers historically didn't support backtracking, and even with backtracking, resolution
-was usually limited to single environment, which one specific architecture, operating system, Python
+was usually limited to a single environment with one specific architecture, operating system, Python
 version, and Python implementation. Some packages use contradictory requirements for different
 environments, for example:
 
@@ -154,7 +154,7 @@ Windows, Linux and macOS.
 ## Metadata consistency
 
 uv, similar to poetry, requires that wheels of a single version of a package in a specific index
-have the same dependencies (`Requires-Dist` in `METADATA`), including wheels build from a source
+have the same dependencies (`Requires-Dist` in `METADATA`), including wheels built from a source
 distribution. More generally, uv assumes that each wheel has the same `METADATA` file in its
 dist-info directory.
 
@@ -311,10 +311,10 @@ multiple solutions. Generally, a desirable solution prioritizes use the highest 
 dependencies over those for indirect dependencies, it avoids backtracking to very old versions and
 can be installed on a target machine.
 
-Internally, uv represent each package with a given package name as a number of virtual packages, for
-example, one package for each activated extra, for dependency groups, or for having a marker. While
-PubGrub needs to choose a version for each virtual package, uv's prioritization works on the package
-name level.
+Internally, uv represents each package with a given package name as a number of virtual packages,
+for example, one package for each activated extra, for dependency groups, or for having a marker.
+While PubGrub needs to choose a version for each virtual package, uv's prioritization works on the
+package name level.
 
 Whenever we encounter a requirement on a package, we match it to a priority. The root package and
 URL requirements have the highest priority, then singleton requirements with the `==` operator, as

@@ -1,7 +1,6 @@
 //! Git support is derived from Cargo's implementation.
 //! Cargo is dual-licensed under either Apache 2.0 or MIT, at the user's choice.
 //! Source: <https://github.com/rust-lang/cargo/blob/23eb492cf920ce051abfc56bbaf838514dc8365c/src/cargo/sources/git/utils.rs>
-use std::fmt::Display;
 use std::path::{Path, PathBuf};
 use std::str::{self};
 use std::sync::LazyLock;
@@ -10,17 +9,16 @@ use anyhow::{Context, Result, anyhow};
 use cargo_util::{ProcessBuilder, ProcessError, paths};
 use owo_colors::OwoColorize;
 use tracing::{debug, instrument, warn};
-use url::Url;
 
 use uv_fs::Simplified;
 use uv_git_types::{GitOid, GitReference};
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 use uv_static::EnvVars;
 use uv_warnings::warn_user_once;
 
-/// A file indicates that if present, `git reset` has been done and a repo
-/// checkout is ready to go. See [`GitCheckout::reset`] for why we need this.
-const CHECKOUT_READY_LOCK: &str = ".ok";
+/// Extension for the marker beside a completed checkout.
+/// See [`GitCheckout::reset`] for why we need this.
+const CHECKOUT_READY_EXTENSION: &str = "ok";
 
 #[derive(Debug, thiserror::Error)]
 pub enum GitError {
@@ -74,88 +72,11 @@ enum RefspecStrategy {
     First,
 }
 
-/// A Git reference (like a tag or branch) or a specific commit.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-enum ReferenceOrOid<'reference> {
-    /// A Git reference, like a tag or branch.
-    Reference(&'reference GitReference),
-    /// A specific commit.
-    Oid(GitOid),
-}
-
-impl ReferenceOrOid<'_> {
-    /// Resolves the [`ReferenceOrOid`] to an object ID with objects the `repo` currently has.
-    fn resolve(&self, repo: &GitRepository) -> Result<GitOid> {
-        let refkind = self.kind_str();
-        let result = match self {
-            // Resolve the commit pointed to by the tag.
-            //
-            // `^0` recursively peels away from the revision to the underlying commit object.
-            // This also verifies that the tag indeed refers to a commit.
-            Self::Reference(GitReference::Tag(s)) => {
-                repo.rev_parse(&format!("refs/remotes/origin/tags/{s}^0"))
-            }
-
-            // Resolve the commit pointed to by the branch.
-            Self::Reference(GitReference::Branch(s)) => repo.rev_parse(&format!("origin/{s}^0")),
-
-            // Attempt to resolve the branch, then the tag.
-            Self::Reference(GitReference::BranchOrTag(s)) => repo
-                .rev_parse(&format!("origin/{s}^0"))
-                .or_else(|_| repo.rev_parse(&format!("refs/remotes/origin/tags/{s}^0"))),
-
-            // Attempt to resolve the branch, then the tag, then the commit.
-            Self::Reference(GitReference::BranchOrTagOrCommit(s)) => repo
-                .rev_parse(&format!("origin/{s}^0"))
-                .or_else(|_| repo.rev_parse(&format!("refs/remotes/origin/tags/{s}^0")))
-                .or_else(|_| repo.rev_parse(&format!("{s}^0"))),
-
-            // We'll be using the HEAD commit.
-            Self::Reference(GitReference::DefaultBranch) => {
-                repo.rev_parse("refs/remotes/origin/HEAD")
-            }
-
-            // Resolve a named reference.
-            Self::Reference(GitReference::NamedRef(s)) => repo.rev_parse(&format!("{s}^0")),
-
-            // Resolve a specific commit.
-            Self::Oid(s) => repo.rev_parse(&format!("{s}^0")),
-        };
-
-        result.with_context(|| anyhow::format_err!("failed to find {refkind} `{self}`"))
-    }
-
-    /// Returns the kind of this [`ReferenceOrOid`].
-    fn kind_str(&self) -> &str {
-        match self {
-            Self::Reference(reference) => reference.kind_str(),
-            Self::Oid(_) => "commit",
-        }
-    }
-
-    /// Converts the [`ReferenceOrOid`] to a `str` that can be used as a revision.
-    fn as_rev(&self) -> &str {
-        match self {
-            Self::Reference(r) => r.as_rev(),
-            Self::Oid(rev) => rev.as_str(),
-        }
-    }
-}
-
-impl Display for ReferenceOrOid<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Reference(reference) => write!(f, "{reference}"),
-            Self::Oid(oid) => write!(f, "{oid}"),
-        }
-    }
-}
-
 /// A remote repository. It gets cloned into a local [`GitDatabase`].
 #[derive(PartialEq, Clone, Debug)]
 pub(crate) struct GitRemote {
     /// URL to a remote repository.
-    url: DisplaySafeUrl,
+    url: SafeUrl,
 }
 
 /// A local clone of a remote repository's database. Multiple [`GitCheckout`]s
@@ -220,6 +141,27 @@ impl GitRepository {
         })
     }
 
+    /// Resolve a [`GitReference`] using the objects already in this repository.
+    fn resolve(&self, reference: &GitReference) -> Result<GitOid> {
+        let result = match reference {
+            // `^0` peels tags and verifies that the object refers to a commit.
+            GitReference::Tag(tag) => self.rev_parse(&format!("refs/remotes/origin/tags/{tag}^0")),
+            GitReference::Branch(branch) => self.rev_parse(&format!("origin/{branch}^0")),
+            GitReference::BranchOrTag(reference) => self
+                .rev_parse(&format!("origin/{reference}^0"))
+                .or_else(|_| self.rev_parse(&format!("refs/remotes/origin/tags/{reference}^0"))),
+            GitReference::BranchOrTagOrCommit(reference) => self
+                .rev_parse(&format!("origin/{reference}^0"))
+                .or_else(|_| self.rev_parse(&format!("refs/remotes/origin/tags/{reference}^0")))
+                .or_else(|_| self.rev_parse(&format!("{reference}^0"))),
+            GitReference::DefaultBranch => self.rev_parse("refs/remotes/origin/HEAD"),
+            GitReference::NamedRef(reference) => self.rev_parse(&format!("{reference}^0")),
+            GitReference::Commit(commit) => self.rev_parse(&format!("{commit}^0")),
+        };
+
+        result.with_context(|| format!("failed to find {} `{reference}`", reference.kind_str()))
+    }
+
     /// Parses the object ID of the given `refname`.
     fn rev_parse(&self, refname: &str) -> Result<GitOid> {
         let result = GIT
@@ -275,12 +217,12 @@ impl GitRepository {
 
 impl GitRemote {
     /// Creates an instance for a remote repository URL.
-    pub(crate) fn new(url: DisplaySafeUrl) -> Self {
+    pub(crate) fn new(url: SafeUrl) -> Self {
         Self { url }
     }
 
     /// Gets the remote repository URL.
-    pub(crate) fn url(&self) -> &DisplaySafeUrl {
+    pub(crate) fn url(&self) -> &SafeUrl {
         &self.url
     }
 
@@ -306,26 +248,13 @@ impl GitRemote {
         offline: bool,
         with_lfs: bool,
     ) -> Result<(GitDatabase, GitOid)> {
-        let reference = locked_rev
-            .or_else(|| {
-                if let GitReference::BranchOrTagOrCommit(revision) = reference {
-                    revision.parse::<GitOid>().ok()
-                } else {
-                    None
-                }
-            })
-            .map(ReferenceOrOid::Oid)
-            .unwrap_or(ReferenceOrOid::Reference(reference));
+        let locked_reference = locked_rev.map(GitReference::Commit);
+        let reference = locked_reference.as_ref().unwrap_or(reference);
         if let Some(mut db) = db {
             fetch(&mut db.repo, &self.url, reference, disable_ssl, offline)
                 .with_context(|| format!("failed to fetch into: {}", into.user_display()))?;
 
-            let resolved_commit_hash = match locked_rev {
-                Some(rev) => db.contains(rev).then_some(rev),
-                None => reference.resolve(&db.repo).ok(),
-            };
-
-            if let Some(rev) = resolved_commit_hash {
+            if let Ok(rev) = db.repo.resolve(reference) {
                 if with_lfs {
                     let lfs_ready = fetch_lfs(&mut db.repo, &self.url, &rev, disable_ssl)
                         .with_context(|| format!("failed to fetch LFS objects at {rev}"))?;
@@ -348,10 +277,7 @@ impl GitRemote {
         let mut repo = GitRepository::init(into)?;
         fetch(&mut repo, &self.url, reference, disable_ssl, offline)
             .with_context(|| format!("failed to clone into: {}", into.user_display()))?;
-        let rev = match locked_rev {
-            Some(rev) => rev,
-            None => reference.resolve(&repo)?,
-        };
+        let rev = repo.resolve(reference)?;
         let lfs_ready = with_lfs
             .then(|| {
                 fetch_lfs(&mut repo, &self.url, &rev, disable_ssl)
@@ -414,9 +340,11 @@ impl GitDatabase {
         Ok(result)
     }
 
-    /// Checks if `oid` resolves to a commit in this database.
+    /// Checks if `oid` identifies a commit object in this database.
     pub(crate) fn contains(&self, oid: GitOid) -> bool {
-        self.repo.rev_parse(&format!("{oid}^0")).is_ok()
+        self.repo
+            .rev_parse(&format!("{oid}^0"))
+            .is_ok_and(|commit| commit == oid)
     }
 
     /// Checks if `oid` contains necessary LFS artifacts in this database.
@@ -451,8 +379,15 @@ impl GitCheckout {
         into: &Path,
         database: &GitDatabase,
         revision: GitOid,
-        original_remote_url: &DisplaySafeUrl,
+        original_remote_url: &SafeUrl,
     ) -> Result<Self> {
+        // Invalidate readiness before replacing the checkout, including an interrupted clone.
+        match fs_err::remove_file(into.with_extension(CHECKOUT_READY_EXTENSION)) {
+            Ok(()) => {}
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+            Err(err) => return Err(err.into()),
+        }
+
         let dirname = into.parent().unwrap();
         fs_err::create_dir_all(dirname)?;
         match fs_err::remove_dir_all(into) {
@@ -499,7 +434,10 @@ impl GitCheckout {
         match self.repo.rev_parse("HEAD") {
             Ok(id) if id == self.revision => {
                 // See comments in reset() for why we check this
-                self.repo.path.join(CHECKOUT_READY_LOCK).exists()
+                self.repo
+                    .path
+                    .with_extension(CHECKOUT_READY_EXTENSION)
+                    .exists()
             }
             _ => false,
         }
@@ -518,34 +456,28 @@ impl GitCheckout {
     }
 
     /// This performs `git reset --hard` to the revision of this checkout and updates submodules,
-    /// with additional interrupt protection by a dummy file [`CHECKOUT_READY_LOCK`].
+    /// with additional interrupt protection by a marker file.
     ///
     /// If we're interrupted while performing any of the processes in this method (e.g., we die
     /// because of a signal) uv needs to be sure to try to check out this
     /// repo again on the next go-round.
     ///
-    /// To enable this we have a dummy file in our checkout, [`.ok`],
-    /// which if present means that the repo has been successfully checked out and is
-    /// ready to go. Hence if we start to update submodules, we make sure this file
-    /// *doesn't* exist, and then once we're done we create the file.
+    /// The marker sits beside the checkout with an [`.ok` extension], so tracked files cannot
+    /// collide with it. It is removed before cloning and created only after preparation succeeds.
+    /// For example, there may be the `checkouts/<repository-key>/0123456789abcdef/` contents
+    /// directory containing `checkouts/<repository-key>/0123456789abcdef/pyproject.toml`, and the
+    /// `checkouts/<repository-key>/0123456789abcdef.ok` marker file besides it.
     ///
-    /// [`.ok`]: CHECKOUT_READY_LOCK
+    /// [`.ok` extension]: CHECKOUT_READY_EXTENSION
     /// `git reset --hard [<commit>]` can break relative submodule URLs, so we update submodules
     /// using the original remote URL.
-    fn reset(
-        &self,
-        with_lfs: Option<bool>,
-        original_remote_url: &DisplaySafeUrl,
-    ) -> Result<Option<bool>> {
-        let ok_file = self.repo.path.join(CHECKOUT_READY_LOCK);
-        let _ = paths::remove_file(&ok_file);
-
+    fn reset(&self, with_lfs: Option<bool>, original_remote_url: &SafeUrl) -> Result<Option<bool>> {
         // We want to skip smudge if lfs was disabled for the repository
         // as smudge filters can trigger on a reset even if lfs artifacts
         // were not originally "fetched".
         let lfs_skip_smudge = if with_lfs == Some(true) { "0" } else { "1" };
 
-        debug!("Reset {} to {}", self.repo.path.display(), self.revision);
+        debug!("Reset `{}` to {}", self.repo.path.display(), self.revision);
 
         // Perform the hard reset.
         GIT.as_ref()
@@ -611,7 +543,7 @@ impl GitCheckout {
         // When Git LFS is enabled, the objects must also be fetched and
         // validated successfully as part of the corresponding db.
         if with_lfs.is_none() || lfs_validation == Some(true) {
-            paths::create(ok_file)?;
+            paths::create(self.repo.path.with_extension(CHECKOUT_READY_EXTENSION))?;
         }
 
         Ok(lfs_validation)
@@ -625,7 +557,7 @@ impl GitCheckout {
 /// remotes. Instead, callers pass these values via `git -c`, using a credential-stripped origin URL
 /// for resolution and a transient `url.*.insteadOf` rewrite when credentials are needed for
 /// transport.
-fn submodule_update_config(original_remote_url: &DisplaySafeUrl) -> Vec<String> {
+fn submodule_update_config(original_remote_url: &SafeUrl) -> Vec<String> {
     let remote_url = original_remote_url.without_credentials();
     let mut config = vec![format!("remote.origin.url={}", remote_url.as_str())];
 
@@ -638,13 +570,13 @@ fn submodule_update_config(original_remote_url: &DisplaySafeUrl) -> Vec<String> 
 /// Unlike `remote.origin.url`, these rewrites are safe to inherit during recursive submodule
 /// updates: they rewrite transport URLs for authentication, but do not change the base URL that Git
 /// uses to resolve nested relative submodule URLs.
-fn submodule_auth_config(original_remote_url: &DisplaySafeUrl) -> Vec<String> {
+fn submodule_auth_config(original_remote_url: &SafeUrl) -> Vec<String> {
     let remote_url = original_remote_url.without_credentials();
     let mut config = Vec::new();
 
     if remote_url.as_str() != original_remote_url.as_str() {
         let safe_root = remote_url_root(remote_url.into_owned());
-        let credentialed_root = remote_url_root((**original_remote_url).clone());
+        let credentialed_root = remote_url_root(original_remote_url.clone());
 
         if safe_root.as_str() != credentialed_root.as_str() {
             config.push(format!(
@@ -663,7 +595,7 @@ fn submodule_auth_config(original_remote_url: &DisplaySafeUrl) -> Vec<String> {
 /// This is used as the rewrite prefix for `url.*.insteadOf`, so a credentialed parent URL can
 /// authenticate sibling submodule URLs without making the credentials part of any persisted
 /// submodule URL.
-fn remote_url_root(mut url: Url) -> Url {
+fn remote_url_root(mut url: SafeUrl) -> SafeUrl {
     url.set_path("/");
     url.set_query(None);
     url.set_fragment(None);
@@ -680,25 +612,18 @@ fn remote_url_root(mut url: Url) -> Url {
 /// The `remote_url` argument is the git remote URL where we want to fetch from.
 fn fetch(
     repo: &mut GitRepository,
-    remote_url: &DisplaySafeUrl,
-    reference: ReferenceOrOid<'_>,
+    remote_url: &SafeUrl,
+    reference: &GitReference,
     disable_ssl: bool,
     offline: bool,
 ) -> Result<()> {
-    let oid_to_fetch = if let ReferenceOrOid::Oid(rev) = reference {
-        let local_object = reference.resolve(repo).ok();
-        if let Some(local_object) = local_object {
-            if rev == local_object {
-                return Ok(());
-            }
-        }
-
-        // If we know the reference is a full commit hash, we can just return it without
-        // querying GitHub.
-        Some(rev)
-    } else {
-        None
-    };
+    if let GitReference::Commit(commit) = reference
+        && repo
+            .resolve(reference)
+            .is_ok_and(|local_commit| *commit == local_commit)
+    {
+        return Ok(());
+    }
 
     // Translate the reference desired here into an actual list of refspecs
     // which need to get fetched. Additionally record if we're fetching tags.
@@ -711,15 +636,15 @@ fn fetch(
     match reference {
         // For branches and tags we can fetch simply one reference and copy it
         // locally, no need to fetch other branches/tags.
-        ReferenceOrOid::Reference(GitReference::Branch(branch)) => {
+        GitReference::Branch(branch) => {
             refspecs.push(format!("+refs/heads/{branch}:refs/remotes/origin/{branch}"));
         }
 
-        ReferenceOrOid::Reference(GitReference::Tag(tag)) => {
+        GitReference::Tag(tag) => {
             refspecs.push(format!("+refs/tags/{tag}:refs/remotes/origin/tags/{tag}"));
         }
 
-        ReferenceOrOid::Reference(GitReference::BranchOrTag(branch_or_tag)) => {
+        GitReference::BranchOrTag(branch_or_tag) => {
             refspecs.push(format!(
                 "+refs/heads/{branch_or_tag}:refs/remotes/origin/{branch_or_tag}"
             ));
@@ -729,35 +654,23 @@ fn fetch(
             refspec_strategy = RefspecStrategy::First;
         }
 
-        // For ambiguous references, we can fetch the exact commit (if known); otherwise,
-        // we fetch all branches and tags.
-        ReferenceOrOid::Reference(GitReference::BranchOrTagOrCommit(branch_or_tag_or_commit)) => {
-            // The `oid_to_fetch` is the exact commit we want to fetch. But it could be the exact
-            // commit of a branch or tag. We should only fetch it directly if it's the exact commit
-            // of a short commit hash.
-            if let Some(oid_to_fetch) =
-                oid_to_fetch.filter(|oid| is_short_hash_of(branch_or_tag_or_commit, *oid))
-            {
-                refspecs.push(format!("+{oid_to_fetch}:refs/commit/{oid_to_fetch}"));
-            } else {
-                // We don't know what the rev will point to. To handle this
-                // situation we fetch all branches and tags, and then we pray
-                // it's somewhere in there.
-                refspecs.push(String::from("+refs/heads/*:refs/remotes/origin/*"));
-                refspecs.push(String::from("+HEAD:refs/remotes/origin/HEAD"));
-                tags = true;
-            }
+        // Fetch all branches and tags so ambiguous references can resolve to either a named
+        // reference or a short commit hash.
+        GitReference::BranchOrTagOrCommit(_) => {
+            refspecs.push(String::from("+refs/heads/*:refs/remotes/origin/*"));
+            refspecs.push(String::from("+HEAD:refs/remotes/origin/HEAD"));
+            tags = true;
         }
 
-        ReferenceOrOid::Reference(GitReference::DefaultBranch) => {
+        GitReference::DefaultBranch => {
             refspecs.push(String::from("+HEAD:refs/remotes/origin/HEAD"));
         }
 
-        ReferenceOrOid::Reference(GitReference::NamedRef(rev)) => {
+        GitReference::NamedRef(rev) => {
             refspecs.push(format!("+{rev}:{rev}"));
         }
 
-        ReferenceOrOid::Oid(rev) => {
+        GitReference::Commit(rev) => {
             refspecs.push(format!("+{rev}:refs/commit/{rev}"));
         }
     }
@@ -812,8 +725,13 @@ fn fetch(
     };
     match reference {
         // With the default branch, adding context is confusing
-        ReferenceOrOid::Reference(GitReference::DefaultBranch) => result,
-        _ => result.with_context(|| {
+        GitReference::DefaultBranch => result,
+        GitReference::Commit(_)
+        | GitReference::Branch(_)
+        | GitReference::Tag(_)
+        | GitReference::BranchOrTag(_)
+        | GitReference::BranchOrTagOrCommit(_)
+        | GitReference::NamedRef(_) => result.with_context(|| {
             format!(
                 "failed to fetch {} `{}`",
                 reference.kind_str(),
@@ -826,7 +744,7 @@ fn fetch(
 /// Attempts to use `git` CLI installed on the system to fetch a repository.
 fn fetch_with_cli(
     repo: &mut GitRepository,
-    url: &DisplaySafeUrl,
+    url: &SafeUrl,
     refspecs: &[String],
     tags: bool,
     disable_ssl: bool,
@@ -896,7 +814,7 @@ pub static GIT_LFS: LazyLock<Result<ProcessBuilder>> = LazyLock::new(|| {
 /// Attempts to use `git-lfs` CLI to fetch required LFS objects for a given revision.
 fn fetch_lfs(
     repo: &mut GitRepository,
-    url: &DisplaySafeUrl,
+    url: &SafeUrl,
     revision: &GitOid,
     disable_ssl: bool,
 ) -> Result<bool> {
@@ -938,8 +856,8 @@ fn fetch_lfs(
 }
 
 /// Redact a credentialed remote URL from a Git process error.
-fn redact_git_error(mut error: anyhow::Error, url: &DisplaySafeUrl) -> anyhow::Error {
-    let credentialed_root = DisplaySafeUrl::from_url(remote_url_root((**url).clone()));
+fn redact_git_error(mut error: anyhow::Error, url: &SafeUrl) -> anyhow::Error {
+    let credentialed_root = remote_url_root(url.clone());
     let redact = |message: &str| credentialed_root.redact_in(&url.redact_in(message));
 
     if let Some(process_error) = error.downcast_mut::<ProcessError>() {
@@ -950,22 +868,15 @@ fn redact_git_error(mut error: anyhow::Error, url: &DisplaySafeUrl) -> anyhow::E
     anyhow!("{}", redact(&error.to_string()))
 }
 
-/// Whether `rev` is a shorter hash of `oid`.
-fn is_short_hash_of(rev: &str, oid: GitOid) -> bool {
-    let long_hash = oid.to_string();
-    match long_hash.get(..rev.len()) {
-        Some(truncated_long_hash) => truncated_long_hash.eq_ignore_ascii_case(rev),
-        None => false,
-    }
-}
-
 #[cfg(test)]
 mod tests {
+    use indoc::indoc;
+
     use super::*;
 
     #[test]
     fn submodule_update_config_strips_credentials_from_origin_override() {
-        let url = DisplaySafeUrl::parse("https://user:password@example.com/org/repo.git").unwrap();
+        let url = SafeUrl::parse("https://user:password@example.com/org/repo.git").unwrap();
 
         assert_eq!(
             submodule_update_config(&url),
@@ -978,7 +889,7 @@ mod tests {
 
     #[test]
     fn submodule_update_config_preserves_git_ssh_user() {
-        let url = DisplaySafeUrl::parse("ssh://git@example.com/org/repo.git").unwrap();
+        let url = SafeUrl::parse("ssh://git@example.com/org/repo.git").unwrap();
 
         assert_eq!(
             submodule_update_config(&url),
@@ -988,7 +899,7 @@ mod tests {
 
     #[test]
     fn git_process_error_redacts_credentials() -> Result<()> {
-        let url = DisplaySafeUrl::parse("https://git:secret-token@example.com/org/repo.git")?;
+        let url = SafeUrl::parse("https://git:secret-token@example.com/org/repo.git")?;
         let stderr = format!("fatal: Authentication failed for '{}'", url.as_str());
         let error = ProcessError::new_raw(
             &format!(
@@ -1009,7 +920,13 @@ mod tests {
 
         assert_eq!(
             error.to_string(),
-            "process didn't exit successfully: `git fetch --force 'https://git:****@example.com/org/repo.git' '+HEAD:refs/remotes/origin/HEAD'` (exit status: 128)\n--- stdout\ngit output\n--- stderr\nfatal: Authentication failed for 'https://git:****@example.com/org/repo.git'"
+            indoc! {"
+                process didn't exit successfully: `git fetch --force 'https://git:****@example.com/org/repo.git' '+HEAD:refs/remotes/origin/HEAD'` (exit status: 128)
+                --- stdout
+                git output
+                --- stderr
+                fatal: Authentication failed for 'https://git:****@example.com/org/repo.git'"
+            }
         );
         assert_eq!(process_error.code, Some(128));
         assert_eq!(
@@ -1023,7 +940,7 @@ mod tests {
 
     #[test]
     fn git_submodule_process_error_redacts_credentials() -> Result<()> {
-        let url = DisplaySafeUrl::parse("https://git:secret-token@example.com/org/repo.git")?;
+        let url = SafeUrl::parse("https://git:secret-token@example.com/org/repo.git")?;
 
         for args in ["--init", "--recursive --init"] {
             let error = anyhow!(

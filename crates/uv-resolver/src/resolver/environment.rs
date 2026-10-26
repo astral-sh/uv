@@ -348,10 +348,10 @@ impl ResolverEnvironment {
     /// with an initial set of forked resolver states (e.g., those present in
     /// a lock file), then this creates the initial set of forks from that
     /// configuration.
-    pub(crate) fn initial_forked_states(
+    pub(crate) fn initial_forked_states<'index>(
         &self,
-        init: ForkState,
-    ) -> Result<Vec<ForkState>, ResolveError> {
+        init: ForkState<'index>,
+    ) -> Result<Vec<ForkState<'index>>, ResolveError> {
         let Kind::Universal {
             ref initial_forks,
             markers: ref _markers,
@@ -371,7 +371,7 @@ impl ResolverEnvironment {
                 let combined = UniversalMarker::from_combined(initial_fork);
                 let (include, exclude) = match combined.conflict().filter_rules() {
                     Ok(rules) => rules,
-                    Err(err) => return Some(Err(err)),
+                    Err(err) => return Some(Err(err.into())),
                 };
                 let mut env = self.filter_by_group(
                     include

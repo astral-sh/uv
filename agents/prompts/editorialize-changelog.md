@@ -52,9 +52,6 @@ Apply these rules:
   noteworthy dependency or security update, including versions when useful, instead of only naming
   the upstream build release. Keep changes to uv's Docker images in `Other changes` unless another
   section clearly fits.
-- For an unusually significant release-wide change, use a short introductory paragraph after the
-  release date to explain the user-facing effect and any action needed. Preserve the pull request
-  references and avoid repeating the same announcement as a routine bullet.
 - Put the most significant user-facing entries first within each section and remove empty sections.
 
 Return only the complete replacement release section, beginning with its `## ` heading. Do not

@@ -20,7 +20,9 @@ jobs:
   initialize-context:
     if: github.repository == 'astral-sh/uv'
     runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
-    environment: automations
+    environment:
+      name: automations
+      deployment: false
     timeout-minutes: 10
     permissions:
       contents: read
@@ -57,7 +59,7 @@ jobs:
 
       - name: "Get issue context token"
         id: token
-        uses: open-security-tools/ost-simple-sts@974a63a2daaaa40f7c6dec40d334f3da4421469e
+        uses: astral-sh/github-actions/simple-token-service@eb81cf4d13127c3f9539f621c17e4c65327636c8
         with:
           exchange-url: ${{ secrets.STS_API_URL }}/exchange
           audience: ${{ secrets.STS_API_URL }}
@@ -107,7 +109,9 @@ jobs:
     needs: initialize-context
     if: github.repository == 'astral-sh/uv'
     runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
-    environment: automations
+    environment:
+      name: automations
+      deployment: false
     timeout-minutes: 15
     permissions:
       contents: read
@@ -142,13 +146,13 @@ jobs:
 
       - name: "Triage issue"
         id: triage
-        uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1.11
+        uses: openai/codex-action@c05cfd74ad95c626cdf05c6685e62becc3bf7813
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TMPDIR: ${{ runner.temp }}
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          codex-version: "0.147.0"
+          codex-version: "0.157.1"
           codex-home: "agents/codex"
           effort: high
           permission-profile: "issue-triage"
@@ -179,7 +183,9 @@ jobs:
     needs: triage
     if: needs.triage.outputs.result != ''
     runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
-    environment: automations
+    environment:
+      name: automations
+      deployment: false
     timeout-minutes: 10
     concurrency:
       group: issue-context-${{ fromJSON(needs.triage.outputs.issue-context).number }}
@@ -204,7 +210,7 @@ jobs:
 
       - name: "Get issue context token"
         id: token
-        uses: open-security-tools/ost-simple-sts@974a63a2daaaa40f7c6dec40d334f3da4421469e
+        uses: astral-sh/github-actions/simple-token-service@eb81cf4d13127c3f9539f621c17e4c65327636c8
         with:
           exchange-url: ${{ secrets.STS_API_URL }}/exchange
           audience: ${{ secrets.STS_API_URL }}

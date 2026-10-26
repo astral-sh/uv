@@ -1,6 +1,6 @@
 use crate::resolver::ForkMap;
 use crate::{DependencyMode, Manifest, ResolverEnvironment};
-use uv_distribution_types::{IndexMetadata, RequirementSource};
+use uv_distribution_types::{IndexMetadata, RequirementSource, ResolutionRecorder};
 use uv_normalize::PackageName;
 
 /// A map of package names to their explicit index.
@@ -17,7 +17,10 @@ use uv_normalize::PackageName;
 ///
 /// [`Indexes`] would contain a single entry mapping `torch` to `https://download.pytorch.org/whl/cu130`.
 #[derive(Debug, Default, Clone)]
-pub(crate) struct Indexes(ForkMap<IndexMetadata>);
+pub(crate) struct Indexes {
+    indexes: ForkMap<IndexMetadata>,
+    recorder: Option<ResolutionRecorder>,
+}
 
 impl Indexes {
     /// Determine the set of explicit, pinned indexes in the [`Manifest`].
@@ -38,16 +41,25 @@ impl Indexes {
             indexes.add(requirement.as_ref(), index.clone());
         }
 
-        Self(indexes)
+        Self {
+            indexes,
+            recorder: manifest.recorder.clone(),
+        }
     }
 
     /// Returns `true` if the map contains any indexes for a package.
     pub(crate) fn contains_key(&self, name: &PackageName) -> bool {
-        self.0.contains_key(name)
+        if let Some(recorder) = &self.recorder {
+            recorder.source_policy(name);
+        }
+        self.indexes.contains_key(name)
     }
 
     /// Return the explicit index used for a package in the given fork.
     pub(crate) fn get(&self, name: &PackageName, env: &ResolverEnvironment) -> Vec<&IndexMetadata> {
-        self.0.get(name, env)
+        if let Some(recorder) = &self.recorder {
+            recorder.source_policy(name);
+        }
+        self.indexes.get(name, env)
     }
 }

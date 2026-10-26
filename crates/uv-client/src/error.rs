@@ -16,11 +16,12 @@ use crate::{FlatIndexError, html};
 use uv_cache::Error as CacheError;
 use uv_distribution_filename::{WheelFilename, WheelFilenameError};
 use uv_distribution_types::IndexUrl;
-use uv_errors::{Hint, Hints};
+use uv_errors::{Hinted, Hints};
 use uv_git::GitError;
+use uv_macros::DebugNoInline;
 use uv_normalize::PackageName;
 use uv_pypi_types::HashDigest;
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 
 /// RFC 9457 Problem Details for HTTP APIs
 ///
@@ -159,6 +160,44 @@ impl std::error::Error for Error {
 }
 
 impl Error {
+    /// Return whether this is an expected user-facing failure.
+    pub fn is_user_failure(&self) -> bool {
+        match self.kind() {
+            ErrorKind::InvalidUrl(_)
+            | ErrorKind::MissingWheelGitLfsArtifacts(..)
+            | ErrorKind::NonFileUrl(_)
+            | ErrorKind::CannotBeABase(_)
+            | ErrorKind::Metadata(..)
+            | ErrorKind::NoIndex(_)
+            | ErrorKind::RemotePackageNotFound(_)
+            | ErrorKind::LocalPackageNotFound(_)
+            | ErrorKind::LocalIndexNotFound(_)
+            | ErrorKind::MetadataHashMismatch { .. }
+            | ErrorKind::MetadataParseError(..)
+            | ErrorKind::BadJson { .. }
+            | ErrorKind::BadHtml { .. }
+            | ErrorKind::MetadataRangeRequestsRequired(..)
+            | ErrorKind::WheelFilename(_)
+            | ErrorKind::NameMismatch { .. }
+            | ErrorKind::Zip(..)
+            | ErrorKind::MissingContentType(_)
+            | ErrorKind::InvalidContentTypeHeader(..)
+            | ErrorKind::UnsupportedMediaType(..)
+            | ErrorKind::Offline(_) => true,
+            ErrorKind::Git(error) => error.is_user_failure(),
+            ErrorKind::WrappedReqwestError(_, error) => error.is_user_failure(),
+            ErrorKind::Flat(error) => error.is_user_failure(),
+            ErrorKind::AsyncHttpRangeReader(..)
+            | ErrorKind::CacheWrite(_)
+            | ErrorKind::CacheLock(_)
+            | ErrorKind::Io(_)
+            | ErrorKind::Decode(_)
+            | ErrorKind::Encode(_)
+            | ErrorKind::ArchiveRead(_)
+            | ErrorKind::ArchiveWrite(_) => false,
+        }
+    }
+
     /// Create a new [`Error`] with the given [`ErrorKind`] and number of retries.
     pub fn new(kind: ErrorKind, retries: u32, duration: Duration) -> Self {
         Self {
@@ -195,18 +234,18 @@ impl Error {
     }
 
     /// Create a new error from a JSON parsing error.
-    pub(crate) fn from_json_err(err: serde_json::Error, url: DisplaySafeUrl) -> Self {
+    pub(crate) fn from_json_err(err: serde_json::Error, url: SafeUrl) -> Self {
         ErrorKind::BadJson { source: err, url }.into()
     }
 
     /// Create a new error from an HTML parsing error.
-    pub(crate) fn from_html_err(err: html::Error, url: DisplaySafeUrl) -> Self {
+    pub(crate) fn from_html_err(err: html::Error, url: SafeUrl) -> Self {
         ErrorKind::BadHtml { source: err, url }.into()
     }
 
     /// Create an [`Error`] from a [`reqwest_middleware::Error`].
     pub(crate) fn from_reqwest_middleware(
-        url: DisplaySafeUrl,
+        url: SafeUrl,
         err: reqwest_middleware::Error,
         start: Instant,
         certificate_source: CertificateSource,
@@ -259,7 +298,7 @@ impl Error {
     /// Returns `true` if the error is due to the server not supporting HTTP range requests.
     pub(crate) fn is_http_range_requests_unsupported(
         &self,
-        url: &DisplaySafeUrl,
+        url: &SafeUrl,
         index: Option<&IndexUrl>,
     ) -> bool {
         match &*self.kind {
@@ -376,7 +415,7 @@ impl Error {
     }
 }
 
-impl Hint for Error {
+impl Hinted for Error {
     fn hints(&self) -> Hints<'_> {
         if self.suggests_system_certs() {
             Hints::from(format!(
@@ -399,7 +438,7 @@ impl From<ErrorKind> for Error {
     }
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(DebugNoInline, thiserror::Error)]
 pub enum ErrorKind {
     #[error(transparent)]
     InvalidUrl(#[from] uv_distribution_types::ToUrlError),
@@ -411,15 +450,15 @@ pub enum ErrorKind {
     Git(#[from] uv_git::GitResolverError),
 
     #[error("The wheel `{0}` is missing Git LFS artifacts.")]
-    MissingWheelGitLfsArtifacts(DisplaySafeUrl, #[source] GitError),
+    MissingWheelGitLfsArtifacts(SafeUrl, #[source] GitError),
 
     #[error("Expected a file URL, but received: {0}")]
-    NonFileUrl(DisplaySafeUrl),
+    NonFileUrl(SafeUrl),
 
     #[error("Expected an index URL, but received non-base URL: {0}")]
-    CannotBeABase(DisplaySafeUrl),
+    CannotBeABase(SafeUrl),
 
-    #[error("Failed to read metadata: `{0}`")]
+    #[error("Failed to read metadata: {0}")]
     Metadata(String, #[source] uv_metadata::Error),
 
     #[error("{0} isn't available locally, but making network requests to registries was banned")]
@@ -437,7 +476,7 @@ pub enum ErrorKind {
     LocalPackageNotFound(PackageName),
 
     /// The root was not found in the local (file-based) index.
-    #[error("Local index not found at: `{}`", _0.display())]
+    #[error("Local index not found at: {}", _0.display())]
     LocalIndexNotFound(PathBuf),
 
     /// The metadata file does not match a hash provided by its package index.
@@ -445,13 +484,13 @@ pub enum ErrorKind {
         "Hash mismatch for package metadata at `{url}`\n\nExpected:\n  {expected}\n\nComputed:\n  {actual}"
     )]
     MetadataHashMismatch {
-        url: DisplaySafeUrl,
+        url: SafeUrl,
         expected: HashDigest,
         actual: HashDigest,
     },
 
     /// The metadata file could not be parsed.
-    #[error("Couldn't parse metadata of {0} from {1}")]
+    #[error("Couldn't parse metadata of `{0}` from `{1}`")]
     MetadataParseError(
         WheelFilename,
         String,
@@ -459,26 +498,23 @@ pub enum ErrorKind {
     ),
 
     /// An error that happened while making a request or in a reqwest middleware.
-    #[error("Failed to fetch: `{0}`")]
-    WrappedReqwestError(DisplaySafeUrl, #[source] WrappedReqwestError),
+    #[error("Failed to fetch: {0}")]
+    WrappedReqwestError(SafeUrl, #[source] WrappedReqwestError),
 
-    #[error("Received some unexpected JSON from {}", url)]
+    #[error("Received some unexpected JSON from `{}`", url)]
     BadJson {
         source: serde_json::Error,
-        url: DisplaySafeUrl,
+        url: SafeUrl,
     },
 
-    #[error("Received some unexpected HTML from {}", url)]
-    BadHtml {
-        source: html::Error,
-        url: DisplaySafeUrl,
-    },
+    #[error("Received some unexpected HTML from `{}`", url)]
+    BadHtml { source: html::Error, url: SafeUrl },
 
-    #[error("Failed to read zip with range requests: `{0}`")]
-    AsyncHttpRangeReader(DisplaySafeUrl, #[source] AsyncHttpRangeReaderError),
+    #[error("Failed to read zip with range requests: {0}")]
+    AsyncHttpRangeReader(SafeUrl, #[source] AsyncHttpRangeReaderError),
 
-    #[error("Wheel metadata range requests are required, but not supported for: `{0}`")]
-    MetadataRangeRequestsRequired(DisplaySafeUrl, #[source] Box<Error>),
+    #[error("Wheel metadata range requests are required, but not supported for: {0}")]
+    MetadataRangeRequestsRequired(SafeUrl, #[source] Box<Error>),
 
     #[error("{0} is not a valid wheel filename")]
     WheelFilename(#[source] WheelFilenameError),
@@ -507,14 +543,14 @@ pub enum ErrorKind {
     #[error("Cache serialization failed")]
     Encode(#[source] rmp_serde::encode::Error),
 
-    #[error("Missing `Content-Type` header for {0}")]
-    MissingContentType(DisplaySafeUrl),
+    #[error("Missing `Content-Type` header for `{0}`")]
+    MissingContentType(SafeUrl),
 
-    #[error("Invalid `Content-Type` header for {0}")]
-    InvalidContentTypeHeader(DisplaySafeUrl, #[source] http::header::ToStrError),
+    #[error("Invalid `Content-Type` header for `{0}`")]
+    InvalidContentTypeHeader(SafeUrl, #[source] http::header::ToStrError),
 
-    #[error("Unsupported `Content-Type` \"{1}\" for {0}. Expected JSON or HTML.")]
-    UnsupportedMediaType(DisplaySafeUrl, String),
+    #[error("Unsupported `Content-Type` \"{1}\" for `{0}`. Expected JSON or HTML.")]
+    UnsupportedMediaType(SafeUrl, String),
 
     #[error("Reading from cache archive failed: {0}")]
     ArchiveRead(String),
@@ -523,7 +559,7 @@ pub enum ErrorKind {
     ArchiveWrite(String),
 
     #[error(
-        "Network connectivity is disabled, but the requested data wasn't found in the cache for: `{0}`"
+        "Network connectivity is disabled, but the requested data wasn't found in the cache: {0}"
     )]
     Offline(String),
 }
@@ -531,7 +567,7 @@ pub enum ErrorKind {
 impl ErrorKind {
     /// Create an [`ErrorKind`] from a [`reqwest::Error`].
     pub(crate) fn from_reqwest(
-        url: DisplaySafeUrl,
+        url: SafeUrl,
         error: reqwest::Error,
         certificate_source: CertificateSource,
     ) -> Self {
@@ -543,7 +579,7 @@ impl ErrorKind {
 
     /// Create an [`ErrorKind`] from a [`reqwest::Error`] with problem details.
     pub(crate) fn from_reqwest_with_problem_details(
-        url: DisplaySafeUrl,
+        url: SafeUrl,
         error: reqwest::Error,
         problem_details: Option<ProblemDetails>,
     ) -> Self {
@@ -572,6 +608,13 @@ enum WrappedReqwestErrorContext {
 }
 
 impl WrappedReqwestError {
+    /// Return whether the request failed because the resource does not exist.
+    pub fn is_user_failure(&self) -> bool {
+        self.inner()
+            .and_then(reqwest::Error::status)
+            .is_some_and(|status| status == reqwest::StatusCode::NOT_FOUND)
+    }
+
     /// Create a new `WrappedReqwestError` with optional problem details
     pub fn with_problem_details(
         error: reqwest_middleware::Error,

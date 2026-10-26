@@ -1,6 +1,6 @@
 [package]
 name = "uv-scripts"
-version = "0.0.80"
+version = "0.0.97"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -19,6 +19,7 @@ workspace = true
 [dependencies]
 uv-configuration = { workspace = true }
 uv-distribution-types = { workspace = true }
+uv-fs = { workspace = true }
 uv-normalize = { workspace = true }
 uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
@@ -29,11 +30,11 @@ uv-warnings = { workspace = true }
 uv-workspace = { workspace = true }
 
 fs-err = { workspace = true, features = ["tokio"] }
+ignore = { workspace = true }
 indoc = { workspace = true }
 memchr = { workspace = true }
-regex = { workspace = true }
+regex = { workspace = true, features = ["perf", "unicode"] }
 serde = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }
 toml = { workspace = true }
 tracing = { workspace = true }
-url = { workspace = true }

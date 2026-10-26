@@ -8,6 +8,12 @@ use fs_err as fs;
 use uv_static::EnvVars;
 
 fn main() {
+    println!("cargo:rerun-if-changed=build.rs");
+    println!(
+        "cargo:rerun-if-env-changed={}",
+        EnvVars::UV_INTERNAL__BUILD_GIT_INFO
+    );
+
     // The workspace root directory is not available without walking up the tree
     // https://github.com/rust-lang/cargo/issues/3946
     let workspace_root = Path::new(&std::env::var(EnvVars::CARGO_MANIFEST_DIR).unwrap())
@@ -24,6 +30,13 @@ fn main() {
 }
 
 fn commit_info(workspace_root: &Path) {
+    // Development builds omit Git metadata so commits do not trigger recompilation.
+    if std::env::var(EnvVars::PROFILE).as_deref() != Ok("release")
+        && std::env::var(EnvVars::UV_INTERNAL__BUILD_GIT_INFO).as_deref() != Ok("1")
+    {
+        return;
+    }
+
     // If not in a git repository, do not attempt to retrieve commit information
     let git_dir = workspace_root.join(".git");
     if !git_dir.exists() {

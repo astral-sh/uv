@@ -1,21 +1,29 @@
 use std::collections::BTreeMap;
-use std::collections::btree_map::Entry;
 
 use rustc_hash::FxHashMap;
 use tracing::instrument;
 
-use uv_client::{FlatIndexEntries, FlatIndexEntry};
+use uv_cache::Cache;
+use uv_client::{
+    FlatIndexClient, FlatIndexEntries, FlatIndexEntry, FlatIndexError, RegistryClient,
+};
 use uv_configuration::BuildOptions;
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
-    File, HashComparison, IncompatibleSource, IncompatibleWheel, IndexUrl, PrioritizedDist,
-    RegistryBuiltWheel, RegistrySourceDist, SourceDistCompatibility, WheelCompatibility,
+    File, Index, IndexEntryFilename, IndexLocations, IndexUrl, MinimumLibcVersion,
+    RegistryBuiltWheel, RegistrySourceDist,
 };
 use uv_normalize::PackageName;
 use uv_pep440::Version;
-use uv_platform_tags::{TagCompatibility, Tags};
+use uv_platform_tags::{IncompatibleTag, TagCompatibility, Tags};
+use uv_preview::PreviewFeature;
 use uv_pypi_types::HashDigest;
 use uv_types::HashStrategy;
+
+use crate::prioritized_distribution::{
+    HashComparison, IncompatibleSource, IncompatibleWheel, PrioritizedDist, RegistryVariantsJson,
+    SourceDistCompatibility, WheelCompatibility,
+};
 
 /// Unfiltered entries from `--find-links`, indexed by [`PackageName`].
 #[derive(Debug, Clone, Default)]
@@ -28,9 +36,22 @@ pub struct FlatIndex {
 }
 
 impl FlatIndex {
+    /// Load the `--find-links` entries from the configured indexes.
+    pub async fn load(
+        client: &RegistryClient,
+        cache: &Cache,
+        index_locations: &IndexLocations,
+    ) -> Result<Self, FlatIndexError> {
+        let client = FlatIndexClient::new(client.cached_client(), client.connectivity(), cache);
+        let entries = client
+            .fetch_all(index_locations.flat_indexes().map(Index::url))
+            .await?;
+        Ok(Self::from_entries(entries))
+    }
+
     /// Collect all files from a `--find-links` target into a [`FlatIndex`].
     #[instrument(skip_all)]
-    pub fn from_entries(entries: FlatIndexEntries) -> Self {
+    fn from_entries(entries: FlatIndexEntries) -> Self {
         let mut index = FxHashMap::<PackageName, Vec<FlatIndexEntry>>::default();
         let (entries, offline) = entries.into_parts();
 
@@ -59,7 +80,7 @@ impl FlatIndex {
 /// A set of [`PrioritizedDist`] from a `--find-links` entry for a single package, indexed
 /// by [`Version`].
 #[derive(Debug, Clone, Default)]
-pub(crate) struct FlatDistributions(BTreeMap<Version, PrioritizedDist>);
+pub struct FlatDistributions(BTreeMap<Version, PrioritizedDist>);
 
 impl FlatDistributions {
     /// Rank the entries for a package using the resolver's platform and hash policies.
@@ -69,12 +90,36 @@ impl FlatDistributions {
         tags: Option<&Tags>,
         hasher: &HashStrategy,
         build_options: &BuildOptions,
+        minimum_libc_version: Option<MinimumLibcVersion>,
     ) -> Self {
         let mut distributions = Self::default();
         for entry in entries {
             let (filename, file, index) = entry.into_parts();
-            distributions.add_file(file, filename, tags, hasher, build_options, index);
+            match filename {
+                IndexEntryFilename::DistFilename(filename) => distributions.add_file(
+                    file,
+                    filename,
+                    tags,
+                    hasher,
+                    build_options,
+                    index,
+                    minimum_libc_version,
+                ),
+                IndexEntryFilename::VariantJson(filename) => {
+                    distributions
+                        .0
+                        .entry(filename.version.clone())
+                        .or_default()
+                        .insert_variants_json(RegistryVariantsJson {
+                            filename,
+                            file,
+                            index,
+                        });
+                }
+            }
         }
+        // Metadata alone does not make a package version installable.
+        distributions.0.retain(|_, dist| !dist.is_empty());
         distributions
     }
 
@@ -92,6 +137,7 @@ impl FlatDistributions {
         hasher: &HashStrategy,
         build_options: &BuildOptions,
         index: IndexUrl,
+        minimum_libc_version: Option<MinimumLibcVersion>,
     ) {
         // No `requires-python` here: for source distributions, we don't have that information;
         // for wheels, we read it lazily only when selected.
@@ -112,14 +158,12 @@ impl FlatDistributions {
                     index,
                     size_is_authoritative: false,
                 };
-                match self.0.entry(version) {
-                    Entry::Occupied(mut entry) => {
-                        entry.get_mut().insert_built(dist, vec![], compatibility);
-                    }
-                    Entry::Vacant(entry) => {
-                        entry.insert(PrioritizedDist::from_built(dist, vec![], compatibility));
-                    }
-                }
+                self.0.entry(version).or_default().insert_built(
+                    dist,
+                    vec![],
+                    compatibility,
+                    minimum_libc_version,
+                );
             }
             DistFilename::SourceDistFilename(filename) => {
                 let compatibility = Self::source_dist_compatibility(
@@ -137,14 +181,11 @@ impl FlatDistributions {
                     wheels: vec![],
                     size_is_authoritative: false,
                 };
-                match self.0.entry(filename.version) {
-                    Entry::Occupied(mut entry) => {
-                        entry.get_mut().insert_source(dist, vec![], compatibility);
-                    }
-                    Entry::Vacant(entry) => {
-                        entry.insert(PrioritizedDist::from_source(dist, vec![], compatibility));
-                    }
-                }
+                self.0.entry(filename.version).or_default().insert_source(
+                    dist,
+                    vec![],
+                    compatibility,
+                );
             }
         }
     }
@@ -192,6 +233,11 @@ impl FlatDistributions {
         hasher: &HashStrategy,
         build_options: &BuildOptions,
     ) -> WheelCompatibility {
+        if filename.variant().is_some() && !uv_preview::is_enabled(PreviewFeature::WheelVariants) {
+            return WheelCompatibility::Incompatible(IncompatibleWheel::Tag(
+                IncompatibleTag::Variant,
+            ));
+        }
         // Check if binaries are allowed for this package.
         if build_options.no_binary_package(&filename.name) {
             return WheelCompatibility::Incompatible(IncompatibleWheel::NoBinary);
@@ -199,7 +245,7 @@ impl FlatDistributions {
 
         // Determine a compatibility for the wheel based on tags.
         let priority = match tags {
-            Some(tags) => match filename.compatibility(tags) {
+            Some(tags) => match filename.tag_compatibility(tags) {
                 TagCompatibility::Incompatible(tag) => {
                     return WheelCompatibility::Incompatible(IncompatibleWheel::Tag(tag));
                 }
@@ -222,10 +268,7 @@ impl FlatDistributions {
             HashComparison::Matched
         };
 
-        // Break ties with the build tag.
-        let build_tag = filename.build_tag().cloned();
-
-        WheelCompatibility::Compatible(hash, priority, build_tag)
+        WheelCompatibility::from_tag_priority(filename, hash, priority)
     }
 }
 
@@ -241,5 +284,11 @@ impl IntoIterator for FlatDistributions {
 impl From<FlatDistributions> for BTreeMap<Version, PrioritizedDist> {
     fn from(distributions: FlatDistributions) -> Self {
         distributions.0
+    }
+}
+
+impl From<BTreeMap<Version, PrioritizedDist>> for FlatDistributions {
+    fn from(distributions: BTreeMap<Version, PrioritizedDist>) -> Self {
+        Self(distributions)
     }
 }

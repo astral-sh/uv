@@ -16,6 +16,7 @@ env:
   CARGO_TERM_COLOR: always
   RUSTUP_MAX_RETRIES: 10
   UV_LOCKED: 1
+  UV_PYTHON_DOWNLOADS_JSON_URL: ${{ github.workspace }}/crates/uv-python-managed/download-metadata.json
 
 jobs:
   # Verify windows crate version matches between workspaces
@@ -28,7 +29,11 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          # renovate: datasource=github-release-attachments depName=astral-sh/uv
+          version: "0.13.5"
+          checksum: "f68d291c75783122dad58ab77def0e13f3233f358731db5d6d7e8715603b928f"
 
       - name: "Check windows crate versions match"
         run: uv run --no-project scripts/check-trampoline-version-consistency.py
@@ -48,7 +53,7 @@ jobs:
           persist-credentials: false
 
       - name: "Set up Docker Buildx"
-        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       - name: "Build trampolines in Docker"
         run: scripts/build-trampolines.sh --cache-from type=gha --cache-to type=gha
@@ -88,10 +93,12 @@ jobs:
           rustup target add ${{ matrix.target-arch }}-pc-windows-msvc
           rustup component add rust-src --target ${{ matrix.target-arch }}-pc-windows-msvc
 
-      - name: "Install cargo-bloat"
-        uses: taiki-e/install-action@6c6fd71fe4fb72c3697d269963d0e15df8adedad # v2.85.10
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
-          tool: cargo-bloat
+          # renovate: datasource=github-release-attachments depName=astral-sh/uv
+          version: "0.13.5"
+          checksum: "a38b8d1902b7cfbc76b423ba1bb456f623f42064cdc72628b6075b89afd1019a"
 
       - name: "rustfmt"
         working-directory: ${{ env.UV_WORKSPACE }}/crates/uv-trampoline
@@ -99,12 +106,14 @@ jobs:
 
       - name: "Clippy"
         working-directory: ${{ env.UV_WORKSPACE }}/crates/uv-trampoline
-        run: cargo clippy --all-features --locked --target x86_64-pc-windows-msvc --tests -- -D warnings
+        env:
+          CARGO_BUILD_WARNINGS: deny
+        run: cargo clippy --all-features --locked --target x86_64-pc-windows-msvc --tests
 
       - name: "Bloat Check"
         working-directory: ${{ env.UV_WORKSPACE }}/crates/uv-trampoline
         run: |
-          $output = cargo bloat --release --target x86_64-pc-windows-msvc
+          $output = uv run --only-dev cargo bloat --locked --release --target x86_64-pc-windows-msvc
           $filteredOutput = $output | Select-String -Pattern 'core::fmt::write|core::fmt::getcount' -NotMatch
           $containsPatterns = $filteredOutput | Select-String -Pattern 'core::fmt|std::panicking|std::backtrace_rs'
 
@@ -116,7 +125,7 @@ jobs:
 
   # Separate jobs for the nightly crate
   windows-trampoline-test:
-    timeout-minutes: 10
+    timeout-minutes: ${{ matrix.target-arch == 'aarch64' && 15 || 10 }}
     runs-on: ${{ matrix.runner }}
     name: "test on ${{ matrix.target-arch }}"
     strategy:
@@ -136,28 +145,35 @@ jobs:
       - name: Copy Git Repo to Dev Drive
         run: |
           Copy-Item -Path "${{ github.workspace }}" -Destination "$Env:UV_WORKSPACE" -Recurse
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-        with:
-          workspaces: ${{ env.UV_WORKSPACE }}/crates/uv-trampoline
       - name: "Install Rust toolchain"
-        working-directory: ${{ env.UV_WORKSPACE }}/crates/uv-trampoline
-        run: |
-          rustup target add ${{ matrix.target-arch }}-pc-windows-msvc
-          rustup component add rust-src --target ${{ matrix.target-arch }}-pc-windows-msvc
-      - name: "Test committed binaries"
         working-directory: ${{ env.UV_WORKSPACE }}
         run: |
+          rustup toolchain install --profile minimal
           rustup target add ${{ matrix.target-arch }}-pc-windows-msvc
-          cargo test -p uv-trampoline-builder --target ${{ matrix.target-arch }}-pc-windows-msvc
+      - name: "Install trampoline Rust toolchain"
+        working-directory: ${{ env.UV_WORKSPACE }}/crates/uv-trampoline
+        run: |
+          rustup toolchain install --profile minimal
+          rustup target add ${{ matrix.target-arch }}-pc-windows-msvc
+          rustup component add rust-src
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          key: ${{ matrix.target-arch }}
+          workspaces: |
+            ${{ env.UV_WORKSPACE }}
+            ${{ env.UV_WORKSPACE }}/crates/uv-trampoline
+      - name: "Test committed binaries"
+        working-directory: ${{ env.UV_WORKSPACE }}
+        run: cargo test --locked -p uv-trampoline-builder --target ${{ matrix.target-arch }}-pc-windows-msvc
       # Build and copy the new binaries
       - name: "Build"
         working-directory: ${{ env.UV_WORKSPACE }}/crates/uv-trampoline
         run: |
-          cargo build --target ${{ matrix.target-arch }}-pc-windows-msvc
+          cargo build --locked --target ${{ matrix.target-arch }}-pc-windows-msvc
           cp target/${{ matrix.target-arch }}-pc-windows-msvc/debug/uv-trampoline-console.exe ../uv-trampoline-builder/trampolines/uv-trampoline-${{ matrix.target-arch }}-console.exe
           cp target/${{ matrix.target-arch }}-pc-windows-msvc/debug/uv-trampoline-gui.exe ../uv-trampoline-builder/trampolines/uv-trampoline-${{ matrix.target-arch }}-gui.exe
       - name: "Test new binaries"
         working-directory: ${{ env.UV_WORKSPACE }}
         run: |
           # We turn off the default "production" test feature since these are debug binaries
-          cargo test -p uv-trampoline-builder --target ${{ matrix.target-arch }}-pc-windows-msvc --no-default-features
+          cargo test --locked -p uv-trampoline-builder --target ${{ matrix.target-arch }}-pc-windows-msvc --no-default-features
