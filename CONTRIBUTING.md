@@ -313,6 +313,15 @@ To preview any changes to the documentation locally:
 The documentation should then be available locally at
 [http://127.0.0.1:8000/uv/](http://127.0.0.1:8000/uv/).
 
+Platform tabs use the browser's operating system as their initial selection, using the `Windows`,
+`macOS and Linux`, and `Unix` labels. This behavior is implemented in `docs/js/extra.js` and runs on
+each Material document load, including instant navigation. Saved platform choices and links to
+specific tabs take precedence; other tab groups keep their configured defaults and saved choices.
+
+When changing this behavior, check the installation and storage pages with fresh browser storage and
+with a saved platform choice. Verify a direct tab link, a reload, and an internal page navigation,
+and confirm that shell tabs remain independent.
+
 Documentation is deployed automatically on release by publishing to the
 [Astral documentation](https://github.com/astral-sh/docs) repository, which itself deploys via
 Cloudflare Pages.
