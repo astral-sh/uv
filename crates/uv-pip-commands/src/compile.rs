@@ -614,6 +614,24 @@ pub async fn pip_compile(
         }
     };
 
+    // pylock.toml can hash each eligible file during serialization. A requirements file must
+    // already have a digest before it can emit a hash-checked registry requirement.
+    if generate_hashes
+        && libc_environments.is_some()
+        && matches!(format, PipCompileFormat::RequirementsTxt)
+        && let Some((_, dist)) = resolution.base_dists().find(|(_, dist)| {
+            dist.dist.index().is_some()
+                && dist.hashes.is_empty()
+                && !no_emit_packages.contains(&dist.name)
+        })
+    {
+        return Err(anyhow!(
+            "No hashes are available for `{name}=={version}` in the configured Linux libc environments",
+            name = dist.name,
+            version = dist.version
+        ));
+    }
+
     if generate_hashes && preview.is_enabled(PreviewFeature::ArtifactHashFiltering) {
         resolution.retain_allowed_distribution_hashes(&build_options);
     }

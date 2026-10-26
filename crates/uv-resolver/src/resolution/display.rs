@@ -188,7 +188,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
         let graph = if self.include_extras {
             combine_extras(&graph)
         } else {
-            strip_extras(&graph, self.resolution.options.libc.environments.is_some())
+            strip_extras(&graph)
         };
 
         // Collect all packages.
@@ -398,10 +398,7 @@ fn combine_extras<'dist>(graph: &IntermediatePetGraph<'dist>) -> RequirementsTxt
 /// `flask` node, with a conjunction of their markers.
 ///
 /// We also remove the root node, to simplify the graph structure.
-fn strip_extras<'dist>(
-    graph: &IntermediatePetGraph<'dist>,
-    libc_environments: bool,
-) -> RequirementsTxtGraph<'dist> {
+fn strip_extras<'dist>(graph: &IntermediatePetGraph<'dist>) -> RequirementsTxtGraph<'dist> {
     let mut next = RequirementsTxtGraph::with_capacity(graph.node_count(), graph.edge_count());
     let mut inverse = FxHashMap::with_capacity_and_hasher(graph.node_count(), FxBuildHasher);
 
@@ -418,13 +415,6 @@ fn strip_extras<'dist>(
                 let index = *entry.get();
                 let node: &mut RequirementsTxtDist = &mut next[index];
                 node.extras.clear();
-                // The base package covers every environment where its extras are requested.
-                if libc_environments
-                    && dist.extras.is_empty()
-                    && node.dist.index() == dist.dist.index()
-                {
-                    node.hashes = dist.hashes;
-                }
                 // Consider:
                 // ```
                 // foo[bar]==1.0.0; sys_platform == 'linux'

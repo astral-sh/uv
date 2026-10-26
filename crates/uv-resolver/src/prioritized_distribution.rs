@@ -6,8 +6,8 @@ use rustc_hash::FxHashSet;
 use uv_distribution::supported_variant_properties;
 use uv_distribution_filename::{BuildTag, WheelFilename};
 use uv_distribution_types::{
-    File, IndexUrl, InstalledDist, LibcEnvironments, LinuxLibc, Name, RegistryBuiltDist,
-    RegistryBuiltWheel, RegistrySourceDist, RequiresPython, VariantsJsonContent,
+    File, Identifier, IndexUrl, InstalledDist, LibcEnvironments, LinuxLibc, Name,
+    RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, RequiresPython, VariantsJsonContent,
     VariantsJsonFilename, implied_platform_markers, implied_platform_markers_with_aliases,
     implied_python_markers,
 };
@@ -16,7 +16,7 @@ use uv_pep440::VersionSpecifiers;
 use uv_pep508::MarkerTree;
 use uv_platform_tags::{AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagPriority, Tags};
 use uv_pypi_types::{HashDigest, HashDigests, Yanked};
-use uv_resolver_types::LibcPolicy;
+use uv_resolver_types::{DistributionMetadataIndex, LibcPolicy, MetadataResponse};
 
 use crate::known_platform::KnownPlatform;
 use crate::resolved::ResolvedDistRef;
@@ -673,29 +673,46 @@ impl PrioritizedDist {
         hashes: &HashDigests,
         environments: LibcEnvironments,
         marker: MarkerTree,
+        metadata: &DistributionMetadataIndex,
+        pinned: bool,
     ) -> Option<HashDigests> {
+        let collect = |file: &File, into: &mut FxHashSet<HashDigest>| {
+            if file.hashes.is_empty()
+                && let Some(response) = metadata.get(&file.distribution_id())
+                && let MetadataResponse::Found(archive) = response.as_ref()
+            {
+                into.extend(archive.hashes.iter().cloned());
+            } else {
+                into.extend(file.hashes.iter().cloned());
+            }
+        };
         let mut excluded = FxHashSet::default();
         let mut allowed = FxHashSet::default();
-        for (wheel, _) in &self.0.wheels {
-            if environments.allows_wheel(&wheel.filename, marker) {
-                allowed.extend(wheel.file.hashes.iter());
-            } else {
-                excluded.extend(wheel.file.hashes.iter());
+        for (wheel, compatibility) in &self.0.wheels {
+            if !environments.allows_wheel(&wheel.filename, marker) {
+                collect(&wheel.file, &mut excluded);
+            } else if !compatibility.is_excluded() {
+                collect(&wheel.file, &mut allowed);
             }
         }
-        if excluded.is_empty() {
+        if excluded.is_empty() && !hashes.is_empty() {
             return None;
         }
-        if let Some((sdist, _)) = &self.0.source {
-            allowed.extend(sdist.file.hashes.iter());
+        if let Some((sdist, compatibility)) = &self.0.source
+            && !compatibility.is_excluded()
+        {
+            collect(&sdist.file, &mut allowed);
         }
-        Some(
-            hashes
-                .iter()
-                .filter(|hash| !excluded.contains(*hash) || allowed.contains(*hash))
-                .cloned()
-                .collect(),
-        )
+        let mut filtered: HashDigests = hashes
+            .iter()
+            .filter(|hash| !excluded.contains(*hash) || allowed.contains(*hash))
+            .cloned()
+            .collect();
+        if filtered.is_empty() && !pinned {
+            filtered = allowed.into_iter().collect();
+            filtered.sort_unstable();
+        }
+        Some(filtered)
     }
 
     /// Returns true if and only if this distribution does not contain any

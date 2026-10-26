@@ -9,7 +9,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 
 use uv_configuration::{Constraints, DependencyModifierScope, DependencyModifiers};
 use uv_distribution_types::{
-    DistributionId, HashCollection, IndexUrl, Name, Requirement, RequiresPython,
+    DistributionId, HashCollection, IndexUrl, LibcEnvironments, Name, Requirement, RequiresPython,
     ResolutionDiagnostic, parse_url_hashes,
 };
 use uv_git::GitResolver;
@@ -194,57 +194,11 @@ impl<'a> ResolutionGraphBuilder<'a> {
         // Discard any unreachable nodes.
         graph.retain_nodes(|graph, node| !graph[node].marker().is_false());
 
-        // Requirements files may already pin a strict subset of the registry's hashes. Apply libc
-        // restrictions only after the graph tells us where each dependency can be installed.
-        if let Some(environments) = options.libc.environments
-            && self.hasher.collection() != HashCollection::None
-        {
-            for node in graph.node_weights_mut() {
-                let ResolutionGraphNode::Dist(dist) = node else {
-                    continue;
-                };
-                let Some(index) = dist.dist.index() else {
-                    continue;
-                };
-                if dist.hashes.is_empty() {
-                    continue;
-                }
-                let Some(filtered) = with_registry_version(
-                    self.index,
-                    &dist.name,
-                    Some(index),
-                    &dist.version,
-                    |registry| {
-                        registry.filter_libc_hashes(
-                            &dist.hashes,
-                            environments,
-                            dist.marker.pep508(),
-                        )
-                    },
-                )
-                .flatten() else {
-                    continue;
-                };
-                if filtered.is_empty()
-                    && self
-                        .preferences
-                        .match_hashes(&dist.name, &dist.version)
-                        .is_some_and(|hashes| !hashes.is_empty())
-                {
-                    return Err(ResolveError::ExcludedPinnedHashes(
-                        dist.name.clone(),
-                        dist.version.clone(),
-                    ));
-                }
-                dist.hashes = filtered;
-            }
-        }
-
         if matches!(resolution_strategy, ResolutionStrategy::Lowest) {
             report_missing_lower_bounds(&graph, &mut diagnostics, &constraints, &modifiers);
         }
 
-        let output = ResolverOutput {
+        let mut output = ResolverOutput {
             graph,
             requires_python,
             fork_markers,
@@ -254,6 +208,12 @@ impl<'a> ResolutionGraphBuilder<'a> {
             modifiers,
             options,
         };
+
+        if let Some(environments) = output.options.libc.environments
+            && self.hasher.collection() != HashCollection::None
+        {
+            filter_package_hashes(&mut output, self.index, self.preferences, environments)?;
+        }
 
         // We only do conflicting distribution detection when no
         // conflicting groups have been specified. The reason here
@@ -503,6 +463,59 @@ fn with_registry_version<T>(
                 .as_deref()
                 .and_then(lookup)
         })
+}
+
+/// Apply a registry package's reachable libc environments to the hashes shared by all its extras.
+fn filter_package_hashes(
+    output: &mut ResolverOutput,
+    index: &InMemoryIndex,
+    preferences: &Preferences,
+    environments: LibcEnvironments,
+) -> Result<(), ResolveError> {
+    let mut packages = FxHashMap::default();
+    for (_, dist) in output.base_dists() {
+        let Some(source) = dist.dist.index() else {
+            continue;
+        };
+        let pinned = preferences
+            .match_hashes(&dist.name, &dist.version)
+            .is_some_and(|hashes| !hashes.is_empty());
+        let Some(hashes) =
+            with_registry_version(index, &dist.name, Some(source), &dist.version, |registry| {
+                registry.filter_libc_hashes(
+                    &dist.hashes,
+                    environments,
+                    dist.marker.pep508(),
+                    index.distributions(),
+                    pinned,
+                )
+            })
+            .flatten()
+        else {
+            continue;
+        };
+        if hashes.is_empty() && pinned {
+            return Err(ResolveError::ExcludedPinnedHashes(
+                dist.name.clone(),
+                dist.version.clone(),
+            ));
+        }
+        packages.insert(
+            (dist.name.clone(), dist.version.clone(), source.clone()),
+            hashes,
+        );
+    }
+    // An extra can have a narrower marker than the base, but it installs the same distribution.
+    for node in output.graph.node_weights_mut() {
+        if let ResolutionGraphNode::Dist(dist) = node
+            && let Some(source) = dist.dist.index()
+            && let Some(hashes) =
+                packages.get(&(dist.name.clone(), dist.version.clone(), source.clone()))
+        {
+            dist.hashes.clone_from(hashes);
+        }
+    }
+    Ok(())
 }
 
 /// Find any packages that don't have any lower bound on them when in resolution-lowest mode.

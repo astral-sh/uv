@@ -1458,16 +1458,24 @@ fn supported_libc_conditional_compile() -> Result<()> {
             parent
             parent[feature] ; python_version < '3.13'
         "})?;
+    // The parent's musl hash remains supported even though its feature is used only on glibc.
+    let hashes: BTreeMap<_, _> = server.files().collect();
+    context
+        .temp_dir
+        .child("requirements.txt")
+        .write_str(&format!(
+            "parent==1.0.0 --hash=sha256:{}\n",
+            hashes["parent-1.0.0-py3-none-musllinux_1_2_x86_64.whl"]
+        ))?;
     uv_snapshot!(context.filters(), context.pip_compile()
-        .args(["requirements.in", "--universal", "--python-version", "3.12", "--generate-hashes", "--no-header", "--no-annotate"])
+        .args(["requirements.in", "--universal", "--python-version", "3.12", "--generate-hashes", "--no-header", "--no-annotate", "-o", "requirements.txt"])
         .arg("--index-url").arg(server.index_url()), @r"
     exit_code: 0 (success)
     ----- stdout -----
     demo==1.0.0 ; python_full_version < '3.13' and sys_platform == 'linux' \
         --hash=sha256:[SHA256:demo-1.0.0-py3-none-manylinux_2_17_x86_64.whl]
     parent==1.0.0 ; sys_platform == 'linux' \
-        --hash=sha256:[SHA256:parent-1.0.0-py3-none-musllinux_1_2_x86_64.whl] \
-        --hash=sha256:[SHA256:parent-1.0.0-py3-none-manylinux_2_17_x86_64.whl]
+        --hash=sha256:[SHA256:parent-1.0.0-py3-none-musllinux_1_2_x86_64.whl]
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
@@ -1498,6 +1506,91 @@ fn supported_libc_conditional_compile() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
+    "#);
+    Ok(())
+}
+
+/// Only the musl wheel has an advertised hash, but the dependency is used only on glibc.
+#[test]
+fn supported_libc_generate_missing_hash() -> Result<()> {
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "supported-libc-generate-missing-hash"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.demo.versions."1.0.0"]
+        sdist = false
+        wheel_tags = ["py3-none-manylinux_2_17_x86_64", "py3-none-musllinux_1_2_x86_64"]
+    "#})?;
+    let server = PackseServer::from_scenario_without_hashes(&scenario);
+    let context = uv_test::test_context!("3.12").with_filters(
+        server
+            .files()
+            .map(|(filename, hash)| (hash.to_owned(), format!("[SHA256:{filename}]"))),
+    );
+    let hashes: BTreeMap<_, _> = server.files().collect();
+    let filename = "demo-1.0.0-py3-none-musllinux_1_2_x86_64.whl";
+    context.temp_dir.child("links.html").write_str(&format!(
+        r#"<a href="{}#sha256={}">{filename}</a>"#,
+        server.file_url(filename),
+        hashes[filename]
+    ))?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [tool.uv]
+        find-links = ["links.html"]
+        environments = [
+            { marker = "sys_platform == 'linux' and python_version < '3.13'", libc = "glibc" },
+            { marker = "sys_platform == 'linux' and python_version >= '3.13'", libc = "musl" },
+        ]
+    "#})?;
+    context
+        .temp_dir
+        .child("requirements.in")
+        .write_str("demo ; python_version < '3.13'")?;
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .args(["requirements.in", "--universal", "--python-version", "3.12", "--generate-hashes", "--no-header"])
+        .arg("--index-url").arg(server.index_url()), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: No hashes are available for `demo==1.0.0` in the configured Linux libc environments
+    ");
+    // A digest computed while reading the musl wheel's metadata belongs to the same excluded file.
+    context.temp_dir.child("links.html").write_str(&format!(
+        r#"<a href="{}">{filename}</a>"#,
+        server.file_url(filename),
+    ))?;
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .args(["requirements.in", "--universal", "--python-version", "3.12", "--generate-hashes", "--no-header", "--refresh"])
+        .arg("--index-url").arg(server.index_url()), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: No hashes are available for `demo==1.0.0` in the configured Linux libc environments
+    ");
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .args(["requirements.in", "--universal", "--python-version", "3.12", "--format", "pylock.toml", "--no-header"])
+        .arg("--index-url").arg(server.index_url()), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    lock-version = "1.0"
+    created-by = "uv"
+    requires-python = ">=3.12"
+
+    [[packages]]
+    name = "demo"
+    version = "1.0.0"
+    marker = "python_full_version < '3.13' and sys_platform == 'linux'"
+    wheels = [{ url = "http://[LOCALHOST]/files/demo-1.0.0-py3-none-manylinux_2_17_x86_64.whl", upload-time = 2024-03-24T00:00:00Z, hashes = { sha256 = "[SHA256:demo-1.0.0-py3-none-manylinux_2_17_x86_64.whl]" } }]
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
     "#);
     Ok(())
 }
