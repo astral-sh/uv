@@ -9,6 +9,7 @@ Released on 2026-10-26.
 
 ### Enhancements
 
+- Accept an empty `UV_RUN_RECURSION_DEPTH` as zero and report invalid values consistently ([#22814](https://github.com/astral-sh/uv/pull/22814))
 - Explain how to add project metadata when `uv init` finds a `pyproject.toml` without a `[project]` table ([#22916](https://github.com/astral-sh/uv/pull/22916))
 
 ### Python
@@ -44,10 +45,6 @@ Released on 2026-10-26.
 ### Documentation
 
 - Update the Docker guide and reproduction examples to use uv 0.13.5 ([#22867](https://github.com/astral-sh/uv/pull/22867))
-
-### Other changes
-
-- Accept an empty `UV_RUN_RECURSION_DEPTH` as zero and report invalid values consistently ([#22814](https://github.com/astral-sh/uv/pull/22814))
 
 ## 0.13.5
 
