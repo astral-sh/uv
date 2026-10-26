@@ -117,7 +117,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                     let trusted_requirements =
                         if matches!(hasher.verification(), HashVerification::Required(_)) {
                             self.database
-                                .dependency_metadata(lookahead.package(), Some(lookahead.version()))
+                                .dependency_metadata(lookahead.package(), lookahead.version())
                                 .map(|metadata| {
                                     Box::into_iter(metadata.requires_dist)
                                         .map(Requirement::from)
@@ -143,10 +143,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                         hasher.augment_with_metadata_requirements(requirements)?
                     };
                     for requirement in self.constraints.apply(self.modifiers.apply(
-                        DependencyModifierScope::Package(
-                            lookahead.package(),
-                            Some(lookahead.version()),
-                        ),
+                        DependencyModifierScope::Package(lookahead.package(), lookahead.version()),
                         lookahead.requirements(),
                     )) {
                         if !matches!(requirement.source, RequirementSource::Registry { .. })
@@ -188,39 +185,53 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
         self.database.record_metadata(&dist);
 
         // Fetch the metadata for the distribution.
-        let metadata = {
+        let (package, version, requires_dist, dependency_groups) = if let Some(manifest) =
+            self.index.manifest_for_dist(&dist)
+        {
+            let requirements = &manifest.requirements;
+            (
+                requirements.name.clone(),
+                None,
+                requirements.requires_dist.clone(),
+                requirements.dependency_groups.clone(),
+            )
+        } else {
             let id = dist.distribution_id();
-            if let Some(response) = self.index.distributions().register_or_wait(&id).await {
-                let MetadataResponse::Found(archive) = &*response else {
-                    panic!("Failed to find metadata for: {requirement}");
+            let metadata =
+                if let Some(response) = self.index.distributions().register_or_wait(&id).await {
+                    let MetadataResponse::Found(archive) = &*response else {
+                        panic!("Failed to find metadata for: {requirement}");
+                    };
+                    archive.metadata.clone()
+                } else {
+                    // Run the PEP 517 build process to extract metadata from the source distribution.
+                    let archive = self
+                        .database
+                        .get_or_build_wheel_metadata(&dist, hasher.metadata_policy(&dist))
+                        .await
+                        .map_err(|err| Error::from_dist(dist, err))?;
+
+                    let metadata = archive.metadata.clone();
+
+                    // Insert the metadata into the index.
+                    self.index
+                        .distributions()
+                        .done(id, Arc::new(MetadataResponse::Found(archive)));
+
+                    metadata
                 };
-                archive.metadata.clone()
-            } else {
-                // Run the PEP 517 build process to extract metadata from the source distribution.
-                let archive = self
-                    .database
-                    .get_or_build_wheel_metadata(&dist, hasher.metadata_policy(&dist))
-                    .await
-                    .map_err(|err| Error::from_dist(dist, err))?;
-
-                let metadata = archive.metadata.clone();
-
-                // Insert the metadata into the index.
-                self.index
-                    .distributions()
-                    .done(id, Arc::new(MetadataResponse::Found(archive)));
-
-                metadata
-            }
+            (
+                metadata.name,
+                Some(metadata.version),
+                metadata.requires_dist,
+                metadata.dependency_groups,
+            )
         };
 
         // Respect recursive extras by propagating the source extras to the dependencies.
-        let package = metadata.name.clone();
-        let version = metadata.version.clone();
-        let requires_dist = Box::into_iter(metadata.requires_dist)
+        let requires_dist = Box::into_iter(requires_dist)
             .chain(
-                metadata
-                    .dependency_groups
+                dependency_groups
                     .into_iter()
                     .filter_map(|(group, dependencies)| {
                         if requirement.groups.contains(&group) {

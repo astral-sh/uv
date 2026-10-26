@@ -34688,6 +34688,102 @@ fn lock_virtual_dynamic_version() -> Result<()> {
     Ok(())
 }
 
+/// Virtual members keep their own dependency scopes, including conflicts and bare back-references.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_virtual_dynamic_version_workspace_scopes() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["apps/*"]
+
+        [tool.uv]
+        conflicts = [[{ package = "app", extra = "cpu" }, { package = "app", extra = "gpu" }]]
+    "#})?;
+    context
+        .temp_dir
+        .child("apps/app/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "app"
+        dynamic = ["version"]
+        requires-python = ">=3.12"
+        dependencies = ["shared"]
+
+        [project.optional-dependencies]
+        cpu = ["variant==1.0"]
+        gpu = ["variant==2.0"]
+
+        [tool.uv]
+        package = false
+    "#})?;
+    context
+        .temp_dir
+        .child("apps/worker/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "worker"
+        dynamic = ["version"]
+        requires-python = ">=3.12"
+        dependencies = ["shared"]
+
+        [dependency-groups]
+        qa = ["checker"]
+
+        [tool.uv]
+        package = false
+    "#})?;
+
+    let (filename, wheel) = WheelBuilder::new(&"shared".parse()?, &"1.0".parse()?)
+        .requires(&["app".parse()?])
+        .build();
+    context.temp_dir.child(filename).write_binary(&wheel)?;
+    for (name, version) in [("variant", "1.0"), ("variant", "2.0"), ("checker", "1.0")] {
+        let (filename, wheel) = WheelBuilder::new(&name.parse()?, &version.parse()?).build();
+        context.temp_dir.child(filename).write_binary(&wheel)?;
+    }
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--no-build").arg("--offline").arg("--no-index").arg("--find-links").arg("."), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--frozen").arg("--dry-run").arg("--package").arg("app").arg("--extra").arg("cpu"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Would use project environment at: .venv
+    Would download 2 packages
+    Would install 2 packages
+     + shared==1.0
+     + variant==1.0
+    ");
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--frozen").arg("--dry-run").arg("--package").arg("app").arg("--extra").arg("gpu"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Would use project environment at: .venv
+    Would download 2 packages
+    Would install 2 packages
+     + shared==1.0
+     + variant==2.0
+    ");
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--frozen").arg("--dry-run").arg("--package").arg("worker").arg("--only-group").arg("qa"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Would use project environment at: .venv
+    Would download 1 package
+    Would install 1 package
+     + checker==1.0
+    ");
+    Ok(())
+}
+
 /// A static metadata error should identify the virtual workspace member that declares it.
 #[cfg(feature = "test-universal")]
 #[test]
@@ -34772,6 +34868,10 @@ fn lock_virtual_dynamic_version_transitive_bound() -> Result<()> {
         .requires(&["app>=1".parse()?])
         .build();
     context.temp_dir.child(&filename).write_binary(&wheel)?;
+    let (filename, wheel) = WheelBuilder::new(&"plugin".parse()?, &"2.0".parse()?)
+        .requires(&["app>=2".parse()?])
+        .build();
+    context.temp_dir.child(&filename).write_binary(&wheel)?;
     context
         .temp_dir
         .child("pyproject.toml")
@@ -34810,12 +34910,26 @@ fn lock_virtual_dynamic_version_transitive_bound() -> Result<()> {
     Resolved 2 packages in [TIME]
     ");
 
+    // The newer plugin requires app>=2, so backtrack to the compatible release.
+    uv_snapshot!(context.filters(), context.tree().arg("--frozen"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    app
+    └── plugin v1.0
+        └── app (*)
+    (*) Package tree already displayed
+    ");
+
     version.write_str("0.5")?;
     uv_snapshot!(context.filters(), context.lock().arg("--find-links").arg(".").arg("--no-index").arg("--offline").arg("--upgrade").arg("--no-cache"), @"
     exit_code: 1 (failure)
     ----- stderr -----
     error: No solution found when resolving dependencies
-      cause: Because all versions of plugin depend on your project and your project depends on plugin, we can conclude that your project's requirements are unsatisfiable.
+      cause: Because plugin<=1.0 depends on app>=1 and plugin>=2.0 depends on app>=2, we can conclude that all of:
+                 plugin<=1.0
+                 plugin>=2.0
+              cannot be used.
+             And because your project depends on plugin, we can conclude that your project's requirements are unsatisfiable.
 
     hint: The package `plugin` depends on the package `app` but the name is shadowed by your project. Consider changing the name of the project.
     ");

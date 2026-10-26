@@ -62,8 +62,8 @@ use uv_pypi_types::{
 };
 use uv_redacted::{SafeUrl, SafeUrlError};
 use uv_resolver_types::{
-    AnnotatedDist, ConflictMarker, DistributionMetadataIndex, MetadataResponse, PackageRole,
-    ResolutionGraphNode, ResolverOutput, UniversalMarker,
+    AnnotatedDist, ConflictMarker, DistributionMetadataIndex, ManifestNode, MetadataResponse,
+    PackageNodeKind, PackageRole, ResolutionGraphNode, ResolverOutput, UniversalMarker,
 };
 use uv_small_str::SmallString;
 use uv_types::{BuildContext, HashStrategy};
@@ -2504,46 +2504,61 @@ impl Lock {
         }
 
         // Lock all base packages.
-        for (node_index, dist) in resolution.base_dists() {
-            // If there are multiple distributions for the same package, include the markers of all
-            // forks that included the current distribution.
-            //
-            // Canonicalize the subset of fork markers that selected this distribution to
-            // match the form persisted in `uv.lock`.
-            let fork_markers = if duplicates.contains(dist.name()) {
-                let fork_markers = resolution
-                    .fork_markers
-                    .iter()
-                    .filter(|fork_markers| !fork_markers.is_disjoint(dist.marker))
-                    .copied()
-                    .collect::<Vec<_>>();
-                canonicalize_universal_markers(&fork_markers, &requires_python)
-            } else {
-                vec![]
-            };
+        for node_index in resolution.graph.node_indices() {
+            let node = &resolution.graph[node_index];
+            if !node.package_kind().is_some_and(PackageNodeKind::is_base) {
+                continue;
+            }
+            let mut package = match node {
+                ResolutionGraphNode::Root => continue,
+                ResolutionGraphNode::Manifest(member) => {
+                    Package::from_workspace_manifest(member, root)?
+                }
+                ResolutionGraphNode::Dist(dist) => {
+                    // If there are multiple distributions for the same package, include the markers of all
+                    // forks that included the current distribution.
+                    //
+                    // Canonicalize the subset of fork markers that selected this distribution to
+                    // match the form persisted in `uv.lock`.
+                    let fork_markers = if duplicates.contains(dist.name()) {
+                        let fork_markers = resolution
+                            .fork_markers
+                            .iter()
+                            .filter(|fork_markers| !fork_markers.is_disjoint(dist.marker))
+                            .copied()
+                            .collect::<Vec<_>>();
+                        canonicalize_universal_markers(&fork_markers, &requires_python)
+                    } else {
+                        vec![]
+                    };
 
-            let mut package =
-                Package::from_annotated_dist(dist, fork_markers, root, index_locations)?;
-            // Git declarations can introduce direct sources needed by offline freshness checks.
-            if metadata_free
-                && matches!(package.id.source, Source::Git(..))
-                && let Some(metadata) = dist.metadata()
-            {
-                package.metadata = PackageMetadata::from_distribution(metadata, root, dist.role)?;
-            }
-            let mut wheel_marker = dist.marker;
-            if let Some(supported_environments_marker) = supported_environments_marker {
-                wheel_marker.and(supported_environments_marker);
-            }
-            let wheels = &mut package.wheels;
-            wheels.retain(|wheel| {
-                !is_wheel_unreachable_for_marker(
-                    &wheel.filename,
-                    &requires_python,
-                    &wheel_marker,
-                    None,
-                )
-            });
+                    let mut package =
+                        Package::from_annotated_dist(dist, fork_markers, root, index_locations)?;
+                    // Git declarations can introduce direct sources needed by offline freshness checks.
+                    if metadata_free
+                        && matches!(package.id.source, Source::Git(..))
+                        && let Some(metadata) = dist.metadata()
+                    {
+                        package.metadata =
+                            PackageMetadata::from_distribution(metadata, root, dist.role)?;
+                    }
+                    let mut wheel_marker = dist.marker;
+                    if let Some(supported_environments_marker) = supported_environments_marker {
+                        wheel_marker.and(supported_environments_marker);
+                    }
+                    let wheels = &mut package.wheels;
+                    wheels.retain(|wheel| {
+                        !is_wheel_unreachable_for_marker(
+                            &wheel.filename,
+                            &requires_python,
+                            &wheel_marker,
+                            None,
+                        )
+                    });
+
+                    package
+                }
+            };
 
             package.add_dependencies(
                 DependencyContext::Production,
@@ -2565,11 +2580,14 @@ impl Lock {
 
         // Lock all extras and development dependencies.
         for node_index in resolution.graph.node_indices() {
-            let ResolutionGraphNode::Dist(dist) = &resolution.graph[node_index] else {
+            let node = &resolution.graph[node_index];
+            let Some(kind) = node.package_kind().filter(|kind| !kind.is_base()) else {
                 continue;
             };
-            if let Some(extra) = dist.kind.extra() {
-                let id = PackageId::from_annotated_dist(dist, root)?;
+            let Some(id) = PackageId::from_graph_node(node, root)? else {
+                continue;
+            };
+            if let Some(extra) = kind.extra() {
                 let Some(package) = packages.get_mut(&id) else {
                     return Err(LockErrorKind::MissingExtraBase {
                         id,
@@ -2594,9 +2612,7 @@ impl Lock {
                     environment,
                     root,
                 )?;
-            }
-            if let Some(group) = dist.kind.group() {
-                let id = PackageId::from_annotated_dist(dist, root)?;
+            } else if let Some(group) = kind.group() {
                 let Some(package) = packages.get_mut(&id) else {
                     return Err(LockErrorKind::MissingDevBase {
                         id,
@@ -6633,6 +6649,36 @@ impl Package {
         self.id.source.is_pypi_registry()
     }
 
+    fn new(id: PackageId, metadata: PackageMetadata) -> Self {
+        Self {
+            id,
+            metadata,
+            sdist: None,
+            wheels: Vec::new(),
+            fork_markers: Vec::new(),
+            dependencies: Vec::new(),
+            optional_dependencies: BTreeMap::new(),
+            dependency_groups: BTreeMap::new(),
+            default_groups: None,
+            group_requires_python: BTreeMap::new(),
+        }
+    }
+
+    fn from_workspace_manifest(member: &ManifestNode, root: &Path) -> Result<Self, LockError> {
+        let requirements = &member.manifest.metadata.requirements;
+        let metadata = PackageMetadata::from_requirements(
+            &requirements.requires_dist,
+            &requirements.provides_extra,
+            &requirements.dependency_groups,
+            root,
+            PackageRole::WorkspaceMember,
+        )?;
+        Ok(Self::new(
+            PackageId::from_workspace_manifest(member, root)?,
+            metadata,
+        ))
+    }
+
     fn from_annotated_dist(
         annotated_dist: &AnnotatedDist,
         fork_markers: Vec<UniversalMarker>,
@@ -6649,16 +6695,10 @@ impl Package {
             PackageMetadata::from_distribution(metadata, root, annotated_dist.role)?
         };
         Ok(Self {
-            id,
             sdist,
             wheels,
             fork_markers,
-            dependencies: vec![],
-            optional_dependencies: BTreeMap::default(),
-            dependency_groups: BTreeMap::default(),
-            default_groups: None,
-            group_requires_python: BTreeMap::new(),
-            metadata,
+            ..Self::new(id, metadata)
         })
     }
 
@@ -6681,12 +6721,16 @@ impl Package {
             parent_marker,
         );
         for edge in resolution.graph.edges(node_index) {
-            let ResolutionGraphNode::Dist(distribution) = &resolution.graph[edge.target()] else {
+            let node = &resolution.graph[edge.target()];
+            let Some(package_id) = PackageId::from_graph_node(node, root)? else {
                 continue;
             };
-
-            let package_id = PackageId::from_annotated_dist(distribution, root)?;
-            let extras = distribution.kind.extra().into_iter().cloned().collect();
+            let extras = node
+                .package_kind()
+                .and_then(PackageNodeKind::extra)
+                .into_iter()
+                .cloned()
+                .collect();
 
             // Preserve the distinction between an empty extra and an extra with dependencies.
             builder.add(
@@ -7467,6 +7511,22 @@ impl PackageMetadata {
         root: &Path,
         package_role: PackageRole,
     ) -> Result<Self, LockError> {
+        Self::from_requirements(
+            &metadata.requires_dist,
+            &metadata.provides_extra,
+            &metadata.dependency_groups,
+            root,
+            package_role,
+        )
+    }
+
+    fn from_requirements(
+        requires_dist: &[Requirement],
+        provides_extra: &[ExtraName],
+        dependency_groups: &BTreeMap<GroupName, Box<[Requirement]>>,
+        root: &Path,
+        package_role: PackageRole,
+    ) -> Result<Self, LockError> {
         let normalize = uv_preview::is_enabled(PreviewFeature::LockfileNormalization);
         // We normally write dependency paths relative to the lockfile. For the current project and
         // workspace members, preserve the user's choice of relative or absolute paths instead.
@@ -7482,8 +7542,7 @@ impl PackageMetadata {
             }
             requirement.relative_to(root)
         };
-        let requires_dist = metadata
-            .requires_dist
+        let requires_dist = requires_dist
             .iter()
             .map(&relative_requirement)
             .collect::<Result<Vec<_>, _>>()
@@ -7491,8 +7550,7 @@ impl PackageMetadata {
                 normalize_collection::<_, NormalizedRequirements>(requirements, normalize)
             })
             .map_err(LockErrorKind::RequirementRelativePath)?;
-        let dependency_groups = metadata
-            .dependency_groups
+        let dependency_groups = dependency_groups
             .iter()
             .map(|(group, requirements)| {
                 let requirements = requirements
@@ -7509,7 +7567,7 @@ impl PackageMetadata {
 
         Ok(Self::from(PackageMetadataWire {
             requires_dist,
-            provides_extra: metadata.provides_extra.clone(),
+            provides_extra: provides_extra.into(),
             dependency_groups,
         }))
     }
@@ -7614,6 +7672,24 @@ pub(crate) struct PackageId {
 }
 
 impl PackageId {
+    fn from_workspace_manifest(member: &ManifestNode, root: &Path) -> Result<Self, LockError> {
+        Ok(Self {
+            name: member.manifest.metadata.requirements.name.clone(),
+            version: None,
+            source: Source::from_dist(&member.manifest.dist, root)?,
+        })
+    }
+
+    fn from_graph_node(node: &ResolutionGraphNode, root: &Path) -> Result<Option<Self>, LockError> {
+        match node {
+            ResolutionGraphNode::Root => Ok(None),
+            ResolutionGraphNode::Dist(dist) => Self::from_annotated_dist(dist, root).map(Some),
+            ResolutionGraphNode::Manifest(member) => {
+                Self::from_workspace_manifest(member, root).map(Some)
+            }
+        }
+    }
+
     fn from_annotated_dist(annotated_dist: &AnnotatedDist, root: &Path) -> Result<Self, LockError> {
         // Identify the source of the package.
         let source = Source::from_resolved_dist(&annotated_dist.dist, root)?;

@@ -1,4 +1,7 @@
-use crate::{AnnotatedDist, DistributionMetadataIndex, MetadataResponse, Options, UniversalMarker};
+use crate::{
+    AnnotatedDist, DistributionMetadataIndex, ManifestNode, MetadataResponse, Options,
+    PackageNodeKind, UniversalMarker,
+};
 use indexmap::IndexSet;
 use petgraph::{
     Directed,
@@ -18,8 +21,7 @@ use uv_pep508::{MarkerEnvironment, MarkerTree, MarkerTreeKind};
 use uv_pypi_types::{HashDigests, ParsedUrlError};
 /// The output of a successful resolution.
 ///
-/// Includes a complete resolution graph in which every node represents a pinned package and every
-/// edge represents a dependency between two pinned packages.
+/// The graph records dependencies between pinned distributions and workspace manifests.
 #[derive(Debug)]
 pub struct ResolverOutput {
     /// The underlying graph.
@@ -44,41 +46,40 @@ pub struct ResolverOutput {
 #[derive(Debug, Clone)]
 pub enum ResolutionGraphNode {
     Root,
+    Manifest(ManifestNode),
     Dist(AnnotatedDist),
 }
 
 impl ResolutionGraphNode {
+    pub fn package_kind(&self) -> Option<&PackageNodeKind> {
+        match self {
+            Self::Root => None,
+            Self::Manifest(node) => Some(&node.kind),
+            Self::Dist(dist) => Some(&dist.kind),
+        }
+    }
+
     pub fn marker(&self) -> &UniversalMarker {
         match self {
             Self::Root => &UniversalMarker::TRUE,
             Self::Dist(dist) => &dist.marker,
+            Self::Manifest(node) => &node.marker,
         }
     }
 
     pub(crate) fn package_extra_names(&self) -> Option<(&PackageName, &ExtraName)> {
-        match self {
-            Self::Root => None,
-            Self::Dist(dist) => {
-                let extra = dist.kind.extra()?;
-                Some((&dist.name, extra))
-            }
-        }
+        Some((self.package_name()?, self.package_kind()?.extra()?))
     }
 
     pub(crate) fn package_group_names(&self) -> Option<(&PackageName, &GroupName)> {
-        match self {
-            Self::Root => None,
-            Self::Dist(dist) => {
-                let group = dist.kind.group()?;
-                Some((&dist.name, group))
-            }
-        }
+        Some((self.package_name()?, self.package_kind()?.group()?))
     }
 
     pub(crate) fn package_name(&self) -> Option<&PackageName> {
         match self {
             Self::Root => None,
             Self::Dist(dist) => Some(&dist.name),
+            Self::Manifest(node) => Some(&node.manifest.metadata.requirements.name),
         }
     }
 }
@@ -88,39 +89,35 @@ impl Display for ResolutionGraphNode {
         match self {
             Self::Root => f.write_str("root"),
             Self::Dist(dist) => Display::fmt(dist, f),
+            Self::Manifest(node) => Display::fmt(&node.manifest.dist, f),
         }
     }
 }
 
 impl ResolverOutput {
-    /// Returns an iterator over the distinct packages in the graph.
-    fn dists(&self) -> impl Iterator<Item = &AnnotatedDist> {
-        self.graph
-            .node_indices()
-            .filter_map(move |index| match &self.graph[index] {
-                ResolutionGraphNode::Root => None,
-                ResolutionGraphNode::Dist(dist) => Some(dist),
-            })
-    }
-
     /// Returns an iterator over the base distributions in the graph.
     pub fn base_dists(&self) -> impl Iterator<Item = (NodeIndex, &AnnotatedDist)> {
         self.graph
             .node_indices()
             .filter_map(move |node_index| match &self.graph[node_index] {
-                ResolutionGraphNode::Root => None,
+                ResolutionGraphNode::Root | ResolutionGraphNode::Manifest(_) => None,
                 ResolutionGraphNode::Dist(dist) => dist.is_base().then_some((node_index, dist)),
             })
     }
 
     /// Return the number of distinct packages in the graph.
     pub fn len(&self) -> usize {
-        self.base_dists().count()
+        self.graph
+            .node_weights()
+            .filter(|node| node.package_kind().is_some_and(PackageNodeKind::is_base))
+            .count()
     }
 
     /// Return `true` if there are no packages in the graph.
     pub fn is_empty(&self) -> bool {
-        self.base_dists().next().is_none()
+        self.graph
+            .node_weights()
+            .all(|node| node.package_kind().is_none_or(|kind| !kind.is_base()))
     }
 
     /// Retain registry hashes only for artifacts permitted by package-specific build options.
@@ -169,7 +166,9 @@ impl ResolverOutput {
 
     /// Returns `true` if the graph contains the given package.
     pub fn contains(&self, name: &PackageName) -> bool {
-        self.dists().any(|dist| dist.name() == name)
+        self.graph
+            .node_weights()
+            .any(|node| node.package_name() == Some(name))
     }
 
     /// Return the [`ResolutionDiagnostic`]s that were encountered while building the graph.
@@ -273,19 +272,31 @@ impl ResolverOutput {
 
         let mut seen_marker_values = IndexSet::default();
         for i in self.graph.node_indices() {
-            let ResolutionGraphNode::Dist(dist) = &self.graph[i] else {
-                continue;
-            };
-            let metadata_id = dist.dist.distribution_id();
-            let res = index
-                .get(&metadata_id)
-                .expect("every package in resolution graph has metadata");
-            let MetadataResponse::Found(archive, ..) = &*res else {
-                panic!("Every package should have metadata: {metadata_id:?}")
+            let response;
+            let (name, version, requirements) = match &self.graph[i] {
+                ResolutionGraphNode::Root => continue,
+                ResolutionGraphNode::Manifest(member) => {
+                    let requirements = &member.manifest.metadata.requirements;
+                    (&requirements.name, None, &requirements.requires_dist)
+                }
+                ResolutionGraphNode::Dist(dist) => {
+                    let metadata_id = dist.dist.distribution_id();
+                    response = index
+                        .get(&metadata_id)
+                        .expect("every package in resolution graph has metadata");
+                    let MetadataResponse::Found(archive, ..) = &*response else {
+                        panic!("Every package should have metadata: {metadata_id:?}")
+                    };
+                    (
+                        &dist.name,
+                        Some(&dist.version),
+                        &archive.metadata.requires_dist,
+                    )
+                }
             };
             for req in self.constraints.apply(self.modifiers.apply(
-                DependencyModifierScope::Package(&dist.name, Some(&dist.version)),
-                archive.metadata.requires_dist.iter(),
+                DependencyModifierScope::Package(name, version),
+                requirements.iter(),
             )) {
                 add_marker_params_from_tree(req.marker, &mut seen_marker_values);
             }
@@ -338,7 +349,7 @@ impl ResolverOutput {
             BTreeMap::new();
         for node in self.graph.node_weights() {
             let annotated_dist = match node {
-                ResolutionGraphNode::Root => continue,
+                ResolutionGraphNode::Root | ResolutionGraphNode::Manifest(_) => continue,
                 ResolutionGraphNode::Dist(annotated_dist) => annotated_dist,
             };
             name_to_markers

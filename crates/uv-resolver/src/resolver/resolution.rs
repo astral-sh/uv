@@ -6,7 +6,7 @@ use tracing::{Level, trace};
 use uv_distribution_types::{Dist, DistributionId, Identifier, IndexUrl, ResolvedDist};
 use uv_git::GitResolver;
 use uv_normalize::PackageName;
-use uv_pep440::{MIN_VERSION, Version};
+use uv_pep440::Version;
 use uv_pep508::MarkerTree;
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_resolver_types::PackageNodeKind;
@@ -19,7 +19,7 @@ use crate::{InMemoryIndex, MetadataResponse, ResolveError, ResolverEnvironment, 
 /// The resolution from a single fork including the virtual packages and the edges between them.
 #[derive(Debug)]
 pub(crate) struct Resolution<'index> {
-    pub(crate) nodes: Vec<(ResolutionPackage, Version)>,
+    pub(crate) nodes: Vec<(ResolutionPackage, Option<Version>)>,
     /// The directed connections between the nodes, where the marker is the edge weight. We don't
     /// store the requirement itself, but it can be retrieved from the package metadata.
     pub(crate) edges: Vec<ResolutionDependencyEdge>,
@@ -152,12 +152,11 @@ impl Resolution<'_> {
             // The unwraps below are OK because `write`ing to
             // a String can never fail (except for OOM).
             let mut msg = String::new();
-            write!(
-                msg,
-                "{}",
-                from.map_or(&*MIN_VERSION, |(_, version)| version)
-            )
-            .unwrap();
+            if let Some(version) = from.and_then(|(_, version)| version.as_ref()) {
+                write!(msg, "{version}").unwrap();
+            } else {
+                msg.push_str("manifest");
+            }
             if let Some(extra) = from.and_then(|(package, _)| package.kind.extra()) {
                 write!(msg, " (extra: {extra})").unwrap();
             }
@@ -165,7 +164,11 @@ impl Resolution<'_> {
                 write!(msg, " (group: {dev})").unwrap();
             }
             write!(msg, " -> ").unwrap();
-            write!(msg, "{to_version}").unwrap();
+            if let Some(version) = to_version {
+                write!(msg, "{version}").unwrap();
+            } else {
+                msg.push_str("manifest");
+            }
             if let Some(extra) = to_package.kind.extra() {
                 write!(msg, " (extra: {extra})").unwrap();
             }
@@ -196,7 +199,7 @@ pub(crate) struct ResolutionPackage {
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub(crate) struct ResolutionNode {
     pub(crate) package: ResolutionPackage,
-    pub(crate) version: Version,
+    pub(crate) version: Option<Version>,
 }
 
 /// An index into a single fork's node vector.

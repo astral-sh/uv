@@ -154,10 +154,10 @@ impl Excludes {
     pub(crate) fn contains_for(
         &self,
         package: &PackageName,
-        version: &Version,
+        version: Option<&Version>,
         dependency: &PackageName,
     ) -> bool {
-        self.contains_for_package(Some((package, Some(version))), dependency)
+        self.contains_for_package(Some((package, version)), dependency)
     }
 
     /// Check if a dependency is always excluded from a package scope.
@@ -172,7 +172,7 @@ impl Excludes {
         dependency: &PackageName,
     ) -> bool {
         if let Some(version) = version {
-            return self.contains_for(package, version, dependency);
+            return self.contains_for(package, Some(version), dependency);
         }
         if self.contains(dependency) {
             return true;

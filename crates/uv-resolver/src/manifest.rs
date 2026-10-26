@@ -174,7 +174,7 @@ impl Manifest {
                             .apply(
                                 DependencyModifierScope::Package(
                                     lookahead.package(),
-                                    Some(lookahead.version()),
+                                    lookahead.version(),
                                 ),
                                 lookahead.requirements(),
                             )
@@ -251,7 +251,7 @@ impl Manifest {
                             .apply(
                                 DependencyModifierScope::Package(
                                     lookahead.package(),
-                                    Some(lookahead.version()),
+                                    lookahead.version(),
                                 ),
                                 lookahead.requirements(),
                             )

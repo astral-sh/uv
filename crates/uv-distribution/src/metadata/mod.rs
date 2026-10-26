@@ -76,26 +76,11 @@ pub struct Metadata {
     pub dynamic: bool,
 }
 
-/// A project's lowered requirements and Python compatibility, without its version.
-#[derive(Debug)]
+/// The requirements and Python compatibility of a project without evaluating its version.
+#[derive(Debug, Clone)]
 pub struct UnversionedMetadata {
-    pub(crate) requirements: RequiresDist,
-    pub(crate) requires_python: Option<VersionSpecifiers>,
-}
-
-impl UnversionedMetadata {
-    /// Combine the project's requirements with its version.
-    pub fn with_version(self, version: Version) -> Metadata {
-        Metadata {
-            name: self.requirements.name,
-            version,
-            requires_dist: self.requirements.requires_dist,
-            requires_python: self.requires_python,
-            provides_extra: self.requirements.provides_extra,
-            dependency_groups: self.requirements.dependency_groups,
-            dynamic: self.requirements.dynamic,
-        }
-    }
+    pub requirements: RequiresDist,
+    pub requires_python: Option<VersionSpecifiers>,
 }
 
 impl Metadata {
@@ -148,7 +133,13 @@ impl Metadata {
             provides_extra: metadata.provides_extra,
             dynamic: metadata.dynamic,
         };
-        let requires_dist = RequiresDist::from_project_maybe_workspace(
+        let RequiresDist {
+            name,
+            requires_dist,
+            provides_extra,
+            dependency_groups,
+            dynamic,
+        } = RequiresDist::from_project_maybe_workspace(
             requires_dist,
             install_path,
             git_source,
@@ -162,11 +153,15 @@ impl Metadata {
         .await?;
 
         // Combine with the remaining metadata.
-        Ok(UnversionedMetadata {
-            requirements: requires_dist,
+        Ok(Self {
+            name,
+            version: metadata.version,
+            requires_dist,
             requires_python: metadata.requires_python,
-        }
-        .with_version(metadata.version))
+            provides_extra,
+            dependency_groups,
+            dynamic,
+        })
     }
 
     /// Set whether local dependency sources should be represented by relative paths.

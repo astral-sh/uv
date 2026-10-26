@@ -607,12 +607,12 @@ mod tests {
                     assert_eq!(
                         indexed.contains_for(
                             &package.parse()?,
-                            &version.parse()?,
+                            Some(&version.parse()?),
                             &dependency.parse()?
                         ),
                         normalized_index.contains_for(
                             &package.parse()?,
-                            &version.parse()?,
+                            Some(&version.parse()?),
                             &dependency.parse()?
                         ),
                     );

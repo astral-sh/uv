@@ -9,7 +9,7 @@ use uv_pep440::{Version, VersionSpecifiers};
 use uv_pypi_types::{ConflictItemRef, Conflicts, VerbatimParsedUrl};
 use uv_resolver_types::PackageNodeKind;
 
-use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner, Range};
+use crate::pubgrub::{PackageSubject, PubGrubPackage, PubGrubPackageInner, Range};
 use crate::resolver::UnsatisfiableRequirement;
 
 /// The source constraint carried by a single dependency edge.
@@ -108,20 +108,31 @@ impl PubGrubDependency {
     /// An empty range cannot retain the specifiers that produced it, so return the source
     /// requirement details instead. The resolver attaches them to the parent package as the
     /// reason that package cannot be selected.
-    pub(crate) fn from_requirements<'a>(
+    pub(crate) fn from_requirements<'a, 'root>(
         conflicts: &Conflicts,
+        workspace_scope: impl Fn(&PackageName) -> Option<&'root Range<Version>>,
         requirements: impl IntoIterator<Item = Cow<'a, Requirement>>,
         group_name: Option<&'a GroupName>,
         parent_package: Option<&'a PubGrubPackage>,
     ) -> Result<Vec<Self>, UnsatisfiableRequirement> {
         let mut dependencies = Vec::new();
         for requirement in requirements {
-            dependencies.extend(Self::from_requirement(
-                conflicts,
-                requirement,
-                group_name,
-                parent_package,
-            )?);
+            let scope = workspace_scope(&requirement.name);
+            let edges = Self::from_requirement(conflicts, requirement, group_name, parent_package)?;
+            for mut edge in edges {
+                if let Some(scope) = scope {
+                    // A workspace scope is an input to the solve, like the root. Only the
+                    // separate distribution dependency is subject to PEP 440 constraints.
+                    if edge.version != Range::full() {
+                        let mut check = edge.clone();
+                        check.package = check.package.with_subject(PackageSubject::VersionCheck);
+                        dependencies.push(check);
+                    }
+                    edge.package = edge.package.with_subject(PackageSubject::Manifest);
+                    edge.version = scope.clone();
+                }
+                dependencies.push(edge);
+            }
         }
         Ok(dependencies)
     }

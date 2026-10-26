@@ -1,7 +1,7 @@
 use std::fmt::Display;
 use std::sync::Arc;
 
-use uv_distribution::Metadata;
+use uv_distribution::{Metadata, UnversionedMetadata};
 use uv_distribution_types::{
     BuiltDist, Dist, DistributionMetadata, IndexUrl, Name, ResolvedDist, SourceDist,
     VersionOrUrlRef,
@@ -53,6 +53,21 @@ pub enum PackageRole {
     WorkspaceMember,
     /// A dependency that is neither the manifest's project nor a workspace member.
     Dependency,
+}
+
+/// Static inputs from a virtual workspace member, identified by its directory.
+#[derive(Debug)]
+pub struct WorkspaceManifest {
+    pub dist: Dist,
+    pub metadata: UnversionedMetadata,
+}
+
+/// A workspace member's production, extra, or group requirements in the output graph.
+#[derive(Debug, Clone)]
+pub struct ManifestNode {
+    pub manifest: Arc<WorkspaceManifest>,
+    pub kind: PackageNodeKind,
+    pub marker: UniversalMarker,
 }
 
 /// A pinned package with its resolved distribution and metadata. The [`ResolvedDist`] refers to a

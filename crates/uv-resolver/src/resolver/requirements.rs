@@ -24,17 +24,17 @@ pub(super) enum RequirementContext<'a> {
     Root,
     Package {
         name: &'a PackageName,
-        version: &'a Version,
+        version: Option<&'a Version>,
     },
     Extra {
         name: &'a PackageName,
-        version: &'a Version,
+        version: Option<&'a Version>,
         extra: &'a ExtraName,
     },
     /// Groups use global overrides and package-scoped exclusions, and may depend on the project.
     Group {
         name: &'a PackageName,
-        version: &'a Version,
+        version: Option<&'a Version>,
     },
 }
 
@@ -43,10 +43,10 @@ impl<'a> RequirementContext<'a> {
         match self {
             Self::Root => DependencyModifierScope::Global,
             Self::Package { name, version } | Self::Extra { name, version, .. } => {
-                DependencyModifierScope::Package(name, Some(version))
+                DependencyModifierScope::Package(name, version)
             }
             Self::Group { name, version } => {
-                DependencyModifierScope::DependencyGroup(name, Some(version))
+                DependencyModifierScope::DependencyGroup(name, version)
             }
         }
     }

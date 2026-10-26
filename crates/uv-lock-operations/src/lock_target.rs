@@ -12,7 +12,7 @@ use uv_cache::Cache;
 use uv_configuration::{
     Constraints, DependencyGroupsWithDefaults, ExcludeDependency, NoSources, Override, Upgrade,
 };
-use uv_distribution::{DistributionDatabase, LoweredRequirement};
+use uv_distribution::{DistributionDatabase, LoweredRequirement, UnversionedMetadata};
 use uv_distribution_types::{
     DependencyMetadata, Dist, DistErrorKind, Index, IndexLocations, MinimumLibcVersion,
     NameRequirementSpecification, Requirement, RequirementSource, RequiresPython,
@@ -23,7 +23,6 @@ use uv_pep508::RequirementOrigin;
 use uv_pypi_types::{Conflicts, SupportedEnvironments, VerbatimParsedUrl};
 use uv_python_discovery::find_requires_python;
 use uv_requirements::Error as RequirementsError;
-use uv_resolver::InMemoryIndex;
 use uv_scripts::Pep723Script;
 use uv_types::BuildContext;
 use uv_workspace::dependency_groups::{
@@ -183,20 +182,20 @@ impl<'lock> LockTarget<'lock> {
         Ok(())
     }
 
-    /// Prepare static metadata for virtual members whose version can wait until a dependency needs it.
-    pub(crate) async fn virtual_project_index(
+    /// Read the static dependency declarations of virtual members with dynamic versions.
+    pub(crate) async fn workspace_manifests(
         self,
         database: &DistributionDatabase<'_, impl BuildContext>,
         overrides: &[Override<Requirement>],
         excludes: &[ExcludeDependency],
         dependency_metadata: &DependencyMetadata,
-    ) -> Result<Option<InMemoryIndex>, RequirementsError> {
+    ) -> Result<Vec<(Dist, UnversionedMetadata)>, RequirementsError> {
         let packages = self.packages();
         if !packages
             .values()
             .any(|member| member.project().has_dynamic_version())
         {
-            return Ok(None);
+            return Ok(Vec::new());
         }
         let versioned_packages = overrides
             .iter()
@@ -246,7 +245,7 @@ impl<'lock> LockTarget<'lock> {
                 }
             }
         }
-        Ok((!projects.is_empty()).then(|| InMemoryIndex::for_virtual_projects(projects)))
+        Ok(projects)
     }
 
     /// Returns the set of all members within the target.

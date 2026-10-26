@@ -79,7 +79,7 @@ impl DependencyModifiers {
             .filter(|requirement| {
                 !self
                     .excludes
-                    .contains_for(package, version, &requirement.name)
+                    .contains_for(package, Some(version), &requirement.name)
             })
     }
 
@@ -92,7 +92,7 @@ impl DependencyModifiers {
     pub fn is_excluded_for(
         &self,
         package: &PackageName,
-        version: &Version,
+        version: Option<&Version>,
         dependency: &PackageName,
     ) -> bool {
         self.excludes.contains_for(package, version, dependency)

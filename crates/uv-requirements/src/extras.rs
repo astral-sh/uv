@@ -86,17 +86,20 @@ impl<'a, Context: BuildContext> ExtrasResolver<'a, Context> {
         // Collect the available extras from the distribution metadata.
         let mut extras = {
             let id = dist.distribution_id();
-            if let Some(archive) = index
-                .distributions()
-                .get(&id)
-                .as_deref()
-                .and_then(|response| {
-                    if let MetadataResponse::Found(archive, ..) = response {
-                        Some(archive)
-                    } else {
-                        None
-                    }
-                })
+            if let Some(manifest) = index.manifest_for_dist(&dist) {
+                manifest.requirements.provides_extra.to_vec()
+            } else if let Some(archive) =
+                index
+                    .distributions()
+                    .get(&id)
+                    .as_deref()
+                    .and_then(|response| {
+                        if let MetadataResponse::Found(archive, ..) = response {
+                            Some(archive)
+                        } else {
+                            None
+                        }
+                    })
             {
                 archive.metadata.provides_extra.to_vec()
             } else {

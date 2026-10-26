@@ -6,21 +6,22 @@ use uv_distribution::UnversionedMetadata;
 use uv_distribution_types::{Dist, Identifier, IndexUrl, Name, VariantsJsonContent};
 use uv_normalize::PackageName;
 use uv_once_map::{RegisteredEntry, RegisteredOnceMap};
-use uv_pep440::Version;
-use uv_resolver_types::DistributionMetadataIndex;
+use uv_resolver_types::{DistributionMetadataIndex, WorkspaceManifest};
 
 use crate::prioritized_distribution::RegistryVariantsJson;
-use crate::resolver::provider::{MetadataResponse, MetadataUnavailable, VersionsResponse};
+use crate::resolver::provider::{MetadataUnavailable, VersionsResponse};
 
 /// In-memory index of package metadata.
 #[derive(Default, Clone)]
-pub struct InMemoryIndex(Arc<SharedInMemoryIndex>);
+pub struct InMemoryIndex {
+    shared: Arc<SharedInMemoryIndex>,
+    /// Static requirements belong to the workspace being solved. Built distribution metadata
+    /// can also be reused by other solves sharing this index.
+    manifests: Option<Arc<FxHashMap<PackageName, Arc<WorkspaceManifest>>>>,
+}
 
 #[derive(Default)]
 struct SharedInMemoryIndex {
-    /// Virtual members whose static metadata omits their dynamic version.
-    deferred_versions: FxHashMap<PackageName, Dist>,
-
     /// A map from package name to the metadata for that package and the index where the metadata
     /// came from.
     implicit: FxOnceMap<PackageName, Arc<VersionsResponse>>,
@@ -40,51 +41,57 @@ pub(crate) type FxRegisteredEntry<'a, K, V> =
     RegisteredEntry<'a, K, V, BuildHasherDefault<FxHasher>>;
 
 impl InMemoryIndex {
-    /// Create a lock-local index so provisional versions cannot be reused by another operation.
-    pub fn for_virtual_projects(projects: Vec<(Dist, UnversionedMetadata)>) -> Self {
-        let mut index = SharedInMemoryIndex::default();
-        for (dist, metadata) in projects {
-            // PubGrub uses a concrete version to link the member to its extras and groups.
-            // Register it as deferred so declared ranges use the backend's version.
-            let metadata = metadata
-                .with_version(Version::new([0]))
-                .with_force_relative(true);
-            index.distributions.done(
-                dist.distribution_id(),
-                Arc::new(MetadataResponse::Found(metadata.into())),
-            );
-            index.deferred_versions.insert(dist.name().clone(), dist);
+    /// Attach the current workspace's manifests while sharing the caches for distributions and indexes.
+    #[must_use]
+    pub fn with_workspace_manifests(&self, projects: Vec<(Dist, UnversionedMetadata)>) -> Self {
+        let manifests: FxHashMap<_, _> = projects
+            .into_iter()
+            .map(|(dist, metadata)| {
+                (
+                    dist.name().clone(),
+                    Arc::new(WorkspaceManifest { dist, metadata }),
+                )
+            })
+            .collect();
+        Self {
+            shared: self.shared.clone(),
+            manifests: (!manifests.is_empty()).then(|| Arc::new(manifests)),
         }
-        Self(Arc::new(index))
     }
 
-    pub(super) fn deferred_versions(&self) -> &FxHashMap<PackageName, Dist> {
-        &self.0.deferred_versions
+    pub(crate) fn workspace_manifest(&self, name: &PackageName) -> Option<&Arc<WorkspaceManifest>> {
+        self.manifests.as_ref()?.get(name)
+    }
+
+    /// Return the manifest only for the workspace directory from which it was read.
+    pub fn manifest_for_dist(&self, dist: &Dist) -> Option<&UnversionedMetadata> {
+        let manifest = self.workspace_manifest(dist.name())?;
+        (manifest.dist.distribution_id() == dist.distribution_id()).then_some(&manifest.metadata)
     }
 
     /// Returns a reference to the package metadata map.
     pub(crate) fn implicit(&self) -> &FxOnceMap<PackageName, Arc<VersionsResponse>> {
-        &self.0.implicit
+        &self.shared.implicit
     }
 
     /// Returns a reference to the package metadata map.
     pub(crate) fn explicit(&self) -> &FxOnceMap<(PackageName, IndexUrl), Arc<VersionsResponse>> {
-        &self.0.explicit
+        &self.shared.explicit
     }
 
     /// Returns a reference to the distribution metadata map.
     pub fn distributions(&self) -> &DistributionMetadataIndex {
-        &self.0.distributions
+        &self.shared.distributions
     }
 
     pub(crate) fn variants_json(
         &self,
     ) -> &FxOnceMap<RegistryVariantsJson, Arc<ParsedVariantsJsonResponse>> {
-        &self.0.variants_json
+        &self.shared.variants_json
     }
 
     /// Return exclusive access to distribution metadata when no cloned index can use it.
     pub fn distributions_mut(&mut self) -> Option<&mut DistributionMetadataIndex> {
-        Arc::get_mut(&mut self.0).map(|index| &mut index.distributions)
+        Arc::get_mut(&mut self.shared).map(|index| &mut index.distributions)
     }
 }
