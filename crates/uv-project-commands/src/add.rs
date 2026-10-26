@@ -428,7 +428,6 @@ pub async fn add(
         // Resolve any unnamed requirements.
         if !unnamed.is_empty() {
             let hasher = HashStrategy::default();
-            let sources = NoSources::None;
 
             // Initialize the registry client.
             let client = RegistryClientBuilder::new(client_builder.clone(), cache.clone())
@@ -512,7 +511,7 @@ pub async fn add(
                 &settings.resolver.build_options,
                 &build_hasher,
                 settings.resolver.exclude_newer.clone(),
-                sources,
+                NoSources::None,
                 SourceTreeEditablePolicy::Project,
                 // No workspace caching since `uv add` changes the workspace definition.
                 WorkspaceCache::default(),
