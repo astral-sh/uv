@@ -18,7 +18,9 @@ use tracing::{debug, trace, warn};
 
 use uv_cache::Cache;
 use uv_configuration::{ActiveEnvironment, DependencyGroupsWithDefaults, ExcludeDependency};
-use uv_distribution_types::{Index, MinimumLibcVersion, Requirement, RequirementSource};
+use uv_distribution_types::{
+    Index, MinimumLibcVersion, ProjectEnvironments, Requirement, RequirementSource,
+};
 use uv_fs::{CWD, Simplified, normalize_path};
 use uv_macros::DebugNoInline;
 use uv_normalize::{DEV_DEPENDENCIES, DefaultGroups, GroupName, PackageName};
@@ -852,7 +854,7 @@ impl Workspace {
     }
 
     /// Returns the set of supported environments for the workspace.
-    pub fn environments(&self) -> Option<&SupportedEnvironments> {
+    pub fn environments(&self) -> Option<&ProjectEnvironments> {
         self.pyproject_toml
             .tool
             .as_ref()

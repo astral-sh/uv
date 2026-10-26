@@ -15,7 +15,7 @@ use uv_distribution_types::{
 use uv_git::GitResolver;
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifier};
-use uv_pypi_types::{Conflicts, HashDigests, ParsedUrl, VerbatimParsedUrl, Yanked};
+use uv_pypi_types::{Conflicts, HashDigest, HashDigests, ParsedUrl, VerbatimParsedUrl, Yanked};
 use uv_resolver_types::PackageRole;
 use uv_types::HashStrategy;
 
@@ -366,8 +366,17 @@ fn get_hashes(
     in_memory: &InMemoryIndex,
 ) -> HashDigests {
     // 1. Look for hashes from the lockfile.
-    if let Some(digests) = preferences.match_hashes(name, version) {
-        if !digests.is_empty() {
+    if let Some(digests) = preferences.match_hashes(name, version)
+        && !digests.is_empty()
+    {
+        if url.is_none()
+            && let Some(filtered) = registry_hashes(in_memory, name, index, version, Some(digests))
+        {
+            if !filtered.is_empty() {
+                return filtered;
+            }
+            // Every preferred hash was for an excluded wheel. Collect hashes for the new target.
+        } else {
             return HashDigests::from(digests);
         }
     }
@@ -405,54 +414,46 @@ fn get_hashes(
     }
 
     // 5. Look for hashes from the registry, which are served at the package level.
-    if url.is_none() {
-        // Query the implicit and explicit indexes (lazily) for the hashes.
-        let implicit_response = in_memory.implicit().get(name);
-        let mut explicit_response = None;
-
-        // Search in the implicit indexes.
-        let hashes = implicit_response
-            .as_ref()
-            .and_then(|response| {
-                if let VersionsResponse::Found(version_maps) = &**response {
-                    Some(version_maps)
-                } else {
-                    None
-                }
-            })
-            .into_iter()
-            .flatten()
-            .filter(|version_map| version_map.index() == index)
-            .find_map(|version_map| version_map.hashes(version))
-            .or_else(|| {
-                // Search in the explicit indexes.
-                explicit_response = index
-                    .and_then(|index| in_memory.explicit().get(&(name.clone(), index.clone())));
-                explicit_response
-                    .as_ref()
-                    .and_then(|response| {
-                        if let VersionsResponse::Found(version_maps) = &**response {
-                            Some(version_maps)
-                        } else {
-                            None
-                        }
-                    })
-                    .into_iter()
-                    .flatten()
-                    .filter(|version_map| version_map.index() == index)
-                    .find_map(|version_map| version_map.hashes(version))
-            });
-
-        if let Some(hashes) = hashes {
-            let mut digests = HashDigests::from(hashes);
-            digests.sort_unstable();
-            if !digests.is_empty() {
-                return digests;
-            }
-        }
+    if url.is_none()
+        && let Some(mut hashes) = registry_hashes(in_memory, name, index, version, None)
+    {
+        hashes.sort_unstable();
+        return hashes;
     }
 
     HashDigests::empty()
+}
+
+/// Read a registry version's hashes, optionally filtering existing requirements.txt hashes.
+fn registry_hashes(
+    in_memory: &InMemoryIndex,
+    name: &PackageName,
+    index: Option<&IndexUrl>,
+    version: &Version,
+    preferred: Option<&[HashDigest]>,
+) -> Option<HashDigests> {
+    let hashes = |response: &VersionsResponse| {
+        let VersionsResponse::Found(versions) = response else {
+            return None;
+        };
+        versions
+            .iter()
+            .filter(|map| map.index() == index)
+            .find_map(|map| map.get(version))
+            .map(|dist| dist.hashes(preferred))
+    };
+    in_memory
+        .implicit()
+        .get(name)
+        .as_deref()
+        .and_then(hashes)
+        .or_else(|| {
+            in_memory
+                .explicit()
+                .get(&(name.clone(), index?.clone()))
+                .as_deref()
+                .and_then(hashes)
+        })
 }
 
 /// Find any packages that don't have any lower bound on them when in resolution-lowest mode.

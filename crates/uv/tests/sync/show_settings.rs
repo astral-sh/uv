@@ -234,7 +234,7 @@ fn pip_compile_baseline() {
         overrides_from_workspace: [],
         excludes_from_workspace: [],
         build_constraints_from_workspace: [],
-        environments: SupportedEnvironments(
+        environments: ProjectEnvironments(
             [],
         ),
         required_environments: SupportedEnvironments(

@@ -86,6 +86,7 @@ pub use crate::installed::*;
 pub use crate::minimum_libc_version::MinimumLibcVersion;
 pub use crate::origin::*;
 pub use crate::pip_index::*;
+pub use crate::project_environments::{LibcEnvironments, LinuxLibc, ProjectEnvironments};
 pub use crate::requested::*;
 pub use crate::requirement::*;
 pub use crate::requires_python::*;
@@ -97,6 +98,7 @@ pub use crate::status_code_strategy::*;
 pub use crate::traits::*;
 pub use crate::variant_json::*;
 pub use crate::variants_json::*;
+pub use crate::wheel_markers::{implied_platform_markers, implied_python_markers};
 
 mod annotation;
 mod any;
@@ -122,6 +124,7 @@ mod installed_modules;
 mod minimum_libc_version;
 mod origin;
 mod pip_index;
+mod project_environments;
 mod requested;
 mod requirement;
 mod requires_python;
@@ -133,6 +136,7 @@ mod status_code_strategy;
 mod traits;
 mod variant_json;
 mod variants_json;
+mod wheel_markers;
 
 #[derive(Debug, Clone)]
 pub enum VersionOrUrlRef<'a, T: Pep508Url = VerbatimUrl> {

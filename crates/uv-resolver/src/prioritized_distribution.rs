@@ -1,22 +1,21 @@
 use std::fmt::{Display, Formatter};
 
-use arcstr::ArcStr;
 use owo_colors::OwoColorize;
-use tracing::debug;
+use rustc_hash::FxHashSet;
 
 use uv_distribution::supported_variant_properties;
 use uv_distribution_filename::{BuildTag, WheelFilename};
 use uv_distribution_types::{
-    File, IndexUrl, InstalledDist, MinimumLibcVersion, Name, RegistryBuiltDist, RegistryBuiltWheel,
+    File, IndexUrl, InstalledDist, LinuxLibc, Name, RegistryBuiltDist, RegistryBuiltWheel,
     RegistrySourceDist, RequiresPython, VariantsJsonContent, VariantsJsonFilename,
+    implied_platform_markers, implied_python_markers,
 };
 use uv_normalize::PackageName;
-use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
-use uv_pep508::{MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString};
-use uv_platform_tags::{
-    AbiTag, BinaryFormat, IncompatibleTag, LanguageTag, PlatformTag, TagPriority, Tags,
-};
-use uv_pypi_types::{HashDigest, Yanked};
+use uv_pep440::VersionSpecifiers;
+use uv_pep508::MarkerTree;
+use uv_platform_tags::{AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagPriority, Tags};
+use uv_pypi_types::{HashDigest, HashDigests, Yanked};
+use uv_resolver_types::LibcPolicy;
 
 use crate::known_platform::KnownPlatform;
 use crate::resolved::ResolvedDistRef;
@@ -47,6 +46,8 @@ struct PrioritizedDistInner {
     variants_json: Vec<RegistryVariantsJson>,
     /// The hashes for each distribution.
     hashes: Vec<HashDigest>,
+    /// Hashes to remove from existing requirements files when their wheels are excluded.
+    excluded_libc_hashes: Option<Box<FxHashSet<HashDigest>>>,
     /// Python coverage, unioned over compatible wheels independently of their platforms.
     python_markers: MarkerTree,
     /// Coverage for the glibc and musl baselines, unioned over compatible wheels separately.
@@ -63,6 +64,7 @@ impl Default for PrioritizedDistInner {
             wheels: Vec::new(),
             variants_json: Vec::new(),
             hashes: Vec::new(),
+            excluded_libc_hashes: None,
             python_markers: MarkerTree::FALSE,
             markers: [MarkerTree::FALSE; 2],
         }
@@ -491,19 +493,32 @@ impl PrioritizedDist {
         dist: RegistryBuiltWheel,
         hashes: impl IntoIterator<Item = HashDigest>,
         compatibility: WheelCompatibility,
-        minimum_libc_version: Option<MinimumLibcVersion>,
+        libc: LibcPolicy,
     ) {
+        if let Some(environments) = libc.environments
+            && !environments.allows_wheel(&dist.filename, MarkerTree::TRUE)
+        {
+            if !dist.file.hashes.is_empty() {
+                self.0
+                    .excluded_libc_hashes
+                    .get_or_insert_default()
+                    .extend(dist.file.hashes.iter().cloned());
+            }
+            return;
+        }
+
         if compatibility.is_compatible()
             && (!self.0.python_markers.is_true()
                 || !self.0.markers.iter().all(|markers| markers.is_true()))
         {
             let python = implied_python_markers(&dist.filename);
             self.0.python_markers = self.0.python_markers.or(python);
-            for (coverage, markers) in self.0.markers.iter_mut().zip(implied_libc_markers(
-                &dist.filename,
-                python,
-                minimum_libc_version,
-            )) {
+            for (coverage, markers) in
+                self.0
+                    .markers
+                    .iter_mut()
+                    .zip(implied_libc_markers(&dist.filename, python, libc))
+            {
                 *coverage = coverage.or(markers);
             }
         }
@@ -641,9 +656,20 @@ impl PrioritizedDist {
             })
     }
 
-    /// Return the hashes for each distribution.
-    pub(crate) fn hashes(&self) -> &[HashDigest] {
-        &self.0.hashes
+    /// Preserve preferred hashes except those known to belong exclusively to excluded wheels.
+    pub(crate) fn hashes(&self, preferred: Option<&[HashDigest]>) -> HashDigests {
+        if let Some(preferred) = preferred {
+            let Some(excluded) = &self.0.excluded_libc_hashes else {
+                return HashDigests::from(preferred);
+            };
+            let allowed: FxHashSet<_> = self.0.hashes.iter().collect();
+            return preferred
+                .iter()
+                .filter(|hash| !excluded.contains(*hash) || allowed.contains(*hash))
+                .cloned()
+                .collect();
+        }
+        HashDigests::from(self.0.hashes.as_slice())
     }
 
     /// Returns true if and only if this distribution does not contain any
@@ -979,12 +1005,9 @@ impl IncompatibleWheel {
 /// Given a wheel filename, determine the markers covered by every configured libc baseline.
 ///
 /// A wheel with multiple platform tags can remain eligible without covering every tagged platform.
-pub(crate) fn implied_markers(
-    filename: &WheelFilename,
-    minimum_libc_version: Option<MinimumLibcVersion>,
-) -> MarkerTree {
+pub(crate) fn implied_markers(filename: &WheelFilename, libc: LibcPolicy) -> MarkerTree {
     let python = implied_python_markers(filename);
-    let [glibc, musl] = implied_libc_markers(filename, python, minimum_libc_version);
+    let [glibc, musl] = implied_libc_markers(filename, python, libc);
     glibc.and(musl)
 }
 
@@ -992,311 +1015,36 @@ pub(crate) fn implied_markers(
 fn implied_libc_markers(
     filename: &WheelFilename,
     python: MarkerTree,
-    minimum_libc_version: Option<MinimumLibcVersion>,
+    libc: LibcPolicy,
 ) -> [MarkerTree; 2] {
-    let Some(minimum_libc_version) = minimum_libc_version else {
+    if libc == LibcPolicy::default() {
         return [implied_platform_markers(filename.platform_tags()).and(python); 2];
-    };
+    }
     let mut markers = [MarkerTree::FALSE; 2];
     for tag in filename.platform_tags() {
-        let platform = implied_platform_markers([tag]).and(python);
-        for (markers, supported) in markers
-            .iter_mut()
-            .zip(minimum_libc_version.platform_coverage(tag))
+        let mut platform = implied_platform_markers([tag]).and(python);
+        if let Some(environments) = libc.environments
+            && let Some(family) = LinuxLibc::from_tag(tag)
         {
-            if supported {
+            platform = platform.and(environments.marker(family));
+        }
+        let coverage = libc
+            .minimum_version
+            .map_or([true; 2], |baseline| baseline.platform_coverage(tag));
+        for ((markers, covers_baseline), family) in markers
+            .iter_mut()
+            .zip(coverage)
+            .zip([LinuxLibc::Glibc, LinuxLibc::Musl])
+        {
+            if covers_baseline {
                 *markers = markers.or(platform);
+            } else if let Some(environments) = libc.environments {
+                // A baseline only needs coverage where that family is supported.
+                *markers = markers.or(platform.and(environments.marker(family).negate()));
             }
         }
     }
     markers
-}
-
-/// Infer the environments described by a set of platform tags.
-fn implied_platform_markers<'a>(
-    platform_tags: impl IntoIterator<Item = &'a PlatformTag>,
-) -> MarkerTree {
-    let mut marker = MarkerTree::FALSE;
-    for platform_tag in platform_tags {
-        match platform_tag {
-            PlatformTag::Any => {
-                return MarkerTree::TRUE;
-            }
-
-            // Windows
-            PlatformTag::Win32 => {
-                let mut tag_marker = MarkerTree::expression(MarkerExpression::String {
-                    key: MarkerValueString::SysPlatform,
-                    operator: MarkerOperator::Equal,
-                    value: arcstr::literal!("win32"),
-                });
-                tag_marker = tag_marker.and(MarkerTree::expression(MarkerExpression::String {
-                    key: MarkerValueString::PlatformMachine,
-                    operator: MarkerOperator::Equal,
-                    value: arcstr::literal!("x86"),
-                }));
-                marker = marker.or(tag_marker);
-            }
-            PlatformTag::WinAmd64 => {
-                let mut tag_marker = MarkerTree::expression(MarkerExpression::String {
-                    key: MarkerValueString::SysPlatform,
-                    operator: MarkerOperator::Equal,
-                    value: arcstr::literal!("win32"),
-                });
-                tag_marker = tag_marker.and(MarkerTree::expression(MarkerExpression::String {
-                    key: MarkerValueString::PlatformMachine,
-                    operator: MarkerOperator::Equal,
-                    value: arcstr::literal!("AMD64"),
-                }));
-                marker = marker.or(tag_marker);
-            }
-            PlatformTag::WinArm64 => {
-                let mut tag_marker = MarkerTree::expression(MarkerExpression::String {
-                    key: MarkerValueString::SysPlatform,
-                    operator: MarkerOperator::Equal,
-                    value: arcstr::literal!("win32"),
-                });
-                tag_marker = tag_marker.and(MarkerTree::expression(MarkerExpression::String {
-                    key: MarkerValueString::PlatformMachine,
-                    operator: MarkerOperator::Equal,
-                    value: arcstr::literal!("ARM64"),
-                }));
-                marker = marker.or(tag_marker);
-            }
-
-            // macOS
-            PlatformTag::Macos {
-                major,
-                minor,
-                binary_format,
-            } => {
-                let Some(release) = macos_darwin_release(*major, *minor) else {
-                    continue;
-                };
-                let mut tag_marker = MarkerTree::expression(MarkerExpression::String {
-                    key: MarkerValueString::SysPlatform,
-                    operator: MarkerOperator::Equal,
-                    value: arcstr::literal!("darwin"),
-                });
-
-                // Extract the architecture from the end of the tag.
-                let mut arch_marker = MarkerTree::FALSE;
-                for arch in binary_format.platform_machine() {
-                    // A universal2 wheel can target an older macOS on Intel, but its ARM
-                    // slice requires macOS 11 (Darwin 20) or later.
-                    let release = if *arch == BinaryFormat::Arm64 {
-                        release.clone().max(Version::new([20, 0, 0]))
-                    } else {
-                        release.clone()
-                    };
-                    let architecture = MarkerTree::expression(MarkerExpression::String {
-                        key: MarkerValueString::PlatformMachine,
-                        operator: MarkerOperator::Equal,
-                        value: ArcStr::from(arch.name()),
-                    });
-                    let release = MarkerTree::expression(MarkerExpression::String {
-                        key: MarkerValueString::PlatformRelease,
-                        operator: MarkerOperator::GreaterEqual,
-                        value: ArcStr::from(release.to_string()),
-                    });
-                    arch_marker = arch_marker.or(architecture.and(release));
-                }
-                tag_marker = tag_marker.and(arch_marker);
-
-                marker = marker.or(tag_marker);
-            }
-
-            // Linux
-            PlatformTag::Manylinux { arch, .. }
-            | PlatformTag::Manylinux1 { arch, .. }
-            | PlatformTag::Manylinux2010 { arch, .. }
-            | PlatformTag::Manylinux2014 { arch, .. }
-            | PlatformTag::Musllinux { arch, .. }
-            | PlatformTag::Linux { arch } => {
-                let mut tag_marker = MarkerTree::expression(MarkerExpression::String {
-                    key: MarkerValueString::SysPlatform,
-                    operator: MarkerOperator::Equal,
-                    value: arcstr::literal!("linux"),
-                });
-                tag_marker = tag_marker.and(MarkerTree::expression(MarkerExpression::String {
-                    key: MarkerValueString::PlatformMachine,
-                    operator: MarkerOperator::Equal,
-                    value: ArcStr::from(arch.name()),
-                }));
-                marker = marker.or(tag_marker);
-            }
-
-            // Android
-            //
-            // The tag's API level is not encoded, since no marker exposes it: `platform_release`
-            // reports the Android version.
-            PlatformTag::Android { abi, .. } => {
-                let mut tag_marker = MarkerTree::expression(MarkerExpression::String {
-                    key: MarkerValueString::SysPlatform,
-                    operator: MarkerOperator::Equal,
-                    value: arcstr::literal!("android"),
-                });
-                tag_marker = tag_marker.and(MarkerTree::expression(MarkerExpression::String {
-                    key: MarkerValueString::PlatformMachine,
-                    operator: MarkerOperator::Equal,
-                    value: ArcStr::from(abi.arch().name()),
-                }));
-                marker = marker.or(tag_marker);
-            }
-
-            tag => {
-                debug!("Unknown platform tag in wheel tag: {tag}");
-            }
-        }
-    }
-
-    marker
-}
-
-/// Translate a macOS deployment target into the corresponding
-/// [Darwin kernel release](<https://en.wikipedia.org/wiki/Darwin_(operating_system)#Darwin_20_onwards>).
-///
-/// macOS 10.16 is the compatibility spelling of macOS 11. macOS 26 uses Darwin 25;
-/// starting with macOS 27, the major versions match.
-fn macos_darwin_release(major: u16, minor: u16) -> Option<Version> {
-    let release = match (major, minor) {
-        (10, 0) => [1, 3, 0],
-        (10, 1) => [1, 4, 1],
-        (10, 2..=16) => [u64::from(minor) + 4, 0, 0],
-        (11..=15, 0) => [u64::from(major) + 9, 0, 0],
-        (26, 0) => [25, 0, 0],
-        (27.., 0) => [u64::from(major), 0, 0],
-        _ => return None,
-    };
-    Some(Version::new(release))
-}
-
-/// Given a wheel filename, determine the set of supported Python versions, in terms of their markers.
-///
-/// This is roughly the inverse of Python tag generation: given a tag, we want to infer the
-/// supported Python version (rather than generating the supported tags from a given Python version).
-fn implied_python_markers(filename: &WheelFilename) -> MarkerTree {
-    let mut marker = MarkerTree::FALSE;
-
-    // If any ABI tag is a stable ABI (`abi3` or `abi3t`), the python tag represents a minimum
-    // version rather than an exact version. For example, `cp39-abi3` means "compatible with
-    // CPython 3.9+".
-    let is_abi3 = filename.abi_tags().iter().any(|tag| tag.is_stable_abi());
-
-    for python_tag in filename.python_tags() {
-        // First, construct the version marker based on the tag
-        let mut tree = match python_tag {
-            LanguageTag::None => {
-                // No Python tag means no Python version requirement.
-                return MarkerTree::TRUE;
-            }
-            LanguageTag::Python { major, minor: None } | LanguageTag::CPythonMajor { major } => {
-                if is_abi3 {
-                    MarkerTree::expression(MarkerExpression::Version {
-                        key: uv_pep508::MarkerValueVersion::PythonVersion,
-                        specifier: VersionSpecifier::greater_than_equal_version(Version::new([
-                            u64::from(*major),
-                        ])),
-                    })
-                } else {
-                    MarkerTree::expression(MarkerExpression::Version {
-                        key: uv_pep508::MarkerValueVersion::PythonVersion,
-                        specifier: VersionSpecifier::equals_star_version(Version::new([
-                            u64::from(*major),
-                        ])),
-                    })
-                }
-            }
-            LanguageTag::Python {
-                major,
-                minor: Some(minor),
-            } => {
-                // Generic Python tags support later minor versions within the same major version.
-                MarkerTree::expression(MarkerExpression::Version {
-                    key: uv_pep508::MarkerValueVersion::PythonVersion,
-                    specifier: VersionSpecifier::greater_than_equal_version(Version::new([
-                        u64::from(*major),
-                        u64::from(*minor),
-                    ])),
-                })
-                .and(MarkerTree::expression(MarkerExpression::Version {
-                    key: uv_pep508::MarkerValueVersion::PythonVersion,
-                    specifier: VersionSpecifier::equals_star_version(Version::new([u64::from(
-                        *major,
-                    )])),
-                }))
-            }
-            LanguageTag::CPython {
-                python_version: (major, minor),
-            }
-            | LanguageTag::PyPy {
-                python_version: (major, minor),
-            }
-            | LanguageTag::GraalPy {
-                python_version: (major, minor),
-            }
-            | LanguageTag::Pyston {
-                python_version: (major, minor),
-            } => {
-                if is_abi3 {
-                    MarkerTree::expression(MarkerExpression::Version {
-                        key: uv_pep508::MarkerValueVersion::PythonVersion,
-                        specifier: VersionSpecifier::greater_than_equal_version(Version::new([
-                            u64::from(*major),
-                            u64::from(*minor),
-                        ])),
-                    })
-                } else {
-                    MarkerTree::expression(MarkerExpression::Version {
-                        key: uv_pep508::MarkerValueVersion::PythonVersion,
-                        specifier: VersionSpecifier::equals_star_version(Version::new([
-                            u64::from(*major),
-                            u64::from(*minor),
-                        ])),
-                    })
-                }
-            }
-        };
-
-        // Then, add implementation markers for implementation-specific tags
-        match python_tag {
-            LanguageTag::None | LanguageTag::Python { .. } => {
-                // No implementation marker needed
-            }
-            LanguageTag::CPython { .. } | LanguageTag::CPythonMajor { .. } => {
-                tree = tree.and(MarkerTree::expression(MarkerExpression::String {
-                    key: MarkerValueString::PlatformPythonImplementation,
-                    operator: MarkerOperator::Equal,
-                    value: arcstr::literal!("CPython"),
-                }));
-            }
-            LanguageTag::PyPy { .. } => {
-                tree = tree.and(MarkerTree::expression(MarkerExpression::String {
-                    key: MarkerValueString::PlatformPythonImplementation,
-                    operator: MarkerOperator::Equal,
-                    value: arcstr::literal!("PyPy"),
-                }));
-            }
-            LanguageTag::GraalPy { .. } => {
-                tree = tree.and(MarkerTree::expression(MarkerExpression::String {
-                    key: MarkerValueString::PlatformPythonImplementation,
-                    operator: MarkerOperator::Equal,
-                    value: arcstr::literal!("GraalPy"),
-                }));
-            }
-            LanguageTag::Pyston { .. } => {
-                tree = tree.and(MarkerTree::expression(MarkerExpression::String {
-                    key: MarkerValueString::PlatformPythonImplementation,
-                    operator: MarkerOperator::Equal,
-                    value: arcstr::literal!("Pyston"),
-                }));
-            }
-        }
-
-        marker = marker.or(tree);
-    }
-
-    marker
 }
 
 #[cfg(test)]
@@ -1327,7 +1075,7 @@ mod tests {
     fn assert_implied_markers(filename: &str, expected: &str) {
         let filename = WheelFilename::from_str(filename).unwrap();
         assert_eq!(
-            implied_markers(&filename, None),
+            implied_markers(&filename, LibcPolicy::default()),
             expected.parse::<MarkerTree>().unwrap()
         );
     }

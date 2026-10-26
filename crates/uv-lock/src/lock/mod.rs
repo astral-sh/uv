@@ -37,11 +37,11 @@ use uv_distribution_types::{
     ArchiveHashPolicy, BuiltDist, DependencyMetadata, DirectUrlBuiltDist, DirectUrlSourceDist,
     DirectorySourceDist, Dist, ExcludeNewerOverride, ExcludeNewerSpan, ExcludeNewerValue,
     FileLocation, FirstParty, GitDirectorySourceDist, GitPathBuiltDist, GitPathSourceDist,
-    HashValidation, Identifier, IndexLocations, IndexMetadata, IndexUrl, MetadataHashPolicy,
-    MinimumLibcVersion, Name, NameRequirementSpecification, PYPI_URL, PathBuiltDist,
-    PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, RemoteSource,
-    Requirement, RequirementSource, RequiresPython, ResolvedDist, SimplifiedMarkerTree,
-    StaticMetadata, ToUrlError, UrlString, VersionId,
+    HashValidation, Identifier, IndexLocations, IndexMetadata, IndexUrl, LibcEnvironments,
+    MetadataHashPolicy, MinimumLibcVersion, Name, NameRequirementSpecification, PYPI_URL,
+    PathBuiltDist, PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist,
+    RemoteSource, Requirement, RequirementSource, RequiresPython, ResolvedDist,
+    SimplifiedMarkerTree, StaticMetadata, ToUrlError, UrlString, VersionId,
 };
 use uv_fs::{PortablePath, PortablePathBuf, Simplified, normalize_path, try_relative_to_if};
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
@@ -2543,6 +2543,11 @@ impl Lock {
             }
             let wheels = &mut package.wheels;
             wheels.retain(|wheel| {
+                if let Some(environments) = resolution.options.libc.environments
+                    && !environments.allows_wheel(&wheel.filename, wheel_marker.pep508())
+                {
+                    return false;
+                }
                 !is_wheel_unreachable_for_marker(
                     &wheel.filename,
                     &requires_python,
@@ -2627,7 +2632,8 @@ impl Lock {
             resolution_mode: resolution.options.resolution_mode,
             prerelease: resolution.options.prerelease.clone(),
             fork_strategy: resolution.options.fork_strategy,
-            minimum_libc_version: resolution.options.minimum_libc_version,
+            minimum_libc_version: resolution.options.libc.minimum_version,
+            libc_environments: resolution.options.libc.environments,
             exclude_newer: resolution.options.exclude_newer.clone(),
         };
         // Canonicalize the top-level fork markers to match what is persisted in
@@ -3133,6 +3139,11 @@ impl Lock {
     /// Return the selected libc implementation and minimum version.
     pub fn minimum_libc_version(&self) -> Option<MinimumLibcVersion> {
         self.options.minimum_libc_version
+    }
+
+    /// Return the supported Linux marker domains for each libc family.
+    pub fn libc_environments(&self) -> Option<LibcEnvironments> {
+        self.options.libc_environments
     }
 
     /// Returns the exclude newer setting used to generate this lock.
@@ -6205,6 +6216,8 @@ struct ResolverOptions {
     fork_strategy: ForkStrategy,
     /// The selected libc implementation and minimum version.
     minimum_libc_version: Option<MinimumLibcVersion>,
+    /// The supported Linux marker domains for each libc family.
+    libc_environments: Option<LibcEnvironments>,
     /// The [`ExcludeNewer`] setting used to generate this lock.
     exclude_newer: ExcludeNewer,
 }
@@ -6224,6 +6237,8 @@ struct ResolverOptionsWire {
     fork_strategy: ForkStrategy,
     /// The selected libc implementation and minimum version.
     minimum_libc_version: Option<MinimumLibcVersion>,
+    /// The supported Linux marker domains for each libc family.
+    libc_environments: Option<LibcEnvironments>,
     /// The [`ExcludeNewer`] setting used to generate this lock.
     #[serde(flatten)]
     exclude_newer: ExcludeNewerWire,
@@ -6575,6 +6590,7 @@ impl TryFrom<LockWire> for Lock {
             prerelease: options_wire.prerelease.into(),
             fork_strategy: options_wire.fork_strategy,
             minimum_libc_version: options_wire.minimum_libc_version,
+            libc_environments: options_wire.libc_environments,
             exclude_newer: options_wire.exclude_newer.into(),
         };
         let lock = Self::new(
