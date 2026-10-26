@@ -6,6 +6,7 @@ use std::str::FromStr;
 
 use anyhow::{Context, Result, bail};
 use owo_colors::OwoColorize;
+use toml::Table;
 use toml_edit::{InlineTable, Value};
 use tracing::{debug, trace, warn};
 
@@ -42,6 +43,8 @@ use uv_warnings::warn_user_once;
 use uv_workspace::{
     DiscoveryOptions, MemberDiscovery, Workspace, WorkspaceCache, WorkspaceErrorKind,
 };
+
+use crate::ProjectError;
 
 /// Add one or more packages to the project requirements.
 #[expect(clippy::single_match_else, clippy::fn_params_excessive_bools)]
@@ -108,13 +111,16 @@ pub async fn init(
             };
 
             // Avoid overwriting an existing `pyproject.toml`.
-            if path.join("pyproject.toml").exists() {
+            let pyproject_path = path.join("pyproject.toml");
+            if let Ok(metadata) = fs_err::tokio::metadata(&pyproject_path).await {
+                let hint = if metadata.is_file() {
+                    existing_pyproject_hint(&pyproject_path).await
+                } else {
+                    None
+                };
                 let path =
                     std::path::absolute(&path).unwrap_or_else(|_| path.simplified().to_path_buf());
-                anyhow::bail!(
-                    "Cannot initialize a project in `{}` because `pyproject.toml` already exists",
-                    path.display().cyan()
-                );
+                return Err(ProjectError::PyprojectTomlExists { path, hint }.into());
             }
 
             // Default to the directory name if a name was not provided.
@@ -283,6 +289,35 @@ async fn init_script(
     Pep723Script::create(script_path, requires_python.specifiers(), content, bare).await?;
 
     Ok(())
+}
+
+/// Suggest how to declare project metadata in an existing manifest.
+async fn existing_pyproject_hint(path: &Path) -> Option<&'static str> {
+    let contents = fs_err::tokio::read_to_string(path).await.ok()?;
+    let pyproject: Table = toml::from_str(&contents).ok()?;
+    let tool = pyproject.get("tool");
+
+    if pyproject.contains_key("project")
+        || tool
+            .and_then(|tool| tool.get("uv"))
+            .and_then(|uv| uv.get("workspace"))
+            .is_some()
+    {
+        return None;
+    }
+
+    if tool
+        .and_then(|tool| tool.get("poetry"))
+        .is_some_and(|poetry| poetry.is_table())
+    {
+        Some(
+            "uv reads project metadata from `[project]`. To migrate, convert the metadata in `[tool.poetry]` to that format",
+        )
+    } else {
+        Some(
+            "To use this directory as a project, add a `[project]` table with a name and version to `pyproject.toml`",
+        )
+    }
 }
 
 /// Initialize a project (and, implicitly, a workspace root) at the given path.

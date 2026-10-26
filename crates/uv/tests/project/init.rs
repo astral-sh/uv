@@ -21,6 +21,12 @@ fn init() {
     Initialized project `foo` at `[TEMP_DIR]/foo`
     ");
 
+    uv_snapshot!(context.filters(), context.init().arg("foo"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Cannot initialize a project in `[TEMP_DIR]/foo` because `pyproject.toml` already exists
+    ");
+
     let pyproject = context.read("foo/pyproject.toml");
     let _ = context.read("foo/README.md");
 
@@ -66,7 +72,7 @@ fn init() {
 }
 
 #[test]
-fn init_existing_pyproject() -> Result<()> {
+fn init_existing_pyproject_tool_only() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&[]);
     context
         .temp_dir
@@ -77,6 +83,31 @@ fn init_existing_pyproject() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Cannot initialize a project in `[TEMP_DIR]/` because `pyproject.toml` already exists
+
+    hint: To use this directory as a project, add a `[project]` table with a name and version to `pyproject.toml`
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn init_existing_pyproject_poetry() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]);
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {
+        r#"
+        [tool.poetry]
+        name = "example"
+        version = "0.1.0"
+        "#,
+    })?;
+
+    uv_snapshot!(context.filters(), context.init(), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Cannot initialize a project in `[TEMP_DIR]/` because `pyproject.toml` already exists
+
+    hint: uv reads project metadata from `[project]`. To migrate, convert the metadata in `[tool.poetry]` to that format
     ");
 
     Ok(())
@@ -2158,6 +2189,12 @@ fn init_virtual_workspace() -> Result<()> {
         members = []
         ",
     })?;
+
+    uv_snapshot!(context.filters(), context.init().current_dir(&child), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Cannot initialize a project in `[TEMP_DIR]/foo` because `pyproject.toml` already exists
+    ");
 
     uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("bar"), @"
     exit_code: 0 (success)
