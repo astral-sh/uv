@@ -8,7 +8,8 @@ use uv_distribution_filename::{BuildTag, WheelFilename};
 use uv_distribution_types::{
     File, IndexUrl, InstalledDist, LibcEnvironments, LinuxLibc, Name, RegistryBuiltDist,
     RegistryBuiltWheel, RegistrySourceDist, RequiresPython, VariantsJsonContent,
-    VariantsJsonFilename, implied_platform_markers, implied_python_markers,
+    VariantsJsonFilename, implied_platform_markers, implied_platform_markers_with_aliases,
+    implied_python_markers,
 };
 use uv_normalize::PackageName;
 use uv_pep440::VersionSpecifiers;
@@ -1057,12 +1058,14 @@ fn implied_libc_markers(
     }
     let mut markers = [MarkerTree::FALSE; 2];
     for tag in filename.platform_tags() {
-        let mut platform = implied_platform_markers([tag]).and(python);
-        if let Some(environments) = libc.environments
-            && let Some(family) = LinuxLibc::from_tag(tag)
-        {
-            platform = platform.and(environments.marker(family));
+        let platform = if let Some(environments) = libc.environments {
+            let domain = LinuxLibc::from_tag(tag)
+                .map_or(MarkerTree::TRUE, |family| environments.marker(family));
+            implied_platform_markers_with_aliases(tag).and(domain)
+        } else {
+            implied_platform_markers([tag])
         }
+        .and(python);
         let coverage = libc
             .minimum_version
             .map_or([true; 2], |baseline| baseline.platform_coverage(tag));

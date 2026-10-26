@@ -1,14 +1,68 @@
+use std::sync::LazyLock;
+
 use arcstr::ArcStr;
 use tracing::debug;
 
 use uv_distribution_filename::WheelFilename;
 use uv_pep440::{Version, VersionSpecifier};
 use uv_pep508::{MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString};
-use uv_platform_tags::{BinaryFormat, LanguageTag, PlatformTag};
+use uv_platform_tags::{Arch, BinaryFormat, LanguageTag, PlatformTag};
+
+fn machine(name: &str) -> MarkerTree {
+    MarkerTree::expression(MarkerExpression::String {
+        key: MarkerValueString::PlatformMachine,
+        operator: MarkerOperator::Equal,
+        value: ArcStr::from(name),
+    })
+}
+
+/// The values of Python's `platform_machine` marker that can denote a wheel architecture.
+pub fn platform_machine_markers(arch: Arch) -> MarkerTree {
+    static AARCH64: LazyLock<MarkerTree> =
+        LazyLock::new(|| machine("aarch64").or(machine("arm64")).or(machine("ARM64")));
+    static X86_64: LazyLock<MarkerTree> =
+        LazyLock::new(|| machine("x86_64").or(machine("amd64")).or(machine("AMD64")));
+    static X86: LazyLock<MarkerTree> = LazyLock::new(|| {
+        machine("i686")
+            .or(machine("i386"))
+            .or(machine("win32"))
+            .or(machine("x86"))
+    });
+    // A 32-bit interpreter on ARMv8 hardware can install ARMv7 wheels.
+    static ARMV7L: LazyLock<MarkerTree> = LazyLock::new(|| machine("armv7l").or(machine("armv8l")));
+
+    match arch {
+        Arch::Aarch64 => *AARCH64,
+        Arch::X86_64 => *X86_64,
+        Arch::X86 => *X86,
+        Arch::Armv7L => *ARMV7L,
+        Arch::Armv5TEL
+        | Arch::Armv6L
+        | Arch::Powerpc64Le
+        | Arch::Powerpc64
+        | Arch::Powerpc
+        | Arch::S390X
+        | Arch::LoongArch64
+        | Arch::Riscv64
+        | Arch::Wasm32 => machine(arch.name()),
+    }
+}
 
 /// Infer the environments described by a set of platform tags.
 pub fn implied_platform_markers<'a>(
     platform_tags: impl IntoIterator<Item = &'a PlatformTag>,
+) -> MarkerTree {
+    platform_markers(platform_tags, |arch| machine(arch.name()))
+}
+
+/// Infer a wheel tag's environments for libc filtering, including equivalent machine names.
+pub fn implied_platform_markers_with_aliases(tag: &PlatformTag) -> MarkerTree {
+    platform_markers([tag], platform_machine_markers)
+}
+
+fn platform_markers<'a>(
+    platform_tags: impl IntoIterator<Item = &'a PlatformTag>,
+    linux_machine: impl Fn(Arch) -> MarkerTree,
 ) -> MarkerTree {
     let mut marker = MarkerTree::FALSE;
     for platform_tag in platform_tags {
@@ -112,11 +166,7 @@ pub fn implied_platform_markers<'a>(
                     operator: MarkerOperator::Equal,
                     value: arcstr::literal!("linux"),
                 });
-                tag_marker = tag_marker.and(MarkerTree::expression(MarkerExpression::String {
-                    key: MarkerValueString::PlatformMachine,
-                    operator: MarkerOperator::Equal,
-                    value: ArcStr::from(arch.name()),
-                }));
+                tag_marker = tag_marker.and(linux_machine(*arch));
                 marker = marker.or(tag_marker);
             }
 

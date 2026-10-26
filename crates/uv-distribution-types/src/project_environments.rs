@@ -8,7 +8,7 @@ use uv_pep508::{MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString,
 use uv_platform_tags::{Os, PlatformTag};
 use uv_pypi_types::{SupportedEnvironments, deserialize_marker_entries};
 
-use crate::{implied_platform_markers, implied_python_markers};
+use crate::{implied_platform_markers_with_aliases, implied_python_markers};
 
 static LINUX: LazyLock<MarkerTree> = LazyLock::new(|| {
     MarkerTree::expression(MarkerExpression::String {
@@ -237,7 +237,7 @@ impl LibcEnvironments {
         }
         let python = implied_python_markers(filename).and(marker);
         tags.iter().any(|tag| {
-            let platform = implied_platform_markers([tag]);
+            let platform = implied_platform_markers_with_aliases(tag);
             // Unknown platform tags cannot prove a wheel is unreachable.
             if platform.is_false() {
                 return true;

@@ -42,6 +42,7 @@ use uv_distribution_types::{
     PathBuiltDist, PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist,
     RemoteSource, Requirement, RequirementSource, RequiresPython, ResolvedDist,
     SimplifiedMarkerTree, StaticMetadata, ToUrlError, UrlString, VersionId,
+    platform_machine_markers,
 };
 use uv_fs::{PortablePath, PortablePathBuf, Simplified, normalize_path, try_relative_to_if};
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
@@ -53,7 +54,7 @@ use uv_pep508::{
     MarkerEnvironment, MarkerTree, Scheme, VerbatimUrl, VerbatimUrlError, split_scheme,
 };
 use uv_platform_tags::{
-    AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagCompatibility, TagPriority, Tags,
+    AbiTag, Arch, IncompatibleTag, LanguageTag, PlatformTag, TagCompatibility, TagPriority, Tags,
 };
 use uv_preview::PreviewFeature;
 use uv_pypi_types::{
@@ -154,23 +155,16 @@ static ANDROID_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
     UniversalMarker::new(pep508, ConflictMarker::TRUE)
 });
 static ARM_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
-    let pep508 =
-        MarkerTree::from_str("platform_machine == 'aarch64' or platform_machine == 'arm64' or platform_machine == 'ARM64'")
-            .unwrap();
-    UniversalMarker::new(pep508, ConflictMarker::TRUE)
+    UniversalMarker::new(
+        platform_machine_markers(Arch::Aarch64),
+        ConflictMarker::TRUE,
+    )
 });
 static X86_64_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
-    let pep508 =
-        MarkerTree::from_str("platform_machine == 'x86_64' or platform_machine == 'amd64' or platform_machine == 'AMD64'")
-            .unwrap();
-    UniversalMarker::new(pep508, ConflictMarker::TRUE)
+    UniversalMarker::new(platform_machine_markers(Arch::X86_64), ConflictMarker::TRUE)
 });
 static X86_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
-    let pep508 = MarkerTree::from_str(
-        "platform_machine == 'i686' or platform_machine == 'i386' or platform_machine == 'win32' or platform_machine == 'x86'",
-    )
-    .unwrap();
-    UniversalMarker::new(pep508, ConflictMarker::TRUE)
+    UniversalMarker::new(platform_machine_markers(Arch::X86), ConflictMarker::TRUE)
 });
 static PPC64LE_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
     let pep508 = MarkerTree::from_str("platform_machine == 'ppc64le'").unwrap();
@@ -193,10 +187,7 @@ static LOONGARCH64_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
     UniversalMarker::new(pep508, ConflictMarker::TRUE)
 });
 static ARMV7L_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
-    let pep508 =
-        MarkerTree::from_str("platform_machine == 'armv7l' or platform_machine == 'armv8l'")
-            .unwrap();
-    UniversalMarker::new(pep508, ConflictMarker::TRUE)
+    UniversalMarker::new(platform_machine_markers(Arch::Armv7L), ConflictMarker::TRUE)
 });
 static ARMV6L_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
     let pep508 = MarkerTree::from_str("platform_machine == 'armv6l'").unwrap();

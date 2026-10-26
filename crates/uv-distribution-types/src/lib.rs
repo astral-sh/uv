@@ -98,7 +98,10 @@ pub use crate::status_code_strategy::*;
 pub use crate::traits::*;
 pub use crate::variant_json::*;
 pub use crate::variants_json::*;
-pub use crate::wheel_markers::{implied_platform_markers, implied_python_markers};
+pub use crate::wheel_markers::{
+    implied_platform_markers, implied_platform_markers_with_aliases, implied_python_markers,
+    platform_machine_markers,
+};
 
 mod annotation;
 mod any;
