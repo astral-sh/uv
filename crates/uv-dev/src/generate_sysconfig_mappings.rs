@@ -14,15 +14,27 @@ use crate::generate_all::Mode;
 const TARGETS_YML_URL: &str = "https://raw.githubusercontent.com/astral-sh/python-build-standalone/refs/tags/20261026/cpython-unix/targets.yml";
 
 // Preserve compiler paths embedded in older downloadable python-build-standalone releases.
-const HISTORICAL_CC_VALUES: [&str; 3] = [
+const HISTORICAL_CC_VALUES: [&str; 9] = [
     "/usr/bin/aarch64-linux-gnu-gcc",
+    "/usr/bin/arm-linux-gnueabi-gcc",
+    "/usr/bin/arm-linux-gnueabihf-gcc",
+    "/usr/bin/mips-linux-gnu-gcc",
+    "/usr/bin/mipsel-linux-gnu-gcc",
+    "/usr/bin/powerpc64le-linux-gnu-gcc",
     "/usr/bin/riscv64-linux-gnu-clang",
     "/usr/bin/riscv64-linux-gnu-gcc",
+    "/usr/bin/s390x-linux-gnu-gcc",
 ];
-const HISTORICAL_CXX_VALUES: [&str; 3] = [
+const HISTORICAL_CXX_VALUES: [&str; 9] = [
     "/usr/bin/aarch64-linux-gnu-g++",
+    "/usr/bin/arm-linux-gnueabi-g++",
+    "/usr/bin/arm-linux-gnueabihf-g++",
+    "/usr/bin/mips-linux-gnu-g++",
+    "/usr/bin/mipsel-linux-gnu-g++",
+    "/usr/bin/powerpc64le-linux-gnu-g++",
     "/usr/bin/riscv64-linux-gnu-clang++",
     "/usr/bin/riscv64-linux-gnu-g++",
+    "/usr/bin/s390x-linux-gnu-g++",
 ];
 
 #[derive(clap::Args)]
