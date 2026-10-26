@@ -3,6 +3,8 @@ use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::time::Duration;
+
+use clap::ValueEnum;
 use tracing::info_span;
 use uv_client::{DEFAULT_CONNECT_TIMEOUT, DEFAULT_READ_TIMEOUT, DEFAULT_READ_TIMEOUT_UPLOAD};
 use uv_configuration::{
@@ -965,10 +967,17 @@ impl EnvironmentOptions {
             venv_clear: EnvFlag::new(EnvVars::UV_VENV_CLEAR)?,
             venv_relocatable: EnvFlag::new(EnvVars::UV_VENV_RELOCATABLE)?,
             init_bare: EnvFlag::new(EnvVars::UV_INIT_BARE)?,
-            init_build_backend: parse_typed_environment_variable(
-                EnvVars::UV_INIT_BUILD_BACKEND,
-                None,
-            )?,
+            init_build_backend: parse_string_environment_variable(EnvVars::UV_INIT_BUILD_BACKEND)?
+                .map(|value| {
+                    ProjectBuildBackend::from_str(&value, false).map_err(|err| {
+                        InvalidEnvironmentVariable {
+                            name: EnvVars::UV_INIT_BUILD_BACKEND.to_string(),
+                            value,
+                            err,
+                        }
+                    })
+                })
+                .transpose()?,
             malware_check: EnvFlag::new(EnvVars::UV_MALWARE_CHECK)?,
             malware_check_url: parse_string_environment_variable(EnvVars::UV_MALWARE_CHECK_URL)?
                 .map(|value| {

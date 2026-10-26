@@ -354,13 +354,13 @@ fn init_build_backend_env_invalid() {
     uv_snapshot!(context.filters(), context.init().arg("--no-package").env(EnvVars::UV_INIT_BUILD_BACKEND, "unknown"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse environment variable `UV_INIT_BUILD_BACKEND` with invalid value `unknown`: expected one of: uv, hatch, flit, pdm, poetry, setuptools, maturin, scikit
+    error: Failed to parse environment variable `UV_INIT_BUILD_BACKEND` with invalid value `unknown`: invalid variant: unknown
     ");
 
     uv_snapshot!(context.filters(), context.sync().env(EnvVars::UV_INIT_BUILD_BACKEND, "unknown"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse environment variable `UV_INIT_BUILD_BACKEND` with invalid value `unknown`: expected one of: uv, hatch, flit, pdm, poetry, setuptools, maturin, scikit
+    error: Failed to parse environment variable `UV_INIT_BUILD_BACKEND` with invalid value `unknown`: invalid variant: unknown
     ");
 }
 

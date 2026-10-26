@@ -1,6 +1,3 @@
-#[cfg(feature = "clap")]
-use clap::ValueEnum;
-
 /// Available project build backends for use in `pyproject.toml`.
 #[derive(Clone, Copy, Debug, PartialEq, serde::Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
@@ -34,20 +31,4 @@ pub enum ProjectBuildBackend {
     #[serde(alias = "scikit-build-core")]
     #[cfg_attr(feature = "clap", value(alias = "scikit-build-core"))]
     Scikit,
-}
-
-#[cfg(feature = "clap")]
-impl std::str::FromStr for ProjectBuildBackend {
-    type Err = String;
-
-    fn from_str(value: &str) -> Result<Self, Self::Err> {
-        <Self as ValueEnum>::from_str(value, false).map_err(|_| {
-            let choices = Self::value_variants()
-                .iter()
-                .filter_map(ValueEnum::to_possible_value)
-                .map(|value| value.get_name().to_owned())
-                .collect::<Vec<_>>();
-            format!("expected one of: {}", choices.join(", "))
-        })
-    }
 }
