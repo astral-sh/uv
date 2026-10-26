@@ -50,11 +50,11 @@ pub const DEFAULT_PYTHON_VERSION: &str = "3.12";
 
 // The expected latest patch version for each Python minor version.
 const LATEST_PYTHON_3_16: &str = "3.16.0a1";
-const LATEST_PYTHON_3_15: &str = "3.15.1";
-const LATEST_PYTHON_3_14: &str = "3.14.9";
-const LATEST_PYTHON_3_13: &str = "3.13.17";
-pub const LATEST_PYTHON_3_12: &str = "3.12.15";
-const LATEST_PYTHON_3_11: &str = "3.11.17";
+const LATEST_PYTHON_3_15: &str = "3.15.2";
+const LATEST_PYTHON_3_14: &str = "3.14.10";
+const LATEST_PYTHON_3_13: &str = "3.13.18";
+pub const LATEST_PYTHON_3_12: &str = "3.12.16";
+const LATEST_PYTHON_3_11: &str = "3.11.18";
 const LATEST_PYTHON_3_10: &str = "3.10.22";
 
 /// Create a new [`TestContext`] with the given Python version.

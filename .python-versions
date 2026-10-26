@@ -7,19 +7,19 @@
 # to use the versions of Python embedded in the local checkout of `uv`.
 
 # Keep Python 3.14 first for development tools with dependencies that lack Python 3.15 wheels.
-3.14.9
-3.15.1
-3.13.17
-3.12.15
-3.11.17
+3.14.10
+3.15.2
+3.13.18
+3.12.16
+3.11.18
 3.10.22
 3.9.25
 3.8.20
 # The following is needed for `==3.13` request tests
 3.13.0
 # Free-threaded versions required for testing
-3.13.17t
-3.14.9t
+3.13.18t
+3.14.10t
 # Pre-release version required for testing
 3.16.0a1
 
