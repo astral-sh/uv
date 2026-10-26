@@ -1376,5 +1376,150 @@ fn supported_libc_recompile_hashes() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     ");
+    // Switching to musl excludes the only remaining pin. Refreshing that pin is explicit.
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&context.read("pyproject.toml").replace("glibc", "musl"))?;
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .args(["requirements.in", "--universal", "--generate-hashes", "--no-header", "--no-annotate", "-o", "requirements.txt"])
+        .arg("--index-url").arg(server.index_url()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: All pinned hashes for `demo==1.0.0` belong to wheels excluded by `tool.uv.environments`
+
+    hint: Use `--upgrade-package demo` to generate hashes for the supported environments.
+    ");
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .args(["requirements.in", "--universal", "--generate-hashes", "--no-header", "--no-annotate", "-o", "requirements.txt", "--upgrade-package", "demo"])
+        .arg("--index-url").arg(server.index_url()), @r"
+    exit_code: 0 (success)
+    ----- stdout -----
+    demo==1.0.0 ; sys_platform == 'linux' \
+        --hash=sha256:[SHA256:demo-1.0.0-py3-none-musllinux_1_2_x86_64.whl]
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    Ok(())
+}
+
+/// The two libc families share an architecture, but this dependency is only reachable on glibc.
+#[test]
+fn supported_libc_conditional_compile() -> Result<()> {
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "supported-libc-conditional-compile"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.demo.versions."1.0.0"]
+        sdist = false
+        wheel_tags = ["py3-none-manylinux_2_17_x86_64", "py3-none-musllinux_1_2_x86_64"]
+
+        [packages.parent.versions."1.0.0"]
+        sdist = false
+        wheel_tags = ["py3-none-manylinux_2_17_x86_64", "py3-none-musllinux_1_2_x86_64"]
+        extras = { feature = ["demo"] }
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
+    let context = uv_test::test_context!("3.12").with_filters(
+        server
+            .files()
+            .map(|(filename, hash)| (hash.to_owned(), format!("[SHA256:{filename}]"))),
+    );
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [tool.uv]
+        environments = [
+            { marker = "sys_platform == 'linux' and python_version < '3.13'", libc = "glibc" },
+            { marker = "sys_platform == 'linux' and python_version >= '3.13'", libc = "musl" },
+        ]
+    "#})?;
+    context
+        .temp_dir
+        .child("requirements.in")
+        .write_str(indoc! {r"
+            parent
+            parent[feature] ; python_version < '3.13'
+        "})?;
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .args(["requirements.in", "--universal", "--python-version", "3.12", "--generate-hashes", "--no-header", "--no-annotate"])
+        .arg("--index-url").arg(server.index_url()), @r"
+    exit_code: 0 (success)
+    ----- stdout -----
+    demo==1.0.0 ; python_full_version < '3.13' and sys_platform == 'linux' \
+        --hash=sha256:[SHA256:demo-1.0.0-py3-none-manylinux_2_17_x86_64.whl]
+    parent==1.0.0 ; sys_platform == 'linux' \
+        --hash=sha256:[SHA256:parent-1.0.0-py3-none-musllinux_1_2_x86_64.whl] \
+        --hash=sha256:[SHA256:parent-1.0.0-py3-none-manylinux_2_17_x86_64.whl]
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .args(["requirements.in", "--universal", "--python-version", "3.12", "--format", "pylock.toml", "--no-header"])
+        .arg("--index-url").arg(server.index_url()), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    lock-version = "1.0"
+    created-by = "uv"
+    requires-python = ">=3.12"
+
+    [[packages]]
+    name = "demo"
+    version = "1.0.0"
+    marker = "python_full_version < '3.13' and sys_platform == 'linux'"
+    wheels = [{ url = "http://[LOCALHOST]/files/demo-1.0.0-py3-none-manylinux_2_17_x86_64.whl", upload-time = 2024-03-24T00:00:00Z, hashes = { sha256 = "[SHA256:demo-1.0.0-py3-none-manylinux_2_17_x86_64.whl]" } }]
+
+    [[packages]]
+    name = "parent"
+    version = "1.0.0"
+    marker = "sys_platform == 'linux'"
+    wheels = [
+        { url = "http://[LOCALHOST]/files/parent-1.0.0-py3-none-manylinux_2_17_x86_64.whl", upload-time = 2024-03-24T00:00:00Z, hashes = { sha256 = "[SHA256:parent-1.0.0-py3-none-manylinux_2_17_x86_64.whl]" } },
+        { url = "http://[LOCALHOST]/files/parent-1.0.0-py3-none-musllinux_1_2_x86_64.whl", upload-time = 2024-03-24T00:00:00Z, hashes = { sha256 = "[SHA256:parent-1.0.0-py3-none-musllinux_1_2_x86_64.whl]" } },
+    ]
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "#);
+    Ok(())
+}
+
+/// Mention the excluded libc when it is the only reason a release has no usable wheels.
+#[test]
+fn supported_libc_only_excluded_wheels() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filter((
+        r"\nhint: The resolution failed for an environment that is not the current one[^\n]*",
+        "",
+    ));
+    wheel(&context, "demo", "1.0.0", "py3-none-musllinux_1_2_x86_64")?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["demo"]
+
+        [tool.uv]
+        no-index = true
+        find-links = ["links"]
+        environments = [{ marker = "sys_platform == 'linux'", libc = "glibc" }]
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies for split (markers: sys_platform == 'linux')
+      cause: Because demo==1.0.0 has no wheels compatible with the configured Linux libc environments and only demo==1.0.0 is available, we can conclude that all versions of demo cannot be used.
+             And because your project depends on demo, we can conclude that your project's requirements are unsatisfiable.
+    ");
     Ok(())
 }

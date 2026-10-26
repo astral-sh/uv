@@ -2543,15 +2543,11 @@ impl Lock {
             }
             let wheels = &mut package.wheels;
             wheels.retain(|wheel| {
-                if let Some(environments) = resolution.options.libc.environments
-                    && !environments.allows_wheel(&wheel.filename, wheel_marker.pep508())
-                {
-                    return false;
-                }
                 !is_wheel_unreachable_for_marker(
                     &wheel.filename,
                     &requires_python,
                     &wheel_marker,
+                    resolution.options.libc.environments,
                     None,
                 )
             });
@@ -10419,6 +10415,7 @@ fn is_wheel_unreachable_for_marker(
     filename: &WheelFilename,
     requires_python: &RequiresPython,
     marker: &UniversalMarker,
+    libc_environments: Option<LibcEnvironments>,
     tags: Option<&Tags>,
 ) -> bool {
     // TODO(konsti): Include wheel variants in lockfiles when supported.
@@ -10432,6 +10429,11 @@ fn is_wheel_unreachable_for_marker(
     }
     // Remove wheels that don't match `requires-python` and can't be selected for installation.
     if !requires_python.matches_wheel_tag(filename) {
+        return true;
+    }
+    if let Some(environments) = libc_environments
+        && !environments.allows_wheel(filename, marker.pep508())
+    {
         return true;
     }
 
@@ -10629,6 +10631,7 @@ pub(crate) fn is_wheel_unreachable(
         filename,
         requires_python,
         graph.graph[node_index].marker(),
+        graph.options.libc.environments,
         tags,
     )
 }

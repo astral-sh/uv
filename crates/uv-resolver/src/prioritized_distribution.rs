@@ -6,9 +6,9 @@ use rustc_hash::FxHashSet;
 use uv_distribution::supported_variant_properties;
 use uv_distribution_filename::{BuildTag, WheelFilename};
 use uv_distribution_types::{
-    File, IndexUrl, InstalledDist, LinuxLibc, Name, RegistryBuiltDist, RegistryBuiltWheel,
-    RegistrySourceDist, RequiresPython, VariantsJsonContent, VariantsJsonFilename,
-    implied_platform_markers, implied_python_markers,
+    File, IndexUrl, InstalledDist, LibcEnvironments, LinuxLibc, Name, RegistryBuiltDist,
+    RegistryBuiltWheel, RegistrySourceDist, RequiresPython, VariantsJsonContent,
+    VariantsJsonFilename, implied_platform_markers, implied_python_markers,
 };
 use uv_normalize::PackageName;
 use uv_pep440::VersionSpecifiers;
@@ -46,8 +46,6 @@ struct PrioritizedDistInner {
     variants_json: Vec<RegistryVariantsJson>,
     /// The hashes for each distribution.
     hashes: Vec<HashDigest>,
-    /// Hashes to remove from existing requirements files when their wheels are excluded.
-    excluded_libc_hashes: Option<Box<FxHashSet<HashDigest>>>,
     /// Python coverage, unioned over compatible wheels independently of their platforms.
     python_markers: MarkerTree,
     /// Coverage for the glibc and musl baselines, unioned over compatible wheels separately.
@@ -64,7 +62,6 @@ impl Default for PrioritizedDistInner {
             wheels: Vec::new(),
             variants_json: Vec::new(),
             hashes: Vec::new(),
-            excluded_libc_hashes: None,
             python_markers: MarkerTree::FALSE,
             markers: [MarkerTree::FALSE; 2],
         }
@@ -191,7 +188,9 @@ impl IncompatibleDist {
                     None => format!("has {self}"),
                 },
                 IncompatibleWheel::RequiresPython(..) => format!("requires {self}"),
-                IncompatibleWheel::MissingPlatform(_) => format!("has {self}"),
+                IncompatibleWheel::MissingPlatform(_) | IncompatibleWheel::ExcludedLibc => {
+                    format!("has {self}")
+                }
             },
             Self::Source(incompatibility) => match incompatibility {
                 IncompatibleSource::NoBuild => format!("has {self}"),
@@ -220,7 +219,9 @@ impl IncompatibleDist {
                     None => format!("have {self}"),
                 },
                 IncompatibleWheel::RequiresPython(..) => format!("require {self}"),
-                IncompatibleWheel::MissingPlatform(_) => format!("have {self}"),
+                IncompatibleWheel::MissingPlatform(_) | IncompatibleWheel::ExcludedLibc => {
+                    format!("have {self}")
+                }
             },
             Self::Source(incompatibility) => match incompatibility {
                 IncompatibleSource::NoBuild => format!("have {self}"),
@@ -268,7 +269,7 @@ impl IncompatibleDist {
                 IncompatibleWheel::Yanked(..) => None,
                 IncompatibleWheel::ExcludeNewer(..) => None,
                 IncompatibleWheel::RequiresPython(..) => None,
-                IncompatibleWheel::MissingPlatform(..) => None,
+                IncompatibleWheel::MissingPlatform(..) | IncompatibleWheel::ExcludedLibc => None,
             },
             Self::Source(..) => None,
             Self::Unavailable => None,
@@ -312,6 +313,9 @@ impl Display for IncompatibleDist {
                 },
                 IncompatibleWheel::RequiresPython(python, _) => {
                     write!(f, "Python {python}")
+                }
+                IncompatibleWheel::ExcludedLibc => {
+                    f.write_str("no wheels compatible with the configured Linux libc environments")
                 }
                 IncompatibleWheel::MissingPlatform(marker) => {
                     if let Some(platform) = KnownPlatform::from_marker(*marker) {
@@ -381,6 +385,8 @@ pub enum IncompatibleWheel {
     NoBinary,
     /// Wheels are not available for the current platform.
     MissingPlatform(MarkerTree),
+    /// The project's libc environments exclude every platform tag of this wheel.
+    ExcludedLibc,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -498,12 +504,11 @@ impl PrioritizedDist {
         if let Some(environments) = libc.environments
             && !environments.allows_wheel(&dist.filename, MarkerTree::TRUE)
         {
-            if !dist.file.hashes.is_empty() {
-                self.0
-                    .excluded_libc_hashes
-                    .get_or_insert_default()
-                    .extend(dist.file.hashes.iter().cloned());
-            }
+            // Retain the file for diagnostics and for filtering previously pinned hashes.
+            self.0.wheels.push((
+                dist,
+                WheelCompatibility::Incompatible(IncompatibleWheel::ExcludedLibc),
+            ));
             return;
         }
 
@@ -644,9 +649,9 @@ impl PrioritizedDist {
 
     /// Return the incompatibility for the best wheel, if any.
     pub(crate) fn incompatible_wheel(&self) -> Option<&IncompatibleWheel> {
-        self.0
-            .best_wheel_index
-            .map(|i| &self.0.wheels[i])
+        // If every wheel was excluded by libc, none was ranked for selection.
+        self.best_wheel()
+            .or_else(|| self.0.wheels.first())
             .and_then(|(_, compatibility)| match compatibility {
                 WheelCompatibility::Compatible(_, _, _) => None,
                 WheelCompatibility::Incompatible(incompatibility) => Some(incompatibility),
@@ -656,20 +661,40 @@ impl PrioritizedDist {
             })
     }
 
-    /// Preserve preferred hashes except those known to belong exclusively to excluded wheels.
-    pub(crate) fn hashes(&self, preferred: Option<&[HashDigest]>) -> HashDigests {
-        if let Some(preferred) = preferred {
-            let Some(excluded) = &self.0.excluded_libc_hashes else {
-                return HashDigests::from(preferred);
-            };
-            let allowed: FxHashSet<_> = self.0.hashes.iter().collect();
-            return preferred
+    /// Return the hashes advertised for this version.
+    pub(crate) fn hashes(&self) -> &[HashDigest] {
+        &self.0.hashes
+    }
+
+    /// Remove only hashes known to belong exclusively to wheels outside the package's environments.
+    pub(crate) fn filter_libc_hashes(
+        &self,
+        hashes: &HashDigests,
+        environments: LibcEnvironments,
+        marker: MarkerTree,
+    ) -> Option<HashDigests> {
+        let mut excluded = FxHashSet::default();
+        let mut allowed = FxHashSet::default();
+        for (wheel, _) in &self.0.wheels {
+            if environments.allows_wheel(&wheel.filename, marker) {
+                allowed.extend(wheel.file.hashes.iter());
+            } else {
+                excluded.extend(wheel.file.hashes.iter());
+            }
+        }
+        if excluded.is_empty() {
+            return None;
+        }
+        if let Some((sdist, _)) = &self.0.source {
+            allowed.extend(sdist.file.hashes.iter());
+        }
+        Some(
+            hashes
                 .iter()
                 .filter(|hash| !excluded.contains(*hash) || allowed.contains(*hash))
                 .cloned()
-                .collect();
-        }
-        HashDigests::from(self.0.hashes.as_slice())
+                .collect(),
+        )
     }
 
     /// Returns true if and only if this distribution does not contain any
@@ -858,7 +883,12 @@ impl WheelCompatibility {
 
     /// Return `true` if the distribution is excluded.
     fn is_excluded(&self) -> bool {
-        matches!(self, Self::Incompatible(IncompatibleWheel::ExcludeNewer(_)))
+        matches!(
+            self,
+            Self::Incompatible(
+                IncompatibleWheel::ExcludeNewer(_) | IncompatibleWheel::ExcludedLibc
+            )
+        )
     }
 
     /// Return `true` if the current compatibility is more compatible than another.
@@ -963,7 +993,8 @@ impl IncompatibleWheel {
                         timestamp_other < timestamp_self
                     }
                 },
-                Self::MissingPlatform(_)
+                Self::ExcludedLibc
+                | Self::MissingPlatform(_)
                 | Self::NoBinary
                 | Self::RequiresPython(_, _)
                 | Self::Tag(_)
@@ -972,7 +1003,8 @@ impl IncompatibleWheel {
             Self::Tag(tag_self) => match other {
                 Self::ExcludeNewer(_) => false,
                 Self::Tag(tag_other) => tag_self > tag_other,
-                Self::MissingPlatform(_)
+                Self::ExcludedLibc
+                | Self::MissingPlatform(_)
                 | Self::NoBinary
                 | Self::RequiresPython(_, _)
                 | Self::Yanked(_) => true,
@@ -981,13 +1013,16 @@ impl IncompatibleWheel {
                 Self::ExcludeNewer(_) | Self::Tag(_) => false,
                 // Version specifiers cannot be reasonably compared
                 Self::RequiresPython(_, _) => false,
-                Self::MissingPlatform(_) | Self::NoBinary | Self::Yanked(_) => true,
+                Self::ExcludedLibc
+                | Self::MissingPlatform(_)
+                | Self::NoBinary
+                | Self::Yanked(_) => true,
             },
             Self::Yanked(_) => match other {
                 Self::ExcludeNewer(_) | Self::Tag(_) | Self::RequiresPython(_, _) => false,
                 // Yanks with a reason are more helpful for errors
                 Self::Yanked(yanked_other) => matches!(yanked_other, Yanked::Reason(_)),
-                Self::MissingPlatform(_) | Self::NoBinary => true,
+                Self::ExcludedLibc | Self::MissingPlatform(_) | Self::NoBinary => true,
             },
             Self::NoBinary => match other {
                 Self::ExcludeNewer(_)
@@ -995,9 +1030,9 @@ impl IncompatibleWheel {
                 | Self::RequiresPython(_, _)
                 | Self::Yanked(_) => false,
                 Self::NoBinary => false,
-                Self::MissingPlatform(_) => true,
+                Self::ExcludedLibc | Self::MissingPlatform(_) => true,
             },
-            Self::MissingPlatform(_) => false,
+            Self::ExcludedLibc | Self::MissingPlatform(_) => false,
         }
     }
 }

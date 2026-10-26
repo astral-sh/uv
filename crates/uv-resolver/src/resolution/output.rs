@@ -15,7 +15,7 @@ use uv_distribution_types::{
 use uv_git::GitResolver;
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifier};
-use uv_pypi_types::{Conflicts, HashDigest, HashDigests, ParsedUrl, VerbatimParsedUrl, Yanked};
+use uv_pypi_types::{Conflicts, HashDigests, ParsedUrl, VerbatimParsedUrl, Yanked};
 use uv_resolver_types::PackageRole;
 use uv_types::HashStrategy;
 
@@ -27,7 +27,9 @@ use crate::resolver::{
     Resolution, ResolutionDependencyEdge, ResolutionNode, ResolutionPackage, SelectedDistribution,
 };
 use crate::universal_marker::{ConflictMarker, UniversalMarker};
-use crate::{InMemoryIndex, MetadataResponse, Options, ResolveError, VersionsResponse};
+use crate::{
+    InMemoryIndex, MetadataResponse, Options, PrioritizedDist, ResolveError, VersionsResponse,
+};
 
 /// Merge completed forks without retaining their duplicate graphs or unused artifact pins.
 pub(crate) struct ResolutionGraphBuilder<'a> {
@@ -191,6 +193,52 @@ impl<'a> ResolutionGraphBuilder<'a> {
 
         // Discard any unreachable nodes.
         graph.retain_nodes(|graph, node| !graph[node].marker().is_false());
+
+        // Requirements files may already pin a strict subset of the registry's hashes. Apply libc
+        // restrictions only after the graph tells us where each dependency can be installed.
+        if let Some(environments) = options.libc.environments
+            && self.hasher.collection() != HashCollection::None
+        {
+            for node in graph.node_weights_mut() {
+                let ResolutionGraphNode::Dist(dist) = node else {
+                    continue;
+                };
+                let Some(index) = dist.dist.index() else {
+                    continue;
+                };
+                if dist.hashes.is_empty() {
+                    continue;
+                }
+                let Some(filtered) = with_registry_version(
+                    self.index,
+                    &dist.name,
+                    Some(index),
+                    &dist.version,
+                    |registry| {
+                        registry.filter_libc_hashes(
+                            &dist.hashes,
+                            environments,
+                            dist.marker.pep508(),
+                        )
+                    },
+                )
+                .flatten() else {
+                    continue;
+                };
+                if filtered.is_empty()
+                    && self
+                        .preferences
+                        .match_hashes(&dist.name, &dist.version)
+                        .is_some_and(|hashes| !hashes.is_empty())
+                {
+                    return Err(ResolveError::ExcludedPinnedHashes(
+                        dist.name.clone(),
+                        dist.version.clone(),
+                    ));
+                }
+                dist.hashes = filtered;
+            }
+        }
 
         if matches!(resolution_strategy, ResolutionStrategy::Lowest) {
             report_missing_lower_bounds(&graph, &mut diagnostics, &constraints, &modifiers);
@@ -369,16 +417,7 @@ fn get_hashes(
     if let Some(digests) = preferences.match_hashes(name, version)
         && !digests.is_empty()
     {
-        if url.is_none()
-            && let Some(filtered) = registry_hashes(in_memory, name, index, version, Some(digests))
-        {
-            if !filtered.is_empty() {
-                return filtered;
-            }
-            // Every preferred hash was for an excluded wheel. Collect hashes for the new target.
-        } else {
-            return HashDigests::from(digests);
-        }
+        return HashDigests::from(digests);
     }
 
     // 2. Preserve trusted hashes for this URL or path. Wheel metadata lookup does not always
@@ -415,7 +454,10 @@ fn get_hashes(
 
     // 5. Look for hashes from the registry, which are served at the package level.
     if url.is_none()
-        && let Some(mut hashes) = registry_hashes(in_memory, name, index, version, None)
+        && let Some(mut hashes) =
+            with_registry_version(in_memory, name, index, version, |registry| {
+                HashDigests::from(registry.hashes())
+            })
     {
         hashes.sort_unstable();
         return hashes;
@@ -424,35 +466,41 @@ fn get_hashes(
     HashDigests::empty()
 }
 
-/// Read a registry version's hashes, optionally filtering existing requirements.txt hashes.
-fn registry_hashes(
+/// Read a registry version from the implicit or explicit index where it was selected.
+fn with_registry_version<T>(
     in_memory: &InMemoryIndex,
     name: &PackageName,
     index: Option<&IndexUrl>,
     version: &Version,
-    preferred: Option<&[HashDigest]>,
-) -> Option<HashDigests> {
-    let hashes = |response: &VersionsResponse| {
+    f: impl Fn(&PrioritizedDist) -> T,
+) -> Option<T> {
+    let lookup = |response: &VersionsResponse| {
         let VersionsResponse::Found(versions) = response else {
             return None;
         };
         versions
             .iter()
-            .filter(|map| map.index() == index)
-            .find_map(|map| map.get(version))
-            .map(|dist| dist.hashes(preferred))
+            .find_map(|map| {
+                if let Some(source) = map.index() {
+                    return (Some(source) == index).then(|| map.get(version)).flatten();
+                }
+                // Flat indexes store the source on each file instead of on the version map.
+                let dist = map.get(version)?;
+                (dist.get()?.for_installation().index() == index).then_some(dist)
+            })
+            .map(&f)
     };
     in_memory
         .implicit()
         .get(name)
         .as_deref()
-        .and_then(hashes)
+        .and_then(lookup)
         .or_else(|| {
             in_memory
                 .explicit()
                 .get(&(name.clone(), index?.clone()))
                 .as_deref()
-                .and_then(hashes)
+                .and_then(lookup)
         })
 }
 
