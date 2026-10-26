@@ -10,7 +10,6 @@ use std::str::FromStr;
 use std::time::Duration;
 
 use anyhow::{Result, bail};
-use clap::ValueEnum;
 use rustc_hash::FxHashSet;
 
 use uv_audit::{VulnerabilityID, VulnerabilityServiceFormat};
@@ -47,9 +46,9 @@ use uv_settings::{
     IndexOptions, LockCheck, LockedFlag, LockedSource, MalwareCheckSettings, Options, PipOptions,
     PreviewFeaturesOption, PreviewOption, PublishOptions, PythonInstallMirrors, PythonListKinds,
     ResolverInstallerOptions, ResolverInstallerSchema, ResolverInstallerSettings, ResolverOptions,
-    ResolverSettings, resolve_build_hash_checking, resolve_prerelease,
+    ResolverSettings, init_build_backend_from_env, resolve_build_hash_checking, resolve_prerelease,
 };
-use uv_static::{EnvVars, InvalidEnvironmentVariable};
+use uv_static::EnvVars;
 use uv_torch::{AmdGpuArchitecture, TorchMode};
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::{DependencyType, ExtraBuildDependencies, OverrideDependency};
@@ -528,26 +527,7 @@ impl InitSettings {
         let build_backend = match build_backend {
             Some(build_backend) => Some(build_backend),
             None if script || no_package || r#virtual => None,
-            None => environment
-                .init_build_backend
-                .map(|value| {
-                    ProjectBuildBackend::from_str(&value, false).map_err(|_| {
-                        InvalidEnvironmentVariable {
-                            name: EnvVars::UV_INIT_BUILD_BACKEND.to_string(),
-                            value,
-                            err: format!(
-                                "expected one of: {}",
-                                ProjectBuildBackend::value_variants()
-                                    .iter()
-                                    .filter_map(ValueEnum::to_possible_value)
-                                    .map(|value| value.get_name().to_string())
-                                    .collect::<Vec<_>>()
-                                    .join(", ")
-                            ),
-                        }
-                    })
-                })
-                .transpose()?,
+            None => init_build_backend_from_env()?,
         };
 
         if r#virtual && lib {

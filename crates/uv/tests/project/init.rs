@@ -360,6 +360,12 @@ fn init_build_backend_env_invalid() -> Result<()> {
     error: Failed to parse environment variable `UV_INIT_BUILD_BACKEND` with invalid value `unknown`: expected one of: uv, hatch, flit, pdm, poetry, setuptools, maturin, scikit
     ");
 
+    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--no-package").env(EnvVars::UV_INIT_BUILD_BACKEND, "unknown"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Initialized project `foo`
+    ");
+
     Ok(())
 }
 
