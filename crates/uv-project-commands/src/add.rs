@@ -5,7 +5,6 @@ use std::path::Path;
 use std::sync::Arc;
 
 use anyhow::{Context, Result, bail};
-use itertools::Itertools;
 use owo_colors::OwoColorize;
 use rustc_hash::{FxBuildHasher, FxHashMap};
 use tracing::{debug, warn};
@@ -23,7 +22,7 @@ use uv_dispatch::{BuildDispatch, PlatformState, UniversalState};
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
 use uv_distribution_types::{
     Identifier, Index, IndexLocations, IndexName, IndexUrl, NameRequirementSpecification,
-    Requirement, RequirementSource, UnresolvedRequirement,
+    Requirement, RequirementSource,
 };
 use uv_environment_operations::install_target::{InstallTarget, PackageSelection};
 use uv_environment_operations::malware::MalwareCheckContext;
@@ -49,7 +48,10 @@ use uv_python_interpreter::PythonEnvironment;
 use uv_python_types::{PythonArchitecture, PythonDownloads, PythonPreference, PythonRequest};
 use uv_redacted::SafeUrl;
 use uv_redacted::policy::Raw;
-use uv_requirements::{NamedRequirementsResolver, RequirementsSource, RequirementsSpecification};
+use uv_requirements::{
+    NamedRequirementsResolver, RequirementsSource, RequirementsSpecification,
+    partition_requirements,
+};
 use uv_resolve_operations::Error as ResolveError;
 use uv_resolve_operations::loggers::{DefaultResolveLogger, SummaryResolveLogger};
 use uv_resolver::FlatIndex;
@@ -406,24 +408,20 @@ pub async fn add(
 
     // Resolve any unnamed requirements.
     let requirements = {
-        // Partition the requirements into named and unnamed requirements.
-        let (mut requirements, unnamed): (Vec<_>, Vec<_>) = requirements
+        let requirements: Vec<_> = requirements
             .into_iter()
-            .map(|spec| {
-                spec.requirement.augment_requirement(
+            .map(|mut spec| {
+                spec.requirement = spec.requirement.augment_requirement(
                     rev.as_deref(),
                     tag.as_deref(),
                     branch.as_deref(),
                     lfs.into(),
                     marker,
-                )
+                );
+                spec
             })
-            .partition_map(|requirement| match requirement {
-                UnresolvedRequirement::Named(requirement) => itertools::Either::Left(requirement),
-                UnresolvedRequirement::Unnamed(requirement) => {
-                    itertools::Either::Right(requirement)
-                }
-            });
+            .collect();
+        let (mut requirements, unnamed) = partition_requirements(requirements);
 
         // Resolve any unnamed requirements.
         if !unnamed.is_empty() {
