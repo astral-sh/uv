@@ -3,8 +3,6 @@ use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::time::Duration;
-
-use clap::ValueEnum;
 use tracing::info_span;
 use uv_client::{DEFAULT_CONNECT_TIMEOUT, DEFAULT_READ_TIMEOUT, DEFAULT_READ_TIMEOUT_UPLOAD};
 use uv_configuration::{
@@ -810,6 +808,7 @@ pub struct EnvironmentOptions {
     pub venv_clear: EnvFlag,
     pub venv_relocatable: EnvFlag,
     pub init_bare: EnvFlag,
+    pub init_build_backend: Option<ProjectBuildBackend>,
     pub malware_check: EnvFlag,
     pub malware_check_url: Option<SafeUrl>,
     pub run_recursion_depth: Option<u32>,
@@ -966,6 +965,10 @@ impl EnvironmentOptions {
             venv_clear: EnvFlag::new(EnvVars::UV_VENV_CLEAR)?,
             venv_relocatable: EnvFlag::new(EnvVars::UV_VENV_RELOCATABLE)?,
             init_bare: EnvFlag::new(EnvVars::UV_INIT_BARE)?,
+            init_build_backend: parse_typed_environment_variable(
+                EnvVars::UV_INIT_BUILD_BACKEND,
+                None,
+            )?,
             malware_check: EnvFlag::new(EnvVars::UV_MALWARE_CHECK)?,
             malware_check_url: parse_string_environment_variable(EnvVars::UV_MALWARE_CHECK_URL)?
                 .map(|value| {
@@ -989,26 +992,6 @@ impl EnvironmentOptions {
             )?,
         })
     }
-}
-
-/// Read the default build backend when `uv init` needs one.
-pub fn init_build_backend_from_env() -> Result<Option<ProjectBuildBackend>, Error> {
-    let Some(value) = parse_string_environment_variable(EnvVars::UV_INIT_BUILD_BACKEND)? else {
-        return Ok(None);
-    };
-    let backend = ProjectBuildBackend::from_str(&value, false).map_err(|_| {
-        let choices = ProjectBuildBackend::value_variants()
-            .iter()
-            .filter_map(ValueEnum::to_possible_value)
-            .map(|value| value.get_name().to_owned())
-            .collect::<Vec<_>>();
-        InvalidEnvironmentVariable {
-            name: EnvVars::UV_INIT_BUILD_BACKEND.to_string(),
-            value,
-            err: format!("expected one of: {}", choices.join(", ")),
-        }
-    })?;
-    Ok(Some(backend))
 }
 
 /// Parse a string environment variable.

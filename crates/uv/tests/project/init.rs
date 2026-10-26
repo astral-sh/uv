@@ -346,27 +346,22 @@ fn init_script_build_backend_env() -> Result<()> {
     Ok(())
 }
 
-/// An invalid `UV_INIT_BUILD_BACKEND` is reported when it would be used.
+/// Environment settings are validated even when the command does not use a build backend.
 #[test]
-fn init_build_backend_env_invalid() -> Result<()> {
+fn init_build_backend_env_invalid() {
     let context = uv_test::test_context!("3.12");
 
-    let child = context.temp_dir.child("foo");
-    child.create_dir_all()?;
-
-    uv_snapshot!(context.filters(), context.init().current_dir(&child).env(EnvVars::UV_INIT_BUILD_BACKEND, "unknown"), @"
+    uv_snapshot!(context.filters(), context.init().arg("--no-package").env(EnvVars::UV_INIT_BUILD_BACKEND, "unknown"), @"
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse environment variable `UV_INIT_BUILD_BACKEND` with invalid value `unknown`: expected one of: uv, hatch, flit, pdm, poetry, setuptools, maturin, scikit
     ");
 
-    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--no-package").env(EnvVars::UV_INIT_BUILD_BACKEND, "unknown"), @"
-    exit_code: 0 (success)
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::UV_INIT_BUILD_BACKEND, "unknown"), @"
+    exit_code: 2 (failure)
     ----- stderr -----
-    Initialized project `foo`
+    error: Failed to parse environment variable `UV_INIT_BUILD_BACKEND` with invalid value `unknown`: expected one of: uv, hatch, flit, pdm, poetry, setuptools, maturin, scikit
     ");
-
-    Ok(())
 }
 
 /// Run `uv init --app --package` to create a packaged application project
@@ -3281,7 +3276,7 @@ fn init_library_flit() -> Result<()> {
 fn init_backend_implies_package() {
     let context = uv_test::test_context!("3.12");
 
-    uv_snapshot!(context.filters(), context.init().arg("project").arg("--build-backend").arg("flit"), @"
+    uv_snapshot!(context.filters(), context.init().arg("project").arg("--build-backend").arg("flit").env(EnvVars::UV_INIT_BUILD_BACKEND, "setuptools"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Initialized project `project` at `[TEMP_DIR]/project`
@@ -3310,6 +3305,13 @@ fn init_backend_implies_package() {
         "#
         );
     });
+
+    uv_snapshot!(context.filters(), context.init().arg("from-env/project").env(EnvVars::UV_INIT_BUILD_BACKEND, "flit-core"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Initialized project `project` at `[TEMP_DIR]/from-env/project`
+    ");
+    assert_eq!(context.read("from-env/project/pyproject.toml"), pyproject);
 }
 
 /// Run `uv init --build-backend poetry` to create a project with poetry-core build backend

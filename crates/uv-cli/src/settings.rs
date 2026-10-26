@@ -46,7 +46,7 @@ use uv_settings::{
     IndexOptions, LockCheck, LockedFlag, LockedSource, MalwareCheckSettings, Options, PipOptions,
     PreviewFeaturesOption, PreviewOption, PublishOptions, PythonInstallMirrors, PythonListKinds,
     ResolverInstallerOptions, ResolverInstallerSchema, ResolverInstallerSettings, ResolverOptions,
-    ResolverSettings, init_build_backend_from_env, resolve_build_hash_checking, resolve_prerelease,
+    ResolverSettings, resolve_build_hash_checking, resolve_prerelease,
 };
 use uv_static::EnvVars;
 use uv_torch::{AmdGpuArchitecture, TorchMode};
@@ -527,7 +527,7 @@ impl InitSettings {
         let build_backend = match build_backend {
             Some(build_backend) => Some(build_backend),
             None if script || no_package || r#virtual => None,
-            None => init_build_backend_from_env()?,
+            None => environment.init_build_backend,
         };
 
         if r#virtual && lib {

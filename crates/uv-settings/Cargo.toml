@@ -49,6 +49,9 @@ thiserror = { workspace = true }
 toml = { workspace = true }
 tracing = { workspace = true }
 
+[package.metadata.cargo-shear]
+ignored = ["clap"]
+
 [features]
 schemars = [
   "dep:schemars",
