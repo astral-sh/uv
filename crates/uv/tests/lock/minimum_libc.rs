@@ -1376,11 +1376,27 @@ fn supported_libc_recompile_hashes() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     ");
+    // A find-links file can also provide the selected wheel when the index lists the package.
+    let links = server
+        .files()
+        .filter(|(filename, _)| filename.starts_with("demo-"))
+        .map(|(filename, hash)| {
+            format!(
+                r##"<a href="{}#sha256={hash}">{filename}</a>"##,
+                server.file_url(filename)
+            )
+        })
+        .collect::<String>();
+    context.temp_dir.child("links.html").write_str(&links)?;
     // Switching to musl excludes the only remaining pin. Refreshing that pin is explicit.
     context
         .temp_dir
         .child("pyproject.toml")
-        .write_str(&context.read("pyproject.toml").replace("glibc", "musl"))?;
+        .write_str(indoc! {r#"
+            [tool.uv]
+            environments = [{ marker = "sys_platform == 'linux'", libc = "musl" }]
+            find-links = ["links.html"]
+        "#})?;
     uv_snapshot!(context.filters(), context.pip_compile()
         .args(["requirements.in", "--universal", "--generate-hashes", "--no-header", "--no-annotate", "-o", "requirements.txt"])
         .arg("--index-url").arg(server.index_url()), @"

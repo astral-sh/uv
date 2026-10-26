@@ -481,10 +481,11 @@ fn with_registry_version<T>(
         versions
             .iter()
             .find_map(|map| {
-                if let Some(source) = map.index() {
-                    return (Some(source) == index).then(|| map.get(version)).flatten();
+                if map.index() == index {
+                    return map.get(version);
                 }
-                // Flat indexes store the source on each file instead of on the version map.
+                // A find-links file can be selected from a flat index or alongside files from a
+                // Simple API index. In both cases the selected file records its own source.
                 let dist = map.get(version)?;
                 (dist.get()?.for_installation().index() == index).then_some(dist)
             })
