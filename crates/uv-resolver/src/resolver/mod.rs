@@ -22,7 +22,7 @@ use tokio_stream::wrappers::ReceiverStream;
 use tracing::{Level, debug, info, instrument, trace, warn};
 
 use uv_configuration::{Constraints, DependencyModifiers, IndexStrategy};
-use uv_distribution::{ArchiveMetadata, DistributionDatabase};
+use uv_distribution::{ArchiveMetadata, DistributionDatabase, Error as DistributionError};
 use uv_distribution_types::{
     BuiltDist, DerivationChain, Dist, DistErrorKind, Identifier, IndexCapabilities, IndexLocations,
     IndexMetadata, IndexUrl, InstalledDist, Name, RemoteSource, Requirement, RequiresPython,
@@ -660,6 +660,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     };
 
                     let version = match version {
+                        ResolverVersion::UnavailablePackage(reason) => {
+                            state.pubgrub.add_unavailable(
+                                next_id,
+                                Range::full(),
+                                UnavailableReason::Package(reason),
+                            );
+                            continue;
+                        }
                         ResolverVersion::Unforked(version) => version,
                         ResolverVersion::Forked(forks) => {
                             incompatibility_arena = state.pubgrub.take_incompatibility_arena();
@@ -1191,9 +1199,20 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         let registered = requests.metadata(&dist)?;
         let response = registered.wait();
 
-        // If we failed to fetch the metadata for a URL, we can't proceed.
         let metadata = match &*response {
             MetadataResponse::Found(archive) => &archive.metadata,
+            MetadataResponse::Error(_, err)
+                if pubgrub.package_store[id].subject() == PackageSubject::VersionCheck
+                    && matches!(
+                        err.as_ref(),
+                        DistributionError::NoBuild | DistributionError::NoBuildPackage(_)
+                    ) =>
+            {
+                // Other candidates can still use this member without requesting its version.
+                return Ok(Some(ResolverVersion::UnavailablePackage(
+                    UnavailablePackage::DynamicVersionBuildDisabled,
+                )));
+            }
             MetadataResponse::Unavailable(reason) => {
                 self.unavailable_packages
                     .pin()

@@ -775,11 +775,20 @@ impl PubGrubReportFormatter<'_> {
         }
 
         let requested_ranges = requested_ranges(derivation_tree);
+        let mut blocked_workspace_versions = BTreeSet::new();
 
         let mut pending = vec![(derivation_tree, inherited_exclude_newer_ranges.clone())];
         while let Some((derivation_tree, inherited_exclude_newer_ranges)) = pending.pop() {
             match derivation_tree {
                 DerivationTree::External(External::Custom(package, set, reason)) => {
+                    if matches!(
+                        reason,
+                        UnavailableReason::Package(UnavailablePackage::DynamicVersionBuildDisabled)
+                    ) && let Some(name) = package.name_no_root()
+                    {
+                        blocked_workspace_versions.insert(name);
+                        continue;
+                    }
                     if matches!(
                         reason,
                         UnavailableReason::Version(UnavailableVersion::UnsatisfiableDependency(_))
@@ -1020,6 +1029,12 @@ impl PubGrubReportFormatter<'_> {
                 }
             }
         }
+
+        // A blocked version check cannot tell us that the workspace member has the wrong version.
+        output_hints.retain(|hint| {
+            !matches!(hint, PubGrubHint::DependsOnWorkspacePackage { dependency, .. }
+                if blocked_workspace_versions.contains(dependency))
+        });
     }
 
     /// Collect the version ranges in `derivation_tree` that were excluded solely by
@@ -1252,7 +1267,9 @@ impl PubGrubReportFormatter<'_> {
                     status: *status,
                 });
             }
-            Some(UnavailablePackage::NotFound) => {}
+            Some(
+                UnavailablePackage::NotFound | UnavailablePackage::DynamicVersionBuildDisabled,
+            ) => {}
             None => {}
         }
 
