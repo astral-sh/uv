@@ -34688,6 +34688,49 @@ fn lock_virtual_dynamic_version() -> Result<()> {
     Ok(())
 }
 
+/// A static metadata error should identify the virtual workspace member that declares it.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_virtual_dynamic_version_invalid_member_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv.workspace]
+        members = ["apps/worker"]
+    "#})?;
+    context
+        .temp_dir
+        .child("apps/worker/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "worker"
+        dynamic = ["version"]
+        requires-python = ">=3.12"
+        dependencies = ["library"]
+
+        [tool.uv]
+        package = false
+
+        [tool.uv.sources]
+        library = { path = "vendor", extra = "gpu" }
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--no-build").arg("--offline"), @r#"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to read `worker @ file://[TEMP_DIR]/apps/worker`
+      cause: Source entry for `library` only applies to extra `gpu`, but the `gpu` extra does not exist. When an extra is present on a source (e.g., `extra = "gpu"`), the relevant package must be included in the `project.optional-dependencies` section for that extra (e.g., `project.optional-dependencies = { "gpu" = ["library"] }`).
+    "#);
+    Ok(())
+}
+
 /// A rule scoped to the project's name applies even when the lock omits its version.
 #[cfg(feature = "test-universal")]
 #[test]

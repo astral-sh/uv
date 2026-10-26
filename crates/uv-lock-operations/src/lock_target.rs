@@ -14,7 +14,7 @@ use uv_configuration::{
 };
 use uv_distribution::{DistributionDatabase, LoweredRequirement};
 use uv_distribution_types::{
-    DependencyMetadata, Dist, Index, IndexLocations, MinimumLibcVersion,
+    DependencyMetadata, Dist, DistErrorKind, Index, IndexLocations, MinimumLibcVersion,
     NameRequirementSpecification, Requirement, RequirementSource, RequiresPython,
 };
 use uv_lock::Lock;
@@ -224,19 +224,26 @@ impl<'lock> LockTarget<'lock> {
             if !member.project().has_dynamic_version() || versioned_packages.contains(name) {
                 continue;
             }
-            if let Some(metadata) = database
+            let dist = Dist::from_directory_url(
+                requirement.name,
+                url,
+                &install_path,
+                editable,
+                Some(true),
+            )?;
+            match database
                 .virtual_project_metadata(&install_path, &member.pyproject_toml().raw)
                 .await
-                .map_err(Box::new)?
             {
-                let dist = Dist::from_directory_url(
-                    requirement.name,
-                    url,
-                    &install_path,
-                    editable,
-                    Some(true),
-                )?;
-                projects.push((dist, metadata));
+                Ok(Some(metadata)) => projects.push((dist, metadata)),
+                Ok(None) => {}
+                Err(err) => {
+                    return Err(RequirementsError::Dist(
+                        DistErrorKind::Read,
+                        Box::new(dist),
+                        Box::new(err),
+                    ));
+                }
             }
         }
         Ok((!projects.is_empty()).then(|| InMemoryIndex::for_virtual_projects(projects)))

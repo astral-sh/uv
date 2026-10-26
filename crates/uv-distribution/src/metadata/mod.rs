@@ -76,6 +76,28 @@ pub struct Metadata {
     pub dynamic: bool,
 }
 
+/// A project's lowered requirements and Python compatibility, without its version.
+#[derive(Debug)]
+pub struct UnversionedMetadata {
+    pub(crate) requirements: RequiresDist,
+    pub(crate) requires_python: Option<VersionSpecifiers>,
+}
+
+impl UnversionedMetadata {
+    /// Combine the project's requirements with its version.
+    pub fn with_version(self, version: Version) -> Metadata {
+        Metadata {
+            name: self.requirements.name,
+            version,
+            requires_dist: self.requirements.requires_dist,
+            requires_python: self.requires_python,
+            provides_extra: self.requirements.provides_extra,
+            dependency_groups: self.requirements.dependency_groups,
+            dynamic: self.requirements.dynamic,
+        }
+    }
+}
+
 impl Metadata {
     /// Lower without considering `tool.uv` in `pyproject.toml`, used for index and other archive
     /// dependencies.
@@ -140,27 +162,11 @@ impl Metadata {
         .await?;
 
         // Combine with the remaining metadata.
-        Ok(Self::from_requires_dist(
-            requires_dist,
-            metadata.version,
-            metadata.requires_python,
-        ))
-    }
-
-    pub(crate) fn from_requires_dist(
-        requirements: RequiresDist,
-        version: Version,
-        requires_python: Option<VersionSpecifiers>,
-    ) -> Self {
-        Self {
-            name: requirements.name,
-            version,
-            requires_dist: requirements.requires_dist,
-            requires_python,
-            provides_extra: requirements.provides_extra,
-            dependency_groups: requirements.dependency_groups,
-            dynamic: requirements.dynamic,
+        Ok(UnversionedMetadata {
+            requirements: requires_dist,
+            requires_python: metadata.requires_python,
         }
+        .with_version(metadata.version))
     }
 
     /// Set whether local dependency sources should be represented by relative paths.

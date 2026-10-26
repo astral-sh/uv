@@ -2,10 +2,11 @@ use std::hash::BuildHasherDefault;
 use std::sync::Arc;
 
 use rustc_hash::{FxHashMap, FxHasher};
-use uv_distribution::Metadata;
+use uv_distribution::UnversionedMetadata;
 use uv_distribution_types::{Dist, Identifier, IndexUrl, Name, VariantsJsonContent};
 use uv_normalize::PackageName;
 use uv_once_map::{RegisteredEntry, RegisteredOnceMap};
+use uv_pep440::Version;
 use uv_resolver_types::DistributionMetadataIndex;
 
 use crate::prioritized_distribution::RegistryVariantsJson;
@@ -40,9 +41,14 @@ pub(crate) type FxRegisteredEntry<'a, K, V> =
 
 impl InMemoryIndex {
     /// Create a lock-local index so provisional versions cannot be reused by another operation.
-    pub fn for_virtual_projects(projects: Vec<(Dist, Metadata)>) -> Self {
+    pub fn for_virtual_projects(projects: Vec<(Dist, UnversionedMetadata)>) -> Self {
         let mut index = SharedInMemoryIndex::default();
         for (dist, metadata) in projects {
+            // PubGrub uses a concrete version to link the member to its extras and groups.
+            // Register it as deferred so declared ranges use the backend's version.
+            let metadata = metadata
+                .with_version(Version::new([0]))
+                .with_force_relative(true);
             index.distributions.done(
                 dist.distribution_id(),
                 Arc::new(MetadataResponse::Found(metadata.into())),

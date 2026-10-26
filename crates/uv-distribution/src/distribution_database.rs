@@ -47,7 +47,7 @@ use crate::download::check_wheel_variant_compatibility;
 use crate::error::PythonVersion;
 use crate::extracted_wheel::{ExtractedWheel, HashedWheel, WheelExtractor};
 use crate::hash::http_hash_algorithms;
-use crate::metadata::{ArchiveMetadata, Metadata};
+use crate::metadata::{ArchiveMetadata, Metadata, UnversionedMetadata};
 use crate::source::SourceDistributionBuilder;
 use crate::{
     Error, FirstPartyPackages, LocalWheel, Reporter, RequiresDist, check_supported_wheel_variant,
@@ -759,20 +759,18 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         &self,
         path: &Path,
         contents: &str,
-    ) -> Result<Option<Metadata>, Error> {
+    ) -> Result<Option<UnversionedMetadata>, Error> {
         let pyproject =
             PyProjectToml::from_toml(contents, path.display()).map_err(Error::PyprojectToml)?;
         let Ok(requires_python) = pyproject.requires_python() else {
             return Ok(None);
         };
-        // PubGrub needs a concrete version to link the project's extras and groups.
-        // A user-supplied range must be checked against the backend's version.
         Ok(self
             .requires_dist(path, &pyproject)
             .await?
-            .map(|requires_dist| {
-                Metadata::from_requires_dist(requires_dist, Version::new([0]), requires_python)
-                    .with_force_relative(true)
+            .map(|requirements| UnversionedMetadata {
+                requirements,
+                requires_python,
             }))
     }
 
