@@ -6,6 +6,9 @@ use std::str::FromStr;
 
 use anyhow::{Context, Result, bail};
 use owo_colors::OwoColorize;
+use serde::Deserialize;
+use serde::de::IgnoredAny;
+use toml::Table;
 use toml_edit::{InlineTable, Value};
 use tracing::{debug, trace, warn};
 
@@ -42,6 +45,8 @@ use uv_warnings::warn_user_once;
 use uv_workspace::{
     DiscoveryOptions, MemberDiscovery, Workspace, WorkspaceCache, WorkspaceErrorKind,
 };
+
+use crate::ProjectError;
 
 /// Add one or more packages to the project requirements.
 #[expect(clippy::single_match_else, clippy::fn_params_excessive_bools)]
@@ -107,14 +112,17 @@ pub async fn init(
                 Some(ref path) => std::path::absolute(path)?,
             };
 
-            // Make sure a project does not already exist in the given directory.
-            if path.join("pyproject.toml").exists() {
+            // Avoid overwriting an existing `pyproject.toml`.
+            let pyproject_path = path.join("pyproject.toml");
+            if let Ok(metadata) = fs_err::tokio::metadata(&pyproject_path).await {
+                let hint = if metadata.is_file() {
+                    existing_pyproject_hint(&pyproject_path).await
+                } else {
+                    None
+                };
                 let path =
                     std::path::absolute(&path).unwrap_or_else(|_| path.simplified().to_path_buf());
-                anyhow::bail!(
-                    "Project is already initialized in `{}` (`pyproject.toml` file exists)",
-                    path.display().cyan()
-                );
+                return Err(ProjectError::PyprojectTomlExists { path, hint }.into());
             }
 
             // Default to the directory name if a name was not provided.
@@ -283,6 +291,55 @@ async fn init_script(
     Pep723Script::create(script_path, requires_python.specifiers(), content, bare).await?;
 
     Ok(())
+}
+
+/// The parts of an existing `pyproject.toml` that determine which `uv init` hint to show.
+#[derive(Deserialize)]
+struct InitPyProjectToml {
+    project: Option<IgnoredAny>,
+    tool: Option<InitTools>,
+    #[serde(flatten)]
+    other: Table,
+}
+
+#[derive(Deserialize)]
+struct InitTools {
+    poetry: Option<Table>,
+    uv: Option<InitToolUv>,
+}
+
+#[derive(Deserialize)]
+struct InitToolUv {
+    workspace: Option<IgnoredAny>,
+    managed: Option<bool>,
+}
+
+/// Suggest how to declare project metadata in an existing manifest.
+async fn existing_pyproject_hint(path: &Path) -> Option<&'static str> {
+    let contents = fs_err::tokio::read_to_string(path).await.ok()?;
+    let pyproject: InitPyProjectToml = toml::from_str(&contents).ok()?;
+    if pyproject.project.is_some() {
+        return None;
+    }
+
+    let tool = pyproject.tool?;
+    if let Some(uv) = tool.uv
+        && (uv.workspace.is_some() || uv.managed == Some(false))
+    {
+        return None;
+    }
+
+    if tool.poetry.is_some() {
+        Some(
+            "uv reads project metadata from `[project]`. To migrate, convert the metadata in `[tool.poetry]` to that format",
+        )
+    } else if pyproject.other.is_empty() {
+        Some(
+            "To use this directory as a project, declare its name, version, and other metadata in a `[project]` table",
+        )
+    } else {
+        None
+    }
 }
 
 /// Initialize a project (and, implicitly, a workspace root) at the given path.
