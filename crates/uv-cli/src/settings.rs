@@ -522,6 +522,14 @@ impl InitSettings {
 
         let no_description = no_description || (bare && description.is_none());
 
+        // `UV_INIT_BUILD_BACKEND` only sets a default, so it yields to `--no-package` and
+        // `--script` instead of conflicting with them like `--build-backend` does.
+        let build_backend = match build_backend {
+            Some(build_backend) => Some(build_backend),
+            None if script || no_package || r#virtual => None,
+            None => environment.init_build_backend,
+        };
+
         if r#virtual && lib {
             bail!("`--virtual` and `--lib` are mutually exclusive");
         }
