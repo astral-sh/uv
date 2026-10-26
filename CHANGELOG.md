@@ -3,6 +3,78 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.13.6
+
+Released on 2026-10-26.
+
+### Enhancements
+
+- Add hints when `uv init` finds `pyproject.toml` without a project table ([#22916](https://github.com/astral-sh/uv/pull/22916))
+
+### Preview features
+
+- Add static constructors for wheel variant identifiers ([#22862](https://github.com/astral-sh/uv/pull/22862))
+- Better description for nvidia wheel variant provider ([#22858](https://github.com/astral-sh/uv/pull/22858))
+- Implement a vendored nvidia variant provider ([#22690](https://github.com/astral-sh/uv/pull/22690))
+- Nest module owners in workspace metadata objects ([#22638](https://github.com/astral-sh/uv/pull/22638))
+- Report unsupported wheel variant properties ([#22719](https://github.com/astral-sh/uv/pull/22719))
+
+### Performance
+
+- Box full-wheel futures during metadata resolution ([#22860](https://github.com/astral-sh/uv/pull/22860))
+- Box optional uv settings in project manifests ([#22870](https://github.com/astral-sh/uv/pull/22870))
+- Box workspace discovery on cache misses ([#22864](https://github.com/astral-sh/uv/pull/22864))
+- Buffer redirected output in `uv export` and `uv pip compile` ([#22840](https://github.com/astral-sh/uv/pull/22840))
+- Compact lockfile requirement sets ([#22834](https://github.com/astral-sh/uv/pull/22834))
+- Derive deserialization for Git cache patterns ([#22877](https://github.com/astral-sh/uv/pull/22877))
+- Derive deserialization for PyPI core metadata ([#22874](https://github.com/astral-sh/uv/pull/22874))
+- Derive deserialization for PyPI yanked metadata ([#22875](https://github.com/astral-sh/uv/pull/22875))
+- Derive deserialization for build backend config settings ([#22879](https://github.com/astral-sh/uv/pull/22879))
+- Derive deserialization for build backend module names ([#22884](https://github.com/astral-sh/uv/pull/22884))
+- Derive deserialization for dependency exclusions ([#22876](https://github.com/astral-sh/uv/pull/22876))
+- Derive deserialization for exclude-newer values ([#22887](https://github.com/astral-sh/uv/pull/22887))
+- Derive deserialization for preview feature settings ([#22878](https://github.com/astral-sh/uv/pull/22878))
+- Derive deserialization for project source entries ([#22880](https://github.com/astral-sh/uv/pull/22880))
+- Derive deserialization for tool receipt requirements ([#22885](https://github.com/astral-sh/uv/pull/22885))
+- Derive deserialization for workspace references ([#22883](https://github.com/astral-sh/uv/pull/22883))
+- Derive single-pass deserialization for untagged enums ([#22871](https://github.com/astral-sh/uv/pull/22871))
+- Deserialize build dependency settings in one pass ([#22848](https://github.com/astral-sh/uv/pull/22848))
+- Share parsed URLs across resolver forks ([#22863](https://github.com/astral-sh/uv/pull/22863))
+- Skip registry requirements when filling the lookahead queue ([#22866](https://github.com/astral-sh/uv/pull/22866))
+- Store Git URL fields out of line ([#22833](https://github.com/astral-sh/uv/pull/22833))
+
+### Bug fixes
+
+- Prevent local-version containment markers from panicking ([#22815](https://github.com/astral-sh/uv/pull/22815))
+- Protect non-virtualenv directories with --active --script ([#21464](https://github.com/astral-sh/uv/pull/21464))
+- Use AMD64 for x86-64 Windows platform markers ([#22935](https://github.com/astral-sh/uv/pull/22935))
+- fix(python): preserve variant in `uv python upgrade` ([#22836](https://github.com/astral-sh/uv/pull/22836))
+
+### Documentation
+
+- Update the Docker guide and reproduction examples to uv 0.13.5 ([#22867](https://github.com/astral-sh/uv/pull/22867))
+
+### Other changes
+
+- Disable deployments for automation jobs ([#22828](https://github.com/astral-sh/uv/pull/22828))
+- Emit DeserializeUntagged scalar callbacks directly ([#22890](https://github.com/astral-sh/uv/pull/22890))
+- Enable opt-in code quality reviews ([#22881](https://github.com/astral-sh/uv/pull/22881))
+- Let `--no-package` and `--script` take precedence over `UV_INIT_BUILD_BACKEND` ([#22907](https://github.com/astral-sh/uv/pull/22907))
+- Move UV_RUN_RECURSION_DEPTH parsing to EnvironmentOptions ([#22814](https://github.com/astral-sh/uv/pull/22814))
+- Reuse environments when PEP 723 dependencies are omitted ([#21458](https://github.com/astral-sh/uv/pull/21458))
+- Select the Microsoft Store source for Python-manager setup ([#22812](https://github.com/astral-sh/uv/pull/22812))
+- Skip the Azure APT mirror for Wine, deadsnakes, and musl ([#22896](https://github.com/astral-sh/uv/pull/22896))
+- Skip the Azure APT mirror in ARMv7 CI ([#22895](https://github.com/astral-sh/uv/pull/22895))
+- Sync latest Python releases, Python 3.11.18, 3.12.16, 3.13.18, 3.14.10, 3.15.2 ([#22938](https://github.com/astral-sh/uv/pull/22938))
+- Use Ubuntu Git for Linux tests ([#22843](https://github.com/astral-sh/uv/pull/22843))
+- Use `DeserializeUntagged` for Packse artifact settings ([#22892](https://github.com/astral-sh/uv/pull/22892))
+- Use bundled `lld` for AArch64 GNU development builds ([#22847](https://github.com/astral-sh/uv/pull/22847))
+- Use bundled `lld` in x86-64 Linux CI ([#19648](https://github.com/astral-sh/uv/pull/19648))
+- Use checked-in Python download metadata for release preparation ([#22945](https://github.com/astral-sh/uv/pull/22945))
+- Use checkout Python metadata in publishing workflows ([#22827](https://github.com/astral-sh/uv/pull/22827))
+- Use repository Python metadata for the Cargo lockfile check ([#22816](https://github.com/astral-sh/uv/pull/22816))
+- Use the Astral simple token service action ([#22844](https://github.com/astral-sh/uv/pull/22844))
+
 ## 0.13.5
 
 Released on 2026-10-21.
