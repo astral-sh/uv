@@ -15,6 +15,9 @@ repository = "https://github.com/astral-sh/uv"
 authors = ["uv"]
 license = "MIT OR Apache-2.0"
 
+[workspace.metadata.cargo-shear]
+ignored = ["uv-delocate"]
+
 [workspace.dependencies]
 uv = { version = "0.13.5", path = "crates/uv", default-features = false }
 uv-audit = { version = "0.0.97", path = "crates/uv-audit" }
@@ -32,6 +35,7 @@ uv-client = { version = "0.0.97", path = "crates/uv-client" }
 uv-command-support = { version = "0.0.97", path = "crates/uv-command-support" }
 uv-configuration = { version = "0.0.97", path = "crates/uv-configuration" }
 uv-console = { version = "0.0.97", path = "crates/uv-console" }
+uv-delocate = { version = "0.0.97", path = "crates/uv-delocate" }
 uv-dirs = { version = "0.0.97", path = "crates/uv-dirs" }
 uv-dispatch = { version = "0.0.97", path = "crates/uv-dispatch" }
 uv-distribution = { version = "0.0.97", path = "crates/uv-distribution" }
@@ -190,6 +194,8 @@ goblin = { version = "0.10.0", default-features = false, features = [
   "elf32",
   "elf64",
   "endian_fd",
+  "mach32",
+  "mach64",
   "pe32",
   "pe64",
 ] }

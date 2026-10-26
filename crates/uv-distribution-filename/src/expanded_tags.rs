@@ -142,7 +142,7 @@ fn parse_expanded_tag(tag: &str) -> Result<WheelTag, ExpandedTagError> {
                     .filter_map(Result::ok)
                     .collect(),
                 variant: None,
-                repr: tag.into(),
+                repr: Some(tag.into()),
             }),
         })
     }
@@ -313,7 +313,9 @@ mod tests {
                                 arch: X86_64,
                             },
                         ],
-                        repr: "cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64",
+                        repr: Some(
+                            "cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64",
+                        ),
                     },
                 },
             ],
@@ -341,7 +343,9 @@ mod tests {
                         platform_tag: [
                             Any,
                         ],
-                        repr: "py3-foo-any",
+                        repr: Some(
+                            "py3-foo-any",
+                        ),
                     },
                 },
             ],
@@ -375,7 +379,9 @@ mod tests {
                         platform_tag: [
                             Any,
                         ],
-                        repr: "py2.py3-none-any",
+                        repr: Some(
+                            "py2.py3-none-any",
+                        ),
                     },
                 },
             ],
@@ -495,7 +501,9 @@ mod tests {
                         arch: X86,
                     },
                 ],
-                repr: "cp39.cp310-cp39.cp310-linux_x86_64.linux_i686",
+                repr: Some(
+                    "cp39.cp310-cp39.cp310-linux_x86_64.linux_i686",
+                ),
             },
         }
         "#);

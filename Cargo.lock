@@ -6327,6 +6327,7 @@ dependencies = [
  "uv-normalize",
  "uv-pep440",
  "uv-pep508",
+ "uv-platform",
  "uv-platform-tags",
  "uv-preview",
  "uv-pypi-types",
@@ -6340,6 +6341,29 @@ name = "uv-console"
 version = "0.0.97"
 dependencies = [
  "console",
+]
+
+[[package]]
+name = "uv-delocate"
+version = "0.0.97"
+dependencies = [
+ "astral_async_zip",
+ "base64 0.22.1",
+ "fs-err",
+ "futures",
+ "goblin",
+ "sha2 0.11.0",
+ "tempfile",
+ "thiserror",
+ "tracing",
+ "uv-distribution-filename",
+ "uv-extract",
+ "uv-fs",
+ "uv-install-wheel",
+ "uv-platform",
+ "uv-platform-tags",
+ "uv-static",
+ "walkdir",
 ]
 
 [[package]]
