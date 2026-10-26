@@ -1,11 +1,11 @@
-use pubgrub::{Id, State};
+use pubgrub::{Id, Ranges, State};
 use rustc_hash::FxHashMap;
 
 use uv_distribution_types::{DerivationChain, DerivationStep};
 use uv_pep440::Version;
 
 use crate::dependency_provider::UvDependencyProvider;
-use crate::pubgrub::PubGrubPackage;
+use crate::pubgrub::{PackageSubject, PubGrubPackage};
 
 /// Build a [`DerivationChain`] from the pubgrub state, which is available in `uv-resolver`, but not
 /// in `uv-distribution-types`.
@@ -57,8 +57,12 @@ impl DerivationChainBuilder {
                         name.clone(),
                         parent.extra().cloned(),
                         parent.group().cloned(),
-                        Some(version.clone()),
-                        dependency_versions.encoded_versions().clone(),
+                        parent.distribution_version(version).cloned(),
+                        if child.subject() == PackageSubject::Manifest {
+                            Ranges::empty()
+                        } else {
+                            dependency_versions.encoded_versions().clone()
+                        },
                     ));
 
                     // Recursively search the next package.

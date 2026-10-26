@@ -34784,6 +34784,43 @@ fn lock_virtual_dynamic_version_workspace_scopes() -> Result<()> {
     Ok(())
 }
 
+/// Build-failure hints show a virtual member's extra and the bound it declared on the failed package.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_virtual_dynamic_version_failure_hint() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "app"
+        dynamic = ["version"]
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        feature = ["broken==1.0"]
+
+        [tool.uv]
+        package = false
+    "#})?;
+    context.temp_dir.child("broken-1.0.tar.gz").touch()?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--offline").arg("--no-index").arg("--find-links").arg("."), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to download and build `broken==1.0`
+      cause: Failed to extract archive: broken==1.0
+      cause: Invalid tar file
+      cause: at byte 0: failed to read tar data
+      cause: failed to read tar data
+      cause: unexpected end of file
+
+    hint: `broken` (v1.0) was included because `app[feature]` depends on `broken==1.0`
+    ");
+    Ok(())
+}
+
 /// A static metadata error should identify the virtual workspace member that declares it.
 #[cfg(feature = "test-universal")]
 #[test]

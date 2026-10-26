@@ -3399,8 +3399,7 @@ impl<'index> ForkState<'index> {
                             url: url.cloned(),
                             index: index.cloned(),
                         },
-                        (selection.subject() == PackageSubject::Distribution)
-                            .then(|| version.clone()),
+                        selection.distribution_version(version).cloned(),
                     ))
                 } else {
                     None
@@ -3451,7 +3450,7 @@ impl<'index> ForkState<'index> {
                     self_kind,
                     url,
                     index,
-                    (selection.subject() == PackageSubject::Distribution).then_some(self_version),
+                    selection.distribution_version(self_version),
                 )]
             });
             for dependency in self.pubgrub.dependencies(*package) {
@@ -3516,9 +3515,8 @@ impl<'index> ForkState<'index> {
                     | PubGrubPackageInner::System(_) => continue,
                 };
                 let (url, index) = self.source(name, dependency_version);
-                let dependency_version = (dependency_package.subject()
-                    == PackageSubject::Distribution)
-                    .then_some(dependency_version);
+                let dependency_version =
+                    dependency_package.distribution_version(dependency_version);
                 edges.push(ResolutionDependencyEdge {
                     from,
                     to: node_indices[&(name, &kind, url, index, dependency_version)],
@@ -4233,11 +4231,17 @@ fn enrich_dependency_error(
     version: &Version,
     pubgrub: &State<UvDependencyProvider>,
 ) -> ResolveError {
-    let Some(name) = pubgrub.package_store[id].name_no_root() else {
+    let package = &pubgrub.package_store[id];
+    let Some(name) = package.name_no_root() else {
         return error;
     };
     let chain = DerivationChainBuilder::from_state(id, version, pubgrub).unwrap_or_default();
-    ResolveError::Dependencies(Box::new(error), name.clone(), version.clone(), chain)
+    ResolveError::Dependencies(
+        Box::new(error),
+        name.clone(),
+        package.distribution_version(version).cloned(),
+        chain,
+    )
 }
 
 /// Compute the set of markers for which a package is known to be relevant.

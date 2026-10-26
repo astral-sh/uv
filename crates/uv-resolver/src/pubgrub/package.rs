@@ -2,6 +2,7 @@ use std::ops::Deref;
 use std::sync::Arc;
 
 use uv_normalize::{ExtraName, GroupName, PackageName};
+use uv_pep440::Version;
 use uv_pep508::MarkerTree;
 use uv_pypi_types::ConflictItemRef;
 use uv_resolver_types::PackageNodeKind;
@@ -115,6 +116,11 @@ pub enum PubGrubPackageInner {
 impl PubGrubPackage {
     pub(crate) fn subject(&self) -> PackageSubject {
         self.0.subject
+    }
+
+    /// Workspace manifest decisions carry no distribution version.
+    pub(crate) fn distribution_version<'a>(&self, version: &'a Version) -> Option<&'a Version> {
+        (self.subject() != PackageSubject::Manifest).then_some(version)
     }
 
     /// Format a selected version or requested range in resolver traces.
