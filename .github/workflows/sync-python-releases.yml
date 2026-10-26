@@ -69,6 +69,7 @@ jobs:
           committer: "astral-automations-bot[bot] <305554984+astral-automations-bot[bot]@users.noreply.github.com>"
           author: "astral-automations-bot[bot] <305554984+astral-automations-bot[bot]@users.noreply.github.com>"
           add-paths: |
+            .python-versions
             crates/uv-python-managed/download-metadata.json
             crates/uv-dev/src/generate_sysconfig_mappings.rs
             crates/uv-python-managed/src/sysconfig/generated_mappings.rs
