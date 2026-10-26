@@ -295,28 +295,28 @@ async fn init_script(
 async fn existing_pyproject_hint(path: &Path) -> Option<&'static str> {
     let contents = fs_err::tokio::read_to_string(path).await.ok()?;
     let pyproject: Table = toml::from_str(&contents).ok()?;
-    let tool = pyproject.get("tool");
+    if pyproject.contains_key("project") {
+        return None;
+    }
 
-    if pyproject.contains_key("project")
-        || tool
-            .and_then(|tool| tool.get("uv"))
-            .and_then(|uv| uv.get("workspace"))
-            .is_some()
+    let tool = pyproject.get("tool")?.as_table()?;
+    if let Some(uv) = tool.get("uv")
+        && (uv.get("workspace").is_some()
+            || uv.get("managed").and_then(toml::Value::as_bool) == Some(false))
     {
         return None;
     }
 
-    if tool
-        .and_then(|tool| tool.get("poetry"))
-        .is_some_and(toml::Value::is_table)
-    {
+    if tool.get("poetry").is_some_and(toml::Value::is_table) {
         Some(
             "uv reads project metadata from `[project]`. To migrate, convert the metadata in `[tool.poetry]` to that format",
         )
-    } else {
+    } else if pyproject.keys().all(|key| key == "tool") {
         Some(
-            "To use this directory as a project, add a `[project]` table with a name and version to `pyproject.toml`",
+            "To use this directory as a project, declare its name, version, and other metadata in a `[project]` table",
         )
+    } else {
+        None
     }
 }
 

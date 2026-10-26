@@ -84,7 +84,7 @@ fn init_existing_pyproject_tool_only() -> Result<()> {
     ----- stderr -----
     error: Cannot initialize a project in `[TEMP_DIR]/` because `pyproject.toml` already exists
 
-    hint: To use this directory as a project, add a `[project]` table with a name and version to `pyproject.toml`
+    hint: To use this directory as a project, declare its name, version, and other metadata in a `[project]` table
     ");
 
     Ok(())
@@ -99,6 +99,10 @@ fn init_existing_pyproject_poetry() -> Result<()> {
         [tool.poetry]
         name = "example"
         version = "0.1.0"
+
+        [build-system]
+        requires = ["poetry-core"]
+        build-backend = "poetry.core.masonry.api"
         "#,
     })?;
 
@@ -108,6 +112,30 @@ fn init_existing_pyproject_poetry() -> Result<()> {
     error: Cannot initialize a project in `[TEMP_DIR]/` because `pyproject.toml` already exists
 
     hint: uv reads project metadata from `[project]`. To migrate, convert the metadata in `[tool.poetry]` to that format
+    ");
+
+    Ok(())
+}
+
+/// A build backend can read project metadata from outside `pyproject.toml`.
+#[test]
+fn init_existing_pyproject_build_system() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]);
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {
+        r#"
+        [build-system]
+        requires = ["setuptools"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.ruff]
+        "#,
+    })?;
+
+    uv_snapshot!(context.filters(), context.init(), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Cannot initialize a project in `[TEMP_DIR]/` because `pyproject.toml` already exists
     ");
 
     Ok(())
@@ -2692,6 +2720,12 @@ fn init_unmanaged() -> Result<()> {
         managed = false
         ",
     })?;
+
+    uv_snapshot!(context.filters(), context.init(), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Cannot initialize a project in `[TEMP_DIR]/` because `pyproject.toml` already exists
+    ");
 
     uv_snapshot!(context.filters(), context.init().arg("foo"), @"
     exit_code: 0 (success)
