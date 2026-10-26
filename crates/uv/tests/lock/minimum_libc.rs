@@ -1377,17 +1377,12 @@ fn supported_libc_recompile_hashes() -> Result<()> {
     Resolved 1 package in [TIME]
     ");
     // A find-links file can also provide the selected wheel when the index lists the package.
-    let links = server
-        .files()
-        .filter(|(filename, _)| filename.starts_with("demo-"))
-        .map(|(filename, hash)| {
-            format!(
-                r##"<a href="{}#sha256={hash}">{filename}</a>"##,
-                server.file_url(filename)
-            )
-        })
-        .collect::<String>();
-    context.temp_dir.child("links.html").write_str(&links)?;
+    let filename = "demo-1.0.0-py3-none-musllinux_1_2_x86_64.whl";
+    context.temp_dir.child("links.html").write_str(&format!(
+        r#"<a href="{}#sha256={}">{filename}</a>"#,
+        server.file_url(filename),
+        hashes[filename],
+    ))?;
     // Switching to musl excludes the only remaining pin. Refreshing that pin is explicit.
     context
         .temp_dir
