@@ -39,7 +39,6 @@ use walkdir::WalkDir;
 use uv_cache::{Cache, CacheBucket};
 use uv_fs::Simplified;
 use uv_python_discovery::PythonInstallation;
-use uv_python_managed::ManagedPythonInstallations;
 use uv_python_types::{EnvironmentPreference, PythonPreference, PythonRequest, PythonVersion};
 use uv_static::EnvVars;
 
@@ -2026,12 +2025,11 @@ impl TestContext {
 
     /// Create a new virtual environment named `.venv` in the test context.
     fn create_venv(&self) {
-        let executable = get_python(
-            self.python_version
-                .as_ref()
-                .expect("A Python version must be provided to create a test virtual environment"),
-        );
-        create_venv_from_executable(&self.venv, &self.cache_dir, &executable, &self.uv_bin);
+        let (_, executable) = self
+            .python_versions
+            .first()
+            .expect("A Python version must be provided to create a test virtual environment");
+        create_venv_from_executable(&self.venv, &self.cache_dir, executable, &self.uv_bin);
     }
 
     /// Copies the files from the ecosystem project given into this text
@@ -2229,23 +2227,6 @@ pub fn venv_bin_path(venv: impl AsRef<Path>) -> PathBuf {
     } else {
         unimplemented!("Only Windows and Unix are supported")
     }
-}
-
-/// Get the path to the python interpreter for a specific python version.
-fn get_python(version: &PythonVersion) -> PathBuf {
-    ManagedPythonInstallations::from_settings(None)
-        .map(|installed_pythons| {
-            installed_pythons
-                .find_version(version)
-                .expect("Tests are run on a supported platform")
-                .next()
-                .as_ref()
-                .map(|python| python.executable(false))
-        })
-        // We'll search for the request Python on the PATH if not found in the python versions
-        // We hack this into a `PathBuf` to satisfy the compiler but it's just a string
-        .unwrap_or_default()
-        .unwrap_or(PathBuf::from(version.to_string()))
 }
 
 /// Create a virtual environment at the given path.
