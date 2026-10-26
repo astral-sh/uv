@@ -51,12 +51,16 @@ pub enum ResolutionGraphNode {
 }
 
 impl ResolutionGraphNode {
-    pub fn package_kind(&self) -> Option<&PackageNodeKind> {
+    fn package(&self) -> Option<(&PackageName, &PackageNodeKind)> {
         match self {
             Self::Root => None,
-            Self::Manifest(node) => Some(&node.kind),
-            Self::Dist(dist) => Some(&dist.kind),
+            Self::Manifest(node) => Some((node.dist.name(), &node.kind)),
+            Self::Dist(dist) => Some((&dist.name, &dist.kind)),
         }
+    }
+
+    pub fn package_kind(&self) -> Option<&PackageNodeKind> {
+        self.package().map(|(_, kind)| kind)
     }
 
     pub fn marker(&self) -> &UniversalMarker {
@@ -68,19 +72,17 @@ impl ResolutionGraphNode {
     }
 
     pub(crate) fn package_extra_names(&self) -> Option<(&PackageName, &ExtraName)> {
-        Some((self.package_name()?, self.package_kind()?.extra()?))
+        let (name, kind) = self.package()?;
+        Some((name, kind.extra()?))
     }
 
     pub(crate) fn package_group_names(&self) -> Option<(&PackageName, &GroupName)> {
-        Some((self.package_name()?, self.package_kind()?.group()?))
+        let (name, kind) = self.package()?;
+        Some((name, kind.group()?))
     }
 
     pub(crate) fn package_name(&self) -> Option<&PackageName> {
-        match self {
-            Self::Root => None,
-            Self::Dist(dist) => Some(&dist.name),
-            Self::Manifest(node) => Some(node.dist.name()),
-        }
+        self.package().map(|(name, _)| name)
     }
 }
 
@@ -447,51 +449,49 @@ impl From<ResolverOutput> for uv_distribution_types::Resolution {
         let root = transformed.add_node(Node::Root);
 
         // Re-add the nodes to the reduced graph.
-        for index in graph.node_indices() {
-            let ResolutionGraphNode::Dist(dist) = &graph[index] else {
-                continue;
-            };
-            if dist.is_base() {
-                inverse.insert(
+        for node in graph.node_weights() {
+            let (name, node) = match node {
+                ResolutionGraphNode::Dist(dist) if dist.is_base() => (
                     &dist.name,
-                    transformed.add_node(Node::Dist {
+                    Node::Dist {
                         dist: dist.dist.clone(),
                         hashes: dist.hashes.clone(),
                         install: true,
-                    }),
-                );
-            }
+                    },
+                ),
+                ResolutionGraphNode::Manifest(member) if member.kind.is_base() => (
+                    member.dist.name(),
+                    Node::Dist {
+                        dist: ResolvedDist::Installable {
+                            dist: member.dist.clone(),
+                            version: None,
+                        },
+                        hashes: HashDigests::empty(),
+                        install: false,
+                    },
+                ),
+                ResolutionGraphNode::Root
+                | ResolutionGraphNode::Manifest(_)
+                | ResolutionGraphNode::Dist(_) => continue,
+            };
+            inverse.insert(name, transformed.add_node(node));
         }
 
         // Re-add the edges to the reduced graph.
-        for edge in graph.edge_indices() {
-            let (source, target) = graph.edge_endpoints(edge).unwrap();
-
-            match (&graph[source], &graph[target]) {
-                (ResolutionGraphNode::Root, ResolutionGraphNode::Dist(target_dist)) => {
-                    let target = inverse[&target_dist.name()];
-                    transformed.update_edge(root, target, Edge::Prod);
-                }
-                (
-                    ResolutionGraphNode::Dist(source_dist),
-                    ResolutionGraphNode::Dist(target_dist),
-                ) => {
-                    let source = inverse[&source_dist.name()];
-                    let target = inverse[&target_dist.name()];
-
-                    let edge = if let Some(extra) = source_dist.kind.extra() {
-                        Edge::Optional(extra.clone())
-                    } else if let Some(group) = source_dist.kind.group() {
-                        Edge::Dev(group.clone())
-                    } else {
-                        Edge::Prod
-                    };
-
-                    transformed.add_edge(source, target, edge);
-                }
-                _ => {
-                    unreachable!("root should not contain incoming edges");
-                }
+        for edge in graph.raw_edges() {
+            let Some(target) = graph[edge.target()].package_name() else {
+                unreachable!("root should not contain incoming edges");
+            };
+            let target = inverse[target];
+            if let Some((source, kind)) = graph[edge.source()].package() {
+                let edge = match kind {
+                    PackageNodeKind::Base => Edge::Prod,
+                    PackageNodeKind::Extra(extra) => Edge::Optional(extra.clone()),
+                    PackageNodeKind::Group(group) => Edge::Dev(group.clone()),
+                };
+                transformed.add_edge(inverse[source], target, edge);
+            } else {
+                transformed.update_edge(root, target, Edge::Prod);
             }
         }
 
