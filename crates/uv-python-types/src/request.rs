@@ -2404,6 +2404,18 @@ mod tests {
     }
 
     #[test]
+    fn version_request_matches_minor_version() {
+        let version = PythonVersion::from_str("3.10.0").expect("valid Python version");
+
+        assert!(
+            !VersionRequest::MajorMinor(3, 1, PythonVariant::Default).matches_version(&version)
+        );
+        assert!(
+            VersionRequest::MajorMinor(3, 10, PythonVariant::Default).matches_version(&version)
+        );
+    }
+
+    #[test]
     fn version_request_from_specifiers() {
         // A single `==` specifier is parsed as a concrete version request
         assert_eq!(
