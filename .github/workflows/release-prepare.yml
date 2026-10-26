@@ -80,7 +80,7 @@ jobs:
         uses: openai/codex-action@c05cfd74ad95c626cdf05c6685e62becc3bf7813
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          codex-version: "0.155.1"
+          codex-version: "0.157.1"
           model: gpt-5.6-sol
           effort: high
           permission-profile: ":read-only"
