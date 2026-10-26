@@ -6,6 +6,8 @@ use std::str::FromStr;
 
 use anyhow::{Context, Result, bail};
 use owo_colors::OwoColorize;
+use serde::Deserialize;
+use serde::de::IgnoredAny;
 use toml::Table;
 use toml_edit::{InlineTable, Value};
 use tracing::{debug, trace, warn};
@@ -291,27 +293,47 @@ async fn init_script(
     Ok(())
 }
 
+/// The parts of an existing `pyproject.toml` that determine which `uv init` hint to show.
+#[derive(Deserialize)]
+struct InitPyProjectToml {
+    project: Option<IgnoredAny>,
+    tool: Option<InitTools>,
+    #[serde(flatten)]
+    other: Table,
+}
+
+#[derive(Deserialize)]
+struct InitTools {
+    poetry: Option<Table>,
+    uv: Option<InitToolUv>,
+}
+
+#[derive(Deserialize)]
+struct InitToolUv {
+    workspace: Option<IgnoredAny>,
+    managed: Option<bool>,
+}
+
 /// Suggest how to declare project metadata in an existing manifest.
 async fn existing_pyproject_hint(path: &Path) -> Option<&'static str> {
     let contents = fs_err::tokio::read_to_string(path).await.ok()?;
-    let pyproject: Table = toml::from_str(&contents).ok()?;
-    if pyproject.contains_key("project") {
+    let pyproject: InitPyProjectToml = toml::from_str(&contents).ok()?;
+    if pyproject.project.is_some() {
         return None;
     }
 
-    let tool = pyproject.get("tool")?.as_table()?;
-    if let Some(uv) = tool.get("uv")
-        && (uv.get("workspace").is_some()
-            || uv.get("managed").and_then(toml::Value::as_bool) == Some(false))
+    let tool = pyproject.tool?;
+    if let Some(uv) = tool.uv
+        && (uv.workspace.is_some() || uv.managed == Some(false))
     {
         return None;
     }
 
-    if tool.get("poetry").is_some_and(toml::Value::is_table) {
+    if tool.poetry.is_some() {
         Some(
             "uv reads project metadata from `[project]`. To migrate, convert the metadata in `[tool.poetry]` to that format",
         )
-    } else if pyproject.keys().all(|key| key == "tool") {
+    } else if pyproject.other.is_empty() {
         Some(
             "To use this directory as a project, declare its name, version, and other metadata in a `[project]` table",
         )
