@@ -50,7 +50,7 @@ jobs:
         # Share archives downloaded during setup with the tests.
         run: echo "UV_PYTHON_CACHE_DIR=$RUNNER_TEMP/uv-python-cache" >> "$GITHUB_ENV"
 
-      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
           # renovate: datasource=github-release-attachments depName=astral-sh/uv
           version: "0.13.5"
@@ -186,7 +186,7 @@ jobs:
       - name: "Configure Python archive cache"
         run: echo "UV_PYTHON_CACHE_DIR=$RUNNER_TEMP/uv-python-cache" >> "$GITHUB_ENV"
 
-      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
           # renovate: datasource=github-release-attachments depName=astral-sh/uv
           version: "0.13.5"
@@ -263,7 +263,7 @@ jobs:
         run: |
           Copy-Item -Path "${{ github.workspace }}" -Destination "$Env:UV_WORKSPACE" -Recurse
 
-      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
           # renovate: datasource=github-release-attachments depName=astral-sh/uv
           version: "0.13.5"
