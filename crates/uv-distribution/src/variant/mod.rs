@@ -1,3 +1,4 @@
+mod aarch64;
 mod nvidia;
 mod tpu;
 mod x86_64;
@@ -13,6 +14,7 @@ use uv_pep508::{Requirement, VersionOrUrl};
 use uv_platform_tags::Platform;
 use uv_pypi_types::{Identifier, ModuleName};
 
+use crate::variant::aarch64::Aarch64VariantProvider;
 use crate::variant::nvidia::NvidiaVariantProvider;
 use crate::variant::tpu::TpuVariantProvider;
 use crate::variant::x86_64::X86_64VariantProvider;
@@ -22,6 +24,7 @@ static VENDORED_PROVIDERS: &[&dyn VendoredVariantProvider] = &[
     &NVIDIA_PROVIDER,
     &TpuVariantProvider,
     &X86_64VariantProvider,
+    &Aarch64VariantProvider,
 ];
 
 /// A Python module and optional path to an object within it, identifying a provider plugin.

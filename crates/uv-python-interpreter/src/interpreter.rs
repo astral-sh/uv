@@ -1485,7 +1485,7 @@ impl InterpreterInfo {
                 );
                 // Cache the interpreter so ordinary commands don't retry the failed probe on every
                 // run. While wheel variants are in preview, we accept that enabling them later can
-                // reuse this entry and fall back to x86-64-v2.
+                // reuse this entry and fall back to the target architecture's baseline.
                 None
             }
         };
