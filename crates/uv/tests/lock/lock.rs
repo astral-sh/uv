@@ -34685,6 +34685,26 @@ fn lock_virtual_dynamic_version() -> Result<()> {
         source = { directory = "library" }
         "#);
     });
+
+    // Editing the member's static requirements also updates an existing lock without a build.
+    let lock = context.read("uv.lock");
+    context
+        .remove()
+        .args(["library", "--no-sync", "--no-build", "--offline"])
+        .assert()
+        .success();
+    context
+        .add()
+        .args([
+            "./library",
+            "--no-workspace",
+            "--no-sync",
+            "--no-build",
+            "--offline",
+        ])
+        .assert()
+        .success();
+    assert_eq!(context.read("uv.lock"), lock);
     Ok(())
 }
 

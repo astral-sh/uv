@@ -205,7 +205,6 @@ impl<'lock> LockTarget<'lock> {
                     .iter()
                     .filter_map(ExcludeDependency::versioned_package),
             )
-            .chain(dependency_metadata.values().map(|metadata| &metadata.name))
             .collect::<FxHashSet<_>>();
         let mut projects = Vec::new();
         for requirement in self.members_requirements() {
@@ -220,7 +219,10 @@ impl<'lock> LockTarget<'lock> {
             };
             let name = &requirement.name;
             let member = &packages[name];
-            if !member.project().has_dynamic_version() || versioned_packages.contains(name) {
+            if !member.project().has_dynamic_version()
+                || versioned_packages.contains(name)
+                || dependency_metadata.contains(name)
+            {
                 continue;
             }
             match database

@@ -4735,6 +4735,7 @@ impl Lock {
                         version: static_version,
                         requires_python,
                         metadata,
+                        ..
                     }) = Self::source_tree_requires_dist_cached(
                         source_tree,
                         root,
@@ -4881,66 +4882,69 @@ impl Lock {
                     .await?
                 };
 
-                let satisfied = metadata.is_some_and(|SourceTreeRequiresDist {
+                let satisfied = if let Some(SourceTreeRequiresDist {
                     requires_python,
+                    has_static_requires_python,
                     metadata,
                     ..
-                }| {
-                    // Validate that the package is still dynamic.
-                    if !metadata.dynamic {
-                        debug!("Static `requires-dist` for `{}` is out-of-date; falling back to distribution database", package.id);
-                        return false;
-                    }
-
-                    // Validate that the extras are unchanged.
-                    if let SatisfiesResult::Satisfied = self.satisfies_provides_extra(
-                        &metadata.provides_extra,
-                        package,
-                        allow_missing_package_metadata,
-                    ) {
-                        debug!("Static `provides-extra` for `{}` is up-to-date", package.id);
+                }) = metadata
+                {
+                    let result = if metadata.dynamic {
+                        match self.satisfies_provides_extra(
+                            &metadata.provides_extra,
+                            package,
+                            allow_missing_package_metadata,
+                        ) {
+                            SatisfiesResult::Satisfied => self.satisfies_requires_dist(
+                                metadata.requires_dist,
+                                &metadata.provides_extra,
+                                metadata.dependency_groups,
+                                &dependency_sources,
+                                &dependency_modifiers,
+                                requires_python.as_ref(),
+                                None,
+                                package,
+                                &mut activated_extras,
+                                &mut remotes,
+                                &mut locals,
+                                root,
+                                allow_missing_package_metadata,
+                            ),
+                            mismatch => Ok(mismatch),
+                        }
                     } else {
-                        debug!("Static `provides-extra` for `{}` is out-of-date; falling back to distribution database", package.id);
-                        return false;
-                    }
-
-                    // Validate that the requirements are unchanged.
-                    match self.satisfies_requires_dist(
-                        metadata.requires_dist,
-                        &metadata.provides_extra,
-                        metadata.dependency_groups,
-                        &dependency_sources,
-                        &dependency_modifiers,
-                        requires_python.as_ref(),
-                        None,
-                        package,
-                        &mut activated_extras,
-                        &mut remotes,
-                        &mut locals,
-                        root,
-                        allow_missing_package_metadata,
-                    ) {
+                        Ok(SatisfiesResult::MismatchedDynamic(&package.id.name, true))
+                    };
+                    match result {
                         Ok(SatisfiesResult::Satisfied) => {
-                            debug!("Static `requires-dist` for `{}` is up-to-date", package.id);
-                        },
-                        Ok(..) => {
-                            debug!("Static `requires-dist` for `{}` is out-of-date; falling back to distribution database", package.id);
-                            return false;
-                        },
-                        Err(..) => {
-                            debug!("Static `requires-dist` for `{}` is invalid; falling back to distribution database", package.id);
-                            return false;
-                        },
+                            debug!("Static requirements for `{}` are up-to-date", package.id);
+                            true
+                        }
+                        // Fresh resolution reads this member's declarations directly from
+                        // pyproject.toml, so a mismatch already means the lock is stale.
+                        result
+                            if metadata.dynamic
+                                && has_static_requires_python
+                                && matches!(package.id.source, Source::Virtual(_))
+                                && packages.contains_key(&package.id.name)
+                                && !dependency_metadata.contains(&package.id.name) =>
+                        {
+                            return result;
+                        }
+                        // A backend may have flattened recursive extras differently from
+                        // pyproject.toml. Check its metadata before rejecting the lock.
+                        _ => {
+                            debug!(
+                                "Static requirements for `{}` differ from the lock; checking distribution metadata",
+                                package.id
+                            );
+                            false
+                        }
                     }
+                } else {
+                    false
+                };
 
-                    true
-                });
-
-                // If the `requires-dist` metadata matches the requirements, we're done; otherwise,
-                // fetch the "full" metadata, which may involve invoking the build system. In some
-                // cases, build backends return metadata that does _not_ match the `pyproject.toml`
-                // exactly. For example, `hatchling` will flatten any recursive (or self-referential)
-                // extras, while `setuptools` will not.
                 if !satisfied {
                     let metadata = Self::package_metadata(
                         package,
@@ -5257,6 +5261,7 @@ impl Lock {
                     let metadata = SourceTreeRequiresDist {
                         version: Some(metadata.version.clone()),
                         requires_python: metadata.requires_python.clone(),
+                        has_static_requires_python: false,
                         metadata: metadata.into(),
                     };
                     source_tree_metadata.insert(package.id.clone(), Some(metadata.clone()));
@@ -5986,20 +5991,21 @@ impl Lock {
                     .project
                     .as_ref()
                     .and_then(|project| project.version.clone());
-                let requires_python = match pyproject_toml.requires_python() {
-                    Ok(requires_python) => requires_python,
-                    Err(
-                        uv_pypi_types::MetadataError::FieldNotFound("project")
-                        | uv_pypi_types::MetadataError::DynamicField("requires-python"),
-                    ) => None,
-                    Err(err) => {
-                        return Err(LockErrorKind::InvalidPyprojectToml {
-                            path: path.clone(),
-                            err,
+                let (requires_python, has_static_requires_python) =
+                    match pyproject_toml.requires_python() {
+                        Ok(requires_python) => (requires_python, true),
+                        Err(
+                            uv_pypi_types::MetadataError::FieldNotFound("project")
+                            | uv_pypi_types::MetadataError::DynamicField("requires-python"),
+                        ) => (None, false),
+                        Err(err) => {
+                            return Err(LockErrorKind::InvalidPyprojectToml {
+                                path: path.clone(),
+                                err,
+                            }
+                            .into());
                         }
-                        .into());
-                    }
-                };
+                    };
                 let metadata = database
                     .requires_dist(&parent, &pyproject_toml)
                     .await
@@ -6010,6 +6016,7 @@ impl Lock {
                 Ok(metadata.map(|metadata| SourceTreeRequiresDist {
                     version,
                     requires_python,
+                    has_static_requires_python,
                     metadata,
                 }))
             }
@@ -6054,6 +6061,7 @@ pub struct Auditable<'lock> {
 struct SourceTreeRequiresDist {
     version: Option<Version>,
     requires_python: Option<VersionSpecifiers>,
+    has_static_requires_python: bool,
     metadata: RequiresDist,
 }
 
