@@ -118,12 +118,18 @@ impl PubGrubPackage {
         self.0.subject
     }
 
-    /// Workspace manifest decisions carry no distribution version.
-    pub(crate) fn distribution_version<'a>(&self, version: &'a Version) -> Option<&'a Version> {
-        (self.subject() != PackageSubject::Manifest).then_some(version)
+    /// Display the selected version when the package has one.
+    pub(crate) fn at_version(&self, version: Option<&Version>) -> impl std::fmt::Display {
+        std::fmt::from_fn(move |f| {
+            write!(f, "{self}")?;
+            if let Some(version) = version {
+                write!(f, "=={version}")?;
+            }
+            Ok(())
+        })
     }
 
-    /// Format a selected version or requested range in resolver traces.
+    /// Format a requested range in resolver traces.
     pub(crate) fn display_range(&self, range: impl std::fmt::Display) -> impl std::fmt::Display {
         std::fmt::from_fn(move |f| {
             write!(f, "{self}")?;

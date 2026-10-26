@@ -34841,6 +34841,47 @@ fn lock_virtual_dynamic_version_workspace_scopes() -> Result<()> {
     Ok(())
 }
 
+/// An extra requested only by a rejected candidate should leave no warning or edge in the lock.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_virtual_dynamic_version_backtrack_extra() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "app"
+        dynamic = ["version"]
+        requires-python = ">=3.12"
+        dependencies = ["plugin"]
+
+        [tool.uv]
+        package = false
+    "#})?;
+    let (filename, wheel) = WheelBuilder::new(&"plugin".parse()?, &"2".parse()?)
+        .requires(&["app[unused]".parse()?, "missing".parse()?])
+        .build();
+    context.temp_dir.child(filename).write_binary(&wheel)?;
+    let (filename, wheel) = WheelBuilder::new(&"plugin".parse()?, &"1".parse()?)
+        .requires(&["app".parse()?])
+        .build();
+    context.temp_dir.child(filename).write_binary(&wheel)?;
+
+    uv_snapshot!(context.filters(), context.tree().arg("--no-build").arg("--offline").arg("--no-index").arg("--find-links").arg("."), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    app
+    └── plugin v1
+        └── app (*)
+    (*) Package tree already displayed
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    Ok(())
+}
+
 /// Build-failure hints show a virtual member's extra and the bound it declared on the failed package.
 #[cfg(feature = "test-universal")]
 #[test]

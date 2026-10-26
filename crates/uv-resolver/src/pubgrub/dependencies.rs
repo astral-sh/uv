@@ -108,19 +108,19 @@ impl PubGrubDependency {
     /// An empty range cannot retain the specifiers that produced it, so return the source
     /// requirement details instead. The resolver attaches them to the parent package as the
     /// reason that package cannot be selected.
-    pub(crate) fn from_requirements<'a, 'root>(
+    pub(crate) fn from_requirements<'a>(
         conflicts: &Conflicts,
-        workspace_scope: impl Fn(&PackageName) -> Option<&'root Range<Version>>,
+        is_workspace_manifest: impl Fn(&PackageName) -> bool,
         requirements: impl IntoIterator<Item = Cow<'a, Requirement>>,
         group_name: Option<&'a GroupName>,
         parent_package: Option<&'a PubGrubPackage>,
     ) -> Result<Vec<Self>, UnsatisfiableRequirement> {
         let mut dependencies = Vec::new();
         for requirement in requirements {
-            let scope = workspace_scope(&requirement.name);
+            let is_manifest = is_workspace_manifest(&requirement.name);
             let edges = Self::from_requirement(conflicts, requirement, group_name, parent_package)?;
             for mut edge in edges {
-                if let Some(scope) = scope {
+                if is_manifest {
                     // A workspace scope is an input to the solve, like the root. Only the
                     // separate distribution dependency is subject to PEP 440 constraints.
                     if edge.version != Range::full() {
@@ -129,7 +129,7 @@ impl PubGrubDependency {
                         dependencies.push(check);
                     }
                     edge.package = edge.package.with_subject(PackageSubject::Manifest);
-                    edge.version = scope.clone();
+                    edge.version = Range::full();
                 }
                 dependencies.push(edge);
             }
