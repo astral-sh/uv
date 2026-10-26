@@ -20,19 +20,14 @@ pub enum ArchiveHashPolicy<'a> {
 impl<'a> ArchiveHashPolicy<'a> {
     /// Use the hashes advertised for an individual index file when no verification policy is set.
     ///
-    /// Explicit [`Self::Any`] and [`Self::All`] policies take precedence, including empty policies
-    /// that must reject the distribution. If the index provides no hashes, preserve the policy.
+    /// Explicit validation takes precedence, including empty policies that must reject the
+    /// distribution. If the index provides no hashes, preserve the policy.
     #[must_use]
     pub fn with_index_hashes(self, hashes: &'a [HashDigest]) -> Self {
-        match self {
-            Self::Any(_) | Self::All(_) => self,
-            Self::None | Self::Generate => {
-                if hashes.is_empty() {
-                    self
-                } else {
-                    Self::All(hashes)
-                }
-            }
+        if self.requires_validation() || hashes.is_empty() {
+            self
+        } else {
+            Self::All(hashes)
         }
     }
 
