@@ -308,7 +308,7 @@ async fn existing_pyproject_hint(path: &Path) -> Option<&'static str> {
 
     if tool
         .and_then(|tool| tool.get("poetry"))
-        .is_some_and(|poetry| poetry.is_table())
+        .is_some_and(toml::Value::is_table)
     {
         Some(
             "uv reads project metadata from `[project]`. To migrate, convert the metadata in `[tool.poetry]` to that format",
