@@ -9,6 +9,7 @@ use uv_configuration::{Constraints, HashCheckingMode};
 use uv_distribution_types::{
     ArchiveHashPolicy, DistributionMetadata, HashCollection, HashValidation, MetadataHashPolicy,
     Name, Requirement, RequirementSource, Resolution, UnresolvedRequirement, VersionId,
+    satisfies_require_hashes,
 };
 use uv_normalize::PackageName;
 use uv_pep440::{Operator, Version};
@@ -94,7 +95,7 @@ impl HashStrategy {
         };
         if mode.is_require() {
             constraint_hashes.retain(|_, digests| {
-                digests.retain(|digest| digest.algorithm() != HashAlgorithm::Md5);
+                digests.retain(satisfies_require_hashes);
                 !digests.is_empty()
             });
         }
@@ -102,7 +103,7 @@ impl HashStrategy {
         for (id, digests) in requirement_hashes.iter() {
             let mut digests = digests.clone();
             if mode.is_require() {
-                digests.retain(|digest| digest.algorithm() != HashAlgorithm::Md5);
+                digests.retain(satisfies_require_hashes);
             }
             let digests = if let Some(constraint) = constraints.hashes_for_id(id) {
                 combine_constraint_hashes(id, digests, constraint, id, mode)?
@@ -334,7 +335,7 @@ impl HashStrategy {
             }
 
             if mode.is_require() {
-                digests.retain(|digest| digest.algorithm() != HashAlgorithm::Md5);
+                digests.retain(satisfies_require_hashes);
             }
 
             if digests.is_empty() {
@@ -385,13 +386,16 @@ impl HashStrategy {
                 merge_digests(&mut digests, fragment_hashes.iter(), requirement)?;
             }
 
-            let has_md5 = mode.is_require()
-                && digests
+            let rejected_algorithm = if mode.is_require() {
+                let rejected = digests
                     .iter()
-                    .any(|digest| digest.algorithm() == HashAlgorithm::Md5);
-            if mode.is_require() {
-                digests.retain(|digest| digest.algorithm() != HashAlgorithm::Md5);
-            }
+                    .find(|digest| !satisfies_require_hashes(digest))
+                    .map(HashDigest::algorithm);
+                digests.retain(satisfies_require_hashes);
+                rejected
+            } else {
+                None
+            };
 
             let digests = if let Some(constraint) = constraint_hashes.get(&id) {
                 // A hashless duplicate must not replace earlier requirement hashes with the
@@ -408,10 +412,10 @@ impl HashStrategy {
             // constraint.
             if digests.is_empty() {
                 if mode.is_require() {
-                    if has_md5 {
+                    if let Some(algorithm) = rejected_algorithm {
                         return Err(HashStrategyError::InsecureHashAlgorithm(
                             requirement.to_string(),
-                            HashAlgorithm::Md5,
+                            algorithm,
                             mode,
                         ));
                     }

@@ -162,6 +162,17 @@ pub enum HashCollection {
     All,
 }
 
+/// Returns whether the digest's algorithm is accepted by `--require-hashes`.
+pub fn satisfies_require_hashes(digest: &HashDigest) -> bool {
+    match digest.algorithm() {
+        HashAlgorithm::Md5 => false,
+        HashAlgorithm::Sha256
+        | HashAlgorithm::Sha384
+        | HashAlgorithm::Sha512
+        | HashAlgorithm::Blake2b256 => true,
+    }
+}
+
 /// Read a URL's declared hash for resolution, excluding MD5, which `--require-hashes` rejects.
 pub fn parse_url_hashes(url: &SafeUrl) -> Option<HashDigests> {
     let hashes = url
@@ -169,8 +180,8 @@ pub fn parse_url_hashes(url: &SafeUrl) -> Option<HashDigests> {
         .split('&')
         .find_map(|fragment| Hashes::parse_fragment(fragment).ok())?;
     let hashes = HashDigests::from(hashes);
-    let contains_md5 = hashes.iter().any(|hash| matches!(hash, HashDigest::Md5(_)));
-    (!contains_md5).then_some(hashes)
+    let allowed = hashes.iter().all(satisfies_require_hashes);
+    allowed.then_some(hashes)
 }
 
 pub trait Hashed {
