@@ -181,6 +181,8 @@ pub struct BuildDispatch<'a> {
 }
 
 impl<'a> BuildDispatch<'a> {
+    // TODO(charlie): Review call sites and consider if we want to make some of the parameters
+    // optional.
     pub fn new(
         client: &'a RegistryClient,
         cache: &'a Cache,

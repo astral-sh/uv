@@ -427,8 +427,6 @@ pub async fn add(
 
         // Resolve any unnamed requirements.
         if !unnamed.is_empty() {
-            // TODO(charlie): These are all default values. We should consider whether we want to
-            // make them optional on the downstream APIs.
             let hasher = HashStrategy::default();
             let sources = NoSources::None;
 
