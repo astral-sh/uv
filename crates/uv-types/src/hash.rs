@@ -13,7 +13,9 @@ use uv_distribution_types::{
 };
 use uv_normalize::PackageName;
 use uv_pep440::{Operator, Version};
-use uv_pypi_types::{HashAlgorithm, HashDigest, HashDigests, HashError, ResolverMarkerEnvironment};
+use uv_pypi_types::{
+    HashAlgorithm, HashDigest, HashDigests, HashError, Hashes, ResolverMarkerEnvironment,
+};
 use uv_redacted::SafeUrl;
 
 /// Hash collection and verification policies for a resolution.
@@ -323,20 +325,8 @@ impl HashStrategy {
                 continue;
             };
 
-            // Parse the hashes provided directly on the requirement, then merge in any hashes from
-            // the URL fragment.
-            let mut digests = digests
-                .iter()
-                .map(|digest| HashDigest::from_str(digest))
-                .collect::<Result<Vec<_>, _>>()?;
-            if let Some(fragment_hashes) = requirement.hashes()? {
-                let fragment_hashes = HashDigests::from(fragment_hashes);
-                merge_digests(&mut digests, fragment_hashes.iter(), requirement)?;
-            }
-
-            if mode.is_require() {
-                digests.retain(satisfies_require_hashes);
-            }
+            let (digests, _) =
+                parse_declared_hashes(digests, requirement.hashes(), requirement, mode)?;
 
             if digests.is_empty() {
                 continue;
@@ -375,27 +365,8 @@ impl HashStrategy {
                 }
             };
 
-            // Parse the hashes provided directly on the requirement, then merge in any hashes from
-            // the URL fragment.
-            let mut digests = digests
-                .iter()
-                .map(|digest| HashDigest::from_str(digest))
-                .collect::<Result<Vec<_>, _>>()?;
-            if let Some(fragment_hashes) = requirement.hashes()? {
-                let fragment_hashes = HashDigests::from(fragment_hashes);
-                merge_digests(&mut digests, fragment_hashes.iter(), requirement)?;
-            }
-
-            let rejected_algorithm = if mode.is_require() {
-                let rejected = digests
-                    .iter()
-                    .find(|digest| !satisfies_require_hashes(digest))
-                    .map(HashDigest::algorithm);
-                digests.retain(satisfies_require_hashes);
-                rejected
-            } else {
-                None
-            };
+            let (digests, rejected_algorithm) =
+                parse_declared_hashes(digests, requirement.hashes(), requirement, mode)?;
 
             let digests = if let Some(constraint) = constraint_hashes.get(&id) {
                 // A hashless duplicate must not replace earlier requirement hashes with the
@@ -626,6 +597,37 @@ fn combine_constraint_hashes(
         }
     }
     Ok(digests)
+}
+
+/// Parse requirement-file hashes and combine them with any URL-fragment hashes.
+fn parse_declared_hashes(
+    hashes: &[String],
+    fragment_hashes: Result<Option<Hashes>, HashError>,
+    requirement: impl Display,
+    mode: HashCheckingMode,
+) -> Result<(Vec<HashDigest>, Option<HashAlgorithm>), HashStrategyError> {
+    let mut digests = hashes
+        .iter()
+        .map(|digest| HashDigest::from_str(digest))
+        .collect::<Result<Vec<_>, _>>()?;
+    if let Some(fragment_hashes) = fragment_hashes? {
+        merge_digests(
+            &mut digests,
+            HashDigests::from(fragment_hashes).iter(),
+            requirement,
+        )?;
+    }
+    let rejected = if mode.is_require() {
+        let rejected = digests
+            .iter()
+            .find(|digest| !satisfies_require_hashes(digest))
+            .map(HashDigest::algorithm);
+        digests.retain(satisfies_require_hashes);
+        rejected
+    } else {
+        None
+    };
+    Ok((digests, rejected))
 }
 
 /// Merge repeated hashes for a requirement or constraint into the hash map.
