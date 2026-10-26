@@ -19,7 +19,7 @@ use predicates::prelude::predicate;
 use tracing::debug;
 #[cfg(unix)]
 use uv_test::assert_link_target;
-use uv_test::{LATEST_PYTHON_3_12, assert_path_missing, uv_snapshot};
+use uv_test::{LATEST_PYTHON_3_12, LATEST_PYTHON_3_13, assert_path_missing, uv_snapshot};
 
 use uv_fs::Simplified;
 use uv_python_managed::platform_key_from_env;
@@ -2711,7 +2711,7 @@ fn python_install_cached() {
     ");
 }
 
-/// Duplicate of [`python_install`] with the cache directory disabled.
+/// Without the archive cache, a Python installation cannot be repeated offline after uninstalling it.
 #[test]
 fn python_install_no_cache() {
     // Skip this test if the developer has set `UV_PYTHON_CACHE_DIR` locally since it's slow
@@ -2735,47 +2735,6 @@ fn python_install_no_cache() {
      + cpython-3.15.[LATEST]-[PLATFORM] (python3.15)
     ");
 
-    let bin_python = context
-        .bin_dir
-        .child(format!("python3.15{}", std::env::consts::EXE_SUFFIX));
-
-    // The executable should not present in the bin directory
-    bin_python.assert(predicate::path::exists());
-
-    // Should be a no-op when already installed
-    uv_snapshot!(context.filters(), context.python_install(), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Python is already installed. Use `uv python install <request>` to install another version.
-    ");
-
-    // Similarly, when a requested version is already installed
-    uv_snapshot!(context.filters(), context.python_install().arg("3.15"), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Python 3.15 is already installed
-    ");
-
-    // You can opt-in to a reinstall
-    uv_snapshot!(context.filters(), context.python_install().arg("3.15").arg("--reinstall"), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Installed Python 3.15.[LATEST] in [TIME]
-     ~ cpython-3.15.[LATEST]-[PLATFORM] (python3.15)
-    ");
-
-    // Uninstallation requires an argument
-    uv_snapshot!(context.filters(), context.python_uninstall(), @"
-    exit_code: 2 (failure)
-    ----- stderr -----
-    error: the following required arguments were not provided:
-      <TARGETS>...
-
-    Usage: uv python uninstall --cache-dir [CACHE_DIR] --install-dir <INSTALL_DIR> <TARGETS>...
-
-    For more information, try '--help'.
-    ");
-
     uv_snapshot!(context.filters(), context.python_uninstall().arg("3.15"), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -2784,22 +2743,22 @@ fn python_install_no_cache() {
      - cpython-3.15.[LATEST]-[PLATFORM] (python3.15)
     ");
 
-    // 3.12 isn't cached, so it can't be installed
+    // The online installation did not cache the archive.
     let context = context
         .with_filter((
-            "cpython-3.12.*.tar.gz",
-            "cpython-3.12.[PATCH]-[DATE]-[PLATFORM].tar.gz",
+            "cpython-3.15.*.tar.gz",
+            "cpython-3.15.[PATCH]-[DATE]-[PLATFORM].tar.gz",
         ))
         .with_filter((r"releases/download/\d{8}/", "releases/download/[DATE]/"));
     uv_snapshot!(context.filters(), context
         .python_install()
-        .arg("3.12")
+        .arg("3.15")
         .arg("--offline"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: Failed to install cpython-3.12.[LATEST]-[PLATFORM]
-      cause: Failed to download `https://github.com/astral-sh/python-build-standalone/releases/download/[DATE]/cpython-3.12.[PATCH]-[DATE]-[PLATFORM].tar.gz`
-      cause: Network connectivity is disabled, but the requested data wasn't found in the cache: https://github.com/astral-sh/python-build-standalone/releases/download/[DATE]/cpython-3.12.[PATCH]-[DATE]-[PLATFORM].tar.gz
+    error: Failed to install cpython-3.15.[LATEST]-[PLATFORM]
+      cause: Failed to download `https://github.com/astral-sh/python-build-standalone/releases/download/[DATE]/cpython-3.15.[PATCH]-[DATE]-[PLATFORM].tar.gz`
+      cause: Network connectivity is disabled, but the requested data wasn't found in the cache: https://github.com/astral-sh/python-build-standalone/releases/download/[DATE]/cpython-3.15.[PATCH]-[DATE]-[PLATFORM].tar.gz
     ");
 }
 
@@ -3053,74 +3012,74 @@ fn install_transparent_patch_upgrade_uv_venv() {
     );
 }
 
-// When installing multiple patches simultaneously, a virtual environment on that
-// minor version should point to the highest.
+/// A venv uses the highest patch regardless of the order of the install requests.
+/// CI already caches both Python 3.13 archives from `.python-versions`.
 #[test]
-fn install_multiple_patches() {
+fn install_multiple_patches_ascending() {
     let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs()
-        .with_filtered_python_install_bin();
+        .with_filtered_latest_python_versions();
 
-    // Install 3.12 patches in ascending order list
-    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.12.9").arg("3.12.11"), @"
+    uv_snapshot!(context.filters(), context.python_install().args(["--preview", "3.13.0", LATEST_PYTHON_3_13]), @"
     exit_code: 0 (success)
     ----- stderr -----
     Installed 2 versions in [TIME]
-     + cpython-3.12.9-[PLATFORM]
-     + cpython-3.12.11-[PLATFORM] (python3.12)
+     + cpython-3.13.0-[PLATFORM]
+     + cpython-3.13.[LATEST]-[PLATFORM] (python3.13)
     "
     );
 
-    // Create a virtual environment.
-    uv_snapshot!(context.filters(), context.venv().arg("-p").arg("3.12")
+    uv_snapshot!(context.filters(), context.venv().arg("-p").arg("3.13")
         .arg(context.venv.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Using CPython 3.12.11
+    Using CPython 3.13.[LATEST]
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
     "
     );
 
-    // Virtual environment should be on highest installed patch.
     uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @"
     exit_code: 0 (success)
     ----- stdout -----
-    Python 3.12.11
+    Python 3.13.[LATEST]
     "
     );
+}
 
-    // Remove the original virtual environment
-    fs_err::remove_dir_all(&context.venv).unwrap();
+#[test]
+fn install_multiple_patches_descending() {
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs()
+        .with_filtered_latest_python_versions();
 
-    // Install 3.10 patches in descending order list
-    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.10.17").arg("3.10.16"), @"
+    uv_snapshot!(context.filters(), context.python_install().args(["--preview", LATEST_PYTHON_3_13, "3.13.0"]), @"
     exit_code: 0 (success)
     ----- stderr -----
     Installed 2 versions in [TIME]
-     + cpython-3.10.16-[PLATFORM]
-     + cpython-3.10.17-[PLATFORM] (python3.10)
+     + cpython-3.13.0-[PLATFORM]
+     + cpython-3.13.[LATEST]-[PLATFORM] (python3.13)
     "
     );
 
-    // Create a virtual environment on 3.10.
-    uv_snapshot!(context.filters(), context.venv().arg("-p").arg("3.10")
+    uv_snapshot!(context.filters(), context.venv().arg("-p").arg("3.13")
         .arg(context.venv.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Using CPython 3.10.17
+    Using CPython 3.13.[LATEST]
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
     "
     );
 
-    // Virtual environment should be on highest installed patch.
     uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @"
     exit_code: 0 (success)
     ----- stdout -----
-    Python 3.10.17
+    Python 3.13.[LATEST]
     "
     );
 }
