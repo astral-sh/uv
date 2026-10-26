@@ -6665,7 +6665,7 @@ impl Package {
     }
 
     fn from_workspace_manifest(member: &ManifestNode, root: &Path) -> Result<Self, LockError> {
-        let requirements = &member.manifest.metadata.requirements;
+        let requirements = &member.metadata.requirements;
         let metadata = PackageMetadata::from_requirements(
             &requirements.requires_dist,
             &requirements.provides_extra,
@@ -7674,9 +7674,9 @@ pub(crate) struct PackageId {
 impl PackageId {
     fn from_workspace_manifest(member: &ManifestNode, root: &Path) -> Result<Self, LockError> {
         Ok(Self {
-            name: member.manifest.metadata.requirements.name.clone(),
+            name: member.dist.name().clone(),
             version: None,
-            source: Source::from_dist(&member.manifest.dist, root)?,
+            source: Source::from_dist(&member.dist, root)?,
         })
     }
 

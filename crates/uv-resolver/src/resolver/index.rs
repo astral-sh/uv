@@ -1,12 +1,13 @@
 use std::hash::BuildHasherDefault;
+use std::path::Path;
 use std::sync::Arc;
 
 use rustc_hash::{FxHashMap, FxHasher};
 use uv_distribution::UnversionedMetadata;
-use uv_distribution_types::{Dist, Identifier, IndexUrl, Name, VariantsJsonContent};
+use uv_distribution_types::{Dist, IndexUrl, Name, VariantsJsonContent};
 use uv_normalize::PackageName;
 use uv_once_map::{RegisteredEntry, RegisteredOnceMap};
-use uv_resolver_types::{DistributionMetadataIndex, WorkspaceManifest};
+use uv_resolver_types::DistributionMetadataIndex;
 
 use crate::prioritized_distribution::RegistryVariantsJson;
 use crate::resolver::provider::{MetadataUnavailable, VersionsResponse};
@@ -17,7 +18,13 @@ pub struct InMemoryIndex {
     shared: Arc<SharedInMemoryIndex>,
     /// Static requirements belong to the workspace being solved. Built distribution metadata
     /// can also be reused by other solves sharing this index.
-    manifests: Option<Arc<FxHashMap<PackageName, Arc<WorkspaceManifest>>>>,
+    manifests: Option<Arc<FxHashMap<PackageName, WorkspaceManifest>>>,
+}
+
+/// Static metadata from a workspace member's directory.
+struct WorkspaceManifest {
+    path: Box<Path>,
+    metadata: Arc<UnversionedMetadata>,
 }
 
 #[derive(Default)]
@@ -43,13 +50,19 @@ pub(crate) type FxRegisteredEntry<'a, K, V> =
 impl InMemoryIndex {
     /// Attach the current workspace's manifests while sharing the caches for distributions and indexes.
     #[must_use]
-    pub fn with_workspace_manifests(&self, projects: Vec<(Dist, UnversionedMetadata)>) -> Self {
+    pub fn with_workspace_manifests(
+        &self,
+        projects: Vec<(Box<Path>, UnversionedMetadata)>,
+    ) -> Self {
         let manifests: FxHashMap<_, _> = projects
             .into_iter()
-            .map(|(dist, metadata)| {
+            .map(|(path, metadata)| {
                 (
-                    dist.name().clone(),
-                    Arc::new(WorkspaceManifest { dist, metadata }),
+                    metadata.requirements.name.clone(),
+                    WorkspaceManifest {
+                        path,
+                        metadata: Arc::new(metadata),
+                    },
                 )
             })
             .collect();
@@ -59,14 +72,18 @@ impl InMemoryIndex {
         }
     }
 
-    pub(crate) fn workspace_manifest(&self, name: &PackageName) -> Option<&Arc<WorkspaceManifest>> {
-        self.manifests.as_ref()?.get(name)
+    pub(crate) fn workspace_manifest(
+        &self,
+        name: &PackageName,
+    ) -> Option<&Arc<UnversionedMetadata>> {
+        Some(&self.manifests.as_ref()?.get(name)?.metadata)
     }
 
     /// Return the manifest only for the workspace directory from which it was read.
     pub fn manifest_for_dist(&self, dist: &Dist) -> Option<&UnversionedMetadata> {
-        let manifest = self.workspace_manifest(dist.name())?;
-        (manifest.dist.distribution_id() == dist.distribution_id()).then_some(&manifest.metadata)
+        let manifest = self.manifests.as_ref()?.get(dist.name())?;
+        (uv_fs::is_same_file_allow_missing(&manifest.path, dist.source_tree()?) == Some(true))
+            .then_some(&manifest.metadata)
     }
 
     /// Returns a reference to the package metadata map.

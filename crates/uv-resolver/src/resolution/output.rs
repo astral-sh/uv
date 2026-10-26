@@ -10,7 +10,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 
 use uv_configuration::{Constraints, DependencyModifierScope, DependencyModifiers};
 use uv_distribution_types::{
-    DistributionId, HashCollection, IndexUrl, Name, Requirement, RequiresPython,
+    Dist, DistributionId, HashCollection, IndexUrl, Name, Requirement, RequiresPython,
     ResolutionDiagnostic, ResolvedDist, parse_url_hashes,
 };
 use uv_git::GitResolver;
@@ -124,24 +124,30 @@ impl<'a> ResolutionGraphBuilder<'a> {
                     package_role,
                 )
             } else {
-                let manifest = self
+                let url = package
+                    .url
+                    .as_deref()
+                    .expect("workspace member has a directory URL");
+                let dist = Arc::new(Dist::from_url(package.name.clone(), url.clone())?);
+                let metadata = self
                     .index
                     .workspace_manifest(&package.name)
                     .expect("workspace scope has a manifest")
                     .clone();
-                let requirements = &manifest.metadata.requirements;
+                let requirements = &metadata.requirements;
                 self.diagnostics.extend(missing_scope(
                     &package.kind,
                     &requirements.provides_extra,
                     &requirements.dependency_groups,
                     || ResolvedDist::Installable {
-                        dist: Arc::new(manifest.dist.clone()),
+                        dist: dist.clone(),
                         version: None,
                     },
                 ));
                 self.graph
                     .add_node(ResolutionGraphNode::Manifest(ManifestNode {
-                        manifest,
+                        dist,
+                        metadata,
                         kind: package.kind.clone(),
                         marker: UniversalMarker::TRUE,
                     }))
@@ -532,7 +538,7 @@ fn has_lower_bound(
             // Direct dependencies are checked separately.
             ResolutionGraphNode::Root => return true,
             ResolutionGraphNode::Manifest(member) => {
-                let requirements = &member.manifest.metadata.requirements;
+                let requirements = &member.metadata.requirements;
                 (
                     &requirements.name,
                     None,

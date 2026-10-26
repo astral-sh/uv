@@ -7,9 +7,7 @@ mod options;
 mod output;
 pub mod universal_marker;
 
-pub use distribution::{
-    AnnotatedDist, ManifestNode, PackageNodeKind, PackageRole, WorkspaceManifest,
-};
+pub use distribution::{AnnotatedDist, ManifestNode, PackageNodeKind, PackageRole};
 pub use metadata::{
     DistributionMetadataIndex, MetadataResponse, MetadataUnavailable, VariantsJsonMetadataError,
 };

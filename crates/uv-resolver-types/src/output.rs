@@ -79,7 +79,7 @@ impl ResolutionGraphNode {
         match self {
             Self::Root => None,
             Self::Dist(dist) => Some(&dist.name),
-            Self::Manifest(node) => Some(&node.manifest.metadata.requirements.name),
+            Self::Manifest(node) => Some(node.dist.name()),
         }
     }
 }
@@ -89,7 +89,7 @@ impl Display for ResolutionGraphNode {
         match self {
             Self::Root => f.write_str("root"),
             Self::Dist(dist) => Display::fmt(dist, f),
-            Self::Manifest(node) => Display::fmt(&node.manifest.dist, f),
+            Self::Manifest(node) => Display::fmt(&node.dist, f),
         }
     }
 }
@@ -276,7 +276,7 @@ impl ResolverOutput {
             let (name, version, requirements) = match &self.graph[i] {
                 ResolutionGraphNode::Root => continue,
                 ResolutionGraphNode::Manifest(member) => {
-                    let requirements = &member.manifest.metadata.requirements;
+                    let requirements = &member.metadata.requirements;
                     (&requirements.name, None, &requirements.requires_dist)
                 }
                 ResolutionGraphNode::Dist(dist) => {

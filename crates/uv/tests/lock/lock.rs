@@ -34688,6 +34688,63 @@ fn lock_virtual_dynamic_version() -> Result<()> {
     Ok(())
 }
 
+/// An absolute constraint on a virtual workspace member also pins its lockfile source.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_virtual_dynamic_version_absolute_constraint() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let app = context.temp_dir.child("app");
+    app.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "app"
+        dynamic = ["version"]
+        requires-python = ">=3.12"
+
+        [tool.uv]
+        package = false
+    "#})?;
+    let alias = context.temp_dir.child("app-link");
+    create_symlink(app.path(), alias.path())?;
+    let app_url = SafeUrl::from_directory_path(alias.path())
+        .map_err(|()| anyhow!("invalid app directory"))?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [tool.uv.workspace]
+        members = ["app"]
+
+        [tool.uv]
+        constraint-dependencies = ["app @ {app_url}"]
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock().arg("--no-sources").arg("--no-build").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(context.read("uv.lock"), @r#"
+        version = 1
+        revision = 5
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        members = [
+            "app",
+        ]
+        constraints = [{ name = "app", directory = "[TEMP_DIR]/app-link" }]
+
+        [[package]]
+        name = "app"
+        source = { virtual = "[TEMP_DIR]/app" }
+        "#);
+    });
+    Ok(())
+}
+
 /// Virtual members keep their own dependency scopes, including conflicts and bare back-references.
 #[cfg(feature = "test-universal")]
 #[test]

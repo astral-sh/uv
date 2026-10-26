@@ -1992,11 +1992,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 let response;
                 let (requires_dist, dependency_groups, requires_python, package_version) =
                     if package.subject() == PackageSubject::Manifest {
-                        let manifest = &self
+                        let manifest = self
                             .index
                             .workspace_manifest(name)
-                            .expect("workspace scope has a manifest")
-                            .metadata;
+                            .expect("workspace scope has a manifest");
                         (
                             &manifest.requirements.requires_dist,
                             &manifest.requirements.dependency_groups,

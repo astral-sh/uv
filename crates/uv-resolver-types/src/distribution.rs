@@ -55,17 +55,11 @@ pub enum PackageRole {
     Dependency,
 }
 
-/// Static inputs from a virtual workspace member, identified by its directory.
-#[derive(Debug)]
-pub struct WorkspaceManifest {
-    pub dist: Dist,
-    pub metadata: UnversionedMetadata,
-}
-
 /// A workspace member's production, extra, or group requirements in the output graph.
 #[derive(Debug, Clone)]
 pub struct ManifestNode {
-    pub manifest: Arc<WorkspaceManifest>,
+    pub dist: Arc<Dist>,
+    pub metadata: Arc<UnversionedMetadata>,
     pub kind: PackageNodeKind,
     pub marker: UniversalMarker,
 }

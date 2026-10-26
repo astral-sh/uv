@@ -189,7 +189,7 @@ impl<'lock> LockTarget<'lock> {
         overrides: &[Override<Requirement>],
         excludes: &[ExcludeDependency],
         dependency_metadata: &DependencyMetadata,
-    ) -> Result<Vec<(Dist, UnversionedMetadata)>, RequirementsError> {
+    ) -> Result<Vec<(Box<Path>, UnversionedMetadata)>, RequirementsError> {
         let packages = self.packages();
         if !packages
             .values()
@@ -223,20 +223,20 @@ impl<'lock> LockTarget<'lock> {
             if !member.project().has_dynamic_version() || versioned_packages.contains(name) {
                 continue;
             }
-            let dist = Dist::from_directory_url(
-                requirement.name,
-                url,
-                &install_path,
-                editable,
-                Some(true),
-            )?;
             match database
                 .virtual_project_metadata(&install_path, &member.pyproject_toml().raw)
                 .await
             {
-                Ok(Some(metadata)) => projects.push((dist, metadata)),
+                Ok(Some(metadata)) => projects.push((install_path, metadata)),
                 Ok(None) => {}
                 Err(err) => {
+                    let dist = Dist::from_directory_url(
+                        requirement.name,
+                        url,
+                        &install_path,
+                        editable,
+                        Some(true),
+                    )?;
                     return Err(RequirementsError::Dist(
                         DistErrorKind::Read,
                         Box::new(dist),
