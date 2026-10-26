@@ -43,10 +43,10 @@ impl<'a> RequirementContext<'a> {
         match self {
             Self::Root => DependencyModifierScope::Global,
             Self::Package { name, version } | Self::Extra { name, version, .. } => {
-                DependencyModifierScope::Package(name, version)
+                DependencyModifierScope::Package(name, Some(version))
             }
             Self::Group { name, version } => {
-                DependencyModifierScope::DependencyGroup(name, version)
+                DependencyModifierScope::DependencyGroup(name, Some(version))
             }
         }
     }

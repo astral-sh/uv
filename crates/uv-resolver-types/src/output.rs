@@ -284,7 +284,7 @@ impl ResolverOutput {
                 panic!("Every package should have metadata: {metadata_id:?}")
             };
             for req in self.constraints.apply(self.modifiers.apply(
-                DependencyModifierScope::Package(&dist.name, &dist.version),
+                DependencyModifierScope::Package(&dist.name, Some(&dist.version)),
                 archive.metadata.requires_dist.iter(),
             )) {
                 add_marker_params_from_tree(req.marker, &mut seen_marker_values);

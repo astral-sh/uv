@@ -754,6 +754,28 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         })
     }
 
+    /// Read a virtual project's resolution metadata without evaluating its dynamic version.
+    pub async fn virtual_project_metadata(
+        &self,
+        path: &Path,
+        contents: &str,
+    ) -> Result<Option<Metadata>, Error> {
+        let pyproject =
+            PyProjectToml::from_toml(contents, path.display()).map_err(Error::PyprojectToml)?;
+        let Ok(requires_python) = pyproject.requires_python() else {
+            return Ok(None);
+        };
+        // PubGrub needs a concrete version to link the project's extras and groups.
+        // A user-supplied range must be checked against the backend's version.
+        Ok(self
+            .requires_dist(path, &pyproject)
+            .await?
+            .map(|requires_dist| {
+                Metadata::from_requires_dist(requires_dist, Version::new([0]), requires_python)
+                    .with_force_relative(true)
+            }))
+    }
+
     /// Return the [`RequiresDist`] from a `pyproject.toml`, if it can be statically extracted.
     pub async fn requires_dist(
         &self,

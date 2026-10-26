@@ -1663,15 +1663,9 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
         workspace_root: &'lock Path,
         declarations_preprocessed: bool,
     ) -> Self {
-        let package_context = package_version.map(|version| (&package.id.name, version));
-        let package_scope = package_context
-            .map_or(DependencyModifierScope::Global, |(name, version)| {
-                DependencyModifierScope::Package(name, version)
-            });
-        let dependency_group_scope = package_context
-            .map_or(DependencyModifierScope::Global, |(name, version)| {
-                DependencyModifierScope::DependencyGroup(name, version)
-            });
+        let package_scope = DependencyModifierScope::Package(&package.id.name, package_version);
+        let dependency_group_scope =
+            DependencyModifierScope::DependencyGroup(&package.id.name, package_version);
         let declarations = if declarations_preprocessed {
             declarations.clone()
         } else {
@@ -4856,8 +4850,8 @@ impl Lock {
                 // even if the version is dynamic, we can still extract the requirements without
                 // performing a build, unlike in the database where we typically construct a "complete"
                 // metadata object.
-                let metadata = if dependency_modifiers.has_scoped_package(&package.id.name) {
-                    // Package-scoped rules depend on the actual dynamic version, which is only
+                let metadata = if dependency_modifiers.requires_package_version(&package.id.name) {
+                    // Version-specific rules depend on the actual dynamic version, which is only
                     // available from the built distribution metadata.
                     None
                 } else {
@@ -5082,15 +5076,14 @@ impl Lock {
         context: DependencyContext<'_>,
         modifiers: &DependencyModifiers,
     ) -> Vec<Requirement> {
-        let scope =
-            package_version.map_or(DependencyModifierScope::Global, |version| match context {
-                DependencyContext::Group(_) => {
-                    DependencyModifierScope::DependencyGroup(package_name, version)
-                }
-                DependencyContext::Production | DependencyContext::Extra(_) => {
-                    DependencyModifierScope::Package(package_name, version)
-                }
-            });
+        let scope = match context {
+            DependencyContext::Group(_) => {
+                DependencyModifierScope::DependencyGroup(package_name, package_version)
+            }
+            DependencyContext::Production | DependencyContext::Extra(_) => {
+                DependencyModifierScope::Package(package_name, package_version)
+            }
+        };
         let requirements = modifiers
             .apply(scope, requirements)
             .map(Cow::into_owned)
@@ -5230,9 +5223,9 @@ impl Lock {
                     && metadata
                         .as_ref()
                         .is_none_or(|metadata| metadata.version.is_none())
-                    && dependency_modifiers.has_scoped_package(&package.id.name)
+                    && dependency_modifiers.requires_package_version(&package.id.name)
                 {
-                    // Scoped rules need the resolved version before this authorized tree can
+                    // Version-specific rules need the resolved version before this authorized tree can
                     // expose any dependency sources.
                     let metadata = Self::package_metadata(
                         package,

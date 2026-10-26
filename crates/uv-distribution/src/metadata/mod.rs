@@ -126,13 +126,7 @@ impl Metadata {
             provides_extra: metadata.provides_extra,
             dynamic: metadata.dynamic,
         };
-        let RequiresDist {
-            name,
-            requires_dist,
-            provides_extra,
-            dependency_groups,
-            dynamic,
-        } = RequiresDist::from_project_maybe_workspace(
+        let requires_dist = RequiresDist::from_project_maybe_workspace(
             requires_dist,
             install_path,
             git_source,
@@ -146,15 +140,27 @@ impl Metadata {
         .await?;
 
         // Combine with the remaining metadata.
-        Ok(Self {
-            name,
-            version: metadata.version,
+        Ok(Self::from_requires_dist(
             requires_dist,
-            requires_python: metadata.requires_python,
-            provides_extra,
-            dependency_groups,
-            dynamic,
-        })
+            metadata.version,
+            metadata.requires_python,
+        ))
+    }
+
+    pub(crate) fn from_requires_dist(
+        requirements: RequiresDist,
+        version: Version,
+        requires_python: Option<VersionSpecifiers>,
+    ) -> Self {
+        Self {
+            name: requirements.name,
+            version,
+            requires_dist: requirements.requires_dist,
+            requires_python,
+            provides_extra: requirements.provides_extra,
+            dependency_groups: requirements.dependency_groups,
+            dynamic: requirements.dynamic,
+        }
     }
 
     /// Set whether local dependency sources should be represented by relative paths.

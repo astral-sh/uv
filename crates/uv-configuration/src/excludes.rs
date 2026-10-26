@@ -50,6 +50,16 @@ pub enum ExcludeDependency {
     Dependency(PackageName),
 }
 
+impl ExcludeDependency {
+    /// Return the parent package when this exclusion depends on its version.
+    pub fn versioned_package(&self) -> Option<&PackageName> {
+        match self {
+            Self::Package(rule) if rule.package.version.is_some() => Some(&rule.package.name),
+            Self::Package(_) | Self::Dependency(_) => None,
+        }
+    }
+}
+
 /// A set of packages to exclude from resolution.
 #[derive(Debug, Default, Clone)]
 pub struct Excludes {
@@ -133,9 +143,11 @@ impl Excludes {
         self.global.contains(name)
     }
 
-    /// Return whether any exclusions are scoped to the given package.
-    pub(crate) fn has_scoped_package(&self, package: &PackageName) -> bool {
-        self.scoped.contains_key(package)
+    /// Return whether any exclusions select an exact version of the given package.
+    pub(crate) fn requires_package_version(&self, package: &PackageName) -> bool {
+        self.scoped
+            .get(package)
+            .is_some_and(|entries| entries.iter().any(|entry| entry.version.is_some()))
     }
 
     /// Check if a dependency is excluded from a specific package version.
@@ -145,7 +157,7 @@ impl Excludes {
         version: &Version,
         dependency: &PackageName,
     ) -> bool {
-        self.contains_for_package(Some((package, version)), dependency)
+        self.contains_for_package(Some((package, Some(version))), dependency)
     }
 
     /// Check if a dependency is always excluded from a package scope.
@@ -187,7 +199,7 @@ impl Excludes {
     /// Check if a dependency is excluded with optional package-version context.
     pub(crate) fn contains_for_package(
         &self,
-        package: Option<(&PackageName, &Version)>,
+        package: Option<(&PackageName, Option<&Version>)>,
         dependency: &PackageName,
     ) -> bool {
         self.contains(dependency)
@@ -198,7 +210,7 @@ impl Excludes {
                 self.scoped.get(package).is_some_and(|entries| {
                     entries
                         .iter()
-                        .find(|entry| entry.version.as_ref() == Some(version))
+                        .find(|entry| entry.version.as_ref() == version)
                         .or_else(|| entries.iter().find(|entry| entry.version.is_none()))
                         .is_some_and(|entry| entry.excludes.contains(dependency))
                 })

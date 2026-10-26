@@ -512,7 +512,10 @@ fn has_lower_bound(
         // bound.
         for requirement in modifiers
             .apply(
-                DependencyModifierScope::Package(neighbor_dist.name(), &neighbor_dist.version),
+                DependencyModifierScope::Package(
+                    neighbor_dist.name(),
+                    Some(&neighbor_dist.version),
+                ),
                 metadata.requires_dist.iter(),
             )
             .chain(modifiers.apply(

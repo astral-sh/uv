@@ -4,19 +4,19 @@ use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fmt::{Display, Formatter};
-use std::ops::Bound;
+use std::ops::{Bound, ControlFlow};
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Instant;
 use std::{mem, thread};
 
 use either::Either;
-use futures::{FutureExt, StreamExt};
+use futures::{FutureExt, Stream, StreamExt, stream};
 use itertools::Itertools;
 use papaya::{HashMap, ResizeMode};
 use pubgrub::{ConflictId, Id, IncompatibilityArena, Ranges, State, Term};
 use rustc_hash::{FxHashMap, FxHashSet};
-use tokio::sync::mpsc::{self, Receiver};
+use tokio::sync::mpsc;
 use tokio::sync::oneshot;
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::{Level, debug, info, instrument, trace, warn};
@@ -24,9 +24,10 @@ use tracing::{Level, debug, info, instrument, trace, warn};
 use uv_configuration::{Constraints, DependencyModifiers, IndexStrategy};
 use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_distribution_types::{
-    BuiltDist, DerivationChain, Dist, DistErrorKind, Identifier, IndexCapabilities, IndexLocations,
-    IndexMetadata, IndexUrl, InstalledDist, Name, RemoteSource, Requirement, RequiresPython,
-    ResolutionRecorder, ResolvedDist, SourceDist, VariantsJsonContent, VersionOrUrlRef,
+    BuiltDist, DerivationChain, Dist, DistErrorKind, DistributionMetadata, Identifier,
+    IndexCapabilities, IndexLocations, IndexMetadata, IndexUrl, InstalledDist, Name, RemoteSource,
+    Requirement, RequiresPython, ResolutionRecorder, ResolvedDist, SourceDist, VariantsJsonContent,
+    VersionOrUrlRef,
 };
 use uv_git::GitResolver;
 use uv_normalize::PackageName;
@@ -311,6 +312,40 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
         let state = Arc::new(self.state);
         let provider = Arc::new(self.provider);
 
+        // Keep the versionless lock entry unless a declared dependency makes the version
+        // observable. Restarting the search discards decisions made with the provisional version.
+        let mut deferred = state
+            .index
+            .deferred_versions()
+            .keys()
+            .cloned()
+            .collect::<FxHashSet<_>>();
+        loop {
+            match Self::resolve_once(&state, &provider, deferred.clone()).await? {
+                ControlFlow::Break(resolution) => {
+                    return Ok(resolution);
+                }
+                ControlFlow::Continue(name) => {
+                    let dist = &state.index.deferred_versions()[&name];
+                    debug!("Resolving the dynamic version of virtual project `{name}`");
+                    state
+                        .clone()
+                        .fetch(
+                            provider.clone(),
+                            stream::iter([Request::Dist(dist.clone())]),
+                        )
+                        .await?;
+                    deferred.remove(&name);
+                }
+            }
+        }
+    }
+
+    async fn resolve_once(
+        state: &Arc<ResolverState<InstalledPackages>>,
+        provider: &Arc<Provider>,
+        deferred: FxHashSet<PackageName>,
+    ) -> Result<ControlFlow<ResolverOutput, PackageName>, ResolveError> {
         // A channel to fetch package metadata (e.g., given `flask`, fetch all versions) and version
         // metadata (e.g., given `flask==1.0.0`, fetch the metadata for that version).
         // Channel size is set large to accommodate batch prefetching.
@@ -319,7 +354,10 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
             MetadataRequests::new(state.index.clone(), request_sink, state.recorder.clone());
 
         // Run the fetcher.
-        let requests_fut = state.clone().fetch(provider.clone(), request_stream).fuse();
+        let requests_fut = state
+            .clone()
+            .fetch(provider.clone(), ReceiverStream::new(request_stream))
+            .fuse();
 
         // Spawn the PubGrub solver on a dedicated thread.
         let solver = state.clone();
@@ -327,7 +365,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
         thread::Builder::new()
             .name("uv-resolver".into())
             .spawn(move || {
-                let result = solver.solve(&requests);
+                let result = solver.solve(&requests, &deferred);
 
                 // This may fail if the main thread returned early due to an error.
                 let _ = tx.send(result);
@@ -339,14 +377,20 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
         // Wait for both to complete.
         let ((), resolution) = tokio::try_join!(requests_fut, resolve_fut)?;
 
-        state.on_complete();
+        if !matches!(resolution, Ok(ControlFlow::Continue(_))) {
+            state.on_complete();
+        }
         resolution
     }
 }
 
 impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackages> {
     #[instrument(skip_all)]
-    fn solve(self: Arc<Self>, requests: &MetadataRequests) -> Result<ResolverOutput, ResolveError> {
+    fn solve(
+        self: Arc<Self>,
+        requests: &MetadataRequests,
+        deferred: &FxHashSet<PackageName>,
+    ) -> Result<ControlFlow<ResolverOutput, PackageName>, ResolveError> {
         debug!(
             "Solving with installed Python version: {}",
             self.python_requirement.exact()
@@ -713,9 +757,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     &state.env,
                     &state.python_requirement,
                     &state.pubgrub,
+                    deferred,
                 )?;
 
                 match forked_deps {
+                    ForkedDependencies::NeedsVersion(name) => {
+                        return Ok(ControlFlow::Continue(name));
+                    }
                     ForkedDependencies::Unavailable(reason) => {
                         // Then here, if we get a reason that we consider unrecoverable, we should
                         // show the derivation chain.
@@ -888,15 +936,17 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 resolutions.num_forks()
             );
         }
-        resolutions.finish(
-            self.requirements.clone(),
-            self.constraints.clone(),
-            self.modifiers.clone(),
-            self.python_requirement.target().clone(),
-            &self.conflicts,
-            self.selector.resolution_strategy(),
-            self.options.clone(),
-        )
+        resolutions
+            .finish(
+                self.requirements.clone(),
+                self.constraints.clone(),
+                self.modifiers.clone(),
+                self.python_requirement.target().clone(),
+                &self.conflicts,
+                self.selector.resolution_strategy(),
+                self.options.clone(),
+            )
+            .map(ControlFlow::Break)
     }
 
     /// Queue dependency forks against one immutable checkpoint.
@@ -1912,9 +1962,23 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         env: &ResolverEnvironment,
         python_requirement: &PythonRequirement,
         pubgrub: &State<UvDependencyProvider>,
+        deferred: &FxHashSet<PackageName>,
     ) -> Result<ForkedDependencies, ResolveError> {
         let dependencies =
             self.get_dependencies(id, package, version, pins, env, python_requirement, pubgrub)?;
+        // Only declared dependency ranges constrain a virtual project's version.
+        // PubGrub also creates exact edges to link extras and groups to their base.
+        if !deferred.is_empty()
+            && let Dependencies::Available(edges) = &dependencies
+            && let Some(name) = edges.iter().find_map(|edge| {
+                edge.package
+                    .name_no_root()
+                    .filter(|name| deferred.contains(*name) && edge.version != Range::full())
+            })
+        {
+            return Ok(ForkedDependencies::NeedsVersion(name.clone()));
+        }
+
         if env.marker_environment().is_some() {
             Ok(ForkedDependencies::from_dependencies_platform_specific(
                 dependencies,
@@ -2185,14 +2249,16 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     async fn fetch<Provider: ResolverProvider>(
         self: Arc<Self>,
         provider: Arc<Provider>,
-        request_stream: Receiver<Request>,
+        request_stream: impl Stream<Item = Request>,
     ) -> Result<(), ResolveError> {
-        let mut response_stream = ReceiverStream::new(request_stream)
-            .map(|request| self.process_request(request, &*provider).boxed_local())
-            // Allow as many futures as possible to start in the background.
-            // Backpressure is provided by at a more granular level by `DistributionDatabase`
-            // and `SourceDispatch`, as well as the bounded request channel.
-            .buffer_unordered(usize::MAX);
+        let mut response_stream = std::pin::pin!(
+            request_stream
+                .map(|request| self.process_request(request, &*provider).boxed_local())
+                // Allow as many futures as possible to start in the background.
+                // Backpressure is provided by at a more granular level by `DistributionDatabase`
+                // and `SourceDispatch`, as well as the bounded request channel.
+                .buffer_unordered(usize::MAX)
+        );
 
         while let Some(response) = response_stream.next().await {
             match response? {
@@ -2720,7 +2786,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 PubGrubPackageInner::Extra { .. } => {}
                 PubGrubPackageInner::Group { .. } => {}
                 PubGrubPackageInner::Package { name, .. } => {
-                    reporter.on_progress(name, &VersionOrUrlRef::Version(version));
+                    let version_or_url = self.index.deferred_versions().get(name).map_or(
+                        VersionOrUrlRef::Version(version),
+                        DistributionMetadata::version_or_url,
+                    );
+                    reporter.on_progress(name, &version_or_url);
                 }
             }
         }
@@ -3642,6 +3712,8 @@ enum Dependencies {
 /// name and non-overlapping marker expressions (i.e., a fork occurs).
 #[derive(Debug)]
 enum ForkedDependencies {
+    /// A declared requirement needs the backend's version of a virtual workspace member.
+    NeedsVersion(PackageName),
     /// Package dependencies are not available.
     Unavailable(UnavailableVersion),
     /// No forking occurred.

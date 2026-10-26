@@ -1,14 +1,15 @@
 use std::hash::BuildHasherDefault;
 use std::sync::Arc;
 
-use rustc_hash::FxHasher;
-use uv_distribution_types::{IndexUrl, VariantsJsonContent};
+use rustc_hash::{FxHashMap, FxHasher};
+use uv_distribution::Metadata;
+use uv_distribution_types::{Dist, Identifier, IndexUrl, Name, VariantsJsonContent};
 use uv_normalize::PackageName;
 use uv_once_map::{RegisteredEntry, RegisteredOnceMap};
 use uv_resolver_types::DistributionMetadataIndex;
 
 use crate::prioritized_distribution::RegistryVariantsJson;
-use crate::resolver::provider::{MetadataUnavailable, VersionsResponse};
+use crate::resolver::provider::{MetadataResponse, MetadataUnavailable, VersionsResponse};
 
 /// In-memory index of package metadata.
 #[derive(Default, Clone)]
@@ -16,6 +17,9 @@ pub struct InMemoryIndex(Arc<SharedInMemoryIndex>);
 
 #[derive(Default)]
 struct SharedInMemoryIndex {
+    /// Virtual members whose static metadata omits their dynamic version.
+    deferred_versions: FxHashMap<PackageName, Dist>,
+
     /// A map from package name to the metadata for that package and the index where the metadata
     /// came from.
     implicit: FxOnceMap<PackageName, Arc<VersionsResponse>>,
@@ -35,6 +39,23 @@ pub(crate) type FxRegisteredEntry<'a, K, V> =
     RegisteredEntry<'a, K, V, BuildHasherDefault<FxHasher>>;
 
 impl InMemoryIndex {
+    /// Create a lock-local index so provisional versions cannot be reused by another operation.
+    pub fn for_virtual_projects(projects: Vec<(Dist, Metadata)>) -> Self {
+        let mut index = SharedInMemoryIndex::default();
+        for (dist, metadata) in projects {
+            index.distributions.done(
+                dist.distribution_id(),
+                Arc::new(MetadataResponse::Found(metadata.into())),
+            );
+            index.deferred_versions.insert(dist.name().clone(), dist);
+        }
+        Self(Arc::new(index))
+    }
+
+    pub(super) fn deferred_versions(&self) -> &FxHashMap<PackageName, Dist> {
+        &self.0.deferred_versions
+    }
+
     /// Returns a reference to the package metadata map.
     pub(crate) fn implicit(&self) -> &FxOnceMap<PackageName, Arc<VersionsResponse>> {
         &self.0.implicit

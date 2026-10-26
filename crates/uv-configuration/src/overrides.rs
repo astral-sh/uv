@@ -60,6 +60,16 @@ pub enum Override<T> {
     Requirement(T),
 }
 
+impl<T> Override<T> {
+    /// Return the parent package when this override depends on its version.
+    pub fn versioned_package(&self) -> Option<&PackageName> {
+        match self {
+            Self::Package(rule) if rule.package.version.is_some() => Some(&rule.package.name),
+            Self::Package(_) | Self::Requirement(_) => None,
+        }
+    }
+}
+
 // A derived `#[serde(untagged)]` implementation collapses detailed requirement parse errors into
 // "data did not match any variant", so use a type-directed visitor for string requirements.
 struct OverrideVisitor<T>(PhantomData<T>);
@@ -265,14 +275,16 @@ impl Overrides {
         package: &PackageName,
         version: &Version,
     ) -> impl Iterator<Item = &Requirement> {
-        self.scoped_for(package, version)
+        self.scoped_for(package, Some(version))
             .into_iter()
             .flat_map(|scoped| scoped.overrides.values().flatten())
     }
 
-    /// Return whether any overrides are scoped to the given package.
-    pub(crate) fn has_scoped_package(&self, package: &PackageName) -> bool {
-        self.scoped.contains_key(package)
+    /// Return whether any overrides select an exact version of the given package.
+    pub(crate) fn requires_package_version(&self, package: &PackageName) -> bool {
+        self.scoped
+            .get(package)
+            .is_some_and(|entries| entries.iter().any(|entry| entry.version.is_some()))
     }
 
     /// Return whether a package has overrides for an exact version.
@@ -293,14 +305,18 @@ impl Overrides {
     }
 
     /// Get the overrides for a specific package version.
-    fn scoped_for(&self, package: &PackageName, version: &Version) -> Option<&ScopedOverrides> {
+    fn scoped_for(
+        &self,
+        package: &PackageName,
+        version: Option<&Version>,
+    ) -> Option<&ScopedOverrides> {
         if let Some(recorder) = &self.recorder {
             recorder.scoped_override(package);
         }
         self.scoped.get(package).and_then(|entries| {
             entries
                 .iter()
-                .find(|entry| entry.version.as_ref() == Some(version))
+                .find(|entry| entry.version.as_ref() == version)
                 .or_else(|| entries.iter().find(|entry| entry.version.is_none()))
         })
     }
@@ -310,7 +326,7 @@ impl Overrides {
     /// NB: Change this method together with [`Constraints::apply`](crate::Constraints::apply).
     pub(crate) fn apply_for_package<'a, I>(
         &'a self,
-        package: Option<(&PackageName, &Version)>,
+        package: Option<(&PackageName, Option<&Version>)>,
         requirements: I,
     ) -> impl Iterator<Item = Cow<'a, Requirement>> + use<'a, I>
     where

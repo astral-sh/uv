@@ -34625,6 +34625,160 @@ fn lock_dynamic_version_dependencies() -> Result<()> {
     Ok(())
 }
 
+/// A virtual project can lock its static dependencies without asking a backend for its version.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_virtual_dynamic_version() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "app"
+        dynamic = ["version"]
+        requires-python = ">=3.12"
+        dependencies = ["library"]
+
+        [tool.uv]
+        package = false
+
+        [tool.uv.sources]
+        library = { path = "library" }
+    "#})?;
+    context
+        .temp_dir
+        .child("library/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "library"
+        version = "1.0"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--no-build").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(context.read("uv.lock"), @r#"
+        version = 1
+        revision = 5
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "app"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "library" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "library", directory = "library" }]
+
+        [[package]]
+        name = "library"
+        version = "1.0"
+        source = { directory = "library" }
+        "#);
+    });
+    Ok(())
+}
+
+/// A rule scoped to the project's name applies even when the lock omits its version.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_virtual_dynamic_version_name_scoped_exclusion() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "app"
+        dynamic = ["version"]
+        requires-python = ">=3.12"
+        dependencies = ["excluded"]
+
+        [tool.uv]
+        package = false
+        exclude-dependencies = [{ package = { name = "app" }, dependencies = ["excluded"] }]
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock().arg("--no-build").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--no-build").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    Ok(())
+}
+
+/// A transitive requirement on a virtual member must use the version supplied by its backend.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_virtual_dynamic_version_transitive_bound() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let (filename, wheel) = WheelBuilder::new(&"plugin".parse()?, &"1.0".parse()?)
+        .requires(&["app>=1".parse()?])
+        .build();
+    context.temp_dir.child(&filename).write_binary(&wheel)?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "app"
+        dynamic = ["version"]
+        requires-python = ">=3.12"
+        dependencies = ["plugin"]
+
+        [tool.uv]
+        package = false
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "backend"
+    "#})?;
+    context.temp_dir.child("backend.py").write_str(indoc! {r#"
+        from pathlib import Path
+
+        def prepare_metadata_for_build_wheel(metadata_directory, config_settings=None):
+            version = Path("version.txt").read_text()
+            dist_info = Path(metadata_directory, f"app-{version}.dist-info")
+            dist_info.mkdir()
+            dist_info.joinpath("METADATA").write_text(
+                f"Metadata-Version: 2.3\nName: app\nVersion: {version}\nRequires-Dist: plugin\n"
+            )
+            return dist_info.name
+    "#})?;
+    let version = context.temp_dir.child("version.txt");
+    version.write_str("1.0")?;
+    uv_snapshot!(context.filters(), context.lock().arg("--find-links").arg(".").arg("--no-index").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    version.write_str("0.5")?;
+    uv_snapshot!(context.filters(), context.lock().arg("--find-links").arg(".").arg("--no-index").arg("--offline").arg("--upgrade").arg("--no-cache"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies
+      cause: Because all versions of plugin depend on your project and your project depends on plugin, we can conclude that your project's requirements are unsatisfiable.
+
+    hint: The package `plugin` depends on the package `app` but the name is shadowed by your project. Consider changing the name of the project.
+    ");
+    Ok(())
+}
+
 /// Validating a lockfile with a dynamic version (but static dependencies) shouldn't require
 /// building the package.
 #[cfg(feature = "test-universal")]
