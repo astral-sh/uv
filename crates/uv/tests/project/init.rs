@@ -66,6 +66,23 @@ fn init() {
 }
 
 #[test]
+fn init_existing_pyproject() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]);
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str("[tool.ruff]\n")?;
+
+    uv_snapshot!(context.filters(), context.init(), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Cannot initialize a project in `[TEMP_DIR]/` because `pyproject.toml` already exists
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn init_bare() {
     let context = uv_test::test_context!("3.12");
 
