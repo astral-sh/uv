@@ -458,12 +458,8 @@ impl GitCheckout {
                 .exec_with_output()?;
         }
 
-        let repo = GitRepository::open(into)?;
-        if database.settings.partial_fetches {
-            repo.set_remote_url(database.remote.url())?;
-        }
-        let checkout = Self::new(revision, repo);
-        let lfs_ready = checkout.reset(database.lfs_ready, database.remote.url())?;
+        let checkout = Self::new(revision, GitRepository::open(into)?);
+        let lfs_ready = checkout.reset(database)?;
         Ok(checkout.with_lfs_ready(lfs_ready))
     }
 
@@ -509,7 +505,10 @@ impl GitCheckout {
     /// [`.ok` extension]: CHECKOUT_READY_EXTENSION
     /// `git reset --hard [<commit>]` can break relative submodule URLs, so we update submodules
     /// using the original remote URL.
-    fn reset(&self, with_lfs: Option<bool>, original_remote_url: &SafeUrl) -> Result<Option<bool>> {
+    fn reset(&self, database: &GitDatabase) -> Result<Option<bool>> {
+        let with_lfs = database.lfs_ready;
+        let original_remote_url = database.remote.url();
+
         // We want to skip smudge if lfs was disabled for the repository
         // as smudge filters can trigger on a reset even if lfs artifacts
         // were not originally "fetched".
@@ -527,10 +526,15 @@ impl GitCheckout {
             .cwd(&self.repo.path)
             .exec_with_output()?;
 
-        // Initialize direct submodules using the original remote URL so Git can resolve relative
-        // submodule URLs, but don't write it to `remote.origin.url`. Git persists resolved submodule
-        // URLs during initialization, so writing a credentialed parent remote can leak credentials
-        // into checkout configuration.
+        // With the default LFS endpoint, the local origin lets Git LFS retrieve cached
+        // payloads from the database during reset. The upstream origin lets Git fetch
+        // missing objects later.
+        if database.settings.partial_fetches {
+            self.repo.set_remote_url(original_remote_url)?;
+        }
+
+        // Resolve relative submodule URLs against the upstream even when the checkout's origin
+        // is the local database. Git persists the resolved URLs, so keep credentials transient.
         //
         // Do not use `--recursive` here: command-local `remote.origin.url` config is inherited by
         // Git commands run inside submodules, which would make nested relative URLs resolve against
