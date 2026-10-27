@@ -611,9 +611,9 @@ def get_operating_system_and_architecture():
 
 
 def _get_cpu_info():
-    """Return raw data so Rust can interpret additional features from the cache.
+    """Detect CPU features, following archspec's detection method.
 
-    The platform-specific probes mostly follow archspec's CPU detection.
+    Returns raw data to avoid bumping the cache when we want to do more detection in Rust.
     """
     if sys.platform == "darwin":
         return _macos_cpu_info()
@@ -644,11 +644,12 @@ def _linux_cpu_flags():
 
 def _macos_cpu_info():
     import ctypes
+    import errno
 
     # archspec reads these x86 feature keys using the sysctl command. Query them from this
     # process instead: a separate executable could run under a different architecture.
     # https://github.com/archspec/archspec/blob/ebd3eb502d9205f1033ffc028d661f2fbece7dfc/archspec/cpu/detect.py#L290-L300
-    sysctl = ctypes.CDLL(None).sysctlbyname
+    sysctl = ctypes.CDLL(None, use_errno=True).sysctlbyname
     sysctl.argtypes = [
         ctypes.c_char_p,
         ctypes.c_void_p,
@@ -657,18 +658,23 @@ def _macos_cpu_info():
         ctypes.c_size_t,
     ]
     flags = []
-    # A missing key must not hide features available through another key.
     for key in (
         b"machdep.cpu.features",
         b"machdep.cpu.leaf7_features",
         b"machdep.cpu.extfeatures",
     ):
         size = ctypes.c_size_t()
-        if sysctl(key, None, ctypes.byref(size), None, 0) != 0 or size.value == 0:
-            continue
-        buffer = ctypes.create_string_buffer(size.value)
-        if sysctl(key, buffer, ctypes.byref(size), None, 0) == 0:
-            flags.append(buffer.value.decode("ascii", errors="replace"))
+        result = sysctl(key, None, ctypes.byref(size), None, 0)
+        if result == 0 and size.value:
+            buffer = ctypes.create_string_buffer(size.value)
+            result = sysctl(key, buffer, ctypes.byref(size), None, 0)
+            if result == 0:
+                flags.append(buffer.value.decode("ascii", errors="replace"))
+        if result != 0:
+            error = ctypes.get_errno()
+            # A missing key must not hide features available through another key.
+            if error != errno.ENOENT:
+                raise OSError(error, os.strerror(error), key.decode("ascii"))
     if flags:
         return {"kind": "flags", "flags": " ".join(flags)}
     return {"kind": "unavailable"}
@@ -778,7 +784,8 @@ def _query_cpuid(address, xgetbv_offset):
 def _query_cpuid_leaf(probe, leaf, subleaf):
     import ctypes
 
-    # The serialized register order must match Rust's CpuidLeaf: EAX, EBX, ECX, EDX.
+    # Instantiate the four-element uint32 array type as the probe's output buffer.
+    # Its register order must match Rust's CpuidLeaf: EAX, EBX, ECX, EDX.
     registers = (ctypes.c_uint32 * 4)()
     probe(registers, leaf, subleaf)
     return {"leaf": leaf, "subleaf": subleaf, "registers": list(registers)}

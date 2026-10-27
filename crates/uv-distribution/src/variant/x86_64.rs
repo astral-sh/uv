@@ -11,13 +11,6 @@ use uv_platform_tags::{Arch, CpuInfo, Platform};
 use super::{PluginApi, VendoredVariantProvider};
 
 const NAMESPACE: &VariantNamespace = &VariantNamespace::from_static("x86_64");
-const LEVEL: VariantFeature = VariantFeature::from_static("level");
-const LEVEL_VALUES: [VariantValue; 4] = [
-    VariantValue::from_static("v1"),
-    VariantValue::from_static("v2"),
-    VariantValue::from_static("v3"),
-    VariantValue::from_static("v4"),
-];
 static PACKAGE_NAME: LazyLock<PackageName> = LazyLock::new(|| {
     "x86-64-variant-provider"
         .parse()
@@ -26,19 +19,25 @@ static PACKAGE_NAME: LazyLock<PackageName> = LazyLock::new(|| {
 // When the target CPU cannot be queried, use the platform default. Mainstream x86-64 CPUs that
 // lack v2 are more than a decade old.
 const PLATFORM_DEFAULT_LEVEL: Level = Level::V2;
-static LEVEL_PROPERTIES: LazyLock<[SupportedVariantFeature; 4]> =
-    LazyLock::new(|| [1, 2, 3, 4].map(levels));
+/// Cached properties for each maximum supported [`Level`], from v4 to v1.
+static LEVEL_PROPERTIES: LazyLock<[SupportedVariantFeature; 4]> = LazyLock::new(|| {
+    let values = ["v4", "v3", "v2", "v1"].map(VariantValue::from_static);
+    std::array::from_fn(|index| SupportedVariantFeature {
+        name: VariantFeature::from_static("level"),
+        values: values[index..].to_vec(),
+    })
+});
 
 /// The vendored implementation of `x86_64-variant-provider` 0.2.0.
 ///
 /// # Variant properties
 ///
-/// - `x86_64::level` lists the microarchitecture levels the target supports (`v1` through `v4`),
-///   highest first, so uv prefers the most specialized compatible wheel.
+/// - `x86_64::level` lists the supported microarchitecture levels (`v4`, `v3`, `v2`, `v1`), which
+///   group instruction set extensions such as SIMD instructions. Each level implies the previous
+///   levels are also compatible, e.g., if `v3` is emitted, `v2` and `v1` are also emitted.
 ///
 /// When CPU detection is unavailable, including for an explicit target (`--python-platform`),
-/// x86-64 targets use the platform defaults, `v2` then `v1`. Other target architectures have no
-/// x86-64 levels.
+/// x86-64 targets use `v2` as the platform default, while other architectures emit nothing.
 pub(super) struct X86_64VariantProvider;
 
 impl VendoredVariantProvider for X86_64VariantProvider {
@@ -66,18 +65,8 @@ impl VendoredVariantProvider for X86_64VariantProvider {
             .cpu_info()
             .and_then(Level::detect)
             .unwrap_or(PLATFORM_DEFAULT_LEVEL);
-        Some(std::slice::from_ref(&LEVEL_PROPERTIES[level as usize - 1]))
-    }
-}
-
-fn levels(max_level: u8) -> SupportedVariantFeature {
-    SupportedVariantFeature {
-        name: LEVEL,
-        values: LEVEL_VALUES
-            .into_iter()
-            .take(usize::from(max_level))
-            .rev()
-            .collect(),
+        let property = &LEVEL_PROPERTIES[LEVEL_PROPERTIES.len() - level as usize];
+        Some(std::slice::from_ref(property))
     }
 }
 
@@ -203,9 +192,11 @@ mod tests {
     #[test]
     fn linux_flags() {
         let info = CpuInfo::Flags {
-            flags: "cx16 lahf_lm popcnt pni ssse3 sse4_1 sse4_2 avx avx2 bmi1 bmi2 f16c \
-                    fma abm movbe"
-                .into(),
+            flags: concat!(
+                "cx16 lahf_lm popcnt pni ssse3 sse4_1 sse4_2 avx avx2 bmi1 bmi2 f16c ",
+                "fma abm movbe"
+            )
+            .into(),
         };
         assert_eq!(Level::detect(&info), Some(Level::V3));
     }
@@ -213,9 +204,11 @@ mod tests {
     #[test]
     fn macos_flags() {
         let info = CpuInfo::Flags {
-            flags: "CX16 LAHF POPCNT SSE3 SSSE3 SSE4.1 SSE4.2 AVX1.0 \
-                    AVX2.0 BMI1 BMI2 F16C FMA LZCNT MOVBE"
-                .into(),
+            flags: concat!(
+                "CX16 LAHF POPCNT SSE3 SSSE3 SSE4.1 SSE4.2 AVX1.0 ",
+                "AVX2.0 BMI1 BMI2 F16C FMA LZCNT MOVBE"
+            )
+            .into(),
         };
         assert_eq!(Level::detect(&info), Some(Level::V3));
     }
