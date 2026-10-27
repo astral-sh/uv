@@ -48,7 +48,7 @@ fn cached_environment_resolution_hash(
 ) -> String {
     match hash_strategy.verification() {
         // Preserve existing cache identities for environments materialized without verification.
-        HashVerification::None => resolution_hash,
+        HashVerification::Unspecified => resolution_hash,
         // Never reuse an environment materialized without hash verification for a lock-backed
         // resolution with the same distributions and expected hashes.
         HashVerification::IfPresent(_) | HashVerification::Required(_) => {

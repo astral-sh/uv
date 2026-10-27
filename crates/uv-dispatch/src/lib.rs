@@ -228,7 +228,9 @@ impl<'a> BuildDispatch<'a> {
             base_hasher: hasher,
             build_hash_checking: match hasher.verification() {
                 HashVerification::Required(_) => HashCheckingMode::Require,
-                HashVerification::None | HashVerification::IfPresent(_) => HashCheckingMode::Verify,
+                HashVerification::Unspecified | HashVerification::IfPresent(_) => {
+                    HashCheckingMode::Verify
+                }
             },
             exclude_newer,
             source_build_context: SourceBuildContext::new(concurrency.builds_semaphore.clone()),
