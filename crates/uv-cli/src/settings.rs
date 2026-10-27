@@ -21,7 +21,7 @@ use uv_configuration::{
     DependencyGroups, DependencyMode, DevMode, DryRun, EditableMode, EnvFile, ExcludeDependency,
     ExcludeNewer, ExcludeNewerPackage, ExportFormat, ExtrasSpecification, ForkStrategy,
     GitLfsSetting, HashCheckingMode, IndexStrategy, InitKind, InitProjectKind, InstallOptions,
-    KeyringProviderType, MetadataSchemaVersion, Modifications, NoBinary, NoBuild, NoSources,
+    KeyringProviderType, MetadataOutputVersion, Modifications, NoBinary, NoBuild, NoSources,
     Override, PackageOverride, PipCompileFormat, Prerelease, ProjectBuildBackend, ProxyUrl,
     PythonUpgrade, PythonUpgradeSource, Reinstall, RequiredVersion, RequirementsInput,
     ResolutionMode, TargetTriple, ToolRunCommand, TrustedHost, TrustedPublishing, Upgrade,
@@ -2141,7 +2141,7 @@ impl UpgradeSettings {
 /// The resolved settings to use for a `workspace metadata` invocation.
 #[derive(Debug, Clone)]
 pub struct MetadataSettings {
-    pub schema_version: MetadataSchemaVersion,
+    pub output_version: MetadataOutputVersion,
     #[expect(dead_code)]
     script: Option<PathBuf>,
     pub lock_check: LockCheck,
@@ -2192,7 +2192,7 @@ impl MetadataSettings {
         let malware_settings = MalwareCheckSettings::resolve(filesystem.as_ref(), &environment);
 
         Ok(Self {
-            schema_version: output_version.unwrap_or_default(),
+            output_version: output_version.unwrap_or_default(),
             script,
             lock_check: locked,
             frozen,

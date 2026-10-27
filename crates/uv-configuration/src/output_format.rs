@@ -61,16 +61,16 @@ pub enum TreeFormat {
     Json,
 }
 
-/// The schema version for workspace metadata. The default is the latest supported version.
+/// The output version for workspace metadata. The default is the latest supported version.
 #[derive(Debug, Default, Clone, Copy, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
-pub enum MetadataSchemaVersion {
+pub enum MetadataOutputVersion {
     /// An unstable, experimental schema.
     #[default]
     Preview,
 }
 
-impl From<&str> for MetadataSchemaVersion {
+impl From<&str> for MetadataOutputVersion {
     fn from(version: &str) -> Self {
         match version {
             "preview" => Self::Preview,

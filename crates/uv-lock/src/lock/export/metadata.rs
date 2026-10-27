@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, VecDeque};
 use std::fmt::Display;
 use std::path::Path;
 
-use uv_configuration::MetadataSchemaVersion;
+use uv_configuration::MetadataOutputVersion;
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
     InstalledDist, Name, Requirement, RequiresPython, ResolvedDist, UrlString,
@@ -100,7 +100,7 @@ pub struct Metadata {
 #[derive(serde::Serialize, Debug, Default)]
 struct SchemaReport {
     /// The version of the schema.
-    version: MetadataSchemaVersion,
+    version: MetadataOutputVersion,
 }
 
 /// Information about the existing or synchronized environment for the workspace.
@@ -1322,12 +1322,12 @@ impl Metadata {
     pub fn from_lockfile(
         workspace_root: &Path,
         lock: &Lock,
-        schema_version: MetadataSchemaVersion,
+        output_version: MetadataOutputVersion,
     ) -> Self {
         Self::from_lock_target(
             MetadataTarget::Workspace(workspace_root),
             lock,
-            schema_version,
+            output_version,
         )
     }
 
@@ -1335,15 +1335,15 @@ impl Metadata {
     pub fn from_script(
         script_path: &Path,
         lock: &Lock,
-        schema_version: MetadataSchemaVersion,
+        output_version: MetadataOutputVersion,
     ) -> Self {
-        Self::from_lock_target(MetadataTarget::Script(script_path), lock, schema_version)
+        Self::from_lock_target(MetadataTarget::Script(script_path), lock, output_version)
     }
 
     fn from_lock_target(
         target: MetadataTarget<'_>,
         lock: &Lock,
-        schema_version: MetadataSchemaVersion,
+        output_version: MetadataOutputVersion,
     ) -> Self {
         let mut resolve = BTreeMap::new();
         let workspace_root = PortablePathBuf::from(target.workspace_root());
@@ -1477,7 +1477,7 @@ impl Metadata {
 
         Self {
             schema: SchemaReport {
-                version: schema_version,
+                version: output_version,
             },
             conflicts,
             environment: None,

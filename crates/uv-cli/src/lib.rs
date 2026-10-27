@@ -17,7 +17,7 @@ use uv_configuration::RequirementsInput;
 use uv_configuration::{
     AddBoundsKind, AnnotationStyle, AuditOutputFormat, AuthorFrom, ColorChoice,
     ExcludeNewerPackageEntry, ExportFormat, ForkStrategy, IndexStrategy, KeyringProviderType,
-    ListFormat, MetadataSchemaVersion, PackageNameSpecifier, PipCompileFormat, PipInstallFormat,
+    ListFormat, MetadataOutputVersion, PackageNameSpecifier, PipCompileFormat, PipInstallFormat,
     PrereleaseMode, PrereleasePackageEntry, ProjectBuildBackend, PythonListFormat, ResolutionMode,
     SyncFormat, TargetTriple, TreeFormat, TrustedHost, TrustedPublishing, VersionBump,
     VersionBumpSpec, VersionControlSystem, VersionFormat,
@@ -7593,7 +7593,7 @@ pub struct MetadataArgs {
     /// If the version is omitted or unrecognized, uv uses the latest schema. The output's
     /// `schema.version` field identifies the schema used. Currently, only `preview` is supported.
     #[arg(long, value_name = "VERSION")]
-    pub output_version: Option<MetadataSchemaVersion>,
+    pub output_version: Option<MetadataOutputVersion>,
 
     /// View metadata for the specified PEP 723 Python script, rather than the current workspace.
     ///
