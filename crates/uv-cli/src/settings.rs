@@ -2163,7 +2163,7 @@ impl MetadataSettings {
         environment: EnvironmentOptions,
     ) -> anyhow::Result<Self> {
         let MetadataArgs {
-            schema_version,
+            output_version,
             script,
             locked,
             no_locked,
@@ -2192,7 +2192,7 @@ impl MetadataSettings {
         let malware_settings = MalwareCheckSettings::resolve(filesystem.as_ref(), &environment);
 
         Ok(Self {
-            schema_version: schema_version.unwrap_or_default(),
+            schema_version: output_version.unwrap_or_default(),
             script,
             lock_check: locked,
             frozen,

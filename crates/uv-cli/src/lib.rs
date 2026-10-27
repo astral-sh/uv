@@ -7593,7 +7593,7 @@ pub struct MetadataArgs {
     /// If the version is omitted or unrecognized, uv uses the latest schema. The output's
     /// `schema.version` field identifies the schema used. Currently, only `preview` is supported.
     #[arg(long, value_name = "VERSION")]
-    pub schema_version: Option<MetadataSchemaVersion>,
+    pub output_version: Option<MetadataSchemaVersion>,
 
     /// View metadata for the specified PEP 723 Python script, rather than the current workspace.
     ///

@@ -132,7 +132,7 @@ fn workspace_metadata_simple() {
     context
         .workspace_metadata()
         .current_dir(&workspace)
-        .args(["--schema-version", "unknown"])
+        .args(["--output-version", "unknown"])
         .assert()
         .success()
         .stdout(latest.stdout);
@@ -632,7 +632,7 @@ print("Hello, world!")
         context.filters(),
         context
             .workspace_metadata()
-            .args(["--schema-version", "preview"])
+            .args(["--output-version", "preview"])
             .arg("--script")
             .arg(script.path()),
         @r#"
