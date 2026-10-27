@@ -230,6 +230,9 @@ jobs:
     name: "free-threaded on windows"
     timeout-minutes: 10
     runs-on: windows-latest
+    env:
+      # Windows runners have unreliable connectivity to the Astral release mirror.
+      UV_PYTHON_INSTALL_MIRROR: https://github.com/astral-sh/python-build-standalone/releases/download
 
     steps:
       - name: "Download binary"
@@ -274,6 +277,9 @@ jobs:
     name: "aarch64 python on aarch64 windows"
     timeout-minutes: 10
     runs-on: windows-11-arm
+    env:
+      # Windows runners have unreliable connectivity to the Astral release mirror.
+      UV_PYTHON_INSTALL_MIRROR: https://github.com/astral-sh/python-build-standalone/releases/download
 
     steps:
       - name: "Download binary"
@@ -320,6 +326,8 @@ jobs:
     runs-on: windows-11-arm
     env:
       UV_PYTHON_ARCH: x86_64
+      # Windows runners have unreliable connectivity to the Astral release mirror.
+      UV_PYTHON_INSTALL_MIRROR: https://github.com/astral-sh/python-build-standalone/releases/download
 
     steps:
       - name: "Download binary"
@@ -388,6 +396,9 @@ jobs:
     name: "windows registry"
     timeout-minutes: 10
     runs-on: windows-latest
+    env:
+      # Windows runners have unreliable connectivity to the Astral release mirror.
+      UV_PYTHON_INSTALL_MIRROR: https://github.com/astral-sh/python-build-standalone/releases/download
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -749,6 +760,8 @@ jobs:
     # Pyodide CLI has an issue running cross-drive,
     # So ensure that cache and Pyodide paths are on D drive as well.
     env:
+      # Windows runners have unreliable connectivity to the Astral release mirror.
+      UV_PYTHON_INSTALL_MIRROR: https://github.com/astral-sh/python-build-standalone/releases/download
       UV_CACHE_DIR: D:\uv-cache
       PYODIDE_XBUILDENV_PATH: D:\pyodide-xbuildenv
     steps:
@@ -807,6 +820,9 @@ jobs:
     name: "windows nanoserver"
     timeout-minutes: 15
     runs-on: windows-latest
+    env:
+      # Windows runners have unreliable connectivity to the Astral release mirror.
+      UV_PYTHON_INSTALL_MIRROR: https://github.com/astral-sh/python-build-standalone/releases/download
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -828,6 +844,7 @@ jobs:
       - name: "Run uv on Windows NanoServer"
         run: |
           docker run --rm `
+            -e UV_PYTHON_INSTALL_MIRROR `
             -v "${{ github.workspace }}:C:\uv" `
             mcr.microsoft.com/powershell:lts-nanoserver-ltsc2022 `
             pwsh -ExecutionPolicy Bypass -File C:\uv\test\integration\windows-nanoserver.ps1

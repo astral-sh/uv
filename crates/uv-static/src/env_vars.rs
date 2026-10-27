@@ -773,6 +773,12 @@ impl EnvVars {
     #[attr_added_in("0.8.0")]
     pub const UV_INTERNAL__TEST_PYTHON_MANAGED: &'static str = "UV_INTERNAL__TEST_PYTHON_MANAGED";
 
+    /// Set the CPython download mirror for tests that install managed Python.
+    #[attr_hidden]
+    #[attr_added_in("0.13.6")]
+    pub const UV_INTERNAL__TEST_PYTHON_INSTALL_MIRROR: &'static str =
+        "UV_INTERNAL__TEST_PYTHON_INSTALL_MIRROR";
+
     /// Used to force ignoring Git LFS commands as `git-lfs` detection cannot be overridden via PATH.
     #[attr_hidden]
     #[attr_added_in("0.9.15")]

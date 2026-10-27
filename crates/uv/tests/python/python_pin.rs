@@ -801,7 +801,9 @@ fn python_pin_with_comments_and_whitespace() -> Result<()> {
 #[test]
 #[cfg(feature = "test-python-managed")]
 fn python_pin_install() {
-    let context = uv_test::test_context_with_versions!(&[]).with_filtered_python_sources();
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_filtered_python_sources()
+        .with_python_install_mirror();
 
     // Should not install 3.12 when downloads are not automatic
     uv_snapshot!(context.filters(), context.python_pin().arg("3.12"), @"

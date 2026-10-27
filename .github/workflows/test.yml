@@ -246,6 +246,9 @@ jobs:
     timeout-minutes: 15
     runs-on: namespace-profile-windows-2022-x86-64-16x32
     name: "cargo test on windows ${{ matrix.partition }} of 3"
+    env:
+      # Windows runners have unreliable connectivity to the Astral release mirror.
+      UV_PYTHON_INSTALL_MIRROR: https://github.com/astral-sh/python-build-standalone/releases/download
     strategy:
       fail-fast: false
       matrix:
@@ -268,6 +271,8 @@ jobs:
           # renovate: datasource=github-release-attachments depName=astral-sh/uv
           version: "0.13.5"
           checksum: "a38b8d1902b7cfbc76b423ba1bb456f623f42064cdc72628b6075b89afd1019a"
+          # Windows runners have unreliable connectivity to the Astral release mirror.
+          download-from-astral-mirror: false
 
       - name: "Install required Python versions"
         env:
@@ -308,6 +313,8 @@ jobs:
           UV_INTERNAL__TEST_ALT_FS: "\\\\localhost\\uv-alt-fs"
           UV_INTERNAL__TEST_SMB_FS: "\\\\localhost\\uv-alt-fs"
           UV_INTERNAL__TEST_LOWLINKS_FS: "C:\\uv"
+          # Windows runners have unreliable connectivity to the Astral release mirror.
+          UV_INTERNAL__TEST_PYTHON_INSTALL_MIRROR: ${{ env.UV_PYTHON_INSTALL_MIRROR }}
           # Write pending snapshots to a separate directory for artifact upload
           INSTA_UPDATE: new
           INSTA_PENDING_DIR: ${{ github.workspace }}/pending-snapshots

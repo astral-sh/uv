@@ -729,13 +729,13 @@ impl TestContext {
         self
     }
 
+    /// Use the test suite's configured mirror for commands that download CPython.
     #[must_use]
-    pub fn with_empty_python_install_mirror(mut self) -> Self {
-        self.extra_env.push((
-            EnvVars::UV_PYTHON_INSTALL_MIRROR.into(),
-            String::new().into(),
-        ));
-        self
+    pub fn with_python_install_mirror(self) -> Self {
+        self.with_env(
+            EnvVars::UV_PYTHON_INSTALL_MIRROR,
+            env::var_os(EnvVars::UV_INTERNAL__TEST_PYTHON_INSTALL_MIRROR).unwrap_or_default(),
+        )
     }
 
     /// Add extra directories and configuration for managed Python installations.
@@ -752,7 +752,7 @@ impl TestContext {
         self.extra_env
             .push((EnvVars::UV_PYTHON_DOWNLOADS.into(), "automatic".into()));
 
-        self
+        self.with_python_install_mirror()
     }
 
     /// Configure isolated directories for installed tools and their executable entry points.
