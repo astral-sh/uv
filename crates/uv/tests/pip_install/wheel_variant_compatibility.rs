@@ -163,6 +163,31 @@ fn select_variant_by_static_provider_order() -> Result<()> {
     Ok(())
 }
 
+/// ARM64 interpreters built without libffi can still install ordinary wheels.
+#[cfg(target_arch = "aarch64")]
+#[test]
+fn aarch64_without_ctypes() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    fs_err::write(
+        context.site_packages().join("missing_ctypes.pth"),
+        "import sys; sys.modules['_ctypes'] = None\n",
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--no-cache")
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg(context.workspace_root.join("test/links/ok-1.0.0-py3-none-any.whl")), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0 (from file://[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl)
+    ");
+    Ok(())
+}
+
 const X86_64_VARIANTS: &str = indoc! {r#"
     name = "x86-64-target-defaults"
     root = {}

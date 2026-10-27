@@ -654,6 +654,9 @@ def _macos_cpu_info(*, arm64):
     try:
         import ctypes
     except ImportError as error:
+        if arm64:
+            # The AArch64 probe distinguishes a missing module from a broken ctypes installation.
+            raise
         # Python can be built without the optional _ctypes extension.
         return {"unavailable": str(error)}
 
@@ -923,8 +926,16 @@ def main() -> None:
         try:
             cpu_info = _get_cpu_info(arm64=arm64)
         except Exception as error:  # noqa: BLE001
-            # Rust applies the preview policy to unexpected failures.
-            cpu_info = {"error": f"{type(error).__name__}: {error}"}
+            # AArch64 interpreters built without ctypes can use the Armv8-A baseline.
+            if (
+                arm64
+                and isinstance(error, ModuleNotFoundError)
+                and error.name in {"ctypes", "_ctypes"}
+            ):
+                cpu_info = {"unavailable": str(error)}
+            else:
+                # Rust applies the preview policy to unexpected failures.
+                cpu_info = {"error": f"{type(error).__name__}: {error}"}
     else:
         cpu_info = {"unsupported_architecture": architecture}
 
