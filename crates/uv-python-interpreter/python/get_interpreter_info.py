@@ -751,32 +751,37 @@ def _query_cpuid(address, xgetbv_offset):
     xgetbv = ctypes.CFUNCTYPE(ctypes.c_uint64)(address + xgetbv_offset)
     leaves = []
 
-    def query(leaf, subleaf):
-        # The serialized register order must match Rust's CpuidLeaf: EAX, EBX, ECX, EDX.
-        registers = (ctypes.c_uint32 * 4)()
-        probe(registers, leaf, subleaf)
-        leaves.append({"leaf": leaf, "subleaf": subleaf, "registers": list(registers)})
-        return registers
-
-    # Save raw feature data for later Rust decoders without another interpreter query.
     # Query advertised limits (basic: 0; extended: 0x80000000) to avoid unsupported leaves,
     # and cap each range at 64 so a bogus emulator response cannot trigger an excessive scan.
     xstate = 0  # Without XGETBV, Rust must not infer OS support for AVX.
     # XGETBV can fault without XSAVE (CPUID leaf 1 ECX bit 26) and OSXSAVE (bit 27).
     xsave_flags = (1 << 26) | (1 << 27)
     for base in (0, 0x80000000):
-        maximum = min(query(base, 0)[0], base + 64)
+        limit = _query_cpuid_leaf(probe, base, 0)
+        leaves.append(limit)
+        maximum = min(limit["registers"][0], base + 64)
         for leaf in range(base + 1, maximum + 1):
-            registers = query(leaf, 0)
+            entry = _query_cpuid_leaf(probe, leaf, 0)
+            leaves.append(entry)
+            registers = entry["registers"]
             if leaf == 1 and registers[2] & xsave_flags == xsave_flags:
                 xstate = xgetbv()
             elif leaf == 7:  # EAX gives the highest structured-feature subleaf.
                 for subleaf in range(1, min(registers[0], 64) + 1):
-                    query(leaf, subleaf)
+                    leaves.append(_query_cpuid_leaf(probe, leaf, subleaf))
             elif leaf == 13:  # Leaf 0xD, subleaf 1: XSAVE feature flags.
-                query(leaf, 1)
+                leaves.append(_query_cpuid_leaf(probe, leaf, 1))
 
     return {"kind": "cpuid", "leaves": leaves, "xstate": xstate}
+
+
+def _query_cpuid_leaf(probe, leaf, subleaf):
+    import ctypes
+
+    # The serialized register order must match Rust's CpuidLeaf: EAX, EBX, ECX, EDX.
+    registers = (ctypes.c_uint32 * 4)()
+    probe(registers, leaf, subleaf)
+    return {"leaf": leaf, "subleaf": subleaf, "registers": list(registers)}
 
 
 def main() -> None:

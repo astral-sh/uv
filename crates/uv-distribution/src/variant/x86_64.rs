@@ -134,9 +134,11 @@ impl Level {
             ),
         ];
 
-        let level = match cpu_info {
+        match cpu_info {
             CpuInfo::Flags { flags } => {
                 let flags = flags.to_ascii_lowercase();
+                // The LAHF, SSE4.1, SSE4.2, and AVX1.0 macOS aliases follow archspec:
+                // https://github.com/archspec/archspec-json/blob/90b453f4053b6b139d1d2cb78c463b02e71ef363/cpu/microarchitectures.json#L4586-L4594
                 let flags: HashSet<_> = flags
                     .split_ascii_whitespace()
                     .map(|flag| match flag {
@@ -150,12 +152,13 @@ impl Level {
                         _ => flag,
                     })
                     .collect();
-                levels
+                let level = levels
                     .iter()
                     .take_while(|(_, features)| {
                         features.iter().all(|(name, ..)| flags.contains(name))
                     })
-                    .last()
+                    .last();
+                Some(level.map_or(Self::V1, |(level, _)| *level))
             }
             CpuInfo::Cpuid { leaves, xstate } => {
                 // AVX requires XMM and YMM state (bits 1 and 2). AVX-512 additionally requires
@@ -167,23 +170,27 @@ impl Level {
                 } else {
                     Self::V4
                 };
-                levels
-                    .iter()
-                    .take_while(|(level, features)| {
-                        *level <= max_level
-                            && features.iter().all(|&(_, leaf, register, bit)| {
-                                leaves.iter().any(|entry| {
-                                    entry.leaf == leaf
-                                        && entry.subleaf == 0
-                                        && entry.registers[register] & (1 << bit) != 0
-                                })
-                            })
-                    })
-                    .last()
+                let mut detected = Self::V1;
+                for &(level, features) in levels {
+                    if level > max_level {
+                        break;
+                    }
+                    for &(_, leaf, register, bit) in features {
+                        let supported = leaves.iter().any(|entry| {
+                            entry.leaf == leaf
+                                && entry.subleaf == 0
+                                && entry.registers[register] & (1 << bit) != 0
+                        });
+                        if !supported {
+                            return Some(detected);
+                        }
+                    }
+                    detected = level;
+                }
+                Some(detected)
             }
-            CpuInfo::Unavailable { .. } => return None,
-        };
-        Some(level.map_or(Self::V1, |(level, _)| *level))
+            CpuInfo::Unavailable { .. } => None,
+        }
     }
 }
 

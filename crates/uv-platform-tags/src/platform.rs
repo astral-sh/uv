@@ -33,8 +33,11 @@ pub enum PlatformError {
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum CpuInfo {
+    /// Feature names exposed by Linux through `/proc/cpuinfo` or macOS through `sysctl`.
     Flags { flags: Box<str> },
+    /// Raw CPUID registers and OS-enabled register state (XCR0), queried directly on Windows.
     Cpuid { leaves: Vec<CpuidLeaf>, xstate: u64 },
+    /// No probe or CPU data was available; `error` contains a probe failure, if one occurred.
     Unavailable { error: Option<Box<str>> },
 }
 
@@ -51,18 +54,10 @@ pub struct CpuidLeaf {
 pub struct Platform {
     os: Os,
     arch: Arch,
-    /// Interpreter-specific CPU data is cached separately and does not change platform identity.
+    /// Interpreter-specific CPU data is cached separately from the platform.
     #[serde(skip)]
     cpu_info: Option<Arc<CpuInfo>>,
 }
-
-impl PartialEq for Platform {
-    fn eq(&self, other: &Self) -> bool {
-        self.os == other.os && self.arch == other.arch
-    }
-}
-
-impl Eq for Platform {}
 
 impl Platform {
     /// Create a new platform from the given operating system and architecture.

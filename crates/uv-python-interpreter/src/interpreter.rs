@@ -75,22 +75,6 @@ impl Interpreter {
     pub fn query(executable: impl AsRef<Path>, cache: &Cache) -> Result<Self, Error> {
         let executable = executable.as_ref();
         let info = InterpreterInfo::query_cached(executable, cache)?;
-        let cpu_info = match info.cpu_info {
-            Some(CpuInfo::Unavailable {
-                error: Some(message),
-            }) => {
-                let error = Error::CpuDetection {
-                    path: executable.to_path_buf(),
-                    message,
-                };
-                if uv_preview::is_enabled(PreviewFeature::WheelVariants) {
-                    return Err(error);
-                }
-                warn_user_once!("{error}; using the x86-64 platform defaults (v2, v1)");
-                None
-            }
-            cpu_info => cpu_info,
-        };
 
         debug_assert!(
             info.sys_executable.is_absolute(),
@@ -99,7 +83,7 @@ impl Interpreter {
         );
 
         Ok(Self {
-            platform: info.platform.with_cpu_info(cpu_info),
+            platform: info.platform.with_cpu_info(info.cpu_info),
             markers: Box::new(info.markers),
             scheme: info.scheme,
             virtualenv: info.virtualenv,
@@ -1435,7 +1419,26 @@ impl InterpreterInfo {
             "Querying interpreter executable at `{}`",
             executable.display()
         );
-        let info = Self::query(executable, cache)?;
+        let mut info = Self::query(executable, cache)?;
+
+        // For the preview period, only show a warning. For stabilization, this will become
+        // a hard detection error.
+        if let Some(CpuInfo::Unavailable {
+            error: Some(message),
+        }) = info.cpu_info
+        {
+            let error = Error::CpuDetection {
+                path: executable.to_path_buf(),
+                message,
+            };
+            if uv_preview::is_enabled(PreviewFeature::WheelVariants) {
+                return Err(error);
+            }
+            warn_user_once!(
+                "Failed to detect CPU information, this will become a hard error in the future: {error}"
+            );
+            info.cpu_info = None;
+        }
 
         // If `executable` is a pyenv shim, a bash script that redirects to the activated
         // python executable at another path, we're not allowed to cache the interpreter info.

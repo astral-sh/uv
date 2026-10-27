@@ -51,8 +51,6 @@ trait VendoredVariantProvider: Sync {
     /// The namespace of the emitted properties.
     fn namespace(&self) -> &VariantNamespace;
     /// Return compatible properties in preference order.
-    ///
-    /// The target includes CPU capabilities when they were observed in the selected interpreter.
     fn properties(&self, target: &Platform) -> Option<&[SupportedVariantFeature]>;
 }
 
