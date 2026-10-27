@@ -2468,10 +2468,10 @@ fn check_script_workspace_ty_no_project() -> Result<()> {
     context
         .temp_dir
         .child("pyproject.toml")
-        .write_str(indoc! {r#"
+        .write_str(indoc! {r"
         [tool.uv.workspace]
         members = []
-    "#})?;
+    "})?;
     context.temp_dir.child("uv.lock").write_str("invalid")?;
     let script = context.temp_dir.child("script.py");
     script.write_str(indoc! {r#"
