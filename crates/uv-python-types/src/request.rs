@@ -11,7 +11,7 @@ use uv_pep440::{
 };
 use uv_platform::Arch;
 
-use crate::{ImplementationName, PythonDownloadRequest, PythonInstallationKey, PythonVersion};
+use crate::{ImplementationName, PythonDownloadRequest, PythonVersion};
 
 /// A request to find a Python installation.
 ///
@@ -1403,14 +1403,6 @@ impl VersionRequest {
         }
     }
 
-    /// Check if a [`PythonInstallationKey`] is compatible with the request.
-    ///
-    /// This only rules out incompatible versions before querying an interpreter; full matching
-    /// must also check the interpreter's variant.
-    pub fn matches_installation_key(&self, key: &PythonInstallationKey) -> bool {
-        self.matches_major_minor_patch_prerelease(key.major, key.minor, key.patch, key.prerelease())
-    }
-
     /// Whether a patch version segment is present in the request.
     pub fn has_patch(&self) -> bool {
         match self {
@@ -2408,6 +2400,18 @@ mod tests {
         assert_eq!(
             VersionRequest::from_str("==3.12.1").unwrap(),
             VersionRequest::MajorMinorPatch(3, 12, 1, PythonVariant::Default)
+        );
+    }
+
+    #[test]
+    fn version_request_matches_minor_version() {
+        let version = PythonVersion::from_str("3.10.0").expect("valid Python version");
+
+        assert!(
+            !VersionRequest::MajorMinor(3, 1, PythonVariant::Default).matches_version(&version)
+        );
+        assert!(
+            VersionRequest::MajorMinor(3, 10, PythonVariant::Default).matches_version(&version)
         );
     }
 
