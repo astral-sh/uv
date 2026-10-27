@@ -26,6 +26,8 @@ use uv_fs::PythonExt;
 use uv_fs::{Simplified, create_symlink};
 use uv_redacted::SafeUrl;
 use uv_static::EnvVars;
+#[cfg(all(feature = "test-universal", feature = "test-python-patch"))]
+use uv_test::LATEST_PYTHON_3_13;
 #[cfg(feature = "test-universal")]
 use uv_test::archive::{generate_source_archive, write_tar_gz};
 #[cfg(feature = "test-universal")]
@@ -41109,8 +41111,9 @@ fn lock_conflict_for_disjoint_python_version() -> Result<()> {
 #[test]
 fn lock_requires_python_empty_lock_file() -> Result<()> {
     // Use two patch versions from `.python-versions` to exercise disjoint requirements.
-    let (v1, v2) = ("3.13.0", "3.13.18");
-    let context = uv_test::test_context_with_versions!(&[v1, v2]);
+    let (v1, v2) = ("3.13.0", LATEST_PYTHON_3_13);
+    let context =
+        uv_test::test_context_with_versions!(&[v1, v2]).with_filtered_latest_python_versions();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(&format!(
@@ -41198,8 +41201,8 @@ fn lock_requires_python_empty_lock_file() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock().arg("--upgrade-package=python"), @r"
     exit_code: 0 (success)
     ----- stderr -----
-    Using CPython 3.13.18 interpreter at: [PYTHON-3.13.18]
-    warning: Resolving despite existing lockfile due to fork markers being disjoint with `requires-python`: `python_full_version == '3.13.0'` vs `python_full_version == '3.13.18'`
+    Using CPython 3.13.[LATEST] interpreter at: [PYTHON-3.13.[LATEST]]
+    warning: Resolving despite existing lockfile due to fork markers being disjoint with `requires-python`: `python_full_version == '3.13.0'` vs `python_full_version == '3.13.[LATEST]'`
     Resolved 3 packages in [TIME]
     ");
 
@@ -41211,7 +41214,7 @@ fn lock_requires_python_empty_lock_file() -> Result<()> {
             lock, @r#"
         version = 1
         revision = 5
-        requires-python = "==3.13.18"
+        requires-python = "==3.13.[LATEST]"
         resolution-markers = [
             "sys_platform == 'darwin'",
             "platform_machine == 'aarch64' and sys_platform == 'linux'",

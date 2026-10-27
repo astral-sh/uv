@@ -17,6 +17,8 @@ use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
 #[cfg(windows)]
 use std::{ffi::OsString, os::windows::ffi::OsStringExt};
 
+#[cfg(feature = "test-python-patch")]
+use uv_test::LATEST_PYTHON_3_12;
 use uv_test::{assert_link_target, site_packages_path, uv_snapshot};
 
 #[test]
@@ -1525,15 +1527,16 @@ fn create_venv_unknown_python_patch() {
 #[cfg(feature = "test-python-patch")]
 #[test]
 fn create_venv_python_patch() {
-    let context = uv_test::test_context_with_versions!(&["3.12.16"]);
+    let context = uv_test::test_context_with_versions!(&[LATEST_PYTHON_3_12])
+        .with_filtered_latest_python_versions();
 
     uv_snapshot!(context.filters(), context.venv()
         .arg(context.venv.as_os_str())
         .arg("--python")
-        .arg("3.12.16"), @r"
+        .arg(LATEST_PYTHON_3_12), @r"
     exit_code: 0 (success)
     ----- stderr -----
-    Using CPython 3.12.16 interpreter at: [PYTHON-3.12.16]
+    Using CPython 3.12.[LATEST] interpreter at: [PYTHON-3.12.[LATEST]]
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
     "
