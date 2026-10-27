@@ -12,6 +12,9 @@ on:
         required: false
         type: string
     outputs:
+      cargo-vet-workspaces:
+        description: "JSON array of Cargo workspace directories to vet"
+        value: ${{ jobs.plan.outputs.cargo-vet-workspaces }}
       test-code:
         description: "Whether code tests should run"
         value: ${{ jobs.plan.outputs.test-code }}
@@ -78,9 +81,11 @@ env:
 
 jobs:
   plan:
+    # Workspace discovery runs before vet, so keep it off Depot's cross-branch cache.
     runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-2' || 'ubuntu-latest' }}
     cache-mode: none
     outputs:
+      cargo-vet-workspaces: ${{ steps.cargo-vet.outputs.workspaces }}
       test-code: ${{ steps.plan.outputs.test_code }}
       review-security: ${{ steps.plan.outputs.review_security }}
       check-schema: ${{ steps.plan.outputs.check_schema }}
@@ -110,6 +115,17 @@ jobs:
       - uses: $/.github/actions/setup-uv-toolchain
         with:
           enable-cache: auto
+
+      - name: "Find Cargo workspaces to vet"
+        id: cargo-vet
+        # Classify explicit PR revisions without executing scripts from their checkout.
+        if: ${{ inputs.base-sha == '' && inputs.head-sha == '' }}
+        env:
+          HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+          UV_PYTHON_DOWNLOADS_JSON_URL: ${{ github.workspace }}/crates/uv-python-managed/download-metadata.json
+        run: uv run --script scripts/cargo-vet-workspaces.py >> "$GITHUB_OUTPUT"
 
       - name: "Plan"
         id: plan
