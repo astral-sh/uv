@@ -17,7 +17,7 @@ use uv_environment_operations::install_target::{InstallTarget, PackageSelection}
 use uv_environment_operations::malware::MalwareCheckContext;
 use uv_environment_operations::{
     LinkErrorReporting, ProjectEnvironment, ProjectEnvironmentPolicy, ProjectEnvironmentTarget,
-    ProjectInterpreter, ScriptEnvironment, store_credentials_from_target, sync_from_lock,
+    ProjectInterpreter, ScriptEnvironment, sync_from_lock,
 };
 use uv_fs::normalize_path;
 use uv_install_operations::loggers::SummaryInstallLogger;
@@ -143,7 +143,7 @@ pub async fn check(
         }
     };
 
-    if no_project {
+    if no_project && script.is_none() {
         for flag in extras.history().as_flags_pretty() {
             warn_user!("`{flag}` has no effect when used alongside `--no-project`");
         }
@@ -358,7 +358,20 @@ pub async fn check(
     };
 
     // Select an environment and, if we found a project, sync it before running checks.
-    let mut locked_ty_path = None;
+    let state = UniversalState::default();
+    let tool_installer = toolchain::LockedToolInstaller {
+        settings: &settings,
+        malware_settings: &malware_settings,
+        client_builder: &client_builder,
+        state: &state,
+        installer_metadata,
+        concurrency: &concurrency,
+        cache,
+        printer,
+        preview,
+    };
+    let ty_name = PackageName::from_str("ty")?;
+    let mut locked_ty_environment = None;
     let venv = if let Some(script) = &script {
         let extras = extras.with_defaults(DefaultExtras::default());
         let venv = if let Some(venv) = isolated_venv {
@@ -383,7 +396,6 @@ pub async fn check(
             .into_environment()?
         };
 
-        let state = UniversalState::default();
         let lock_target = LockTarget::Script(script);
         // Scripts always run in an isolated environment, so `--no-sync` has no effect.
         let _environment_lock = venv
@@ -424,26 +436,6 @@ pub async fn check(
             Err(err) => return Err(UvError::from(err).into()),
         };
 
-        let marker_environment = venv.interpreter().to_resolver_marker_environment();
-        if ty_path.is_none()
-            && ty_version.is_none()
-            && result
-                .lock()
-                .dependency_selection(
-                    None,
-                    &PackageName::from_str("ty")?,
-                    marker_environment.markers(),
-                )
-                .map_err(anyhow::Error::msg)?
-                .root()
-                .is_some()
-        {
-            locked_ty_path = Some(
-                venv.scripts()
-                    .join(format!("ty{}", std::env::consts::EXE_SUFFIX)),
-            );
-        }
-
         let target = InstallTarget::Script {
             script,
             lock: result.lock(),
@@ -480,6 +472,35 @@ pub async fn check(
             warn_user!(
                 "`--no-sync` is a no-op for Python scripts with inline metadata, which always run in isolation"
             );
+        }
+
+        if ty_path.is_none() && ty_version.is_none() {
+            let marker_environment = venv.interpreter().to_resolver_marker_environment();
+            locked_ty_environment = if result
+                .lock()
+                .dependency_selection(None, &ty_name, marker_environment.markers())
+                .map_err(anyhow::Error::msg)?
+                .root()
+                .is_some()
+            {
+                Some(venv.clone())
+            } else if no_project {
+                None
+            } else {
+                tool_installer
+                    .install_from_script_workspace(
+                        &target_dir,
+                        venv.interpreter().markers().sys_platform(),
+                        &ty_name,
+                        workspace_cache,
+                        config_discovery,
+                        python_preference,
+                        python_arch,
+                        python_downloads,
+                        &install_mirrors,
+                    )
+                    .await?
+            };
         }
 
         Some(venv)
@@ -557,7 +578,6 @@ pub async fn check(
             .as_ref()
             .unwrap_or_else(|| venv.interpreter());
 
-        let state = UniversalState::default();
         // Keep the environment locked through synchronization and metadata collection.
         let _environment_lock;
         if !no_sync {
@@ -618,56 +638,24 @@ pub async fn check(
                 project,
                 result.lock(),
                 lock_interpreter,
-                &PackageName::from_str("ty")?,
+                &ty_name,
                 &DEV_DEPENDENCIES,
                 &groups,
             )?
         {
-            locked_ty_path = Some(if !tool.requires_separate_environment() && !no_sync {
+            locked_ty_environment = Some(if !tool.requires_separate_environment && !no_sync {
                 // Synchronization will install the locked tool into the selected project or
                 // isolated environment.
-                venv.scripts()
-                    .join(format!("ty{}", std::env::consts::EXE_SUFFIX))
+                venv.clone()
             } else {
                 // Do not modify the selected environment when synchronization is disabled or the
                 // locked tool is excluded from it. Install only the locked `ty` subgraph.
-                let base_interpreter =
-                    CachedEnvironment::base_interpreter(lock_interpreter, cache)?;
-                let resolution = toolchain::resolution_from_lock(
-                    project,
-                    result.lock(),
-                    &tool,
-                    &base_interpreter,
-                    &settings.resolver.build_options,
-                )?;
-                store_credentials_from_target(target, &client_builder)?;
-                let ty_state = state.fork();
-                let environment = match CachedEnvironment::from_locked_resolution(
-                    &resolution,
-                    result
-                        .lock()
-                        .build_constraints(project.workspace().install_path()),
-                    &base_interpreter,
-                    &settings,
-                    &malware_settings,
-                    &client_builder,
-                    &ty_state,
-                    Box::new(SummaryInstallLogger),
-                    installer_metadata,
-                    &concurrency,
-                    cache,
-                    printer,
-                    preview,
-                )
-                .await
-                {
-                    Ok(environment) => environment,
-                    Err(err) => return Err(UvError::from(err).into()),
-                };
+                let interpreter = CachedEnvironment::base_interpreter(lock_interpreter, cache)?;
+                let (environment, resolution) = tool_installer
+                    .install(target, &tool.dependency, &interpreter)
+                    .await?;
                 malware_context.record_resolution(&resolution);
-                PythonEnvironment::from(environment)
-                    .scripts()
-                    .join(format!("ty{}", std::env::consts::EXE_SUFFIX))
+                environment
             });
         }
 
@@ -744,7 +732,12 @@ pub async fn check(
     let exclude_newer = settings
         .resolver
         .exclude_newer
-        .exclude_newer_package_for_index(&PackageName::from_str("ty")?, None);
+        .exclude_newer_package_for_index(&ty_name, None);
+    let locked_ty_path = locked_ty_environment.map(|environment| {
+        environment
+            .scripts()
+            .join(format!("ty{}", std::env::consts::EXE_SUFFIX))
+    });
 
     ty::run(
         ty_version,

@@ -9280,6 +9280,11 @@ impl Dependency {
         &self.package_id.name
     }
 
+    /// Returns the PEP 508 marker on this resolved dependency edge.
+    pub fn pep508_marker(&self) -> MarkerTree {
+        self.complexified_marker.pep508()
+    }
+
     /// Returns the extras specified on this dependency.
     pub fn extra(&self) -> &BTreeSet<ExtraName> {
         &self.extra
