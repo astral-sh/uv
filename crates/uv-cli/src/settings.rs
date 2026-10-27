@@ -21,10 +21,11 @@ use uv_configuration::{
     DependencyGroups, DependencyMode, DevMode, DryRun, EditableMode, EnvFile, ExcludeDependency,
     ExcludeNewer, ExcludeNewerPackage, ExportFormat, ExtrasSpecification, ForkStrategy,
     GitLfsSetting, HashCheckingMode, IndexStrategy, InitKind, InitProjectKind, InstallOptions,
-    KeyringProviderType, Modifications, NoBinary, NoBuild, NoSources, Override, PackageOverride,
-    PipCompileFormat, Prerelease, ProjectBuildBackend, ProxyUrl, PythonUpgrade,
-    PythonUpgradeSource, Reinstall, RequiredVersion, RequirementsInput, ResolutionMode,
-    TargetTriple, ToolRunCommand, TrustedHost, TrustedPublishing, Upgrade, VersionControlSystem,
+    KeyringProviderType, MetadataSchemaVersion, Modifications, NoBinary, NoBuild, NoSources,
+    Override, PackageOverride, PipCompileFormat, Prerelease, ProjectBuildBackend, ProxyUrl,
+    PythonUpgrade, PythonUpgradeSource, Reinstall, RequiredVersion, RequirementsInput,
+    ResolutionMode, TargetTriple, ToolRunCommand, TrustedHost, TrustedPublishing, Upgrade,
+    VersionControlSystem,
 };
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExcludeNewerOverride, ExtraBuildVariables, Index,
@@ -2137,9 +2138,10 @@ impl UpgradeSettings {
     }
 }
 
-/// The resolved settings to use for a `lock` invocation.
+/// The resolved settings to use for a `workspace metadata` invocation.
 #[derive(Debug, Clone)]
 pub struct MetadataSettings {
+    pub schema_version: MetadataSchemaVersion,
     #[expect(dead_code)]
     script: Option<PathBuf>,
     pub lock_check: LockCheck,
@@ -2154,13 +2156,14 @@ pub struct MetadataSettings {
 }
 
 impl MetadataSettings {
-    /// Resolve the [`LockSettings`] from the CLI and filesystem configuration.
+    /// Resolve the [`MetadataSettings`] from the CLI and filesystem configuration.
     pub fn resolve(
         args: Box<MetadataArgs>,
         filesystem: Option<FilesystemOptions>,
         environment: EnvironmentOptions,
     ) -> anyhow::Result<Self> {
         let MetadataArgs {
+            schema_version,
             script,
             locked,
             no_locked,
@@ -2189,6 +2192,7 @@ impl MetadataSettings {
         let malware_settings = MalwareCheckSettings::resolve(filesystem.as_ref(), &environment);
 
         Ok(Self {
+            schema_version: schema_version.unwrap_or_default(),
             script,
             lock_check: locked,
             frozen,

@@ -17,10 +17,10 @@ use uv_configuration::RequirementsInput;
 use uv_configuration::{
     AddBoundsKind, AnnotationStyle, AuditOutputFormat, AuthorFrom, ColorChoice,
     ExcludeNewerPackageEntry, ExportFormat, ForkStrategy, IndexStrategy, KeyringProviderType,
-    ListFormat, PackageNameSpecifier, PipCompileFormat, PipInstallFormat, PrereleaseMode,
-    PrereleasePackageEntry, ProjectBuildBackend, PythonListFormat, ResolutionMode, SyncFormat,
-    TargetTriple, TreeFormat, TrustedHost, TrustedPublishing, VersionBump, VersionBumpSpec,
-    VersionControlSystem, VersionFormat,
+    ListFormat, MetadataSchemaVersion, PackageNameSpecifier, PipCompileFormat, PipInstallFormat,
+    PrereleaseMode, PrereleasePackageEntry, ProjectBuildBackend, PythonListFormat, ResolutionMode,
+    SyncFormat, TargetTriple, TreeFormat, TrustedHost, TrustedPublishing, VersionBump,
+    VersionBumpSpec, VersionControlSystem, VersionFormat,
 };
 use uv_distribution_types::{
     ConfigSettingEntry, ConfigSettingPackageEntry, ExcludeNewerOverride, Index, IndexName,
@@ -7588,6 +7588,13 @@ pub enum WorkspaceCommand {
 }
 #[derive(Args)]
 pub struct MetadataArgs {
+    /// Request a specific version of the metadata schema.
+    ///
+    /// If the version is omitted or unrecognized, uv uses the latest schema. The output's
+    /// `schema.version` field identifies the schema used. Currently, only `preview` is supported.
+    #[arg(long, value_name = "VERSION")]
+    pub schema_version: Option<MetadataSchemaVersion>,
+
     /// View metadata for the specified PEP 723 Python script, rather than the current workspace.
     ///
     /// If provided, uv will resolve the dependencies based on the script's inline metadata table,

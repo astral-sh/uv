@@ -81,7 +81,7 @@ fn workspace_metadata_simple() {
 
     let workspace = context.temp_dir.child("foo");
 
-    uv_snapshot!(context.filters(), context.workspace_metadata().current_dir(&workspace), @r#"
+    let latest = uv_snapshot!(context.filters(), context.workspace_metadata().current_dir(&workspace), @r#"
     exit_code: 0 (success)
     ----- stdout -----
     {
@@ -128,6 +128,14 @@ fn workspace_metadata_simple() {
     Resolved 1 package in [TIME]
     "#
     );
+
+    context
+        .workspace_metadata()
+        .current_dir(&workspace)
+        .args(["--schema-version", "unknown"])
+        .assert()
+        .success()
+        .stdout(latest.stdout);
 
     assert!(!workspace.child(".venv").exists());
 }
@@ -624,6 +632,7 @@ print("Hello, world!")
         context.filters(),
         context
             .workspace_metadata()
+            .args(["--schema-version", "preview"])
             .arg("--script")
             .arg(script.path()),
         @r#"
