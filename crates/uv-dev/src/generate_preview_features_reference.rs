@@ -240,18 +240,17 @@ mod tests {
 
         ### `git-partial-fetches` {#git-partial-fetches}
 
-        Requests commits with `tree:0`, then downloads the trees and blobs needed to check out the
-        requested revision. This can reduce transfer sizes for repositories with long histories.
-        Build tools that inspect other revisions may fetch additional objects. In offline mode, uv
-        sets `GIT_ALLOW_PROTOCOL=file` for builds from Git checkouts and their build requirements.
-        Git commands that read missing history can then fail.
+        uv fetches a Git dependency’s commit history and the files needed for the requested revision.
+        This can save bandwidth when older revisions contain large files the checkout no longer
+        needs. On small repositories, the extra requests can slow down a checkout. Git LFS downloads
+        the files referenced by its pointers separately.
 
-        Partial Git fetches use a separate cache from full fetches. Switching modes can require
-        downloading a repository again, even when its revision is cached in the other mode.
+        Build tools that read files from other revisions may need another download. With `--offline`,
+        a build can fail if those files are missing from the cache.
 
-        uv uses full fetches when the source URL contains credentials or query parameters, or when
-        any `--allow-insecure-host` exception is configured. A later Git process may need to
-        fetch missing objects after uv’s credentials or TLS settings are out of scope.
+        Partial fetches use a separate cache, so switching modes can require a fresh download.
+        uv uses full fetches for source URLs with credentials or query parameters and whenever
+        `--allow-insecure-host` is set.
 
         ### `index-by-name` {#index-by-name}
 
