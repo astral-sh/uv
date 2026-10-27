@@ -490,7 +490,6 @@ pub async fn check(
                 tool_installer
                     .install_from_script_workspace(
                         &target_dir,
-                        venv.interpreter().markers().sys_platform(),
                         &ty_name,
                         workspace_cache,
                         config_discovery,
@@ -499,7 +498,18 @@ pub async fn check(
                         python_downloads,
                         &install_mirrors,
                     )
-                    .await?
+                    .await
+                    .map_err(|error| -> anyhow::Error {
+                        let add_context = |error: anyhow::Error| {
+                            error.context("Failed to use the workspace's locked `ty`. Use `--no-project` to skip the workspace lookup")
+                        };
+                        match error.downcast() {
+                            Ok(UvError::User(error)) => UvError::User(add_context(error)).into(),
+                            Ok(UvError::Argument(error)) => UvError::Argument(add_context(error)).into(),
+                            Ok(UvError::Unexpected(error)) => UvError::Unexpected(add_context(error)).into(),
+                            Err(error) => add_context(error),
+                        }
+                    })?
             };
         }
 
@@ -635,7 +645,7 @@ pub async fn check(
         if ty_path.is_none()
             && ty_version.is_none()
             && let Some(tool) = toolchain::find_locked_tool(
-                project,
+                project.project_name(),
                 result.lock(),
                 lock_interpreter,
                 &ty_name,
@@ -643,7 +653,7 @@ pub async fn check(
                 &groups,
             )?
         {
-            locked_ty_environment = Some(if !tool.requires_separate_environment && !no_sync {
+            locked_ty_environment = Some(if !tool.requires_separate_environment() && !no_sync {
                 // Synchronization will install the locked tool into the selected project or
                 // isolated environment.
                 venv.clone()
@@ -652,7 +662,7 @@ pub async fn check(
                 // locked tool is excluded from it. Install only the locked `ty` subgraph.
                 let interpreter = CachedEnvironment::base_interpreter(lock_interpreter, cache)?;
                 let (environment, resolution) = tool_installer
-                    .install(target, &tool.dependency, &interpreter)
+                    .install(target, tool.dependency(), &interpreter)
                     .await?;
                 malware_context.record_resolution(&resolution);
                 environment
