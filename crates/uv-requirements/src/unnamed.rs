@@ -12,7 +12,8 @@ use uv_distribution::{DistributionDatabase, Reporter};
 use uv_distribution_filename::{DistExtension, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
     BuildableSource, DirectSourceUrl, DirectorySourceUrl, GitDirectorySourceUrl, GitPathSourceUrl,
-    Identifier, PathSourceUrl, RemoteSource, Requirement, SourceUrl,
+    Identifier, PathSourceUrl, RemoteSource, Requirement, SourceUrl, UnresolvedRequirement,
+    UnresolvedRequirementSpecification,
 };
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
@@ -324,4 +325,19 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
             origin: requirement.origin,
         })
     }
+}
+
+/// Partition input requirements into those with known names and those needing name resolution.
+pub fn partition_requirements(
+    requirements: Vec<UnresolvedRequirementSpecification>,
+) -> (Vec<Requirement>, Vec<UnnamedRequirement<VerbatimParsedUrl>>) {
+    let mut named = Vec::new();
+    let mut unnamed = Vec::new();
+    for spec in requirements {
+        match spec.requirement {
+            UnresolvedRequirement::Named(req) => named.push(req),
+            UnresolvedRequirement::Unnamed(req) => unnamed.push(req),
+        }
+    }
+    (named, unnamed)
 }

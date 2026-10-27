@@ -5,7 +5,6 @@ use std::fmt::Write;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use itertools::Itertools;
 use owo_colors::OwoColorize;
 use uv_client::{BaseClientBuilder, RegistryClient};
 use uv_command_support::Printer;
@@ -17,8 +16,7 @@ use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, SourcedDependencyGroups};
 use uv_distribution_types::{
     Diagnostic, NameRequirementSpecification, Requirement, RequirementScope, RequirementSource,
-    ResolutionDiagnostic, ResolutionRecorder, UnresolvedRequirement,
-    UnresolvedRequirementSpecification,
+    ResolutionDiagnostic, ResolutionRecorder, UnresolvedRequirementSpecification,
 };
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
@@ -28,6 +26,7 @@ use uv_pypi_types::Conflicts;
 use uv_requirements::{
     GroupsSpecification, LookaheadResolver, NamedRequirementsResolver, RequirementsSource,
     RequirementsSpecification, SourceTree, SourceTreeResolution, SourceTreeResolver,
+    partition_requirements,
 };
 use uv_resolver::{
     DependencyMode, Exclusions, FlatIndex, InMemoryIndex, Manifest, Options, Preference,
@@ -128,17 +127,7 @@ pub async fn resolve(
     // Resolve the requirements from the provided sources.
     let requirements = {
         // Partition the requirements into named and unnamed requirements.
-        let (mut requirements, unnamed): (Vec<_>, Vec<_>) =
-            requirements
-                .into_iter()
-                .partition_map(|spec| match spec.requirement {
-                    UnresolvedRequirement::Named(requirement) => {
-                        itertools::Either::Left(requirement)
-                    }
-                    UnresolvedRequirement::Unnamed(requirement) => {
-                        itertools::Either::Right(requirement)
-                    }
-                });
+        let (mut requirements, unnamed) = partition_requirements(requirements);
 
         // Resolve any unnamed requirements.
         if !unnamed.is_empty() {
@@ -272,17 +261,7 @@ pub async fn resolve(
     // Resolve the overrides from the provided sources.
     let overrides = {
         // Partition the overrides into named and unnamed requirements.
-        let (mut overrides, unnamed): (Vec<_>, Vec<_>) =
-            overrides
-                .into_iter()
-                .partition_map(|spec| match spec.requirement {
-                    UnresolvedRequirement::Named(requirement) => {
-                        itertools::Either::Left(requirement)
-                    }
-                    UnresolvedRequirement::Unnamed(requirement) => {
-                        itertools::Either::Right(requirement)
-                    }
-                });
+        let (mut overrides, unnamed) = partition_requirements(overrides);
 
         // Resolve any unnamed overrides.
         if !unnamed.is_empty() {
