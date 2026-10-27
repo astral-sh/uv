@@ -163,28 +163,66 @@ fn select_variant_by_static_provider_order() -> Result<()> {
     Ok(())
 }
 
-/// ARM64 interpreters built without libffi can still install ordinary wheels.
-#[cfg(target_arch = "aarch64")]
+/// ARM64 interpreters built without libffi can install the baseline AArch64 variant.
+#[cfg(all(
+    target_arch = "aarch64",
+    any(target_os = "linux", target_os = "macos", windows)
+))]
 #[test]
 fn aarch64_without_ctypes() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     fs_err::write(
-        context.site_packages().join("missing_ctypes.pth"),
-        "import sys; sys.modules['_ctypes'] = None\n",
+        context.site_packages().join("sitecustomize.py"),
+        indoc::indoc! {r"
+            import sys
+
+            sys.modules['_ctypes'] = None
+        "},
     )?;
+    let server = PackseServer::from_toml(indoc! {r#"
+        name = "aarch64-without-ctypes"
+        root = {}
+        expected.satisfiable = true
+
+        [packages.ok.versions."1.0.0"]
+        wheel = false
+        sdist = false
+        wheel_tags = [
+            "py3-none-linux_aarch64",
+            "py3-none-macosx_11_0_arm64",
+            "py3-none-win_arm64",
+        ]
+
+        [packages.ok.versions."1.0.0".variants]
+        namespaces = ["aarch64"]
+        providers.aarch64.requires = ["aarch64-variant-provider==0.2.0"]
+        wheels.arm8.properties = ["aarch64 :: version :: 8a"]
+        wheels.arm86.properties = ["aarch64 :: version :: 8.6a"]
+    "#})?;
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--no-cache")
+        .arg("--index-url")
+        .arg(server.index_url())
         .arg("--preview-features")
         .arg("wheel-variants")
-        .arg(context.workspace_root.join("test/links/ok-1.0.0-py3-none-any.whl")), @"
+        .arg("ok==1.0.0"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + ok==1.0.0 (from file://[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl)
+     + ok==1.0.0
     ");
+    let installed = context.read(
+        context
+            .site_packages()
+            .join("ok-1.0.0.dist-info/variant.json"),
+    );
+    assert_eq!(
+        serde_json::from_str::<Value>(&installed)?["variants"],
+        json!({ "arm8": { "aarch64": { "version": ["8a"] } } })
+    );
     Ok(())
 }
 

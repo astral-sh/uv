@@ -215,47 +215,31 @@ fn linux_core_ceiling(implementer: &str, part: &str) -> Option<Aarch64Version> {
 
 #[cfg(test)]
 mod tests {
-    use uv_distribution_types::VariantFeature;
-    use uv_platform_tags::{Arch, CpuInfo, Os, Platform};
+    use uv_platform_tags::CpuInfo;
 
-    use super::{Aarch64VariantProvider, VendoredVariantProvider};
+    use super::Aarch64Version;
 
     #[test]
     fn linux_version_requires_usable_features_on_every_core() {
-        // A Neoverse N2 is Armv9.0-A. Its CPU ID survives when a VM masks SVE2.
-        let mut cores = vec![("0x41".into(), "0xd49".into())];
-        let versions = |cores, hwcap2| {
-            let cpu_info = CpuInfo::LinuxAarch64 {
+        let detect = |cores, hwcap2| {
+            Aarch64Version::detect(&CpuInfo::LinuxAarch64 {
                 cores,
                 hwcaps: [u64::MAX, hwcap2, 0, 0],
-            };
-            let target = Platform::from_interpreter(
-                Os::Manylinux {
-                    major: 2,
-                    minor: 28,
-                },
-                Arch::Aarch64,
-                Some(cpu_info),
-            );
-            let features = Aarch64VariantProvider
-                .properties(&target)
-                .expect("AArch64 has version properties");
-            assert_eq!(features[0].name, VariantFeature::from_static("version"));
-            features[0]
-                .values
-                .iter()
-                .map(ToString::to_string)
-                .collect::<Vec<_>>()
+            })
+            .expect("known core")
         };
+        // A Neoverse N2 is Armv9.0-A. Its CPU ID survives when a VM masks SVE2.
+        let n2 = ("0x41".into(), "0xd49".into());
+        let version = detect(vec![n2.clone()], u64::MAX);
+        assert_eq!(version, Aarch64Version::V9_0);
+        assert!(!version.supports(Aarch64Version::V8_6));
         assert_eq!(
-            versions(cores.clone(), u64::MAX),
-            ["9.0a", "8.5a", "8.4a", "8.3a", "8.2a", "8.1a", "8a"]
+            detect(vec![n2.clone()], u64::MAX ^ (1 << 1)),
+            Aarch64Version::V8
         );
-        assert_eq!(versions(cores.clone(), u64::MAX ^ (1 << 1)), ["8a"]);
 
         // An N1 in the same system limits every wheel to Armv8.2-A.
-        cores.push(("0x41".into(), "0xd0c".into()));
-        assert_eq!(versions(cores.clone(), u64::MAX), ["8.2a", "8.1a", "8a"]);
-        assert_eq!(versions(cores, u64::MAX ^ (1 << 1)), ["8a"]);
+        let n1 = ("0x41".into(), "0xd0c".into());
+        assert_eq!(detect(vec![n2, n1], u64::MAX), Aarch64Version::V8_2);
     }
 }
