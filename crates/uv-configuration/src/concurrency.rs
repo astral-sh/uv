@@ -95,6 +95,7 @@ impl Concurrency {
 /// standard input, output, and error, the event loop, cache databases, and temporary files.
 /// The reserve only needs to cover a small fraction of a typical open file limit, since uv
 /// keeps most of its file descriptors open only briefly.
+#[cfg(any(test, unix))]
 const RESERVED_OPEN_FILES: u64 = 32;
 
 /// The number of open file descriptors held concurrently by each package moving through the
@@ -104,6 +105,7 @@ const RESERVED_OPEN_FILES: u64 = 32;
 /// process, its pipes, and the files written to the build cache. Downloads and installs add a
 /// few more, e.g., for the download target file and the unpacked wheel, and we include
 /// additional slack for file descriptors held only briefly.
+#[cfg(any(test, unix))]
 const OPEN_FILES_PER_PIPELINE_PACKAGE: u64 = 12;
 
 /// The highest number of concurrent downloads, builds, and installs to allow for the given
@@ -111,6 +113,7 @@ const OPEN_FILES_PER_PIPELINE_PACKAGE: u64 = 12;
 ///
 /// At least one concurrent operation is always allowed, even if the limit doesn't leave room
 /// for it, since uv can't make progress otherwise.
+#[cfg(any(test, unix))]
 fn open_file_limit_concurrency_cap(soft_limit: u64) -> usize {
     let concurrent_packages =
         soft_limit.saturating_sub(RESERVED_OPEN_FILES) / OPEN_FILES_PER_PIPELINE_PACKAGE;
