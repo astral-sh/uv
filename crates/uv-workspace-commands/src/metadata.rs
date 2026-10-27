@@ -7,7 +7,8 @@ use uv_cache::{Cache, Refresh};
 use uv_client::BaseClientBuilder;
 use uv_command_support::{ExitStatus, Printer, Stdout, UvError};
 use uv_configuration::{
-    ActiveEnvironment, Concurrency, DependencyGroupsWithDefaults, DryRun, Modifications,
+    ActiveEnvironment, Concurrency, DependencyGroupsWithDefaults, DryRun, MetadataOutputVersion,
+    Modifications,
 };
 use uv_dispatch::UniversalState;
 use uv_environment_operations::install_target::{InstallTarget, PackageSelection};
@@ -43,6 +44,7 @@ enum MetadataSource<'a> {
 /// Display metadata about the workspace.
 pub async fn metadata(
     project_dir: &Path,
+    output_version: MetadataOutputVersion,
     lock_check: LockCheck,
     frozen: Option<FrozenSource>,
     refresh: Refresh,
@@ -207,7 +209,7 @@ pub async fn metadata(
             lock,
         },
     };
-    let mut export = metadata_for_target(install_target);
+    let mut export = metadata_for_target(install_target, output_version);
     let environment = if sync.is_some() {
         Some(match &source {
             MetadataSource::Manifest(LockTarget::Workspace(workspace)) => {
@@ -318,7 +320,10 @@ pub async fn metadata(
     print_metadata(&export, printer)
 }
 
-fn metadata_for_target(target: InstallTarget<'_>) -> Metadata {
+fn metadata_for_target(
+    target: InstallTarget<'_>,
+    output_version: MetadataOutputVersion,
+) -> Metadata {
     match target {
         InstallTarget::Project {
             workspace, lock, ..
@@ -330,10 +335,14 @@ fn metadata_for_target(target: InstallTarget<'_>) -> Metadata {
             workspace, lock, ..
         }
         | InstallTarget::NonProjectWorkspace { workspace, lock } => {
-            Metadata::from_lockfile(workspace.install_path(), lock)
+            Metadata::from_lockfile(workspace.install_path(), lock, output_version)
         }
-        InstallTarget::Script { script, lock } => Metadata::from_script(&script.path, lock),
-        InstallTarget::Lockfile { root, lock, .. } => Metadata::from_lockfile(root, lock),
+        InstallTarget::Script { script, lock } => {
+            Metadata::from_script(&script.path, lock, output_version)
+        }
+        InstallTarget::Lockfile { root, lock, .. } => {
+            Metadata::from_lockfile(root, lock, output_version)
+        }
     }
 }
 

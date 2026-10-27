@@ -171,6 +171,10 @@ def visit(metadata: UvMetadata, to_analyze: list[Node]):
 
 ## Schema
 
+Use `uv workspace metadata --output-version preview` to request the `preview` schema. It is
+currently the only supported version. If you omit the flag or request an unsupported version, uv
+returns the latest schema it supports. The `schema.version` field identifies the version returned.
+
 A full JSON schema for the format will be provided when the format is finalized.
 
 Here is a human-readable annotated example:

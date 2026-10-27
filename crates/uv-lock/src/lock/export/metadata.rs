@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, VecDeque};
 use std::fmt::Display;
 use std::path::Path;
 
+use uv_configuration::MetadataOutputVersion;
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
     InstalledDist, Name, Requirement, RequiresPython, ResolvedDist, UrlString,
@@ -95,20 +96,11 @@ pub struct Metadata {
     resolution: BTreeMap<MetadataNodeIdFlat, MetadataNode>,
 }
 
-/// The schema version for the metadata report.
-#[derive(serde::Serialize, Debug, Default)]
-#[serde(rename_all = "snake_case")]
-enum SchemaVersion {
-    /// An unstable, experimental schema.
-    #[default]
-    Preview,
-}
-
 /// The schema metadata for the metadata report.
 #[derive(serde::Serialize, Debug, Default)]
 struct SchemaReport {
     /// The version of the schema.
-    version: SchemaVersion,
+    version: MetadataOutputVersion,
 }
 
 /// Information about the existing or synchronized environment for the workspace.
@@ -1327,16 +1319,32 @@ impl Metadata {
     ///
     /// Relative package paths are resolved against `workspace_root`. Script lockfiles are treated
     /// as workspaces because they do not identify the original script.
-    pub fn from_lockfile(workspace_root: &Path, lock: &Lock) -> Self {
-        Self::from_lock_target(MetadataTarget::Workspace(workspace_root), lock)
+    pub fn from_lockfile(
+        workspace_root: &Path,
+        lock: &Lock,
+        output_version: MetadataOutputVersion,
+    ) -> Self {
+        Self::from_lock_target(
+            MetadataTarget::Workspace(workspace_root),
+            lock,
+            output_version,
+        )
     }
 
     /// Construct [`Metadata`] for a script from a uv lockfile.
-    pub fn from_script(script_path: &Path, lock: &Lock) -> Self {
-        Self::from_lock_target(MetadataTarget::Script(script_path), lock)
+    pub fn from_script(
+        script_path: &Path,
+        lock: &Lock,
+        output_version: MetadataOutputVersion,
+    ) -> Self {
+        Self::from_lock_target(MetadataTarget::Script(script_path), lock, output_version)
     }
 
-    fn from_lock_target(target: MetadataTarget<'_>, lock: &Lock) -> Self {
+    fn from_lock_target(
+        target: MetadataTarget<'_>,
+        lock: &Lock,
+        output_version: MetadataOutputVersion,
+    ) -> Self {
         let mut resolve = BTreeMap::new();
         let workspace_root = PortablePathBuf::from(target.workspace_root());
         let workspace_packages = lock.packages().iter().filter(|package| match target {
@@ -1469,7 +1477,7 @@ impl Metadata {
 
         Self {
             schema: SchemaReport {
-                version: SchemaVersion::Preview,
+                version: output_version,
             },
             conflicts,
             environment: None,
