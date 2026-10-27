@@ -105,56 +105,34 @@ fn run_open_file_limit_override_exceeds_hard_limit() {
 
 /// A minimal PEP 517 build backend for `sync_workspace_under_low_open_file_limit`.
 ///
-/// It builds an editable wheel containing a single `.pth` file, so building a
-/// workspace member requires no network access and no compilation, while still
-/// spawning a build backend process (and its pipes) for every member.
-const TEST_BACKEND: &str = r#"import base64
-import csv
-import hashlib
-import io
-import tomllib
+/// It builds an editable wheel containing a single `.pth` file, so building a workspace member
+/// requires no network access and no compilation, while still spawning a build backend process
+/// (and its pipes) for every member. The incomplete `RECORD` is fine: uv completes it when
+/// extracting the wheel.
+const TEST_BACKEND: &str = r#"import tomllib
 import zipfile
 from pathlib import Path
 
 
-def get_requires_for_build_editable(config_settings=None):
-    return []
-
-
 def build_editable(wheel_directory, config_settings=None, metadata_directory=None):
-    data = tomllib.loads(Path("pyproject.toml").read_text())
-    project = data["project"]
+    project = tomllib.loads(Path("pyproject.toml").read_text())["project"]
     name = project["name"]
     version = project["version"]
+    distribution = name.replace("-", "_")
 
-    dist_info = f"{name.replace('-', '_')}-{version}.dist-info"
-    record = io.StringIO()
-    csv.writer(record, lineterminator="\n").writerows(
-        [("WHEEL", "", ""), ("METADATA", "", "")]
-    )
-    contents = {
-        f"{dist_info}/WHEEL": (
-            "Wheel-Version: 1.0\nGenerator: test\nRoot-Is-Purelib: true\nTag: py3-none-any\n"
-        ),
-        f"{dist_info}/METADATA": (
-            f"Metadata-Version: 2.1\nName: {name}\nVersion: {version}\n"
-            f"Requires-Python: {project.get('requires-python', '>=3.8')}\n"
-        ),
-        f"{name.replace('-', '_')}.pth": ".\n",
-    }
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w") as archive:
-        for path, data in contents.items():
-            archive.writestr(path, data)
-            digest = base64.urlsafe_b64encode(hashlib.sha256(data.encode()).digest())
-            checksum = digest.rstrip(b"=").decode()
-            csv.writer(record, lineterminator="\n").writerow(
-                (path, f"sha256={checksum}", "")
-            )
-        archive.writestr(f"{dist_info}/RECORD", record.getvalue())
-
-    filename = f"{name.replace('-', '_')}-{version}-py3-none-any.whl"
-    Path(wheel_directory).joinpath(filename).write_bytes(buf.getvalue())
+    dist_info = f"{distribution}-{version}.dist-info"
+    filename = f"{distribution}-{version}-py3-none-any.whl"
+    with zipfile.ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr(
+            f"{dist_info}/METADATA",
+            f"Metadata-Version: 2.1\nName: {name}\nVersion: {version}\n",
+        )
+        wheel.writestr(
+            f"{dist_info}/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr(f"{distribution}.pth", ".\n")
+        wheel.writestr(f"{dist_info}/RECORD", "")
     return filename
 "#;
 
@@ -207,7 +185,6 @@ fn sync_workspace_under_low_open_file_limit() -> Result<()> {
             name = "pkg-{member}"
             version = "0.1.0"
             requires-python = ">=3.12"
-            dependencies = []
 
             [build-system]
             requires = []
@@ -219,8 +196,8 @@ fn sync_workspace_under_low_open_file_limit() -> Result<()> {
 
     // Run `uv sync` with an open file limit low enough that syncing all members
     // concurrently fails, while leaving enough room for a capped run to succeed.
-    // The concurrency limits are raised explicitly, so that the number of
-    // concurrent builds doesn't depend on the machine's CPU count.
+    // The concurrency limits are set explicitly, so the number of concurrent
+    // builds doesn't depend on the machine's CPU count.
     let mut command = context.external_command("sh");
     command
         .arg("-c")

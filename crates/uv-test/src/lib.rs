@@ -123,9 +123,7 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
     ),
     // The concurrency limits that uv derives from the open file limit depend on
     // the environment.
-    (r"downloads: \d+", "downloads: [CONCURRENCY]"),
-    (r"builds: \d+", "builds: [CONCURRENCY]"),
-    (r"installs: \d+", "installs: [CONCURRENCY]"),
+    (r"(downloads|builds|installs): \d+", "$1: [CONCURRENCY]"),
 ];
 
 /// Create a context for tests which simplifies shared behavior across tests.

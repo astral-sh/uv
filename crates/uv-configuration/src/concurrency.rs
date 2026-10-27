@@ -103,10 +103,10 @@ const RESERVED_OPEN_FILES: u64 = 32;
 ///
 /// A build dominates the pipeline with about five open file descriptors for the build backend
 /// process, its pipes, and the files written to the build cache. Downloads and installs add a
-/// few more, e.g., for the download target file and the unpacked wheel, and we include
-/// additional slack for file descriptors held only briefly.
+/// few more, e.g., for the download target file and the unpacked wheel, with additional slack
+/// for file descriptors held only briefly.
 #[cfg(any(test, unix))]
-const OPEN_FILES_PER_PIPELINE_PACKAGE: u64 = 12;
+const OPEN_FILES_PER_PACKAGE: u64 = 12;
 
 /// The highest number of concurrent downloads, builds, and installs to allow for the given
 /// soft open file limit.
@@ -116,7 +116,7 @@ const OPEN_FILES_PER_PIPELINE_PACKAGE: u64 = 12;
 #[cfg(any(test, unix))]
 fn open_file_limit_concurrency_cap(soft_limit: u64) -> usize {
     let concurrent_packages =
-        soft_limit.saturating_sub(RESERVED_OPEN_FILES) / OPEN_FILES_PER_PIPELINE_PACKAGE;
+        soft_limit.saturating_sub(RESERVED_OPEN_FILES) / OPEN_FILES_PER_PACKAGE;
     usize::try_from(concurrent_packages)
         .unwrap_or(usize::MAX)
         .max(1)
@@ -150,13 +150,11 @@ mod tests {
 
     #[test]
     fn open_file_limit_allows_single_concurrent_operation_at_minimum() {
-        // There's no room for concurrent operations, but we allow one regardless.
+        // There's no room for concurrent operations, but one is allowed regardless.
         assert_eq!(open_file_limit_concurrency_cap(0), 1);
         assert_eq!(open_file_limit_concurrency_cap(RESERVED_OPEN_FILES), 1);
         assert_eq!(
-            open_file_limit_concurrency_cap(
-                RESERVED_OPEN_FILES + OPEN_FILES_PER_PIPELINE_PACKAGE - 1
-            ),
+            open_file_limit_concurrency_cap(RESERVED_OPEN_FILES + OPEN_FILES_PER_PACKAGE - 1),
             1
         );
     }
@@ -164,28 +162,24 @@ mod tests {
     #[test]
     fn open_file_limit_scales_with_budget() {
         assert_eq!(
-            open_file_limit_concurrency_cap(RESERVED_OPEN_FILES + OPEN_FILES_PER_PIPELINE_PACKAGE),
+            open_file_limit_concurrency_cap(RESERVED_OPEN_FILES + OPEN_FILES_PER_PACKAGE),
             1
         );
         assert_eq!(
-            open_file_limit_concurrency_cap(
-                RESERVED_OPEN_FILES + 2 * OPEN_FILES_PER_PIPELINE_PACKAGE
-            ),
+            open_file_limit_concurrency_cap(RESERVED_OPEN_FILES + 2 * OPEN_FILES_PER_PACKAGE),
             2
         );
         assert_eq!(
-            open_file_limit_concurrency_cap(
-                RESERVED_OPEN_FILES + 10 * OPEN_FILES_PER_PIPELINE_PACKAGE
-            ),
+            open_file_limit_concurrency_cap(RESERVED_OPEN_FILES + 10 * OPEN_FILES_PER_PACKAGE),
             10
         );
     }
 
     #[test]
     fn open_file_limit_is_not_constraining_for_typical_limits() {
-        // The Linux default soft limit is enough for uv's default limits.
+        // The Linux default soft limit, and the limit after uv raises it to the typical
+        // maximum at startup, leave room for uv's default download limit.
         assert!(open_file_limit_concurrency_cap(1024) >= Concurrency::DEFAULT_DOWNLOADS);
-        // The limit raised to the typical maximum, as done at startup on Unix.
-        assert_eq!(open_file_limit_concurrency_cap(0x0010_0000), 87_378);
+        assert!(open_file_limit_concurrency_cap(0x0010_0000) >= Concurrency::DEFAULT_DOWNLOADS);
     }
 }
