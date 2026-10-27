@@ -1551,7 +1551,7 @@ fn add_git_cache_compat_downgrade() -> Result<()> {
     Ok(())
 }
 
-/// The LFS payload is separate from the Git blob containing its pointer.
+/// A missing LFS checkout can be rebuilt from cached payloads after the upstream disappears.
 #[test]
 #[cfg(feature = "test-git-lfs")]
 fn git_partial_fetches_lfs() -> Result<()> {
@@ -1577,9 +1577,6 @@ fn git_partial_fetches_lfs() -> Result<()> {
     repository
         .child(".gitattributes")
         .write_str("asset.bin filter=lfs diff=lfs merge=lfs -text\n")?;
-    repository
-        .child(".lfsconfig")
-        .write_str(&format!("[lfs]\nurl = {url}\n"))?;
     repository.child("asset.bin").write_str("selected file\n")?;
     git(&context, repository.path(), &["add", "."])?;
     git(
@@ -1627,6 +1624,28 @@ fn git_partial_fetches_lfs() -> Result<()> {
         fs_err::read_to_string(checkout.child("asset.bin"))?,
         "selected file\n"
     );
+
+    // Remove the checkout and cached metadata to recreate the checkout from the shared Git database.
+    fs_err::remove_dir_all(checkout.path())?;
+    fs_err::remove_file(context.temp_dir.child("uv.lock"))?;
+    fs_err::remove_dir_all(
+        Cache::from_path(context.cache_dir.path()).bucket(CacheBucket::SourceDistributions),
+    )?;
+    fs_err::rename(repository.path(), context.temp_dir.child("unavailable"))?;
+    uv_snapshot!(context.filters(), context.lock()
+        .args(["--preview-features", "git-partial-fetches", "--offline"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    assert_eq!(
+        fs_err::read_to_string(checkout.child("asset.bin"))?,
+        "selected file\n"
+    );
+
+    // Later Git reads can fetch missing objects from upstream.
+    let origin = git(&context, checkout.path(), &["remote", "get-url", "origin"])?;
+    assert_eq!(GitUpstreamUrl::parse(&origin)?, repository_url);
     Ok(())
 }
 
