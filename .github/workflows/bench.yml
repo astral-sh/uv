@@ -40,7 +40,7 @@ jobs:
           profile: |
             debug
             profiling
-          save-if: ${{ inputs.save-rust-cache == 'true' }}
+          save-if: ${{ github.ref == 'refs/heads/main' && inputs.save-rust-cache == 'true' }}
 
       - uses: $/.github/actions/setup-uv-toolchain
         with:
@@ -164,7 +164,7 @@ jobs:
           profile: |
             debug
             profiling
-          save-if: ${{ inputs.save-rust-cache == 'true' }}
+          save-if: ${{ github.ref == 'refs/heads/main' && inputs.save-rust-cache == 'true' }}
 
       - uses: $/.github/actions/setup-uv-toolchain
         with:

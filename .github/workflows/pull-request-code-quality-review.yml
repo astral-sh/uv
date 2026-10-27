@@ -9,6 +9,7 @@ env:
 jobs:
   review:
     name: "code quality review"
+    cache-mode: read # Depot jobs can still request upload URLs directly from the cache API.
     if: >-
       ${{
         github.event_name == 'pull_request' &&
@@ -42,6 +43,7 @@ jobs:
       - uses: $/.github/actions/setup-uv-toolchain
         with:
           enable-cache: auto
+          save-cache: false
 
       - name: "Prepare review configuration"
         env:

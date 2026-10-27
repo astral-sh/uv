@@ -44,7 +44,7 @@ jobs:
           prefix-key: v1-rust-workspace
           key: ${{ hashFiles('Cargo.toml') }}
           profile: fast-build-nightly
-          save-if: ${{ inputs.save-rust-cache == 'true' }}
+          save-if: ${{ github.ref == 'refs/heads/main' && inputs.save-rust-cache == 'true' }}
 
       - name: "Configure Python archive cache"
         # Share archives downloaded during setup with the tests.
