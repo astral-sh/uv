@@ -4,6 +4,7 @@ use anyhow::Result;
 use assert_fs::prelude::*;
 use insta::assert_snapshot;
 use serde_json::{Map, Value, json};
+use sha2::{Digest, Sha256};
 use uv_distribution_types::PEP_850_SCHEMA;
 use uv_static::EnvVars;
 use uv_test::find_links::FindLinksServer;
@@ -77,7 +78,7 @@ fn install_local_variant_wheel() -> Result<()> {
     Ok(())
 }
 
-/// Refreshing a direct wheel must still check its platform tags before preparing it.
+/// A refreshed local variant wheel must have compatible platform tags.
 #[test]
 fn refresh_incompatible_variant_wheel() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -98,13 +99,50 @@ fn refresh_incompatible_variant_wheel() -> Result<()> {
         .arg("linux")
         .arg("--refresh")
         .arg(wheel_path.path()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies
+      cause: Because only ok==1.0.0 is available and ok==1.0.0 has no wheels with a matching platform tag (e.g., `manylinux_2_28_x86_64`), we can conclude that all versions of ok cannot be used.
+             And because you require ok, we can conclude that your requirements are unsatisfiable.
+    ");
+    Ok(())
+}
+
+/// `pylock.toml` installs bypass the resolver, so they must check local variant wheel tags.
+#[test]
+fn sync_incompatible_local_variant_from_pylock() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let variant = null_variant().to_string();
+    let (_, wheel) = WheelBuilder::new(&"ok".parse()?, &"1.0.0".parse()?)
+        .tag("py3-none-win_amd64")
+        .files(&[("ok-1.0.0.dist-info/variant.json", &variant)])
+        .build();
+    context
+        .temp_dir
+        .child("ok-1.0.0-py3-none-win_amd64-null.whl")
+        .write_binary(&wheel)?;
+    let hash = hex::encode(Sha256::digest(&wheel));
+    context.temp_dir.child("pylock.toml").write_str(&format!(
+        r#"
+        lock-version = "1.0"
+        created-by = "uv"
+        [[packages]]
+        name = "ok"
+        version = "1.0.0"
+        archive = {{ path = "ok-1.0.0-py3-none-win_amd64-null.whl", hashes = {{ sha256 = "{hash}" }} }}
+        "#,
+    ))?;
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview-features")
+        .arg("wheel-variants,pylock")
+        .arg("--python-platform")
+        .arg("linux")
+        .arg("--refresh")
+        .arg("pylock.toml"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    Resolved 1 package in [TIME]
-    error: Failed to determine installation plan
-      cause: A path (ok-1.0.0-py3-none-win_amd64-null.whl) dependency is incompatible with the current platform
-
-    hint: The wheel is compatible with Windows (`win_amd64`), but you're on Linux (`manylinux_2_28_x86_64`)
+    error: Package `ok` can't be installed because the binary distribution is incompatible with the current platform
     ");
     Ok(())
 }
