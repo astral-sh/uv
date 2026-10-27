@@ -804,8 +804,8 @@ def main() -> None:
     if os_and_arch["arch"].lower() in ("x86_64", "amd64"):
         try:
             cpu_info = _get_cpu_info()
-        except Exception as error:
-            # Rust applies the preview policy to probe failures.
+        except Exception as error:  # noqa: BLE001
+            # Forward all probe failures so Rust can apply the preview policy.
             cpu_info = {
                 "kind": "unavailable",
                 "error": f"{type(error).__name__}: {error}",

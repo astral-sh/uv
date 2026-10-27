@@ -70,6 +70,7 @@ impl Platform {
     }
 
     /// Attach raw CPU capabilities reported by the Python interpreter.
+    #[must_use]
     pub fn with_cpu_info(mut self, cpu_info: Option<CpuInfo>) -> Self {
         self.cpu_info = cpu_info.map(Arc::new);
         self
