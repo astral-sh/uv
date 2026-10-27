@@ -9,7 +9,8 @@ env:
 jobs:
   review:
     name: "code quality review"
-    cache-mode: read # Depot jobs can still request upload URLs directly from the cache API.
+    # N.B. despite setting this, Depot jobs allow cache writes directly through the API
+    cache-mode: read
     if: >-
       ${{
         github.event_name == 'pull_request' &&
