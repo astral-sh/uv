@@ -7,7 +7,7 @@
 //! Cached build dependencies are exposed through the same `/simple/*` and
 //! `/files/*` routes as scenario packages.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -18,14 +18,17 @@ use wiremock::{
     matchers::{header_exists, method, path},
 };
 
-use uv_distribution_filename::WheelFilename;
+use uv_distribution_filename::{VariantLabel, WheelFilename};
+use uv_distribution_types::{PEP_825_SCHEMA, PEP_850_SCHEMA};
 use uv_normalize::PackageName;
 use uv_pep440::VersionSpecifiers;
 
 use crate::http_server::{HttpServer, content_type_for_filename};
 use crate::vendor::{VendorArtifact, vendor_artifacts};
 
-use super::scenario::{ArtifactMetadata, PackageMetadata, Scenario, WheelTag};
+use super::scenario::{
+    ArtifactMetadata, PackageMetadata, Scenario, VariantWheel, Variants, WheelTag,
+};
 use super::scenarios_dir;
 use super::wheel::{DEFAULT_WHEEL_TAG, WheelBuilder, generate_sdist, sha256_hex};
 
@@ -35,10 +38,10 @@ const PACKSE_UPLOAD_TIME: &str = "2024-03-24T00:00:00Z";
 struct IndexFile {
     filename: String,
     sha256: String,
-    distribution: DistributionMetadata,
+    distribution: Option<DistributionMetadata>,
 }
 
-/// Distribution-specific fields in the Simple API.
+/// Metadata for a distribution file, omitted for a release's `variants.json` sidecar.
 #[derive(Default)]
 struct DistributionMetadata {
     requires_python: Option<VersionSpecifiers>,
@@ -146,19 +149,53 @@ impl ServerIndex {
             index.packages.insert(package_name.clone(), Vec::new());
 
             for (version, meta) in &package.versions {
+                let wheel = WheelBuilder::new(package_name, version)
+                    .requires(&meta.requires)
+                    .extras(&meta.extras)
+                    .requires_python(meta.requires_python.as_ref())
+                    .entry_points(&meta.entry_points);
                 if let Some(wheel_metadata) = &meta.wheel {
-                    let wheel = WheelBuilder::new(package_name, version)
-                        .requires(&meta.requires)
-                        .extras(&meta.extras)
-                        .requires_python(meta.requires_python.as_ref())
-                        .entry_points(&meta.entry_points);
                     for tag in wheel_tags(&meta.wheel_tags) {
                         index.register_generated(
                             package_name,
                             wheel.tag(tag).build(),
-                            (meta, wheel_metadata),
+                            Some((meta, wheel_metadata)),
                         );
                     }
+                }
+
+                if let Some(variants) = &meta.variants {
+                    let default_artifact = ArtifactMetadata::default();
+                    let artifact = meta.wheel.as_ref().unwrap_or(&default_artifact);
+                    for (label, variant) in &variants.wheels {
+                        let metadata = variant_metadata(variants, [(label, variant)]);
+                        let wheel = wheel
+                            .requires(variant.requires.as_deref().unwrap_or(&meta.requires))
+                            .variant(label, &metadata);
+                        let tags = if variant.wheel_tags.is_empty() {
+                            &meta.wheel_tags
+                        } else {
+                            &variant.wheel_tags
+                        };
+                        for tag in wheel_tags(tags) {
+                            index.register_generated(
+                                package_name,
+                                wheel.tag(tag).build(),
+                                Some((meta, artifact)),
+                            );
+                        }
+                    }
+                    index.register_generated(
+                        package_name,
+                        (
+                            format!(
+                                "{}-{version}-variants.json",
+                                package_name.as_dist_info_name()
+                            ),
+                            variant_metadata(variants, &variants.wheels).into_bytes(),
+                        ),
+                        None,
+                    );
                 }
 
                 if let Some(sdist_metadata) = &meta.sdist {
@@ -172,7 +209,7 @@ impl ServerIndex {
                             meta.requires_python.as_ref(),
                             &meta.entry_points,
                         ),
-                        (meta, sdist_metadata),
+                        Some((meta, sdist_metadata)),
                     );
                 }
             }
@@ -194,7 +231,7 @@ impl ServerIndex {
                 IndexFile {
                     filename: artifact.filename.to_string(),
                     sha256: artifact.sha256.to_string(),
-                    distribution: DistributionMetadata::default(),
+                    distribution: Some(DistributionMetadata::default()),
                 },
                 FileData::Vendor(artifact),
             );
@@ -207,7 +244,7 @@ impl ServerIndex {
         &mut self,
         package_name: &PackageName,
         (filename, bytes): (String, Vec<u8>),
-        (package, artifact): (&PackageMetadata, &ArtifactMetadata),
+        distribution: Option<(&PackageMetadata, &ArtifactMetadata)>,
     ) {
         let sha256 = sha256_hex(&bytes);
         self.register_file(
@@ -215,11 +252,11 @@ impl ServerIndex {
             IndexFile {
                 filename,
                 sha256,
-                distribution: DistributionMetadata {
+                distribution: distribution.map(|(package, artifact)| DistributionMetadata {
                     requires_python: package.requires_python.clone(),
                     upload_time: artifact.upload_time.clone(),
                     yanked: package.yanked,
-                },
+                }),
             },
             FileData::Bytes(bytes.into()),
         );
@@ -236,6 +273,30 @@ fn wheel_tags(tags: &[WheelTag]) -> impl Iterator<Item = &str> {
     tags.iter()
         .map(WheelTag::as_str)
         .chain(tags.is_empty().then_some(DEFAULT_WHEEL_TAG))
+}
+
+fn variant_metadata<'a>(
+    variants: &Variants,
+    wheels: impl IntoIterator<Item = (&'a VariantLabel, &'a VariantWheel)>,
+) -> String {
+    let properties = wheels
+        .into_iter()
+        .map(|(label, wheel)| (label, &wheel.properties))
+        .collect::<BTreeMap<_, _>>();
+    let schema = if variants.providers.is_some() {
+        PEP_850_SCHEMA
+    } else {
+        PEP_825_SCHEMA
+    };
+    let mut metadata = json!({
+        "$schema": schema,
+        "default-priorities": { "namespace": variants.namespaces },
+        "variants": properties,
+    });
+    if let Some(providers) = &variants.providers {
+        metadata["providers"] = json!(providers);
+    }
+    metadata.to_string()
 }
 
 fn handle_request(
@@ -381,17 +442,24 @@ fn build_simple_api_response(
                 "filename": file.filename,
                 "url": url,
                 "hashes": {},
-                "upload-time": file.distribution.upload_time.as_deref()
-                    .unwrap_or(PACKSE_UPLOAD_TIME),
             });
             if hashes {
                 file_obj["hashes"] = json!({ "sha256": file.sha256 });
             }
-            if let Some(requires_python) = &file.distribution.requires_python {
-                file_obj["requires-python"] = json!(requires_python);
-            }
-            if file.distribution.yanked {
-                file_obj["yanked"] = json!(true);
+            // `variants.json` is listed alongside distributions without these attributes.
+            if let Some(distribution) = &file.distribution {
+                file_obj["upload-time"] = json!(
+                    distribution
+                        .upload_time
+                        .as_deref()
+                        .unwrap_or(PACKSE_UPLOAD_TIME)
+                );
+                if let Some(requires_python) = &distribution.requires_python {
+                    file_obj["requires-python"] = json!(requires_python);
+                }
+                if distribution.yanked {
+                    file_obj["yanked"] = json!(true);
+                }
             }
             file_obj
         })

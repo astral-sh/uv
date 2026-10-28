@@ -56,11 +56,11 @@ impl HttpServer {
 }
 
 pub(crate) fn content_type_for_filename(filename: &str) -> &'static str {
-    if Path::new(filename)
-        .extension()
-        .is_some_and(|extension| extension.eq_ignore_ascii_case("whl"))
-    {
+    let extension = Path::new(filename).extension();
+    if extension.is_some_and(|extension| extension.eq_ignore_ascii_case("whl")) {
         "application/zip"
+    } else if extension.is_some_and(|extension| extension.eq_ignore_ascii_case("json")) {
+        "application/json"
     } else {
         "application/gzip"
     }
