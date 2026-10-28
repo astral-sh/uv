@@ -132,8 +132,6 @@ impl uv_errors::Hinted for ExternallyInstalledError {
 #[instrument(skip_all)]
 #[doc(hidden)]
 pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Result<ExitStatus> {
-    let config_discovery = ConfigDiscovery::from_args(cli.top_level.no_config);
-
     // Configure color before resolving settings so argument errors retain their styling.
     anstream::ColorChoice::write_global(resolve_color(&cli.top_level.global_args).into());
 
@@ -152,6 +150,31 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
     if let Some(directory) = directory.as_ref() {
         std::env::set_current_dir(directory)?;
     }
+
+    run_command(cli, global_initialization, None).await
+}
+
+/// Run an export with an explicit workspace discovery directory in a library caller.
+/// The caller supplies an absolute directory and leaves process initialization to its host.
+#[doc(hidden)]
+pub async fn run_export_in_project(cli: Cli, project_dir: &Path) -> Result<ExitStatus> {
+    anyhow::ensure!(
+        matches!(&*cli.command, Commands::Project(command) if matches!(&**command, ProjectCommand::Export(_))),
+        "expected an export command"
+    );
+    anyhow::ensure!(
+        project_dir.is_absolute() && cli.top_level.global_args.directory.is_none(),
+        "expected an absolute project directory and no process-wide --directory"
+    );
+    run_command(cli, GlobalInitialization::Reuse, Some(project_dir)).await
+}
+
+async fn run_command(
+    cli: Cli,
+    global_initialization: GlobalInitialization,
+    default_project_dir: Option<&Path>,
+) -> Result<ExitStatus> {
+    let config_discovery = ConfigDiscovery::from_args(cli.top_level.no_config);
 
     // Parse the external command, if necessary.
     let parsed_run_command = if let Commands::Project(command) = &*cli.command
@@ -226,7 +249,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
         // rather than the current working directory.
         Cow::Owned(std::path::absolute(dir)?)
     } else {
-        Cow::Borrowed(&*CWD)
+        Cow::Borrowed(default_project_dir.unwrap_or_else(|| CWD.as_path()))
     };
 
     // Validate that the project directory exists if explicitly provided via --project, except for
@@ -560,17 +583,19 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
     // Configure the `Printer`, which controls user-facing output in the CLI.
     let printer = Printer::new(globals.quiet, globals.verbose, globals.no_progress);
 
-    // Configure the `warn!` macros, which control user-facing warnings in the CLI.
-    if globals.quiet > 0 {
-        uv_warnings::disable();
-    } else {
-        uv_warnings::enable();
+    if default_project_dir.is_none() {
+        // Configure the `warn!` macros, which control user-facing warnings in the CLI.
+        if globals.quiet > 0 {
+            uv_warnings::disable();
+        } else {
+            uv_warnings::enable();
+        }
+
+        anstream::ColorChoice::write_global(globals.color.into());
+
+        // Don't initialize the rayon threadpool yet, this is too costly when we're doing a noop sync.
+        RAYON_PARALLELISM.store(globals.concurrency.installs, Ordering::Relaxed);
     }
-
-    anstream::ColorChoice::write_global(globals.color.into());
-
-    // Don't initialize the rayon threadpool yet, this is too costly when we're doing a noop sync.
-    RAYON_PARALLELISM.store(globals.concurrency.installs, Ordering::Relaxed);
 
     // Write out any resolved settings.
     macro_rules! show_settings {

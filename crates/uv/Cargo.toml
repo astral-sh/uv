@@ -112,6 +112,7 @@ uv-version = { workspace = true }
 embed-manifest = { workspace = true }
 
 [dev-dependencies]
+uv-command-support = { workspace = true, features = ["test-output"] }
 uv-python-managed = { workspace = true }
 uv-cache-key = { workspace = true }
 uv-extract = { workspace = true }

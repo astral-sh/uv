@@ -3,11 +3,11 @@
 use anyhow::{Ok, Result};
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
+use clap::Parser;
 use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 #[cfg(all(unix, feature = "test-universal"))]
 use std::os::unix::fs::FileTypeExt;
-#[cfg(all(feature = "test-universal", feature = "test-git"))]
 use std::path::Path;
 use std::process::{Command, Stdio};
 #[cfg(all(unix, feature = "test-universal"))]
@@ -107,8 +107,40 @@ fn export_no_emit_project_all_packages() -> Result<()> {
         "#,
     )?;
 
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?;
+    let export = |directory: &Path, selection: &str| -> Result<String> {
+        let cli = uv_cli::Cli::try_parse_from(
+            [
+                "uv",
+                "export",
+                "--all-packages",
+                selection,
+                "--no-header",
+                "--offline",
+                "--no-config",
+                "--no-python-downloads",
+                "--cache-dir",
+            ]
+            .map(std::ffi::OsStr::new)
+            .into_iter()
+            .chain([context.cache_dir.as_os_str()]),
+        )?;
+        let (status, output) = runtime.block_on(uv_command_support::test_output::capture(
+            Box::pin(uv::run_export_in_project(cli, directory)),
+        ));
+        Ok(uv_test::format_command_output(
+            std::result::Result::Ok(i32::from(u8::from(status?))),
+            &output.stdout,
+            &output.stderr,
+            context.filters(),
+            Some(uv_test::WindowsFilters::Platform),
+        ))
+    };
+
     // Exclude the root project, but emit its child dependency.
-    uv_snapshot!(context.filters(), context.export().arg("--all-packages").arg("--no-emit-project").arg("--no-header").arg("--offline"), @"
+    assert_snapshot!(export(context.temp_dir.path(), "--no-emit-project")?, @"
     exit_code: 0 (success)
     ----- stdout -----
     -e ./child
@@ -119,7 +151,7 @@ fn export_no_emit_project_all_packages() -> Result<()> {
     ");
 
     // From the child, exclude the child, even though the root depends on it.
-    uv_snapshot!(context.filters(), context.export().current_dir(child.path()).arg("--all-packages").arg("--no-emit-project").arg("--no-header").arg("--offline"), @"
+    assert_snapshot!(export(child.path(), "--no-emit-project")?, @"
     exit_code: 0 (success)
     ----- stdout -----
     -e .
@@ -129,7 +161,7 @@ fn export_no_emit_project_all_packages() -> Result<()> {
     ");
 
     // The inverse filter should emit only the current project.
-    uv_snapshot!(context.filters(), context.export().current_dir(child.path()).arg("--all-packages").arg("--only-emit-project").arg("--no-header").arg("--offline"), @"
+    assert_snapshot!(export(child.path(), "--only-emit-project")?, @"
     exit_code: 0 (success)
     ----- stdout -----
     -e ./child

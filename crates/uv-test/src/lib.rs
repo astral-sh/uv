@@ -2425,30 +2425,48 @@ pub fn run_and_format_silent<T: AsRef<str>>(
             .unwrap_or_else(|err| panic!("Failed to spawn {program}: {err}"))
     };
 
+    let snapshot = format_command_output(
+        output.status.code().ok_or(output.status),
+        &output.stdout,
+        &output.stderr,
+        filters,
+        windows_filters,
+    );
+    (snapshot, output)
+}
+
+/// Format either a returned exit code or the OS status of a process killed by a signal.
+pub fn format_command_output<T: AsRef<str>>(
+    status: Result<i32, std::process::ExitStatus>,
+    stdout: &[u8],
+    stderr: &[u8],
+    filters: impl AsRef<[(T, T)]>,
+    windows_filters: Option<WindowsFilters>,
+) -> String {
     let mut snapshot = format!(
         "exit_code: {} ({})\n",
-        output.status.code().unwrap_or(!0),
-        if output.status.success() {
+        status.unwrap_or(!0),
+        if status == Ok(0) {
             "success"
         } else {
             "failure"
         },
     );
-    if output.status.code().is_none() {
+    if let Err(status) = status {
         snapshot.push_str("exit_status: ");
-        snapshot.push_str(&output.status.to_string());
+        snapshot.push_str(&status.to_string());
         snapshot.push('\n');
     }
-    if !output.stdout.is_empty() {
+    if !stdout.is_empty() {
         snapshot.push_str("----- stdout -----\n");
-        snapshot.push_str(&String::from_utf8_lossy(&output.stdout));
+        snapshot.push_str(&String::from_utf8_lossy(stdout));
     }
-    if !output.stderr.is_empty() {
-        if !output.stdout.is_empty() {
+    if !stderr.is_empty() {
+        if !stdout.is_empty() {
             snapshot.push('\n');
         }
         snapshot.push_str("----- stderr -----\n");
-        snapshot.push_str(&String::from_utf8_lossy(&output.stderr));
+        snapshot.push_str(&String::from_utf8_lossy(stderr));
     }
     let mut snapshot = apply_filters(snapshot, filters);
 
@@ -2499,7 +2517,7 @@ pub fn run_and_format_silent<T: AsRef<str>>(
         }
     }
 
-    (snapshot, output)
+    snapshot
 }
 
 /// Reject cache environment overrides hidden by an explicit cache-directory argument.
