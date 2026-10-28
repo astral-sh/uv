@@ -73,6 +73,11 @@ the API from required call ordering. Respect corrections and withdrawn suggestio
 globals, duplication, and small helpers are contextual choices, not automatic findings. Do not
 repeat an existing finding or report unrelated pre-existing problems. No findings is a valid result.
 
+When a relevant finding may predate the PR, compare the triggering behavior at the merge base
+(`base` in `revisions.json`) and at the PR head. If it already occurs on the base, say so in the
+review comment and describe any new exposure or impact this PR introduces. If the fix can land in a
+separate PR, say whether it can follow this PR or needs to land first.
+
 Return only JSON matching `$REVIEW_CONFIG/schema.json`. Each finding needs a precise diff location,
 triggering condition or concrete maintenance cost, evidence, and the smallest useful correction.
 Keep ranges tight and use repository-relative paths. Order findings by impact: `priority` 0 is
