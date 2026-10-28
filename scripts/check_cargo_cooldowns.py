@@ -26,6 +26,7 @@ from urllib.request import Request, urlopen
 CRATES_IO_SOURCES = {
     "registry+https://github.com/rust-lang/crates.io-index",
     "registry+https://index.crates.io/",
+    "sparse+https://index.crates.io/",
 }
 
 
@@ -90,7 +91,7 @@ def packages(lockfile: bytes) -> set[Package]:
     return {
         Package(package["name"], package["version"], package["source"])
         for package in tomllib.loads(lockfile.decode()).get("package", [])
-        if package.get("source", "").startswith("registry+")
+        if package.get("source", "").startswith(("registry+", "sparse+"))
     }
 
 

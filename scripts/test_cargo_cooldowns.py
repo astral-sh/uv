@@ -230,6 +230,55 @@ class LockfileTests(unittest.TestCase):
             {PACKAGE: {"crates/new/Cargo.lock"}},
         )
 
+    def test_sparse_registry_is_not_silently_accepted(self) -> None:
+        source = "sparse+https://example.com/index/"
+        Path("Cargo.lock").write_text(
+            Path("Cargo.lock")
+            .read_text()
+            .replace(SOURCE, source)
+            .replace('"1.2.2"', '"1.2.3"')
+        )
+        head = self.commit()
+        output = io.StringIO()
+        with (
+            patch.object(cooldowns, "urlopen") as request,
+            redirect_stdout(output),
+        ):
+            self.assertEqual(
+                cooldowns.check_packages(
+                    cooldowns.added_packages(self.base, head), POLICY, NOW
+                ),
+                1,
+            )
+        self.assertEqual(
+            output.getvalue(),
+            "::error::Cannot verify example 1.2.3 in 'Cargo.lock': "
+            f"Unsupported registry: {source!r}\n",
+        )
+        request.assert_not_called()
+
+    def test_sparse_crates_io_publication_is_checked(self) -> None:
+        Path("Cargo.lock").write_text(
+            Path("Cargo.lock")
+            .read_text()
+            .replace(SOURCE, "sparse+https://index.crates.io/")
+            .replace('"1.2.2"', '"1.2.3"')
+        )
+        head = self.commit()
+        with (
+            patch.object(
+                cooldowns, "urlopen", return_value=response("2026-10-28T00:00:00Z")
+            ) as request,
+            redirect_stdout(io.StringIO()),
+        ):
+            self.assertEqual(
+                cooldowns.check_packages(
+                    cooldowns.added_packages(self.base, head), POLICY, NOW
+                ),
+                1,
+            )
+        request.assert_called_once()
+
     def test_unchanged_versions_and_git_or_workspace_packages_need_no_lookup(
         self,
     ) -> None:
