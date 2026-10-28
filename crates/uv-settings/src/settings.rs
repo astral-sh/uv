@@ -101,8 +101,8 @@ pub struct Options {
 
     /// The keys to consider when caching builds for the project.
     ///
-    /// Cache keys enable you to specify the files or directories that should trigger a rebuild when
-    /// modified. By default, uv will rebuild a project whenever the `pyproject.toml`, `setup.py`,
+    /// Cache keys enable you to specify the files that should trigger a rebuild when modified.
+    /// By default, uv will rebuild a project whenever the `pyproject.toml`, `setup.py`,
     /// or `setup.cfg` files in the project directory are modified, or if a `src` directory is
     /// added or removed, i.e.:
     ///
@@ -121,6 +121,12 @@ pub struct Options {
     /// Note that the use of globs can be expensive, as uv may need to walk the filesystem to
     /// determine whether any files have changed.
     ///
+    /// Directories are also supported via `dir` keys, as in `cache-keys = [{ dir = "src" }]`. Note
+    /// that a `dir` key will only track changes to the directory itself (i.e., the directory being
+    /// created or removed), and not arbitrary changes within the directory. To invalidate the cache
+    /// whenever a file within a directory is modified, use a glob instead, e.g.,
+    /// `cache-keys = [{ file = "src/**/*.py" }]`.
+    ///
     /// Cache keys can also include version control information. For example, if a project uses
     /// `setuptools_scm` to read its version from a Git commit, you can specify `cache-keys = [{ git = { commit = true }, { file = "pyproject.toml" }]`
     /// to include the current Git commit hash in the cache key (in addition to the
@@ -135,7 +141,7 @@ pub struct Options {
     /// specified (as opposed to, e.g., affecting all members in a workspace), and all paths and
     /// globs are interpreted as relative to the project directory.
     #[option(
-        default = r#"[{ file = "pyproject.toml" }, { file = "setup.py" }, { file = "setup.cfg" }]"#,
+        default = r#"[{ file = "pyproject.toml" }, { file = "setup.py" }, { file = "setup.cfg" }, { dir = "src" }]"#,
         value_type = "list[dict]",
         example = r#"
             cache-keys = [{ file = "pyproject.toml" }, { file = "requirements.txt" }, { git = { commit = true } }]
