@@ -1,7 +1,9 @@
 use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
+use std::error::Error;
 use std::fmt::Write;
+use std::iter;
 use std::ops::Bound;
 
 use indexmap::IndexSet;
@@ -30,8 +32,7 @@ use crate::prioritized_distribution::{IncompatibleDist, IncompatibleSource, Inco
 use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner, PubGrubPython, Range};
 use crate::python_requirement::{PythonRequirement, PythonRequirementSource};
 use crate::resolver::{
-    MetadataUnavailable, UnavailableErrorChain, UnavailablePackage, UnavailableReason,
-    UnavailableVersion,
+    MetadataUnavailable, UnavailablePackage, UnavailableReason, UnavailableVersion,
 };
 use crate::{Flexibility, InMemoryIndex, Options, ResolverEnvironment, VersionsResponse};
 use uv_configuration::EffectiveExcludeNewerSource;
@@ -341,6 +342,15 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
                 }
             }
             External::FromDependencyOf(package, package_set, dependency, dependency_set) => {
+                if package == dependency {
+                    let range = self.compatible_range(package, package_set);
+                    return if range.plural() {
+                        format!("{range} have incompatible dependencies on themselves")
+                    } else {
+                        format!("{range} has an incompatible dependency on itself")
+                    };
+                }
+
                 if package.name_no_root() == dependency.name_no_root() {
                     if let Some(member) = self.format_workspace_member(package) {
                         return format!(
@@ -1216,13 +1226,17 @@ impl PubGrubReportFormatter<'_> {
             Some(UnavailablePackage::Offline) => {
                 hints.insert(PubGrubHint::Offline);
             }
-            Some(UnavailablePackage::InvalidMetadata(reason)) => {
+            Some(
+                reason @ (UnavailablePackage::InvalidMetadata(_)
+                | UnavailablePackage::InvalidVariantMetadata(_)
+                | UnavailablePackage::InconsistentMetadata(_)),
+            ) => {
                 hints.insert(PubGrubHint::InvalidPackageMetadata {
                     package: name.clone(),
                     reason: reason.clone(),
                 });
             }
-            Some(UnavailablePackage::InvalidStructure(reason)) => {
+            Some(reason @ UnavailablePackage::InvalidStructure(_)) => {
                 hints.insert(PubGrubHint::InvalidPackageStructure {
                     package: name.clone(),
                     reason: reason.clone(),
@@ -1247,6 +1261,13 @@ impl PubGrubReportFormatter<'_> {
                             hints.insert(PubGrubHint::Offline);
                         }
                         MetadataUnavailable::InvalidMetadata(reason) => {
+                            hints.insert(PubGrubHint::InvalidVersionMetadata {
+                                package: name.clone(),
+                                version: version.clone(),
+                                reason: reason.to_string(),
+                            });
+                        }
+                        MetadataUnavailable::InvalidVariantMetadata(reason) => {
                             hints.insert(PubGrubHint::InvalidVersionMetadata {
                                 package: name.clone(),
                                 version: version.clone(),
@@ -1519,13 +1540,13 @@ pub enum PubGrubHint {
     InvalidPackageMetadata {
         package: PackageName,
         // excluded from `PartialEq` and `Hash`
-        reason: UnavailableErrorChain,
+        reason: UnavailablePackage,
     },
     /// The structure of a package was invalid (e.g., multiple `.dist-info` directories).
     InvalidPackageStructure {
         package: PackageName,
         // excluded from `PartialEq` and `Hash`
-        reason: UnavailableErrorChain,
+        reason: UnavailablePackage,
     },
     /// The package metadata could not be fetched due to a network error.
     InvalidPackageNetwork {
@@ -1940,20 +1961,20 @@ impl std::fmt::Display for PubGrubHint {
                 )
             }
             Self::InvalidPackageMetadata { package, reason } => {
-                write!(
-                    f,
-                    "Metadata for `{}` could not be parsed.\n{}",
-                    package.cyan(),
-                    textwrap::indent(reason.to_string().as_str(), "  ")
-                )
+                writeln!(f, "Metadata for `{}` could not be parsed.", package.cyan())?;
+                for source in iter::successors(reason.source(), |&error| error.source()) {
+                    let message = format!("Caused by: {}", source.to_string().trim());
+                    writeln!(f, "{}", textwrap::indent(&message, "  "))?;
+                }
+                Ok(())
             }
             Self::InvalidPackageStructure { package, reason } => {
-                write!(
-                    f,
-                    "The structure of `{}` was invalid\n{}",
-                    package.cyan(),
-                    textwrap::indent(reason.to_string().as_str(), "  ")
-                )
+                writeln!(f, "The structure of `{}` was invalid", package.cyan())?;
+                for source in iter::successors(reason.source(), |&error| error.source()) {
+                    let message = format!("Caused by: {}", source.to_string().trim());
+                    writeln!(f, "{}", textwrap::indent(&message, "  "))?;
+                }
+                Ok(())
             }
             Self::InvalidPackageNetwork { package, status } => {
                 write!(

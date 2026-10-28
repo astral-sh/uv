@@ -13,12 +13,13 @@ use tracing::trace;
 use uv_distribution_types::{
     DerivationChain, DistErrorKind, IndexCapabilities, IndexLocations, IndexUrl, RequestedDist,
 };
+use uv_macros::DebugNoInline;
 use uv_normalize::PackageName;
 use uv_pep440::{LowerBound, Version};
 use uv_pep508::MarkerEnvironment;
 use uv_platform_tags::Tags;
 use uv_pypi_types::ParsedUrl;
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 use uv_static::EnvVars;
 
 use crate::candidate_selector::CandidateSelector;
@@ -37,7 +38,7 @@ use crate::resolver::{
 };
 use crate::{InMemoryIndex, Options};
 
-#[derive(Debug, thiserror::Error)]
+#[derive(DebugNoInline, thiserror::Error)]
 pub enum ResolveError {
     #[error("Failed to resolve dependencies for package `{1}=={2}`")]
     Dependencies(#[source] Box<Self>, PackageName, Version, DerivationChain),
@@ -62,7 +63,7 @@ pub enum ResolveError {
             format!(" in {env}")
         },
         urls.iter()
-            .map(|url| format!("{}{}", DisplaySafeUrl::from(url.clone()), if url.is_editable() { " (editable)" } else { "" }))
+            .map(|url| format!("{}{}", SafeUrl::from(url.clone()), if url.is_editable() { " (editable)" } else { "" }))
             .collect::<Vec<_>>()
             .join("\n- ")
     )]

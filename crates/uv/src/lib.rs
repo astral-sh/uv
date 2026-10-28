@@ -2119,6 +2119,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
 
                 Box::pin(commands::metadata(
                     &project_dir,
+                    args.output_version,
                     args.lock_check,
                     args.frozen,
                     args.refresh,
@@ -2395,6 +2396,7 @@ async fn run_project(
                 printer,
                 args.env_file,
                 globals.preview,
+                args.recursion_depth,
                 args.max_recursion_depth,
                 args.malware_settings,
                 #[cfg(unix)]

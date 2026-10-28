@@ -163,8 +163,6 @@ class CaptureServer(ThreadingHTTPServer):
 
 
 class CaptureHandler(BaseHTTPRequestHandler):
-    server: CaptureServer
-
     def log_message(self, format, *args):
         # HTTP paths contain the relay nonce; never log requests or headers.
         pass
@@ -178,6 +176,7 @@ class CaptureHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_POST(self):
+        assert isinstance(self.server, CaptureServer)
         try:
             if self.path == f"/{self.server.nonce}/finish":
                 self.respond(200, {"complete": self.server.complete})
@@ -208,6 +207,7 @@ class CaptureHandler(BaseHTTPRequestHandler):
             self.respond(502, {"error": "Could not prepare CodSpeed profile capture"})
 
     def do_PUT(self):
+        assert isinstance(self.server, CaptureServer)
         try:
             if self.path != f"/{self.server.nonce}/profile" or not self.server.pending:
                 self.respond(404, {})

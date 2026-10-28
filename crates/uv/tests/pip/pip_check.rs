@@ -1,4 +1,5 @@
 use anyhow::Result;
+use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::ChildPath;
 use assert_fs::fixture::FileWriteStr;
 use assert_fs::fixture::PathChild;
@@ -6,6 +7,43 @@ use indoc::indoc;
 
 use uv_test::packse::{PackseServer, scenario::Scenario};
 use uv_test::uv_snapshot;
+
+#[test]
+fn check_incompatible_packages_quiet() -> Result<()> {
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "check-quiet-policy"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.package-a.versions."1.0.0"]
+        sdist = false
+        requires = ["package-b==1.0.0"]
+
+        [packages.package-b.versions."1.0.0"]
+        sdist = false
+    "#})?;
+    let index = PackseServer::from_scenario(&scenario);
+    let context = uv_test::test_context!("3.12");
+    context
+        .pip_install()
+        .arg("package-a")
+        .arg("--no-deps")
+        .arg("--index-url")
+        .arg(index.index_url())
+        .assert()
+        .success();
+
+    uv_snapshot!(context.pip_check().arg("-q"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Found 1 incompatibility
+    The package `package-a` requires `package-b==1.0.0`, but it's not installed
+    ");
+    Ok(())
+}
 
 #[test]
 fn check_compatible_packages() -> Result<()> {
@@ -184,7 +222,11 @@ fn check_versionless_egg_info_file() -> Result<()> {
 
     ChildPath::new(context.site_packages())
         .child("demo.egg-info")
-        .write_str("Metadata-Version: 1.1\nName: demo\nVersion: 1.0\n")?;
+        .write_str(indoc! {"
+            Metadata-Version: 1.1
+            Name: demo
+            Version: 1.0
+        "})?;
 
     uv_snapshot!(context.pip_check(), @"
     exit_code: 0 (success)
@@ -285,7 +327,10 @@ fn check_multiple_incompatible_packages() -> Result<()> {
     );
 
     let requirements_txt_two = context.temp_dir.child("requirements_two.txt");
-    requirements_txt_two.write_str("idna==2.4\nurllib3==1.20")?;
+    requirements_txt_two.write_str(indoc! {"
+        idna==2.4
+        urllib3==1.20
+    "})?;
 
     uv_snapshot!(context
         .pip_install()

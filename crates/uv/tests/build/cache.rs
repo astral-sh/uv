@@ -7,6 +7,7 @@ use assert_fs::prelude::*;
 use async_zip::base::write::ZipFileWriter;
 use async_zip::{Compression, ZipEntryBuilder};
 use futures::executor::block_on;
+use indoc::indoc;
 use insta::assert_snapshot;
 use predicates::prelude::predicate;
 use sha2::{Digest, Sha256};
@@ -34,6 +35,37 @@ fn cache_dir_uses_configured_test_context_path() {
     ----- stdout -----
     [CACHE_DIR]/
     ");
+}
+
+/// Invalid cache keys in a local dependency must fail instead of falling back to the default keys.
+#[test]
+fn cache_key_git_sequence() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let project = context.temp_dir.child("project");
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+
+        [tool.uv]
+        cache-keys = [{ git = [true, false] }]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.pip_install().arg("./project").arg("--offline"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Failed to build `project @ file://[TEMP_DIR]/project`
+      cause: Failed to parse cache keys in `project/pyproject.toml`
+      cause: TOML parse error at line 6, column 23
+               |
+             6 | cache-keys = [{ git = [true, false] }]
+               |                       ^^^^^^^^^^^^^
+             invalid type: sequence, expected a boolean or a Git cache key table
+    ");
+
+    Ok(())
 }
 
 /// When the active cache directory is inside an explicit build source, we should warn and continue
@@ -846,24 +878,34 @@ fn binary_payload_copy_fallback_uses_archive_file_store() -> Result<()> {
 const BINARY_PAYLOAD_CONTENTS: &[u8] = b"binary payload contents\n";
 
 fn binary_payload_wheel(context: &TestContext) -> Result<PathBuf> {
-    const METADATA: &[u8] = b"Metadata-Version: 2.1\nName: binary-payload\nVersion: 0.1.0\n";
-    const WHEEL: &[u8] =
-        b"Wheel-Version: 1.0\nGenerator: uv-test\nRoot-Is-Purelib: true\nTag: py3-none-any\n";
-    const RECORD: &[u8] = b"binary_payload/__init__.py,,\n\
-binary_payload/module.py,,\n\
-binary_payload/native.so,,\n\
-binary_payload/plain.so,,\n\
-binary_payload/versioned.so.1,,\n\
-binary_payload/versioned.so.1.2,,\n\
-binary_payload/native.dylib,,\n\
-binary_payload/native.DLL,,\n\
-binary_payload/native.pyd,,\n\
-binary_payload/tool,,\n\
-binary_payload/large.dat,,\n\
-binary_payload-0.1.0.dist-info/ignored.so,,\n\
-binary_payload-0.1.0.dist-info/METADATA,,\n\
-binary_payload-0.1.0.dist-info/WHEEL,,\n\
-binary_payload-0.1.0.dist-info/RECORD,,\n";
+    const METADATA: &[u8] = indoc! {b"
+        Metadata-Version: 2.1
+        Name: binary-payload
+        Version: 0.1.0
+    "};
+    const WHEEL: &[u8] = indoc! {b"
+        Wheel-Version: 1.0
+        Generator: uv-test
+        Root-Is-Purelib: true
+        Tag: py3-none-any
+    "};
+    const RECORD: &[u8] = indoc! {b"
+        binary_payload/__init__.py,,
+        binary_payload/module.py,,
+        binary_payload/native.so,,
+        binary_payload/plain.so,,
+        binary_payload/versioned.so.1,,
+        binary_payload/versioned.so.1.2,,
+        binary_payload/native.dylib,,
+        binary_payload/native.DLL,,
+        binary_payload/native.pyd,,
+        binary_payload/tool,,
+        binary_payload/large.dat,,
+        binary_payload-0.1.0.dist-info/ignored.so,,
+        binary_payload-0.1.0.dist-info/METADATA,,
+        binary_payload-0.1.0.dist-info/WHEEL,,
+        binary_payload-0.1.0.dist-info/RECORD,,
+    "};
 
     let wheel = context
         .temp_dir

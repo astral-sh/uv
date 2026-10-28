@@ -1,4 +1,3 @@
-use std::collections::BTreeMap;
 use std::fmt::Write;
 #[cfg(windows)]
 use std::os::windows::ffi::OsStrExt;
@@ -20,7 +19,6 @@ use insta::{allow_duplicates, assert_snapshot};
 use predicates::prelude::predicate;
 use serde_json::json;
 use sha2::{Digest, Sha256};
-use url::Url;
 use walkdir::WalkDir;
 use wiremock::{
     Mock, MockServer, ResponseTemplate,
@@ -30,15 +28,16 @@ use wiremock::{
 use uv_extract::dirhash::{DirectoryDigest, dirhash_path};
 use uv_fs::{PortablePath, Simplified};
 use uv_install_wheel::validate_and_heal_record;
+use uv_redacted::SafeUrl;
 use uv_static::EnvVars;
-use uv_test::archive::write_tar_gz;
+use uv_test::archive::{generate_source_archive, write_tar_gz};
 #[cfg(feature = "test-git")]
 use uv_test::decode_token;
 use uv_test::find_links::FindLinksServer;
 use uv_test::package_server::PackageServer;
-#[cfg(windows)]
-use uv_test::packse::generate_wheel_with_files;
-use uv_test::packse::{PackseServer, generate_wheel};
+#[cfg(feature = "test-universal")]
+use uv_test::packse::scenario::Scenario;
+use uv_test::packse::{PackseServer, WheelBuilder};
 use uv_test::{
     DEFAULT_PYTHON_VERSION, TestContext, apply_filters, copy_dir_ignore, download_to_disk, get_bin,
     uv_snapshot, venv_bin_path,
@@ -150,6 +149,123 @@ fn install_crlf_wheel_script_preserves_encoding_cookie() -> Result<()> {
     café
     ");
 
+    Ok(())
+}
+
+/// A Python script's encoding declaration must remain on the second line even when its
+/// interpreter path requires a multi-line shell launcher.
+#[test]
+#[cfg(unix)]
+fn install_wheel_script_with_shell_launcher_preserves_encoding_cookie() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+    let wheel = context
+        .temp_dir
+        .join("encoded_script-1.0.0-py3-none-any.whl");
+    write_crlf_script_wheel(&wheel)?;
+
+    let venv = context.temp_dir.join("venv with spaces");
+    context.venv().arg(&venv).assert().success();
+
+    uv_snapshot!(context.filters(), context.pip_install().arg("--python").arg(&venv).arg(&wheel), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using Python 3.12.[X] environment at: venv with spaces
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + encoded-script==1.0.0 (from file://[TEMP_DIR]/encoded_script-1.0.0-py3-none-any.whl)
+    ");
+
+    uv_snapshot!(context.external_command(venv_bin_path(&venv).join("encoded-script")), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    café
+    ");
+
+    Ok(())
+}
+
+/// The launcher must be valid in the script's declared encoding, even when the interpreter path
+/// contains non-ASCII characters.
+#[test]
+#[cfg(unix)]
+fn install_ascii_wheel_script_in_non_ascii_environment() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+    let (filename, wheel) = WheelBuilder::new(&"ascii-script".parse()?, &"1.0.0".parse()?)
+        .files(&[(
+            "ascii_script-1.0.0.data/scripts/ascii-script",
+            indoc! {"
+                #!python
+                # coding: ascii
+                print('ok')
+            "},
+        )])
+        .build();
+    fs::write(context.temp_dir.join(&filename), wheel)?;
+
+    let venv = context.temp_dir.join("café env");
+    context
+        .venv()
+        .arg("--no-relocatable")
+        .arg(&venv)
+        .assert()
+        .success();
+    context
+        .pip_install()
+        .arg("--python")
+        .arg(&venv)
+        .arg(&filename)
+        .assert()
+        .success();
+
+    uv_snapshot!(context.external_command(venv_bin_path(&venv).join("ascii-script")), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    ok
+    ");
+    Ok(())
+}
+
+/// UTF-7 decodes `+ACcAJwAn-` to three single quotes, so embedding this interpreter path in a
+/// triple-quoted Python string would execute code from the path.
+#[test]
+#[cfg(unix)]
+fn install_wheel_script_does_not_execute_decoded_interpreter_path() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+    let (filename, wheel) = WheelBuilder::new(&"encoded-script".parse()?, &"1.0.0".parse()?)
+        .files(&[(
+            "encoded_script-1.0.0.data/scripts/encoded-script",
+            indoc! {"
+                #!python
+                # coding: utf-7
+                print('ok')
+            "},
+        )])
+        .build();
+    fs::write(context.temp_dir.join(&filename), wheel)?;
+
+    let venv = context
+        .temp_dir
+        .join("+ACcAJwAn-;print(1337);+ACcAJwAn- env");
+    context
+        .venv()
+        .arg("--no-relocatable")
+        .arg(&venv)
+        .assert()
+        .success();
+    context
+        .pip_install()
+        .arg("--python")
+        .arg(&venv)
+        .arg(&filename)
+        .assert()
+        .success();
+
+    uv_snapshot!(context.external_command(venv_bin_path(&venv).join("encoded-script")), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    ok
+    ");
     Ok(())
 }
 
@@ -1274,7 +1390,7 @@ async fn install_remote_requirements_txt() -> Result<()> {
 
     let server_url = start_requirements_server(username, password, requirements_txt).await;
 
-    let mut requirements_url = Url::parse(&format!("{server_url}/requirements.txt"))?;
+    let mut requirements_url = SafeUrl::parse(&format!("{server_url}/requirements.txt"))?;
 
     // Should fail without credentials
     uv_snapshot!(context.filters(), context.pip_install()
@@ -1315,7 +1431,7 @@ async fn install_remote_requirements_txt() -> Result<()> {
     let requirements_txt = "iniconfig";
     // Update the mock server to serve a new requirements.txt
     let server_url = start_requirements_server(username, password, requirements_txt).await;
-    let mut requirements_url = Url::parse(&format!("{server_url}/requirements.txt"))?;
+    let mut requirements_url = SafeUrl::parse(&format!("{server_url}/requirements.txt"))?;
     let _ = requirements_url.set_username(username);
     let _ = requirements_url.set_password(Some(password));
 
@@ -3007,7 +3123,7 @@ fn install_git_workspace_build_requirement() -> Result<()> {
         .assert()
         .success();
 
-    let repository_url = Url::from_directory_path(repository.path())
+    let repository_url = SafeUrl::from_directory_path(repository.path())
         .map_err(|()| anyhow!("failed to convert repository path to file URL"))?;
     let repository_url = repository_url.as_str().trim_end_matches('/');
 
@@ -3049,8 +3165,8 @@ fn install_git_checkout_marker_symlink() -> Result<()> {
         requires-python = ">=3.12"
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
     "#})?;
     repository
         .child("src/example/__init__.py")
@@ -3085,7 +3201,7 @@ fn install_git_checkout_marker_symlink() -> Result<()> {
         .assert()
         .success();
 
-    let repository_url = Url::from_directory_path(repository.path())
+    let repository_url = SafeUrl::from_directory_path(repository.path())
         .map_err(|()| anyhow!("failed to convert repository path to file URL"))?;
     let repository_url = repository_url.as_str().trim_end_matches('/');
 
@@ -3121,8 +3237,8 @@ fn install_git_full_commit_ignores_same_named_branch() -> Result<()> {
         requires-python = ">=3.12"
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
     "#})?;
     repository
         .child("src/example/__init__.py")
@@ -3172,8 +3288,8 @@ fn install_git_full_commit_ignores_same_named_branch() -> Result<()> {
         requires-python = ">=3.12"
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
     "#})?;
     repository
         .child("src/example/__init__.py")
@@ -3215,7 +3331,7 @@ fn install_git_full_commit_ignores_same_named_branch() -> Result<()> {
         .assert()
         .success();
 
-    let repository_url = Url::from_directory_path(repository.path())
+    let repository_url = SafeUrl::from_directory_path(repository.path())
         .map_err(|()| anyhow!("failed to convert repository path to file URL"))?;
     let repository_url = repository_url.as_str().trim_end_matches('/');
 
@@ -3258,6 +3374,95 @@ fn install_git_full_commit_ignores_same_named_branch() -> Result<()> {
     ");
 
     context.assert_installed("example", "9.9.9");
+
+    Ok(())
+}
+
+/// A full commit revision must not identify an annotated tag object, even in the Git cache.
+#[test]
+#[cfg(feature = "test-git")]
+fn install_git_full_commit_rejects_tag_object() -> Result<()> {
+    let context = uv_test::test_context!(DEFAULT_PYTHON_VERSION);
+    let repository = context.temp_dir.child("repository");
+    Command::new("git")
+        .arg("init")
+        .arg(repository.path())
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("-C")
+        .arg(repository.path())
+        .args([
+            "-c",
+            "user.name=ferris",
+            "-c",
+            "user.email=ferris@example.com",
+            "commit",
+            "--allow-empty",
+            "-m",
+            "Commit",
+        ])
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("-C")
+        .arg(repository.path())
+        .args([
+            "-c",
+            "user.name=ferris",
+            "-c",
+            "user.email=ferris@example.com",
+            "tag",
+            "-a",
+            "v1",
+            "-m",
+            "Tag",
+        ])
+        .assert()
+        .success();
+
+    let commit = Command::new("git")
+        .arg("-C")
+        .arg(repository.path())
+        .args(["rev-parse", "HEAD"])
+        .output()?;
+    assert!(commit.status.success());
+    let commit = String::from_utf8(commit.stdout)?;
+    let commit = commit.trim();
+    let tag = Command::new("git")
+        .arg("-C")
+        .arg(repository.path())
+        .args(["rev-parse", "refs/tags/v1"])
+        .output()?;
+    assert!(tag.status.success());
+    let tag = String::from_utf8(tag.stdout)?;
+    let tag = tag.trim();
+
+    let repository_url = SafeUrl::from_directory_path(repository.path())
+        .map_err(|()| anyhow!("failed to convert repository path to file URL"))?;
+    let repository_url = repository_url.as_str().trim_end_matches('/');
+    let mut filters = context.filters();
+    filters.push((tag, "[TAG]"));
+    filters.push((commit, "[COMMIT]"));
+
+    uv_snapshot!(filters, context.pip_install()
+        .arg(format!("example @ git+{repository_url}@{tag}")), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to download and build `example @ git+file://[TEMP_DIR]/repository@[TAG]`
+      cause: Git operation failed
+      cause: Exact Git revision `[TAG]` does not match precise commit `[COMMIT]` for `file://[TEMP_DIR]/repository`
+    ");
+
+    // The fetched tag object must not become an accepted commit on a subsequent run.
+    uv_snapshot!(filters, context.pip_install()
+        .arg(format!("example @ git+{repository_url}@{tag}")), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to download and build `example @ git+file://[TEMP_DIR]/repository@[TAG]`
+      cause: Git operation failed
+      cause: Exact Git revision `[TAG]` does not match precise commit `[COMMIT]` for `file://[TEMP_DIR]/repository`
+    ");
 
     Ok(())
 }
@@ -3306,8 +3511,11 @@ fn install_git_percent_encoded_ref() -> Result<()> {
         requires-python = ">=3.12"
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+
+        [tool.uv.build-backend]
+        module-root = ""
     "#})?;
 
     Command::new("git")
@@ -3344,7 +3552,7 @@ fn install_git_percent_encoded_ref() -> Result<()> {
         .assert()
         .success();
 
-    let repository_url = Url::from_directory_path(repository.path())
+    let repository_url = SafeUrl::from_directory_path(repository.path())
         .map_err(|()| anyhow!("failed to convert repository path to file URL"))?;
     let repository_url = repository_url.as_str().trim_end_matches('/');
 
@@ -3452,7 +3660,7 @@ fn install_git_public_https_missing_branch_or_tag() {
 
 #[tokio::test]
 #[cfg(feature = "test-git")]
-async fn install_git_public_rejects_mismatched_github_api_commit() -> Result<()> {
+async fn install_git_full_commit_skips_github_api() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     context
         .temp_dir
@@ -3477,7 +3685,7 @@ async fn install_git_public_rejects_mismatched_github_api_commit() -> Result<()>
             "/astral-test/uv-public-pypackage/commits/{requested_revision}"
         )))
         .respond_with(ResponseTemplate::new(200).set_body_string(precise))
-        .expect(1)
+        .expect(0)
         .mount(&server)
         .await;
 
@@ -3489,11 +3697,12 @@ async fn install_git_public_rejects_mismatched_github_api_commit() -> Result<()>
             "uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@{requested_revision}"
         ))
         .env(EnvVars::UV_GITHUB_FAST_PATH_URL, server.uri()), @"
-    exit_code: 1 (failure)
+    exit_code: 0 (success)
     ----- stderr -----
-    error: Failed to download and build `uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979`
-      cause: Git operation failed
-      cause: Exact Git revision `0dacfd662c64cb4ceb16e6cf65a157a8b715b979` does not match precise commit `b270df1a2fb5d012294e9aaf05e7e0bab1e6a389` for `https://github.com/astral-test/uv-public-pypackage`
+    Resolved 1 package in [TIME]
+    Would download 1 package
+    Would install 1 package
+     + uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979
     ");
 
     Ok(())
@@ -4311,6 +4520,54 @@ fn install_build_policy_cache() {
     );
 }
 
+/// A cached wheel uploaded after the cutoff must not replace the source distribution
+/// selected by the resolver.
+#[cfg(feature = "test-universal")]
+#[test]
+fn exclude_newer_does_not_reuse_cached_wheel() -> Result<()> {
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "exclude-newer-cached-wheel"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.a.versions."1.0.0"]
+        sdist = { upload_time = "2024-03-24T00:00:00Z" }
+        wheel = { upload_time = "2024-03-24T12:00:00Z" }
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
+    let context = uv_test::test_context!("3.12");
+
+    // Cache the published wheel, then clear the environment but keep the cache.
+    context
+        .pip_install()
+        .arg("a")
+        .arg("--index-url")
+        .arg(server.index_url())
+        .arg("--only-binary")
+        .arg(":all:")
+        .assert()
+        .success();
+    context.reset_venv();
+
+    // The cutoff falls between the two uploads, so we must prepare a wheel from the source.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("a")
+        .arg("--index-url").arg(server.index_url())
+        .arg("--exclude-newer").arg("2024-03-24T06:00:00Z"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + a==1.0.0
+    ");
+
+    Ok(())
+}
+
 /// Respect `--only-binary` flags in `requirements.txt`
 #[test]
 fn only_binary_requirements_txt() {
@@ -4610,15 +4867,9 @@ fn install_copy_long_paths() -> Result<()> {
             let context = TestContext::new_with_bin("3.10", uv_bin.clone());
             let destination = context.site_packages().join(&file);
             assert!(destination.as_os_str().encode_wide().count() > 260);
-            let (filename, wheel) = generate_wheel_with_files(
-                &"long-paths".parse()?,
-                &"1.0.0".parse()?,
-                &[],
-                &BTreeMap::default(),
-                None,
-                "py3-none-any",
-                &[(&file, "data")],
-            );
+            let (filename, wheel) = WheelBuilder::new(&"long-paths".parse()?, &"1.0.0".parse()?)
+                .files(&[(&file, "data")])
+                .build();
             fs::write(context.temp_dir.join(&filename), wheel)?;
 
             // Both the destination and the temporary-file path can exceed MAX_PATH. Neither
@@ -5197,7 +5448,10 @@ fn install_constraints_from_pyproject() -> Result<()> {
 fn install_constraints_inline() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let requirementstxt = context.temp_dir.child("requirements.txt");
-    requirementstxt.write_str("anyio==3.7.0\n-c constraints.txt")?;
+    requirementstxt.write_str(indoc! {"
+        anyio==3.7.0
+        -c constraints.txt
+    "})?;
 
     let constraints_txt = context.temp_dir.child("constraints.txt");
     constraints_txt.write_str("idna<3.4")?;
@@ -5244,7 +5498,10 @@ fn install_constraints_remote() {
 fn install_constraints_inline_remote() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let requirementstxt = context.temp_dir.child("requirements.txt");
-    requirementstxt.write_str("typing-extensions>=4.0\n-c https://raw.githubusercontent.com/apache/airflow/constraints-2-6/constraints-3.11.txt")?;
+    requirementstxt.write_str(indoc! {"
+        typing-extensions>=4.0
+        -c https://raw.githubusercontent.com/apache/airflow/constraints-2-6/constraints-3.11.txt
+    "})?;
 
     uv_snapshot!(context.pip_install()
             .arg("-r")
@@ -6210,6 +6467,7 @@ fn invalidate_editable_on_change() -> Result<()> {
     // Create an editable package.
     let editable_dir = context.temp_dir.child("editable");
     editable_dir.create_dir_all()?;
+    editable_dir.child("src/example/__init__.py").touch()?;
     let pyproject_toml = editable_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"[project]
@@ -6219,6 +6477,10 @@ dependencies = [
   "anyio==4.0.0"
 ]
 requires-python = ">=3.8"
+
+[build-system]
+requires = ["uv_build>=0.7,<10000"]
+build-backend = "uv_build"
 "#,
     )?;
 
@@ -6256,6 +6518,10 @@ dependencies = [
   "anyio==3.7.1"
 ]
 requires-python = ">=3.8"
+
+[build-system]
+requires = ["uv_build>=0.7,<10000"]
+build-backend = "uv_build"
 "#,
     )?;
 
@@ -6343,6 +6609,7 @@ fn invalidate_path_on_change() -> Result<()> {
     // Create a local package.
     let editable_dir = context.temp_dir.child("editable");
     editable_dir.create_dir_all()?;
+    editable_dir.child("src/example/__init__.py").touch()?;
     let pyproject_toml = editable_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"[project]
@@ -6352,6 +6619,10 @@ dependencies = [
   "anyio==4.0.0"
 ]
 requires-python = ">=3.8"
+
+[build-system]
+requires = ["uv_build>=0.7,<10000"]
+build-backend = "uv_build"
 "#,
     )?;
 
@@ -6389,6 +6660,10 @@ dependencies = [
   "anyio==3.7.1"
 ]
 requires-python = ">=3.8"
+
+[build-system]
+requires = ["uv_build>=0.7,<10000"]
+build-backend = "uv_build"
 "#,
     )?;
 
@@ -6421,6 +6696,7 @@ fn invalidate_path_on_cache_key() -> Result<()> {
     // Create a local package.
     let editable_dir = context.temp_dir.child("editable");
     editable_dir.create_dir_all()?;
+    editable_dir.child("src/example/__init__.py").touch()?;
     let pyproject_toml = editable_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"[project]
@@ -6428,6 +6704,10 @@ fn invalidate_path_on_cache_key() -> Result<()> {
         version = "0.0.0"
         dependencies = ["anyio==4.0.0"]
         requires-python = ">=3.8"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [tool.uv]
         cache-keys = ["constraints.txt", { file = "overrides.txt" }]
@@ -6507,6 +6787,10 @@ fn invalidate_path_on_cache_key() -> Result<()> {
         dependencies = ["anyio==4.0.0"]
         requires-python = ">=3.8"
 
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+
         [tool.uv]
         cache-keys = [{ file = "overrides.txt" }, "constraints.txt"]
 "#,
@@ -6529,6 +6813,10 @@ fn invalidate_path_on_cache_key() -> Result<()> {
         version = "0.0.0"
         dependencies = ["anyio==4.0.0"]
         requires-python = ">=3.8"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [tool.uv]
         cache-keys = [{ file = "**/*.txt" }]
@@ -6595,10 +6883,15 @@ fn invalidate_path_on_worktree_packed_commit() -> Result<()> {
         dependencies = ["anyio==4.0.0"]
         requires-python = ">=3.8"
 
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+
         [tool.uv]
         cache-keys = [{ git = true }]
         "#,
     )?;
+    editable_dir.child("src/example/__init__.py").touch()?;
 
     // Create a linked worktree with the branch reference in the common Git directory's
     // `packed-refs` file.
@@ -6672,12 +6965,17 @@ fn invalidate_path_on_env_var() -> Result<()> {
     requirements_txt.write_str(".")?;
 
     // Create a local package.
+    context.temp_dir.child("src/example/__init__.py").touch()?;
     context.temp_dir.child("pyproject.toml").write_str(
         r#"[project]
         name = "example"
         version = "0.0.0"
         dependencies = ["anyio==4.0.0"]
         requires-python = ">=3.8"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [tool.uv]
         cache-keys = [{ env = "FOO" }]
@@ -6863,8 +7161,13 @@ dependencies = [
   "anyio @ https://files.pythonhosted.org/packages/2d/b8/7333d87d5f03247215d86a86362fd3e324111788c6cdd8d2e6196a6ba833/anyio-4.2.0.tar.gz ; python_version < '3.11'"
 ]
 requires-python = ">=3.11,<3.13"
+
+[build-system]
+requires = ["uv_build>=0.7,<10000"]
+build-backend = "uv_build"
 "#,
     )?;
+    editable_dir.child("src/example/__init__.py").touch()?;
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--editable")
@@ -6936,8 +7239,8 @@ dependencies = []
 requires-python = ">=3.13"
 
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["uv_build>=0.7,<10000"]
+build-backend = "uv_build"
 "#,
     )?;
     child_dir.child("src").child("example").create_dir_all()?;
@@ -7626,10 +7929,13 @@ async fn install_package_basic_auth_from_netrc_index_in_requirements() -> Result
     ))?;
 
     let requirements = context.temp_dir.child("requirements.txt");
-    requirements.write_str(&format!(
-        "\nanyio\n--index-url {}/basic-auth/simple\n    ",
-        proxy.uri()
-    ))?;
+    requirements.write_str(&formatdoc! {"
+
+        anyio
+        --index-url {}/basic-auth/simple
+    ",
+        proxy.uri(),
+    })?;
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
@@ -8664,7 +8970,7 @@ fn find_links_local_html() -> Result<()> {
 #[test]
 fn find_links_uppercase_file_url_from_requirements_file() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let links_url = Url::from_directory_path(context.workspace_root.join("test/links"))
+    let links_url = SafeUrl::from_directory_path(context.workspace_root.join("test/links"))
         .map_err(|()| anyhow!("Failed to convert links directory to URL"))?;
     let links_url = links_url.as_str().replacen("file://", "FILE://", 1);
     context
@@ -8697,7 +9003,7 @@ async fn find_links_uppercase_http_url_from_requirements_file() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let server = MockServer::start().await;
     let wheel_filename = "ok-1.0.0-py3-none-any.whl";
-    let wheel_url = Url::from_file_path(
+    let wheel_url = SafeUrl::from_file_path(
         context
             .workspace_root
             .join("test/links")
@@ -8894,7 +9200,7 @@ async fn find_links_uppercase_html() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let server = MockServer::start().await;
     let wheel_filename = "tqdm-1000.0.0-py3-none-any.whl";
-    let wheel_url = Url::from_file_path(
+    let wheel_url = SafeUrl::from_file_path(
         context
             .workspace_root
             .join("test/links")
@@ -9022,17 +9328,28 @@ async fn reject_wheel_with_multiple_dist_info_directories() -> Result<()> {
     Ok(())
 }
 
-/// Sync using `--find-links` with a local directory, with wheels disabled.
+/// Install an sdist from a local directory instead of a newer wheel when wheels are disabled.
 #[test]
-fn find_links_no_binary() {
+fn find_links_no_binary() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    let links = context.temp_dir.child("links");
+    links.create_dir_all()?;
+    let source = generate_source_archive(&"tqdm".parse()?, &"999.0.0".parse()?, "", None)?;
+    links.child("tqdm-999.0.0.tar.gz").write_binary(&source)?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/tqdm-1000.0.0-py3-none-any.whl"),
+        links.child("tqdm-1000.0.0-py3-none-any.whl"),
+    )?;
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("tqdm")
         .arg("--no-binary")
         .arg(":all:")
+        .arg("--no-index")
         .arg("--find-links")
-        .arg(context.workspace_root.join("test/links/")), @"
+        .arg(links.path()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
@@ -9041,6 +9358,8 @@ fn find_links_no_binary() {
      + tqdm==999.0.0
     "
     );
+
+    Ok(())
 }
 
 /// Provide valid hashes for all dependencies with `--require-hashes`.
@@ -9837,7 +10156,7 @@ fn require_hashes_repeated_file_requirements_constraint() -> Result<()> {
     let wheel = context
         .workspace_root
         .join("test/links/ok-2.0.0-py3-none-any.whl");
-    let url = Url::from_file_path(&wheel).map_err(|()| anyhow!("invalid wheel path"))?;
+    let url = SafeUrl::from_file_path(&wheel).map_err(|()| anyhow!("invalid wheel path"))?;
     let requirements_txt = context.temp_dir.child("requirements.txt");
     let constraints_txt = context.temp_dir.child("constraints.txt");
     requirements_txt.write_str(&formatdoc! {r"
@@ -10470,24 +10789,8 @@ fn verify_hashes_public_pin_local_version() -> Result<()> {
     let name = "hash-probe".parse()?;
     let public_version = "1.0.0".parse()?;
     let local_version = "1.0.0+local".parse()?;
-    let (_, public_wheel) = generate_wheel(
-        &name,
-        &public_version,
-        &[],
-        &BTreeMap::default(),
-        None,
-        "py3-none-any",
-        &[],
-    );
-    let (local_wheel_filename, local_wheel) = generate_wheel(
-        &name,
-        &local_version,
-        &[],
-        &BTreeMap::default(),
-        None,
-        "py3-none-any",
-        &[],
-    );
+    let (_, public_wheel) = WheelBuilder::new(&name, &public_version).build();
+    let (local_wheel_filename, local_wheel) = WheelBuilder::new(&name, &local_version).build();
     let public_hash = hex::encode(Sha256::digest(&public_wheel));
     let local_hash = hex::encode(Sha256::digest(&local_wheel));
     let context = context
@@ -10927,7 +11230,12 @@ fn recursive_extra_transitive_url() -> Result<()> {
         docs = [
             "iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl",
         ]
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
     "#})?;
+    context.temp_dir.child("src/project/__init__.py").touch()?;
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg(".[all]"), @"
@@ -11018,7 +11326,7 @@ fn create_local_index_with_tqdm(context: &TestContext, root: &Path) -> Result<()
             </a>
           </body>
         </html>
-    "#, Url::from_directory_path(context.workspace_root.join("test/links/")).unwrap().as_str()},
+    "#, SafeUrl::from_directory_path(context.workspace_root.join("test/links/")).unwrap().as_str()},
     )?;
     Ok(())
 }
@@ -11035,7 +11343,7 @@ fn local_index_absolute() -> Result<()> {
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("tqdm")
         .arg("--index-url")
-        .arg(Url::from_directory_path(root).unwrap().as_str()), @"
+        .arg(SafeUrl::from_directory_path(root).unwrap().as_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
@@ -11087,7 +11395,7 @@ fn local_index_requirements_txt_absolute() -> Result<()> {
     requirements_txt.write_str(&indoc::formatdoc! {r"
         --index-url {}
         tqdm
-    ", Url::from_directory_path(root).unwrap().as_str()})?;
+    ", SafeUrl::from_directory_path(root).unwrap().as_str()})?;
 
     uv_snapshot!(context.filters(), context.pip_install()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
@@ -11168,7 +11476,7 @@ fn local_index_fallback() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("iniconfig")
         .arg("--extra-index-url")
-        .arg(Url::from_directory_path(root).unwrap().as_str()), @"
+        .arg(SafeUrl::from_directory_path(root).unwrap().as_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
@@ -11814,8 +12122,10 @@ fn switch_python_version() -> Result<()> {
      + iniconfig==2.0.0
     ");
 
-    requirements_txt
-        .write_str("iniconfig ; python_version == '3.12'\nanyio ; python_version < '3.12'")?;
+    requirements_txt.write_str(indoc! {"
+        iniconfig ; python_version == '3.12'
+        anyio ; python_version < '3.12'
+    "})?;
 
     // Add `anyio`, though it's only installed because of `--python-version`.
     uv_snapshot!(context.pip_install()
@@ -13565,8 +13875,8 @@ fn no_sources_workspace_discovery() -> Result<()> {
         dependencies = ["anyio"]
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [tool.uv.sources]
         anyio = { workspace = true }
@@ -13590,8 +13900,8 @@ fn no_sources_workspace_discovery() -> Result<()> {
         version = "2.0.0"
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#
     })?;
     anyio
@@ -13714,8 +14024,8 @@ fn pip_install_no_sources_package() -> Result<()> {
         dependencies = ["anyio", "iniconfig"]
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [tool.uv.sources]
         anyio = { git = "https://github.com/agronholm/anyio", tag = "3.7.0" }
@@ -13811,9 +14121,10 @@ fn install_git_submodule_relative_url() -> Result<()> {
         .output()?;
 
     // Create a simple file in helpers
-    helpers_dir
-        .child("helper.py")
-        .write_str("def help():\n    return 'I am a helper'")?;
+    helpers_dir.child("helper.py").write_str(indoc! {"
+        def help():
+            return 'I am a helper'
+    "})?;
 
     // Create a nested dependency of the helper repository. This lives outside the parent
     // repository so the helper must resolve it through its own relative submodule URL.
@@ -13825,9 +14136,10 @@ fn install_git_submodule_relative_url() -> Result<()> {
         .current_dir(grandchild_dir.path())
         .output()?;
 
-    grandchild_dir
-        .child("grandchild.py")
-        .write_str("def help():\n    return 'I am a nested helper'")?;
+    grandchild_dir.child("grandchild.py").write_str(indoc! {"
+        def help():
+            return 'I am a nested helper'
+    "})?;
 
     Command::new("git")
         .args(["add", "."])
@@ -14094,8 +14406,8 @@ fn change_layout_custom_directory() -> Result<()> {
         dependencies = ["iniconfig"]
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [tool.uv]
         cache-keys = [{ dir = "build" }]
@@ -14387,8 +14699,8 @@ fn pep_751_install_directory() -> Result<()> {
         dependencies = ["anyio"]
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
     context
@@ -15790,6 +16102,28 @@ fn pep_751_lock_version() -> Result<()> {
 }
 
 #[test]
+fn pep_751_incompatible_environment() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("pylock.toml").write_str(indoc! {r#"
+        lock-version = "1.0"
+        created-by = "uv"
+        environments = ["python_version < '3.12'"]
+        packages = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--preview")
+        .arg("-r")
+        .arg("pylock.toml"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: The target environment is not supported by the lockfile
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn pep_751_package_requires_python() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
@@ -15932,8 +16266,8 @@ fn reserved_script_name() -> Result<()> {
         "activate.bash" = "project:activate"
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
     "#,
     )?;
 
@@ -15966,8 +16300,8 @@ fn reserved_script_name() -> Result<()> {
         "python" = "project:python"
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
     "#,
     )?;
 
@@ -16003,11 +16337,19 @@ fn install_in_prefix_symlinked_wheel_data_directory() -> Result<()> {
     for (name, contents) in [
         (
             "foo-0.1.0.dist-info/METADATA",
-            "Metadata-Version: 2.1\nName: foo\nVersion: 0.1.0\n",
+            indoc! {"
+                Metadata-Version: 2.1
+                Name: foo
+                Version: 0.1.0
+            "},
         ),
         (
             "foo-0.1.0.dist-info/WHEEL",
-            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+            indoc! {"
+                Wheel-Version: 1.0
+                Root-Is-Purelib: true
+                Tag: py3-none-any
+            "},
         ),
         ("foo-0.1.0.dist-info/RECORD", record.as_str()),
         (data_path, "foo manual\n"),
@@ -16078,11 +16420,19 @@ fn reject_reserved_wheel_data_script_name() -> Result<()> {
                 ("foo/__init__.py", ""),
                 (
                     "foo-0.1.0.dist-info/METADATA",
-                    "Metadata-Version: 2.1\nName: foo\nVersion: 0.1.0\n",
+                    indoc! {"
+                        Metadata-Version: 2.1
+                        Name: foo
+                        Version: 0.1.0
+                    "},
                 ),
                 (
                     "foo-0.1.0.dist-info/WHEEL",
-                    "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+                    indoc! {"
+                        Wheel-Version: 1.0
+                        Root-Is-Purelib: true
+                        Tag: py3-none-any
+                    "},
                 ),
                 ("foo-0.1.0.dist-info/RECORD", record.as_str()),
                 ("foo-0.1.0.data/data/harmless.txt", "this must not be moved"),
@@ -16121,10 +16471,13 @@ fn repacked_wheel_with_entrypoint(
     section: &str,
     entrypoint_name: &str,
 ) -> Result<PathBuf> {
-    context.init().arg("--lib").arg("foo").assert().success();
-    context.build().arg("--wheel").arg("foo").assert().success();
-
     let built_wheel = context.temp_dir.join("foo/dist/foo-0.1.0-py3-none-any.whl");
+    let (_, wheel) = WheelBuilder::new(&"foo".parse()?, &"0.1.0".parse()?)
+        .requires_python(Some(&">=3.12".parse()?))
+        .build();
+    fs::create_dir_all(context.temp_dir.join("foo/dist"))?;
+    fs::write(&built_wheel, wheel)?;
+
     let unpacked = context.temp_dir.join("foo-unpacked");
     uv_extract::unzip(File::open(&built_wheel)?, &unpacked)?;
 
@@ -17020,8 +17373,8 @@ fn already_installed_url_dependency_no_sources() -> Result<()> {
         dependencies = ["iniconfig"]
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
     "#})?;
     context
         .temp_dir
@@ -17043,8 +17396,8 @@ fn already_installed_url_dependency_no_sources() -> Result<()> {
         dependencies = ["foo"]
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
     "#})?;
     context
         .temp_dir
@@ -17698,7 +18051,7 @@ fn switch_platform() {
     let context = uv_test::test_context!("3.12");
 
     uv_snapshot!(context.pip_install()
-        .arg("cffi")
+        .arg("cffi; platform_machine == 'AMD64'")
         .arg("--python-platform")
         .arg("windows"), @"
     exit_code: 0 (success)
@@ -17763,8 +18116,8 @@ fn pip_install_no_sources_editable_to_registry_switch() -> Result<()> {
         requires-python = ">=3.7"
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
 

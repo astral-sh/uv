@@ -1,5 +1,6 @@
 //! Failures specific to project metadata and editing.
 
+use std::path::PathBuf;
 use std::{fmt, io};
 
 use owo_colors::OwoColorize;
@@ -11,6 +12,12 @@ use uv_workspace::WorkspaceError;
 /// A failure from project metadata, editing, or a shared workflow.
 #[derive(thiserror::Error, Debug)]
 pub enum ProjectError {
+    #[error("Cannot initialize a project in `{}` because `pyproject.toml` already exists", .path.display().cyan())]
+    PyprojectTomlExists {
+        path: PathBuf,
+        hint: Option<&'static str>,
+    },
+
     #[error("Failed to parse `pyproject.toml`")]
     PyprojectTomlParse(#[source] uv_workspace::pyproject::PyprojectTomlError),
 
@@ -50,7 +57,8 @@ impl From<ProjectError> for UvError {
         match error {
             ProjectError::Lock(error) => Self::from(error),
             ProjectError::Environment(error) => Self::from(error),
-            error @ (ProjectError::PyprojectTomlParse(_)
+            error @ (ProjectError::PyprojectTomlExists { .. }
+            | ProjectError::PyprojectTomlParse(_)
             | ProjectError::PyprojectTomlUpdate
             | ProjectError::Pep723ScriptTomlParse(_)
             | ProjectError::PyprojectMut(_)
@@ -66,6 +74,7 @@ impl From<ProjectError> for UvError {
 impl Hinted for ProjectError {
     fn hints(&self) -> Hints<'_> {
         match self {
+            Self::PyprojectTomlExists { hint, .. } => hint.map_or_else(Hints::none, Hints::from),
             Self::Lock(error) => error.hints(),
             Self::Environment(error) => error.hints(),
             Self::MissingProjectVersion(_) => Hints::from(format!(

@@ -1,14 +1,15 @@
-"""Update the Python version constants in the test common module.
+"""Update the Python version constants and the Python versions used in CI.
 
 This script reads the download-metadata.json file and extracts the latest
-patch version for each minor version (3.15, 3.14, 3.13, 3.12, 3.11, 3.10).
-It then updates the LATEST_PYTHON_X_Y constants in crates/uv-test/src/lib.rs.
+patch version for each minor version (3.16, 3.15, 3.14, 3.13, 3.12, 3.11, 3.10).
+It then updates the LATEST_PYTHON_X_Y constants in crates/uv-test/src/lib.rs
+and the matching pins in .python-versions.
 
 For minor versions with stable releases, it uses the latest stable version.
 For minor versions with only prereleases, it uses the latest prerelease.
 
 This is called by the sync-python-releases workflow to keep the test constants
-in sync with the latest available Python versions.
+and CI Python versions in sync with the latest available Python versions.
 """
 
 # /// script
@@ -29,7 +30,7 @@ from packaging.version import Version
 
 SELF_DIR = Path(__file__).parent
 ROOT = SELF_DIR.parent
-PYTHON_MINOR_VERSIONS = ("3.15", "3.14", "3.13", "3.12", "3.11", "3.10")
+PYTHON_MINOR_VERSIONS = ("3.16", "3.15", "3.14", "3.13", "3.12", "3.11", "3.10")
 
 
 def main() -> None:
@@ -92,6 +93,20 @@ def main() -> None:
         content = re.sub(pattern, new_value, content)
 
     lib_path.write_text(content)
+
+    # Update pins matching the previous latest versions, including free-threaded builds.
+    versions_path = ROOT / ".python-versions"
+    content = versions_path.read_text()
+    for minor, old_version in old_versions.items():
+        if minor not in latest_versions:
+            continue
+        content = re.sub(
+            rf"^{re.escape(old_version)}(t?)$",
+            rf"{latest_versions[minor]}\g<1>",
+            content,
+            flags=re.MULTILINE,
+        )
+    versions_path.write_text(content)
 
     updates = []
     for minor in PYTHON_MINOR_VERSIONS:

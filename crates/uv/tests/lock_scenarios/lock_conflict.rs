@@ -4,8 +4,8 @@ use anyhow::{Result, anyhow};
 use assert_fs::prelude::*;
 use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
-use url::Url;
 
+use uv_redacted::SafeUrl;
 use uv_test::packse::PackseServer;
 use uv_test::packse::scenario::Scenario;
 use uv_test::uv_snapshot;
@@ -14,6 +14,126 @@ use uv_test::uv_snapshot;
 //
 // They are split from `lock.rs` somewhat arbitrarily. Mostly because there are
 // a lot of them, and `lock.rs` was growing large enough as it is.
+
+/// Environment-only forks must not acquire the impossible combinations from unrelated conflicts.
+/// See: <https://github.com/astral-sh/uv/issues/21954>.
+#[test]
+fn conflicting_extras_with_python_forks() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let scenario = toml::from_str::<Scenario>(
+        r#"
+        name = "conflicting-extras-with-python-forks"
+
+        [root]
+        requires = ["shared"]
+
+        [expected]
+        satisfiable = true
+
+        [packages.shared.versions."1.0.0"]
+        requires_python = ">=3.10"
+        sdist = false
+
+        [packages.shared.versions."1.0.1"]
+        requires_python = ">=3.12"
+        sdist = false
+        "#,
+    )?;
+    let server = PackseServer::from_scenario(&scenario);
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.10,<3.15"
+        dependencies = ["shared"]
+
+        [project.optional-dependencies]
+        foo = []
+        bar = []
+        baz = []
+
+        [tool.uv]
+        conflicts = [[{ extra = "foo" }, { extra = "bar" }, { extra = "baz" }]]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--index-url")
+        .arg(server.index_url())
+        .arg("--no-build"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    insta::with_settings!({filters => context.filters()}, {
+        assert_snapshot!(context.read("uv.lock"), @r#"
+        version = 1
+        revision = 5
+        requires-python = ">=3.10, <3.15"
+        resolution-markers = [
+            "python_full_version >= '3.12'",
+            "python_full_version < '3.12'",
+        ]
+        conflicts = [[
+            { package = "project", extra = "bar" },
+            { package = "project", extra = "baz" },
+            { package = "project", extra = "foo" },
+        ]]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "shared", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "python_full_version < '3.12'" },
+            { name = "shared", version = "1.0.1", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "python_full_version >= '3.12'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "shared" }]
+        provides-extras = ["foo", "bar", "baz"]
+
+        [[package]]
+        name = "shared"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "python_full_version < '3.12'",
+        ]
+        wheels = [
+            { url = "http://[LOCALHOST]/files/shared-1.0.0-py3-none-any.whl", hash = "sha256:0fb07bb64b25c65746ebf6d82a427be9b8e60a6c26a66e1e4e189fb5f4fd98aa", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "shared"
+        version = "1.0.1"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "python_full_version >= '3.12'",
+        ]
+        wheels = [
+            { url = "http://[LOCALHOST]/files/shared-1.0.1-py3-none-any.whl", hash = "sha256:6505f076999e9506ab679fff0c906818958c3cacb266e6a94a9083662b80b5ba", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+        "#);
+    });
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--index-url")
+        .arg(server.index_url())
+        .arg("--no-build")
+        .arg("--locked"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
 
 /// Conflict discovery can provisionally visit a package that is later excluded after all
 /// transitive extras have been activated. Its dependencies must be evaluated under the package's
@@ -1146,6 +1266,58 @@ fn extra_unconditional() -> Result<()> {
     Ok(())
 }
 
+/// Conflicting transitive extras must remain discoverable in an environment where the package
+/// also has a valid, non-conflicting activation in another environment.
+#[test]
+fn extra_unconditional_in_python_fork() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.10"
+        dependencies = [
+            "proxy[one] ; python_version < '3.12'",
+            "proxy[one,two] ; python_version >= '3.12'",
+        ]
+
+        [tool.uv.workspace]
+        members = ["proxy"]
+
+        [tool.uv.sources]
+        proxy = { workspace = true }
+        "#,
+    )?;
+    context.temp_dir.child("proxy/pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "proxy"
+        version = "0.1.0"
+        requires-python = ">=3.10"
+
+        [project.optional-dependencies]
+        one = ["anyio==4.1.0"]
+        two = ["anyio==4.2.0"]
+
+        [tool.uv]
+        conflicts = [[{ extra = "one" }, { extra = "two" }]]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Found conflicting extras `proxy[one]` and `proxy[two]` enabled simultaneously
+    ");
+    Ok(())
+}
+
 /// A regression tests for unconditionally installing an extra that is
 /// marked as conflicting. Previously, the `proxy1[extra1]` dependency
 /// would be completely ignored here.
@@ -1695,13 +1867,11 @@ fn extra_depends_on_conflicting_extra_transitive() -> Result<()> {
         members = ["indirection"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
-
-        [tool.setuptools.packages.find]
-        include = ["example"]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
+    context.temp_dir.child("src/example/__init__.py").touch()?;
 
     // Create the indirection subproject
     let subproject_dir = context.temp_dir.child("indirection");
@@ -1720,10 +1890,13 @@ fn extra_depends_on_conflicting_extra_transitive() -> Result<()> {
         example = { workspace = true }
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
+    subproject_dir
+        .child("src/indirection/__init__.py")
+        .touch()?;
 
     // This succeeds, but probably shouldn't. There's an unconditional conflict in `example[foo]
     // -> indirection[bar] -> example[bar]`, which means `example[foo]` can never be used.
@@ -2392,10 +2565,10 @@ fn extra_conflict_environments_omit_redundant_markers() -> Result<()> {
         version = "4.11.0"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "exceptiongroup", marker = "python_full_version < '3.11' or (extra == 'extra-3-bar-a' and extra == 'extra-3-bar-b')" },
+            { name = "exceptiongroup", marker = "python_full_version < '3.11'" },
             { name = "idna" },
             { name = "sniffio" },
-            { name = "typing-extensions", marker = "python_full_version < '3.13' or (extra == 'extra-3-bar-a' and extra == 'extra-3-bar-b')" },
+            { name = "typing-extensions", marker = "python_full_version < '3.13'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/c6/78/7d432127c41b50bccba979505f272c16cbcadcc33645d5fa3a738110ae75/anyio-4.11.0.tar.gz", hash = "sha256:82a8d0b81e318cc5ce71a5f1f8b5c4e63619620b63141ef8c995fa0db95a57c4", size = 219094, upload-time = "2025-09-23T09:19:12.58Z" }
         wheels = [
@@ -2409,7 +2582,7 @@ fn extra_conflict_environments_omit_redundant_markers() -> Result<()> {
         dependencies = [
             { name = "anyio" },
             { name = "tqdm", version = "1.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-3-bar-a'" },
-            { name = "tqdm", version = "4.67.1", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-3-bar-b' or extra != 'extra-3-bar-a'" },
+            { name = "tqdm", version = "4.67.1", source = { registry = "https://pypi.org/simple" }, marker = "extra != 'extra-3-bar-a' or extra == 'extra-3-bar-b'" },
         ]
 
         [package.optional-dependencies]
@@ -2434,7 +2607,7 @@ fn extra_conflict_environments_omit_redundant_markers() -> Result<()> {
         version = "1.3.0"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "typing-extensions", marker = "python_full_version < '3.13' or (extra == 'extra-3-bar-a' and extra == 'extra-3-bar-b')" },
+            { name = "typing-extensions" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/0b/9f/a65090624ecf468cdca03533906e7c69ed7588582240cfe7cc9e770b50eb/exceptiongroup-1.3.0.tar.gz", hash = "sha256:b241f5885f560bc56a59ee63ca4c6a8bfa46ae4ad651af316d4e81817bb9fd88", size = 29749, upload-time = "2025-05-10T17:42:51.123Z" }
         wheels = [
@@ -4019,7 +4192,7 @@ fn shared_optional_dependency_mixed1() -> Result<()> {
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
             { name = "idna", version = "3.5", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-7-project-foo'" },
-            { name = "idna", version = "3.6", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'group-7-project-bar' or extra != 'extra-7-project-foo'" },
+            { name = "idna", version = "3.6", source = { registry = "https://pypi.org/simple" }, marker = "extra != 'extra-7-project-foo' or extra == 'group-7-project-bar'" },
             { name = "sniffio" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6", size = 159642, upload-time = "2024-02-19T08:36:28.641Z" }
@@ -4910,7 +5083,7 @@ fn shared_dependency_mixed() -> Result<()> {
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
             { name = "idna", version = "3.5", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-7-project-foo'" },
-            { name = "idna", version = "3.6", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'group-7-project-bar' or extra != 'extra-7-project-foo'" },
+            { name = "idna", version = "3.6", source = { registry = "https://pypi.org/simple" }, marker = "extra != 'extra-7-project-foo' or extra == 'group-7-project-bar'" },
             { name = "sniffio" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6", size = 159642, upload-time = "2024-02-19T08:36:28.641Z" }
@@ -5121,7 +5294,7 @@ conflicts = [
         dependencies = [
             { name = "idna", version = "3.4", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-6-proxy1-x2' or (extra == 'extra-6-proxy1-x3' and extra == 'extra-7-project-x1')" },
             { name = "idna", version = "3.5", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-6-proxy1-x3' or (extra == 'extra-6-proxy1-x2' and extra == 'extra-7-project-x1')" },
-            { name = "idna", version = "3.6", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-7-project-x1' or (extra == 'extra-6-proxy1-x2' and extra == 'extra-6-proxy1-x3') or (extra != 'extra-6-proxy1-x2' and extra != 'extra-6-proxy1-x3')" },
+            { name = "idna", version = "3.6", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-7-project-x1' or (extra != 'extra-6-proxy1-x2' and extra != 'extra-6-proxy1-x3') or (extra == 'extra-6-proxy1-x2' and extra == 'extra-6-proxy1-x3')" },
             { name = "sniffio" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6", size = 159642, upload-time = "2024-02-19T08:36:28.641Z" }
@@ -6005,7 +6178,7 @@ fn extra_inferences() -> Result<()> {
             { name = "cattrs" },
             { name = "colorlog" },
             { name = "configupdater" },
-            { name = "connexion", extra = ["flask"], marker = "extra == 'extra-3-pkg-x2' or extra != 'extra-3-pkg-x1'" },
+            { name = "connexion", extra = ["flask"], marker = "extra != 'extra-3-pkg-x1' or extra == 'extra-3-pkg-x2'" },
             { name = "cron-descriptor" },
             { name = "croniter" },
             { name = "cryptography" },
@@ -6347,7 +6520,7 @@ fn extra_inferences() -> Result<()> {
         version = "8.1.7"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'extra-3-pkg-x1' and extra == 'extra-3-pkg-x2')" },
+            { name = "colorama", marker = "sys_platform == 'win32'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/96/d3/f04c7bfcf5c1862a2a5b845c6b2b360488cf47af55dfa79c98f6a6bf98b5/click-8.1.7.tar.gz", hash = "sha256:ca9853ad459e787e2192211578cc907e7594e294c7ccc834310722b41b9ca6de", size = 336121, upload-time = "2023-08-17T17:29:11.868Z" }
         wheels = [
@@ -6368,7 +6541,7 @@ fn extra_inferences() -> Result<()> {
         version = "4.8.0"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'extra-3-pkg-x1' and extra == 'extra-3-pkg-x2')" },
+            { name = "colorama", marker = "sys_platform == 'win32'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/75/32/cdfba08674d72fe7895a8ec7be8f171e8502274999cae9497e4545404873/colorlog-4.8.0.tar.gz", hash = "sha256:59b53160c60902c405cdec28d38356e09d40686659048893e026ecbd589516b1", size = 28770, upload-time = "2021-03-22T11:26:32.319Z" }
         wheels = [
@@ -6442,7 +6615,7 @@ fn extra_inferences() -> Result<()> {
         version = "42.0.5"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "cffi", marker = "platform_python_implementation != 'PyPy' or (extra == 'extra-3-pkg-x1' and extra == 'extra-3-pkg-x2')" },
+            { name = "cffi", marker = "platform_python_implementation != 'PyPy'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/13/9e/a55763a32d340d7b06d045753c186b690e7d88780cafce5f88cb931536be/cryptography-42.0.5.tar.gz", hash = "sha256:6fe07eec95dfd477eb9530aef5bead34fec819b3aaf6c5bd6d20565da607bfe1", size = 671025, upload-time = "2024-02-24T01:17:48.141Z" }
         wheels = [
@@ -6579,7 +6752,7 @@ fn extra_inferences() -> Result<()> {
         version = "4.3.0"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "apispec", version = "5.2.2", source = { registry = "https://pypi.org/simple" }, extra = ["yaml"], marker = "extra == 'extra-3-pkg-x2' or extra != 'extra-3-pkg-x1'" },
+            { name = "apispec", version = "5.2.2", source = { registry = "https://pypi.org/simple" }, extra = ["yaml"], marker = "extra != 'extra-3-pkg-x1' or extra == 'extra-3-pkg-x2'" },
             { name = "click" },
             { name = "colorama" },
             { name = "email-validator" },
@@ -6759,7 +6932,6 @@ fn extra_inferences() -> Result<()> {
             { url = "https://files.pythonhosted.org/packages/a2/2f/461615adc53ba81e99471303b15ac6b2a6daa8d2a0f7f77fd15605e16d5b/greenlet-3.0.3-cp312-cp312-macosx_11_0_universal2.whl", hash = "sha256:70fb482fdf2c707765ab5f0b6655e9cfcf3780d8d87355a063547b41177599be", size = 273085, upload-time = "2023-12-21T22:03:01.176Z" },
             { url = "https://files.pythonhosted.org/packages/e9/55/2c3cfa3cdbb940cf7321fbcf544f0e9c74898eed43bf678abf416812d132/greenlet-3.0.3-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:d4d1ac74f5c0c0524e4a24335350edad7e5f03b9532da7ea4d3c54d527784f2e", size = 660514, upload-time = "2023-12-21T22:29:28.62Z" },
             { url = "https://files.pythonhosted.org/packages/38/77/efb21ab402651896c74f24a172eb4d7479f9f53898bd5e56b9e20bb24ffd/greenlet-3.0.3-cp312-cp312-manylinux_2_17_ppc64le.manylinux2014_ppc64le.whl", hash = "sha256:149e94a2dd82d19838fe4b2259f1b6b9957d5ba1b25640d2380bea9c5df37676", size = 674295, upload-time = "2023-12-21T22:26:24.101Z" },
-            { url = "https://files.pythonhosted.org/packages/74/3a/92f188ace0190f0066dca3636cf1b09481d0854c46e92ec5e29c7cefe5b1/greenlet-3.0.3-cp312-cp312-manylinux_2_17_s390x.manylinux2014_s390x.whl", hash = "sha256:15d79dd26056573940fcb8c7413d84118086f2ec1a8acdfa854631084393efcc", size = 669395, upload-time = "2023-12-21T22:31:35.992Z" },
             { url = "https://files.pythonhosted.org/packages/63/0f/847ed02cdfce10f0e6e3425cd054296bddb11a17ef1b34681fa01a055187/greenlet-3.0.3-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:881b7db1ebff4ba09aaaeae6aa491daeb226c8150fc20e836ad00041bcb11230", size = 670455, upload-time = "2023-12-21T22:03:16.291Z" },
             { url = "https://files.pythonhosted.org/packages/bd/37/56b0da468a85e7704f3b2bc045015301bdf4be2184a44868c71f6dca6fe2/greenlet-3.0.3-cp312-cp312-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:fcd2469d6a2cf298f198f0487e0a5b1a47a42ca0fa4dfd1b6862c999f018ebbf", size = 625692, upload-time = "2023-12-21T22:03:06.294Z" },
             { url = "https://files.pythonhosted.org/packages/7c/68/b5f4084c0a252d7e9c0d95fc1cfc845d08622037adb74e05be3a49831186/greenlet-3.0.3-cp312-cp312-musllinux_1_1_aarch64.whl", hash = "sha256:1f672519db1796ca0d8753f9e78ec02355e862d0998193038c7073045899f305", size = 1152597, upload-time = "2023-12-21T22:31:00.412Z" },
@@ -7146,7 +7318,7 @@ fn extra_inferences() -> Result<()> {
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
             { name = "python-dateutil" },
-            { name = "time-machine", marker = "implementation_name != 'pypy' or (extra == 'extra-3-pkg-x1' and extra == 'extra-3-pkg-x2')" },
+            { name = "time-machine", marker = "implementation_name != 'pypy'" },
             { name = "tzdata" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/b8/fe/27c7438c6ac8b8f8bef3c6e571855602ee784b85d072efddfff0ceb1cd77/pendulum-3.0.0.tar.gz", hash = "sha256:5d034998dea404ec31fae27af6b22cff1708f830a1ed7353be4d1019bb9f584e", size = 84524, upload-time = "2023-12-16T21:27:19.742Z" }
@@ -7374,7 +7546,7 @@ fn extra_inferences() -> Result<()> {
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
             { name = "apache-airflow", version = "2.5.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "apache-airflow", version = "2.6.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-3-pkg-x2' or extra != 'extra-3-pkg-x1'" },
+            { name = "apache-airflow", version = "2.6.0", source = { registry = "https://pypi.org/simple" }, marker = "extra != 'extra-3-pkg-x1' or extra == 'extra-3-pkg-x2'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/d0/df/a0954234d18c9903a6c1a8991a6702230ceb9a1e1b7221fa02b57a4a7de4/quickpath-airflow-operator-1.0.2.tar.gz", hash = "sha256:c678424ee7f2802aacb281336ad78b2315f73f32307be99fdc3a3a8b1724a86b", size = 4696, upload-time = "2022-10-24T16:51:19.11Z" }
         wheels = [
@@ -7531,7 +7703,7 @@ fn extra_inferences() -> Result<()> {
         version = "1.4.52"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "greenlet", marker = "platform_machine == 'AMD64' or platform_machine == 'WIN32' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'ppc64le' or platform_machine == 'win32' or platform_machine == 'x86_64' or (extra == 'extra-3-pkg-x1' and extra == 'extra-3-pkg-x2')" },
+            { name = "greenlet", marker = "platform_machine == 'AMD64' or platform_machine == 'WIN32' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'ppc64le' or platform_machine == 'win32' or platform_machine == 'x86_64'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/8a/a4/b5991829c34af0505e0f2b1ccf9588d1ba90f2d984ee208c90c985f1265a/SQLAlchemy-1.4.52.tar.gz", hash = "sha256:80e63bbdc5217dad3485059bdf6f65a7d43f33c8bde619df5c220edf03d87296", size = 8514200, upload-time = "2024-03-04T13:29:44.258Z" }
         wheels = [
@@ -8536,9 +8708,9 @@ fn overlapping_resolution_markers() -> Result<()> {
 
         [package.optional-dependencies]
         cpu = [
-            { name = "torch", version = "2.2.2", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cpu') or (platform_machine != 'aarch64' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118') or (platform_python_implementation != 'CPython' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform != 'linux' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
+            { name = "torch", version = "2.2.2", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cpu') or (extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
             { name = "torch", version = "2.2.2", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform == 'darwin' and extra == 'extra-14-ads-mega-model-cpu') or (extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
-            { name = "torch", version = "2.2.2+cpu", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(platform_machine != 'aarch64' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cpu') or (platform_python_implementation != 'CPython' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cpu') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-14-ads-mega-model-cpu') or (sys_platform == 'darwin' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
+            { name = "torch", version = "2.2.2+cpu", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(platform_machine != 'aarch64' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cpu') or (platform_python_implementation != 'CPython' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cpu') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-14-ads-mega-model-cpu') or (extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
         ]
         cu118 = [
             { name = "torch", version = "2.2.2", source = { registry = "https://pypi.org/simple" } },
@@ -8589,7 +8761,7 @@ fn overlapping_resolution_markers() -> Result<()> {
         version = "8.1.8"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
+            { name = "colorama", marker = "sys_platform == 'win32'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/b9/2e/0090cbf739cee7d23781ad4b89a9894a41538e4fcf4c31dcdd705b78eb8b/click-8.1.8.tar.gz", hash = "sha256:ed53c9d8990d83c2a27deae68e4ee337473f6330c040a31d4225c9574d16096a", size = 226593, upload-time = "2024-12-21T18:38:44.339Z" }
         wheels = [
@@ -9011,24 +9183,24 @@ fn overlapping_resolution_markers() -> Result<()> {
             "sys_platform == 'darwin' and extra == 'extra-14-ads-mega-model-cpu' and extra != 'extra-14-ads-mega-model-cu118'",
         ]
         dependencies = [
-            { name = "filelock", marker = "(sys_platform != 'darwin' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform == 'darwin' and extra == 'extra-14-ads-mega-model-cpu') or (extra != 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
-            { name = "fsspec", marker = "(sys_platform != 'darwin' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform == 'darwin' and extra == 'extra-14-ads-mega-model-cpu') or (extra != 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
-            { name = "jinja2", marker = "(sys_platform != 'darwin' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform == 'darwin' and extra == 'extra-14-ads-mega-model-cpu') or (extra != 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
-            { name = "networkx", marker = "(sys_platform != 'darwin' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform == 'darwin' and extra == 'extra-14-ads-mega-model-cpu') or (extra != 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
-            { name = "nvidia-cublas-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cu118') or (platform_machine != 'x86_64' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform != 'linux' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
-            { name = "nvidia-cuda-cupti-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cu118') or (platform_machine != 'x86_64' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform != 'linux' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
-            { name = "nvidia-cuda-nvrtc-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cu118') or (platform_machine != 'x86_64' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform != 'linux' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
-            { name = "nvidia-cuda-runtime-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cu118') or (platform_machine != 'x86_64' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform != 'linux' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
-            { name = "nvidia-cudnn-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cu118') or (platform_machine != 'x86_64' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform != 'linux' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
-            { name = "nvidia-cufft-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cu118') or (platform_machine != 'x86_64' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform != 'linux' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
-            { name = "nvidia-curand-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cu118') or (platform_machine != 'x86_64' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform != 'linux' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
-            { name = "nvidia-cusolver-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cu118') or (platform_machine != 'x86_64' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform != 'linux' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
-            { name = "nvidia-cusparse-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cu118') or (platform_machine != 'x86_64' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform != 'linux' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
-            { name = "nvidia-nccl-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cu118') or (platform_machine != 'x86_64' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform != 'linux' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
-            { name = "nvidia-nvtx-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cu118') or (platform_machine != 'x86_64' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform != 'linux' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
-            { name = "sympy", marker = "(sys_platform != 'darwin' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform == 'darwin' and extra == 'extra-14-ads-mega-model-cpu') or (extra != 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
-            { name = "triton", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cu118') or (platform_machine != 'x86_64' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform != 'linux' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
-            { name = "typing-extensions", marker = "(sys_platform != 'darwin' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform == 'darwin' and extra == 'extra-14-ads-mega-model-cpu') or (extra != 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
+            { name = "filelock", marker = "(sys_platform == 'darwin' and extra == 'extra-14-ads-mega-model-cpu') or extra == 'extra-14-ads-mega-model-cu118'" },
+            { name = "fsspec", marker = "(sys_platform == 'darwin' and extra == 'extra-14-ads-mega-model-cpu') or extra == 'extra-14-ads-mega-model-cu118'" },
+            { name = "jinja2", marker = "(sys_platform == 'darwin' and extra == 'extra-14-ads-mega-model-cpu') or extra == 'extra-14-ads-mega-model-cu118'" },
+            { name = "networkx", marker = "(sys_platform == 'darwin' and extra == 'extra-14-ads-mega-model-cpu') or extra == 'extra-14-ads-mega-model-cu118'" },
+            { name = "nvidia-cublas-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cu118') or (extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
+            { name = "nvidia-cuda-cupti-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cu118') or (extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
+            { name = "nvidia-cuda-nvrtc-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cu118') or (extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
+            { name = "nvidia-cuda-runtime-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cu118') or (extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
+            { name = "nvidia-cudnn-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cu118') or (extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
+            { name = "nvidia-cufft-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cu118') or (extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
+            { name = "nvidia-curand-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cu118') or (extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
+            { name = "nvidia-cusolver-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cu118') or (extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
+            { name = "nvidia-cusparse-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cu118') or (extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
+            { name = "nvidia-nccl-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cu118') or (extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
+            { name = "nvidia-nvtx-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cu118') or (extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
+            { name = "sympy", marker = "(sys_platform == 'darwin' and extra == 'extra-14-ads-mega-model-cpu') or extra == 'extra-14-ads-mega-model-cu118'" },
+            { name = "triton", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cu118') or (extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
+            { name = "typing-extensions", marker = "(sys_platform == 'darwin' and extra == 'extra-14-ads-mega-model-cpu') or extra == 'extra-14-ads-mega-model-cu118'" },
         ]
         wheels = [
             { url = "https://files.pythonhosted.org/packages/33/b3/1fcc3bccfddadfd6845dcbfe26eb4b099f1dfea5aa0e5cfb92b3c98dba5b/torch-2.2.2-cp310-cp310-manylinux1_x86_64.whl", hash = "sha256:bc889d311a855dd2dfd164daf8cc903a6b7273a747189cebafdd89106e4ad585", size = 755526581, upload-time = "2024-03-27T21:06:46.5Z" },
@@ -9416,7 +9588,7 @@ fn conditional_sources_keep_default_platform_specific_transitive_dependencies() 
         dependencies = [
             { name = "torch", version = "2.6.0", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(sys_platform == 'darwin' and extra == 'extra-10-test-torch-cpu') or (extra == 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124')" },
             { name = "torch", version = "2.6.0+cpu", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(sys_platform != 'darwin' and extra == 'extra-10-test-torch-cpu') or (extra == 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124')" },
-            { name = "torch", version = "2.6.0+cu124", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }, marker = "extra == 'extra-10-test-torch-cu124' or extra != 'extra-10-test-torch-cpu'" },
+            { name = "torch", version = "2.6.0+cu124", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }, marker = "extra != 'extra-10-test-torch-cpu' or extra == 'extra-10-test-torch-cu124'" },
         ]
 
         [package.optional-dependencies]
@@ -9500,8 +9672,8 @@ fn conditional_sources_keep_default_platform_specific_transitive_dependencies() 
             { name = "nvidia-nccl-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-10-test-torch-cpu') or (extra == 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124')" },
             { name = "nvidia-nvjitlink-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-10-test-torch-cpu') or (extra == 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124')" },
             { name = "nvidia-nvtx-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-10-test-torch-cpu') or (extra == 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124')" },
-            { name = "setuptools", marker = "extra == 'extra-10-test-torch-cu124' or extra != 'extra-10-test-torch-cpu'" },
-            { name = "sympy", marker = "extra == 'extra-10-test-torch-cu124' or extra != 'extra-10-test-torch-cpu'" },
+            { name = "setuptools", marker = "extra != 'extra-10-test-torch-cpu' or extra == 'extra-10-test-torch-cu124'" },
+            { name = "sympy", marker = "extra != 'extra-10-test-torch-cpu' or extra == 'extra-10-test-torch-cu124'" },
             { name = "triton", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-10-test-torch-cpu') or (extra == 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124')" },
             { name = "typing-extensions" },
         ]
@@ -10838,7 +11010,7 @@ fn lock_conflicting_workspace_member_transitive_source() -> Result<()> {
         requires = []
         build-backend = "example"
     "#})?;
-    let other_url = Url::from_file_path(context.temp_dir.child("other").path())
+    let other_url = SafeUrl::from_file_path(context.temp_dir.child("other").path())
         .map_err(|()| anyhow!("failed to convert dependency path to file URL"))?;
     context
         .temp_dir
@@ -11738,6 +11910,200 @@ fn many_conflicts_with_requested_dependency_extra() -> Result<()> {
         .timeout(Duration::from_mins(1))
         .assert()
         .success();
+
+    Ok(())
+}
+
+/// An environment-dependent edge must not repeat unrelated conflicting extras in its marker.
+/// The compact marker must remain valid when reusing and exporting the lockfile.
+#[test]
+fn conflicting_extras_with_environment_dependent_dependency() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let root_pyproject_toml = context.temp_dir.child("pyproject.toml");
+    root_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.10"
+        dependencies = ["shared-package"]
+
+        [project.optional-dependencies]
+        x0 = ["extra-package"]
+        x1 = ["extra-package"]
+        x2 = ["extra-package"]
+        x3 = ["extra-package"]
+        x4 = ["extra-package"]
+
+        [tool.uv.sources]
+        shared-package = { path = "shared-package" }
+        extra-package = { path = "extra-package" }
+
+        [tool.uv]
+        conflicts = [[
+            { extra = "x0" },
+            { extra = "x1" },
+            { extra = "x2" },
+            { extra = "x3" },
+            { extra = "x4" },
+        ]]
+        "#,
+    )?;
+
+    let shared_pyproject_toml = context
+        .temp_dir
+        .child("shared-package")
+        .child("pyproject.toml");
+    shared_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "shared-package"
+        version = "0.1.0"
+        requires-python = ">=3.10"
+        dependencies = ["leaf-package ; python_full_version < '3.11'"]
+
+        [tool.uv.sources]
+        leaf-package = { path = "../leaf-package" }
+        "#,
+    )?;
+
+    let leaf_pyproject_toml = context
+        .temp_dir
+        .child("leaf-package")
+        .child("pyproject.toml");
+    leaf_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "leaf-package"
+        version = "0.1.0"
+        requires-python = ">=3.10"
+        dependencies = []
+        "#,
+    )?;
+
+    let extra_pyproject_toml = context
+        .temp_dir
+        .child("extra-package")
+        .child("pyproject.toml");
+    extra_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "extra-package"
+        version = "0.1.0"
+        requires-python = ">=3.10"
+        dependencies = []
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock,
+            @r#"
+        version = 1
+        revision = 5
+        requires-python = ">=3.10"
+        conflicts = [[
+            { package = "project", extra = "x0" },
+            { package = "project", extra = "x1" },
+            { package = "project", extra = "x2" },
+            { package = "project", extra = "x3" },
+            { package = "project", extra = "x4" },
+        ]]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "extra-package"
+        version = "0.1.0"
+        source = { directory = "extra-package" }
+
+        [[package]]
+        name = "leaf-package"
+        version = "0.1.0"
+        source = { directory = "leaf-package" }
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "shared-package" },
+        ]
+
+        [package.optional-dependencies]
+        x0 = [
+            { name = "extra-package" },
+        ]
+        x1 = [
+            { name = "extra-package" },
+        ]
+        x2 = [
+            { name = "extra-package" },
+        ]
+        x3 = [
+            { name = "extra-package" },
+        ]
+        x4 = [
+            { name = "extra-package" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "extra-package", marker = "extra == 'x0'", directory = "extra-package" },
+            { name = "extra-package", marker = "extra == 'x1'", directory = "extra-package" },
+            { name = "extra-package", marker = "extra == 'x2'", directory = "extra-package" },
+            { name = "extra-package", marker = "extra == 'x3'", directory = "extra-package" },
+            { name = "extra-package", marker = "extra == 'x4'", directory = "extra-package" },
+            { name = "shared-package", directory = "shared-package" },
+        ]
+        provides-extras = ["x0", "x1", "x2", "x3", "x4"]
+
+        [[package]]
+        name = "shared-package"
+        version = "0.1.0"
+        source = { directory = "shared-package" }
+        dependencies = [
+            { name = "leaf-package", marker = "python_full_version < '3.11'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "leaf-package", marker = "python_full_version < '3.11'", directory = "leaf-package" }]
+        "#
+        );
+    });
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--frozen")
+        .arg("--no-dev")
+        .arg("--no-emit-project")
+        .arg("--no-hashes")
+        .arg("--no-header"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    ./leaf-package ; python_full_version < '3.11'
+        # via shared-package
+    ./shared-package
+        # via project
+    ");
 
     Ok(())
 }

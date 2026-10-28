@@ -79,9 +79,8 @@ pub fn pip_show(
     // Build the installed index.
     let site_packages = SitePackages::from_environment(&environment)?;
 
-    // Determine the markers and tags to use for resolution.
+    // Determine the markers used to evaluate dependencies.
     let markers = environment.interpreter().to_resolver_marker_environment();
-    let tags = environment.interpreter().tags()?;
 
     // Sort and deduplicate the packages, which are keyed by name.
     packages.sort_unstable();
@@ -228,6 +227,7 @@ pub fn pip_show(
 
     // Validate that the environment is consistent.
     if strict {
+        let tags = environment.interpreter().tags()?;
         for diagnostic in site_packages.diagnostics(&markers, tags, dependency_metadata)? {
             writeln!(
                 printer.stderr(),

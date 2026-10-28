@@ -11,18 +11,30 @@ use crate::ROOT_DIR;
 use crate::generate_all::Mode;
 
 /// Contains current supported targets
-const TARGETS_YML_URL: &str = "https://raw.githubusercontent.com/astral-sh/python-build-standalone/refs/tags/20261009/cpython-unix/targets.yml";
+const TARGETS_YML_URL: &str = "https://raw.githubusercontent.com/astral-sh/python-build-standalone/refs/tags/20261026/cpython-unix/targets.yml";
 
 // Preserve compiler paths embedded in older downloadable python-build-standalone releases.
-const HISTORICAL_CC_VALUES: [&str; 3] = [
+const HISTORICAL_CC_VALUES: [&str; 9] = [
     "/usr/bin/aarch64-linux-gnu-gcc",
+    "/usr/bin/arm-linux-gnueabi-gcc",
+    "/usr/bin/arm-linux-gnueabihf-gcc",
+    "/usr/bin/mips-linux-gnu-gcc",
+    "/usr/bin/mipsel-linux-gnu-gcc",
+    "/usr/bin/powerpc64le-linux-gnu-gcc",
     "/usr/bin/riscv64-linux-gnu-clang",
     "/usr/bin/riscv64-linux-gnu-gcc",
+    "/usr/bin/s390x-linux-gnu-gcc",
 ];
-const HISTORICAL_CXX_VALUES: [&str; 3] = [
+const HISTORICAL_CXX_VALUES: [&str; 9] = [
     "/usr/bin/aarch64-linux-gnu-g++",
+    "/usr/bin/arm-linux-gnueabi-g++",
+    "/usr/bin/arm-linux-gnueabihf-g++",
+    "/usr/bin/mips-linux-gnu-g++",
+    "/usr/bin/mipsel-linux-gnu-g++",
+    "/usr/bin/powerpc64le-linux-gnu-g++",
     "/usr/bin/riscv64-linux-gnu-clang++",
     "/usr/bin/riscv64-linux-gnu-g++",
+    "/usr/bin/s390x-linux-gnu-g++",
 ];
 
 #[derive(clap::Args)]
@@ -159,7 +171,7 @@ async fn generate() -> Result<String> {
     output.push_str("//! DO NOT EDIT\n");
     output.push_str("//!\n");
     output.push_str("//! Generated with `cargo run dev generate-sysconfig-metadata`\n");
-    output.push_str("//! Targets from <https://github.com/astral-sh/python-build-standalone/blob/20261009/cpython-unix/targets.yml>\n");
+    output.push_str("//! Targets from <https://github.com/astral-sh/python-build-standalone/blob/20261026/cpython-unix/targets.yml>\n");
     output.push_str("//!\n");
 
     // Disable clippy/fmt

@@ -21,10 +21,11 @@ use uv_configuration::{
     DependencyGroups, DependencyMode, DevMode, DryRun, EditableMode, EnvFile, ExcludeDependency,
     ExcludeNewer, ExcludeNewerPackage, ExportFormat, ExtrasSpecification, ForkStrategy,
     GitLfsSetting, HashCheckingMode, IndexStrategy, InitKind, InitProjectKind, InstallOptions,
-    KeyringProviderType, Modifications, NoBinary, NoBuild, NoSources, Override, PackageOverride,
-    PipCompileFormat, Prerelease, ProjectBuildBackend, ProxyUrl, PythonUpgrade,
-    PythonUpgradeSource, Reinstall, RequiredVersion, RequirementsInput, ResolutionMode,
-    TargetTriple, ToolRunCommand, TrustedHost, TrustedPublishing, Upgrade, VersionControlSystem,
+    KeyringProviderType, MetadataOutputVersion, Modifications, NoBinary, NoBuild, NoSources,
+    Override, PackageOverride, PipCompileFormat, Prerelease, ProjectBuildBackend, ProxyUrl,
+    PythonUpgrade, PythonUpgradeSource, Reinstall, RequiredVersion, RequirementsInput,
+    ResolutionMode, TargetTriple, ToolRunCommand, TrustedHost, TrustedPublishing, Upgrade,
+    VersionControlSystem,
 };
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExcludeNewerOverride, ExtraBuildVariables, Index,
@@ -40,7 +41,7 @@ use uv_pypi_types::SupportedEnvironments;
 use uv_python_types::{
     Prefix, PythonArchitecture, PythonDownloads, PythonPreference, PythonVersion, Target,
 };
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 use uv_settings::{
     Combine, EnvFlag, EnvironmentOptions, FilesystemOptions, FrozenFlag, FrozenSource,
     IndexOptions, LockCheck, LockedFlag, LockedSource, MalwareCheckSettings, Options, PipOptions,
@@ -522,6 +523,14 @@ impl InitSettings {
 
         let no_description = no_description || (bare && description.is_none());
 
+        // `UV_INIT_BUILD_BACKEND` only sets a default, so it yields to `--no-package` and
+        // `--script` instead of conflicting with them like `--build-backend` does.
+        let build_backend = match build_backend {
+            Some(build_backend) => Some(build_backend),
+            None if script || no_package || r#virtual => None,
+            None => environment.init_build_backend,
+        };
+
         if r#virtual && lib {
             bail!("`--virtual` and `--lib` are mutually exclusive");
         }
@@ -706,6 +715,7 @@ pub struct RunSettings {
     pub refresh: Refresh,
     pub settings: ResolverInstallerSettings,
     pub env_file: EnvFile,
+    pub recursion_depth: u32,
     pub max_recursion_depth: u32,
     pub malware_settings: MalwareCheckSettings,
     #[cfg(unix)]
@@ -875,6 +885,7 @@ impl RunSettings {
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
+            recursion_depth: environment.run_recursion_depth.unwrap_or_default(),
             max_recursion_depth: max_recursion_depth.unwrap_or(Self::DEFAULT_MAX_RECURSION_DEPTH),
             malware_settings,
             #[cfg(unix)]
@@ -1337,7 +1348,7 @@ pub struct ToolAuditSettings {
     pub names: Vec<PackageName>,
     pub output_format: AuditOutputFormat,
     pub service_format: VulnerabilityServiceFormat,
-    pub service_url: Option<DisplaySafeUrl>,
+    pub service_url: Option<SafeUrl>,
     pub ignore: Vec<VulnerabilityID>,
     pub ignore_until_fixed: Vec<VulnerabilityID>,
     pub filesystem: ResolverInstallerOptions,
@@ -2133,9 +2144,10 @@ impl UpgradeSettings {
     }
 }
 
-/// The resolved settings to use for a `lock` invocation.
+/// The resolved settings to use for a `workspace metadata` invocation.
 #[derive(Debug, Clone)]
 pub struct MetadataSettings {
+    pub output_version: MetadataOutputVersion,
     #[expect(dead_code)]
     script: Option<PathBuf>,
     pub lock_check: LockCheck,
@@ -2150,13 +2162,14 @@ pub struct MetadataSettings {
 }
 
 impl MetadataSettings {
-    /// Resolve the [`LockSettings`] from the CLI and filesystem configuration.
+    /// Resolve the [`MetadataSettings`] from the CLI and filesystem configuration.
     pub fn resolve(
         args: Box<MetadataArgs>,
         filesystem: Option<FilesystemOptions>,
         environment: EnvironmentOptions,
     ) -> anyhow::Result<Self> {
         let MetadataArgs {
+            output_version,
             script,
             locked,
             no_locked,
@@ -2185,6 +2198,7 @@ impl MetadataSettings {
         let malware_settings = MalwareCheckSettings::resolve(filesystem.as_ref(), &environment);
 
         Ok(Self {
+            output_version: output_version.unwrap_or_default(),
             script,
             lock_check: locked,
             frozen,
@@ -3182,7 +3196,7 @@ pub struct AuditSettings {
     pub settings: ResolverSettings,
     pub output_format: AuditOutputFormat,
     pub service_format: VulnerabilityServiceFormat,
-    pub service_url: Option<DisplaySafeUrl>,
+    pub service_url: Option<SafeUrl>,
     pub ignore: Vec<VulnerabilityID>,
     pub ignore_until_fixed: Vec<VulnerabilityID>,
 }
@@ -5031,7 +5045,7 @@ pub struct PublishSettings {
     pub no_attestations: bool,
 
     // Both CLI and configuration.
-    pub publish_url: DisplaySafeUrl,
+    pub publish_url: SafeUrl,
     pub trusted_publishing: TrustedPublishing,
     pub keyring_provider: KeyringProviderType,
     pub check_url: Option<IndexUrl>,
@@ -5096,7 +5110,7 @@ impl PublishSettings {
             publish_url: args
                 .publish_url
                 .combine(publish_url)
-                .unwrap_or_else(|| DisplaySafeUrl::parse(PYPI_PUBLISH_URL).unwrap()),
+                .unwrap_or_else(|| SafeUrl::parse(PYPI_PUBLISH_URL).unwrap()),
             trusted_publishing: args
                 .trusted_publishing
                 .combine(trusted_publishing)

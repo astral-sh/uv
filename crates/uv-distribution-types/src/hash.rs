@@ -1,5 +1,5 @@
 use uv_pypi_types::{HashAlgorithm, HashDigest, HashDigests, Hashes};
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 
 /// Hash generation and validation policy for an archive.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -20,19 +20,14 @@ pub enum ArchiveHashPolicy<'a> {
 impl<'a> ArchiveHashPolicy<'a> {
     /// Use the hashes advertised for an individual index file when no verification policy is set.
     ///
-    /// Explicit [`Self::Any`] and [`Self::All`] policies take precedence, including empty policies
-    /// that must reject the distribution. If the index provides no hashes, preserve the policy.
+    /// Explicit validation takes precedence, including empty policies that must reject the
+    /// distribution. If the index provides no hashes, preserve the policy.
     #[must_use]
     pub fn with_index_hashes(self, hashes: &'a [HashDigest]) -> Self {
-        match self {
-            Self::Any(_) | Self::All(_) => self,
-            Self::None | Self::Generate => {
-                if hashes.is_empty() {
-                    self
-                } else {
-                    Self::All(hashes)
-                }
-            }
+        if self.requires_validation() || hashes.is_empty() {
+            self
+        } else {
+            Self::All(hashes)
         }
     }
 
@@ -167,15 +162,26 @@ pub enum HashCollection {
     All,
 }
 
+/// Returns whether the digest's algorithm is accepted by `--require-hashes`.
+pub fn satisfies_require_hashes(digest: &HashDigest) -> bool {
+    match digest.algorithm() {
+        HashAlgorithm::Md5 => false,
+        HashAlgorithm::Sha256
+        | HashAlgorithm::Sha384
+        | HashAlgorithm::Sha512
+        | HashAlgorithm::Blake2b256 => true,
+    }
+}
+
 /// Read a URL's declared hash for resolution, excluding MD5, which `--require-hashes` rejects.
-pub fn parse_url_hashes(url: &DisplaySafeUrl) -> Option<HashDigests> {
+pub fn parse_url_hashes(url: &SafeUrl) -> Option<HashDigests> {
     let hashes = url
         .fragment()?
         .split('&')
         .find_map(|fragment| Hashes::parse_fragment(fragment).ok())?;
     let hashes = HashDigests::from(hashes);
-    let contains_md5 = hashes.iter().any(|hash| matches!(hash, HashDigest::Md5(_)));
-    (!contains_md5).then_some(hashes)
+    let allowed = hashes.iter().all(satisfies_require_hashes);
+    allowed.then_some(hashes)
 }
 
 pub trait Hashed {

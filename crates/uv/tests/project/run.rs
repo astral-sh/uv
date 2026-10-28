@@ -7,11 +7,12 @@ use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 use predicates::{prelude::predicate, str::contains};
 use serde_json::json;
+use std::io;
 use std::path::Path;
 use uv_python_discovery::PYTHON_VERSION_FILENAME;
 use uv_static::EnvVars;
 use wiremock::matchers::{method, path};
-use wiremock::{Mock, MockServer, ResponseTemplate};
+use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
 use uv_test::{TestContext, copy_dir_ignore, packse::PackseServer, uv_snapshot};
 
@@ -381,12 +382,14 @@ fn run_pep723_script() -> Result<()> {
     Checked 4 packages in [TIME]
     ");
 
-    // If the script contains a PEP 723 tag, it can omit the dependencies field.
+    // Omitting dependencies reuses the script environment and retains previously installed packages.
     let test_script = context.temp_dir.child("main.py");
     test_script.write_str(indoc! { r#"
         # /// script
         # requires-python = ">=3.11"
         # ///
+
+        import iniconfig
 
         print("Hello, world!")
        "#
@@ -2066,8 +2069,8 @@ fn run_in_workspace() -> Result<()> {
         dependencies = ["anyio>3"]
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [tool.uv.workspace]
         members = ["child1", "child2"]
@@ -2094,8 +2097,8 @@ fn run_in_workspace() -> Result<()> {
         dependencies = ["iniconfig>1"]
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
     child1
@@ -2114,8 +2117,8 @@ fn run_in_workspace() -> Result<()> {
         dependencies = ["typing-extensions>4"]
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
     child2
@@ -2224,8 +2227,8 @@ fn run_with_editable() -> Result<()> {
         dependencies = ["anyio", "sniffio==1.3.1"]
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#
     })?;
 
@@ -2288,8 +2291,8 @@ fn run_with_editable() -> Result<()> {
         dependencies = ["anyio", "sniffio==1.3.1"]
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [tool.uv.sources]
         anyio = { path = "./src/anyio_local", editable = true }
@@ -3429,8 +3432,8 @@ fn run_isolated_python_version() -> Result<()> {
         dependencies = ["anyio"]
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#
     })?;
 
@@ -3523,8 +3526,8 @@ fn run_no_project() -> Result<()> {
         dependencies = ["anyio"]
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#
     })?;
 
@@ -4181,8 +4184,8 @@ fn run_script_module_conflict() -> Result<()> {
         foo = "foo:app"
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#
     })?;
 
@@ -4663,7 +4666,8 @@ fn run_active_script_environment() -> Result<()> {
         .child("foo")
         .assert(predicate::path::missing());
 
-    // Using `--active` should create the environment
+    // Using `--active` should initialize an empty directory.
+    context.temp_dir.child("foo").create_dir_all()?;
     uv_snapshot!(context.filters(), context.run()
         .arg("--active")
         .arg("--script")
@@ -4682,7 +4686,8 @@ fn run_active_script_environment() -> Result<()> {
     context
         .temp_dir
         .child("foo")
-        .assert(predicate::path::is_dir());
+        .child("pyvenv.cfg")
+        .assert(predicate::path::is_file());
 
     // Requesting a different Python version should invalidate the environment
     uv_snapshot!(context.filters(), context.run()
@@ -4704,6 +4709,32 @@ fn run_active_script_environment() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn run_active_script_environment_without_dependencies() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("main.py").write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # ///
+
+        import sys
+
+        print(sys.prefix)
+        "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--active")
+        .arg("main.py")
+        .env(EnvVars::VIRTUAL_ENV, "active"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [TEMP_DIR]/active
+    ");
+
+    Ok(())
+}
+
 /// Regression test for <https://github.com/astral-sh/uv/issues/21364>.
 #[test]
 fn run_active_script_environment_non_virtualenv() -> Result<()> {
@@ -4713,7 +4744,6 @@ fn run_active_script_environment_non_virtualenv() -> Result<()> {
     test_script.write_str(indoc! { r#"
         # /// script
         # requires-python = ">=3.12"
-        # dependencies = []
         # ///
 
         print("Hello, world!")
@@ -4725,20 +4755,67 @@ fn run_active_script_environment_non_virtualenv() -> Result<()> {
     active_environment
         .child("important.txt")
         .write_str("important data")?;
+    // A directory named `pyvenv.cfg` does not make this a virtual environment.
+    active_environment.child("pyvenv.cfg").create_dir_all()?;
 
-    context
-        .run()
+    uv_snapshot!(context.filters(), context.run()
         .arg("--active")
         .arg("--script")
         .arg("main.py")
-        .env(EnvVars::VIRTUAL_ENV, "foo")
-        .assert()
-        .success();
+        .env(EnvVars::VIRTUAL_ENV, "foo"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Script environment at `[TEMP_DIR]/foo` cannot be replaced because it is a non-empty directory that is not a virtual environment
+    ");
 
-    active_environment.assert(predicate::path::is_dir());
-    // Silently deleting user data outside a virtual environment is undesirable.
     active_environment
         .child("important.txt")
+        .assert("important data");
+
+    Ok(())
+}
+
+/// A damaged script environment in uv's cache can be replaced even without a virtualenv marker.
+#[test]
+fn run_script_environment_cache_repair() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("main.py").write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = []
+        # ///
+
+        import sys
+
+        print(sys.prefix)
+        "#
+    })?;
+
+    let output = uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [CACHE_DIR]/environments-v2/main-[HASH]
+    ");
+
+    let environment = ChildPath::new(String::from_utf8(output.stdout)?.trim());
+    assert!(environment.path().starts_with(context.cache_dir.path()));
+    fs_err::remove_dir_all(&environment)?;
+    environment.create_dir_all()?;
+    environment
+        .child("stale.txt")
+        .write_str("stale cache data")?;
+
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [CACHE_DIR]/environments-v2/main-[HASH]
+    ");
+
+    environment
+        .child("pyvenv.cfg")
+        .assert(predicate::path::is_file());
+    environment
+        .child("stale.txt")
         .assert(predicate::path::missing());
 
     Ok(())
@@ -4837,20 +4914,28 @@ fn run_remote_requirements_offline_redacts_credentials() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn run_remote_pep723_requirements_fetch_error_does_not_leak_credentials() -> Result<()> {
-    let context = uv_test::test_context!("3.12").with_filter((
-        r"(?m)^  cause: .*(Connection refused|No connection could be made).*$",
-        "  cause: [CONNECTION_REFUSED]",
-    ));
+/// A retried transport error must not expose credentials from a remote requirements URL.
+#[tokio::test]
+async fn run_remote_pep723_requirements_fetch_error_does_not_leak_credentials() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/requirements.py"))
+        .respond_with_err(|_: &Request| {
+            io::Error::new(io::ErrorKind::ConnectionReset, "Connection reset by peer")
+        })
+        .expect(4)
+        .mount(&server)
+        .await;
 
     let script = context.temp_dir.child("main.py");
     script.write_str("print('hello')")?;
 
-    let listener = std::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))?;
-    let port = listener.local_addr()?.port();
-    drop(listener);
-    let url = format!("http://username:password@127.0.0.1:{port}/requirements.py");
+    let url = format!(
+        "http://username:password@{}/requirements.py",
+        server.address()
+    );
 
     uv_snapshot!(context.filters(), context.run()
         .arg("--with-requirements")
@@ -4861,9 +4946,8 @@ fn run_remote_pep723_requirements_fetch_error_does_not_leak_credentials() -> Res
     ----- stderr -----
     error: Request failed after 3 retries
       cause: error sending request for url (http://[LOCALHOST]/requirements.py)
-      cause: client error (Connect)
-      cause: tcp connect error
-      cause: [CONNECTION_REFUSED]
+      cause: client error (SendRequest)
+      cause: connection closed before message completed
     ");
 
     Ok(())
@@ -5888,6 +5972,75 @@ fn detect_infinite_recursion() -> Result<()> {
     ");
 
     Ok(())
+}
+
+#[test]
+fn run_recursion_depth() {
+    let context = uv_test::test_context!("3.12");
+
+    // The current depth is allowed at the limit and incremented for the child.
+    uv_snapshot!(
+        context.filters(),
+        context.run()
+            .env(EnvVars::UV_RUN_RECURSION_DEPTH, "5")
+            .env(EnvVars::UV_RUN_MAX_RECURSION_DEPTH, "5")
+            .arg("python")
+            .arg("-c")
+            .arg("import os; print(os.environ['UV_RUN_RECURSION_DEPTH'])"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    6
+    "
+    );
+
+    // The next invocation exceeds the limit.
+    uv_snapshot!(
+        context.filters(),
+        context.run()
+            .env(EnvVars::UV_RUN_RECURSION_DEPTH, "6")
+            .env(EnvVars::UV_RUN_MAX_RECURSION_DEPTH, "5")
+            .arg("python"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: `uv run` was recursively invoked 6 times which exceeds the limit of 5
+
+    hint: If you are running a script with `uv run` in the shebang, you may need to include the `--script` flag
+    "
+    );
+}
+
+#[test]
+fn run_recursion_depth_empty() {
+    let context = uv_test::test_context!("3.12");
+
+    uv_snapshot!(
+        context.filters(),
+        context.run()
+            .env(EnvVars::UV_RUN_RECURSION_DEPTH, "")
+            .arg("python")
+            .arg("-c")
+            .arg("import os; print(os.environ['UV_RUN_RECURSION_DEPTH'])"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    1
+    "
+    );
+}
+
+#[test]
+fn run_recursion_depth_invalid() {
+    let context = uv_test::test_context_with_versions!(&[]);
+
+    uv_snapshot!(
+        context.filters(),
+        context.run()
+            .env(EnvVars::UV_RUN_RECURSION_DEPTH, "invalid")
+            .arg("python"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to parse environment variable `UV_RUN_RECURSION_DEPTH` with invalid value `invalid`: invalid digit found in string
+    "
+    );
 }
 
 #[test]

@@ -22,7 +22,7 @@ use uv_python_discovery::ConfigDiscovery;
 use uv_python_discovery::ProjectPythonRequest;
 use uv_python_discovery::ScriptInterpreter;
 use uv_python_types::{PythonArchitecture, PythonDownloads, PythonPreference, PythonVersion};
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 use uv_resolve_operations::loggers::DefaultResolveLogger;
 use uv_resolve_operations::resolution_markers;
 use uv_scripts::Pep723Script;
@@ -53,7 +53,7 @@ pub async fn audit(
     preview: Preview,
     output_format: AuditOutputFormat,
     service: VulnerabilityServiceFormat,
-    service_url: Option<DisplaySafeUrl>,
+    service_url: Option<SafeUrl>,
     ignore: Vec<VulnerabilityID>,
     ignore_until_fixed: Vec<VulnerabilityID>,
 ) -> Result<ExitStatus> {

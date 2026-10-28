@@ -7,7 +7,8 @@ use uv_cache::{Cache, Refresh};
 use uv_client::BaseClientBuilder;
 use uv_command_support::{ExitStatus, Printer, Stdout, UvError};
 use uv_configuration::{
-    ActiveEnvironment, Concurrency, DependencyGroupsWithDefaults, DryRun, Modifications,
+    ActiveEnvironment, Concurrency, DependencyGroupsWithDefaults, DryRun, MetadataOutputVersion,
+    Modifications,
 };
 use uv_dispatch::UniversalState;
 use uv_environment_operations::install_target::{InstallTarget, PackageSelection};
@@ -32,7 +33,7 @@ use uv_settings::{
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, WorkspaceCache};
 
-use super::module_owners::collect_module_owners;
+use super::environment::collect_environment;
 
 /// The input used to obtain metadata and its locked resolution.
 enum MetadataSource<'a> {
@@ -43,6 +44,7 @@ enum MetadataSource<'a> {
 /// Display metadata about the workspace.
 pub async fn metadata(
     project_dir: &Path,
+    output_version: MetadataOutputVersion,
     lock_check: LockCheck,
     frozen: Option<FrozenSource>,
     refresh: Refresh,
@@ -207,7 +209,7 @@ pub async fn metadata(
             lock,
         },
     };
-    let mut export = metadata_for_target(install_target);
+    let mut export = metadata_for_target(install_target, output_version);
     let environment = if sync.is_some() {
         Some(match &source {
             MetadataSource::Manifest(LockTarget::Workspace(workspace)) => {
@@ -295,7 +297,7 @@ pub async fn metadata(
                 tracing::warn!("Failed to acquire environment lock: {err}");
             })
             .ok();
-        let module_owners = collect_module_owners(
+        let collected = collect_environment(
             install_target,
             &environment,
             &settings,
@@ -309,16 +311,19 @@ pub async fn metadata(
             sync,
         )
         .await
-        .context("Failed to collect module owners")?;
+        .context("Failed to inspect environment")?;
         export = export
-            .with_environment(&environment)
-            .with_module_owners(module_owners);
+            .with_environment(&environment, collected.packages)
+            .with_modules(collected.module_owners);
     }
 
     print_metadata(&export, printer)
 }
 
-fn metadata_for_target(target: InstallTarget<'_>) -> Metadata {
+fn metadata_for_target(
+    target: InstallTarget<'_>,
+    output_version: MetadataOutputVersion,
+) -> Metadata {
     match target {
         InstallTarget::Project {
             workspace, lock, ..
@@ -330,10 +335,14 @@ fn metadata_for_target(target: InstallTarget<'_>) -> Metadata {
             workspace, lock, ..
         }
         | InstallTarget::NonProjectWorkspace { workspace, lock } => {
-            Metadata::from_lockfile(workspace.install_path(), lock)
+            Metadata::from_lockfile(workspace.install_path(), lock, output_version)
         }
-        InstallTarget::Script { script, lock } => Metadata::from_script(&script.path, lock),
-        InstallTarget::Lockfile { root, lock, .. } => Metadata::from_lockfile(root, lock),
+        InstallTarget::Script { script, lock } => {
+            Metadata::from_script(&script.path, lock, output_version)
+        }
+        InstallTarget::Lockfile { root, lock, .. } => {
+            Metadata::from_lockfile(root, lock, output_version)
+        }
     }
 }
 

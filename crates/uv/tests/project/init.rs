@@ -9,6 +9,8 @@ use predicates::prelude::predicate;
 
 use uv_static::EnvVars;
 
+#[cfg(feature = "test-python-patch")]
+use uv_test::LATEST_PYTHON_3_16;
 use uv_test::{TestContext, uv_snapshot};
 
 #[test]
@@ -19,6 +21,12 @@ fn init() {
     exit_code: 0 (success)
     ----- stderr -----
     Initialized project `foo` at `[TEMP_DIR]/foo`
+    ");
+
+    uv_snapshot!(context.filters(), context.init().arg("foo"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Cannot initialize a project in `[TEMP_DIR]/foo` because `pyproject.toml` already exists
     ");
 
     let pyproject = context.read("foo/pyproject.toml");
@@ -63,6 +71,76 @@ fn init() {
             python_version, @"3.12"
         );
     });
+}
+
+#[test]
+fn init_existing_pyproject_tool_only() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]);
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str("[tool.ruff]\n")?;
+
+    uv_snapshot!(context.filters(), context.init(), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Cannot initialize a project in `[TEMP_DIR]/` because `pyproject.toml` already exists
+
+    hint: To use this directory as a project, declare its name, version, and other metadata in a `[project]` table
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn init_existing_pyproject_poetry() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]);
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {
+        r#"
+        [tool.poetry]
+        name = "example"
+        version = "0.1.0"
+
+        [build-system]
+        requires = ["poetry-core"]
+        build-backend = "poetry.core.masonry.api"
+        "#,
+    })?;
+
+    uv_snapshot!(context.filters(), context.init(), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Cannot initialize a project in `[TEMP_DIR]/` because `pyproject.toml` already exists
+
+    hint: uv reads project metadata from `[project]`. To migrate, convert the metadata in `[tool.poetry]` to that format
+    ");
+
+    Ok(())
+}
+
+/// A build backend can read project metadata from outside `pyproject.toml`.
+#[test]
+fn init_existing_pyproject_build_system() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]);
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {
+        r#"
+        [build-system]
+        requires = ["setuptools"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.ruff]
+        "#,
+    })?;
+
+    uv_snapshot!(context.filters(), context.init(), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Cannot initialize a project in `[TEMP_DIR]/` because `pyproject.toml` already exists
+    ");
+
+    Ok(())
 }
 
 #[test]
@@ -274,6 +352,94 @@ fn init_application_no_package_other_python_exists() -> Result<()> {
     });
 
     Ok(())
+}
+
+/// `--no-package` takes precedence over `UV_INIT_BUILD_BACKEND`, but not over `--build-backend`.
+///
+/// See: <https://github.com/astral-sh/uv/issues/17335>
+#[test]
+fn init_application_no_package_build_backend_env() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let child = context.temp_dir.child("foo");
+    child.create_dir_all()?;
+
+    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--app").arg("--no-package").arg("--build-backend").arg("setuptools"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: the argument '--no-package' cannot be used with '--build-backend <BUILD_BACKEND>'
+
+    Usage: uv init --cache-dir [CACHE_DIR] --app --no-package [PATH]
+
+    For more information, try '--help'.
+    ");
+
+    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--app").arg("--no-package").env(EnvVars::UV_INIT_BUILD_BACKEND, "setuptools"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Initialized project `foo`
+    ");
+
+    let pyproject = context.read("foo/pyproject.toml");
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject, @r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        requires-python = ">=3.12"
+        dependencies = []
+        "#
+        );
+    });
+
+    child.child("main.py").assert(predicate::path::is_file());
+    child.child("src").assert(predicate::path::missing());
+
+    Ok(())
+}
+
+/// `--script` takes precedence over `UV_INIT_BUILD_BACKEND`.
+#[test]
+fn init_script_build_backend_env() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let child = context.temp_dir.child("foo");
+    child.create_dir_all()?;
+
+    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--script").arg("main.py").env(EnvVars::UV_INIT_BUILD_BACKEND, "setuptools"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Initialized script at `main.py`
+    ");
+
+    child
+        .child("pyproject.toml")
+        .assert(predicate::path::missing());
+
+    Ok(())
+}
+
+/// Environment settings are validated even when the command does not use a build backend.
+#[test]
+fn init_build_backend_env_invalid() {
+    let context = uv_test::test_context!("3.12");
+
+    uv_snapshot!(context.filters(), context.init().arg("--no-package").env(EnvVars::UV_INIT_BUILD_BACKEND, "unknown"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to parse environment variable `UV_INIT_BUILD_BACKEND` with invalid value `unknown`: invalid variant: unknown
+    ");
+
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::UV_INIT_BUILD_BACKEND, "unknown"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to parse environment variable `UV_INIT_BUILD_BACKEND` with invalid value `unknown`: invalid variant: unknown
+    ");
 }
 
 /// Run `uv init --app --package` to create a packaged application project
@@ -916,7 +1082,10 @@ fn init_script_shebang() -> Result<()> {
 
     let script_path = context.temp_dir.child("script.py");
 
-    let contents = "#! /usr/bin/env python3\nprint(\"Hello, world!\")";
+    let contents = indoc! {r#"
+        #! /usr/bin/env python3
+        print("Hello, world!")
+    "#};
     fs_err::write(&script_path, contents)?;
     uv_snapshot!(context.filters(), context.init().arg("--script").arg("script.py"), @"
     exit_code: 0 (success)
@@ -939,7 +1108,10 @@ fn init_script_shebang() -> Result<()> {
     );
 
     // If the shebang already contains `uv`, the result is the same, but we suppress the warning.
-    let contents = "#!/usr/bin/env -S uv run --script\nprint(\"Hello, world!\")";
+    let contents = indoc! {r#"
+        #!/usr/bin/env -S uv run --script
+        print("Hello, world!")
+    "#};
     fs_err::write(&script_path, contents)?;
     uv_snapshot!(context.filters(), context.init().arg("--script").arg("script.py"), @"
     exit_code: 0 (success)
@@ -967,7 +1139,7 @@ fn init_script_shebang() -> Result<()> {
 #[cfg(feature = "test-python-patch")]
 #[test]
 fn init_script_picks_latest_stable_version() {
-    let managed_versions = &["3.14.0rc2", "3.13", "3.12"];
+    let managed_versions = &[LATEST_PYTHON_3_16, "3.15", "3.14"];
     // If we do not mark these versions as managed, they would have `PythonSource::SearchPath(First)`, which
     // would mean that pre-releases would be preferred without opt-in (see `PythonSource::allows_prereleases`).
     let context = uv_test::test_context_with_versions!(managed_versions)
@@ -983,7 +1155,7 @@ fn init_script_picks_latest_stable_version() {
     assert_snapshot!(
         resulting_script, @r#"
         # /// script
-        # requires-python = ">=3.13"
+        # requires-python = ">=3.15"
         # dependencies = []
         # ///
 
@@ -2136,6 +2308,12 @@ fn init_virtual_workspace() -> Result<()> {
         ",
     })?;
 
+    uv_snapshot!(context.filters(), context.init().current_dir(&child), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Cannot initialize a project in `[TEMP_DIR]/foo` because `pyproject.toml` already exists
+    ");
+
     uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("bar"), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -2632,6 +2810,12 @@ fn init_unmanaged() -> Result<()> {
         managed = false
         ",
     })?;
+
+    uv_snapshot!(context.filters(), context.init(), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Cannot initialize a project in `[TEMP_DIR]/` because `pyproject.toml` already exists
+    ");
 
     uv_snapshot!(context.filters(), context.init().arg("foo"), @"
     exit_code: 0 (success)
@@ -3182,7 +3366,7 @@ fn init_library_flit() -> Result<()> {
 fn init_backend_implies_package() {
     let context = uv_test::test_context!("3.12");
 
-    uv_snapshot!(context.filters(), context.init().arg("project").arg("--build-backend").arg("flit"), @"
+    uv_snapshot!(context.filters(), context.init().arg("project").arg("--build-backend").arg("flit").env(EnvVars::UV_INIT_BUILD_BACKEND, "setuptools"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Initialized project `project` at `[TEMP_DIR]/project`
@@ -3211,6 +3395,13 @@ fn init_backend_implies_package() {
         "#
         );
     });
+
+    uv_snapshot!(context.filters(), context.init().arg("from-env/project").env(EnvVars::UV_INIT_BUILD_BACKEND, "flit-core"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Initialized project `project` at `[TEMP_DIR]/from-env/project`
+    ");
+    assert_eq!(context.read("from-env/project/pyproject.toml"), pyproject);
 }
 
 /// Run `uv init --build-backend poetry` to create a project with poetry-core build backend

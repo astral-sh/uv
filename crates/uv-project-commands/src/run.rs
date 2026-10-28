@@ -1,11 +1,12 @@
 use std::borrow::Cow;
-use std::env::VarError;
+#[cfg(unix)]
+use std::ffi::OsStr;
 use std::ffi::OsString;
 use std::fmt::Write;
 use std::io;
 use std::io::Read;
 #[cfg(unix)]
-use std::os::unix::ffi::OsStringExt;
+use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, anyhow, bail};
@@ -15,7 +16,6 @@ use owo_colors::OwoColorize;
 use thiserror::Error;
 use tokio::process::Command;
 use tracing::{debug, trace, warn};
-use url::Url;
 
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
@@ -50,13 +50,12 @@ use uv_python_discovery::ProjectPythonRequest;
 use uv_python_discovery::PythonDownloadReporter;
 use uv_python_discovery::PythonInstallation;
 use uv_python_discovery::PythonVersionFile;
-use uv_python_discovery::ScriptInterpreter;
 use uv_python_discovery::VersionFileDiscoveryOptions;
 use uv_python_interpreter::{Interpreter, PyVenvConfiguration, PythonEnvironment};
 use uv_python_types::{
     EnvironmentPreference, PythonArchitecture, PythonDownloads, PythonPreference, PythonRequest,
 };
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 use uv_requirements::{
     RequirementsSource, RequirementsSpecification, script_extra_build_requires,
     script_specification,
@@ -122,6 +121,7 @@ pub async fn run(
     printer: Printer,
     env_file: EnvFile,
     preview: Preview,
+    recursion_depth: u32,
     max_recursion_depth: u32,
     malware_settings: MalwareCheckSettings,
     #[cfg(unix)] run_rlimit_nofile: Option<u32>,
@@ -129,7 +129,6 @@ pub async fn run(
     // Check if max recursion depth was exceeded. This most commonly happens
     // for scripts with a shebang line like `#!/usr/bin/env -S uv run`, so try
     // to provide guidance for that case.
-    let recursion_depth = read_recursion_depth_from_environment_variable()?;
     if recursion_depth > max_recursion_depth {
         return Err(RecursionLimitError {
             depth: recursion_depth,
@@ -182,7 +181,6 @@ pub async fn run(
     let mut unlocked_build_constraints = Constraints::default();
 
     // Determine whether the command to execute is a PEP 723 script.
-    let temp_dir;
     let script_interpreter = if let Some(script) = script {
         match &script {
             Pep723Item::Script(script) => {
@@ -381,8 +379,17 @@ pub async fn run(
                 })
                 .unwrap_or_default();
 
-            // Install the script requirements, if necessary. Otherwise, use an isolated environment.
-            if let Some(spec) = script_specification(
+            // Install the script requirements, if necessary.
+            let spec = script_specification(
+                (&script).into(),
+                &settings.resolver.sources,
+                &settings.resolver.index_locations,
+                &cache,
+                workspace_cache,
+                client_builder.credentials_cache(),
+            )
+            .await?;
+            let script_extra_build_requires = script_extra_build_requires(
                 (&script).into(),
                 &settings.resolver.sources,
                 &settings.resolver.index_locations,
@@ -391,115 +398,70 @@ pub async fn run(
                 client_builder.credentials_cache(),
             )
             .await?
-            {
-                let script_extra_build_requires = script_extra_build_requires(
-                    (&script).into(),
-                    &settings.resolver.sources,
-                    &settings.resolver.index_locations,
-                    &cache,
-                    workspace_cache,
-                    client_builder.credentials_cache(),
-                )
-                .await?
-                .into_inner();
-                let environment = ScriptEnvironment::get_or_init(
-                    (&script).into(),
-                    python.as_deref().map(PythonRequest::parse),
-                    &client_builder,
-                    python_preference,
-                    python_arch,
-                    python_downloads,
-                    &install_mirrors,
-                    no_sync,
-                    config_discovery,
-                    active.without_warning(),
-                    &cache,
-                    DryRun::Disabled,
-                    printer,
-                )
-                .await?
-                .into_environment()?;
+            .into_inner();
+            let environment = ScriptEnvironment::get_or_init(
+                (&script).into(),
+                python.as_deref().map(PythonRequest::parse),
+                &client_builder,
+                python_preference,
+                python_arch,
+                python_downloads,
+                &install_mirrors,
+                no_sync,
+                config_discovery,
+                active.without_warning(),
+                &cache,
+                DryRun::Disabled,
+                printer,
+            )
+            .await?
+            .into_environment()?;
 
-                let _lock = environment
-                    .lock()
-                    .await
-                    .inspect_err(|err| {
-                        warn!("Failed to acquire environment lock: {err}");
-                    })
-                    .ok();
-
-                match update_environment(
-                    environment,
-                    spec,
-                    modifications,
-                    python_platform.as_ref(),
-                    SourceTreeEditablePolicy::Project,
-                    unlocked_build_constraints.clone(),
-                    script_extra_build_requires,
-                    &settings,
-                    &client_builder,
-                    &sync_state,
-                    if show_resolution {
-                        Box::new(DefaultResolveLogger)
-                    } else {
-                        Box::new(SummaryResolveLogger)
-                    },
-                    if show_resolution {
-                        Box::new(DefaultInstallLogger)
-                    } else {
-                        Box::new(SummaryInstallLogger)
-                    },
-                    installer_metadata,
-                    &concurrency,
-                    &cache,
-                    workspace_cache,
-                    DryRun::Disabled,
-                    printer,
-                    preview,
-                )
+            let _lock = environment
+                .lock()
                 .await
-                {
-                    Ok(update) => Some(update.environment.into_interpreter()),
-                    Err(EnvironmentError::Resolve(err)) => {
-                        let err = *err;
-                        return Err(UvError::from(err.with_resolution_context("script")).into());
-                    }
-                    Err(err) => return Err(UvError::from(err).into()),
+                .inspect_err(|err| {
+                    warn!("Failed to acquire environment lock: {err}");
+                })
+                .ok();
+
+            match update_environment(
+                environment,
+                spec,
+                modifications,
+                python_platform.as_ref(),
+                SourceTreeEditablePolicy::Project,
+                unlocked_build_constraints.clone(),
+                script_extra_build_requires,
+                &settings,
+                &client_builder,
+                &sync_state,
+                if show_resolution {
+                    Box::new(DefaultResolveLogger)
+                } else {
+                    Box::new(SummaryResolveLogger)
+                },
+                if show_resolution {
+                    Box::new(DefaultInstallLogger)
+                } else {
+                    Box::new(SummaryInstallLogger)
+                },
+                installer_metadata,
+                &concurrency,
+                &cache,
+                workspace_cache,
+                DryRun::Disabled,
+                printer,
+                preview,
+            )
+            .await
+            {
+                Ok(update) => Some(update.environment.into_interpreter()),
+                Err(EnvironmentError::Resolve(err)) => {
+                    let err = *err;
+                    return Err(UvError::from(err.with_resolution_context("script")).into());
                 }
-            } else {
-                // Create a virtual environment.
-                let interpreter = ScriptInterpreter::discover(
-                    (&script).into(),
-                    python.as_deref().map(PythonRequest::parse),
-                    &client_builder,
-                    python_preference,
-                    python_arch,
-                    python_downloads,
-                    &install_mirrors,
-                    no_sync,
-                    config_discovery,
-                    active.without_warning(),
-                    &cache,
-                    printer,
-                )
-                .await?
-                .into_interpreter();
-
-                temp_dir = cache.venv_dir()?;
-                let environment = uv_virtualenv::create_venv(
-                    temp_dir.path(),
-                    interpreter,
-                    uv_virtualenv::Prompt::None,
-                    false,
-                    uv_virtualenv::OnExisting::Remove(
-                        uv_virtualenv::RemovalReason::TemporaryEnvironment,
-                    ),
-                    false,
-                    uv_virtualenv::Seed::Disabled,
-                    UpgradePolicy::Fixed,
-                )?;
-
-                Some(environment.into_interpreter())
+                Err(err) => return Err(UvError::from(err).into()),
             }
         }
     } else {
@@ -1443,7 +1405,7 @@ pub enum ParsedRunCommand {
 #[derive(Debug)]
 pub struct PendingRemoteRunCommand {
     /// The remote URL to download.
-    url: DisplaySafeUrl,
+    url: SafeUrl,
     /// The arguments to forward after the downloaded script path.
     args: Vec<OsString>,
 }
@@ -1453,7 +1415,7 @@ impl PendingRemoteRunCommand {
     async fn download(
         self,
         client_builder: &BaseClientBuilder<'_>,
-    ) -> anyhow::Result<(DisplaySafeUrl, tempfile::NamedTempFile, Vec<OsString>)> {
+    ) -> anyhow::Result<(SafeUrl, tempfile::NamedTempFile, Vec<OsString>)> {
         let url = self.url.clone();
         let downloaded_script =
             ParsedRunCommand::download_remote_script(&self.url, client_builder).await?;
@@ -1533,7 +1495,7 @@ impl ParsedRunCommand {
             // We don't do this check on Windows since the file path would
             // be invalid anyway, and thus couldn't refer to a local file.
             if !cfg!(unix) || matches!(target_path.try_exists(), Ok(false)) {
-                let url = DisplaySafeUrl::parse(&target.to_string_lossy())?;
+                let url = SafeUrl::parse(&target.to_string_lossy())?;
                 return Ok(Self::PendingRemote(PendingRemoteRunCommand {
                     url,
                     args: args.to_vec(),
@@ -1603,28 +1565,19 @@ impl ParsedRunCommand {
 
     /// Download a remote script target into a temporary file ready for execution.
     async fn download_remote_script(
-        mut url: &DisplaySafeUrl,
+        mut url: &SafeUrl,
         client_builder: &BaseClientBuilder<'_>,
     ) -> anyhow::Result<tempfile::NamedTempFile> {
         let client = client_builder.build()?;
-        let mut response = client
-            .for_host(url)
-            .get(Url::from(url.clone()))
-            .send()
-            .await?;
+        let mut response = client.for_host(url).get(url.clone()).send().await?;
 
         let gist_url;
         // If it's a Gist URL, use the GitHub API to get the raw URL.
         if response.url().host_str() == Some("gist.github.com") {
-            gist_url =
-                resolve_gist_url(DisplaySafeUrl::ref_cast(response.url()), client_builder).await?;
+            gist_url = resolve_gist_url(SafeUrl::ref_cast(response.url()), client_builder).await?;
             url = &gist_url;
 
-            response = client
-                .for_host(url)
-                .get(Url::from(url.clone()))
-                .send()
-                .await?;
+            response = client.for_host(url).get(url.clone()).send().await?;
         }
 
         let file_stem = url
@@ -1776,7 +1729,7 @@ impl RunCommand {
 
                 cfg_select! {
                     unix => {
-                        process.arg(OsString::from_vec(script.clone()));
+                        process.arg(OsStr::from_bytes(script));
                     },
                     _ => {
                         let script =
@@ -1807,7 +1760,7 @@ impl RunCommand {
 
                 cfg_select! {
                     unix => {
-                        process.arg(OsString::from_vec(script.clone()));
+                        process.arg(OsStr::from_bytes(script));
                     },
                     _ => {
                         let script =
@@ -1916,9 +1869,9 @@ impl std::fmt::Display for RunCommand {
 
 /// Resolve a GitHub Gist URL to its raw file URL using the GitHub API.
 async fn resolve_gist_url(
-    url: &DisplaySafeUrl,
+    url: &SafeUrl,
     client_builder: &BaseClientBuilder<'_>,
-) -> anyhow::Result<DisplaySafeUrl> {
+) -> anyhow::Result<SafeUrl> {
     // Extract the Gist ID from the URL.
     let gist_id = url
         .path_segments()
@@ -1931,10 +1884,8 @@ async fn resolve_gist_url(
     let client = client_builder.build()?;
 
     // Build the request with appropriate headers.
-    let api_url_parsed = DisplaySafeUrl::parse(&api_url)?;
-    let mut request = client
-        .for_host(&api_url_parsed)
-        .get(Url::from(api_url_parsed));
+    let api_url_parsed = SafeUrl::parse(&api_url)?;
+    let mut request = client.for_host(&api_url_parsed).get(api_url_parsed);
     request = request.header("Accept", "application/vnd.github.v3+json");
 
     // Add GitHub token, if available.
@@ -1964,7 +1915,7 @@ async fn resolve_gist_url(
         .or_else(|| gist_data.files.values().next().map(|file| &file.raw_url))
         .ok_or_else(|| anyhow!("No files found in the Gist"))?;
 
-    let url = DisplaySafeUrl::parse(raw_url)?;
+    let url = SafeUrl::parse(raw_url)?;
 
     Ok(url)
 }
@@ -1994,27 +1945,6 @@ fn is_python_zipapp(target: &Path) -> bool {
         .unwrap_or(false);
     }
     false
-}
-
-/// Read and parse recursion depth from the environment.
-///
-/// Returns Ok(0) if `EnvVars::UV_RUN_RECURSION_DEPTH` is not set.
-///
-/// Returns an error if `EnvVars::UV_RUN_RECURSION_DEPTH` is set to a value
-/// that cannot ber parsed as an integer.
-fn read_recursion_depth_from_environment_variable() -> anyhow::Result<u32> {
-    let envvar = match std::env::var(EnvVars::UV_RUN_RECURSION_DEPTH) {
-        Ok(val) => val,
-        Err(VarError::NotPresent) => return Ok(0),
-        Err(e) => {
-            return Err(e)
-                .with_context(|| format!("invalid value for {}", EnvVars::UV_RUN_RECURSION_DEPTH));
-        }
-    };
-
-    envvar
-        .parse::<u32>()
-        .with_context(|| format!("invalid value for {}", EnvVars::UV_RUN_RECURSION_DEPTH))
 }
 
 #[derive(Error, Debug)]

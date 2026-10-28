@@ -1041,6 +1041,7 @@ mod tests {
     use std::str::FromStr;
     use std::sync::LazyLock;
 
+    use indoc::formatdoc;
     use petgraph::visit::EdgeRef;
     use uv_configuration::{DependencyGroups, ExtrasSpecification};
     use uv_distribution_types::Name;
@@ -1402,16 +1403,15 @@ provides-extras = ["cli"]
     #[test]
     fn unrelated_packages_do_not_change_dependency_identity() {
         let original = lock();
-        let input = format!(
-            "{}\n{}",
-            original.to_toml().expect("valid lock TOML"),
-            r#"
-[[package]]
-name = "aaa-unrelated"
-version = "1.0.0"
-source = { registry = "https://example.com/simple" }
-"#
-        );
+        let original_toml = original.to_toml().expect("valid lock TOML");
+        let input = formatdoc! {r#"
+            {original_toml}
+
+            [[package]]
+            name = "aaa-unrelated"
+            version = "1.0.0"
+            source = {{ registry = "https://example.com/simple" }}
+        "#};
         let extended = Lock::from_toml(&input).expect("valid extended lock");
         let original_root = package(&original, "root-a", "1.0.0");
         let extended_root = package(&extended, "root-a", "1.0.0");

@@ -9,7 +9,7 @@ use anyhow::{Context, Result, bail};
 use console::Term;
 use owo_colors::OwoColorize;
 use tracing::{debug, info, trace};
-use uv_auth::Credentials;
+use uv_auth::{Credentials, CredentialsPrompt, CredentialsPromptError};
 use uv_cache::Cache;
 use uv_client::{
     AuthIntegration, BaseClient, BaseClientBuilder, RedirectPolicy, RegistryClientBuilder,
@@ -19,10 +19,11 @@ use uv_configuration::{KeyringProviderType, TrustedPublishing};
 use uv_distribution_types::{IndexLocations, IndexUrl};
 use uv_errors::{ErrorOptions, Hints, write_error_chain_with_options};
 use uv_publish::{
-    PreparedDistribution, PublishFinalizeError, PublishOutcome, PublishSession,
-    PublishingCredentials, TrustedPublishResult, UploadOutcome, check_trusted_publishing,
+    PreparedDistribution, PublishError, PublishFinalizeError, PublishOutcome, PublishSession,
+    PublishingCredentials, TrustedPublishResult, TrustedPublishingError, UploadOutcome,
+    check_trusted_publishing,
 };
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 use uv_settings::EnvironmentOptions;
 use uv_static::TarBackend;
 use uv_warnings::{warn_user, warn_user_once};
@@ -32,7 +33,7 @@ use crate::reporters::PublishReporter;
 /// Publish distributions to a package index.
 pub async fn publish(
     paths: Vec<String>,
-    publish_url: DisplaySafeUrl,
+    publish_url: SafeUrl,
     trusted_publishing: TrustedPublishing,
     keyring_provider: KeyringProviderType,
     environment: &EnvironmentOptions,
@@ -79,7 +80,8 @@ pub async fn publish(
         let publish_url = index
             .publish_url
             .clone()
-            .with_context(|| format!("Index is missing a publish URL: `{index_name}`"))?;
+            .with_context(|| format!("Index is missing a publish URL: `{index_name}`"))?
+            .into_url();
 
         let check_url = index.url.clone();
         (publish_url, Some(check_url))
@@ -116,12 +118,14 @@ pub async fn publish(
     //   shouldn't try cloning the request to make an unauthenticated request first, but we want
     //   keyring integration. For trusted publishing, we use an OIDC auth routine without keyring
     //   or other auth integration.
+    let credentials_prompt = CredentialsPrompt::new(prompt_username_and_password);
     let upload_client = client_builder
         .clone()
         .retries(0)
         .keyring(keyring_provider)
         // Don't try cloning the request to make an unauthenticated request first.
         .auth_integration(AuthIntegration::OnlyAuthenticated)
+        .credentials_prompt(credentials_prompt.clone())
         // Disable automatic redirect, as the streaming publish request is not cloneable.
         // Rely on custom redirect logic instead.
         .redirect(RedirectPolicy::NoRedirect)
@@ -138,7 +142,11 @@ pub async fn publish(
         .build()?;
 
     // Load credentials and immediately transfer them to the session.
-    let (publish_url, credentials) = gather_credentials(
+    let GatheredCredentials {
+        publish_url,
+        credentials,
+        trusted_publishing_error,
+    } = GatheredCredentials::gather(
         publish_url,
         username,
         password,
@@ -146,8 +154,6 @@ pub async fn publish(
         keyring_provider,
         &oidc_client,
         check_url.as_ref(),
-        Prompt::Enabled,
-        printer,
     )
     .await?;
     let mut session = PublishSession::new(
@@ -157,7 +163,8 @@ pub async fn publish(
         &oidc_client,
         client_builder.retry_policy(),
         TarBackend::from_env(),
-    );
+    )
+    .with_credentials_prompt(credentials_prompt.clone());
     if let Some(index_url) = check_url {
         let registry_client_builder =
             RegistryClientBuilder::new(client_builder.clone(), cache.clone())
@@ -177,6 +184,28 @@ pub async fn publish(
             );
             debug!("Trusted publishing token revocation failed: {err:?}");
         }
+    }
+
+    if let Err(err) = &result
+        && matches!(
+            err.downcast_ref::<PublishError>(),
+            Some(PublishError::PublishSend(..))
+        )
+        && credentials_prompt.was_unavailable()
+        && let Some(err) = trusted_publishing_error
+    {
+        writeln!(
+            printer.stderr(),
+            "Note: Trusted publishing also failed. To use it, check the error below."
+        )?;
+        trace!("Error trace: {err:?}");
+        write_error_chain_with_options(
+            anyhow::Error::from(err)
+                .context("Trusted publishing failed")
+                .as_ref(),
+            &Hints::none(),
+            ErrorOptions::default().with_stream(printer.stderr()),
+        )?;
     }
 
     result.map(|outcome| match outcome {
@@ -273,182 +302,151 @@ async fn publish_file(
     Ok(())
 }
 
-/// Whether to allow prompting for username and password.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Prompt {
-    Enabled,
-    #[allow(dead_code)]
-    Disabled,
+/// The publish URL and credentials, with any ignored trusted publishing error.
+struct GatheredCredentials {
+    publish_url: SafeUrl,
+    credentials: PublishingCredentials,
+    trusted_publishing_error: Option<TrustedPublishingError>,
 }
 
-/// Unify the different possible source for username and password information.
-///
-/// Possible credential sources are environment variables, the CLI, the URL, the keyring, trusted
-/// publishing or a prompt.
-///
-/// The username can come from, in order:
-///
-/// - Mutually exclusive:
-///   - `--username` or `UV_PUBLISH_USERNAME`. The CLI option overrides the environment variable
-///   - The username field in the publish URL
-///   - If `--token` or `UV_PUBLISH_TOKEN` are used, it is `__token__`. The CLI option
-///     overrides the environment variable
-/// - If trusted publishing is available, it is `__token__`
-/// - (We currently do not read the username from the keyring)
-/// - If stderr is a tty, prompt the user
-///
-/// The password can come from, in order:
-///
-/// - Mutually exclusive:
-///   - `--password` or `UV_PUBLISH_PASSWORD`. The CLI option overrides the environment variable
-///   - The password field in the publish URL
-///   - If `--token` or `UV_PUBLISH_TOKEN` are used, it is the token value. The CLI option overrides
-///     the environment variable
-/// - If the keyring is enabled, the keyring entry for the URL and username
-/// - If trusted publishing is available, the trusted publishing token
-/// - If stderr is a tty, prompt the user
-///
-/// If no credentials are found, the auth middleware does a final check for cached credentials and
-/// otherwise errors without sending the request.
-///
-/// Returns the publish URL and [`PublishingCredentials`].
-async fn gather_credentials(
-    mut publish_url: DisplaySafeUrl,
-    mut username: Option<String>,
-    mut password: Option<String>,
-    trusted_publishing: TrustedPublishing,
-    keyring_provider: KeyringProviderType,
-    oidc_client: &BaseClient,
-    check_url: Option<&IndexUrl>,
-    prompt: Prompt,
-    printer: Printer,
-) -> Result<(DisplaySafeUrl, PublishingCredentials)> {
-    // Support reading username and password from the URL, for symmetry with the index API.
-    if let Some(url_password) = publish_url.password() {
-        if password.is_some_and(|password| password != url_password) {
-            bail!("The password can't be set both in the publish URL and in the CLI");
-        }
-        password = Some(url_password.to_string());
-        publish_url
-            .set_password(None)
-            .expect("Failed to clear publish URL password");
-    }
-
-    if !publish_url.username().is_empty() {
-        if username.is_some_and(|username| username != publish_url.username()) {
-            bail!("The username can't be set both in the publish URL and in the CLI");
-        }
-        username = Some(publish_url.username().to_string());
-        publish_url
-            .set_username("")
-            .expect("Failed to clear publish URL username");
-    }
-
-    // If applicable, attempt obtaining a token for trusted publishing.
-    let trusted_publishing_status = match check_trusted_publishing(
-        username.as_deref(),
-        password.as_deref(),
-        keyring_provider,
-        trusted_publishing,
-        &publish_url,
-        oidc_client,
-    )
-    .await?
-    {
-        TrustedPublishResult::Configured(token) => {
-            return Ok((publish_url, PublishingCredentials::TrustedPublishing(token)));
-        }
-        TrustedPublishResult::Skipped => None,
-        TrustedPublishResult::Ignored(err) => Some(err),
-    };
-
-    let (username, mut password) = if username.is_none() && password.is_none() {
-        match prompt {
-            Prompt::Enabled => prompt_username_and_password()?,
-            Prompt::Disabled => (None, None),
-        }
-    } else {
-        (username, password)
-    };
-
-    if password.is_some() && username.is_none() {
-        bail!(
-            "Attempted to publish with a password, but no username. Either provide a username \
-            with `--username` (`UV_PUBLISH_USERNAME`), or use `--token` (`UV_PUBLISH_TOKEN`) \
-            instead of a password."
-        );
-    }
-
-    if username.is_none()
-        && password.is_none()
-        && keyring_provider == KeyringProviderType::Disabled
-        && let Some(err) = trusted_publishing_status
-    {
-        // The user has configured something incorrectly:
-        // * The user forgot to configure credentials.
-        // * The user forgot to forward the secrets as env vars (or used the wrong ones).
-        // * The trusted publishing configuration is wrong.
-        writeln!(
-            printer.stderr(),
-            "Note: Neither credentials nor keyring are configured, and there was an error \
-            fetching the trusted publishing token. If you don't want to use trusted \
-            publishing, you can ignore this error, but you need to provide credentials."
-        )?;
-
-        trace!("Error trace: {err:?}");
-        write_error_chain_with_options(
-            anyhow::Error::from(err)
-                .context("Trusted publishing failed")
-                .as_ref(),
-            &Hints::none(),
-            ErrorOptions::default().with_stream(printer.stderr()),
-        )?;
-    }
-
-    // If applicable, fetch the password from the keyring eagerly to avoid user confusion about
-    // missing keyring entries later.
-    if let Some(provider) = keyring_provider.to_provider() {
-        if password.is_none() {
-            if let Some(username) = &username {
-                debug!("Fetching password from keyring");
-                if let Some(keyring_password) = provider
-                    .fetch(DisplaySafeUrl::ref_cast(&publish_url), Some(username))
-                    .await
-                    .as_ref()
-                    .and_then(|credentials| credentials.password())
-                {
-                    password = Some(keyring_password.to_string());
-                } else {
-                    warn_user_once!(
-                        "Keyring has no password for URL `{publish_url}` and username `{username}`"
-                    );
-                }
+impl GatheredCredentials {
+    /// Unify the different possible sources for username and password information.
+    ///
+    /// Possible credential sources are environment variables, the CLI, the URL, the keyring, or trusted
+    /// publishing.
+    ///
+    /// The username can come from, in order:
+    ///
+    /// - Mutually exclusive:
+    ///   - `--username` or `UV_PUBLISH_USERNAME`. The CLI option overrides the environment variable
+    ///   - The username field in the publish URL
+    ///   - If `--token` or `UV_PUBLISH_TOKEN` are used, it is `__token__`. The CLI option
+    ///     overrides the environment variable
+    /// - If trusted publishing is available, it is `__token__`
+    /// - (We currently do not read the username from the keyring)
+    ///
+    /// The password can come from, in order:
+    ///
+    /// - Mutually exclusive:
+    ///   - `--password` or `UV_PUBLISH_PASSWORD`. The CLI option overrides the environment variable
+    ///   - The password field in the publish URL
+    ///   - If `--token` or `UV_PUBLISH_TOKEN` are used, it is the token value. The CLI option overrides
+    ///     the environment variable
+    /// - If the keyring is enabled, the keyring entry for the URL and username
+    /// - If trusted publishing is available, the trusted publishing token
+    ///
+    /// If no credentials are found, the auth middleware checks the credential cache and providers
+    /// before invoking the interactive prompt.
+    async fn gather(
+        mut publish_url: SafeUrl,
+        mut username: Option<String>,
+        mut password: Option<String>,
+        trusted_publishing: TrustedPublishing,
+        keyring_provider: KeyringProviderType,
+        oidc_client: &BaseClient,
+        check_url: Option<&IndexUrl>,
+    ) -> Result<Self> {
+        // Support reading username and password from the URL, for symmetry with the index API.
+        if let Some(url_password) = publish_url.password() {
+            if password.is_some_and(|password| password != url_password) {
+                bail!("The password can't be set both in the publish URL and in the CLI");
             }
-        } else if check_url.is_none() {
-            warn_user_once!(
-                "Using `--keyring-provider` with a password or token and no check URL has no effect"
-            );
-        } else {
-            // We may be using the keyring for the simple index.
+            password = Some(url_password.to_string());
+            publish_url
+                .set_password(None)
+                .expect("Failed to clear publish URL password");
         }
+
+        if !publish_url.username().is_empty() {
+            if username.is_some_and(|username| username != publish_url.username()) {
+                bail!("The username can't be set both in the publish URL and in the CLI");
+            }
+            username = Some(publish_url.username().to_string());
+            publish_url
+                .set_username("")
+                .expect("Failed to clear publish URL username");
+        }
+
+        // If applicable, attempt obtaining a token for trusted publishing.
+        let trusted_publishing_error = match check_trusted_publishing(
+            username.as_deref(),
+            password.as_deref(),
+            keyring_provider,
+            trusted_publishing,
+            &publish_url,
+            oidc_client,
+        )
+        .await?
+        {
+            TrustedPublishResult::Configured(token) => {
+                return Ok(Self {
+                    publish_url,
+                    credentials: PublishingCredentials::TrustedPublishing(token),
+                    trusted_publishing_error: None,
+                });
+            }
+            TrustedPublishResult::Skipped => None,
+            TrustedPublishResult::Ignored(err) => Some(err),
+        };
+
+        if password.is_some() && username.is_none() {
+            bail!(
+                "Attempted to publish with a password, but no username. Either provide a username \
+                with `--username` (`UV_PUBLISH_USERNAME`), or use `--token` (`UV_PUBLISH_TOKEN`) \
+                instead of a password."
+            );
+        }
+
+        // If applicable, fetch the password from the keyring eagerly to avoid user confusion about
+        // missing keyring entries later.
+        if let Some(provider) = keyring_provider.to_provider() {
+            if password.is_none() {
+                if let Some(username) = &username {
+                    debug!("Fetching password from keyring");
+                    if let Some(keyring_password) = provider
+                        .fetch(&publish_url, Some(username))
+                        .await
+                        .as_ref()
+                        .and_then(|credentials| credentials.password())
+                    {
+                        password = Some(keyring_password.to_string());
+                    } else {
+                        warn_user_once!(
+                            "Keyring has no password for URL `{publish_url}` and username `{username}`"
+                        );
+                    }
+                }
+            } else if check_url.is_none() {
+                warn_user_once!(
+                    "Using `--keyring-provider` with a password or token and no check URL has no effect"
+                );
+            } else {
+                // We may be using the keyring for the simple index.
+            }
+        }
+
+        let credentials = Credentials::basic(username, password);
+
+        Ok(Self {
+            publish_url,
+            credentials: PublishingCredentials::Supplied(credentials),
+            trusted_publishing_error,
+        })
     }
-
-    let credentials = Credentials::basic(username, password);
-
-    Ok((publish_url, PublishingCredentials::Supplied(credentials)))
 }
 
-fn prompt_username_and_password() -> Result<(Option<String>, Option<String>)> {
+fn prompt_username_and_password() -> Result<Option<Credentials>, CredentialsPromptError> {
     let term = Term::stderr();
     if !term.is_term() {
-        return Ok((None, None));
+        return Ok(None);
     }
     let username_prompt = "Enter username ('__token__' if using a token): ";
     let password_prompt = "Enter password: ";
-    let username = uv_console::input(username_prompt, &term).context("Failed to read username")?;
-    let password =
-        uv_console::password(password_prompt, &term).context("Failed to read password")?;
-    Ok((Some(username), Some(password)))
+    let username =
+        uv_console::input(username_prompt, &term).map_err(CredentialsPromptError::ReadUsername)?;
+    let password = uv_console::password(password_prompt, &term)
+        .map_err(CredentialsPromptError::ReadPassword)?;
+    Ok(Some(Credentials::basic(Some(username), Some(password))))
 }
 
 #[cfg(test)]
@@ -459,15 +457,19 @@ mod tests {
 
     use insta::assert_snapshot;
 
-    use uv_redacted::DisplaySafeUrl;
+    use uv_redacted::SafeUrl;
 
     async fn get_credentials(
-        url: DisplaySafeUrl,
+        url: SafeUrl,
         username: Option<String>,
         password: Option<String>,
-    ) -> Result<(DisplaySafeUrl, Credentials)> {
+    ) -> Result<(SafeUrl, Credentials)> {
         let client = BaseClientBuilder::default().build()?;
-        gather_credentials(
+        let GatheredCredentials {
+            publish_url,
+            credentials,
+            ..
+        } = GatheredCredentials::gather(
             url,
             username,
             password,
@@ -475,19 +477,17 @@ mod tests {
             KeyringProviderType::Disabled,
             &client,
             None,
-            Prompt::Disabled,
-            Printer::Quiet,
         )
-        .await
-        .map(|(publish_url, credentials)| (publish_url, credentials.as_credentials().into_owned()))
+        .await?;
+        Ok((publish_url, credentials.as_credentials().into_owned()))
     }
 
     #[tokio::test]
     async fn username_password_sources() {
-        let example_url = DisplaySafeUrl::from_str("https://example.com").unwrap();
-        let example_url_username = DisplaySafeUrl::from_str("https://ferris@example.com").unwrap();
+        let example_url = SafeUrl::from_str("https://example.com").unwrap();
+        let example_url_username = SafeUrl::from_str("https://ferris@example.com").unwrap();
         let example_url_username_password =
-            DisplaySafeUrl::from_str("https://ferris:f3rr1s@example.com").unwrap();
+            SafeUrl::from_str("https://ferris:f3rr1s@example.com").unwrap();
 
         let (publish_url, credentials) = get_credentials(example_url.clone(), None, None)
             .await

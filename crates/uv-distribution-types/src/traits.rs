@@ -2,6 +2,7 @@ use std::borrow::Cow;
 
 use uv_normalize::PackageName;
 use uv_pep508::VerbatimUrl;
+use uv_redacted::policy::SerializationPolicy;
 
 use crate::error::Error;
 use crate::{
@@ -97,7 +98,7 @@ pub trait Verbatim {
     fn verbatim(&self) -> Cow<'_, str>;
 }
 
-impl Verbatim for VerbatimUrl {
+impl<P: SerializationPolicy> Verbatim for VerbatimUrl<P> {
     fn verbatim(&self) -> Cow<'_, str> {
         if let Some(given) = self.given() {
             Cow::Borrowed(given)

@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
-use uv_macros::OptionsMetadata;
+use uv_macros::{DeserializeUntagged, OptionsMetadata};
 
 /// Settings for the uv build backend (`uv_build`).
 ///
@@ -189,13 +189,15 @@ impl Default for BuildBackendSettings {
 }
 
 /// Whether to include a single module or multiple modules.
-#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq)]
+#[derive(DeserializeUntagged, Serialize, Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(untagged)]
 pub(crate) enum ModuleName {
     /// A single module name.
+    #[untagged(string)]
     Name(String),
     /// Multiple module names, which are all included.
+    #[untagged(seq)]
     Names(Vec<String>),
 }
 

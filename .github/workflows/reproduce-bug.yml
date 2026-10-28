@@ -64,7 +64,9 @@ jobs:
   reproduce:
     if: github.repository == 'astral-sh/uv'
     runs-on: ${{ inputs.runner }}
-    environment: automations
+    environment:
+      name: automations
+      deployment: false
     timeout-minutes: 15
     permissions:
       contents: read
@@ -87,20 +89,20 @@ jobs:
 
       - name: "Install uv on Linux x64"
         if: ${{ runner.os == 'Linux' && runner.arch == 'X64' }}
-        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
           # renovate: datasource=github-release-attachments depName=astral-sh/uv
-          version: "0.13.0"
-          checksum: "1468ebd5a5541121837c5a2817b9972ba6090fa6caa3d142620850a47fb75154"
+          version: "0.13.5"
+          checksum: "f68d291c75783122dad58ab77def0e13f3233f358731db5d6d7e8715603b928f"
           enable-cache: false
 
       - name: "Install uv on macOS ARM64"
         if: ${{ runner.os == 'macOS' && runner.arch == 'ARM64' }}
-        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
           # renovate: datasource=github-release-attachments depName=astral-sh/uv
-          version: "0.13.0"
-          checksum: "a9c1b29002cf3c83f07fa9cd8a887a3be0107d90e23189721221e7257db8e3d6"
+          version: "0.13.5"
+          checksum: "743f85035a1996ecb350659e01cd9faea9709829be09b1b4b03c73eaf3c9cd73"
           enable-cache: false
 
       - name: "Collect issue context"
@@ -133,14 +135,14 @@ jobs:
 
       - name: "Reproduce issue behavior"
         id: reproduce
-        uses: openai/codex-action@a8d8be6ee028bea4525bc722d16f36687b408c81
+        uses: openai/codex-action@c05cfd74ad95c626cdf05c6685e62becc3bf7813
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TMPDIR: ${{ runner.temp }}
           UV_CACHE_DIR: ${{ runner.temp }}/uv-reproduce-cache
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          codex-version: "0.154.0"
+          codex-version: "0.157.1"
           codex-home: "agents/codex"
           effort: high
           permission-profile: "reproduce-bug"
@@ -171,7 +173,9 @@ jobs:
     needs: reproduce
     if: needs.reproduce.outputs.result != ''
     runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
-    environment: automations
+    environment:
+      name: automations
+      deployment: false
     timeout-minutes: 10
     concurrency:
       group: issue-context-${{ needs.reproduce.outputs.issue-number }}
@@ -194,7 +198,7 @@ jobs:
 
       - name: "Get issue context token"
         id: token
-        uses: open-security-tools/ost-simple-sts@974a63a2daaaa40f7c6dec40d334f3da4421469e
+        uses: astral-sh/github-actions/simple-token-service@eb81cf4d13127c3f9539f621c17e4c65327636c8
         with:
           exchange-url: ${{ secrets.STS_API_URL }}/exchange
           audience: ${{ secrets.STS_API_URL }}
@@ -243,7 +247,9 @@ jobs:
       needs.reproduce.outputs.result != '' &&
       fromJSON(needs.reproduce.outputs.result).reproduction == 'reproducible'
     runs-on: ${{ inputs.runner }}
-    environment: automations
+    environment:
+      name: automations
+      deployment: false
     timeout-minutes: 60
     permissions:
       contents: read
@@ -266,20 +272,20 @@ jobs:
 
       - name: "Install uv on Linux x64"
         if: ${{ runner.os == 'Linux' && runner.arch == 'X64' }}
-        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
           # renovate: datasource=github-release-attachments depName=astral-sh/uv
-          version: "0.13.0"
-          checksum: "1468ebd5a5541121837c5a2817b9972ba6090fa6caa3d142620850a47fb75154"
+          version: "0.13.5"
+          checksum: "f68d291c75783122dad58ab77def0e13f3233f358731db5d6d7e8715603b928f"
           enable-cache: false
 
       - name: "Install uv on macOS ARM64"
         if: ${{ runner.os == 'macOS' && runner.arch == 'ARM64' }}
-        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
           # renovate: datasource=github-release-attachments depName=astral-sh/uv
-          version: "0.13.0"
-          checksum: "a9c1b29002cf3c83f07fa9cd8a887a3be0107d90e23189721221e7257db8e3d6"
+          version: "0.13.5"
+          checksum: "743f85035a1996ecb350659e01cd9faea9709829be09b1b4b03c73eaf3c9cd73"
           enable-cache: false
 
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
@@ -287,6 +293,8 @@ jobs:
           save-if: false
 
       - name: "Install required Python versions"
+        env:
+          UV_PYTHON_DOWNLOADS_JSON_URL: crates/uv-python-managed/download-metadata.json
         run: uv python install
 
       - name: "Collect reproduction context"
@@ -303,7 +311,7 @@ jobs:
 
       - name: "Create integration test"
         id: create-test
-        uses: openai/codex-action@a8d8be6ee028bea4525bc722d16f36687b408c81
+        uses: openai/codex-action@c05cfd74ad95c626cdf05c6685e62becc3bf7813
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           INSTA_UPDATE: "no"
@@ -311,7 +319,7 @@ jobs:
           UV_CACHE_DIR: ${{ runner.temp }}/uv-create-test-cache
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          codex-version: "0.154.0"
+          codex-version: "0.157.1"
           codex-home: "agents/codex"
           effort: high
           permission-profile: "create-bug-test"
@@ -381,7 +389,9 @@ jobs:
     needs: [reproduce, create-integration-test]
     if: needs.create-integration-test.outputs.created == 'true'
     runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-2' || 'ubuntu-slim' }}
-    environment: automations
+    environment:
+      name: automations
+      deployment: false
     timeout-minutes: 10
     permissions:
       contents: read
@@ -456,7 +466,7 @@ jobs:
 
       - name: "Get uv-dev token"
         id: token
-        uses: open-security-tools/ost-simple-sts@9e012247e07c39080fb6a832dbfbcfeacebc19c4
+        uses: astral-sh/github-actions/simple-token-service@eb81cf4d13127c3f9539f621c17e4c65327636c8
         with:
           exchange-url: ${{ secrets.STS_API_URL }}/exchange
           audience: ${{ secrets.STS_API_URL }}

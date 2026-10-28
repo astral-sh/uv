@@ -9,9 +9,22 @@ env:
 jobs:
   review:
     name: "code quality review"
-    if: github.event_name == 'pull_request' && github.repository == 'astral-sh/uv-dev' && github.event.pull_request.head.repo.full_name == github.repository
+    if: >-
+      ${{
+        github.event_name == 'pull_request' &&
+        github.event.pull_request.head.repo.full_name == github.repository &&
+        (
+          github.repository == 'astral-sh/uv-dev' ||
+          (
+            github.repository == 'astral-sh/uv' &&
+            contains(fromJSON('["astral-automations-bot[bot]", "charliermarsh", "woodruffw", "zanieb", "zaniebot", "zsol"]'), github.event.pull_request.user.login)
+          )
+        )
+      }}
     runs-on: depot-ubuntu-24.04-16
-    environment: automations
+    environment:
+      name: automations
+      deployment: false
     timeout-minutes: 30
     permissions:
       contents: read
@@ -26,15 +39,16 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
           # renovate: datasource=github-release-attachments depName=astral-sh/uv
-          version: "0.13.0"
-          checksum: "1468ebd5a5541121837c5a2817b9972ba6090fa6caa3d142620850a47fb75154"
+          version: "0.13.5"
+          checksum: "f68d291c75783122dad58ab77def0e13f3233f358731db5d6d7e8715603b928f"
 
       - name: "Prepare review configuration"
         env:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          UV_PYTHON_DOWNLOADS_JSON_URL: ${{ github.workspace }}/crates/uv-python-managed/download-metadata.json
         run: |
           export REVIEW_CONFIG="$RUNNER_TEMP/pull-request-code-quality-review"
           mkdir -p "$REVIEW_CONFIG/codex" "$RUNNER_TEMP/codex-code-quality-review"
@@ -75,13 +89,13 @@ jobs:
 
       - name: "Review pull request"
         id: review
-        uses: openai/codex-action@a8d8be6ee028bea4525bc722d16f36687b408c81
+        uses: openai/codex-action@c05cfd74ad95c626cdf05c6685e62becc3bf7813
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TMPDIR: ${{ runner.temp }}/codex-code-quality-review
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          codex-version: "0.154.0"
+          codex-version: "0.157.1"
           codex-home: "${{ env.REVIEW_CONFIG }}/codex"
           model: gpt-6-astra
           effort: xhigh
@@ -128,11 +142,11 @@ jobs:
           sparse-checkout: pull-request-review
           persist-credentials: false
 
-      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
           # renovate: datasource=github-release-attachments depName=astral-sh/uv
-          version: "0.13.0"
-          checksum: "1468ebd5a5541121837c5a2817b9972ba6090fa6caa3d142620850a47fb75154"
+          version: "0.13.5"
+          checksum: "f68d291c75783122dad58ab77def0e13f3233f358731db5d6d7e8715603b928f"
 
       - name: "Prepare review findings"
         id: comments
@@ -145,7 +159,9 @@ jobs:
     needs: prepare
     if: needs.prepare.outputs.result != '' && fromJSON(needs.prepare.outputs.result).comments[0] != null
     runs-on: github-ubuntu-24.04-x86_64-4
-    environment: automations
+    environment:
+      name: automations
+      deployment: false
     timeout-minutes: 5
     permissions:
       contents: read
@@ -161,11 +177,11 @@ jobs:
 
       - name: "Get repository token"
         id: token
-        uses: open-security-tools/ost-simple-sts@9e012247e07c39080fb6a832dbfbcfeacebc19c4
+        uses: astral-sh/github-actions/simple-token-service@eb81cf4d13127c3f9539f621c17e4c65327636c8
         with:
           exchange-url: ${{ secrets.STS_API_URL }}/exchange
           audience: ${{ secrets.STS_API_URL }}
-          repository: astral-sh/uv-dev
+          repository: ${{ github.repository }}
           permissions: |
             pull_requests: write
 

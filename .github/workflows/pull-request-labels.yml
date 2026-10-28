@@ -26,7 +26,9 @@ jobs:
   labels:
     if: github.repository == 'astral-sh/uv' || github.repository == 'astral-sh/uv-dev'
     runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
-    environment: automations
+    environment:
+      name: automations
+      deployment: false
     timeout-minutes: 15
     permissions:
       contents: read
@@ -68,12 +70,12 @@ jobs:
 
       - name: "Determine pull request labels"
         id: labels
-        uses: openai/codex-action@a8d8be6ee028bea4525bc722d16f36687b408c81
+        uses: openai/codex-action@c05cfd74ad95c626cdf05c6685e62becc3bf7813
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          codex-version: "0.154.0"
+          codex-version: "0.157.1"
           working-directory: "${{ github.workspace }}/pull-request"
           codex-home: "${{ github.workspace }}/agents/codex"
           permission-profile: "pull-request-labels"
@@ -137,14 +139,16 @@ jobs:
       needs.validate.outputs.labels != '' &&
       fromJSON(needs.validate.outputs.labels)[0] != null
     runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-2' || 'ubuntu-slim' }}
-    environment: automations
+    environment:
+      name: automations
+      deployment: false
     timeout-minutes: 5
     permissions:
       id-token: write # for the repository label credential broker
     steps:
       - name: "Get repository label token"
         id: token
-        uses: open-security-tools/ost-simple-sts@9e012247e07c39080fb6a832dbfbcfeacebc19c4
+        uses: astral-sh/github-actions/simple-token-service@eb81cf4d13127c3f9539f621c17e4c65327636c8
         with:
           exchange-url: ${{ secrets.STS_API_URL }}/exchange
           audience: ${{ secrets.STS_API_URL }}

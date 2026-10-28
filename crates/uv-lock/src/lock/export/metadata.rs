@@ -2,8 +2,11 @@ use std::collections::{BTreeMap, VecDeque};
 use std::fmt::Display;
 use std::path::Path;
 
+use uv_configuration::MetadataOutputVersion;
 use uv_distribution_filename::WheelFilename;
-use uv_distribution_types::{Name, Requirement, RequiresPython, ResolvedDist, UrlString};
+use uv_distribution_types::{
+    InstalledDist, Name, Requirement, RequiresPython, ResolvedDist, UrlString,
+};
 use uv_fs::PortablePathBuf;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
@@ -80,33 +83,24 @@ pub struct Metadata {
     requires_python: RequiresPython,
     /// Info about conflicting packages
     conflicts: MetadataConflicts,
-    /// A mapping from importable module names to the package nodes that provide them
+    /// Information about importable modules, keyed by module name.
     #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
-    module_owners: BTreeMap<ModuleName, Vec<MetadataModuleOwner>>,
+    modules: BTreeMap<ModuleName, MetadataModule>,
     /// An index of which nodes are workspace members
     ///
     /// These entries are often what you should use as the entry-points into the `resolve` graph.
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     members: Vec<MetadataWorkspaceMember>,
-    /// The dependency graph
+    /// The dependency graph.
     #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
     resolution: BTreeMap<MetadataNodeIdFlat, MetadataNode>,
-}
-
-/// The schema version for the metadata report.
-#[derive(serde::Serialize, Debug, Default)]
-#[serde(rename_all = "snake_case")]
-enum SchemaVersion {
-    /// An unstable, experimental schema.
-    #[default]
-    Preview,
 }
 
 /// The schema metadata for the metadata report.
 #[derive(serde::Serialize, Debug, Default)]
 struct SchemaReport {
     /// The version of the schema.
-    version: SchemaVersion,
+    version: MetadataOutputVersion,
 }
 
 /// Information about the existing or synchronized environment for the workspace.
@@ -116,6 +110,33 @@ struct MetadataEnvironment {
     root: PortablePathBuf,
     /// Information about the Python interpreter in the environment.
     python: PythonReport,
+    /// Installed distributions, keyed by selected resolution IDs or generated IDs for unmanaged
+    /// distributions.
+    packages: BTreeMap<MetadataNodeIdFlat, MetadataInstalledPackage>,
+}
+
+/// A distribution installed in a Python environment.
+#[derive(Debug, serde::Serialize)]
+struct MetadataInstalledPackage {
+    /// The normalized name of the distribution.
+    name: PackageName,
+    /// The installed version of the distribution.
+    version: Version,
+    /// The absolute path to the distribution's installed metadata.
+    path: PortablePathBuf,
+    /// Whether the distribution was installed as editable.
+    editable: bool,
+}
+
+impl MetadataInstalledPackage {
+    fn from_dist(dist: &InstalledDist) -> Self {
+        Self {
+            name: dist.name().clone(),
+            version: dist.version().clone(),
+            path: PortablePathBuf::from(dist.install_path()),
+            editable: dist.is_editable(),
+        }
+    }
 }
 
 /// Information about the Python interpreter in an existing environment.
@@ -219,14 +240,21 @@ impl MetadataWorkspaceMember {
     }
 }
 
+/// Information about an importable module.
+#[derive(Debug, serde::Serialize)]
+struct MetadataModule {
+    /// Installed distributions that provide this module.
+    owners: Vec<MetadataModuleOwner>,
+}
+
 /// An installed distribution that provides an importable module.
 #[derive(Debug, serde::Serialize)]
 struct MetadataModuleOwner {
-    /// Key for the package node in the `resolution` graph.
+    /// Key in `environment.packages` and, for a matched distribution, `resolution`.
     package_id: MetadataNodeIdFlat,
 }
 
-/// A node in the dependency graph.
+/// A node in the metadata report.
 ///
 /// There are 6 kinds of nodes:
 ///
@@ -755,6 +783,17 @@ pub(crate) struct MetadataWorkspaceGroupNodeId {
 type MetadataNodeIdFlat = String;
 
 impl MetadataNodeId {
+    fn from_unmanaged_distribution(dist: &InstalledDist) -> Self {
+        Self::Package(MetadataPackageNodeId {
+            name: dist.name().clone(),
+            version: Some(dist.version().clone()),
+            source: MetadataSource::Unmanaged {
+                unmanaged: PortablePathBuf::from(dist.install_path()),
+            },
+            kind: MetadataNodeKind::Package,
+        })
+    }
+
     pub(crate) fn from_script(path: PortablePathBuf) -> Self {
         Self::Script(MetadataScriptNodeId {
             kind: MetadataScriptNodeKind::Script,
@@ -891,6 +930,10 @@ enum MetadataSource {
     Virtual {
         r#virtual: PortablePathBuf,
     },
+    /// An unmanaged distribution found installed in the environment, identified by its metadata path.
+    Unmanaged {
+        unmanaged: PortablePathBuf,
+    },
 }
 
 impl Display for MetadataSource {
@@ -909,7 +952,8 @@ impl Display for MetadataSource {
             | Self::Path { path }
             | Self::Directory { directory: path }
             | Self::Editable { editable: path }
-            | Self::Virtual { r#virtual: path } => {
+            | Self::Virtual { r#virtual: path }
+            | Self::Unmanaged { unmanaged: path } => {
                 write!(f, "{}+{}", self.name(), path)
             }
         }
@@ -926,6 +970,7 @@ impl MetadataSource {
             Self::Directory { .. } => "directory",
             Self::Editable { .. } => "editable",
             Self::Virtual { .. } => "virtual",
+            Self::Unmanaged { .. } => "unmanaged",
         }
     }
 }
@@ -1274,16 +1319,32 @@ impl Metadata {
     ///
     /// Relative package paths are resolved against `workspace_root`. Script lockfiles are treated
     /// as workspaces because they do not identify the original script.
-    pub fn from_lockfile(workspace_root: &Path, lock: &Lock) -> Self {
-        Self::from_lock_target(MetadataTarget::Workspace(workspace_root), lock)
+    pub fn from_lockfile(
+        workspace_root: &Path,
+        lock: &Lock,
+        output_version: MetadataOutputVersion,
+    ) -> Self {
+        Self::from_lock_target(
+            MetadataTarget::Workspace(workspace_root),
+            lock,
+            output_version,
+        )
     }
 
     /// Construct [`Metadata`] for a script from a uv lockfile.
-    pub fn from_script(script_path: &Path, lock: &Lock) -> Self {
-        Self::from_lock_target(MetadataTarget::Script(script_path), lock)
+    pub fn from_script(
+        script_path: &Path,
+        lock: &Lock,
+        output_version: MetadataOutputVersion,
+    ) -> Self {
+        Self::from_lock_target(MetadataTarget::Script(script_path), lock, output_version)
     }
 
-    fn from_lock_target(target: MetadataTarget<'_>, lock: &Lock) -> Self {
+    fn from_lock_target(
+        target: MetadataTarget<'_>,
+        lock: &Lock,
+        output_version: MetadataOutputVersion,
+    ) -> Self {
         let mut resolve = BTreeMap::new();
         let workspace_root = PortablePathBuf::from(target.workspace_root());
         let workspace_packages = lock.packages().iter().filter(|package| match target {
@@ -1416,13 +1477,13 @@ impl Metadata {
 
         Self {
             schema: SchemaReport {
-                version: SchemaVersion::Preview,
+                version: output_version,
             },
             conflicts,
             environment: None,
             script,
             workspace: workspace_metadata,
-            module_owners: BTreeMap::new(),
+            modules: BTreeMap::new(),
             workspace_root,
             requires_python: lock.requires_python.clone(),
             members,
@@ -1444,26 +1505,46 @@ impl Metadata {
         .to_flat())
     }
 
+    /// Return the package node ID for an unmanaged distribution.
+    ///
+    /// Installed metadata may not identify the original source, such as the registry, so the
+    /// ID uses the distribution's metadata path as its source.
+    pub fn unmanaged_package_node_id(dist: &InstalledDist) -> String {
+        MetadataNodeId::from_unmanaged_distribution(dist).to_flat()
+    }
+
     #[must_use]
-    pub fn with_environment(mut self, environment: &PythonEnvironment) -> Self {
+    pub fn with_environment(
+        mut self,
+        environment: &PythonEnvironment,
+        packages: impl IntoIterator<Item = (String, InstalledDist)>,
+    ) -> Self {
         self.environment = Some(MetadataEnvironment {
             root: PortablePathBuf::from(environment.root()),
             python: PythonReport::from(environment.interpreter()),
+            packages: packages
+                .into_iter()
+                .map(|(package_id, dist)| (package_id, MetadataInstalledPackage::from_dist(&dist)))
+                .collect(),
         });
         self
     }
 
     #[must_use]
-    pub fn with_module_owners(mut self, module_owners: BTreeMap<ModuleName, Vec<String>>) -> Self {
-        self.module_owners = module_owners
+    pub fn with_modules(mut self, module_owners: BTreeMap<ModuleName, Vec<String>>) -> Self {
+        self.modules = module_owners
             .into_iter()
             .filter_map(|(module, owners)| {
                 let owners = owners
                     .into_iter()
-                    .filter(|package_id| self.resolution.contains_key(package_id))
+                    .filter(|package_id| {
+                        self.environment.as_ref().is_some_and(|environment| {
+                            environment.packages.contains_key(package_id)
+                        })
+                    })
                     .map(|package_id| MetadataModuleOwner { package_id })
                     .collect::<Vec<_>>();
-                (!owners.is_empty()).then_some((module, owners))
+                (!owners.is_empty()).then_some((module, MetadataModule { owners }))
             })
             .collect();
         self

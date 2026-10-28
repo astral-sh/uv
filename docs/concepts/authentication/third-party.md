@@ -15,7 +15,7 @@ uv supports automatic authentication for the Hugging Face Hub. Specifically, if 
 environment variable is set, uv will propagate it to requests to `huggingface.co`.
 
 This is particularly useful for accessing private scripts in Hugging Face Datasets. For example, you
-can run the following command to execute the script `main.py` script from a private dataset:
+can run the following command to execute the script `main.py` from a private dataset:
 
 ```console
 $ HF_TOKEN=hf_... uv run https://huggingface.co/datasets/<user>/<name>/resolve/<branch>/main.py

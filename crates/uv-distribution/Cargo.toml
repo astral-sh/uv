@@ -1,6 +1,6 @@
 [package]
 name = "uv-distribution"
-version = "0.0.92"
+version = "0.0.98"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -16,6 +16,7 @@ doctest = false
 workspace = true
 
 [dependencies]
+uv-macros = { workspace = true }
 uv-python-types = { workspace = true }
 uv-auth = { workspace = true }
 uv-cache = { workspace = true }
@@ -42,6 +43,7 @@ uv-pypi-types = { workspace = true }
 uv-redacted = { workspace = true }
 uv-static = { workspace = true }
 uv-threads = { workspace = true }
+uv-torch = { workspace = true }
 uv-types = { workspace = true }
 uv-workspace = { workspace = true }
 
@@ -64,7 +66,6 @@ tokio = { workspace = true }
 tokio-util = { workspace = true, features = ["compat"] }
 toml = { workspace = true }
 tracing = { workspace = true }
-url = { workspace = true }
 version-ranges = { workspace = true }
 walkdir = { workspace = true }
 

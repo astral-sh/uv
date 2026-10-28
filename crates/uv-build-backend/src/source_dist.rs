@@ -2,7 +2,8 @@ use crate::metadata::DEFAULT_EXCLUDES;
 use crate::wheel::build_exclude_matcher;
 use crate::{
     BuildBackendSettings, DirectoryWriter, Error, FileList, ListWriter, PyProjectToml,
-    error_on_venv, find_roots, write_directory_once, write_file_with_directories,
+    compare_build_entries, error_on_venv, find_roots, write_directory_once,
+    write_file_with_directories,
 };
 use flate2::Compression;
 use flate2::write::GzEncoder;
@@ -90,14 +91,12 @@ pub fn list_source_dist(
 fn source_dist_matcher(
     source_tree: &Path,
     pyproject_toml: &PyProjectToml,
-    settings: BuildBackendSettings,
+    settings: &BuildBackendSettings,
+    license_files: &[String],
     show_warnings: bool,
 ) -> Result<(GlobDirFilter, GlobSet), Error> {
     // File and directories to include in the source directory
     let mut include_globs = Vec::new();
-    let mut includes: Vec<String> = settings.source_include;
-    // pyproject.toml is always included.
-    includes.push(globset::escape("pyproject.toml"));
 
     // Check that the source tree contains a module.
     let (src_root, modules_relative) = find_roots(
@@ -108,6 +107,9 @@ fn source_dist_matcher(
         settings.namespace,
         show_warnings,
     )?;
+    let mut includes = Vec::with_capacity(modules_relative.len() + 1);
+    // pyproject.toml is always included.
+    includes.push(globset::escape("pyproject.toml"));
     for module_relative in modules_relative {
         // The wheel must not include any files included by the source distribution (at least until we
         // have files generated in the source dist -> wheel build step).
@@ -116,9 +118,9 @@ fn source_dist_matcher(
         let import_path = normalize_path(path).portable_display().to_string();
         includes.push(format!("{}/**", globset::escape(&import_path)));
     }
-    for include in includes {
+    for include in settings.source_include.iter().chain(&includes) {
         let glob = PortableGlobParser::Uv
-            .parse(&include)
+            .parse(include)
             .map_err(|err| Error::PortableGlob {
                 field: "tool.uv.build-backend.source-include".to_string(),
                 source: err,
@@ -140,10 +142,14 @@ fn source_dist_matcher(
     }
 
     // Include the license files
-    for license_files in pyproject_toml.license_files_source_dist() {
-        trace!("Including license files at: {license_files}`");
+    for license_file in license_files {
+        trace!("Including license file at: {license_file}");
+        let glob = Glob::new(&globset::escape(license_file)).expect("escaped globset is parseable");
+        include_globs.push(glob);
+    }
+    if let Some(license_file) = pyproject_toml.legacy_license_file() {
         let glob = PortableGlobParser::Pep639
-            .parse(license_files)
+            .parse(license_file)
             .map_err(|err| Error::PortableGlob {
                 field: "project.license-files".to_string(),
                 source: err,
@@ -216,13 +222,8 @@ fn write_source_dist(
     show_warnings: bool,
 ) -> Result<SourceDistFilename, Error> {
     let pyproject_toml = PyProjectToml::parse(&source_tree.join("pyproject.toml"))?;
-    for warning in pyproject_toml.check_build_system(uv_version, BuildKind::Sdist) {
-        warn_user_once!("{warning}");
-    }
-    let settings = pyproject_toml
-        .settings()
-        .cloned()
-        .unwrap_or_else(BuildBackendSettings::default);
+    pyproject_toml.warn_build_system(uv_version, BuildKind::Sdist);
+    let settings = pyproject_toml.settings();
 
     let filename = SourceDistFilename {
         name: pyproject_toml.name().clone(),
@@ -280,15 +281,20 @@ fn write_source_dist(
         &pyproject_path,
     )?;
 
-    let (include_matcher, exclude_matcher) =
-        source_dist_matcher(source_tree, &pyproject_toml, settings, show_warnings)?;
+    let (include_matcher, exclude_matcher) = source_dist_matcher(
+        source_tree,
+        &pyproject_toml,
+        &settings,
+        &metadata.license_files,
+        show_warnings,
+    )?;
 
     let mut files_visited = 0;
     let mut written_directories = FxHashSet::<PathBuf>::default();
     let top_level_directory = PathBuf::from(&top_level).join("");
     write_directory_once(&mut writer, &mut written_directories, &top_level_directory)?;
     for entry in WalkDir::new(source_tree)
-        .sort_by_file_name()
+        .sort_by(compare_build_entries)
         .into_iter()
         .filter_entry(|entry| {
             // TODO(konsti): This should be prettier.
@@ -324,7 +330,7 @@ fn write_source_dist(
             .strip_prefix(source_tree)
             .expect("walkdir starts with root");
 
-        if !include_matcher.match_path(relative) || exclude_matcher.is_match(relative) {
+        if !include_matcher.match_path(relative, &entry) || exclude_matcher.is_match(relative) {
             trace!("Excluding from sdist: {}", relative.user_display());
             continue;
         }

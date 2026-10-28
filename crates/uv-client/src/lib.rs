@@ -12,7 +12,7 @@ pub use registry_client::{
     Connectivity, MetadataFormat, MetadataRangeRequest, RegistryClient, RegistryClientBuilder,
     SimpleDetailMetadata, SimpleDetailMetadatum, SimpleIndexMetadata, VersionFiles,
 };
-pub(crate) use retry::UvRetryableStrategy;
+pub(crate) use retry::UvRetryMiddleware;
 pub use retry::{RetriableError, RetryState, retryable_on_request_failure};
 pub use rkyvutil::OwnedArchive;
 pub use tls::{CertificateFileError, Certificates};

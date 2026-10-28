@@ -12,7 +12,7 @@ use uv_fs::normalize_path;
 use uv_git_types::GitUrl;
 use uv_pep508::VerbatimUrl;
 use uv_pypi_types::{ParsedArchiveUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl};
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 
 use super::{LockError, LockErrorKind};
 
@@ -140,7 +140,7 @@ pub(super) fn normalize_requirement(
             };
 
             // Reconstruct the PEP 508 URL from the underlying data.
-            let url = DisplaySafeUrl::from(ParsedGitDirectoryUrl {
+            let url = SafeUrl::from(ParsedGitDirectoryUrl {
                 url: git.clone(),
                 subdirectory: subdirectory.clone(),
             });
@@ -177,7 +177,7 @@ pub(super) fn normalize_requirement(
             };
 
             // Reconstruct the PEP 508 URL from the underlying data.
-            let url = DisplaySafeUrl::from(ParsedGitPathUrl {
+            let url = SafeUrl::from(ParsedGitPathUrl {
                 url: git.clone(),
                 install_path: install_path.clone(),
                 ext,
@@ -256,8 +256,8 @@ pub(super) fn normalize_requirement(
             location.set_fragment(None);
 
             // Reconstruct the PEP 508 URL from the underlying data.
-            let url = DisplaySafeUrl::from(ParsedArchiveUrl {
-                url: location.clone(),
+            let url = SafeUrl::from(ParsedArchiveUrl {
+                url: location.as_url().clone(),
                 subdirectory: subdirectory.clone(),
                 ext,
             });

@@ -17,9 +17,48 @@ env:
   UV_LOCKED: 1
 
 jobs:
-  plan:
+  detect-vet-workspaces:
     # CI on main is redundant in the security repository.
     if: ${{ github.repository != 'astral-sh/uv-security' || github.ref != 'refs/heads/main' }}
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-2' || 'ubuntu-latest' }}
+    outputs:
+      workspaces: ${{ steps.detect.outputs.workspaces }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: ${{ github.event_name == 'pull_request' && 2 || 0 }}
+          persist-credentials: false
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          # renovate: datasource=github-release-attachments depName=astral-sh/uv
+          version: "0.13.4"
+          checksum: "2b428396f12572d4429cf210ca234dd599a33b3af0958a4d5ed569d63e3f344f"
+      - name: "Detect Cargo Vet workspaces"
+        id: detect
+        env:
+          HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+          UV_PYTHON_DOWNLOADS_JSON_URL: ${{ github.workspace }}/crates/uv-python-managed/download-metadata.json
+        run: uv run --script scripts/cargo-vet-workspaces.py >> "$GITHUB_OUTPUT"
+
+  check-vet:
+    name: "Cargo Vet"
+    needs: detect-vet-workspaces
+    uses: astral-sh/github-actions/.github/workflows/cargo-vet.yml@c064e17eb42bf9ac71f66d7f5eda694f326d16cd
+    with:
+      runner: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
+      workspaces: ${{ needs.detect-vet-workspaces.outputs.workspaces }}
+      # renovate: datasource=github-release-attachments depName=astral-sh/uv
+      uv-version: "0.13.4"
+    secrets: inherit
+    permissions:
+      contents: read
+      id-token: write
+
+  plan:
+    needs: check-vet
     uses: $/.github/workflows/plan.yml
 
   check-fmt:
@@ -29,17 +68,18 @@ jobs:
   review:
     needs: plan
     if: ${{ github.event_name == 'pull_request' && github.repository == 'astral-sh/uv' && github.event.pull_request.head.repo.full_name == github.repository && needs.plan.outputs.review-security == 'true' }}
-    uses: astral-sh/github-actions/.github/workflows/pull-request-security-review.yml@3c57a5dba8ad854a97e8b9fbf454286a7574e677
+    uses: astral-sh/github-actions/.github/workflows/pull-request-security-review.yml@f11dbff15181b71f2cc5e8487b1ac7d7bb03ea7d
     with:
       runner: depot-ubuntu-24.04-16
       helper-runner: github-ubuntu-24.04-x86_64-4
       # renovate: datasource=github-release-attachments depName=astral-sh/uv
-      uv-version: "0.13.0"
-      uv-checksum: "1468ebd5a5541121837c5a2817b9972ba6090fa6caa3d142620850a47fb75154"
+      uv-version: "0.13.5"
+      uv-checksum: "f68d291c75783122dad58ab77def0e13f3233f358731db5d6d7e8715603b928f"
       # Install Rust tools such as cargo-nextest so the reviewer can test PR code.
       # Keep the environment outside the checkout when switching to the PR head.
       setup-command: |
         export UV_PROJECT_ENVIRONMENT="$RUNNER_TEMP/pull-request-review-tools"
+        export UV_PYTHON_DOWNLOADS_JSON_URL="$GITHUB_WORKSPACE/crates/uv-python-managed/download-metadata.json"
         uv sync --locked --only-dev
         echo "$UV_PROJECT_ENVIRONMENT/bin" >> "$GITHUB_PATH"
     secrets: inherit
@@ -51,7 +91,13 @@ jobs:
 
   review-code-quality:
     needs: plan
-    if: ${{ github.event_name == 'pull_request' && github.repository == 'astral-sh/uv-dev' && github.event.pull_request.head.repo.full_name == github.repository && needs.plan.outputs.run-checks == 'true' }}
+    if: >-
+      ${{
+        github.event_name == 'pull_request' &&
+        (github.repository == 'astral-sh/uv' || github.repository == 'astral-sh/uv-dev') &&
+        github.event.pull_request.head.repo.full_name == github.repository &&
+        needs.plan.outputs.run-checks == 'true'
+      }}
     uses: $/.github/workflows/pull-request-code-quality-review.yml
     secrets: inherit
     permissions:
@@ -99,6 +145,32 @@ jobs:
     permissions:
       contents: read
       id-token: write
+
+  check-cargo-lock-changes:
+    name: "Cargo lockfile changes"
+    if: >-
+      ${{
+        github.event_name == 'pull_request' &&
+        github.repository_owner == 'astral-sh' &&
+        github.event.pull_request.head.repo.full_name != github.repository
+      }}
+    runs-on: github-ubuntu-24.04-x86_64-2
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          # renovate: datasource=github-release-attachments depName=astral-sh/uv
+          version: "0.13.5"
+          checksum: "f68d291c75783122dad58ab77def0e13f3233f358731db5d6d7e8715603b928f"
+      - name: "Check Cargo lockfile changes"
+        env:
+          GH_REPOSITORY: ${{ github.repository }}
+          UV_PYTHON_DOWNLOADS_JSON_URL: ${{ github.workspace }}/crates/uv-python-managed/download-metadata.json
+        run: uv run --script scripts/check-cargo-lock-changes.py HEAD^1 HEAD
 
   check-lock:
     needs: plan
@@ -220,6 +292,7 @@ jobs:
   # This job cannot be moved into a reusable workflow because it includes coverage for uploading
   # attestations and PyPI does not support attestations in reusable workflows.
   test-publish:
+    cache-mode: none
     name: "test uv publish"
     timeout-minutes: 20
     needs:
@@ -268,7 +341,7 @@ jobs:
           ../uv build
 
       - name: "Publish astral-test-pypa-gh-action"
-        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
         with:
           # With this GitHub action, we can't do as rigid checks as with our custom Python script, so we publish more
           # leniently
@@ -330,6 +403,8 @@ jobs:
     if: ${{ always() && github.ref != 'refs/heads/main' }}
     needs:
       - plan
+      - check-cargo-lock-changes
+      - check-vet
       - check-fmt
       - check-lint
       - check-docs
@@ -351,7 +426,7 @@ jobs:
             echo "$NEEDS_JSON" | jq -r --argjson conditional_jobs "$CONDITIONAL_JOBS" '
               to_entries[]
               | select($conditional_jobs[.key] != false)
-              | select(.value.result != "success" and .value.result != "skipped")
+              | select(.value.result != "success" and (.value.result != "skipped" or .key == "check-vet"))
               | "\(.key): \(.value.result)"
             '
           )

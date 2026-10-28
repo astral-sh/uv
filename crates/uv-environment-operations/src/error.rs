@@ -4,6 +4,7 @@ use uv_audit::osv;
 use uv_auth::CredentialsFromUrlError;
 use uv_command_support::UvError;
 use uv_distribution_types::{IndexCredentialsError, IndexUrlError, RequiresPython};
+use uv_macros::DebugNoInline;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
 use uv_python_discovery::format_requires_python_sources;
@@ -14,7 +15,7 @@ use uv_workspace::dependency_groups::DependencyGroupError;
 use crate::ConflictError;
 
 /// A failure while resolving, creating, or updating a Python environment.
-#[derive(thiserror::Error, Debug)]
+#[derive(thiserror::Error, DebugNoInline)]
 pub enum EnvironmentError {
     #[error(transparent)]
     Conflict(#[from] ConflictError),
@@ -58,6 +59,11 @@ pub enum EnvironmentError {
 
     #[error("Project virtual environment directory `{0}` cannot be used because {1}")]
     InvalidProjectEnvironmentDir(PathBuf, String),
+
+    #[error(
+        "Script environment at `{0}` cannot be replaced because it is a non-empty directory that is not a virtual environment"
+    )]
+    InvalidScriptEnvironmentDir(PathBuf),
 
     #[error(
         "Malware detected in one or more dependencies that would be installed; aborting sync. Set `UV_MALWARE_CHECK=0` to bypass this check."
@@ -222,6 +228,7 @@ impl From<EnvironmentError> for UvError {
             | EnvironmentError::LockedPythonIncompatibility(..)
             | EnvironmentError::LockedPlatformIncompatibility(..)
             | EnvironmentError::InvalidProjectEnvironmentDir(..)
+            | EnvironmentError::InvalidScriptEnvironmentDir(..)
             | EnvironmentError::MalwareFound
             | EnvironmentError::Osv(..)
             | EnvironmentError::DroppedEnvironment
@@ -276,6 +283,7 @@ impl uv_errors::Hinted for EnvironmentError {
             | Self::LockedPythonIncompatibility(..)
             | Self::LockedPlatformIncompatibility(..)
             | Self::InvalidProjectEnvironmentDir(..)
+            | Self::InvalidScriptEnvironmentDir(..)
             | Self::MalwareFound
             | Self::Osv(..)
             | Self::DroppedEnvironment

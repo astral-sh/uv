@@ -143,6 +143,7 @@ jobs:
     steps:
       - name: "Install python3.9"
         run: |
+          sudo sed -i '/azure\.archive\.ubuntu\.com/d' /etc/apt/apt-mirrors.txt
           for i in {1..5}; do
             sudo add-apt-repository ppa:deadsnakes && break || { echo "Attempt $i failed, retrying in 10 seconds..."; sleep 10; }
             if [ $i -eq 5 ]; then
@@ -373,7 +374,7 @@ jobs:
       - name: "Install Python via Python Install manager"
         run: |
           # https://www.python.org/downloads/release/pymanager-250/
-          winget install --accept-package-agreements --accept-source-agreements 9NQ7512CXL7T
+          winget install --source msstore --accept-package-agreements --accept-source-agreements 9NQ7512CXL7T
           # Call Python Install Manager's py.exe by full path to avoid legacy py.exe
           & "$env:LOCALAPPDATA\Microsoft\WindowsApps\py.exe" install 3.14
 
@@ -477,6 +478,7 @@ jobs:
     steps:
       - name: "Install Wine"
         run: |
+          sudo sed -i '/azure\.archive\.ubuntu\.com/d' /etc/apt/apt-mirrors.txt
           echo 'Acquire::Retries "3";' | sudo tee /etc/apt/apt.conf.d/80-retries > /dev/null
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends wine wine64
@@ -1032,6 +1034,7 @@ jobs:
           UV_TEST_PYTORCH_URL: https://download.pytorch.org/whl/cpu
 
   integration-test-registries:
+    cache-mode: none
     name: "registries"
     timeout-minutes: 10
     runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
@@ -1060,7 +1063,7 @@ jobs:
         run: chmod +x ./uv
 
       - name: "Configure AWS credentials"
-        uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}

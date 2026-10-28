@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "uv"
-version = "0.13.0"
+version = "0.13.6"
 description = "An extremely fast Python package and project manager, written in Rust."
 authors = [{ name = "Astral Software Inc.", email = "hey@astral.sh" }]
 requires-python = ">=3.8"
@@ -79,6 +79,7 @@ version_files = [
   "docs/guides/integration/gitlab.md",
   "docs/guides/integration/aws-lambda.md",
   "docs/guides/projects.md",
+  "docs/reference/troubleshooting/reproducible-examples.md",
   "docs/concepts/build-backend.md",
   "docs/concepts/projects/init.md",
   "docs/concepts/projects/workspaces.md",
@@ -125,12 +126,15 @@ check = [
     "typos>=1.49.0",
     "validate-pyproject[all,store]>=0.25",
 ]
+test = [
+    "astral-dev-toolchain-cargo-nextest>=0.9.143",
+]
 dev = [
+    { include-group = "test" },
     "astral-dev-toolchain-cargo-bloat>=0.12.1",
     "astral-dev-toolchain-cargo-codspeed>=5.0.1",
     "astral-dev-toolchain-cargo-deny>=0.20.2",
     "astral-dev-toolchain-cargo-dist>=0.32.0",
-    "astral-dev-toolchain-cargo-nextest>=0.9.143",
     "astral-dev-toolchain-cargo-xwin>=0.23.1",
 ]
 
@@ -175,6 +179,7 @@ astral-dev-toolchain-cargo-bloat = "2026-09-14T19:10:00Z"
 astral-dev-toolchain-cargo-shear = "2026-08-27T04:00:00Z"
 astral-dev-toolchain-cargo-dist = "2026-08-28T04:00:00Z"
 astral-dev-toolchain-cargo-xwin = "2026-08-27T04:00:00Z"
+certifi = "2026-10-20T02:24:17Z"
 
 [tool.uv.dependency-groups]
 docs = { requires-python = ">=3.12" }

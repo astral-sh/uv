@@ -39,12 +39,11 @@
 use std::str::FromStr;
 use std::sync::LazyLock;
 
-use url::Url;
-
 use uv_distribution_types::{IndexUrl, IndexUrlError};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_platform_tags::Os;
+use uv_redacted::SafeUrl;
 
 use crate::accelerator::{Accelerator, AcceleratorError, AmdGpuArchitecture};
 
@@ -590,7 +589,7 @@ impl TorchBackend {
     }
 
     /// Extract a [`TorchBackend`] from an index URL.
-    pub fn from_index(index: &Url) -> Option<Self> {
+    pub fn from_index(index: &SafeUrl) -> Option<Self> {
         let backend_identifier = if index.host_str() == Some("download.pytorch.org") {
             // E.g., `https://download.pytorch.org/whl/cu124`
             let mut path_segments = index.path_segments()?;

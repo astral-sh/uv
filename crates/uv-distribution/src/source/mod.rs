@@ -19,7 +19,6 @@ use futures::{FutureExt, TryStreamExt};
 use reqwest::{Response, StatusCode};
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::{Instrument, debug, info_span, instrument, warn};
-use url::Url;
 
 use uv_auth::CredentialsCache;
 use uv_cache::{Cache, CacheBucket, CacheEntry, CacheShard, Removal, WheelCache};
@@ -44,7 +43,7 @@ use uv_normalize::PackageName;
 use uv_pep440::{Version, release_specifiers_to_ranges};
 use uv_platform_tags::Tags;
 use uv_pypi_types::{HashAlgorithm, HashDigest, HashDigests, PyProjectToml, ResolutionMetadata};
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 use uv_types::{BuildContext, BuildKey, BuildStack, SourceBuildTrait};
 use uv_workspace::pyproject::ToolUvSources;
 
@@ -175,7 +174,7 @@ impl<'a, 'client> StaticMetadataDatabase<'a, 'client> {
 async fn fetch_git_source_tree(
     git_resolver: &GitResolver,
     git: &GitUrl,
-    url: DisplaySafeUrl,
+    url: SafeUrl,
     subdirectory: Option<&Path>,
     http_settings: GitHttpSettings,
     cache: &Cache,
@@ -649,7 +648,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     async fn url<'data>(
         &self,
         source: &BuildableSource<'data>,
-        url: &'data DisplaySafeUrl,
+        url: &'data SafeUrl,
         index: Option<&'data IndexUrl>,
         cache_shard: &CacheShard,
         subdirectory: Option<&'data Path>,
@@ -783,7 +782,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     async fn url_metadata<'data>(
         &self,
         source: &BuildableSource<'data>,
-        url: &'data DisplaySafeUrl,
+        url: &'data SafeUrl,
         index: Option<&'data IndexUrl>,
         cache_shard: &CacheShard,
         subdirectory: Option<&'data Path>,
@@ -969,7 +968,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         &self,
         source: &BuildableSource<'_>,
         ext: SourceDistExtension,
-        url: &DisplaySafeUrl,
+        url: &SafeUrl,
         index: Option<&IndexUrl>,
         cache_shard: &CacheShard,
         hashes: ArchiveHashPolicy<'_>,
@@ -2272,19 +2271,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             return Err(Error::HashesNotSupportedGit(source.to_string()));
         }
 
-        // If the reference appears to be a commit, and we've already checked it out, avoid taking
-        // the GitHub fast path.
-        let cache_shard = resource
-            .git
-            .reference()
-            .as_str()
-            .and_then(|reference| GitOid::from_str(reference).ok())
-            .map(|oid| {
-                self.build_context.cache().shard(
-                    CacheBucket::SourceDistributions,
-                    WheelCache::Git(resource.url, oid.as_short_str()).root(),
-                )
-            });
+        // If the commit is known and we've already checked it out, avoid taking the GitHub fast path.
+        let cache_shard = resource.git.precise().map(|oid| {
+            self.build_context.cache().shard(
+                CacheBucket::SourceDistributions,
+                WheelCache::Git(resource.url, oid.as_short_str()).root(),
+            )
+        });
         if cache_shard
             .as_ref()
             .is_some_and(|cache_shard| cache_shard.is_dir())
@@ -2655,14 +2648,20 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         };
 
         // Fetch the `pyproject.toml` from the resolved commit.
-        let url =
-            format!("https://raw.githubusercontent.com/{owner}/{repo}/{commit}/pyproject.toml");
+        let url = SafeUrl::parse_relaxed(&format!(
+            "https://raw.githubusercontent.com/{owner}/{repo}/{commit}/pyproject.toml"
+        ))
+        .map_err(anyhow::Error::from)?;
 
         debug!("Attempting to fetch `pyproject.toml` from: {url}");
 
         let content = client
             .managed(async |client| {
-                let response = client.uncached_client(git.url()).get(&url).send().await?;
+                let response = client
+                    .uncached_client(git.url())
+                    .get(url.clone())
+                    .send()
+                    .await?;
 
                 // If the `pyproject.toml` does not exist, the GitHub API will return a 404.
                 if response.status() == StatusCode::NOT_FOUND {
@@ -2761,7 +2760,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         &self,
         source: &BuildableSource<'_>,
         ext: SourceDistExtension,
-        url: &DisplaySafeUrl,
+        url: &SafeUrl,
         index: Option<&IndexUrl>,
         entry: &CacheEntry,
         revision: Revision,
@@ -3218,13 +3217,10 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     }
 
     /// Returns a GET [`reqwest::Request`] for the given URL.
-    fn request(
-        url: DisplaySafeUrl,
-        client: &RegistryClient,
-    ) -> Result<reqwest::Request, reqwest::Error> {
+    fn request(url: SafeUrl, client: &RegistryClient) -> Result<reqwest::Request, reqwest::Error> {
         client
             .uncached_client(&url)
-            .get(Url::from(url))
+            .get(url)
             .header(
                 // `reqwest` defaults to accepting compressed responses.
                 // Specify identity encoding to get consistent .whl downloading

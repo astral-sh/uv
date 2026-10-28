@@ -39,11 +39,11 @@ jobs:
       id-token: write # For PyPI's trusted publishing
     steps:
       - name: "Install uv"
-        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
           # renovate: datasource=github-release-attachments depName=astral-sh/uv
-          version: "0.13.0"
-          checksum: "1468ebd5a5541121837c5a2817b9972ba6090fa6caa3d142620850a47fb75154"
+          version: "0.13.5"
+          checksum: "f68d291c75783122dad58ab77def0e13f3233f358731db5d6d7e8715603b928f"
           enable-cache: false
           ignore-empty-workdir: true
       - name: "Download uv release distributions"
@@ -64,11 +64,11 @@ jobs:
       id-token: write # For PyPI's trusted publishing
     steps:
       - name: "Install uv"
-        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
           # renovate: datasource=github-release-attachments depName=astral-sh/uv
-          version: "0.13.0"
-          checksum: "1468ebd5a5541121837c5a2817b9972ba6090fa6caa3d142620850a47fb75154"
+          version: "0.13.5"
+          checksum: "f68d291c75783122dad58ab77def0e13f3233f358731db5d6d7e8715603b928f"
           enable-cache: false
           ignore-empty-workdir: true
       - name: "Download uv_build release distributions"

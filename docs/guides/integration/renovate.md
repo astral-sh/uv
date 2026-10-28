@@ -64,8 +64,8 @@ like so:
 
 ## Dependency cooldown
 
-If you use [`exclude-newer`](../../reference/settings.md#exclude-newer) option, it is recommended to
-also set the equivalent
+If you use the [`exclude-newer`](../../reference/settings.md#exclude-newer) option, it is
+recommended to also set the equivalent
 [`minimumReleaseAge`](https://docs.renovatebot.com/configuration-options/#minimumreleaseage) option
 in Renovate, to avoid ending up with pull requests where uv would not be able to lock the
 dependencies.

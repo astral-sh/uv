@@ -1,6 +1,6 @@
 [package]
 name = "uv-metadata"
-version = "0.0.92"
+version = "0.0.98"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -14,6 +14,7 @@ doctest = false
 
 [dependencies]
 uv-distribution-filename = { workspace = true }
+uv-distribution-types = { workspace = true }
 uv-normalize = { workspace = true }
 uv-pypi-types = { workspace = true }
 

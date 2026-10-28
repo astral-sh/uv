@@ -1,5 +1,3 @@
-use std::collections::BTreeMap;
-
 use anyhow::{Context, Result};
 use assert_fs::fixture::ChildPath;
 use assert_fs::prelude::*;
@@ -8,21 +6,15 @@ use insta::assert_snapshot;
 
 use uv_test::archive::write_tar_gz;
 use uv_test::find_links::FindLinksServer;
-use uv_test::packse::{PackseServer, generate_wheel, scenario::Scenario};
+use uv_test::packse::{PackseServer, WheelBuilder, scenario::Scenario};
 use uv_test::{TestContext, uv_snapshot};
 
 fn wheel(context: &TestContext, name: &str, version: &str, tag: &str) -> Result<ChildPath> {
     let links = context.temp_dir.child("links");
     links.create_dir_all()?;
-    let (filename, bytes) = generate_wheel(
-        &name.parse()?,
-        &version.parse()?,
-        &[],
-        &BTreeMap::new(),
-        None,
-        tag,
-        &[],
-    );
+    let (filename, bytes) = WheelBuilder::new(&name.parse()?, &version.parse()?)
+        .tag(tag)
+        .build();
     let wheel = links.child(filename);
     wheel.write_binary(&bytes)?;
     Ok(wheel)

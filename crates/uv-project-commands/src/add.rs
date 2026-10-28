@@ -5,7 +5,6 @@ use std::path::Path;
 use std::sync::Arc;
 
 use anyhow::{Context, Result, bail};
-use itertools::Itertools;
 use owo_colors::OwoColorize;
 use rustc_hash::{FxBuildHasher, FxHashMap};
 use tracing::{debug, warn};
@@ -23,7 +22,7 @@ use uv_dispatch::{BuildDispatch, PlatformState, UniversalState};
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
 use uv_distribution_types::{
     Identifier, Index, IndexLocations, IndexName, IndexUrl, NameRequirementSpecification,
-    Requirement, RequirementSource, UnresolvedRequirement,
+    Requirement, RequirementSource,
 };
 use uv_environment_operations::install_target::{InstallTarget, PackageSelection};
 use uv_environment_operations::malware::MalwareCheckContext;
@@ -47,8 +46,12 @@ use uv_python_discovery::ScriptInterpreter;
 use uv_python_discovery::init_script_python_requirement;
 use uv_python_interpreter::PythonEnvironment;
 use uv_python_types::{PythonArchitecture, PythonDownloads, PythonPreference, PythonRequest};
-use uv_redacted::DisplaySafeUrl;
-use uv_requirements::{NamedRequirementsResolver, RequirementsSource, RequirementsSpecification};
+use uv_redacted::SafeUrl;
+use uv_redacted::policy::Raw;
+use uv_requirements::{
+    NamedRequirementsResolver, RequirementsSource, RequirementsSpecification,
+    partition_requirements,
+};
 use uv_resolve_operations::Error as ResolveError;
 use uv_resolve_operations::loggers::{DefaultResolveLogger, SummaryResolveLogger};
 use uv_resolver::FlatIndex;
@@ -405,31 +408,24 @@ pub async fn add(
 
     // Resolve any unnamed requirements.
     let requirements = {
-        // Partition the requirements into named and unnamed requirements.
-        let (mut requirements, unnamed): (Vec<_>, Vec<_>) = requirements
+        let requirements: Vec<_> = requirements
             .into_iter()
-            .map(|spec| {
-                spec.requirement.augment_requirement(
+            .map(|mut spec| {
+                spec.requirement = spec.requirement.augment_requirement(
                     rev.as_deref(),
                     tag.as_deref(),
                     branch.as_deref(),
                     lfs.into(),
                     marker,
-                )
+                );
+                spec
             })
-            .partition_map(|requirement| match requirement {
-                UnresolvedRequirement::Named(requirement) => itertools::Either::Left(requirement),
-                UnresolvedRequirement::Unnamed(requirement) => {
-                    itertools::Either::Right(requirement)
-                }
-            });
+            .collect();
+        let (mut requirements, unnamed) = partition_requirements(requirements);
 
         // Resolve any unnamed requirements.
         if !unnamed.is_empty() {
-            // TODO(charlie): These are all default values. We should consider whether we want to
-            // make them optional on the downstream APIs.
             let hasher = HashStrategy::default();
-            let sources = NoSources::None;
 
             // Initialize the registry client.
             let client = RegistryClientBuilder::new(client_builder.clone(), cache.clone())
@@ -513,7 +509,7 @@ pub async fn add(
                 &settings.resolver.build_options,
                 &build_hasher,
                 settings.resolver.exclude_newer.clone(),
-                sources,
+                NoSources::None,
                 SourceTreeEditablePolicy::Project,
                 // No workspace caching since `uv add` changes the workspace definition.
                 WorkspaceCache::default(),
@@ -956,7 +952,7 @@ fn edits(
         // user's credentials store, rather than by reading from the `pyproject.toml` file.
         let source = match source {
             Some(Source::Git {
-                mut git,
+                git,
                 subdirectory,
                 path,
                 rev,
@@ -967,6 +963,7 @@ fn edits(
                 extra,
                 group,
             }) => {
+                let mut git = git.into_url();
                 let credentials = uv_auth::Credentials::from_url(&git)?;
                 if let Some(credentials) = credentials {
                     debug!("Caching credentials for: {git}");
@@ -976,7 +973,7 @@ fn edits(
                     git.remove_credentials();
                 }
                 Some(Source::Git {
-                    git,
+                    git: git.with_policy(Raw),
                     subdirectory,
                     path,
                     rev,
@@ -1244,7 +1241,7 @@ async fn lock_and_sync(
             // Invalidate any cached project metadata. Reusing a metadata-free lock may not
             // populate the in-memory index.
             if let EditTarget::Project(VirtualProject::Project(ref project)) = target {
-                let url = DisplaySafeUrl::from_file_path(project.project_root())
+                let url = SafeUrl::from_file_path(project.project_root())
                     .expect("project root is a valid URL");
                 let distribution_id = url.distribution_id();
                 lock_state

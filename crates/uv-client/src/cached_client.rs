@@ -16,7 +16,7 @@ use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned};
 use uv_cache::{CacheEntry, Freshness};
 use uv_fastid::Id;
 use uv_fs::write_atomic;
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 
 use crate::base_client::CertificateSource;
 use crate::httpcache::{
@@ -263,7 +263,7 @@ impl CachedClient {
                 Ok(Some(payload)) => return Ok(payload),
                 Ok(None) => warn!(
                     "Cached response doesn't match current request for: {}",
-                    DisplaySafeUrl::from_url(req.url().clone())
+                    SafeUrl::from_url(req.url().clone())
                 ),
                 Err(err) if err.is_file_not_exists() => {
                     trace!(
@@ -331,7 +331,7 @@ impl CachedClient {
             None => {
                 debug!(
                     "No cache entry for: {}",
-                    DisplaySafeUrl::from_url(req.url().clone())
+                    SafeUrl::from_url(req.url().clone())
                 );
                 let (response, cache_policy) =
                     self.fresh_request(req, cache_control.clone()).await?;
@@ -387,7 +387,7 @@ impl CachedClient {
                 if response.status() == http::StatusCode::NOT_MODIFIED {
                     warn!(
                         "Server returned unusable 304 for: {}",
-                        DisplaySafeUrl::from_url(fresh_req.url().clone())
+                        SafeUrl::from_url(fresh_req.url().clone())
                     );
                     self.resend_and_heal_cache(
                         fresh_req,
@@ -525,7 +525,7 @@ impl CachedClient {
                                 http::HeaderValue::from_static("no-cache"),
                             );
                         }
-                        let url = DisplaySafeUrl::from_url(req.url().clone());
+                        let url = SafeUrl::from_url(req.url().clone());
                         match cached.cache_policy().before_request(&mut req) {
                             BeforeRequest::Fresh => {
                                 debug!("Found fresh response for: {url}");
@@ -608,7 +608,7 @@ impl CachedClient {
         cached: DataWithCachePolicy,
         new_cache_policy_builder: CachePolicyBuilder,
     ) -> Result<CachedResponse, Error> {
-        let url = DisplaySafeUrl::from_url(req.url().clone());
+        let url = SafeUrl::from_url(req.url().clone());
         debug!("Sending revalidation request for: {url}");
         let start = Instant::now();
         let mut response = self
@@ -671,13 +671,13 @@ impl CachedClient {
         }
     }
 
-    #[instrument(skip_all, fields(url = %DisplaySafeUrl::from_url(req.url().clone())))]
+    #[instrument(skip_all, fields(url = %SafeUrl::from_url(req.url().clone())))]
     async fn fresh_request(
         &self,
         req: Request,
         cache_control: CacheControl,
     ) -> Result<(Response, Option<Box<CachePolicy>>), Error> {
-        let url = DisplaySafeUrl::from_url(req.url().clone());
+        let url = SafeUrl::from_url(req.url().clone());
         debug!("Sending fresh {} request for: {}", req.method(), url);
         let cache_policy_builder = CachePolicyBuilder::new(&req);
         let start = Instant::now();

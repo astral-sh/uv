@@ -8,7 +8,7 @@ use uv_test::uv_snapshot;
 
 #[test]
 fn tool_uninstall() {
-    let context = uv_test::test_context!("3.12")
+    let context = uv_test::test_context_with_versions!(&["3.12"])
         .with_filtered_exe_suffix()
         .with_tool_dirs();
     let bin_dir = context.temp_dir.child("bin");
@@ -57,7 +57,7 @@ fn tool_uninstall() {
 /// directories remain in the parent.
 #[test]
 fn tool_uninstall_preserves_parent_files() -> Result<()> {
-    let context = uv_test::test_context!("3.12")
+    let context = uv_test::test_context_with_versions!(&["3.12"])
         .with_filtered_exe_suffix()
         .with_tool_dirs();
     let tool_dir = context.temp_dir.child("data/tools");
@@ -118,7 +118,7 @@ fn tool_uninstall_all_empty_preserves_parent_files() -> Result<()> {
 
 #[test]
 fn tool_uninstall_multiple_names() {
-    let context = uv_test::test_context!("3.12")
+    let context = uv_test::test_context_with_versions!(&["3.12"])
         .with_filtered_exe_suffix()
         .with_tool_dirs();
 
@@ -147,7 +147,7 @@ fn tool_uninstall_multiple_names() {
 
 #[test]
 fn tool_uninstall_not_installed() {
-    let context = uv_test::test_context!("3.12")
+    let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_exe_suffix()
         .with_tool_dirs();
 
@@ -160,7 +160,7 @@ fn tool_uninstall_not_installed() {
 
 #[test]
 fn tool_uninstall_missing_receipt() {
-    let context = uv_test::test_context!("3.12")
+    let context = uv_test::test_context_with_versions!(&["3.12"])
         .with_filtered_exe_suffix()
         .with_tool_dirs();
     let tool_dir = context.temp_dir.child("tools");
@@ -183,7 +183,7 @@ fn tool_uninstall_missing_receipt() {
 
 #[test]
 fn tool_uninstall_multiple_names_with_missing_receipt() {
-    let context = uv_test::test_context!("3.12")
+    let context = uv_test::test_context_with_versions!(&["3.12"])
         .with_filtered_exe_suffix()
         .with_tool_dirs();
     let tool_dir = context.temp_dir.child("tools");
@@ -216,7 +216,7 @@ fn tool_uninstall_multiple_names_with_missing_receipt() {
 
 #[test]
 fn tool_uninstall_all_missing_receipt() {
-    let context = uv_test::test_context!("3.12")
+    let context = uv_test::test_context_with_versions!(&["3.12"])
         .with_filtered_exe_suffix()
         .with_tool_dirs();
     let tool_dir = context.temp_dir.child("tools");

@@ -11,7 +11,7 @@ uv has Tier 1 support for the following Python versions:
 - 3.14
 - 3.15
 
-As with [platforms](./platforms.md), Tier 1 support can be thought of "guaranteed to work". uv is
+As with [platforms](./platforms.md), Tier 1 support can be thought of as "guaranteed to work". uv is
 continuously tested against these versions.
 
 uv has Tier 2 support for:
@@ -33,7 +33,7 @@ uv has Tier 1 support for the following Python implementations:
 
 - CPython
 
-As with [platforms](./platforms.md), Tier 1 support can be thought of "guaranteed to work". uv
+As with [platforms](./platforms.md), Tier 1 support can be thought of as "guaranteed to work". uv
 supports managed installations of these implementations, and the builds are maintained by Astral.
 
 uv has Tier 2 support for:

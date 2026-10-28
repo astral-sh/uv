@@ -3,7 +3,7 @@ use std::process::Command;
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
-use indoc::indoc;
+use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 use serde_json::json;
 use wiremock::matchers::{body_string_contains, method, path};
@@ -16,18 +16,22 @@ use uv_test::{diff_snapshot, uv_snapshot};
 fn workspace_check(context: &uv_test::TestContext) -> Command {
     let mut command = context.check();
     command.env("TY_OUTPUT_FORMAT", "concise");
-    // Select ty 0.0.80 independently of the suite-wide cutoff so these checks
+    // Select ty 0.0.90 independently of the suite-wide cutoff so these checks
     // can exercise new ty features without disrupting other tests.
-    command.env(EnvVars::UV_EXCLUDE_NEWER, "2026-09-10T00:00:00Z");
+    command.env(EnvVars::UV_EXCLUDE_NEWER, "2026-10-21T00:00:00Z");
     command
 }
 
 fn write_workspace_member(context: &uv_test::TestContext, name: &str, source: &str) -> Result<()> {
     let member = context.temp_dir.child("packages").child(name);
     member.create_dir_all()?;
-    member.child("pyproject.toml").write_str(&format!(
-        "[project]\nname = \"{name}\"\nversion = \"0.1.0\"\nrequires-python = \">=3.12\"\ndependencies = []\n"
-    ))?;
+    member.child("pyproject.toml").write_str(&formatdoc! {r#"
+        [project]
+        name = "{name}"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
     member.child("main.py").write_str(source)?;
 
     Ok(())

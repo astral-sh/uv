@@ -13,7 +13,7 @@ use uv_fs::Simplified;
 use uv_lock::{Lock, LockParseError};
 use uv_normalize::{DefaultExtras, PackageName};
 use uv_preview::{Preview, PreviewFeature};
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 use uv_settings::{Combine, ResolverInstallerOptions};
 use uv_tool::InstalledTools;
 use uv_warnings::warn_user;
@@ -30,7 +30,7 @@ pub async fn audit(
     names: Vec<PackageName>,
     output_format: AuditOutputFormat,
     service: VulnerabilityServiceFormat,
-    service_url: Option<DisplaySafeUrl>,
+    service_url: Option<SafeUrl>,
     ignore: Vec<VulnerabilityID>,
     ignore_until_fixed: Vec<VulnerabilityID>,
     filesystem: ResolverInstallerOptions,

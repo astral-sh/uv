@@ -1,19 +1,15 @@
 use std::sync::Arc;
 
-use itertools::Itertools;
-
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_command_support::Printer;
 use uv_configuration::{Concurrency, Constraints, GitLfsSetting};
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
-use uv_distribution_types::{
-    Requirement, UnresolvedRequirement, UnresolvedRequirementSpecification,
-};
+use uv_distribution_types::{Requirement, UnresolvedRequirementSpecification};
 use uv_preview::Preview;
 use uv_python_interpreter::{Interpreter, PythonEnvironment};
-use uv_requirements::NamedRequirementsResolver;
+use uv_requirements::{NamedRequirementsResolver, partition_requirements};
 use uv_resolve_operations::reporters::ResolverReporter;
 use uv_resolver::FlatIndex;
 use uv_settings::ResolverSettings;
@@ -38,17 +34,16 @@ pub(super) async fn resolve_names(
     preview: Preview,
     lfs: GitLfsSetting,
 ) -> Result<Vec<Requirement>, ToolError> {
-    // Partition the requirements into named and unnamed requirements.
-    let (mut requirements, unnamed): (Vec<_>, Vec<_>) = requirements
+    let requirements: Vec<_> = requirements
         .into_iter()
-        .map(|spec| {
-            spec.requirement
-                .augment_requirement(None, None, None, lfs.into(), None)
+        .map(|mut spec| {
+            spec.requirement =
+                spec.requirement
+                    .augment_requirement(None, None, None, lfs.into(), None);
+            spec
         })
-        .partition_map(|requirement| match requirement {
-            UnresolvedRequirement::Named(requirement) => itertools::Either::Left(requirement),
-            UnresolvedRequirement::Unnamed(requirement) => itertools::Either::Right(requirement),
-        });
+        .collect();
+    let (mut requirements, unnamed) = partition_requirements(requirements);
 
     // Short-circuit if there are no unnamed requirements.
     if unnamed.is_empty() {

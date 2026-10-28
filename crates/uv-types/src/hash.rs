@@ -9,11 +9,14 @@ use uv_configuration::{Constraints, HashCheckingMode};
 use uv_distribution_types::{
     ArchiveHashPolicy, DistributionMetadata, HashCollection, HashValidation, MetadataHashPolicy,
     Name, Requirement, RequirementSource, Resolution, UnresolvedRequirement, VersionId,
+    satisfies_require_hashes,
 };
 use uv_normalize::PackageName;
 use uv_pep440::{Operator, Version};
-use uv_pypi_types::{HashAlgorithm, HashDigest, HashDigests, HashError, ResolverMarkerEnvironment};
-use uv_redacted::DisplaySafeUrl;
+use uv_pypi_types::{
+    HashAlgorithm, HashDigest, HashDigests, HashError, Hashes, ResolverMarkerEnvironment,
+};
+use uv_redacted::SafeUrl;
 
 /// Hash collection and verification policies for a resolution.
 ///
@@ -28,9 +31,9 @@ pub struct HashStrategy {
 /// The trusted hashes to enforce when retrieving distributions.
 #[derive(Debug, Default, Clone)]
 pub enum HashVerification {
-    /// Hashes do not need to be validated.
+    /// No resolution-wide hash verification policy is configured.
     #[default]
-    None,
+    Unspecified,
     /// Validate known hashes, without requiring hashes for other distributions.
     IfPresent(Arc<FxHashMap<VersionId, Vec<HashDigest>>>),
     /// Every distribution must have a matching trusted hash.
@@ -69,14 +72,14 @@ impl HashStrategy {
     /// for identities absent from this strategy remain available for newly resolved dependencies.
     pub fn with_constraint_hashes(mut self, constraints: &Self) -> Result<Self, HashStrategyError> {
         let (requirement_hashes, mode) = match &self.verification {
-            HashVerification::None => {
+            HashVerification::Unspecified => {
                 self.verification = constraints.verification.clone();
                 return Ok(self);
             }
             HashVerification::IfPresent(hashes) => {
                 let mode = match &constraints.verification {
                     HashVerification::Required(_) => HashCheckingMode::Require,
-                    HashVerification::None | HashVerification::IfPresent(_) => {
+                    HashVerification::Unspecified | HashVerification::IfPresent(_) => {
                         HashCheckingMode::Verify
                     }
                 };
@@ -87,14 +90,14 @@ impl HashStrategy {
 
         let mut constraints = constraints.clone();
         let constraint_hashes = match &mut constraints.verification {
-            HashVerification::None => return Ok(self),
+            HashVerification::Unspecified => return Ok(self),
             HashVerification::IfPresent(hashes) | HashVerification::Required(hashes) => {
                 Arc::make_mut(hashes)
             }
         };
         if mode.is_require() {
             constraint_hashes.retain(|_, digests| {
-                digests.retain(|digest| digest.algorithm() != HashAlgorithm::Md5);
+                digests.retain(satisfies_require_hashes);
                 !digests.is_empty()
             });
         }
@@ -102,7 +105,7 @@ impl HashStrategy {
         for (id, digests) in requirement_hashes.iter() {
             let mut digests = digests.clone();
             if mode.is_require() {
-                digests.retain(|digest| digest.algorithm() != HashAlgorithm::Md5);
+                digests.retain(satisfies_require_hashes);
             }
             let digests = if let Some(constraint) = constraints.hashes_for_id(id) {
                 combine_constraint_hashes(id, digests, constraint, id, mode)?
@@ -161,12 +164,12 @@ impl HashStrategy {
     /// Return the [`ArchiveHashPolicy`] for the given direct URL package.
     ///
     /// A direct URL identifies a single concrete artifact, so every provided digest must match.
-    pub fn archive_policy_for_url(&self, url: &DisplaySafeUrl) -> ArchiveHashPolicy<'_> {
+    pub fn archive_policy_for_url(&self, url: &SafeUrl) -> ArchiveHashPolicy<'_> {
         self.archive_policy_for_id(|| VersionId::from_url(url))
     }
 
     /// Return the [`MetadataHashPolicy`] for a URL whose package name is not yet known.
-    pub fn metadata_policy_for_url(&self, url: &DisplaySafeUrl) -> MetadataHashPolicy<'_> {
+    pub fn metadata_policy_for_url(&self, url: &SafeUrl) -> MetadataHashPolicy<'_> {
         MetadataHashPolicy {
             collection: self.collection,
             validation: self.validation_for_id(|| VersionId::from_url(url)),
@@ -201,7 +204,7 @@ impl HashStrategy {
                     hashes.get(&id).map(Vec::as_slice).unwrap_or_default(),
                 );
             }
-            HashVerification::None => {}
+            HashVerification::Unspecified => {}
         }
         HashValidation::None
     }
@@ -209,7 +212,7 @@ impl HashStrategy {
     /// Look up supplied hashes, including public-version pins in verification mode.
     fn hashes_for_id(&self, id: &VersionId) -> Option<&[HashDigest]> {
         match &self.verification {
-            HashVerification::None => None,
+            HashVerification::Unspecified => None,
             HashVerification::IfPresent(hashes) => hashes
                 .get(id)
                 .or_else(|| {
@@ -237,15 +240,15 @@ impl HashStrategy {
             HashVerification::Required(hashes) => {
                 hashes.contains_key(&VersionId::from_registry(name.clone(), version.clone()))
             }
-            HashVerification::None | HashVerification::IfPresent(_) => true,
+            HashVerification::Unspecified | HashVerification::IfPresent(_) => true,
         }
     }
 
     /// Returns `true` if the given direct URL package is allowed.
-    pub fn allows_url(&self, url: &DisplaySafeUrl) -> bool {
+    pub fn allows_url(&self, url: &SafeUrl) -> bool {
         match &self.verification {
             HashVerification::Required(hashes) => hashes.contains_key(&VersionId::from_url(url)),
-            HashVerification::None | HashVerification::IfPresent(_) => true,
+            HashVerification::Unspecified | HashVerification::IfPresent(_) => true,
         }
     }
 
@@ -256,7 +259,7 @@ impl HashStrategy {
         requirements: impl Iterator<Item = &'a Requirement>,
     ) -> Result<Self, HashStrategyError> {
         match &mut self.verification {
-            HashVerification::None => {}
+            HashVerification::Unspecified => {}
             HashVerification::IfPresent(existing) | HashVerification::Required(existing) => {
                 if let Some(hashes) = Self::augment_hashes(existing, requirements)? {
                     *existing = Arc::new(hashes);
@@ -322,20 +325,8 @@ impl HashStrategy {
                 continue;
             };
 
-            // Parse the hashes provided directly on the requirement, then merge in any hashes from
-            // the URL fragment.
-            let mut digests = digests
-                .iter()
-                .map(|digest| HashDigest::from_str(digest))
-                .collect::<Result<Vec<_>, _>>()?;
-            if let Some(fragment_hashes) = requirement.hashes()? {
-                let fragment_hashes = HashDigests::from(fragment_hashes);
-                merge_digests(&mut digests, fragment_hashes.iter(), requirement)?;
-            }
-
-            if mode.is_require() {
-                digests.retain(|digest| digest.algorithm() != HashAlgorithm::Md5);
-            }
+            let (digests, _) =
+                parse_declared_hashes(digests, requirement.hashes(), requirement, mode)?;
 
             if digests.is_empty() {
                 continue;
@@ -374,24 +365,8 @@ impl HashStrategy {
                 }
             };
 
-            // Parse the hashes provided directly on the requirement, then merge in any hashes from
-            // the URL fragment.
-            let mut digests = digests
-                .iter()
-                .map(|digest| HashDigest::from_str(digest))
-                .collect::<Result<Vec<_>, _>>()?;
-            if let Some(fragment_hashes) = requirement.hashes()? {
-                let fragment_hashes = HashDigests::from(fragment_hashes);
-                merge_digests(&mut digests, fragment_hashes.iter(), requirement)?;
-            }
-
-            let has_md5 = mode.is_require()
-                && digests
-                    .iter()
-                    .any(|digest| digest.algorithm() == HashAlgorithm::Md5);
-            if mode.is_require() {
-                digests.retain(|digest| digest.algorithm() != HashAlgorithm::Md5);
-            }
+            let (digests, rejected_algorithm) =
+                parse_declared_hashes(digests, requirement.hashes(), requirement, mode)?;
 
             let digests = if let Some(constraint) = constraint_hashes.get(&id) {
                 // A hashless duplicate must not replace earlier requirement hashes with the
@@ -408,10 +383,10 @@ impl HashStrategy {
             // constraint.
             if digests.is_empty() {
                 if mode.is_require() {
-                    if has_md5 {
+                    if let Some(algorithm) = rejected_algorithm {
                         return Err(HashStrategyError::InsecureHashAlgorithm(
                             requirement.to_string(),
-                            HashAlgorithm::Md5,
+                            algorithm,
                             mode,
                         ));
                     }
@@ -560,7 +535,7 @@ impl HashStrategy {
                 subdirectory,
                 ..
             } => Some(VersionId::from_archive(
-                location.clone(),
+                location.as_url().clone(),
                 subdirectory.clone().map(Path::into_path_buf),
             )),
             RequirementSource::GitDirectory {
@@ -622,6 +597,37 @@ fn combine_constraint_hashes(
         }
     }
     Ok(digests)
+}
+
+/// Parse requirement-file hashes and combine them with any URL-fragment hashes.
+fn parse_declared_hashes(
+    hashes: &[String],
+    fragment_hashes: Result<Option<Hashes>, HashError>,
+    requirement: impl Display,
+    mode: HashCheckingMode,
+) -> Result<(Vec<HashDigest>, Option<HashAlgorithm>), HashStrategyError> {
+    let mut digests = hashes
+        .iter()
+        .map(|digest| HashDigest::from_str(digest))
+        .collect::<Result<Vec<_>, _>>()?;
+    if let Some(fragment_hashes) = fragment_hashes? {
+        merge_digests(
+            &mut digests,
+            HashDigests::from(fragment_hashes).iter(),
+            requirement,
+        )?;
+    }
+    let rejected = if mode.is_require() {
+        let rejected = digests
+            .iter()
+            .find(|digest| !satisfies_require_hashes(digest))
+            .map(HashDigest::algorithm);
+        digests.retain(satisfies_require_hashes);
+        rejected
+    } else {
+        None
+    };
+    Ok((digests, rejected))
 }
 
 /// Merge repeated hashes for a requirement or constraint into the hash map.
@@ -720,7 +726,8 @@ mod tests {
     use uv_normalize::PackageName;
     use uv_pep440::Version;
     use uv_pypi_types::HashDigest;
-    use uv_redacted::DisplaySafeUrl;
+    use uv_redacted::SafeUrl;
+    use uv_redacted::policy::Raw;
 
     use super::{HashStrategy, HashVerification};
 
@@ -732,8 +739,9 @@ mod tests {
             marker: "python_version >= '3.8'".parse().unwrap(),
             source: RequirementSource::Url {
                 location: "https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl"
-                    .parse()
-                    .unwrap(),
+                    .parse::<SafeUrl>()
+                    .unwrap()
+                    .with_policy(Raw),
                 subdirectory: None,
                 ext: DistExtension::Wheel,
                 url: url.parse().unwrap(),
@@ -789,8 +797,8 @@ mod tests {
     #[test]
     fn generate_and_verify_validates_known_hashes_and_generates_unknown_hashes()
     -> Result<(), Box<dyn std::error::Error>> {
-        let url: DisplaySafeUrl = "https://example.com/anyio-4.0.0.tar.gz".parse()?;
-        let unknown_url: DisplaySafeUrl = "https://example.com/anyio-4.1.0.tar.gz".parse()?;
+        let url: SafeUrl = "https://example.com/anyio-4.0.0.tar.gz".parse()?;
+        let unknown_url: SafeUrl = "https://example.com/anyio-4.1.0.tar.gz".parse()?;
         let name: PackageName = "anyio".parse()?;
         let version: Version = "4.0.0".parse()?;
         let unknown_version: Version = "4.1.0".parse()?;
@@ -855,7 +863,7 @@ mod tests {
 
     #[test]
     fn required_hashes_take_precedence_over_collection() -> Result<(), Box<dyn std::error::Error>> {
-        let url: DisplaySafeUrl = "https://example.com/anyio-4.0.0.tar.gz".parse()?;
+        let url: SafeUrl = "https://example.com/anyio-4.0.0.tar.gz".parse()?;
         let name: PackageName = "anyio".parse()?;
         let version: Version = "4.0.0".parse()?;
         let strategy = HashStrategy::collect(HashCollection::All)

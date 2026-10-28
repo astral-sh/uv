@@ -21,6 +21,7 @@ use uv_fs::{
     LockedFile, LockedFileError, LockedFileMode, Simplified, normalize_absolute_path,
     replace_symlink, symlink_or_copy_file, verbatim_path,
 };
+use uv_macros::DebugNoInline;
 use uv_platform::{Error as PlatformError, Os};
 use uv_platform::{LibcDetectionError, Platform};
 use uv_pypi_types::Digest;
@@ -38,7 +39,7 @@ use uv_python_types::{
     PythonVariant, PythonVersion, VersionRequest,
 };
 
-#[derive(Error, Debug)]
+#[derive(Error, DebugNoInline)]
 pub enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),
@@ -52,8 +53,6 @@ pub enum Error {
     PlatformError(#[from] PlatformError),
     #[error(transparent)]
     ImplementationError(#[from] ImplementationError),
-    #[error("Invalid python version: {0}")]
-    InvalidPythonVersion(String),
     #[error(transparent)]
     ExtractError(#[from] uv_extract::Error),
     #[error(transparent)]
@@ -256,21 +255,6 @@ impl ManagedPythonInstallations {
         Ok(iter)
     }
 
-    /// Iterate over managed Python installations that satisfy the requested version on this platform.
-    ///
-    /// ## Errors
-    ///
-    /// - The platform metadata cannot be read
-    /// - A directory for the installation cannot be read
-    pub fn find_version<'a>(
-        &'a self,
-        version: &'a PythonVersion,
-    ) -> Result<impl DoubleEndedIterator<Item = ManagedPythonInstallation> + 'a, Error> {
-        let request = VersionRequest::from(version);
-        Ok(Self::find_matching_current_platform()?
-            .filter(move |installation| request.matches_installation_key(installation.key())))
-    }
-
     pub fn root(&self) -> &Path {
         &self.root
     }
@@ -344,6 +328,7 @@ pub struct ManagedPythonInstallation {
 impl ManagedPythonInstallation {
     pub fn new(path: PathBuf, download: &ManagedPythonDownload) -> Result<Self, Error> {
         let implementation = ImplementationName::try_from(&download.key().implementation)?;
+        let path = std::path::absolute(&path).map_err(|err| Error::AbsolutePath(path, err))?;
         Ok(Self {
             path,
             key: download.key().clone(),
@@ -1087,7 +1072,13 @@ impl From<&ManagedPythonInstallation> for PythonDownloadRequest {
     fn from(installation: &ManagedPythonInstallation) -> Self {
         let key = installation.key();
         Self::new(
-            Some(VersionRequest::from(&key.version())),
+            Some(VersionRequest::from_components(
+                key.major,
+                key.minor,
+                key.patch,
+                key.prerelease,
+                key.variant,
+            )),
             Some(installation.key_implementation()),
             Some(ArchRequest::Explicit(*key.arch())),
             Some(*key.os()),
@@ -1256,6 +1247,31 @@ mod tests {
         // Different variants should not be upgrades
         assert!(!freethreaded.is_upgrade_of(&default));
         assert!(!default.is_upgrade_of(&freethreaded));
+    }
+
+    #[test]
+    fn test_download_request_from_installation_preserves_variant() {
+        for variant in [
+            PythonVariant::Default,
+            PythonVariant::Freethreaded,
+            PythonVariant::Debug,
+            PythonVariant::FreethreadedDebug,
+        ] {
+            let installation = create_test_installation(
+                ImplementationName::CPython,
+                3,
+                14,
+                7,
+                None,
+                variant,
+                None,
+            );
+            let request = PythonDownloadRequest::from(&installation);
+            assert_eq!(
+                request.version(),
+                Some(&VersionRequest::MajorMinorPatch(3, 14, 7, variant))
+            );
+        }
     }
 
     #[test]
@@ -1436,35 +1452,6 @@ mod tests {
         assert!(newer_patch_older_build.is_upgrade_of(&older_patch_newer_build));
         // Older patch version should not be an upgrade even with newer build
         assert!(!older_patch_newer_build.is_upgrade_of(&newer_patch_older_build));
-    }
-
-    #[test]
-    fn test_find_version_matching() {
-        use uv_python_types::PythonVersion;
-
-        let platform = Platform::from_env().unwrap();
-        let temp_dir = tempfile::tempdir().unwrap();
-
-        // Create mock installation directories
-        fs::create_dir(temp_dir.path().join(format!("cpython-3.10.0-{platform}"))).unwrap();
-
-        temp_env::with_var(
-            uv_static::EnvVars::UV_PYTHON_INSTALL_DIR,
-            Some(temp_dir.path()),
-            || {
-                let installations = ManagedPythonInstallations::from_settings(None).unwrap();
-
-                // Version 3.1 should NOT match 3.10
-                let v3_1 = PythonVersion::from_str("3.1").unwrap();
-                let matched: Vec<_> = installations.find_version(&v3_1).unwrap().collect();
-                assert_eq!(matched.len(), 0);
-
-                // Check that 3.10 matches
-                let v3_10 = PythonVersion::from_str("3.10").unwrap();
-                let matched: Vec<_> = installations.find_version(&v3_10).unwrap().collect();
-                assert_eq!(matched.len(), 1);
-            },
-        );
     }
 
     #[test]

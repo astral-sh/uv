@@ -1,6 +1,6 @@
 [package]
 name = "uv-dev"
-version = "0.0.92"
+version = "0.0.98"
 description = "This is an internal component crate of uv"
 publish = false
 
@@ -70,6 +70,7 @@ walkdir = { workspace = true }
 yaml_serde = { version = "0.10.7", default-features = false, features = ["std"] }
 
 [dev-dependencies]
+indoc = { workspace = true }
 insta = { workspace = true }
 
 [lib]

@@ -1682,7 +1682,13 @@ mod tests {
             interpreter.markers.python_version().version,
             Version::from_str("3.13")?
         );
-        assert_eq!(fs::read_to_string(&query_log)?, "queried\nqueried\n");
+        assert_eq!(
+            fs::read_to_string(&query_log)?,
+            indoc! {"
+                queried
+                queried
+            "}
+        );
 
         let refreshed: CachedByTimestamp<InterpreterInfo> =
             rmp_serde::from_slice(&fs::read(cache_entry.path())?)?;
@@ -1697,7 +1703,13 @@ mod tests {
             interpreter.markers.python_version().version,
             Version::from_str("3.13")?
         );
-        assert_eq!(fs::read_to_string(&query_log)?, "queried\nqueried\n");
+        assert_eq!(
+            fs::read_to_string(&query_log)?,
+            indoc! {"
+                queried
+                queried
+            "}
+        );
         Ok(())
     }
 

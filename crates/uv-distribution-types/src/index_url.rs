@@ -9,31 +9,32 @@ use http::StatusCode;
 use itertools::Either;
 use rustc_hash::{FxHashMap, FxHashSet};
 use thiserror::Error;
-use url::{ParseError, Url};
+use url::ParseError;
 use uv_auth::RealmRef;
 use uv_cache_key::CanonicalUrl;
 use uv_pep508::{Scheme, VerbatimUrl, VerbatimUrlError, split_scheme};
 use uv_pypi_types::HashAlgorithm;
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
+use uv_redacted::policy::{SerializationPolicy, Stripped};
 use uv_warnings::warn_user;
 
 use crate::{ExcludeNewerOverride, Index, IndexStatusCodeStrategy, Verbatim};
 
-pub static PYPI_URL: LazyLock<DisplaySafeUrl> =
-    LazyLock::new(|| DisplaySafeUrl::parse("https://pypi.org/simple").unwrap());
+pub static PYPI_URL: LazyLock<SafeUrl> =
+    LazyLock::new(|| SafeUrl::parse("https://pypi.org/simple").unwrap());
 
 static DEFAULT_INDEX: LazyLock<Index> = LazyLock::new(|| {
     Index::from_index_url(IndexUrl::Pypi(Arc::new(VerbatimUrl::from_url(
-        PYPI_URL.clone(),
+        PYPI_URL.clone().with_policy(Stripped),
     ))))
 });
 
 /// The URL of an index to use for fetching packages (e.g., PyPI).
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
 pub enum IndexUrl {
-    Pypi(Arc<VerbatimUrl>),
-    Url(Arc<VerbatimUrl>),
-    Path(Arc<VerbatimUrl>),
+    Pypi(Arc<VerbatimUrl<Stripped>>),
+    Url(Arc<VerbatimUrl<Stripped>>),
+    Path(Arc<VerbatimUrl<Stripped>>),
 }
 
 impl IndexUrl {
@@ -46,11 +47,11 @@ impl IndexUrl {
         Ok(Self::from(url))
     }
 
-    /// Return the root [`Url`] of the index, if applicable.
+    /// Return the root [`SafeUrl`] of the index, if applicable.
     ///
     /// For indexes with a `/simple` endpoint, this is simply the URL with the final segment
     /// removed. This is useful, e.g., for credential propagation to other endpoints on the index.
-    pub fn root(&self) -> Option<DisplaySafeUrl> {
+    pub fn root(&self) -> Option<SafeUrl> {
         let mut segments = self.url().path_segments()?;
         let last = match segments.next_back()? {
             // If the last segment is empty due to a trailing `/`, skip it (as in `pop_if_empty`)
@@ -85,19 +86,19 @@ impl schemars::JsonSchema for IndexUrl {
 
 impl IndexUrl {
     #[inline]
-    fn inner(&self) -> &VerbatimUrl {
+    fn inner(&self) -> &VerbatimUrl<Stripped> {
         match self {
             Self::Pypi(url) | Self::Url(url) | Self::Path(url) => url,
         }
     }
 
     /// Return the raw URL for the index.
-    pub fn url(&self) -> &DisplaySafeUrl {
-        self.inner().raw()
+    pub fn url(&self) -> &SafeUrl {
+        self.inner().raw().as_url()
     }
 
-    /// Convert the index URL into a [`DisplaySafeUrl`].
-    pub fn into_url(self) -> DisplaySafeUrl {
+    /// Convert the index URL into a [`SafeUrl`].
+    pub fn into_url(self) -> SafeUrl<Stripped> {
         match self {
             Self::Pypi(url) | Self::Url(url) | Self::Path(url) => {
                 Arc::unwrap_or_clone(url).into_url()
@@ -106,7 +107,7 @@ impl IndexUrl {
     }
 
     /// Return the redacted URL for the index, omitting any sensitive credentials.
-    pub fn without_credentials(&self) -> Cow<'_, DisplaySafeUrl> {
+    pub fn without_credentials(&self) -> Cow<'_, SafeUrl> {
         let url = self.url();
         if url.username().is_empty() && url.password().is_none() {
             Cow::Borrowed(url)
@@ -201,7 +202,7 @@ impl serde::ser::Serialize for IndexUrl {
     where
         S: serde::ser::Serializer,
     {
-        self.inner().without_credentials().serialize(serializer)
+        self.inner().serialize(serializer)
     }
 }
 
@@ -228,11 +229,12 @@ impl<'de> serde::de::Deserialize<'de> for IndexUrl {
     }
 }
 
-impl From<VerbatimUrl> for IndexUrl {
-    fn from(url: VerbatimUrl) -> Self {
+impl<P: SerializationPolicy> From<VerbatimUrl<P>> for IndexUrl {
+    fn from(url: VerbatimUrl<P>) -> Self {
+        let url = url.with_policy(Stripped);
         if url.scheme() == "file" {
             Self::Path(Arc::new(url))
-        } else if *url.raw() == *PYPI_URL {
+        } else if *url.raw().as_url() == *PYPI_URL {
             Self::Pypi(Arc::new(url))
         } else {
             Self::Url(Arc::new(url))
@@ -240,17 +242,17 @@ impl From<VerbatimUrl> for IndexUrl {
     }
 }
 
-impl From<IndexUrl> for DisplaySafeUrl {
+impl From<IndexUrl> for SafeUrl {
     fn from(index: IndexUrl) -> Self {
-        index.into_url()
+        index.into_url().into_url()
     }
 }
 
 impl Deref for IndexUrl {
-    type Target = Url;
+    type Target = SafeUrl;
 
     fn deref(&self) -> &Self::Target {
-        self.inner()
+        self.url()
     }
 }
 
@@ -299,7 +301,7 @@ impl IndexLocations {
 
 /// Returns `true` if two [`IndexUrl`]s refer to the same index.
 fn is_same_index(a: &IndexUrl, b: &IndexUrl) -> bool {
-    RealmRef::from(&**b.url()) == RealmRef::from(&**a.url())
+    RealmRef::from(b.url()) == RealmRef::from(a.url())
         && CanonicalUrl::new(a.url().clone()) == CanonicalUrl::new(b.url().clone())
 }
 
@@ -505,6 +507,13 @@ impl<'a> IndexLocations {
     pub fn artifact_cache_control_for(&self, url: &IndexUrl) -> Option<http::HeaderValue> {
         self.index_for_url(url)
             .and_then(Index::artifact_cache_control)
+    }
+
+    /// Return the explicitly configured file cache control header for an [`IndexUrl`].
+    pub fn configured_files_cache_control_for(&self, url: &IndexUrl) -> Option<http::HeaderValue> {
+        self.index_for_url(url)
+            .and_then(|index| index.cache_control.as_ref())
+            .and_then(|cache_control| cache_control.files.clone())
     }
 
     /// Return the hash algorithm required for distributions resolved from a given index.

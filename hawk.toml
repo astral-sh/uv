@@ -29,14 +29,6 @@ package = "uv-redacted"
 # Keep public APIs that are consumed by downstream Rust integrations.
 
 [[override]]
-lint = "hawk::unnecessary_public"
-crate = "uv_client"
-item = "base_client::BaseClientBuilder::<'a>::custom_client"
-kind = "inherent_method"
-level = "expect"
-reason = "used by Pixi to provide its own HTTP client"
-
-[[override]]
 lint = "hawk::dead_public"
 crate = "uv_client"
 item = "base_client::BaseClientBuilder::<'a>::extra_middleware"
@@ -347,6 +339,16 @@ item = "virtualenv::PyVenvConfiguration::set"
 kind = "inherent_method"
 level = "expect"
 reason = "retained as a public pyvenv.cfg editing helper"
+
+# Keep wheel variant component APIs consistent.
+
+[[override]]
+lint = "hawk::dead_public"
+crate = "uv_distribution_types"
+item = "variants_json::VariantValue::from_static"
+kind = "inherent_method"
+level = "expect"
+reason = "kept public alongside the other wheel variant component constructors"
 
 [[exclude]]
 crate = "uv_extract"

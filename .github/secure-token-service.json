@@ -24,6 +24,26 @@
   },
   "rules": [
     {
+      "caller": "uv",
+      "environment": "automations",
+      "caller_ref": "refs/pull/*/merge",
+      "caller_workflow": "ci.yml",
+      "reusable_workflow": "astral-sh/uv-dev/.github/workflows/publish-binary-size.yml@373da20ba8956b8b585d29d706ebb2f5d565432b",
+      "on": ["pull_request"],
+      "permissions": { "pull_requests": "write" },
+      "target": "uv"
+    },
+    {
+      "caller": "uv-dev",
+      "environment": "automations",
+      "caller_ref": "refs/pull/*/merge",
+      "caller_workflow": "ci.yml",
+      "reusable_workflow": "astral-sh/uv-dev/.github/workflows/publish-binary-size.yml@373da20ba8956b8b585d29d706ebb2f5d565432b",
+      "on": ["pull_request"],
+      "permissions": { "pull_requests": "write" },
+      "target": "uv-dev"
+    },
+    {
       "caller": "uv-dev",
       "environment": "automations",
       "caller_workflow": "import-codspeed-profiles.yml",
@@ -137,7 +157,7 @@
       "environment": "automations",
       "caller_ref": "refs/pull/*/merge",
       "caller_workflow": "ci.yml",
-      "reusable_workflow": "astral-sh/github-actions/.github/workflows/pull-request-security-review.yml@3c57a5dba8ad854a97e8b9fbf454286a7574e677",
+      "reusable_workflow": "astral-sh/github-actions/.github/workflows/pull-request-security-review.yml@f11dbff15181b71f2cc5e8487b1ac7d7bb03ea7d",
       "on": ["pull_request"],
       "permissions": { "pull_requests": "write" },
       "target": "uv"
@@ -148,6 +168,16 @@
       "caller_ref": "refs/pull/*/merge",
       "caller_workflow": "ci.yml",
       "reusable_workflow": "check-crates-policies.yml",
+      "on": ["pull_request"],
+      "permissions": { "pull_requests": "write" },
+      "target": "uv"
+    },
+    {
+      "caller": "uv",
+      "environment": "automations",
+      "caller_ref": "refs/pull/*/merge",
+      "caller_workflow": "ci.yml",
+      "reusable_workflow": "pull-request-code-quality-review.yml",
       "on": ["pull_request"],
       "permissions": { "pull_requests": "write" },
       "target": "uv"
@@ -221,6 +251,17 @@
       },
       "targets": ["uv", "uv-dev"],
       "installation": "automations"
+    },
+    {
+      "caller": "uv",
+      "environment": "automations",
+      "caller_workflow": "ai-policy.yml",
+      "on": ["workflow_dispatch"],
+      "permissions": {
+        "issues": "write",
+        "pull_requests": "write"
+      },
+      "target": "uv"
     }
   ]
 }

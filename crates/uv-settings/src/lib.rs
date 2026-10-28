@@ -3,9 +3,13 @@ use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::time::Duration;
+
+use clap::ValueEnum;
 use tracing::info_span;
 use uv_client::{DEFAULT_CONNECT_TIMEOUT, DEFAULT_READ_TIMEOUT, DEFAULT_READ_TIMEOUT_UPLOAD};
-use uv_configuration::{RequiredVersion, RequirementsInput, RequirementsInputError};
+use uv_configuration::{
+    ProjectBuildBackend, RequiredVersion, RequirementsInput, RequirementsInputError,
+};
 use uv_dirs::{system_config_file, user_config_dir};
 use uv_distribution_types::{IndexUrl, IndexUrlError, Origin};
 use uv_flags::EnvironmentFlags;
@@ -13,7 +17,7 @@ use uv_fs::Simplified;
 use uv_normalize::{GroupName, PackageName};
 use uv_pep440::Version;
 use uv_python_types::PythonArchitecture;
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 use uv_static::{EnvVars, InvalidEnvironmentVariable, parse_boolish_environment_variable};
 use uv_torch::AmdGpuArchitecture;
 use uv_warnings::warn_user;
@@ -807,8 +811,10 @@ pub struct EnvironmentOptions {
     pub venv_clear: EnvFlag,
     pub venv_relocatable: EnvFlag,
     pub init_bare: EnvFlag,
+    pub init_build_backend: Option<ProjectBuildBackend>,
     pub malware_check: EnvFlag,
-    pub malware_check_url: Option<DisplaySafeUrl>,
+    pub malware_check_url: Option<SafeUrl>,
+    pub run_recursion_depth: Option<u32>,
     #[cfg(unix)]
     pub run_rlimit_nofile: Option<u32>,
 }
@@ -966,10 +972,21 @@ impl EnvironmentOptions {
             venv_clear: EnvFlag::new(EnvVars::UV_VENV_CLEAR)?,
             venv_relocatable: EnvFlag::new(EnvVars::UV_VENV_RELOCATABLE)?,
             init_bare: EnvFlag::new(EnvVars::UV_INIT_BARE)?,
+            init_build_backend: parse_string_environment_variable(EnvVars::UV_INIT_BUILD_BACKEND)?
+                .map(|value| {
+                    ProjectBuildBackend::from_str(&value, false).map_err(|err| {
+                        InvalidEnvironmentVariable {
+                            name: EnvVars::UV_INIT_BUILD_BACKEND.to_string(),
+                            value,
+                            err,
+                        }
+                    })
+                })
+                .transpose()?,
             malware_check: EnvFlag::new(EnvVars::UV_MALWARE_CHECK)?,
             malware_check_url: parse_string_environment_variable(EnvVars::UV_MALWARE_CHECK_URL)?
                 .map(|value| {
-                    value.parse::<DisplaySafeUrl>().map_err(|err| {
+                    value.parse::<SafeUrl>().map_err(|err| {
                         Error::InvalidEnvironmentVariable(InvalidEnvironmentVariable {
                             name: EnvVars::UV_MALWARE_CHECK_URL.to_string(),
                             value,
@@ -978,6 +995,10 @@ impl EnvironmentOptions {
                     })
                 })
                 .transpose()?,
+            run_recursion_depth: parse_integer_environment_variable(
+                EnvVars::UV_RUN_RECURSION_DEPTH,
+                None,
+            )?,
             #[cfg(unix)]
             run_rlimit_nofile: parse_integer_environment_variable(
                 EnvVars::UV_RUN_RLIMIT_NOFILE,

@@ -7,6 +7,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use thiserror::Error;
 
 use uv_cache_key::cache_digest;
+use uv_macros::DebugNoInline;
 use uv_normalize::{InvalidNameError, PackageName};
 use uv_pep440::{Version, VersionParseError};
 use uv_platform_tags::{
@@ -113,6 +114,11 @@ impl WheelFilename {
         if self.variant().is_some() {
             return TagCompatibility::Incompatible(IncompatibleTag::Variant);
         }
+        self.tag_compatibility(compatible_tags)
+    }
+
+    /// Return the platform tag compatibility without checking the variant label.
+    pub fn tag_compatibility(&self, compatible_tags: &Tags) -> TagCompatibility {
         self.tags.compatibility(compatible_tags)
     }
 
@@ -437,7 +443,7 @@ impl Serialize for WheelFilename {
     }
 }
 
-#[derive(Error, Debug)]
+#[derive(Error, DebugNoInline)]
 pub enum WheelFilenameError {
     #[error("The wheel filename `{0}` is invalid: {1}")]
     InvalidWheelFileName(String, String),

@@ -33,7 +33,6 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use rustc_hash::FxHashSet;
 use tracing::instrument;
-use url::Url;
 
 use uv_cache_key::CanonicalUrl;
 use uv_client::BaseClientBuilder;
@@ -109,18 +108,11 @@ impl RequirementsSpecification {
     fn from_pep723_metadata(metadata: &Pep723Metadata) -> Self {
         let requirements = metadata
             .dependencies
-            .as_ref()
-            .map(|dependencies| {
-                dependencies
-                    .iter()
-                    .map(|dependency| {
-                        UnresolvedRequirementSpecification::from(Requirement::from(
-                            dependency.to_owned(),
-                        ))
-                    })
-                    .collect::<Vec<UnresolvedRequirementSpecification>>()
+            .iter()
+            .map(|dependency| {
+                UnresolvedRequirementSpecification::from(Requirement::from(dependency.to_owned()))
             })
-            .unwrap_or_default();
+            .collect::<Vec<_>>();
 
         if let Some(tool_uv) = metadata.tool.as_ref().and_then(|tool| tool.uv.as_ref()) {
             let constraints = tool_uv
@@ -753,11 +745,7 @@ async fn read_file(
         RequirementsInput::Stdin => Ok(uv_fs::read_stdin_to_string_transcode()?),
         RequirementsInput::Remote(url) => {
             let client = client_builder.build()?;
-            let response = client
-                .for_host(url)
-                .get(Url::from(url.clone()))
-                .send()
-                .await?;
+            let response = client.for_host(url).get(url.clone()).send().await?;
 
             response.error_for_status_ref()?;
 
