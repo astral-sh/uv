@@ -5,7 +5,6 @@ use std::path::Path;
 use std::str::FromStr;
 use std::sync::{Arc, LazyLock, RwLock};
 
-use http::StatusCode;
 use itertools::Either;
 use rustc_hash::{FxHashMap, FxHashSet};
 use thiserror::Error;
@@ -19,7 +18,7 @@ use uv_redacted::SafeUrl;
 use uv_redacted::policy::{SerializationPolicy, Stripped};
 use uv_warnings::warn_user;
 
-use crate::{ExcludeNewerOverride, Index, IndexStatusCodeStrategy, Verbatim};
+use crate::{ExcludeNewerOverride, Index, IndexRequestPolicy, Verbatim};
 
 pub static PYPI_URL: LazyLock<SafeUrl> =
     LazyLock::new(|| SafeUrl::parse("https://pypi.org/simple").unwrap());
@@ -257,13 +256,38 @@ impl Deref for IndexUrl {
     }
 }
 
+static DEFAULT_REQUEST_POLICY: LazyLock<IndexRequestPolicy> =
+    LazyLock::new(IndexRequestPolicy::default);
+
+/// An index definition and the request policy derived from it.
+#[derive(Clone, PartialEq, Eq)]
+struct ConfiguredIndex {
+    definition: Index,
+    request_policy: IndexRequestPolicy,
+}
+
+impl From<Index> for ConfiguredIndex {
+    fn from(definition: Index) -> Self {
+        Self {
+            request_policy: IndexRequestPolicy::from(&definition),
+            definition,
+        }
+    }
+}
+
+impl std::fmt::Debug for ConfiguredIndex {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Debug::fmt(&self.definition, formatter)
+    }
+}
+
 /// The index locations to use for fetching packages. By default, uses the PyPI index.
 ///
 /// This type merges the legacy `--index-url`, `--extra-index-url`, and `--find-links` options,
 /// along with the uv-specific `--index` and `--default-index`.
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
 pub struct IndexLocations {
-    indexes: Vec<Index>,
+    indexes: Vec<ConfiguredIndex>,
     flat_index: Vec<Index>,
     no_index: bool,
 }
@@ -272,7 +296,7 @@ impl IndexLocations {
     /// Determine the index URLs to use for fetching packages.
     pub fn new(indexes: Vec<Index>, flat_index: Vec<Index>, no_index: bool) -> Self {
         Self {
-            indexes,
+            indexes: indexes.into_iter().map(ConfiguredIndex::from).collect(),
             flat_index,
             no_index,
         }
@@ -287,7 +311,11 @@ impl IndexLocations {
     #[must_use]
     pub fn combine(self, indexes: Vec<Index>, flat_index: Vec<Index>, no_index: bool) -> Self {
         Self {
-            indexes: self.indexes.into_iter().chain(indexes).collect(),
+            indexes: self
+                .indexes
+                .into_iter()
+                .chain(indexes.into_iter().map(ConfiguredIndex::from))
+                .collect(),
             flat_index: self.flat_index.into_iter().chain(flat_index).collect(),
             no_index: self.no_index || no_index,
         }
@@ -312,6 +340,7 @@ impl<'a> IndexLocations {
         let mut seen = FxHashSet::default();
         self.indexes
             .iter()
+            .map(|index| &index.definition)
             .filter(move |index| index.name.as_ref().is_none_or(|name| seen.insert(name)))
     }
 
@@ -416,6 +445,7 @@ impl<'a> IndexLocations {
             for index in {
                 self.indexes
                     .iter()
+                    .map(|index| &index.definition)
                     .chain(self.flat_index.iter())
                     .filter(move |index| index.name.as_ref().is_none_or(|name| seen.insert(name)))
             } {
@@ -451,7 +481,7 @@ impl<'a> IndexLocations {
             Either::Right(
                 std::iter::once(&*DEFAULT_INDEX)
                     .chain(self.flat_index.iter().rev())
-                    .chain(self.indexes.iter().rev()),
+                    .chain(self.indexes.iter().rev().map(|index| &index.definition)),
             )
         }
     }
@@ -477,50 +507,23 @@ impl<'a> IndexLocations {
         Either::Right(non_default.into_iter().chain(default))
     }
 
-    /// Return the configured index matching the given URL.
-    fn index_for_url(&self, url: &IndexUrl) -> Option<&Index> {
+    /// Return the first configured index matching the given URL.
+    fn index_for_url(&self, url: &IndexUrl) -> Option<&ConfiguredIndex> {
         self.indexes
             .iter()
-            .find(|index| is_same_index(index.url(), url))
+            .find(|index| is_same_index(index.definition.url(), url))
     }
 
-    /// Return the [`IndexStatusCodeStrategy`] for an [`IndexUrl`].
-    pub fn status_code_strategy_for(&self, url: &IndexUrl) -> IndexStatusCodeStrategy {
-        self.index_for_url(url).map_or(
-            IndexStatusCodeStrategy::Default,
-            Index::status_code_strategy,
-        )
-    }
-
-    /// Return whether the given status code is explicitly ignored for an [`IndexUrl`].
-    pub fn ignores_error_code_for(&self, url: &IndexUrl, status_code: StatusCode) -> bool {
+    /// Return the HTTP request policy for an index, or the default for an unconfigured URL.
+    pub fn request_policy(&self, url: &IndexUrl) -> &IndexRequestPolicy {
         self.index_for_url(url)
-            .is_some_and(|index| index.ignores_error_code(status_code))
-    }
-
-    /// Return the Simple API cache control header for an [`IndexUrl`], if configured.
-    pub fn simple_api_cache_control_for(&self, url: &IndexUrl) -> Option<http::HeaderValue> {
-        self.index_for_url(url)
-            .and_then(Index::simple_api_cache_control)
-    }
-
-    /// Return the artifact cache control header for an [`IndexUrl`], if configured.
-    pub fn artifact_cache_control_for(&self, url: &IndexUrl) -> Option<http::HeaderValue> {
-        self.index_for_url(url)
-            .and_then(Index::artifact_cache_control)
-    }
-
-    /// Return the explicitly configured file cache control header for an [`IndexUrl`].
-    pub fn configured_files_cache_control_for(&self, url: &IndexUrl) -> Option<http::HeaderValue> {
-        self.index_for_url(url)
-            .and_then(|index| index.cache_control.as_ref())
-            .and_then(|cache_control| cache_control.files.clone())
+            .map_or(&DEFAULT_REQUEST_POLICY, |index| &index.request_policy)
     }
 
     /// Return the hash algorithm required for distributions resolved from a given index.
     pub fn hash_algorithm_for(&self, url: &IndexUrl) -> Option<HashAlgorithm> {
         self.index_for_url(url)
-            .and_then(|index| index.hash_algorithm.map(HashAlgorithm::from))
+            .and_then(|index| index.definition.hash_algorithm.map(HashAlgorithm::from))
     }
 
     /// Return the `exclude-newer` setting for a package on a given index, if configured.
@@ -530,7 +533,7 @@ impl<'a> IndexLocations {
         package: &PackageName,
     ) -> Option<&ExcludeNewerOverride> {
         self.index_for_url(url)
-            .and_then(|index| index.exclude_newer(package))
+            .and_then(|index| index.definition.exclude_newer(package))
     }
 }
 
@@ -639,7 +642,7 @@ mod tests {
 
     use super::*;
     use crate::{IndexCacheControl, IndexFormat, IndexName};
-    use http::HeaderValue;
+    use http::{HeaderValue, StatusCode};
 
     fn index_urls<'a>(indexes: impl IntoIterator<Item = &'a Index>) -> Vec<&'a str> {
         indexes
@@ -844,21 +847,72 @@ mod tests {
 
         let url1 = IndexUrl::from_str("https://index1.example.com/simple").unwrap();
         assert_eq!(
-            index_locations.simple_api_cache_control_for(&url1),
+            index_locations
+                .request_policy(&url1)
+                .simple_api_cache_control(),
             Some(HeaderValue::from_static("max-age=300"))
         );
         assert_eq!(
-            index_locations.artifact_cache_control_for(&url1),
+            index_locations
+                .request_policy(&url1)
+                .artifact_cache_control(),
             Some(HeaderValue::from_static("max-age=1800"))
         );
 
         let url2 = IndexUrl::from_str("https://index2.example.com/simple").unwrap();
-        assert_eq!(index_locations.simple_api_cache_control_for(&url2), None);
-        assert_eq!(index_locations.artifact_cache_control_for(&url2), None);
+        assert_eq!(
+            index_locations
+                .request_policy(&url2)
+                .simple_api_cache_control(),
+            None
+        );
+        assert_eq!(
+            index_locations
+                .request_policy(&url2)
+                .artifact_cache_control(),
+            None
+        );
 
         let url3 = IndexUrl::from_str("https://index3.example.com/simple").unwrap();
-        assert_eq!(index_locations.simple_api_cache_control_for(&url3), None);
-        assert_eq!(index_locations.artifact_cache_control_for(&url3), None);
+        assert_eq!(
+            index_locations
+                .request_policy(&url3)
+                .simple_api_cache_control(),
+            None
+        );
+        assert_eq!(
+            index_locations
+                .request_policy(&url3)
+                .artifact_cache_control(),
+            None
+        );
+    }
+
+    #[test]
+    fn request_policy_distinguishes_configured_and_builtin_status_codes()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let url = IndexUrl::from_str("https://download.pytorch.org/whl/cu118")?;
+        let implicit = IndexLocations::new(vec![Index::from(url.clone())], vec![], false);
+        let explicit: Index = toml::from_str(
+            r#"url = "https://download.pytorch.org/whl/cu118"
+               ignore-error-codes = [403]"#,
+        )?;
+        let explicit = IndexLocations::new(vec![explicit], vec![], false);
+        assert_eq!(
+            implicit.request_policy(&url).status_code_strategy(),
+            explicit.request_policy(&url).status_code_strategy()
+        );
+        assert!(
+            !implicit
+                .request_policy(&url)
+                .ignores_error_code(StatusCode::FORBIDDEN)
+        );
+        assert!(
+            explicit
+                .request_policy(&url)
+                .ignores_error_code(StatusCode::FORBIDDEN)
+        );
+        Ok(())
     }
 
     #[test]
@@ -885,14 +939,24 @@ mod tests {
         let pytorch_url = IndexUrl::from_str("https://download.pytorch.org/whl/cu118").unwrap();
 
         assert_eq!(
-            index_locations.simple_api_cache_control_for(&pytorch_url),
+            index_locations
+                .request_policy(&pytorch_url)
+                .simple_api_cache_control(),
             None
         );
         assert_eq!(
-            index_locations.artifact_cache_control_for(&pytorch_url),
+            index_locations
+                .request_policy(&pytorch_url)
+                .artifact_cache_control(),
             Some(HeaderValue::from_static(
                 "max-age=365000000, immutable, public",
             ))
+        );
+        assert_eq!(
+            index_locations
+                .request_policy(&pytorch_url)
+                .configured_files_cache_control(),
+            None
         );
     }
 
@@ -923,11 +987,15 @@ mod tests {
         let pytorch_url = IndexUrl::from_str("https://download.pytorch.org/whl/cu118").unwrap();
 
         assert_eq!(
-            index_locations.simple_api_cache_control_for(&pytorch_url),
+            index_locations
+                .request_policy(&pytorch_url)
+                .simple_api_cache_control(),
             Some(HeaderValue::from_static("no-cache"))
         );
         assert_eq!(
-            index_locations.artifact_cache_control_for(&pytorch_url),
+            index_locations
+                .request_policy(&pytorch_url)
+                .artifact_cache_control(),
             Some(HeaderValue::from_static("max-age=3600"))
         );
     }
@@ -956,11 +1024,15 @@ mod tests {
         let nvidia_url = IndexUrl::from_str("https://pypi.nvidia.com").unwrap();
 
         assert_eq!(
-            index_locations.simple_api_cache_control_for(&nvidia_url),
+            index_locations
+                .request_policy(&nvidia_url)
+                .simple_api_cache_control(),
             None
         );
         assert_eq!(
-            index_locations.artifact_cache_control_for(&nvidia_url),
+            index_locations
+                .request_policy(&nvidia_url)
+                .artifact_cache_control(),
             Some(HeaderValue::from_static(
                 "max-age=365000000, immutable, public",
             ))
