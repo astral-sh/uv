@@ -21,7 +21,7 @@ use wiremock::{
 use uv_distribution_filename::{VariantLabel, WheelFilename};
 use uv_distribution_types::{PEP_825_SCHEMA, PEP_850_SCHEMA};
 use uv_normalize::PackageName;
-use uv_pep440::VersionSpecifiers;
+use uv_pep440::{Version, VersionSpecifiers};
 
 use crate::http_server::{HttpServer, content_type_for_filename};
 use crate::vendor::{VendorArtifact, vendor_artifacts};
@@ -149,52 +149,7 @@ impl ServerIndex {
             index.packages.insert(package_name.clone(), Vec::new());
 
             for (version, meta) in &package.versions {
-                let wheel = WheelBuilder::new(package_name, version)
-                    .requires(&meta.requires)
-                    .extras(&meta.extras)
-                    .requires_python(meta.requires_python.as_ref())
-                    .entry_points(&meta.entry_points);
-                if let Some(wheel_metadata) = &meta.wheel {
-                    for tag in wheel_tags(&meta.wheel_tags) {
-                        index.register_generated(
-                            package_name,
-                            wheel.tag(tag).build(),
-                            Some((meta, wheel_metadata)),
-                        );
-                    }
-                }
-
-                if let Some(variants) = &meta.variants {
-                    let default_artifact = ArtifactMetadata::default();
-                    let artifact = meta.wheel.as_ref().unwrap_or(&default_artifact);
-                    for (label, variant) in &variants.wheels {
-                        let metadata = variant_metadata(variants, [(label, variant)]);
-                        let wheel = wheel.variant(label, &metadata);
-                        let tags = if variant.wheel_tags.is_empty() {
-                            &meta.wheel_tags
-                        } else {
-                            &variant.wheel_tags
-                        };
-                        for tag in wheel_tags(tags) {
-                            index.register_generated(
-                                package_name,
-                                wheel.tag(tag).build(),
-                                Some((meta, artifact)),
-                            );
-                        }
-                    }
-                    index.register_generated(
-                        package_name,
-                        (
-                            format!(
-                                "{}-{version}-variants.json",
-                                package_name.as_dist_info_name()
-                            ),
-                            variant_metadata(variants, &variants.wheels).into_bytes(),
-                        ),
-                        None,
-                    );
-                }
+                index.register_wheels(package_name, version, meta);
 
                 if let Some(sdist_metadata) = &meta.sdist {
                     index.register_generated(
@@ -236,6 +191,58 @@ impl ServerIndex {
         }
 
         index
+    }
+
+    /// Register the wheels and variant metadata for a package version.
+    fn register_wheels(
+        &mut self,
+        package_name: &PackageName,
+        version: &Version,
+        meta: &PackageMetadata,
+    ) {
+        let wheel = WheelBuilder::new(package_name, version)
+            .requires(&meta.requires)
+            .extras(&meta.extras)
+            .requires_python(meta.requires_python.as_ref())
+            .entry_points(&meta.entry_points);
+        if let Some(wheel_metadata) = &meta.wheel {
+            for tag in wheel_tags(&meta.wheel_tags) {
+                self.register_generated(
+                    package_name,
+                    wheel.tag(tag).build(),
+                    Some((meta, wheel_metadata)),
+                );
+            }
+        }
+
+        let Some(variants) = &meta.variants else {
+            return;
+        };
+        let default_artifact = ArtifactMetadata::default();
+        let artifact = meta.wheel.as_ref().unwrap_or(&default_artifact);
+        for (label, variant) in &variants.wheels {
+            let metadata = variant_metadata(variants, [(label, variant)]);
+            let wheel = wheel.variant(label, &metadata);
+            let tags = if variant.wheel_tags.is_empty() {
+                &meta.wheel_tags
+            } else {
+                &variant.wheel_tags
+            };
+            for tag in wheel_tags(tags) {
+                self.register_generated(
+                    package_name,
+                    wheel.tag(tag).build(),
+                    Some((meta, artifact)),
+                );
+            }
+        }
+
+        let filename = format!(
+            "{}-{version}-variants.json",
+            package_name.as_dist_info_name()
+        );
+        let metadata = variant_metadata(variants, &variants.wheels).into_bytes();
+        self.register_generated(package_name, (filename, metadata), None);
     }
 
     fn register_generated(
