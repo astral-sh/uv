@@ -121,7 +121,7 @@ pub struct PackageMetadata {
     )]
     pub sdist: Option<ArtifactMetadata>,
 
-    /// Whether to produce wheels without a variant label, and optionally their shared metadata.
+    /// Whether to produce wheels (without a variant label), and optionally their shared metadata.
     #[serde(
         default = "default_artifact",
         deserialize_with = "deserialize_artifact"
