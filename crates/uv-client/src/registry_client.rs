@@ -374,14 +374,16 @@ impl RegistryClient {
                     let _permit = download_concurrency.acquire().await;
                     match index.format {
                         IndexFormat::Simple => {
-                            let status_code_strategy =
-                                self.indexes.status_code_strategy_for(index.url);
+                            let status_code_strategy = self
+                                .indexes
+                                .request_policy(index.url)
+                                .status_code_strategy();
                             match self
                                 .simple_detail_single_index(
                                     package_name,
                                     index.url,
                                     capabilities,
-                                    &status_code_strategy,
+                                    status_code_strategy,
                                 )
                                 .await?
                             {
@@ -566,7 +568,10 @@ impl RegistryClient {
         );
         let cache_control = match self.connectivity {
             Connectivity::Online
-                if let Some(header) = self.indexes.simple_api_cache_control_for(index) =>
+                if let Some(header) = self
+                    .indexes
+                    .request_policy(index)
+                    .simple_api_cache_control() =>
             {
                 CacheControl::Override(header)
             }
@@ -821,7 +826,10 @@ impl RegistryClient {
         );
         let cache_control = match self.connectivity {
             Connectivity::Online
-                if let Some(header) = self.indexes.simple_api_cache_control_for(index) =>
+                if let Some(header) = self
+                    .indexes
+                    .request_policy(index)
+                    .simple_api_cache_control() =>
             {
                 CacheControl::Override(header)
             }
@@ -964,7 +972,10 @@ impl RegistryClient {
         // TODO(konsti): Revisit cache freshness once variant metadata mutability is specified.
         let cache_control = match self.connectivity {
             Connectivity::Online
-                if let Some(header) = self.indexes.configured_files_cache_control_for(index) =>
+                if let Some(header) = self
+                    .indexes
+                    .request_policy(index)
+                    .configured_files_cache_control() =>
             {
                 CacheControl::Override(header)
             }
@@ -1356,7 +1367,8 @@ impl RegistryClient {
         Ok(match self.connectivity {
             Connectivity::Online
                 if let Some(index) = effective_index
-                    && let Some(header) = self.indexes.artifact_cache_control_for(index) =>
+                    && let Some(header) =
+                        self.indexes.request_policy(index).artifact_cache_control() =>
             {
                 CacheControl::Override(header)
             }
