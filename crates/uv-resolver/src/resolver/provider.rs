@@ -171,7 +171,9 @@ impl<'a, Context: BuildContext> DefaultResolverProvider<'a, Context> {
                 if let uv_client::ErrorKind::WrappedReqwestError(_, error) = &kind
                     && let Some(status) = error.status()
                     && index.is_some_and(|index| {
-                        self.index_locations.ignores_error_code_for(index, status)
+                        self.index_locations
+                            .request_policy(index)
+                            .ignores_error_code(status)
                     })
                 {
                     Ok(MetadataUnavailable::Network(status))
