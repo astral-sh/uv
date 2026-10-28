@@ -9,17 +9,17 @@ use uv_pypi_types::{HashDigest, HashDigests, ResolutionMetadata};
 
 use crate::{Error, supported_variant_properties};
 
-/// Allow variant wheels from an index or local path when the wheel variants preview is enabled.
+/// Allow variant wheels from supported sources when the wheel variants preview is enabled.
 ///
 /// Variant compatibility is checked separately by [`check_wheel_variant_compatibility`].
 ///
-/// TODO: Support variant wheels from direct URLs and Git paths.
+/// TODO: Support variant wheels from Git paths.
 pub fn check_supported_wheel_variant(dist: &BuiltDist) -> Result<(), Error> {
     let filename = dist.wheel_filename();
     if filename.variant().is_some() {
         let supported_source = match dist {
-            BuiltDist::Registry(_) | BuiltDist::Path(_) => true,
-            BuiltDist::DirectUrl(_) | BuiltDist::GitPath(_) => false,
+            BuiltDist::Registry(_) | BuiltDist::DirectUrl(_) | BuiltDist::Path(_) => true,
+            BuiltDist::GitPath(_) => false,
         };
         if !supported_source || !uv_preview::is_enabled(PreviewFeature::WheelVariants) {
             return Err(Error::UnsupportedWheelVariant(Box::new(filename.clone())));
