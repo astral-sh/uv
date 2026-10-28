@@ -74,7 +74,7 @@ impl File<FileLocation> {
 
 impl<Url> File<Url> {
     /// Replace the file URL while preserving the artifact metadata.
-    pub(crate) fn map_url<Mapped>(self, map: impl FnOnce(Url) -> Mapped) -> File<Mapped> {
+    fn map_url<Mapped>(self, map: impl FnOnce(Url) -> Mapped) -> File<Mapped> {
         File {
             dist_info_metadata: self.dist_info_metadata,
             filename: self.filename,
