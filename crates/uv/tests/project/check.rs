@@ -2984,6 +2984,38 @@ fn check_no_project() -> Result<()> {
     "
     );
 
+    // UV_FROZEN in the environment should not produce warnings when project discovery is disabled.
+    uv_snapshot!(
+        context.filters(),
+        workspace_check(&context)
+            .arg("--no-project")
+            .env("UV_FROZEN", "1"),
+        @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    "
+    );
+
+    // UV_LOCKED in the environment should not produce warnings when project discovery is disabled.
+    uv_snapshot!(
+        context.filters(),
+        workspace_check(&context)
+            .arg("--no-project")
+            .env("UV_LOCKED", "1"),
+        @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    "
+    );
+
     Ok(())
 }
 

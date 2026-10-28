@@ -567,11 +567,11 @@ pub async fn run(
             for flag in groups.history().as_flags_pretty() {
                 warn_user!("`{flag}` has no effect when used alongside `--no-project`");
             }
-            if let LockCheck::Enabled(lock_check) = lock_check {
+            if let LockCheck::Enabled(LockedSource::Cli(lock_check)) = lock_check {
                 warn_user!("`{lock_check}` has no effect when used alongside `--no-project`");
             }
-            if frozen.is_some() {
-                warn_user!("`--frozen` has no effect when used alongside `--no-project`");
+            if let Some(FrozenSource::Cli(frozen)) = frozen {
+                warn_user!("`{frozen}` has no effect when used alongside `--no-project`");
             }
             if no_sync {
                 warn_user!("`--no-sync` has no effect when used alongside `--no-project`");
@@ -584,8 +584,11 @@ pub async fn run(
             for flag in groups.history().as_flags_pretty() {
                 warn_user!("`{flag}` has no effect when used outside of a project");
             }
-            if let LockCheck::Enabled(lock_check) = lock_check {
-                warn_user!("`{lock_check}` has no effect when used outside of a project",);
+            if let LockCheck::Enabled(LockedSource::Cli(lock_check)) = lock_check {
+                warn_user!("`{lock_check}` has no effect when used outside of a project");
+            }
+            if let Some(FrozenSource::Cli(frozen)) = frozen {
+                warn_user!("`{frozen}` has no effect when used outside of a project");
             }
             if no_sync {
                 warn_user!("`--no-sync` has no effect when used outside of a project");

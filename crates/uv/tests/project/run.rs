@@ -3586,6 +3586,29 @@ fn run_no_project() -> Result<()> {
     warning: `--locked` has no effect when used alongside `--no-project`
     ");
 
+    // `run --no-project --frozen` should warn about `--frozen`.
+    uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("--frozen").arg("python").arg("-c").arg("import sys; print(sys.executable)"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [VENV]/[BIN]/[PYTHON]
+
+    ----- stderr -----
+    warning: `--frozen` has no effect when used alongside `--no-project`
+    ");
+
+    // `run --no-project` with `UV_FROZEN=1` or `UV_LOCKED=1` in environment should not warn.
+    uv_snapshot!(context.filters(), context.run().arg("--no-project").env("UV_FROZEN", "1").arg("python").arg("-c").arg("import sys; print(sys.executable)"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [VENV]/[BIN]/[PYTHON]
+    ");
+
+    uv_snapshot!(context.filters(), context.run().arg("--no-project").env("UV_LOCKED", "1").arg("python").arg("-c").arg("import sys; print(sys.executable)"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [VENV]/[BIN]/[PYTHON]
+    ");
+
     Ok(())
 }
 
