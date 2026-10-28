@@ -73,6 +73,15 @@ fn export_reuses_settings_workspace_discovery() -> Result<()> {
 /// Filter the current project when exporting every workspace member.
 #[test]
 fn export_no_emit_project_all_packages() -> Result<()> {
+    // The CLI runs the command dispatcher on a larger stack than libtest provides.
+    std::thread::Builder::new()
+        .stack_size(uv_threads::min_stack_size())
+        .spawn(check_workspace_export)?
+        .join()
+        .unwrap_or_else(|panic| std::panic::resume_unwind(panic))
+}
+
+fn check_workspace_export() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     context.temp_dir.child("pyproject.toml").write_str(
         r#"
@@ -107,6 +116,7 @@ fn export_no_emit_project_all_packages() -> Result<()> {
         "#,
     )?;
 
+    let _preview = uv_preview::test::with_features(&[]);
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()?;

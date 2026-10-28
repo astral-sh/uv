@@ -117,6 +117,7 @@ uv-python-managed = { workspace = true }
 uv-cache-key = { workspace = true }
 uv-extract = { workspace = true }
 uv-platform = { workspace = true }
+uv-preview = { workspace = true, features = ["testing"] }
 uv-publish = { workspace = true, features = ["test"] }
 uv-test = { workspace = true }
 uv-trampoline-builder = { workspace = true }

@@ -138,6 +138,7 @@ struct ResolverState<InstalledPackages: InstalledPackagesProvider> {
     urls: Urls,
     indexes: Indexes,
     dependency_mode: DependencyMode,
+    wheel_variants: bool,
     hasher: HashStrategy,
     env: ResolverEnvironment,
     // The environment of the current Python interpreter.
@@ -264,6 +265,8 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
             capabilities: capabilities.clone(),
             selector: CandidateSelector::for_resolution(&options, &manifest, &env),
             dependency_mode: options.dependency_mode,
+            // Read the command’s preview setting before moving to the solver thread.
+            wheel_variants: uv_preview::is_enabled(PreviewFeature::WheelVariants),
             urls: Urls::from_manifest(&manifest, &env, git, options.dependency_mode),
             indexes: Indexes::from_manifest(&manifest, &env, options.dependency_mode),
             recorder: manifest.recorder.clone(),
@@ -1394,7 +1397,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         // Select a variant only for a specific environment and an installable candidate.
         // TODO(konsti): Check variant compatibility before reusing an installed candidate.
         let variant = if env.marker_environment().is_some()
-            && uv_preview::is_enabled(PreviewFeature::WheelVariants)
+            && self.wheel_variants
             && let Some(prioritized) = candidate.prioritized()
         {
             self.select_wheel_variant(candidate.version(), prioritized, version_maps, requests)?
@@ -1825,7 +1828,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             | CompatibleDist::IncompatibleWheel { sdist, .. } => Some(&sdist.index),
             CompatibleDist::CompatibleWheel { wheel, .. } => Some(&wheel.index),
         };
-        let variants_json = if uv_preview::is_enabled(PreviewFeature::WheelVariants)
+        let variants_json = if self.wheel_variants
             && let Some(index) = index
             && let Some(variants_json) = candidate.prioritized().and_then(|prioritized| {
                 prioritized
@@ -1960,7 +1963,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 kind,
                 marker: _,
             } => {
-                if uv_preview::is_enabled(PreviewFeature::WheelVariants)
+                if self.wheel_variants
                     && let Some(variants_json) = pins.variants_json(name, version)
                     && let Err(reason) = &*variants_json.wait()
                 {
