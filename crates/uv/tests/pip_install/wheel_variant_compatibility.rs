@@ -4,6 +4,7 @@ use anyhow::Result;
 use assert_fs::prelude::*;
 use insta::assert_snapshot;
 use serde_json::{Map, Value, json};
+use sha2::{Digest, Sha256};
 use uv_distribution_types::PEP_850_SCHEMA;
 use uv_static::EnvVars;
 use uv_test::find_links::FindLinksServer;
@@ -16,6 +17,154 @@ fn null_variant() -> Value {
         "default-priorities": { "namespace": ["x86_64"] },
         "variants": { "null": {} },
     })
+}
+
+/// Installing a local wheel checks its properties, including when reusing a cached extraction.
+#[test]
+fn install_local_variant_wheel() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let variant = json!({
+        "$schema": PEP_850_SCHEMA,
+        "default-priorities": { "namespace": ["nvidia"] },
+        "providers": {
+            "nvidia": {
+                "requires": ["nvidia-variant-provider==0.0.1"],
+                "plugin-api": "nvidia_variant_provider.plugin:NvidiaVariantPlugin"
+            }
+        },
+        "variants": {
+            "gpu": {
+                "nvidia": {
+                    "cuda_version_lower_bound": ["12"],
+                    "sm_arch": ["89_real"]
+                }
+            }
+        }
+    })
+    .to_string();
+    let (_, wheel) = WheelBuilder::new(&"ok".parse()?, &"1.0.0".parse()?)
+        .files(&[("ok-1.0.0.dist-info/variant.json", &variant)])
+        .build();
+    let wheel_path = context.temp_dir.child("ok-1.0.0-py3-none-any-gpu.whl");
+    wheel_path.write_binary(&wheel)?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .env(EnvVars::NV_VARIANT_PROVIDER_FORCE_CUDA_DRIVER_VERSION, "12")
+        .env(EnvVars::NV_VARIANT_PROVIDER_FORCE_SM_ARCH, "8.9")
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg(wheel_path.path()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0 (from file://[TEMP_DIR]/ok-1.0.0-py3-none-any-gpu.whl)
+    ");
+
+    context.reset_venv();
+    uv_snapshot!(context.filters(), context.pip_install()
+        .env(EnvVars::NV_VARIANT_PROVIDER_FORCE_CUDA_DRIVER_VERSION, "11")
+        .env(EnvVars::NV_VARIANT_PROVIDER_FORCE_SM_ARCH, "8.8")
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg(wheel_path.path()), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Failed to determine installation plan
+      cause: Wheel variant `gpu` requires unsupported properties: `nvidia :: cuda_version_lower_bound :: 12` and `nvidia :: sm_arch :: 89_real`
+    ");
+    Ok(())
+}
+
+/// A refreshed local variant wheel must have compatible platform tags.
+#[test]
+fn refresh_incompatible_variant_wheel() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let variant = null_variant().to_string();
+    let (_, wheel) = WheelBuilder::new(&"ok".parse()?, &"1.0.0".parse()?)
+        .tag("py3-none-win_amd64")
+        .files(&[("ok-1.0.0.dist-info/variant.json", &variant)])
+        .build();
+    let wheel_path = context
+        .temp_dir
+        .child("ok-1.0.0-py3-none-win_amd64-null.whl");
+    wheel_path.write_binary(&wheel)?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("--python-platform")
+        .arg("linux")
+        .arg("--refresh")
+        .arg(wheel_path.path()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies
+      cause: Because only ok==1.0.0 is available and ok==1.0.0 has no wheels with a matching platform tag (e.g., `manylinux_2_28_x86_64`), we can conclude that all versions of ok cannot be used.
+             And because you require ok, we can conclude that your requirements are unsatisfiable.
+    ");
+    Ok(())
+}
+
+/// `pylock.toml` installs bypass the resolver, so they must check local variant wheel tags.
+#[test]
+fn sync_incompatible_local_variant_from_pylock() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let variant = null_variant().to_string();
+    let (_, wheel) = WheelBuilder::new(&"ok".parse()?, &"1.0.0".parse()?)
+        .tag("py3-none-win_amd64")
+        .files(&[("ok-1.0.0.dist-info/variant.json", &variant)])
+        .build();
+    context
+        .temp_dir
+        .child("ok-1.0.0-py3-none-win_amd64-null.whl")
+        .write_binary(&wheel)?;
+    let hash = hex::encode(Sha256::digest(&wheel));
+    context.temp_dir.child("pylock.toml").write_str(&format!(
+        r#"
+        lock-version = "1.0"
+        created-by = "uv"
+        [[packages]]
+        name = "ok"
+        version = "1.0.0"
+        archive = {{ path = "ok-1.0.0-py3-none-win_amd64-null.whl", hashes = {{ sha256 = "{hash}" }} }}
+        "#,
+    ))?;
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview-features")
+        .arg("wheel-variants,pylock")
+        .arg("--python-platform")
+        .arg("linux")
+        .arg("--refresh")
+        .arg("pylock.toml"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Package `ok` can't be installed because the binary distribution is incompatible with the current platform
+    ");
+    Ok(())
+}
+
+#[test]
+fn local_variant_wheel_requires_variant_metadata() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let (_, wheel) = WheelBuilder::new(&"ok".parse()?, &"1.0.0".parse()?).build();
+    let wheel_path = context.temp_dir.child("ok-1.0.0-py3-none-any-null.whl");
+    wheel_path.write_binary(&wheel)?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg(wheel_path.path()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to read `ok @ file://[TEMP_DIR]/ok-1.0.0-py3-none-any-null.whl`
+      cause: Failed to read metadata: [TEMP_DIR]/ok-1.0.0-py3-none-any-null.whl
+      cause: Missing `variant.json` in the wheel's .dist-info directory
+    ");
+    Ok(())
 }
 
 /// Sync keeps an installed variant even when wheel variants are no longer enabled.

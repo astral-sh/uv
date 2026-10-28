@@ -34,7 +34,7 @@ use uv_pep440::{MIN_VERSION, Version, VersionSpecifiers, release_specifiers_to_r
 use uv_pep508::{
     MarkerEnvironment, MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString,
 };
-use uv_platform_tags::{IncompatibleTag, Tags};
+use uv_platform_tags::{IncompatibleTag, TagCompatibility, Tags};
 use uv_preview::PreviewFeature;
 use uv_pypi_types::{ConflictItem, ConflictItemRef, ConflictKindRef, Conflicts, VerbatimParsedUrl};
 use uv_resolver_types::{PackageNodeKind, VariantsJsonMetadataError};
@@ -1290,11 +1290,19 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 }
             }
 
-            let incompatible_tag = if filename.variant().is_some() {
-                // Selecting a wheel variant requires variant metadata from the index.
+            let incompatible_tag = if filename.variant().is_some()
+                && env.marker_environment().is_none()
+            {
+                // Universal lockfiles cannot yet record wheel variants.
                 Some(IncompatibleTag::Variant)
             } else if !python_requirement.target().matches_wheel_tag(filename) {
                 Some(IncompatibleTag::AbiPythonVersion)
+            } else if let BuiltDist::Path(wheel) = dist
+                && wheel.filename.variant().is_some()
+                && let Some(tags) = &self.tags
+                && let TagCompatibility::Incompatible(tag) = wheel.filename.tag_compatibility(tags)
+            {
+                Some(tag)
             } else {
                 None
             };
