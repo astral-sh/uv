@@ -1708,7 +1708,7 @@ impl PylockTomlWheel {
             requires_python: None,
             size: self.size,
             upload_time_utc_ms: self.upload_time.map(Timestamp::as_millisecond),
-            url: CanonicalFileLocation::absolute(file_url),
+            url: CanonicalFileLocation::from_lockfile(file_url),
             yanked: None,
         });
 
@@ -1868,7 +1868,7 @@ impl PylockTomlSdist {
             requires_python: None,
             size: self.size,
             upload_time_utc_ms: self.upload_time.map(Timestamp::as_millisecond),
-            url: CanonicalFileLocation::absolute(file_url),
+            url: CanonicalFileLocation::from_lockfile(file_url),
             yanked: None,
         });
 
