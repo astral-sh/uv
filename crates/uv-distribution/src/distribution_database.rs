@@ -25,9 +25,10 @@ use uv_client::{
 };
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
-    ArchiveHashPolicy, BuildInfo, BuildableSource, BuiltDist, Dist, DistRef, GitPathBuiltDist,
-    HashCollection, HashValidation, IndexUrl, InstalledDist, MetadataHashPolicy, Name,
-    ResolutionRecorder, SourceDist, SourceUrl, VariantsJsonContent, parse_url_hashes,
+    ArchiveHashPolicy, BuildInfo, BuildableSource, BuiltDist, CanonicalFileLocation, Dist, DistRef,
+    GitPathBuiltDist, HashCollection, HashValidation, IndexUrl, InstalledDist, MetadataHashPolicy,
+    Name, ResolutionRecorder, SourceDist, SourceUrl, ToUrlError, VariantsJsonContent,
+    parse_url_hashes,
 };
 use uv_extract::dirhash::{DirectoryDigest, HashedFile};
 use uv_extract::hash::Hasher;
@@ -342,13 +343,14 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         match dist {
             BuiltDist::Registry(wheels) => {
                 let wheel = wheels.best_wheel();
-                let url = wheel.file.location.to_url()?;
+                let RegistryArtifactRequest { index, url } =
+                    RegistryArtifactRequest::new(&wheel.index, &wheel.file.location)?;
                 let size = wheel.file.size;
 
                 // Create a cache entry for the wheel.
                 let wheel_entry = self.build_context.cache().entry(
                     CacheBucket::Wheels,
-                    WheelCache::Index(&wheel.index).wheel_dir(wheel.name().as_ref()),
+                    WheelCache::Index(index).wheel_dir(wheel.name().as_ref()),
                     wheel.filename.cache_key(),
                 );
 
@@ -366,7 +368,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 match self
                     .stream_wheel(
                         url.clone(),
-                        dist.index(),
+                        Some(index),
                         &wheel.filename,
                         size,
                         &wheel_entry,
@@ -405,7 +407,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         let archive = self
                             .download_wheel(
                                 url,
-                                dist.index(),
+                                Some(index),
                                 &wheel.filename,
                                 size,
                                 &wheel_entry,
@@ -1749,6 +1751,24 @@ fn persist_archive_file(src: &Path, dst: &Path) -> io::Result<()> {
     }
 
     fs_err::hard_link(dst, src).or_else(|_| uv_fs::copy_atomic_sync(dst, src))
+}
+
+/// The download URL and cache index for a registry artifact.
+pub(crate) struct RegistryArtifactRequest<'index> {
+    pub(crate) index: &'index IndexUrl,
+    pub(crate) url: SafeUrl,
+}
+
+impl<'index> RegistryArtifactRequest<'index> {
+    pub(crate) fn new(
+        index: &'index IndexUrl,
+        location: &CanonicalFileLocation,
+    ) -> Result<Self, ToUrlError> {
+        Ok(Self {
+            index,
+            url: location.to_url()?,
+        })
+    }
 }
 
 /// A wrapper around `RegistryClient` that manages a concurrency limit.
