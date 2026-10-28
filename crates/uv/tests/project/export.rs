@@ -130,6 +130,9 @@ fn check_workspace_export() -> Result<()> {
                 "--no-header",
                 "--offline",
                 "--no-config",
+                // The fixture needs to create its lockfile, even in a locked CI environment.
+                "--no-locked",
+                "--no-frozen",
                 "--no-python-downloads",
                 "--cache-dir",
             ]
