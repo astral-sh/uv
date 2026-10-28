@@ -55,8 +55,6 @@ jobs:
       - run: uv run --only-group check ty check python/uv
       - name: "Check scrolls"
         env:
-          # TODO: Remove once ty infers Python versions from script environments instead of the root project.
-          TY_CONFIG_FILE: /dev/null
           UV_PREVIEW_FEATURES: check-command,workspace-list-scripts
         run: |
           set -e -o pipefail

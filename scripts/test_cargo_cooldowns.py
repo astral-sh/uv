@@ -4,6 +4,8 @@
 # [tool.uv]
 # no-build = true
 # exclude-newer = "P7D"
+# [tool.ty.environment]
+# extra-paths = ["."]
 # ///
 """Regression tests for the Cargo dependency cooldown gate."""
 
