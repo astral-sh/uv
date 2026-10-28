@@ -2,11 +2,12 @@ use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use serde::de::{IgnoredAny, MapAccess, Visitor, value::MapAccessDeserializer};
+use serde::de::{IgnoredAny, MapAccess, Visitor};
 use serde::{Deserialize, Deserializer};
 use tracing::{debug, info_span, warn};
 
 use uv_fs::{Simplified, created_time};
+use uv_macros::DeserializeUntagged;
 
 use crate::git_info::{Commit, Tags};
 use crate::glob::cluster_globs;
@@ -424,48 +425,18 @@ impl<'de> Deserialize<'de> for CacheKey {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, DeserializeUntagged)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[cfg_attr(
     feature = "schemars",
     schemars(untagged, rename_all = "kebab-case", deny_unknown_fields)
 )]
+#[serde(expecting = "a boolean or a Git cache key table")]
 pub enum GitPattern {
+    #[untagged(bool)]
     Bool(bool),
+    #[untagged(map)]
     Set(GitSet),
-}
-
-impl<'de> Deserialize<'de> for GitPattern {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        struct GitPatternVisitor;
-
-        impl<'de> Visitor<'de> for GitPatternVisitor {
-            type Value = GitPattern;
-
-            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                formatter.write_str("a boolean or a Git cache key table")
-            }
-
-            fn visit_bool<E>(self, value: bool) -> Result<Self::Value, E>
-            where
-                E: serde::de::Error,
-            {
-                Ok(GitPattern::Bool(value))
-            }
-
-            fn visit_map<A>(self, map: A) -> Result<Self::Value, A::Error>
-            where
-                A: MapAccess<'de>,
-            {
-                GitSet::deserialize(MapAccessDeserializer::new(map)).map(GitPattern::Set)
-            }
-        }
-
-        deserializer.deserialize_any(GitPatternVisitor)
-    }
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]

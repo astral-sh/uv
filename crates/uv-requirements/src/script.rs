@@ -41,11 +41,7 @@ pub async fn script_specification(
     cache: &Cache,
     workspace_cache: &WorkspaceCache,
     credentials_cache: &CredentialsCache,
-) -> Result<Option<RequirementsSpecification>, ScriptRequirementsError> {
-    let Some(dependencies) = script.metadata().dependencies.as_ref() else {
-        return Ok(None);
-    };
-
+) -> Result<RequirementsSpecification, ScriptRequirementsError> {
     let script_dir = script.directory()?;
     let script_indexes = script
         .indexes(sources)
@@ -56,7 +52,7 @@ pub async fn script_specification(
     let script_sources = script.sources(sources);
 
     let mut requirements = Vec::new();
-    for requirement in dependencies.iter().cloned() {
+    for requirement in script.metadata().dependencies.iter().cloned() {
         requirements.extend(
             LoweredRequirement::from_non_workspace_requirement(
                 requirement,
@@ -180,7 +176,7 @@ pub async fn script_specification(
         RequirementsSpecification::from_excludes(requirements, constraints, Vec::new(), Vec::new());
     specification.override_dependencies = overrides;
     specification.excludes = excludes;
-    Ok(Some(specification))
+    Ok(specification)
 }
 
 /// Determine the extra build requires for a script.

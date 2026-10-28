@@ -209,7 +209,7 @@ impl BuildRequires {
         let mut requires_dist = Vec::new();
         for requirement in metadata.requires_dist {
             if sources.for_package(&requirement.name) {
-                requires_dist.push(Requirement::from(requirement));
+                requires_dist.push(Requirement::from(requirement).with_git_lfs(git_lfs));
                 continue;
             }
 

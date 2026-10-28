@@ -1276,7 +1276,7 @@ fn lock_exclude_newer_package_relative_no_timestamp_in_lockfile() -> Result<()> 
                |
              5 | [options]
                | ^^^^^^^^^
-             data did not match any variant of untagged enum Helper
+             missing field `timestamp`
     ");
 
     Ok(())

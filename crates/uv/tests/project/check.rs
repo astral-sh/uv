@@ -16,9 +16,9 @@ use uv_test::{diff_snapshot, uv_snapshot};
 fn workspace_check(context: &uv_test::TestContext) -> Command {
     let mut command = context.check();
     command.env("TY_OUTPUT_FORMAT", "concise");
-    // Select ty 0.0.80 independently of the suite-wide cutoff so these checks
+    // Select ty 0.0.90 independently of the suite-wide cutoff so these checks
     // can exercise new ty features without disrupting other tests.
-    command.env(EnvVars::UV_EXCLUDE_NEWER, "2026-09-10T00:00:00Z");
+    command.env(EnvVars::UV_EXCLUDE_NEWER, "2026-10-21T00:00:00Z");
     command
 }
 

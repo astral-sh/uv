@@ -75,7 +75,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          codex-version: "0.155.1"
+          codex-version: "0.157.1"
           working-directory: "${{ github.workspace }}/pull-request"
           codex-home: "${{ github.workspace }}/agents/codex"
           permission-profile: "pull-request-labels"

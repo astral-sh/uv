@@ -61,6 +61,11 @@ pub enum EnvironmentError {
     InvalidProjectEnvironmentDir(PathBuf, String),
 
     #[error(
+        "Script environment at `{0}` cannot be replaced because it is a non-empty directory that is not a virtual environment"
+    )]
+    InvalidScriptEnvironmentDir(PathBuf),
+
+    #[error(
         "Malware detected in one or more dependencies that would be installed; aborting sync. Set `UV_MALWARE_CHECK=0` to bypass this check."
     )]
     MalwareFound,
@@ -220,6 +225,7 @@ impl From<EnvironmentError> for UvError {
             | EnvironmentError::LockedPythonIncompatibility(..)
             | EnvironmentError::LockedPlatformIncompatibility(..)
             | EnvironmentError::InvalidProjectEnvironmentDir(..)
+            | EnvironmentError::InvalidScriptEnvironmentDir(..)
             | EnvironmentError::MalwareFound
             | EnvironmentError::Osv(..)
             | EnvironmentError::DroppedEnvironment
@@ -273,6 +279,7 @@ impl uv_errors::Hinted for EnvironmentError {
             | Self::LockedPythonIncompatibility(..)
             | Self::LockedPlatformIncompatibility(..)
             | Self::InvalidProjectEnvironmentDir(..)
+            | Self::InvalidScriptEnvironmentDir(..)
             | Self::MalwareFound
             | Self::Osv(..)
             | Self::DroppedEnvironment

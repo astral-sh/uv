@@ -1193,6 +1193,102 @@ fn build_constraints() -> Result<()> {
     Ok(())
 }
 
+/// Static build requirements inherit the invocation's Git LFS setting.
+#[test]
+#[cfg(feature = "test-git-lfs")]
+fn build_git_lfs_static_requires() -> Result<()> {
+    let context = uv_test::test_context!("3.13").with_git_lfs_config();
+    context.temp_dir.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.13"
+
+        [build-system]
+        requires = ["test-lfs-repo @ git+https://github.com/astral-sh/test-lfs-repo.git@261c828b8e05251f3a3e4f6b47b149d691c7efbb"]
+        build-backend = "backend"
+        backend-path = ["."]
+    "#})?;
+    context.temp_dir.child("backend.py").write_str(indoc! {r#"
+        from pathlib import Path
+        import zipfile
+        import test_lfs_repo.lfs_module
+
+        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+            filename = "project-0.1.0-py3-none-any.whl"
+            with zipfile.ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+                wheel.writestr("project-0.1.0.dist-info/METADATA", "Metadata-Version: 2.3\nName: project\nVersion: 0.1.0\n")
+                wheel.writestr("project-0.1.0.dist-info/WHEEL", "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n")
+                wheel.writestr("project-0.1.0.dist-info/RECORD", "")
+            return filename
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.build().arg("--wheel")
+        .env(EnvVars::UV_GIT_LFS, "true"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Building wheel...
+    Successfully built dist/project-0.1.0-py3-none-any.whl
+    ");
+
+    Ok(())
+}
+
+/// Requirements returned by a PEP 517 hook inherit Git LFS with and without source lowering.
+#[test]
+#[cfg(feature = "test-git-lfs")]
+fn build_git_lfs_hook_requires() -> Result<()> {
+    let context = uv_test::test_context!("3.13").with_git_lfs_config();
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.13"
+
+        [build-system]
+        requires = []
+        build-backend = "backend"
+        backend-path = ["."]
+    "#})?;
+    context.temp_dir.child("backend.py").write_str(indoc! {r#"
+        from pathlib import Path
+        import zipfile
+
+        def get_requires_for_build_wheel(config_settings=None):
+            return ["test-lfs-repo @ git+https://github.com/astral-sh/test-lfs-repo.git@261c828b8e05251f3a3e4f6b47b149d691c7efbb"]
+
+        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+            import test_lfs_repo.lfs_module
+            filename = "project-0.1.0-py3-none-any.whl"
+            with zipfile.ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+                wheel.writestr("project-0.1.0.dist-info/METADATA", "Metadata-Version: 2.3\nName: project\nVersion: 0.1.0\n")
+                wheel.writestr("project-0.1.0.dist-info/WHEEL", "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n")
+                wheel.writestr("project-0.1.0.dist-info/RECORD", "")
+            return filename
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.build().arg("--wheel")
+        .env(EnvVars::UV_GIT_LFS, "true"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Building wheel...
+    Successfully built dist/project-0.1.0-py3-none-any.whl
+    ");
+
+    uv_snapshot!(context.filters(), context.build().args(["--wheel", "--no-sources", "--no-cache"])
+        .env(EnvVars::UV_GIT_LFS, "true"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Building wheel...
+    Successfully built dist/project-0.1.0-py3-none-any.whl
+    ");
+
+    Ok(())
+}
+
 #[test]
 fn build_dependency_check_missing_declared_requirement() -> Result<()> {
     let context = uv_test::test_context!("3.12");

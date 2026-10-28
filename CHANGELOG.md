@@ -3,6 +3,49 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.13.6
+
+Released on 2026-10-26.
+
+### Enhancements
+
+- Accept an empty `UV_RUN_RECURSION_DEPTH` as zero and report invalid values consistently ([#22814](https://github.com/astral-sh/uv/pull/22814))
+- Explain how to add project metadata when `uv init` finds a `pyproject.toml` without a `[project]` table ([#22916](https://github.com/astral-sh/uv/pull/22916))
+
+### Python
+
+- Add CPython 3.11.18, 3.12.16, 3.13.18, 3.14.10, and 3.15.2 ([#22938](https://github.com/astral-sh/uv/pull/22938))
+
+### Preview features
+
+- Detect NVIDIA GPU capabilities when selecting compatible wheel variants with `wheel-variants` ([#22690](https://github.com/astral-sh/uv/pull/22690))
+- Nest each module's owners in an object in `uv workspace metadata` output ([#22638](https://github.com/astral-sh/uv/pull/22638))
+- Report the unsupported properties required by an incompatible wheel variant ([#22719](https://github.com/astral-sh/uv/pull/22719))
+
+### Performance
+
+- Reduce peak memory use when resolving large workspaces ([#22860](https://github.com/astral-sh/uv/pull/22860), [#22863](https://github.com/astral-sh/uv/pull/22863), [#22864](https://github.com/astral-sh/uv/pull/22864), [#22866](https://github.com/astral-sh/uv/pull/22866), [#22870](https://github.com/astral-sh/uv/pull/22870))
+- Reduce peak memory use when locking or upgrading large projects ([#22833](https://github.com/astral-sh/uv/pull/22833), [#22834](https://github.com/astral-sh/uv/pull/22834))
+- Speed up redirected output from `uv export` and `uv pip compile` ([#22840](https://github.com/astral-sh/uv/pull/22840))
+- Reuse cached or active environments when running PEP 723 scripts without dependencies ([#21458](https://github.com/astral-sh/uv/pull/21458))
+- Reduce parsing overhead for build dependency and build backend settings ([#22848](https://github.com/astral-sh/uv/pull/22848), [#22871](https://github.com/astral-sh/uv/pull/22871), [#22879](https://github.com/astral-sh/uv/pull/22879), [#22884](https://github.com/astral-sh/uv/pull/22884))
+- Reduce parsing overhead for project sources and workspace references ([#22880](https://github.com/astral-sh/uv/pull/22880), [#22883](https://github.com/astral-sh/uv/pull/22883))
+- Reduce parsing overhead for cache, exclusion, cutoff, and preview settings ([#22876](https://github.com/astral-sh/uv/pull/22876), [#22877](https://github.com/astral-sh/uv/pull/22877), [#22878](https://github.com/astral-sh/uv/pull/22878), [#22887](https://github.com/astral-sh/uv/pull/22887))
+- Reduce PyPI metadata parsing overhead ([#22874](https://github.com/astral-sh/uv/pull/22874), [#22875](https://github.com/astral-sh/uv/pull/22875))
+- Speed up parsing tool receipt requirements ([#22885](https://github.com/astral-sh/uv/pull/22885))
+
+### Bug fixes
+
+- Prevent `uv run --active --script` and `uv sync --active --script` from deleting non-virtual-environment directories ([#21464](https://github.com/astral-sh/uv/pull/21464))
+- Use `AMD64` for `platform_machine` when resolving for x86-64 Windows ([#22935](https://github.com/astral-sh/uv/pull/22935))
+- Preserve free-threaded and other non-default variants in `uv python upgrade` ([#22836](https://github.com/astral-sh/uv/pull/22836))
+- Allow `uv init --no-package` and `uv init --script` when `UV_INIT_BUILD_BACKEND` is set ([#22907](https://github.com/astral-sh/uv/pull/22907))
+- Prevent panics when rendering containment markers with local versions ([#22815](https://github.com/astral-sh/uv/pull/22815))
+
+### Documentation
+
+- Update the Docker guide and reproduction examples to use uv 0.13.5 ([#22867](https://github.com/astral-sh/uv/pull/22867))
+
 ## 0.13.5
 
 Released on 2026-10-21.

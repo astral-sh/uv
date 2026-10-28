@@ -18051,7 +18051,7 @@ fn switch_platform() {
     let context = uv_test::test_context!("3.12");
 
     uv_snapshot!(context.pip_install()
-        .arg("cffi")
+        .arg("cffi; platform_machine == 'AMD64'")
         .arg("--python-platform")
         .arg("windows"), @"
     exit_code: 0 (success)

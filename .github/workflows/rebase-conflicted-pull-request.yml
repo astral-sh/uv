@@ -60,7 +60,7 @@ jobs:
         run: cargo fetch --locked
 
       - name: "Install uv"
-        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
           # renovate: datasource=github-release-attachments depName=astral-sh/uv
           version: "0.13.5"
@@ -69,6 +69,7 @@ jobs:
       - name: "Install cargo nextest"
         env:
           UV_PROJECT_ENVIRONMENT: ${{ runner.temp }}/cargo-tools
+          UV_PYTHON_DOWNLOADS_JSON_URL: ${{ github.workspace }}/crates/uv-python-managed/download-metadata.json
         run: |
           uv sync --only-dev
           echo "$UV_PROJECT_ENVIRONMENT/bin" >> "$GITHUB_PATH"
@@ -124,7 +125,7 @@ jobs:
           TMPDIR: ${{ runner.temp }}
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          codex-version: "0.155.1"
+          codex-version: "0.157.1"
           model: gpt-5.6-sol
           effort: high
           codex-home: "${{ runner.temp }}/codex-home"

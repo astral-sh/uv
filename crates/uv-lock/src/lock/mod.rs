@@ -9148,8 +9148,7 @@ struct WheelWire {
     upload_time: Option<Timestamp>,
 }
 
-#[derive(Clone, Debug, serde::Deserialize, PartialEq, Eq)]
-#[serde(untagged, rename_all = "kebab-case")]
+#[derive(Clone, Debug, PartialEq, Eq)]
 enum WheelWireSource {
     /// Used for all wheels that come from remote sources.
     Url {

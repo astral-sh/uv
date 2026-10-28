@@ -178,7 +178,7 @@ impl LoweredRequirement {
 
             Self(Requirement {
                 marker: remaining,
-                ..Requirement::from(requirement.clone())
+                ..Requirement::from(requirement.clone()).with_git_lfs(git_lfs)
             })
         };
 
@@ -345,7 +345,9 @@ impl LoweredRequirement {
         let source = sources.get(&requirement.name).cloned();
 
         let Some(source) = source else {
-            return Either::Left(std::iter::once(Ok(Self(Requirement::from(requirement)))));
+            return Either::Left(std::iter::once(Ok(Self(
+                Requirement::from(requirement).with_git_lfs(git_lfs),
+            ))));
         };
 
         // If the source only applies to a given extra, filter it out.
@@ -377,7 +379,7 @@ impl LoweredRequirement {
 
             Self(Requirement {
                 marker: remaining,
-                ..Requirement::from(requirement.clone())
+                ..Requirement::from(requirement.clone()).with_git_lfs(git_lfs)
             })
         };
 

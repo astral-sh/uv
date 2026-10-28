@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, VecDeque};
 use std::fmt::Display;
 use std::path::Path;
 
+use uv_configuration::MetadataOutputVersion;
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
     InstalledDist, Name, Requirement, RequiresPython, ResolvedDist, UrlString,
@@ -82,9 +83,9 @@ pub struct Metadata {
     requires_python: RequiresPython,
     /// Info about conflicting packages
     conflicts: MetadataConflicts,
-    /// A mapping from importable module names to the package nodes that provide them
+    /// Information about importable modules, keyed by module name.
     #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
-    module_owners: BTreeMap<ModuleName, Vec<MetadataModuleOwner>>,
+    modules: BTreeMap<ModuleName, MetadataModule>,
     /// An index of which nodes are workspace members
     ///
     /// These entries are often what you should use as the entry-points into the `resolve` graph.
@@ -95,20 +96,11 @@ pub struct Metadata {
     resolution: BTreeMap<MetadataNodeIdFlat, MetadataNode>,
 }
 
-/// The schema version for the metadata report.
-#[derive(serde::Serialize, Debug, Default)]
-#[serde(rename_all = "snake_case")]
-enum SchemaVersion {
-    /// An unstable, experimental schema.
-    #[default]
-    Preview,
-}
-
 /// The schema metadata for the metadata report.
 #[derive(serde::Serialize, Debug, Default)]
 struct SchemaReport {
     /// The version of the schema.
-    version: SchemaVersion,
+    version: MetadataOutputVersion,
 }
 
 /// Information about the existing or synchronized environment for the workspace.
@@ -246,6 +238,13 @@ impl MetadataWorkspaceMember {
             .to_flat(),
         })
     }
+}
+
+/// Information about an importable module.
+#[derive(Debug, serde::Serialize)]
+struct MetadataModule {
+    /// Installed distributions that provide this module.
+    owners: Vec<MetadataModuleOwner>,
 }
 
 /// An installed distribution that provides an importable module.
@@ -1320,16 +1319,32 @@ impl Metadata {
     ///
     /// Relative package paths are resolved against `workspace_root`. Script lockfiles are treated
     /// as workspaces because they do not identify the original script.
-    pub fn from_lockfile(workspace_root: &Path, lock: &Lock) -> Self {
-        Self::from_lock_target(MetadataTarget::Workspace(workspace_root), lock)
+    pub fn from_lockfile(
+        workspace_root: &Path,
+        lock: &Lock,
+        output_version: MetadataOutputVersion,
+    ) -> Self {
+        Self::from_lock_target(
+            MetadataTarget::Workspace(workspace_root),
+            lock,
+            output_version,
+        )
     }
 
     /// Construct [`Metadata`] for a script from a uv lockfile.
-    pub fn from_script(script_path: &Path, lock: &Lock) -> Self {
-        Self::from_lock_target(MetadataTarget::Script(script_path), lock)
+    pub fn from_script(
+        script_path: &Path,
+        lock: &Lock,
+        output_version: MetadataOutputVersion,
+    ) -> Self {
+        Self::from_lock_target(MetadataTarget::Script(script_path), lock, output_version)
     }
 
-    fn from_lock_target(target: MetadataTarget<'_>, lock: &Lock) -> Self {
+    fn from_lock_target(
+        target: MetadataTarget<'_>,
+        lock: &Lock,
+        output_version: MetadataOutputVersion,
+    ) -> Self {
         let mut resolve = BTreeMap::new();
         let workspace_root = PortablePathBuf::from(target.workspace_root());
         let workspace_packages = lock.packages().iter().filter(|package| match target {
@@ -1462,13 +1477,13 @@ impl Metadata {
 
         Self {
             schema: SchemaReport {
-                version: SchemaVersion::Preview,
+                version: output_version,
             },
             conflicts,
             environment: None,
             script,
             workspace: workspace_metadata,
-            module_owners: BTreeMap::new(),
+            modules: BTreeMap::new(),
             workspace_root,
             requires_python: lock.requires_python.clone(),
             members,
@@ -1516,8 +1531,8 @@ impl Metadata {
     }
 
     #[must_use]
-    pub fn with_module_owners(mut self, module_owners: BTreeMap<ModuleName, Vec<String>>) -> Self {
-        self.module_owners = module_owners
+    pub fn with_modules(mut self, module_owners: BTreeMap<ModuleName, Vec<String>>) -> Self {
+        self.modules = module_owners
             .into_iter()
             .filter_map(|(module, owners)| {
                 let owners = owners
@@ -1529,7 +1544,7 @@ impl Metadata {
                     })
                     .map(|package_id| MetadataModuleOwner { package_id })
                     .collect::<Vec<_>>();
-                (!owners.is_empty()).then_some((module, owners))
+                (!owners.is_empty()).then_some((module, MetadataModule { owners }))
             })
             .collect();
         self

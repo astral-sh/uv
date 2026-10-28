@@ -1193,6 +1193,27 @@ impl ScriptEnvironment {
                 let interpreter = requested.into_interpreter();
                 let root = ScriptInterpreter::root(script, active, cache);
 
+                // The derived cache entry is owned by uv and can be repaired, but an active
+                // destination may contain user data.
+                let is_cache_entry = match active {
+                    ActiveEnvironment::Ignore | ActiveEnvironment::Warn => true,
+                    ActiveEnvironment::Prefer => {
+                        root == ScriptInterpreter::root(script, ActiveEnvironment::Ignore, cache)
+                    }
+                };
+                let replace_environment = is_cache_entry || uv_fs::is_virtualenv_base(&root);
+                if !replace_environment {
+                    match fs_err::read_dir(&root) {
+                        Ok(mut entries) => {
+                            if entries.next().transpose()?.is_some() {
+                                return Err(EnvironmentError::InvalidScriptEnvironmentDir(root));
+                            }
+                        }
+                        Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+                        Err(err) => return Err(err.into()),
+                    }
+                }
+
                 // Determine a prompt for the environment, in order of preference:
                 //
                 // 1) The name of the script
@@ -1219,7 +1240,7 @@ impl ScriptEnvironment {
                         uv_virtualenv::Seed::Disabled,
                         upgrade_policy,
                     )?;
-                    return Ok(if root.exists() {
+                    return Ok(if replace_environment && root.exists() {
                         Self::WouldReplace(root, environment, temp_dir)
                     } else {
                         Self::WouldCreate(root, environment, temp_dir)
@@ -1227,16 +1248,20 @@ impl ScriptEnvironment {
                 }
 
                 // Remove the existing virtual environment.
-                let replaced = match uv_fs::remove_virtualenv(&root) {
-                    Ok(()) => {
-                        debug!(
-                            "Removed virtual environment at: {}",
-                            root.user_display().cyan()
-                        );
-                        true
+                let replaced = if replace_environment {
+                    match uv_fs::remove_virtualenv(&root) {
+                        Ok(()) => {
+                            debug!(
+                                "Removed virtual environment at: {}",
+                                root.user_display().cyan()
+                            );
+                            true
+                        }
+                        Err(err) if err.kind() == io::ErrorKind::NotFound => false,
+                        Err(err) => return Err(uv_virtualenv::Error::from(err).into()),
                     }
-                    Err(err) if err.kind() == std::io::ErrorKind::NotFound => false,
-                    Err(err) => return Err(uv_virtualenv::Error::from(err).into()),
+                } else {
+                    false
                 };
 
                 debug!(
@@ -1249,9 +1274,8 @@ impl ScriptEnvironment {
                     interpreter,
                     prompt,
                     false,
-                    uv_virtualenv::OnExisting::Remove(
-                        uv_virtualenv::RemovalReason::ManagedEnvironment,
-                    ),
+                    // Do not clear any contents that appeared after validating the destination.
+                    uv_virtualenv::OnExisting::Fail,
                     false,
                     uv_virtualenv::Seed::Disabled,
                     upgrade_policy,

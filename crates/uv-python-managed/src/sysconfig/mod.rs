@@ -349,6 +349,66 @@ mod tests {
     }
 
     #[test]
+    fn historical_compiler_paths() -> Result<(), Error> {
+        for (cc, cxx) in [
+            (
+                "/usr/bin/arm-linux-gnueabi-gcc",
+                "/usr/bin/arm-linux-gnueabi-g++",
+            ),
+            (
+                "/usr/bin/arm-linux-gnueabihf-gcc",
+                "/usr/bin/arm-linux-gnueabihf-g++",
+            ),
+            ("/usr/bin/mips-linux-gnu-gcc", "/usr/bin/mips-linux-gnu-g++"),
+            (
+                "/usr/bin/mipsel-linux-gnu-gcc",
+                "/usr/bin/mipsel-linux-gnu-g++",
+            ),
+            (
+                "/usr/bin/powerpc64le-linux-gnu-gcc",
+                "/usr/bin/powerpc64le-linux-gnu-g++",
+            ),
+            (
+                "/usr/bin/s390x-linux-gnu-gcc",
+                "/usr/bin/s390x-linux-gnu-g++",
+            ),
+        ] {
+            let sysconfigdata = [
+                ("BLDSHARED", cc),
+                ("CC", cc),
+                ("CXX", cxx),
+                ("LDCXXSHARED", cxx),
+                ("LDSHARED", cc),
+                ("LINKCC", cc),
+            ]
+            .into_iter()
+            .map(|(key, value)| (key.to_string(), Value::String(format!("{value} -pthread"))))
+            .collect::<SysconfigData>();
+
+            let real_prefix = Path::new("/real/prefix");
+            let data = patch_sysconfigdata(sysconfigdata, real_prefix);
+            let patched = data.to_string_pretty()?;
+
+            insta::allow_duplicates! {
+                insta::assert_snapshot!(patched, @r#"
+            # system configuration generated and used by the sysconfig module
+            build_time_vars = {
+                "BLDSHARED": "cc -pthread",
+                "CC": "cc -pthread",
+                "CXX": "c++ -pthread",
+                "LDCXXSHARED": "c++ -pthread",
+                "LDSHARED": "cc -pthread",
+                "LINKCC": "cc -pthread",
+                "PYTHON_BUILD_STANDALONE": 1
+            }
+                "#);
+            }
+        }
+
+        Ok(())
+    }
+
+    #[test]
     fn remove_isysroot() -> Result<(), Error> {
         let sysconfigdata = [
             ("BLDSHARED", "clang -bundle -undefined dynamic_lookup -arch arm64 -isysroot /Applications/MacOSX14.2.sdk"),

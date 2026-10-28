@@ -89,7 +89,7 @@ jobs:
 
       - name: "Install uv on Linux x64"
         if: ${{ runner.os == 'Linux' && runner.arch == 'X64' }}
-        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
           # renovate: datasource=github-release-attachments depName=astral-sh/uv
           version: "0.13.5"
@@ -98,7 +98,7 @@ jobs:
 
       - name: "Install uv on macOS ARM64"
         if: ${{ runner.os == 'macOS' && runner.arch == 'ARM64' }}
-        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
           # renovate: datasource=github-release-attachments depName=astral-sh/uv
           version: "0.13.5"
@@ -142,7 +142,7 @@ jobs:
           UV_CACHE_DIR: ${{ runner.temp }}/uv-reproduce-cache
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          codex-version: "0.155.1"
+          codex-version: "0.157.1"
           codex-home: "agents/codex"
           effort: high
           permission-profile: "reproduce-bug"
@@ -272,7 +272,7 @@ jobs:
 
       - name: "Install uv on Linux x64"
         if: ${{ runner.os == 'Linux' && runner.arch == 'X64' }}
-        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
           # renovate: datasource=github-release-attachments depName=astral-sh/uv
           version: "0.13.5"
@@ -281,7 +281,7 @@ jobs:
 
       - name: "Install uv on macOS ARM64"
         if: ${{ runner.os == 'macOS' && runner.arch == 'ARM64' }}
-        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
           # renovate: datasource=github-release-attachments depName=astral-sh/uv
           version: "0.13.5"
@@ -319,7 +319,7 @@ jobs:
           UV_CACHE_DIR: ${{ runner.temp }}/uv-create-test-cache
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          codex-version: "0.155.1"
+          codex-version: "0.157.1"
           codex-home: "agents/codex"
           effort: high
           permission-profile: "create-bug-test"

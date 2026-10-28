@@ -50,7 +50,6 @@ use uv_python_discovery::ProjectPythonRequest;
 use uv_python_discovery::PythonDownloadReporter;
 use uv_python_discovery::PythonInstallation;
 use uv_python_discovery::PythonVersionFile;
-use uv_python_discovery::ScriptInterpreter;
 use uv_python_discovery::VersionFileDiscoveryOptions;
 use uv_python_interpreter::{Interpreter, PyVenvConfiguration, PythonEnvironment};
 use uv_python_types::{
@@ -182,7 +181,6 @@ pub async fn run(
     let mut unlocked_build_constraints = Constraints::default();
 
     // Determine whether the command to execute is a PEP 723 script.
-    let temp_dir;
     let script_interpreter = if let Some(script) = script {
         match &script {
             Pep723Item::Script(script) => {
@@ -381,8 +379,18 @@ pub async fn run(
                 })
                 .unwrap_or_default();
 
-            // Install the script requirements, if necessary. Otherwise, use an isolated environment.
-            if let Some(spec) = script_specification(
+            // Install the script requirements, if necessary.
+            let spec = script_specification(
+                (&script).into(),
+                &settings.resolver.sources,
+                &settings.resolver.index_locations,
+                settings.resolver.git_lfs,
+                &cache,
+                workspace_cache,
+                client_builder.credentials_cache(),
+            )
+            .await?;
+            let script_extra_build_requires = script_extra_build_requires(
                 (&script).into(),
                 &settings.resolver.sources,
                 &settings.resolver.index_locations,
@@ -392,116 +400,70 @@ pub async fn run(
                 client_builder.credentials_cache(),
             )
             .await?
-            {
-                let script_extra_build_requires = script_extra_build_requires(
-                    (&script).into(),
-                    &settings.resolver.sources,
-                    &settings.resolver.index_locations,
-                    settings.resolver.git_lfs,
-                    &cache,
-                    workspace_cache,
-                    client_builder.credentials_cache(),
-                )
-                .await?
-                .into_inner();
-                let environment = ScriptEnvironment::get_or_init(
-                    (&script).into(),
-                    python.as_deref().map(PythonRequest::parse),
-                    &client_builder,
-                    python_preference,
-                    python_arch,
-                    python_downloads,
-                    &install_mirrors,
-                    no_sync,
-                    config_discovery,
-                    active.without_warning(),
-                    &cache,
-                    DryRun::Disabled,
-                    printer,
-                )
-                .await?
-                .into_environment()?;
+            .into_inner();
+            let environment = ScriptEnvironment::get_or_init(
+                (&script).into(),
+                python.as_deref().map(PythonRequest::parse),
+                &client_builder,
+                python_preference,
+                python_arch,
+                python_downloads,
+                &install_mirrors,
+                no_sync,
+                config_discovery,
+                active.without_warning(),
+                &cache,
+                DryRun::Disabled,
+                printer,
+            )
+            .await?
+            .into_environment()?;
 
-                let _lock = environment
-                    .lock()
-                    .await
-                    .inspect_err(|err| {
-                        warn!("Failed to acquire environment lock: {err}");
-                    })
-                    .ok();
-
-                match update_environment(
-                    environment,
-                    spec,
-                    modifications,
-                    python_platform.as_ref(),
-                    SourceTreeEditablePolicy::Project,
-                    unlocked_build_constraints.clone(),
-                    script_extra_build_requires,
-                    &settings,
-                    &client_builder,
-                    &sync_state,
-                    if show_resolution {
-                        Box::new(DefaultResolveLogger)
-                    } else {
-                        Box::new(SummaryResolveLogger)
-                    },
-                    if show_resolution {
-                        Box::new(DefaultInstallLogger)
-                    } else {
-                        Box::new(SummaryInstallLogger)
-                    },
-                    installer_metadata,
-                    &concurrency,
-                    &cache,
-                    workspace_cache,
-                    DryRun::Disabled,
-                    printer,
-                    preview,
-                )
+            let _lock = environment
+                .lock()
                 .await
-                {
-                    Ok(update) => Some(update.environment.into_interpreter()),
-                    Err(EnvironmentError::Resolve(err)) => {
-                        let err = *err;
-                        return Err(UvError::from(err.with_resolution_context("script")).into());
-                    }
-                    Err(err) => return Err(UvError::from(err).into()),
+                .inspect_err(|err| {
+                    warn!("Failed to acquire environment lock: {err}");
+                })
+                .ok();
+
+            match update_environment(
+                environment,
+                spec,
+                modifications,
+                python_platform.as_ref(),
+                SourceTreeEditablePolicy::Project,
+                unlocked_build_constraints.clone(),
+                script_extra_build_requires,
+                &settings,
+                &client_builder,
+                &sync_state,
+                if show_resolution {
+                    Box::new(DefaultResolveLogger)
+                } else {
+                    Box::new(SummaryResolveLogger)
+                },
+                if show_resolution {
+                    Box::new(DefaultInstallLogger)
+                } else {
+                    Box::new(SummaryInstallLogger)
+                },
+                installer_metadata,
+                &concurrency,
+                &cache,
+                workspace_cache,
+                DryRun::Disabled,
+                printer,
+                preview,
+            )
+            .await
+            {
+                Ok(update) => Some(update.environment.into_interpreter()),
+                Err(EnvironmentError::Resolve(err)) => {
+                    let err = *err;
+                    return Err(UvError::from(err.with_resolution_context("script")).into());
                 }
-            } else {
-                // Create a virtual environment.
-                let interpreter = ScriptInterpreter::discover(
-                    (&script).into(),
-                    python.as_deref().map(PythonRequest::parse),
-                    &client_builder,
-                    python_preference,
-                    python_arch,
-                    python_downloads,
-                    &install_mirrors,
-                    no_sync,
-                    config_discovery,
-                    active.without_warning(),
-                    &cache,
-                    printer,
-                )
-                .await?
-                .into_interpreter();
-
-                temp_dir = cache.venv_dir()?;
-                let environment = uv_virtualenv::create_venv(
-                    temp_dir.path(),
-                    interpreter,
-                    uv_virtualenv::Prompt::None,
-                    false,
-                    uv_virtualenv::OnExisting::Remove(
-                        uv_virtualenv::RemovalReason::TemporaryEnvironment,
-                    ),
-                    false,
-                    uv_virtualenv::Seed::Disabled,
-                    UpgradePolicy::Fixed,
-                )?;
-
-                Some(environment.into_interpreter())
+                Err(err) => return Err(UvError::from(err).into()),
             }
         }
     } else {

@@ -2121,6 +2121,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
 
                 Box::pin(commands::metadata(
                     &project_dir,
+                    args.output_version,
                     args.lock_check,
                     args.frozen,
                     args.refresh,

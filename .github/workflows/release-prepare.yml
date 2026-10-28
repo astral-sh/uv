@@ -13,6 +13,7 @@ permissions: {}
 
 env:
   UV_LOCKED: 1
+  UV_PYTHON_DOWNLOADS_JSON_URL: ${{ github.workspace }}/crates/uv-python-managed/download-metadata.json
 
 jobs:
   prepare-release:
@@ -30,7 +31,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
           # renovate: datasource=github-release-attachments depName=astral-sh/uv
           version: "0.13.5"
@@ -80,7 +81,7 @@ jobs:
         uses: openai/codex-action@c05cfd74ad95c626cdf05c6685e62becc3bf7813
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          codex-version: "0.155.1"
+          codex-version: "0.157.1"
           model: gpt-5.6-sol
           effort: high
           permission-profile: ":read-only"

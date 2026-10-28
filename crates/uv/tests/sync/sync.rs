@@ -9134,6 +9134,39 @@ fn sync_active_script_environment() -> Result<()> {
 }
 
 #[test]
+fn sync_active_script_environment_non_virtualenv() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("script.py").write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = []
+        # ///
+        "#
+    })?;
+    let active_environment = context.temp_dir.child("active");
+    active_environment.create_dir_all()?;
+    active_environment
+        .child("important.txt")
+        .write_str("important data")?;
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--active")
+        .arg("--script")
+        .arg("script.py")
+        .env(EnvVars::VIRTUAL_ENV, "active"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Script environment at `[TEMP_DIR]/active` cannot be replaced because it is a non-empty directory that is not a virtual environment
+    ");
+
+    active_environment
+        .child("important.txt")
+        .assert("important data");
+
+    Ok(())
+}
+
+#[test]
 fn sync_active_script_environment_json() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&["3.11", "3.12"])
         .with_filtered_virtualenv_bin()
@@ -16700,6 +16733,41 @@ fn reject_unmatched_runtime() -> Result<()> {
       cause: Extra build requirement `iniconfig` was declared with `match-runtime = true`, but `source-distribution` does not declare static metadata, making runtime-matching impossible
 
     hint: `source-distribution` (v0.0.3) was included because `foo` (v0.1.0) depends on `source-distribution`
+    ");
+
+    Ok(())
+}
+
+/// An unmatched source marker must not disable LFS for a direct Git requirement.
+#[test]
+#[cfg(feature = "test-git-lfs")]
+fn sync_git_lfs_marker_fallback() -> Result<()> {
+    let context = uv_test::test_context!("3.13").with_git_lfs_config();
+    context.temp_dir.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "test-project"
+        version = "0.1.0"
+        requires-python = ">=3.13"
+        dependencies = ["test-lfs-repo @ git+https://github.com/astral-sh/test-lfs-repo.git@261c828b8e05251f3a3e4f6b47b149d691c7efbb"]
+
+        [tool.uv.sources]
+        test-lfs-repo = { git = "https://github.com/astral-sh/test-lfs-repo.git", rev = "261c828b8e05251f3a3e4f6b47b149d691c7efbb", lfs = false, marker = "python_version < '3.0'" }
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::UV_GIT_LFS, "true"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo.git@261c828b8e05251f3a3e4f6b47b149d691c7efbb#lfs=true)
+    ");
+
+    uv_snapshot!(context.filters(), context.python_command()
+        .args(["-c", "import test_lfs_repo.lfs_module; print('LFS source fallback imported')"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    LFS source fallback imported
     ");
 
     Ok(())
