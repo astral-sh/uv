@@ -773,7 +773,7 @@ impl EnvVars {
     #[attr_added_in("0.8.0")]
     pub const UV_INTERNAL__TEST_PYTHON_MANAGED: &'static str = "UV_INTERNAL__TEST_PYTHON_MANAGED";
 
-    /// Set the CPython download mirror for tests that install managed Python.
+    /// Set the default CPython download mirror for test commands.
     #[attr_hidden]
     #[attr_added_in("0.13.6")]
     pub const UV_INTERNAL__TEST_PYTHON_INSTALL_MIRROR: &'static str =

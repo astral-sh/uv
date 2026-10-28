@@ -19,7 +19,8 @@ fn add_shared_args(mut command: Command) -> Command {
         .env(EnvVars::UV_CONCURRENT_INSTALLS, "8")
         .env(EnvVars::UV_CONCURRENT_CACHE_READS, "2")
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env_remove(EnvVars::UV_PYTHON_DOWNLOADS);
+        .env_remove(EnvVars::UV_PYTHON_DOWNLOADS)
+        .env_remove(EnvVars::UV_PYTHON_INSTALL_MIRROR);
 
     if cfg!(unix) {
         // Avoid locale issues in tests

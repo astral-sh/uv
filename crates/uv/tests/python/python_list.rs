@@ -724,6 +724,7 @@ async fn python_list_remote_python_downloads_json_url() -> Result<()> {
     uv_snapshot!(context
         .python_list()
         .env_remove(EnvVars::UV_PYTHON_DOWNLOADS)
+        .env_remove(EnvVars::UV_PYTHON_INSTALL_MIRROR)
         .arg("--all-versions")
         .arg("--all-platforms")
         .arg("--all-arches")
@@ -775,6 +776,8 @@ async fn python_list_remote_python_downloads_json_url() -> Result<()> {
 #[test]
 fn python_list_with_mirrors() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&[])
+        // Exercise mirror selection independently of the CI download mirror.
+        .with_env(EnvVars::UV_PYTHON_INSTALL_MIRROR, "")
         .with_filtered_python_keys()
         .with_collapsed_whitespace()
         .with_filtered_latest_python_versions()

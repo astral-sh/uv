@@ -729,15 +729,6 @@ impl TestContext {
         self
     }
 
-    /// Use the test suite's configured mirror for commands that download CPython.
-    #[must_use]
-    pub fn with_python_install_mirror(self) -> Self {
-        self.with_env(
-            EnvVars::UV_PYTHON_INSTALL_MIRROR,
-            env::var_os(EnvVars::UV_INTERNAL__TEST_PYTHON_INSTALL_MIRROR).unwrap_or_default(),
-        )
-    }
-
     /// Add extra directories and configuration for managed Python installations.
     #[must_use]
     pub fn with_managed_python_dirs(mut self) -> Self {
@@ -752,7 +743,7 @@ impl TestContext {
         self.extra_env
             .push((EnvVars::UV_PYTHON_DOWNLOADS.into(), "automatic".into()));
 
-        self.with_python_install_mirror()
+        self
     }
 
     /// Configure isolated directories for installed tools and their executable entry points.
@@ -1379,6 +1370,10 @@ impl TestContext {
             // at or above the root.
             .env(EnvVars::GIT_CEILING_DIRECTORIES, self.root.path())
             .current_dir(self.temp_dir.path());
+
+        if let Some(mirror) = env::var_os(EnvVars::UV_INTERNAL__TEST_PYTHON_INSTALL_MIRROR) {
+            command.env(EnvVars::UV_PYTHON_INSTALL_MIRROR, mirror);
+        }
 
         for (key, value) in &self.extra_env {
             command.env(key, value);
