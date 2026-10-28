@@ -43,7 +43,8 @@ pub enum VariantsJsonParseError {
 }
 
 /// Variant properties, grouped by namespace and feature.
-type VariantProperties = BTreeMap<VariantNamespace, BTreeMap<VariantFeature, Vec<VariantValue>>>;
+pub type VariantProperties =
+    BTreeMap<VariantNamespace, BTreeMap<VariantFeature, Vec<VariantValue>>>;
 
 /// Required variant properties unsupported by the target system.
 #[derive(Debug)]
@@ -321,7 +322,7 @@ struct DefaultPriorities {
 
 /// A PEP 850 provider for one variant namespace.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-struct VariantProvider {
+pub struct VariantProvider {
     #[serde(default)]
     optional: bool,
     #[serde(flatten)]

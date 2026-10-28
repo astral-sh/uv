@@ -7986,6 +7986,7 @@ dependencies = [
  "uv-client",
  "uv-configuration",
  "uv-distribution-filename",
+ "uv-distribution-types",
  "uv-fs",
  "uv-macros",
  "uv-normalize",
