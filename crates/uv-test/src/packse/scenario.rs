@@ -11,7 +11,7 @@ use std::str::FromStr;
 use anyhow::{Context, Result};
 use indexmap::IndexMap;
 use itertools::Itertools;
-use serde::{Deserialize, de::Error as _};
+use serde::{Deserialize, de::Error};
 
 use uv_configuration::TargetTriple;
 use uv_distribution_filename::{VariantLabel, WheelFilename};
