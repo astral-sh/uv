@@ -26,7 +26,7 @@ use wiremock::{
 };
 
 use uv_extract::dirhash::{DirectoryDigest, dirhash_path};
-use uv_fs::{PortablePath, Simplified};
+use uv_fs::{PortablePath, PythonExt, Simplified};
 use uv_install_wheel::validate_and_heal_record;
 use uv_redacted::SafeUrl;
 use uv_static::EnvVars;
@@ -11907,16 +11907,69 @@ fn require_build_hashes_rejects_md5_url() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
-    WARN Range requests not supported for ok-1.0.0-py3-none-any.whl; streaming wheel
     error: Failed to build `hash-test @ file://[TEMP_DIR]/`
       cause: Failed to resolve requirements from `build-system.requires`
       cause: No solution found when resolving: `ok @ http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl#md5=88d6d524262f256596aa7f663c88038b`
-      cause: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `ok`
+      cause: Hash-checking is required, but no trusted hash was provided for: `ok`
     ");
     context
         .temp_dir
         .child("backend-executed")
         .assert(predicate::path::missing());
+
+    Ok(())
+}
+
+/// A URL hash declared by an sdist cannot authorize its own build dependency.
+#[test]
+fn require_build_hashes_rejects_sdist_supplied_hash() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let wheels = FindLinksServer::new(&context.workspace_root.join("test/links"));
+    let requirement = format!(
+        "ok @ {}/ok-1.0.0-py3-none-any.whl#sha256=79f0b33e6ce1e09eaa1784c8eee275dfe84d215d9c65c652f07c18e85fdaac5f",
+        wheels.url()
+    );
+    let pyproject = formatdoc! {r#"
+        [project]
+        name = "hash-test"
+        version = "1.0.0"
+
+        [build-system]
+        requires = ["{requirement}"]
+        build-backend = "backend"
+        backend-path = ["."]
+    "#};
+    let marker = context.temp_dir.child("backend-executed");
+    let backend = formatdoc! {r#"
+        from pathlib import Path
+        Path({}).touch()
+        raise RuntimeError("build backend executed")
+    "#, marker.path().escape_for_python()};
+    let sdists = context.temp_dir.child("sdists");
+    sdists.create_dir_all()?;
+    write_tar_gz(
+        File::create(sdists.child("hash_test-1.0.0.tar.gz").path())?,
+        &[
+            ("hash_test-1.0.0/pyproject.toml", pyproject),
+            ("hash_test-1.0.0/backend.py", backend),
+        ],
+    )?;
+    let sdists = FindLinksServer::new(sdists.path());
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(format!("{}/hash_test-1.0.0.tar.gz", sdists.url()))
+        .arg("--no-index")
+        .arg("--require-build-hashes")
+        .args(["--preview-features", "build-dependency-hashes"]), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Failed to download and build `hash-test @ http://[LOCALHOST]/hash_test-1.0.0.tar.gz`
+      cause: Failed to resolve requirements from `build-system.requires`
+      cause: No solution found when resolving: `ok @ http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl#sha256=79f0b33e6ce1e09eaa1784c8eee275dfe84d215d9c65c652f07c18e85fdaac5f`
+      cause: Hash-checking is required, but no trusted hash was provided for: `ok`
+    ");
+    marker.assert(predicate::path::missing());
 
     Ok(())
 }

@@ -5755,11 +5755,10 @@ fn require_build_hashes_rejects_md5_url() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
-    WARN Range requests not supported for ok-1.0.0-py3-none-any.whl; streaming wheel
     error: Failed to build `hash-test @ file://[TEMP_DIR]/`
       cause: Failed to resolve requirements from `build-system.requires`
       cause: No solution found when resolving: `ok @ http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl#md5=88d6d524262f256596aa7f663c88038b`
-      cause: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `ok`
+      cause: Hash-checking is required, but no trusted hash was provided for: `ok`
     ");
     context
         .temp_dir

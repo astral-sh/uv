@@ -272,9 +272,8 @@ impl HashStrategy {
     /// Return a [`HashStrategy`] augmented with archive URL hashes discovered in distribution
     /// metadata.
     ///
-    /// Required-hash verification is intentionally a closed set. In that mode, distribution
-    /// untrusted metadata cannot authorize a requirement that was absent from the input hash set.
-    /// Explicit requirements, such as `build-system.requires` and user-provided metadata, can still
+    /// In required-hash mode, distribution metadata cannot authorize a requirement that was absent
+    /// from the input hash set. Local project requirements and user-provided metadata can
     /// contribute hashes via [`Self::augment_with_requirements`].
     pub fn augment_with_metadata_requirements<'a>(
         self,
@@ -479,8 +478,8 @@ impl HashStrategy {
             let current_digests = current.get(&id);
             let mut merged = current_digests.cloned().unwrap_or_default();
             if mode.is_require() {
-                digests.retain(|digest| digest.algorithm() != HashAlgorithm::Md5);
-                merged.retain(|digest| digest.algorithm() != HashAlgorithm::Md5);
+                digests.retain(satisfies_require_hashes);
+                merged.retain(satisfies_require_hashes);
             }
             merge_digests(&mut merged, &digests, requirement)?;
 
