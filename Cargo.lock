@@ -7967,7 +7967,6 @@ dependencies = [
  "hex",
  "http",
  "ignore",
- "indexmap",
  "indoc",
  "insta",
  "itertools 0.14.0",
