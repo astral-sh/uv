@@ -151,13 +151,12 @@ pub trait BuildContext {
 
     /// Resolve build requirements.
     ///
-    /// Pass `None` for the initial requirements, such as `build-system.requires`. When adding
-    /// requirements returned by a build backend, pass the previous resolution's [`HashStrategy`]
-    /// to preserve the hashes already collected. When build dependency hashes are required,
-    /// backend output cannot add hashes to this set.
+    /// When build hashes are required, only `trusted_requirements` may contribute hashes.
+    /// Pass the previous resolution's [`HashStrategy`] when adding backend requirements.
     fn resolve<'a>(
         &'a self,
         requirements: &'a [Requirement],
+        trusted_requirements: &'a [Requirement],
         hash_override: Option<&'a HashStrategy>,
         build_stack: &'a BuildStack,
     ) -> impl Future<Output = Result<ResolvedRequirements, impl IsBuildBackendError>> + 'a;
@@ -181,6 +180,8 @@ pub trait BuildContext {
     ///
     /// `version_id` is for error reporting only.
     /// `dist` is for safety checks and may be null for editable builds.
+    /// `is_source_tree` identifies local directories whose declared build requirements can
+    /// contribute trusted hashes.
     fn setup_build<'a>(
         &'a self,
         source: &'a Path,
@@ -189,6 +190,7 @@ pub trait BuildContext {
         stop_discovery_at: Option<&'a Path>,
         version_id: Option<&'a str>,
         dist: Option<&'a SourceDist>,
+        is_source_tree: bool,
         sources: &'a NoSources,
         build_kind: BuildKind,
         build_output: BuildOutput,
