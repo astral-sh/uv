@@ -10,6 +10,8 @@
   enabledManagers: ["github-actions", "cargo", "custom.regex"],
   cargo: {
     managerFilePatterns: ["/^Cargo\\.toml$/", "/^crates/.*Cargo\\.toml$/"],
+    // Keep this in sync with `cargo-cooldowns.toml`; CI also checks transitive updates.
+    minimumReleaseAge: "7 days",
   },
   packageRules: [
     {
