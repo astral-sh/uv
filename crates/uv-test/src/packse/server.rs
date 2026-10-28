@@ -252,16 +252,17 @@ impl ServerIndex {
         distribution: Option<(&PackageMetadata, &ArtifactMetadata)>,
     ) {
         let sha256 = sha256_hex(&bytes);
+        let distribution = distribution.map(|(package, artifact)| DistributionMetadata {
+            requires_python: package.requires_python.clone(),
+            upload_time: artifact.upload_time.clone(),
+            yanked: package.yanked,
+        });
         self.register_file(
             package_name.clone(),
             IndexFile {
                 filename,
                 sha256,
-                distribution: distribution.map(|(package, artifact)| DistributionMetadata {
-                    requires_python: package.requires_python.clone(),
-                    upload_time: artifact.upload_time.clone(),
-                    yanked: package.yanked,
-                }),
+                distribution,
             },
             FileData::Bytes(bytes.into()),
         );
