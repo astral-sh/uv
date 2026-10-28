@@ -3,22 +3,24 @@ use std::borrow::Cow;
 use std::ops::Deref;
 
 use http::StatusCode;
-use rustc_hash::FxHashSet;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use uv_redacted::SafeUrl;
 
 use crate::{IndexCapabilities, IndexUrl};
 
 #[derive(Debug, Clone, Default, Eq, PartialEq)]
-pub enum IndexStatusCodeStrategy {
+pub enum IndexStatusCodeStrategy<'a> {
     #[default]
     Default,
-    IgnoreErrorCodes {
-        status_codes: FxHashSet<StatusCode>,
+    IgnoreBuiltinErrorCodes {
+        status_codes: &'a [SerializableStatusCode],
+    },
+    IgnoreConfiguredErrorCodes {
+        status_codes: &'a [SerializableStatusCode],
     },
 }
 
-impl IndexStatusCodeStrategy {
+impl IndexStatusCodeStrategy<'_> {
     /// Derive a strategy from an index URL. We special-case PyTorch. Otherwise,
     /// we follow the default strategy.
     pub(crate) fn from_index_url(url: &SafeUrl) -> Self {
@@ -28,34 +30,33 @@ impl IndexStatusCodeStrategy {
         {
             // The PyTorch registry returns a 403 when a package is not found, so
             // we ignore them when deciding whether to search other indexes.
-            Self::IgnoreErrorCodes {
-                status_codes: FxHashSet::from_iter([StatusCode::FORBIDDEN]),
+            Self::IgnoreBuiltinErrorCodes {
+                status_codes: &[SerializableStatusCode(StatusCode::FORBIDDEN)],
             }
         } else {
             Self::Default
         }
     }
 
-    /// Derive a strategy from a list of status codes to ignore.
-    pub(crate) fn from_ignored_error_codes(status_codes: &[SerializableStatusCode]) -> Self {
-        Self::IgnoreErrorCodes {
-            status_codes: status_codes
-                .iter()
-                .map(SerializableStatusCode::deref)
-                .copied()
-                .collect::<FxHashSet<_>>(),
+    /// Derive a strategy for ignoring authentication error codes.
+    pub fn ignore_authentication_error_codes() -> Self {
+        Self::IgnoreBuiltinErrorCodes {
+            status_codes: &[
+                SerializableStatusCode(StatusCode::UNAUTHORIZED),
+                SerializableStatusCode(StatusCode::FORBIDDEN),
+                SerializableStatusCode(StatusCode::NETWORK_AUTHENTICATION_REQUIRED),
+                SerializableStatusCode(StatusCode::PROXY_AUTHENTICATION_REQUIRED),
+            ],
         }
     }
 
-    /// Derive a strategy for ignoring authentication error codes.
-    pub fn ignore_authentication_error_codes() -> Self {
-        Self::IgnoreErrorCodes {
-            status_codes: FxHashSet::from_iter([
-                StatusCode::UNAUTHORIZED,
-                StatusCode::FORBIDDEN,
-                StatusCode::NETWORK_AUTHENTICATION_REQUIRED,
-                StatusCode::PROXY_AUTHENTICATION_REQUIRED,
-            ]),
+    /// Return whether the status code is in the configured list of ignored codes.
+    pub(crate) fn explicitly_ignores_error_code(&self, status_code: StatusCode) -> bool {
+        match self {
+            Self::Default | Self::IgnoreBuiltinErrorCodes { .. } => false,
+            Self::IgnoreConfiguredErrorCodes { status_codes } => {
+                status_codes.contains(&SerializableStatusCode(status_code))
+            }
         }
     }
 
@@ -67,26 +68,28 @@ impl IndexStatusCodeStrategy {
         index_url: &IndexUrl,
         capabilities: &IndexCapabilities,
     ) -> IndexStatusCodeDecision {
-        match self {
-            Self::Default => match status_code {
-                StatusCode::NOT_FOUND => IndexStatusCodeDecision::Ignore,
-                StatusCode::UNAUTHORIZED => {
-                    capabilities.set_unauthorized(index_url.clone());
-                    IndexStatusCodeDecision::Fail(status_code)
-                }
-                StatusCode::FORBIDDEN => {
-                    capabilities.set_forbidden(index_url.clone());
-                    IndexStatusCodeDecision::Fail(status_code)
-                }
-                _ => IndexStatusCodeDecision::Fail(status_code),
-            },
-            Self::IgnoreErrorCodes { status_codes } => {
-                if status_codes.contains(&status_code) {
-                    IndexStatusCodeDecision::Ignore
-                } else {
-                    Self::Default.handle_status_code(status_code, index_url, capabilities)
-                }
+        let ignored = match self {
+            Self::Default => false,
+            Self::IgnoreBuiltinErrorCodes { status_codes }
+            | Self::IgnoreConfiguredErrorCodes { status_codes } => {
+                status_codes.contains(&SerializableStatusCode(status_code))
             }
+        };
+        if ignored {
+            return IndexStatusCodeDecision::Ignore;
+        }
+
+        match status_code {
+            StatusCode::NOT_FOUND => IndexStatusCodeDecision::Ignore,
+            StatusCode::UNAUTHORIZED => {
+                capabilities.set_unauthorized(index_url.clone());
+                IndexStatusCodeDecision::Fail(status_code)
+            }
+            StatusCode::FORBIDDEN => {
+                capabilities.set_forbidden(index_url.clone());
+                IndexStatusCodeDecision::Fail(status_code)
+            }
+            _ => IndexStatusCodeDecision::Fail(status_code),
         }
     }
 }
@@ -167,24 +170,12 @@ mod tests {
 
     #[test]
     fn test_strategy_pytorch_registry() {
-        let status_codes = std::iter::once(StatusCode::FORBIDDEN).collect::<FxHashSet<_>>();
         let url = SafeUrl::from_str("https://download.pytorch.org/whl/cu118").unwrap();
         assert_eq!(
             IndexStatusCodeStrategy::from_index_url(&url),
-            IndexStatusCodeStrategy::IgnoreErrorCodes { status_codes }
-        );
-    }
-
-    #[test]
-    fn test_strategy_custom_error_codes() {
-        let status_codes = FxHashSet::from_iter([StatusCode::UNAUTHORIZED, StatusCode::FORBIDDEN]);
-        let serializable_status_codes = status_codes
-            .iter()
-            .map(|code| SerializableStatusCode(*code))
-            .collect::<Vec<_>>();
-        assert_eq!(
-            IndexStatusCodeStrategy::from_ignored_error_codes(&serializable_status_codes),
-            IndexStatusCodeStrategy::IgnoreErrorCodes { status_codes }
+            IndexStatusCodeStrategy::IgnoreBuiltinErrorCodes {
+                status_codes: &[SerializableStatusCode(StatusCode::FORBIDDEN)]
+            }
         );
     }
 
@@ -263,13 +254,14 @@ mod tests {
 
     #[test]
     fn test_decision_multiple_ignored_status_codes() {
-        let status_codes = vec![
+        let status_codes = [
             StatusCode::UNAUTHORIZED,
             StatusCode::BAD_GATEWAY,
             StatusCode::SERVICE_UNAVAILABLE,
         ];
-        let strategy = IndexStatusCodeStrategy::IgnoreErrorCodes {
-            status_codes: status_codes.iter().copied().collect::<FxHashSet<_>>(),
+        let configured = status_codes.map(SerializableStatusCode);
+        let strategy = IndexStatusCodeStrategy::IgnoreConfiguredErrorCodes {
+            status_codes: &configured,
         };
         let index_url = IndexUrl::parse("https://internal-registry.com/simple", None).unwrap();
         let capabilities = IndexCapabilities::default();
