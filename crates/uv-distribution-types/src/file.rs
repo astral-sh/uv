@@ -74,7 +74,7 @@ impl File<FileLocation> {
 
 impl<Url> File<Url> {
     /// Replace the file URL while preserving the artifact metadata.
-    pub fn map_url<Mapped>(self, map: impl FnOnce(Url) -> Mapped) -> File<Mapped> {
+    pub(crate) fn map_url<Mapped>(self, map: impl FnOnce(Url) -> Mapped) -> File<Mapped> {
         File {
             dist_info_metadata: self.dist_info_metadata,
             filename: self.filename,
@@ -85,6 +85,20 @@ impl<Url> File<Url> {
             url: map(self.url),
             yanked: self.yanked,
         }
+    }
+}
+
+impl File {
+    /// Take the artifact location advertised by an index that was queried directly.
+    ///
+    /// The index supplies the original location, so relative URLs can stay relative.
+    pub fn from_direct_index(file: VerbatimFile) -> Self {
+        file.map_url(|location| match location {
+            FileLocation::RelativeUrl(base, path, _) => CanonicalFileLocation::relative(base, path),
+            FileLocation::AbsoluteUrl(url, _) => {
+                CanonicalFileLocation::AbsoluteUrl(url, PhantomData)
+            }
+        })
     }
 }
 
@@ -110,17 +124,17 @@ pub mod provenance {
 pub type CanonicalFileLocation = FileLocation<provenance::Canonical>;
 
 impl FileLocation<provenance::Canonical> {
-    /// Mark an artifact location from a canonical source, such as a lockfile or direct index.
-    pub fn from_location(location: FileLocation) -> Self {
-        match location {
-            FileLocation::RelativeUrl(base, path, _) => Self::relative(base, path),
-            FileLocation::AbsoluteUrl(url, _) => Self::absolute(url),
-        }
+    /// Use the canonical artifact URL recorded in a lockfile.
+    pub fn from_lockfile(url: UrlString) -> Self {
+        Self::AbsoluteUrl(url, PhantomData)
     }
 
-    /// Store a parsed canonical artifact URL as an absolute location.
-    pub fn from_url(url: SafeUrl) -> Self {
-        Self::absolute(url.into())
+    /// Borrow the absolute URL if the location does not need to be joined to an index page.
+    pub fn as_absolute(&self) -> Option<&UrlString> {
+        match self {
+            Self::AbsoluteUrl(url, _) => Some(url),
+            Self::RelativeUrl(..) => None,
+        }
     }
 }
 
@@ -138,8 +152,10 @@ pub type VerbatimFile = File<FileLocation>;
 #[rkyv(archive_bounds(Archived<PhantomData<Provenance>>: fmt::Debug), derive(Debug))]
 pub enum FileLocation<Provenance = provenance::Verbatim> {
     /// URL relative to the base URL.
+    #[non_exhaustive]
     RelativeUrl(SmallString, SmallString, PhantomData<Provenance>),
     /// Absolute URL.
+    #[non_exhaustive]
     AbsoluteUrl(UrlString, PhantomData<Provenance>),
 }
 
@@ -154,14 +170,14 @@ impl FileLocation {
             None => Self::relative(base.clone(), url),
         }
     }
-}
 
-impl<Provenance> FileLocation<Provenance> {
-    /// Store an absolute URL without parsing it.
+    /// Store an absolute URL as supplied by an index without parsing it.
     pub fn absolute(url: UrlString) -> Self {
         Self::AbsoluteUrl(url, PhantomData)
     }
+}
 
+impl<Provenance> FileLocation<Provenance> {
     /// Store a relative URL and its base without parsing them.
     fn relative(base: SmallString, url: SmallString) -> Self {
         Self::RelativeUrl(base, url, PhantomData)
