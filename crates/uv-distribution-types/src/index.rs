@@ -16,6 +16,64 @@ use crate::index_name::{IndexName, IndexNameError};
 use crate::origin::Origin;
 use crate::{IndexStatusCodeStrategy, IndexUrl, IndexUrlError, SerializableStatusCode};
 
+/// HTTP status and cache policies for requests to a package index.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct IndexRequestPolicy {
+    status_code_strategy: IndexStatusCodeStrategy,
+    has_explicit_error_codes: bool,
+    simple_api_cache_control: Option<HeaderValue>,
+    artifact_cache_control: Option<HeaderValue>,
+    configured_files_cache_control: Option<HeaderValue>,
+}
+
+impl From<&Index> for IndexRequestPolicy {
+    fn from(index: &Index) -> Self {
+        Self {
+            status_code_strategy: index.status_code_strategy(),
+            has_explicit_error_codes: index.ignore_error_codes.is_some(),
+            simple_api_cache_control: index.simple_api_cache_control(),
+            artifact_cache_control: index.artifact_cache_control(),
+            configured_files_cache_control: index
+                .cache_control
+                .as_ref()
+                .and_then(|cache_control| cache_control.files.clone()),
+        }
+    }
+}
+
+impl IndexRequestPolicy {
+    /// Return the status codes that let a search continue to the next index.
+    pub fn status_code_strategy(&self) -> &IndexStatusCodeStrategy {
+        &self.status_code_strategy
+    }
+
+    /// Return whether this status code is explicitly ignored, excluding built-in defaults.
+    pub fn ignores_error_code(&self, status_code: StatusCode) -> bool {
+        self.has_explicit_error_codes
+            && match &self.status_code_strategy {
+                IndexStatusCodeStrategy::Default => false,
+                IndexStatusCodeStrategy::IgnoreErrorCodes { status_codes } => {
+                    status_codes.contains(&status_code)
+                }
+            }
+    }
+
+    /// Return the cache control header for Simple API requests.
+    pub fn simple_api_cache_control(&self) -> Option<HeaderValue> {
+        self.simple_api_cache_control.clone()
+    }
+
+    /// Return the cache control header for artifact downloads, including index-specific defaults.
+    pub fn artifact_cache_control(&self) -> Option<HeaderValue> {
+        self.artifact_cache_control.clone()
+    }
+
+    /// Return the file cache control header only when the user configured it.
+    pub fn configured_files_cache_control(&self) -> Option<HeaderValue> {
+        self.configured_files_cache_control.clone()
+    }
+}
+
 /// Cache control configuration for an index.
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Default)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
@@ -569,15 +627,6 @@ impl Index {
         } else {
             IndexStatusCodeStrategy::from_index_url(self.url.url())
         }
-    }
-
-    /// Return whether the given status code is explicitly ignored for this index.
-    pub(crate) fn ignores_error_code(&self, status_code: StatusCode) -> bool {
-        self.ignore_error_codes.as_ref().is_some_and(|codes| {
-            codes
-                .iter()
-                .any(|ignored_status_code| **ignored_status_code == status_code)
-        })
     }
 
     /// Return the cache control header for file requests to this index, if any.
