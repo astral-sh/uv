@@ -564,7 +564,7 @@ async fn audit_duplicate_vulnerability_aliases() -> Result<()> {
         .and(path("/v1/vulns/PYSEC-2026-4320"))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
             "id": "PYSEC-2026-4320",
-            "modified": "2026-10-19T00:00:00Z",
+            "modified": "2026-10-20T22:00:02Z",
             "summary": "certifi bundles emSign root CAs with compromised intermediate CA keys",
             "aliases": ["GHSA-6q48-6c7w-9gw2"],
             "affected": [{
@@ -575,14 +575,14 @@ async fn audit_duplicate_vulnerability_aliases() -> Result<()> {
                 "ranges": [{
                     "type": "ECOSYSTEM",
                     "events": [
-                        {"introduced": "0"},
-                        {"fixed": "2026.10.18"}
+                        {"introduced": "2019.03.09"},
+                        {"fixed": "2026.10.19"}
                     ]
                 }]
             }],
             "references": [{
                 "type": "ADVISORY",
-                "url": "https://github.com/certifi/python-certifi/security/advisories/GHSA-6q48-6c7w-9gw2"
+                "url": "https://github.com/advisories/GHSA-6q48-6c7w-9gw2"
             }]
         })))
         .mount(&server)
@@ -592,7 +592,7 @@ async fn audit_duplicate_vulnerability_aliases() -> Result<()> {
         .and(path("/v1/vulns/GHSA-6q48-6c7w-9gw2"))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
             "id": "GHSA-6q48-6c7w-9gw2",
-            "modified": "2026-10-19T00:00:00Z",
+            "modified": "2026-10-26T16:15:35Z",
             "summary": "certifi bundles emSign root CAs with compromised intermediate CA keys",
             "aliases": ["PYSEC-2026-4320"],
             "affected": [{
@@ -603,14 +603,14 @@ async fn audit_duplicate_vulnerability_aliases() -> Result<()> {
                 "ranges": [{
                     "type": "ECOSYSTEM",
                     "events": [
-                        {"introduced": "0"},
-                        {"fixed": "2026.10.19"}
+                        {"introduced": "2019.03.09"},
+                        {"fixed": "2026.10.18"}
                     ]
                 }]
             }],
             "references": [{
-                "type": "ADVISORY",
-                "url": "https://github.com/advisories/GHSA-6q48-6c7w-9gw2"
+                "type": "WEB",
+                "url": "https://github.com/certifi/python-certifi/security/advisories/GHSA-6q48-6c7w-9gw2"
             }]
         })))
         .mount(&server)
@@ -634,15 +634,15 @@ async fn audit_duplicate_vulnerability_aliases() -> Result<()> {
 
     - PYSEC-2026-4320: certifi bundles emSign root CAs with compromised intermediate CA keys
 
-      Fixed in: 2026.10.18
-
-      Advisory information: https://github.com/certifi/python-certifi/security/advisories/GHSA-6q48-6c7w-9gw2
-
-    - PYSEC-2026-4320: certifi bundles emSign root CAs with compromised intermediate CA keys
-
       Fixed in: 2026.10.19
 
       Advisory information: https://github.com/advisories/GHSA-6q48-6c7w-9gw2
+
+    - PYSEC-2026-4320: certifi bundles emSign root CAs with compromised intermediate CA keys
+
+      Fixed in: 2026.10.18
+
+      Advisory information: https://github.com/certifi/python-certifi/security/advisories/GHSA-6q48-6c7w-9gw2
 
 
     ----- stderr -----
