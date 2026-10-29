@@ -1555,6 +1555,54 @@ async fn proxy_index_rejects_hashless_selected_source() -> Result<()> {
     Ok(())
 }
 
+/// After five versions conflict, batch prefetch looks past the viable 2.0 release at 1.0.
+/// The proxy cannot map 1.0's wheel, but the solver only needs 2.0.
+#[tokio::test]
+async fn proxy_index_ignores_unmapped_artifact_during_prefetch() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = MockServer::start().await;
+    let url = server.uri();
+    write_implicit_pypi_configuration(&context, &server, &server, "demo")?;
+    context
+        .temp_dir
+        .child("requirements.in")
+        .write_str("demo")?;
+
+    let mut files = vec![advertised_file(
+        "demo-1.0-py3-none-any.whl",
+        &format!("{url}/outside/demo-1.0-py3-none-any.whl"),
+        Some(WHEEL_HASH),
+    )];
+    for version in 2..=7 {
+        let filename = format!("demo-{version}.0-py3-none-any.whl");
+        files.push(advertised_file(
+            &filename,
+            &format!("{url}/files/{filename}"),
+            Some(&sha256(filename.as_bytes())),
+        ));
+        let mut metadata = format!("Metadata-Version: 2.3\nName: demo\nVersion: {version}.0\n");
+        if version > 2 {
+            metadata.push_str(&format!("Requires-Dist: absent-{version}\n"));
+        }
+        mount_metadata(&server, &filename, &metadata, 1).await;
+    }
+    mount_simple(&server, "demo", files, 1).await;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in")
+        .arg("--no-header")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    demo==2.0
+        # via -r requirements.in
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    Ok(())
+}
+
 #[tokio::test]
 async fn proxy_index_rejects_unmapped_artifact_without_origin_fallback() -> Result<()> {
     let context = uv_test::test_context!("3.12");

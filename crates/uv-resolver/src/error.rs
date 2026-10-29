@@ -11,7 +11,8 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::trace;
 
 use uv_distribution_types::{
-    DerivationChain, DistErrorKind, IndexCapabilities, IndexLocations, IndexUrl, RequestedDist,
+    DerivationChain, DistErrorKind, IndexCapabilities, IndexLocations, IndexUrl, ProxyIndexError,
+    RequestedDist,
 };
 use uv_macros::DebugNoInline;
 use uv_normalize::PackageName;
@@ -137,6 +138,12 @@ pub enum ResolveError {
         expected: PackageName,
         actual: PackageName,
     },
+}
+
+impl From<ProxyIndexError> for ResolveError {
+    fn from(error: ProxyIndexError) -> Self {
+        Self::Client(uv_client::ErrorKind::ProxyIndex(error).into())
+    }
 }
 
 impl ResolveError {

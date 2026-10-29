@@ -107,7 +107,6 @@ impl VersionMap {
                 no_binary: build_options.no_binary_package(package_name),
                 no_build: build_options.no_build_package(package_name),
                 index_route,
-                proxy_mapping_error: OnceLock::new(),
                 tags,
                 allowed_yanks,
                 hasher,
@@ -146,9 +145,12 @@ impl VersionMap {
     }
 
     /// Return the [`DistFile`] for the given version, if any.
-    pub(crate) fn get(&self, version: &Version) -> Option<&PrioritizedDist> {
+    pub(crate) fn get(
+        &self,
+        version: &Version,
+    ) -> Result<Option<&PrioritizedDist>, ProxyIndexError> {
         match self.inner {
-            VersionMapInner::Eager(ref eager) => eager.map.get(version),
+            VersionMapInner::Eager(ref eager) => Ok(eager.map.get(version)),
             VersionMapInner::Lazy(ref lazy) => lazy.get(version),
         }
     }
@@ -181,23 +183,6 @@ impl VersionMap {
             VersionMapInner::Eager(_) => None,
             VersionMapInner::Lazy(lazy) => Some(&lazy.index_route.canonical),
         }
-    }
-
-    /// Return any proxy artifact mapping error encountered during lazy materialization.
-    fn proxy_mapping_error(&self) -> Option<ProxyIndexError> {
-        match &self.inner {
-            VersionMapInner::Eager(_) => None,
-            VersionMapInner::Lazy(lazy) => lazy.proxy_mapping_error.get().cloned(),
-        }
-    }
-
-    /// Propagate proxy mapping errors through the existing typed client error chain.
-    pub(crate) fn check_proxy_mapping_errors(maps: &[Self]) -> Result<(), uv_client::Error> {
-        if let Some(error) = maps.iter().find_map(Self::proxy_mapping_error) {
-            return Err(uv_client::ErrorKind::ProxyIndex(error).into());
-        }
-
-        Ok(())
     }
 
     /// Return the included-version cutoff for this version map, if any.
@@ -285,13 +270,11 @@ impl VersionMap {
     }
 
     /// Return the [`Hashes`] for the given version, if any.
-    pub(crate) fn hashes(&self, version: &Version) -> Option<&[HashDigest]> {
-        match self.inner {
-            VersionMapInner::Eager(ref eager) => {
-                eager.map.get(version).map(PrioritizedDist::hashes)
-            }
-            VersionMapInner::Lazy(ref lazy) => lazy.get(version).map(PrioritizedDist::hashes),
-        }
+    pub(crate) fn hashes(
+        &self,
+        version: &Version,
+    ) -> Result<Option<&[HashDigest]>, ProxyIndexError> {
+        Ok(self.get(version)?.map(PrioritizedDist::hashes))
     }
 
     /// Returns the total number of distinct versions in this map.
@@ -362,10 +345,10 @@ impl<'a> VersionMapDistHandle<'a> {
     }
 
     /// Returns a prioritized distribution from this handle.
-    pub(crate) fn prioritized_dist(&self) -> Option<&'a PrioritizedDist> {
+    pub(crate) fn prioritized_dist(&self) -> Result<Option<&'a PrioritizedDist>, ProxyIndexError> {
         match self.inner {
-            VersionMapDistHandleInner::Eager(dist) => Some(dist),
-            VersionMapDistHandleInner::Lazy { lazy, dist } => Some(lazy.get_lazy(dist)?),
+            VersionMapDistHandleInner::Eager(dist) => Ok(Some(dist)),
+            VersionMapDistHandleInner::Lazy { lazy, dist } => lazy.get_lazy(dist),
         }
     }
 }
@@ -513,8 +496,6 @@ struct VersionMapLazy {
     no_build: bool,
     /// The validated route from the canonical index to its physical endpoint.
     index_route: IndexRoute,
-    /// The first invalid proxy artifact encountered during lazy materialization.
-    proxy_mapping_error: OnceLock<ProxyIndexError>,
     /// The set of compatibility tags that determines whether a wheel is usable
     /// in the current environment.
     tags: Option<Tags>,
@@ -568,8 +549,11 @@ impl VersionMapLazy {
     }
 
     /// Returns the distribution for the given version, if it exists.
-    fn get(&self, version: &Version) -> Option<&PrioritizedDist> {
-        self.get_lazy(&self.map.get(version)?.dist)
+    fn get(&self, version: &Version) -> Result<Option<&PrioritizedDist>, ProxyIndexError> {
+        let Some(entry) = self.map.get(version) else {
+            return Ok(None);
+        };
+        self.get_lazy(&entry.dist)
     }
 
     /// Returns an iterator over the versions with at least one file within the exclude-newer
@@ -646,12 +630,15 @@ impl VersionMapLazy {
     ///
     /// When both a flat and simple distribution are present internally, they
     /// are merged automatically.
-    fn get_lazy<'p>(&'p self, lazy_dist: &'p LazyPrioritizedDist) -> Option<&'p PrioritizedDist> {
+    fn get_lazy<'p>(
+        &'p self,
+        lazy_dist: &'p LazyPrioritizedDist,
+    ) -> Result<Option<&'p PrioritizedDist>, ProxyIndexError> {
         match (&lazy_dist.flat, &lazy_dist.simple) {
             (Some(flat), Some(simple)) => self.get_simple(Some(flat), simple),
-            (Some(flat), None) => Some(flat),
+            (Some(flat), None) => Ok(Some(flat)),
             (None, Some(simple)) => self.get_simple(None, simple),
-            (None, None) => None,
+            (None, None) => Ok(None),
         }
     }
 
@@ -663,7 +650,7 @@ impl VersionMapLazy {
         &'p self,
         init: Option<&'p PrioritizedDist>,
         simple: &'p SimplePrioritizedDist,
-    ) -> Option<&'p PrioritizedDist> {
+    ) -> Result<Option<&'p PrioritizedDist>, ProxyIndexError> {
         let get_or_init = || {
             let files = rkyv::deserialize::<VersionFiles, rkyv::rancor::Error>(
                 &self
@@ -769,11 +756,10 @@ impl VersionMapLazy {
                         }
 
                         if let Some(flat) = init {
-                            return Some(flat.clone());
+                            return Ok(Some(flat.clone()));
                         }
 
-                        let _ = self.proxy_mapping_error.set(error);
-                        return None;
+                        return Err(error);
                     }
                 };
 
@@ -806,13 +792,14 @@ impl VersionMapLazy {
                     }
                 }
             }
-            if priority_dist.is_empty() {
-                None
-            } else {
-                Some(priority_dist)
-            }
+            Ok((!priority_dist.is_empty()).then_some(priority_dist))
         };
-        simple.dist.get_or_init(get_or_init).as_ref()
+        simple
+            .dist
+            .get_or_init(get_or_init)
+            .as_ref()
+            .map(Option::as_ref)
+            .map_err(Clone::clone)
     }
 
     fn source_dist_compatibility(
@@ -968,9 +955,8 @@ struct SimplePrioritizedDist {
     /// Note that the `Option` does not represent the initialization state.
     /// The `Option` can be `None` even after initialization, for example,
     /// if initialization could not find any usable files from which to
-    /// construct a distribution. (One easy way to effect this, at the time
-    /// of writing, is to use `--exclude-newer 1900-01-01`.)
-    dist: OnceLock<Option<PrioritizedDist>>,
+    /// construct a distribution.
+    dist: OnceLock<Result<Option<PrioritizedDist>, ProxyIndexError>>,
 }
 
 /// A range that can be used to iterate over a subset of a [`BTreeMap`].

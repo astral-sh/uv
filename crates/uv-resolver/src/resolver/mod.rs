@@ -1386,9 +1386,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             index,
             env,
             self.tags.as_ref(),
-        );
-
-        VersionMap::check_proxy_mapping_errors(version_maps)?;
+        )?;
 
         let Some(candidate) = candidate else {
             // Short circuit: we couldn't find _any_ versions for a package.
@@ -1545,13 +1543,18 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         // we passed over can become compatible once we know its variant properties. Revisit the
         // indexes in order, stopping as soon as one has a distribution we can use.
         let candidates = if self.selector.index_strategy() == &IndexStrategy::UnsafeBestMatch {
-            Either::Left(version_maps.iter().filter_map(|map| map.get(version)))
+            Either::Left(
+                version_maps
+                    .iter()
+                    .filter_map(|map| map.get(version).transpose()),
+            )
         } else {
-            Either::Right(std::iter::once(prioritized))
+            Either::Right(std::iter::once(Ok(prioritized)))
         };
 
         let mut selection = WheelVariantSelection::default();
         for dist in candidates {
+            let dist = dist?;
             // Queue all metadata requests for this candidate before waiting for any of them.
             // A flat index can combine wheels from several sources, so keep each response
             // paired with its source: the same variant label can mean different things on each.
@@ -1706,8 +1709,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             index,
             env,
             self.tags.as_ref(),
-        );
-        VersionMap::check_proxy_mapping_errors(version_maps)?;
+        )?;
 
         let Some(base_candidate) = base_candidate else {
             return Ok(None);
@@ -2440,9 +2442,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     &env,
                     self.tags.as_ref(),
                 );
-                VersionMap::check_proxy_mapping_errors(version_map)?;
-
-                let Some(candidate) = candidate else {
+                // The solver will see a cached mapping error if it selects this version.
+                let Ok(Some(candidate)) = candidate else {
                     return Ok(None);
                 };
 
@@ -2646,7 +2647,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 else {
                                     return false;
                                 };
-                                let Some(prioritized_dist) = dists.prioritized_dist() else {
+                                let Ok(Some(prioritized_dist)) = dists.prioritized_dist() else {
                                     return true;
                                 };
                                 prioritized_dist.files().all(|file| {
@@ -2669,7 +2670,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 let Some(ref exclude_newer) = available_version_cutoff else {
                                     return false;
                                 };
-                                let Some(prioritized_dist) = dists.prioritized_dist() else {
+                                let Ok(Some(prioritized_dist)) = dists.prioritized_dist() else {
                                     return false;
                                 };
                                 prioritized_dist.files().all(|file| {

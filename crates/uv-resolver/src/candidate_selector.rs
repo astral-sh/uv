@@ -7,7 +7,9 @@ use smallvec::SmallVec;
 use tracing::{debug, trace};
 
 use uv_configuration::IndexStrategy;
-use uv_distribution_types::{DistributionMetadata, IndexUrl, Name, ResolutionRecorder};
+use uv_distribution_types::{
+    DistributionMetadata, IndexUrl, Name, ProxyIndexError, ResolutionRecorder,
+};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_platform_tags::Tags;
@@ -90,7 +92,7 @@ impl CandidateSelector {
         index: Option<&'a IndexUrl>,
         env: &ResolverEnvironment,
         tags: Option<&'a Tags>,
-    ) -> Option<Candidate<'a>> {
+    ) -> Result<Option<Candidate<'a>>, ProxyIndexError> {
         if let Some(recorder) = &self.recorder {
             recorder.candidate_policy(package_name);
         }
@@ -118,9 +120,9 @@ impl CandidateSelector {
             prerelease_selection,
             env,
             tags,
-        ) {
+        )? {
             trace!("Using preference {} {}", preferred.name, preferred.version);
-            return Some(preferred);
+            return Ok(Some(preferred));
         }
 
         // If we don't have a preference, find an already-installed distribution that satisfies the
@@ -137,7 +139,7 @@ impl CandidateSelector {
                 "Using installed {} {} that satisfies {range}",
                 installed.name, installed.version
             );
-            return Some(installed);
+            return Ok(Some(installed));
         }
 
         // Otherwise, find the best candidate from the version maps.
@@ -147,7 +149,7 @@ impl CandidateSelector {
             version_maps,
             prerelease_selection,
             env,
-        );
+        )?;
 
         // Cross-reference against the already-installed distribution.
         //
@@ -167,10 +169,10 @@ impl CandidateSelector {
                 "Using installed {} {} that satisfies {range}",
                 installed.name, installed.version
             );
-            return Some(installed);
+            return Ok(Some(installed));
         }
 
-        compatible
+        Ok(compatible)
     }
 
     /// If the package has a preference, an existing version from an existing lockfile or a version
@@ -194,16 +196,16 @@ impl CandidateSelector {
         prerelease_selection: PrereleaseSelection,
         env: &ResolverEnvironment,
         tags: Option<&'a Tags>,
-    ) -> Option<Candidate<'a>> {
+    ) -> Result<Option<Candidate<'a>>, ProxyIndexError> {
         let preferences = preferences.get(package_name);
 
         // If there are multiple preferences for the same package, we need to sort them by priority.
         let preferences = match preferences {
-            [] => return None,
+            [] => return Ok(None),
             [entry] => {
                 // Filter out preferences that map to a conflicting index.
                 if index.is_some_and(|index| !entry.index().matches(index)) {
-                    return None;
+                    return Ok(None);
                 }
                 Either::Left(std::iter::once((entry.pin().version(), entry.source())))
             }
@@ -263,7 +265,7 @@ impl CandidateSelector {
         reinstall: bool,
         prerelease_selection: PrereleaseSelection,
         tags: Option<&Tags>,
-    ) -> Option<Candidate<'a>> {
+    ) -> Result<Option<Candidate<'a>>, ProxyIndexError> {
         for (version, source) in preferences {
             // Respect the version range for this requirement.
             if !range.contains(version) {
@@ -293,14 +295,14 @@ impl CandidateSelector {
                                 continue;
                             }
 
-                            return Some(Candidate {
+                            return Ok(Some(Candidate {
                                 name: package_name,
                                 version,
                                 dist: CandidateDist::Compatible(CompatibleDist::InstalledDist(
                                     dist,
                                 )),
                                 choice_kind: VersionChoiceKind::Preference,
-                            });
+                            }));
                         }
                     }
                     // We do not consider installed distributions with multiple versions because
@@ -333,10 +335,10 @@ impl CandidateSelector {
             }
 
             // Check for a remote distribution that matches the preferred version
-            if let Some((version_map, file)) = version_maps
-                .iter()
-                .find_map(|version_map| version_map.get(version).map(|dist| (version_map, dist)))
-            {
+            for version_map in version_maps {
+                let Some(file) = version_map.get(version)? else {
+                    continue;
+                };
                 // If the preferred version has a local variant, prefer that.
                 if version_map.local() {
                     for local in version_map
@@ -353,27 +355,27 @@ impl CandidateSelector {
                         if !range.contains(local) {
                             continue;
                         }
-                        if let Some(dist) = version_map.get(local) {
+                        if let Some(dist) = version_map.get(local)? {
                             debug!("Preferring local version `{package_name}` (v{local})");
-                            return Some(Candidate::new(
+                            return Ok(Some(Candidate::new(
                                 package_name,
                                 local,
                                 dist,
                                 VersionChoiceKind::Preference,
-                            ));
+                            )));
                         }
                     }
                 }
 
-                return Some(Candidate::new(
+                return Ok(Some(Candidate::new(
                     package_name,
                     version,
                     file,
                     VersionChoiceKind::Preference,
-                ));
+                )));
             }
         }
-        None
+        Ok(None)
     }
 
     /// Check for an installed distribution that satisfies the current range and is allowed.
@@ -431,7 +433,7 @@ impl CandidateSelector {
         range: &Range<Version>,
         version_maps: &'a [VersionMap],
         env: &ResolverEnvironment,
-    ) -> Option<Candidate<'a>> {
+    ) -> Result<Option<Candidate<'a>>, ProxyIndexError> {
         self.select_no_preference_with(
             package_name,
             range,
@@ -448,7 +450,7 @@ impl CandidateSelector {
         version_maps: &'a [VersionMap],
         prerelease_selection: PrereleaseSelection,
         env: &ResolverEnvironment,
-    ) -> Option<Candidate<'a>> {
+    ) -> Result<Option<Candidate<'a>>, ProxyIndexError> {
         match prerelease_selection {
             PrereleaseSelection::Allow => self.select_no_preference_from(
                 package_name,
@@ -464,46 +466,31 @@ impl CandidateSelector {
                 PrereleaseCandidates::Stable,
                 env,
             ),
-            PrereleaseSelection::PreferStable
-                if self.index_strategy == IndexStrategy::UnsafeFirstMatch =>
-            {
-                version_maps.iter().find_map(|version_map| {
-                    let version_maps = std::slice::from_ref(version_map);
-                    self.select_no_preference_from(
-                        package_name,
-                        range,
-                        version_maps,
+            PrereleaseSelection::PreferStable => {
+                // With unsafe-first-match, try both passes on one index before moving to the next.
+                let groups = if self.index_strategy == IndexStrategy::UnsafeFirstMatch {
+                    Either::Left(version_maps.chunks(1))
+                } else {
+                    Either::Right(std::iter::once(version_maps))
+                };
+                for maps in groups {
+                    for candidates in [
                         PrereleaseCandidates::Stable,
-                        env,
-                    )
-                    .or_else(|| {
-                        self.select_no_preference_from(
+                        PrereleaseCandidates::Prerelease,
+                    ] {
+                        if let Some(candidate) = self.select_no_preference_from(
                             package_name,
                             range,
-                            version_maps,
-                            PrereleaseCandidates::Prerelease,
+                            maps,
+                            candidates,
                             env,
-                        )
-                    })
-                })
+                        )? {
+                            return Ok(Some(candidate));
+                        }
+                    }
+                }
+                Ok(None)
             }
-            PrereleaseSelection::PreferStable => self
-                .select_no_preference_from(
-                    package_name,
-                    range,
-                    version_maps,
-                    PrereleaseCandidates::Stable,
-                    env,
-                )
-                .or_else(|| {
-                    self.select_no_preference_from(
-                        package_name,
-                        range,
-                        version_maps,
-                        PrereleaseCandidates::Prerelease,
-                        env,
-                    )
-                }),
         }
     }
 
@@ -514,7 +501,7 @@ impl CandidateSelector {
         version_maps: &'a [VersionMap],
         prerelease_candidates: PrereleaseCandidates,
         env: &ResolverEnvironment,
-    ) -> Option<Candidate<'a>> {
+    ) -> Result<Option<Candidate<'a>>, ProxyIndexError> {
         trace!(
             "Selecting candidate for {package_name} with range {range} with {} remote versions",
             version_maps.iter().map(VersionMap::len).sum::<usize>(),
@@ -575,27 +562,24 @@ impl CandidateSelector {
                 )
             }
         } else {
-            if highest {
-                version_maps.iter().find_map(|version_map| {
-                    Self::select_candidate(
-                        version_map.iter_included(range).rev(),
-                        package_name,
-                        range,
-                        prerelease_candidates,
-                        highest,
-                    )
-                })
-            } else {
-                version_maps.iter().find_map(|version_map| {
-                    Self::select_candidate(
-                        version_map.iter_included(range),
-                        package_name,
-                        range,
-                        prerelease_candidates,
-                        highest,
-                    )
-                })
+            for version_map in version_maps {
+                let versions = version_map.iter_included(range);
+                let versions = if highest {
+                    Either::Left(versions.rev())
+                } else {
+                    Either::Right(versions)
+                };
+                if let Some(candidate) = Self::select_candidate(
+                    versions,
+                    package_name,
+                    range,
+                    prerelease_candidates,
+                    highest,
+                )? {
+                    return Ok(Some(candidate));
+                }
             }
+            Ok(None)
         }
     }
 
@@ -630,7 +614,7 @@ impl CandidateSelector {
         range: &Range<Version>,
         prerelease_candidates: PrereleaseCandidates,
         highest: bool,
-    ) -> Option<Candidate<'a>> {
+    ) -> Result<Option<Candidate<'a>>, ProxyIndexError> {
         let segments = range.iter();
         let segments = if highest {
             Either::Left(segments.rev())
@@ -639,7 +623,7 @@ impl CandidateSelector {
         };
         let Some(mut cursor) = RangeCursor::new(segments, highest) else {
             trace!("Exhausted all candidates for package {package_name} with empty range");
-            return None;
+            return Ok(None);
         };
         let mut steps = 0usize;
         let mut incompatible: Option<Candidate> = None;
@@ -654,7 +638,7 @@ impl CandidateSelector {
                 trace!(
                     "Returning incompatible candidate for package {package_name} with range {range} after {steps} steps",
                 );
-                return incompatible;
+                return Ok(incompatible);
             }
 
             let candidate = {
@@ -668,7 +652,7 @@ impl CandidateSelector {
                 if !cursor.contains(version) {
                     continue;
                 }
-                let Some(dist) = maybe_dist.prioritized_dist() else {
+                let Some(dist) = maybe_dist.prioritized_dist()? else {
                     continue;
                 };
                 trace!(
@@ -725,20 +709,20 @@ impl CandidateSelector {
             trace!(
                 "Returning candidate for package {package_name} with range {range} after {steps} steps",
             );
-            return Some(candidate);
+            return Ok(Some(candidate));
         }
 
         if incompatible.is_some() {
             trace!(
                 "Returning incompatible candidate for package {package_name} with range {range} after {steps} steps",
             );
-            return incompatible;
+            return Ok(incompatible);
         }
 
         trace!(
             "Exhausted all candidates for package {package_name} with range {range} after {steps} steps"
         );
-        None
+        Ok(None)
     }
 }
 

@@ -11,7 +11,6 @@ use crate::candidate_selector::CandidateSelector;
 use crate::prioritized_distribution::CompatibleDist;
 use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner, Range};
 use crate::resolver::requests::{MetadataRequest, MetadataRequests};
-use crate::version_map::VersionMap;
 use crate::{PythonRequirement, ResolveError, ResolverEnvironment, VersionsResponse};
 use uv_distribution_types::{IndexCapabilities, IndexMetadata};
 use uv_normalize::PackageName;
@@ -204,6 +203,8 @@ impl BatchPrefetcherRunner {
             return Ok(());
         };
 
+        // Stop this speculative batch on a mapping error. Selection will report the cached
+        // error if the solver actually needs that version.
         let mut prefetch_count = 0;
         for _ in 0..total_prefetch {
             let candidate = match phase {
@@ -211,9 +212,11 @@ impl BatchPrefetcherRunner {
                     compatible,
                     previous,
                 } => {
-                    let candidate =
-                        selector.select_no_preference(name, &compatible, version_map, env);
-                    VersionMap::check_proxy_mapping_errors(version_map)?;
+                    let Ok(candidate) =
+                        selector.select_no_preference(name, &compatible, version_map, env)
+                    else {
+                        break;
+                    };
 
                     if let Some(candidate) = candidate {
                         let compatible =
@@ -247,8 +250,11 @@ impl BatchPrefetcherRunner {
                             }
                         };
                     }
-                    let candidate = selector.select_no_preference(name, &range, version_map, env);
-                    VersionMap::check_proxy_mapping_errors(version_map)?;
+                    let Ok(candidate) =
+                        selector.select_no_preference(name, &range, version_map, env)
+                    else {
+                        break;
+                    };
 
                     if let Some(candidate) = candidate {
                         phase = BatchPrefetchStrategy::InOrder {
