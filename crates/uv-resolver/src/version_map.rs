@@ -16,6 +16,7 @@ use uv_distribution_types::{
 };
 use uv_normalize::PackageName;
 use uv_pep440::Version;
+use uv_pep508::MarkerTree;
 use uv_platform_tags::{IncompatibleTag, TagCompatibility, Tags};
 use uv_preview::PreviewFeature;
 use uv_pypi_types::{HashDigest, ResolutionMetadata, Yanked};
@@ -28,6 +29,14 @@ use crate::prioritized_distribution::{
     SourceDistCompatibility, WheelCompatibility,
 };
 use crate::yanks::AllowedYanks;
+
+/// A proxy mapping failure and the platforms the version would otherwise cover.
+#[derive(Debug, Clone, thiserror::Error)]
+#[error("{source}")]
+pub(crate) struct VersionMapError {
+    pub(crate) source: Box<ProxyIndexError>,
+    pub(crate) implied_markers: MarkerTree,
+}
 
 /// A map from versions to distributions.
 #[derive(Debug)]
@@ -148,7 +157,7 @@ impl VersionMap {
     pub(crate) fn get(
         &self,
         version: &Version,
-    ) -> Result<Option<&PrioritizedDist>, ProxyIndexError> {
+    ) -> Result<Option<&PrioritizedDist>, VersionMapError> {
         match self.inner {
             VersionMapInner::Eager(ref eager) => Ok(eager.map.get(version)),
             VersionMapInner::Lazy(ref lazy) => lazy.get(version),
@@ -273,7 +282,7 @@ impl VersionMap {
     pub(crate) fn hashes(
         &self,
         version: &Version,
-    ) -> Result<Option<&[HashDigest]>, ProxyIndexError> {
+    ) -> Result<Option<&[HashDigest]>, VersionMapError> {
         Ok(self.get(version)?.map(PrioritizedDist::hashes))
     }
 
@@ -345,7 +354,7 @@ impl<'a> VersionMapDistHandle<'a> {
     }
 
     /// Returns a prioritized distribution from this handle.
-    pub(crate) fn prioritized_dist(&self) -> Result<Option<&'a PrioritizedDist>, ProxyIndexError> {
+    pub(crate) fn prioritized_dist(&self) -> Result<Option<&'a PrioritizedDist>, VersionMapError> {
         match self.inner {
             VersionMapDistHandleInner::Eager(dist) => Ok(Some(dist)),
             VersionMapDistHandleInner::Lazy { lazy, dist } => lazy.get_lazy(dist),
@@ -549,7 +558,7 @@ impl VersionMapLazy {
     }
 
     /// Returns the distribution for the given version, if it exists.
-    fn get(&self, version: &Version) -> Result<Option<&PrioritizedDist>, ProxyIndexError> {
+    fn get(&self, version: &Version) -> Result<Option<&PrioritizedDist>, VersionMapError> {
         let Some(entry) = self.map.get(version) else {
             return Ok(None);
         };
@@ -633,7 +642,7 @@ impl VersionMapLazy {
     fn get_lazy<'p>(
         &'p self,
         lazy_dist: &'p LazyPrioritizedDist,
-    ) -> Result<Option<&'p PrioritizedDist>, ProxyIndexError> {
+    ) -> Result<Option<&'p PrioritizedDist>, VersionMapError> {
         match (&lazy_dist.flat, &lazy_dist.simple) {
             (Some(flat), Some(simple)) => self.get_simple(Some(flat), simple),
             (Some(flat), None) => Ok(Some(flat)),
@@ -650,7 +659,7 @@ impl VersionMapLazy {
         &'p self,
         init: Option<&'p PrioritizedDist>,
         simple: &'p SimplePrioritizedDist,
-    ) -> Result<Option<&'p PrioritizedDist>, ProxyIndexError> {
+    ) -> Result<Option<&'p PrioritizedDist>, VersionMapError> {
         let get_or_init = || {
             let files = rkyv::deserialize::<VersionFiles, rkyv::rancor::Error>(
                 &self
@@ -661,6 +670,7 @@ impl VersionMapLazy {
             )
             .expect("archived version files always deserializes");
             let mut priority_dist = init.cloned().unwrap_or_default();
+            let mut mapping_error = None;
             for (filename, file) in files.all_entries(&self.package_name) {
                 let filename =
                     match filename {
@@ -759,7 +769,19 @@ impl VersionMapLazy {
                             return Ok(Some(flat.clone()));
                         }
 
-                        return Err(error);
+                        // The URL cannot be used, but the file can still establish that the
+                        // base version covers platforms missing from a local version.
+                        mapping_error.get_or_insert_with(|| Box::new(error));
+                        match candidate {
+                            RegistryFileCandidate::Wheel(filename, _) => {
+                                priority_dist
+                                    .add_wheel_coverage(&filename, self.minimum_libc_version);
+                            }
+                            RegistryFileCandidate::Source(..) => {
+                                priority_dist.add_source_coverage();
+                            }
+                        }
+                        continue;
                     }
                 };
 
@@ -791,6 +813,12 @@ impl VersionMapLazy {
                         priority_dist.insert_source(dist, hashes, compatibility);
                     }
                 }
+            }
+            if let Some(source) = mapping_error {
+                return Err(VersionMapError {
+                    source,
+                    implied_markers: priority_dist.implied_markers(),
+                });
             }
             Ok((!priority_dist.is_empty()).then_some(priority_dist))
         };
@@ -956,7 +984,7 @@ struct SimplePrioritizedDist {
     /// The `Option` can be `None` even after initialization, for example,
     /// if initialization could not find any usable files from which to
     /// construct a distribution.
-    dist: OnceLock<Result<Option<PrioritizedDist>, ProxyIndexError>>,
+    dist: OnceLock<Result<Option<PrioritizedDist>, VersionMapError>>,
 }
 
 /// A range that can be used to iterate over a subset of a [`BTreeMap`].

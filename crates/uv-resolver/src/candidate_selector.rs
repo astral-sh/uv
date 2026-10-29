@@ -7,9 +7,7 @@ use smallvec::SmallVec;
 use tracing::{debug, trace};
 
 use uv_configuration::IndexStrategy;
-use uv_distribution_types::{
-    DistributionMetadata, IndexUrl, Name, ProxyIndexError, ResolutionRecorder,
-};
+use uv_distribution_types::{DistributionMetadata, IndexUrl, Name, ResolutionRecorder};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_platform_tags::Tags;
@@ -22,7 +20,7 @@ use crate::prioritized_distribution::{
 };
 use crate::pubgrub::Range;
 use crate::resolution_mode::ResolutionStrategy;
-use crate::version_map::{VersionMap, VersionMapDistHandle};
+use crate::version_map::{VersionMap, VersionMapDistHandle, VersionMapError};
 use crate::{Exclusions, Manifest, Options, ResolverEnvironment};
 
 #[derive(Debug, Clone)]
@@ -92,7 +90,7 @@ impl CandidateSelector {
         index: Option<&'a IndexUrl>,
         env: &ResolverEnvironment,
         tags: Option<&'a Tags>,
-    ) -> Result<Option<Candidate<'a>>, ProxyIndexError> {
+    ) -> Result<Option<Candidate<'a>>, VersionMapError> {
         if let Some(recorder) = &self.recorder {
             recorder.candidate_policy(package_name);
         }
@@ -196,7 +194,7 @@ impl CandidateSelector {
         prerelease_selection: PrereleaseSelection,
         env: &ResolverEnvironment,
         tags: Option<&'a Tags>,
-    ) -> Result<Option<Candidate<'a>>, ProxyIndexError> {
+    ) -> Result<Option<Candidate<'a>>, VersionMapError> {
         let preferences = preferences.get(package_name);
 
         // If there are multiple preferences for the same package, we need to sort them by priority.
@@ -265,7 +263,7 @@ impl CandidateSelector {
         reinstall: bool,
         prerelease_selection: PrereleaseSelection,
         tags: Option<&Tags>,
-    ) -> Result<Option<Candidate<'a>>, ProxyIndexError> {
+    ) -> Result<Option<Candidate<'a>>, VersionMapError> {
         for (version, source) in preferences {
             // Respect the version range for this requirement.
             if !range.contains(version) {
@@ -336,7 +334,8 @@ impl CandidateSelector {
 
             // Check for a remote distribution that matches the preferred version
             for version_map in version_maps {
-                let Some(file) = version_map.get(version)? else {
+                // A preferred base version may be superseded by its local variant.
+                let Some(file) = version_map.get(version).transpose() else {
                     continue;
                 };
                 // If the preferred version has a local variant, prefer that.
@@ -370,7 +369,7 @@ impl CandidateSelector {
                 return Ok(Some(Candidate::new(
                     package_name,
                     version,
-                    file,
+                    file?,
                     VersionChoiceKind::Preference,
                 )));
             }
@@ -433,7 +432,7 @@ impl CandidateSelector {
         range: &Range<Version>,
         version_maps: &'a [VersionMap],
         env: &ResolverEnvironment,
-    ) -> Result<Option<Candidate<'a>>, ProxyIndexError> {
+    ) -> Result<Option<Candidate<'a>>, VersionMapError> {
         self.select_no_preference_with(
             package_name,
             range,
@@ -450,7 +449,7 @@ impl CandidateSelector {
         version_maps: &'a [VersionMap],
         prerelease_selection: PrereleaseSelection,
         env: &ResolverEnvironment,
-    ) -> Result<Option<Candidate<'a>>, ProxyIndexError> {
+    ) -> Result<Option<Candidate<'a>>, VersionMapError> {
         match prerelease_selection {
             PrereleaseSelection::Allow => self.select_no_preference_from(
                 package_name,
@@ -501,7 +500,7 @@ impl CandidateSelector {
         version_maps: &'a [VersionMap],
         prerelease_candidates: PrereleaseCandidates,
         env: &ResolverEnvironment,
-    ) -> Result<Option<Candidate<'a>>, ProxyIndexError> {
+    ) -> Result<Option<Candidate<'a>>, VersionMapError> {
         trace!(
             "Selecting candidate for {package_name} with range {range} with {} remote versions",
             version_maps.iter().map(VersionMap::len).sum::<usize>(),
@@ -614,7 +613,7 @@ impl CandidateSelector {
         range: &Range<Version>,
         prerelease_candidates: PrereleaseCandidates,
         highest: bool,
-    ) -> Result<Option<Candidate<'a>>, ProxyIndexError> {
+    ) -> Result<Option<Candidate<'a>>, VersionMapError> {
         let segments = range.iter();
         let segments = if highest {
             Either::Left(segments.rev())

@@ -1603,6 +1603,100 @@ async fn proxy_index_ignores_unmapped_artifact_during_prefetch() -> Result<()> {
     Ok(())
 }
 
+/// The existing base pin prefers its local variant. Both wheels cover the same platforms,
+/// so resolving the local version does not require a mappable base wheel.
+#[tokio::test]
+async fn proxy_index_ignores_unmapped_base_with_same_platform_coverage() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = MockServer::start().await;
+    let url = server.uri();
+    write_implicit_pypi_configuration(&context, &server, &server, "demo")?;
+    context
+        .temp_dir
+        .child("requirements.in")
+        .write_str("demo\n")?;
+    context
+        .temp_dir
+        .child("requirements.txt")
+        .write_str("demo==1.0\n")?;
+
+    let local = "demo-1.0+local-py3-none-manylinux_2_17_x86_64.whl";
+    let base = "demo-1.0-py3-none-manylinux_2_17_x86_64.whl";
+    mount_simple(
+        &server,
+        "demo",
+        vec![
+            advertised_file(local, &format!("{url}/files/{local}"), Some(WHEEL_HASH)),
+            advertised_file(base, &format!("{url}/outside/{base}"), Some(WHEEL_HASH)),
+        ],
+        1,
+    )
+    .await;
+    mount_metadata(
+        &server,
+        local,
+        "Metadata-Version: 2.3\nName: demo\nVersion: 1.0+local\n",
+        1,
+    )
+    .await;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in")
+        .arg("--universal")
+        .arg("--output-file").arg("requirements.txt")
+        .arg("--no-header")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    demo==1.0+local
+        # via -r requirements.in
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    Ok(())
+}
+
+/// The Linux-only local version needs the base version on other platforms. An unmappable
+/// base wheel must still participate in that decision.
+#[tokio::test]
+async fn proxy_index_reports_unmapped_base_version_needed_for_platform_fork() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = MockServer::start().await;
+    let url = server.uri();
+    write_implicit_pypi_configuration(&context, &server, &server, "demo")?;
+
+    let local = "demo-1.0+local-py3-none-manylinux_2_17_x86_64.whl";
+    let base = "demo-1.0-py3-none-any.whl";
+    mount_simple(
+        &server,
+        "demo",
+        vec![
+            advertised_file(local, &format!("{url}/files/{local}"), Some(WHEEL_HASH)),
+            advertised_file(base, &format!("{url}/outside/{base}"), Some(WHEEL_HASH)),
+        ],
+        1,
+    )
+    .await;
+    Mock::given(method("GET"))
+        .and(path(format!("/files/{local}.metadata")))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_string("Metadata-Version: 2.3\nName: demo\nVersion: 1.0+local\n"),
+        )
+        .mount(&server)
+        .await;
+
+    let mut filters = context.filters();
+    filters.insert(0, (url.as_str(), "[PROXY]"));
+    uv_snapshot!(filters, context.lock(), @r"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Artifact URL `[PROXY]/outside/demo-1.0-py3-none-any.whl` does not match the `artifact-base-url` prefix `[PROXY]/files/`
+    ");
+    Ok(())
+}
+
 #[tokio::test]
 async fn proxy_index_rejects_unmapped_artifact_without_origin_fallback() -> Result<()> {
     let context = uv_test::test_context!("3.12");

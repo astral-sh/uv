@@ -11,8 +11,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::trace;
 
 use uv_distribution_types::{
-    DerivationChain, DistErrorKind, IndexCapabilities, IndexLocations, IndexUrl, ProxyIndexError,
-    RequestedDist,
+    DerivationChain, DistErrorKind, IndexCapabilities, IndexLocations, IndexUrl, RequestedDist,
 };
 use uv_macros::DebugNoInline;
 use uv_normalize::PackageName;
@@ -37,6 +36,7 @@ use crate::resolution::ConflictingDistributionError;
 use crate::resolver::{
     MetadataUnavailable, ResolverEnvironment, UnavailablePackage, UnavailableReason,
 };
+use crate::version_map::VersionMapError;
 use crate::{InMemoryIndex, Options};
 
 #[derive(DebugNoInline, thiserror::Error)]
@@ -140,9 +140,9 @@ pub enum ResolveError {
     },
 }
 
-impl From<ProxyIndexError> for ResolveError {
-    fn from(error: ProxyIndexError) -> Self {
-        Self::Client(uv_client::ErrorKind::ProxyIndex(error).into())
+impl From<VersionMapError> for ResolveError {
+    fn from(error: VersionMapError) -> Self {
+        Self::Client(uv_client::ErrorKind::ProxyIndex(*error.source).into())
     }
 }
 

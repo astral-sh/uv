@@ -1709,21 +1709,23 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             index,
             env,
             self.tags.as_ref(),
-        )?;
+        );
 
-        let Some(base_candidate) = base_candidate else {
-            return Ok(None);
+        // The base candidate is only needed if it adds platform coverage to this fork.
+        let (base_candidate, base_markers) = match base_candidate {
+            Ok(Some(candidate)) => {
+                let Some(&dist) = candidate.compatible() else {
+                    return Ok(None);
+                };
+                (Ok((candidate, dist)), dist.implied_markers())
+            }
+            Ok(None) => return Ok(None),
+            Err(error) => {
+                let markers = error.implied_markers;
+                (Err(error), markers)
+            }
         };
-        let CandidateDist::Compatible(base_dist) = base_candidate.dist() else {
-            return Ok(None);
-        };
-
-        // ...and the non-local version has greater platform support...
-        let mut remainder = {
-            let mut remainder = base_dist.implied_markers();
-            remainder = remainder.and(artifact_markers.negate());
-            remainder
-        };
+        let mut remainder = base_markers.and(artifact_markers.negate());
         if remainder.is_false() {
             return Ok(None);
         }
@@ -1738,6 +1740,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         // Similarly, if the local distribution is incompatible with the current environment, then
         // use the base distribution instead (but don't fork).
         if !env.included_by_marker(artifact_markers) {
+            let (base_candidate, base_dist) = base_candidate?;
             let filename = match dist.for_installation() {
                 ResolvedDistRef::InstallableRegistrySourceDist { sdist, .. } => sdist
                     .filename()
@@ -1755,7 +1758,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 base_candidate.choice_kind(),
                 filename,
             );
-            self.visit_candidate(&base_candidate, base_dist, package, name, pins, requests)?;
+            self.visit_candidate(&base_candidate, &base_dist, package, name, pins, requests)?;
 
             return Ok(Some(ResolverVersion::Unforked(
                 base_candidate.version().clone(),
@@ -1800,8 +1803,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 .collect::<Vec<_>>()
                 .join(", ")
         );
+        let (base_candidate, base_dist) = base_candidate?;
         self.visit_candidate(candidate, dist, package, name, pins, requests)?;
-        self.visit_candidate(&base_candidate, base_dist, package, name, pins, requests)?;
+        self.visit_candidate(&base_candidate, &base_dist, package, name, pins, requests)?;
 
         let forks = vec![
             VersionFork {
