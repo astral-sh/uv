@@ -1,11 +1,9 @@
 //! Type-level policies for URL serialization.
 //!
-//! Policies govern Serde serialization of the normalized URL, not its original
-//! input bytes. The [`Stripped`] policy also supports plain-text persistence via
-//! `to_serialized_string`. Changing a policy leaves the parsed URL and its
-//! credentials in memory. Display and debug output use the same redaction for
-//! every policy; ordinary deserialization uses URL parsing independently of the
-//! policy.
+//! Policies govern serialization of the normalized URL, not its original input
+//! bytes. Changing a policy leaves the parsed URL and its credentials in memory.
+//! Display and debug output use the same redaction for every policy; ordinary
+//! deserialization uses URL parsing independently of the policy.
 
 use std::borrow::Cow;
 use std::hash::Hash;
@@ -84,6 +82,9 @@ impl SafeUrl<Stripped> {
     ///
     /// This applies the same policy as Serde serialization, retaining the complete query,
     /// including signed credentials. [`std::fmt::Display`] and [`std::fmt::Debug`] remain redacted.
+    ///
+    /// Removing userinfo can make a previously accepted URL fail the ambiguity check in
+    /// [`SafeUrl::parse`] when read back.
     ///
     /// ```
     /// use uv_redacted::{SafeUrl, policy::Stripped};
