@@ -1,12 +1,21 @@
-# Keep this in sync with the Cargo package rule in `renovate.json5`.
+# Keep the Cargo rules in `renovate.json5` in sync with this policy.
 cooldown-days = 7
 
-# Exclusions require an exact crate name and a reason. Include `version` to limit
-# an exclusion to one release; omit it to exclude every version of the crate.
-exclusions = []
-
-# Replace the empty list above with entries like:
-# [[exclusions]]
-# name = "example-crate"
-# version = "1.2.3"
-# reason = "Explain why this release needs an exception."
+# Omit `version` to exempt every release of an exact crate name.
+exclusions = [
+  { name = "ambient-id", reason = "Maintained by Astral." },
+  { name = "archive-trait", reason = "Maintained by Astral." },
+  { name = "astral-html", reason = "Maintained by Astral." },
+  { name = "astral-ini", reason = "Maintained by Astral." },
+  { name = "astral-mail-headers", reason = "Maintained by Astral." },
+  { name = "astral-pubgrub", reason = "Maintained by Astral." },
+  { name = "astral-reqwest-middleware", reason = "Maintained by Astral." },
+  { name = "astral-reqwest-retry", reason = "Maintained by Astral." },
+  { name = "astral-tokio-tar", reason = "Maintained by Astral." },
+  { name = "astral-version-ranges", reason = "Maintained by Astral." },
+  { name = "astral_async_http_range_reader", reason = "Maintained by Astral." },
+  { name = "astral_async_zip", reason = "Maintained by Astral." },
+  { name = "tar-codec", reason = "Maintained by Astral." },
+  { name = "tar-framing", reason = "Maintained by Astral." },
+  { name = "http-body-util", version = "0.1.5", reason = "Reviewed release for the development environment." },
+]

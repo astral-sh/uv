@@ -13,10 +13,39 @@
   },
   packageRules: [
     {
-      // Apply the CI cooldown to registry crates, including Astral's own crates.
+      // Keep Cargo's release age and exclusions in sync with `cargo-cooldowns.toml`.
       matchManagers: ["cargo"],
       matchDatasources: ["crate"],
       minimumReleaseAge: "7 days",
+    },
+    {
+      matchManagers: ["cargo"],
+      matchDatasources: ["crate"],
+      matchPackageNames: [
+        "ambient-id",
+        "archive-trait",
+        "astral-html",
+        "astral-ini",
+        "astral-mail-headers",
+        "astral-pubgrub",
+        "astral-reqwest-middleware",
+        "astral-reqwest-retry",
+        "astral-tokio-tar",
+        "astral-version-ranges",
+        "astral_async_http_range_reader",
+        "astral_async_zip",
+        "tar-codec",
+        "tar-framing",
+      ],
+      minimumReleaseAge: null,
+    },
+    {
+      matchManagers: ["cargo"],
+      matchDatasources: ["crate"],
+      matchPackageNames: ["http-body-util"],
+      // Candidate releases have `version`; the resulting update has `newVersion`.
+      matchJsonata: ["(newVersion ? newVersion : version) = '0.1.5'"],
+      minimumReleaseAge: null,
     },
     {
       // Codex Action publishes two-component tags instead of full SemVer tags.

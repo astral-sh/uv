@@ -231,8 +231,9 @@ uv run --script scripts/check_cargo_cooldowns.py
 ```
 
 Reviewed exceptions belong in `.github/cargo-cooldowns.toml`. Each exclusion requires an exact crate
-name and a reason; specify `version` to exempt only one release. CI fails if it cannot determine a
-package's publication time. When a cooldown expires, re-run CI to check the update again.
+name and a reason; specify `version` to exempt only one release. Keep the Cargo rules in
+`.github/renovate.json5` in sync. CI fails if it cannot determine a package's publication time. When
+a cooldown expires, re-run CI to check the update again.
 
 ## Crate structure
 
