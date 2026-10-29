@@ -15200,7 +15200,7 @@ async fn tool_uv_sources_signed_url() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + ok==1.0.0 (from http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl?X-Amz-Credential=****&X-Amz-Signature=****)
+     + ok==1.0.0 (from http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl?X-Amz-Credential=****&X-Amz-Signature=****&X-Goog-Credential=****&X-Goog-Signature=****)
     ");
 
     Ok(())
