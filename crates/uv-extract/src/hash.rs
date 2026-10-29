@@ -78,7 +78,8 @@ where
 
     /// Exhaust the underlying reader.
     pub async fn finish(&mut self) -> Result<(), std::io::Error> {
-        while self.read(&mut vec![0; 8192]).await? > 0 {}
+        let mut buffer = vec![0; 8192];
+        while self.read(&mut buffer).await? > 0 {}
 
         Ok(())
     }
