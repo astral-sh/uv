@@ -220,10 +220,10 @@ CARGO_BUILD_WARNINGS=deny uv run --only-dev cargo xwin clippy --workspace --all-
 
 ## Rust dependency updates
 
-New registry versions in any `Cargo.lock` must be at least seven days old before CI can build them.
-This includes transitive dependencies and manual updates. CI compares the pull request's merge
-commit with its base, so unchanged versions do not need another registry lookup. Git and workspace
-dependencies are not subject to the registry publication cooldown.
+CI requires new registry versions in any `Cargo.lock` to be at least seven days old. This includes
+transitive dependencies and manual updates. CI compares the pull request's merge commit with its
+base, so unchanged versions do not need another registry lookup. Git and workspace dependencies are
+not subject to the registry publication cooldown.
 
 To check a dependency update locally:
 

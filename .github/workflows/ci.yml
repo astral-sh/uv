@@ -17,41 +17,7 @@ env:
   UV_LOCKED: 1
 
 jobs:
-  check-cargo-cooldowns:
-    name: "Cargo dependency cooldowns"
-    if: ${{ github.repository != 'astral-sh/uv-security' || github.ref != 'refs/heads/main' }}
-    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-2' || 'ubuntu-latest' }}
-    timeout-minutes: 15
-    env:
-      UV_PYTHON_DOWNLOADS_JSON_URL: ${{ github.workspace }}/crates/uv-python-managed/download-metadata.json
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: ${{ github.event_name == 'pull_request' && 2 || 0 }}
-          persist-credentials: false
-      - name: "Install uv"
-        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
-        with:
-          # renovate: datasource=github-release-attachments depName=astral-sh/uv
-          version: "0.13.5"
-          checksum: "f68d291c75783122dad58ab77def0e13f3233f358731db5d6d7e8715603b928f"
-      - name: "Test Cargo cooldown check"
-        run: uv run --script scripts/test_cargo_cooldowns.py
-      - name: "Check Cargo dependency cooldowns"
-        env:
-          PUSH_BEFORE_SHA: ${{ github.event.before }}
-        run: |
-          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
-            base=HEAD^1
-          elif [ "$GITHUB_EVENT_NAME" = "push" ]; then
-            base="$PUSH_BEFORE_SHA"
-          else
-            base="$(git merge-base origin/main HEAD)"
-          fi
-          uv run --script scripts/check_cargo_cooldowns.py "$base" HEAD
-
   detect-vet-workspaces:
-    needs: check-cargo-cooldowns
     # CI on main is redundant in the security repository.
     if: ${{ github.repository != 'astral-sh/uv-security' || github.ref != 'refs/heads/main' }}
     runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-2' || 'ubuntu-latest' }}
@@ -179,6 +145,39 @@ jobs:
     permissions:
       contents: read
       id-token: write
+
+  check-cargo-cooldowns:
+    name: "Cargo dependency cooldowns"
+    needs: plan
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-2' || 'ubuntu-latest' }}
+    timeout-minutes: 15
+    env:
+      UV_PYTHON_DOWNLOADS_JSON_URL: ${{ github.workspace }}/crates/uv-python-managed/download-metadata.json
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: ${{ github.event_name == 'pull_request' && 2 || 0 }}
+          persist-credentials: false
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          # renovate: datasource=github-release-attachments depName=astral-sh/uv
+          version: "0.13.5"
+          checksum: "f68d291c75783122dad58ab77def0e13f3233f358731db5d6d7e8715603b928f"
+      - name: "Test Cargo cooldown check"
+        run: uv run --script scripts/test_cargo_cooldowns.py
+      - name: "Check Cargo dependency cooldowns"
+        env:
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            base=HEAD^1
+          elif [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            base="$PUSH_BEFORE_SHA"
+          else
+            base="$(git merge-base origin/main HEAD)"
+          fi
+          uv run --script scripts/check_cargo_cooldowns.py "$base" HEAD
 
   check-cargo-lock-changes:
     name: "Cargo lockfile changes"
