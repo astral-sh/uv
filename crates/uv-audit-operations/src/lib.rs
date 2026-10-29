@@ -105,20 +105,17 @@ pub async fn audit_lock(
         .into_iter()
         .filter(|finding| match finding {
             Finding::Vulnerability(vulnerability) => {
-                if let Some(id) = ignore.iter().find(|id| vulnerability.matches(id)) {
-                    matched_ignores.insert(id.clone());
-                    return false;
-                }
-                if let Some(id) = ignore_until_fixed
-                    .iter()
-                    .find(|id| vulnerability.matches(id))
-                {
-                    matched_ignores.insert(id.clone());
-                    if vulnerability.fix_versions.is_empty() {
-                        return false;
+                let mut ignored = false;
+                for (rules, suppress_if_matched) in [
+                    (ignore, true),
+                    (ignore_until_fixed, vulnerability.fix_versions.is_empty()),
+                ] {
+                    for id in rules.iter().filter(|id| vulnerability.matches(id)) {
+                        matched_ignores.insert(id.clone());
+                        ignored |= suppress_if_matched;
                     }
                 }
-                true
+                !ignored
             }
             Finding::ProjectStatus(_) => true,
         })

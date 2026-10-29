@@ -643,6 +643,24 @@ async fn audit_duplicate_vulnerability_aliases() -> Result<()> {
     Found 1 known vulnerability and no adverse project statuses in 1 package
     ");
 
+    // Both primary IDs match the grouped finding.
+    uv_snapshot!(context.filters(), context
+        .audit()
+        .arg("--preview-features")
+        .arg("audit")
+        .arg("--no-build")
+        .arg("--service-url")
+        .arg(server.uri())
+        .arg("--ignore")
+        .arg("PYSEC-2026-4320")
+        .arg("--ignore")
+        .arg("GHSA-6q48-6c7w-9gw2"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Found no known vulnerabilities and no adverse project statuses in 1 package
+    ");
+
     Ok(())
 }
 
@@ -1826,6 +1844,7 @@ async fn audit_ignore_mixed_matched_unmatched() {
             "id": "PYSEC-2023-0001",
             "modified": "2026-01-01T00:00:00Z",
             "summary": "A test vulnerability in iniconfig",
+            "aliases": ["GHSA-abcd-efgh-ijkl", "CVE-2023-9999"],
             "affected": [{
                 "package": {
                     "ecosystem": "PyPI",
@@ -1843,8 +1862,7 @@ async fn audit_ignore_mixed_matched_unmatched() {
         .mount(&server)
         .await;
 
-    // Ignore one real and one non-existent vulnerability: the real one is suppressed,
-    // and the non-existent one triggers a warning.
+    // The unconditional ignore suppresses the finding. Both conditional aliases still match.
     uv_snapshot!(context.filters(), context
         .audit()
         .arg("--preview-features")
@@ -1853,6 +1871,10 @@ async fn audit_ignore_mixed_matched_unmatched() {
         .arg("PYSEC-2023-0001")
         .arg("--ignore")
         .arg("CVE-DOES-NOT-EXIST")
+        .arg("--ignore-until-fixed")
+        .arg("GHSA-abcd-efgh-ijkl")
+        .arg("--ignore-until-fixed")
+        .arg("CVE-2023-9999")
         .arg("--service-url")
         .arg(server.uri()), @"
     exit_code: 0 (success)
