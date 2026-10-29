@@ -146,6 +146,49 @@ jobs:
       contents: read
       id-token: write
 
+  check-cargo-cooldowns:
+    name: "Cargo dependency cooldowns"
+    needs: plan
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-2' || 'ubuntu-latest' }}
+    timeout-minutes: 15
+    permissions:
+      actions: read # Download publication times from a successful main run.
+      contents: read
+    env:
+      UV_PYTHON_DOWNLOADS_JSON_URL: ${{ github.workspace }}/crates/uv-python-managed/download-metadata.json
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          # renovate: datasource=github-release-attachments depName=astral-sh/uv
+          version: "0.13.5"
+          checksum: "f68d291c75783122dad58ab77def0e13f3233f358731db5d6d7e8715603b928f"
+      - name: "Restore crate publication times from main"
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/cargo-cooldowns"
+          if run_id=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml \
+            --branch main --event push --status success --limit 1 \
+            --json databaseId --jq '.[0].databaseId // empty') && [[ -n "$run_id" ]]; then
+            gh run download "$run_id" --repo "$GITHUB_REPOSITORY" --name cargo-publication-times --dir "$RUNNER_TEMP/cargo-cooldowns" ||
+              echo "No publication times available from main run $run_id; checking crates.io."
+          fi
+      - name: "Check Cargo dependency cooldowns"
+        run: uv run --script scripts/check_cargo_cooldowns.py --cache "$RUNNER_TEMP/cargo-cooldowns/cargo-publication-times.json"
+      - name: "Store crate publication times"
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: cargo-publication-times
+          path: ${{ runner.temp }}/cargo-cooldowns/cargo-publication-times.json
+          retention-days: 7
+          overwrite: true
+
   check-cargo-lock-changes:
     name: "Cargo lockfile changes"
     if: >-
@@ -403,6 +446,7 @@ jobs:
     if: ${{ always() && github.ref != 'refs/heads/main' }}
     needs:
       - plan
+      - check-cargo-cooldowns
       - check-cargo-lock-changes
       - check-vet
       - check-fmt
@@ -426,7 +470,7 @@ jobs:
             echo "$NEEDS_JSON" | jq -r --argjson conditional_jobs "$CONDITIONAL_JOBS" '
               to_entries[]
               | select($conditional_jobs[.key] != false)
-              | select(.value.result != "success" and (.value.result != "skipped" or .key == "check-vet"))
+              | select(.value.result != "success" and (.value.result != "skipped" or .key == "check-vet" or .key == "check-cargo-cooldowns"))
               | "\(.key): \(.value.result)"
             '
           )
