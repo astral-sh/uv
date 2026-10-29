@@ -381,14 +381,30 @@ impl RequirementsSpecification {
                     Self::from_pep723_metadata(&metadata)
                 } else {
                     // If it's not a PEP 723 script, assume it's a `requirements.txt` file.
-                    let requirements_txt = RequirementsTxt::parse_str(
+                    let requirements_txt = match RequirementsTxt::parse_str(
                         &content,
                         input.clone(),
                         &*CWD,
                         client_builder,
                         cache,
                     )
-                    .await?;
+                    .await
+                    {
+                        Ok(reqs) => reqs,
+                        Err(err) => {
+                            let input_str = format!("{}", input.user_display());
+                            if std::path::Path::new(&input_str)
+                                .extension()
+                                .is_some_and(|ext| ext.eq_ignore_ascii_case("lock"))
+                            {
+                                return Err(anyhow::anyhow!(
+                                    "The file `{}` appears to be a lockfile, but lockfiles are not valid requirements inputs. Did you mean to run `uv pip install`?",
+                                    input.user_display()
+                                ));
+                            }
+                            return Err(err.into());
+                        }
+                    };
 
                     if requirements_txt == RequirementsTxt::default() {
                         match input {
