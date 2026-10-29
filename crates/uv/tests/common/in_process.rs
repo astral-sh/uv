@@ -12,7 +12,6 @@ pub(super) fn with_runtime(test: fn(&Runtime) -> Result<()>) -> Result<()> {
     std::thread::Builder::new()
         .stack_size(uv_threads::min_stack_size())
         .spawn(move || {
-            let _preview = uv_preview::test::with_features(&[]);
             let runtime = tokio::runtime::Builder::new_current_thread()
                 .enable_all()
                 .build()?;
@@ -38,6 +37,7 @@ pub(super) fn run(
     arguments: impl IntoIterator<Item = impl AsRef<OsStr>>,
     environment: EnvironmentOptions,
 ) -> Result<String> {
+    let _preview = uv_preview::test::with_features(&[]);
     let mut matches = fixture_arguments(uv_cli::Cli::command()).try_get_matches_from(
         ["uv", "--no-config", "--no-python-downloads", "--cache-dir"]
             .map(OsString::from)
