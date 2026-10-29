@@ -59,6 +59,14 @@ impl HuggingFaceProvider {
     }
 }
 
+/// Cloud storage endpoints supplied by trusted configuration files.
+#[derive(Debug, Default, Clone)]
+pub struct CloudEndpoints {
+    pub s3: Option<SafeUrl>,
+    pub gcs: Option<SafeUrl>,
+    pub azure: Option<SafeUrl>,
+}
+
 /// The [`SafeUrl`] for the S3 endpoint, if set.
 static S3_ENDPOINT_URL: LazyLock<Result<Option<SafeUrl>, ParseError>> =
     LazyLock::new(|| endpoint_url(EnvVars::UV_S3_ENDPOINT_URL));
@@ -69,11 +77,17 @@ pub(crate) struct S3EndpointProvider;
 
 impl S3EndpointProvider {
     /// Returns `true` if the URL matches the configured S3 endpoint.
-    pub(crate) fn is_s3_endpoint(url: &SafeUrl, preview: Preview) -> Result<bool> {
+    pub(crate) fn is_s3_endpoint(
+        url: &SafeUrl,
+        configured: Option<&SafeUrl>,
+        preview: Preview,
+    ) -> Result<bool> {
         if let Some(s3_endpoint_url) = S3_ENDPOINT_URL
             .as_ref()
             .map_err(|error| *error)
             .with_context(|| format!("Invalid `{}`", EnvVars::UV_S3_ENDPOINT_URL))?
+            .as_ref()
+            .or(configured)
         {
             if !preview.is_enabled(PreviewFeature::S3Endpoint) {
                 warn_user_once!(
@@ -119,11 +133,17 @@ pub(crate) struct GcsEndpointProvider;
 
 impl GcsEndpointProvider {
     /// Returns `true` if the URL matches the configured GCS endpoint.
-    pub(crate) fn is_gcs_endpoint(url: &SafeUrl, preview: Preview) -> Result<bool> {
+    pub(crate) fn is_gcs_endpoint(
+        url: &SafeUrl,
+        configured: Option<&SafeUrl>,
+        preview: Preview,
+    ) -> Result<bool> {
         if let Some(gcs_endpoint_url) = GCS_ENDPOINT_URL
             .as_ref()
             .map_err(|error| *error)
             .with_context(|| format!("Invalid `{}`", EnvVars::UV_GCS_ENDPOINT_URL))?
+            .as_ref()
+            .or(configured)
         {
             if !preview.is_enabled(PreviewFeature::GcsEndpoint) {
                 warn_user_once!(
@@ -160,11 +180,17 @@ pub struct AzureEndpointProvider;
 
 impl AzureEndpointProvider {
     /// Returns `true` if the URL matches the configured Azure endpoint.
-    pub fn is_azure_endpoint(url: &SafeUrl, preview: Preview) -> Result<bool> {
+    pub fn is_azure_endpoint(
+        url: &SafeUrl,
+        configured: Option<&SafeUrl>,
+        preview: Preview,
+    ) -> Result<bool> {
         if let Some(azure_endpoint_url) = AZURE_ENDPOINT_URL
             .as_ref()
             .map_err(|error| *error)
             .with_context(|| format!("Invalid `{}`", EnvVars::UV_AZURE_ENDPOINT_URL))?
+            .as_ref()
+            .or(configured)
         {
             if !preview.is_enabled(PreviewFeature::AzureEndpoint) {
                 warn_user_once!(

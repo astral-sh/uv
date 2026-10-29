@@ -19,8 +19,8 @@ use tracing::{debug, warn};
 use url::ParseError;
 
 use uv_auth::{
-    AuthMiddleware, Credentials, CredentialsCache, CredentialsFromUrlError, CredentialsPrompt,
-    Indexes, RealmRef,
+    AuthMiddleware, CloudEndpoints, Credentials, CredentialsCache, CredentialsFromUrlError,
+    CredentialsPrompt, Indexes, RealmRef,
 };
 use uv_configuration::ProxyUrlKind;
 use uv_configuration::{Concurrency, KeyringProviderType, ProxyUrl, TrustedHost};
@@ -100,6 +100,7 @@ pub enum AuthIntegration {
 #[derive(Debug, Clone)]
 pub struct BaseClientBuilder<'a> {
     keyring: KeyringProviderType,
+    endpoints: CloudEndpoints,
     preview: Preview,
     allow_insecure_host: Vec<TrustedHost>,
     system_certs: bool,
@@ -213,6 +214,7 @@ impl Default for BaseClientBuilder<'_> {
     fn default() -> Self {
         Self {
             keyring: KeyringProviderType::default(),
+            endpoints: CloudEndpoints::default(),
             preview: Preview::default(),
             allow_insecure_host: vec![],
             system_certs: false,
@@ -264,6 +266,12 @@ impl<'a> BaseClientBuilder<'a> {
             connect_timeout,
             ..Self::default()
         }
+    }
+
+    #[must_use]
+    pub fn cloud_endpoints(mut self, endpoints: CloudEndpoints) -> Self {
+        self.endpoints = endpoints;
+        self
     }
 
     /// Use a custom reqwest client instead of creating a new one.
@@ -702,6 +710,7 @@ impl<'a> BaseClientBuilder<'a> {
                 }
 
                 client = client.with(AzureStorageMiddleware {
+                    endpoint: self.endpoints.azure.clone(),
                     preview: self.preview,
                 });
 
@@ -713,6 +722,7 @@ impl<'a> BaseClientBuilder<'a> {
                             .with_indexes(self.indexes.clone())
                             .with_keyring(self.keyring.to_provider())
                             .with_credentials_prompt(self.credentials_prompt.clone())
+                            .with_cloud_endpoints(self.endpoints.clone())
                             .with_preview(self.preview);
                         client = client.with(auth_middleware);
                     }
@@ -722,6 +732,7 @@ impl<'a> BaseClientBuilder<'a> {
                             .with_indexes(self.indexes.clone())
                             .with_keyring(self.keyring.to_provider())
                             .with_credentials_prompt(self.credentials_prompt.clone())
+                            .with_cloud_endpoints(self.endpoints.clone())
                             .with_preview(self.preview)
                             .with_only_authenticated(true);
                         client = client.with(auth_middleware);

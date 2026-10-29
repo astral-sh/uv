@@ -20,7 +20,7 @@ use insta::{allow_duplicates, assert_snapshot};
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use tokio_stream::wrappers::ReceiverStream;
-use wiremock::matchers::{any, method};
+use wiremock::matchers::{any, header, method};
 use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
 #[cfg(feature = "test-pypi")]
@@ -833,6 +833,32 @@ fn proxy_url_without_host() -> Result<()> {
              invalid proxy URL: empty host
     "#);
 
+    Ok(())
+}
+
+/// Azure needs a storage API version even on the initial anonymous request.
+#[tokio::test]
+async fn azure_endpoint_from_config_file() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = MockServer::start().await;
+    Mock::given(header("x-ms-version", "2020-10-02"))
+        .respond_with(ResponseTemplate::new(418))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let config = context.temp_dir.child("uv.toml");
+    config.write_str(&format!(r#"azure-endpoint-url = "{}""#, server.uri()))?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--config-file").arg(config.path())
+        .arg("--preview-features").arg("azure-endpoint")
+        .arg("--default-index").arg(server.uri())
+        .arg("iniconfig"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to fetch: http://[LOCALHOST]/iniconfig/
+      cause: HTTP status client error (418 I'm a teapot) for url (http://[LOCALHOST]/iniconfig/)
+    ");
     Ok(())
 }
 

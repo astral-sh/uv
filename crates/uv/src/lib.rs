@@ -77,6 +77,7 @@ fn base_client_builder<'a>(globals: &GlobalSettings) -> BaseClientBuilder<'a> {
         globals.network_settings.connect_timeout,
         globals.network_settings.retries,
     )
+    .cloud_endpoints(globals.network_settings.cloud_endpoints.clone())
     .metadata_range_request(globals.network_settings.metadata_range_request)
     .cache_read_concurrency(globals.concurrency.cache_reads)
     .http_proxy(globals.network_settings.http_proxy.clone())
@@ -487,7 +488,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
         .and_then(|metadata| metadata.tool.as_ref())
         .and_then(|tool| tool.uv.as_ref())
         .map(|uv| Options::simple(uv.globals.clone(), uv.top_level.clone()))
-        .map(FilesystemOptions::from);
+        .map(FilesystemOptions::from_project);
     let script_filesystem = if let Some(Pep723Item::Script(script)) = script.as_ref() {
         let script_dir = script.path.parent().expect("script path has no parent");
         script_filesystem

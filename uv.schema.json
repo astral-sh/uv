@@ -32,6 +32,17 @@
         }
       ]
     },
+    "azure-endpoint-url": {
+      "description": "The Azure Storage endpoint to authenticate requests to.\n\nSet this in a user or system `uv.toml`, or a file passed to `--config-file`.\n`UV_AZURE_ENDPOINT_URL` takes precedence.",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/SafeUrl"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "build-backend": {
       "description": "Configuration for the uv build backend.\n\nNote that those settings only apply when using the `uv_build` backend, other build backends\n(such as hatchling) have their own configuration.",
       "anyOf": [
@@ -247,6 +258,17 @@
       "anyOf": [
         {
           "$ref": "#/definitions/ForkStrategy"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "gcs-endpoint-url": {
+      "description": "The Google Cloud Storage endpoint to authenticate requests to.\n\nSet this in a user or system `uv.toml`, or a file passed to `--config-file`.\n`UV_GCS_ENDPOINT_URL` takes precedence.",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/SafeUrl"
         },
         {
           "type": "null"
@@ -560,6 +582,17 @@
       "anyOf": [
         {
           "$ref": "#/definitions/ResolutionMode"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "s3-endpoint-url": {
+      "description": "The Amazon S3 endpoint to authenticate requests to.\n\nSet this in a user or system `uv.toml`, or a file passed to `--config-file`.\n`UV_S3_ENDPOINT_URL` takes precedence.",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/SafeUrl"
         },
         {
           "type": "null"
