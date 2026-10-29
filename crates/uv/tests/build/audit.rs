@@ -531,6 +531,128 @@ async fn audit_best_id_selection() {
     ");
 }
 
+/// OSV can return separate records for the same vulnerability with conflicting fix versions.
+#[tokio::test]
+async fn audit_duplicate_vulnerability_aliases() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-01T00:00:00Z");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.10"
+        dependencies = ["certifi==2024.12.14"]
+    "#})?;
+
+    let server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": [{"vulns": [
+                {"id": "PYSEC-2026-4320"},
+                {"id": "GHSA-6q48-6c7w-9gw2"}
+            ]}]
+        })))
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/v1/vulns/PYSEC-2026-4320"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "id": "PYSEC-2026-4320",
+            "modified": "2026-10-19T00:00:00Z",
+            "summary": "certifi bundles emSign root CAs with compromised intermediate CA keys",
+            "aliases": ["GHSA-6q48-6c7w-9gw2"],
+            "affected": [{
+                "package": {
+                    "ecosystem": "PyPI",
+                    "name": "certifi"
+                },
+                "ranges": [{
+                    "type": "ECOSYSTEM",
+                    "events": [
+                        {"introduced": "0"},
+                        {"fixed": "2026.10.18"}
+                    ]
+                }]
+            }],
+            "references": [{
+                "type": "ADVISORY",
+                "url": "https://github.com/certifi/python-certifi/security/advisories/GHSA-6q48-6c7w-9gw2"
+            }]
+        })))
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/v1/vulns/GHSA-6q48-6c7w-9gw2"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "id": "GHSA-6q48-6c7w-9gw2",
+            "modified": "2026-10-19T00:00:00Z",
+            "summary": "certifi bundles emSign root CAs with compromised intermediate CA keys",
+            "aliases": ["PYSEC-2026-4320"],
+            "affected": [{
+                "package": {
+                    "ecosystem": "PyPI",
+                    "name": "certifi"
+                },
+                "ranges": [{
+                    "type": "ECOSYSTEM",
+                    "events": [
+                        {"introduced": "0"},
+                        {"fixed": "2026.10.19"}
+                    ]
+                }]
+            }],
+            "references": [{
+                "type": "ADVISORY",
+                "url": "https://github.com/advisories/GHSA-6q48-6c7w-9gw2"
+            }]
+        })))
+        .mount(&server)
+        .await;
+
+    // These aliases identify one vulnerability, so reporting and counting both is misleading.
+    // The conflicting fix versions come from OSV; see astral-sh/uv#22985.
+    uv_snapshot!(context.filters(), context
+        .audit()
+        .arg("--preview-features")
+        .arg("audit")
+        .arg("--no-build")
+        .arg("--service-url")
+        .arg(server.uri()), @"
+    exit_code: 1 (failure)
+    ----- stdout -----
+
+    Vulnerabilities:
+
+    certifi 2024.12.14 has 2 known vulnerabilities:
+
+    - PYSEC-2026-4320: certifi bundles emSign root CAs with compromised intermediate CA keys
+
+      Fixed in: 2026.10.18
+
+      Advisory information: https://github.com/certifi/python-certifi/security/advisories/GHSA-6q48-6c7w-9gw2
+
+    - PYSEC-2026-4320: certifi bundles emSign root CAs with compromised intermediate CA keys
+
+      Fixed in: 2026.10.19
+
+      Advisory information: https://github.com/advisories/GHSA-6q48-6c7w-9gw2
+
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Found 2 known vulnerabilities and no adverse project statuses in 1 package
+    ");
+
+    Ok(())
+}
+
 /// A vulnerability without fix versions shows "No fix versions available".
 #[tokio::test]
 async fn audit_no_fix_versions() {
