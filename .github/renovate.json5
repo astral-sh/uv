@@ -9,8 +9,6 @@
   schedule: ["* 0-3 * * 1"],
   enabledManagers: ["github-actions", "cargo", "custom.regex"],
   cargo: {
-    // Override the shared 30-day default for Cargo updates.
-    minimumReleaseAge: "7 days",
     managerFilePatterns: ["/^Cargo\\.toml$/", "/^crates/.*Cargo\\.toml$/"],
   },
   packageRules: [

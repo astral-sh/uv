@@ -218,22 +218,6 @@ rustup target add x86_64-pc-windows-msvc
 CARGO_BUILD_WARNINGS=deny uv run --only-dev cargo xwin clippy --workspace --all-targets --all-features --locked
 ```
 
-## Rust dependency updates
-
-CI requires every registry version in every tracked `Cargo.lock` to be at least seven days old. This
-includes transitive dependencies and manual updates. Git and workspace dependencies are not subject
-to the registry publication cooldown.
-
-To check a dependency update locally:
-
-```shell
-uv run --script scripts/check_cargo_cooldowns.py
-```
-
-Reviewed exceptions belong in `.github/cargo-cooldowns.toml`. Each exclusion requires an exact crate
-name and a reason; specify `version` to exempt only one release. CI fails if it cannot determine a
-package's publication time. When a cooldown expires, re-run CI to check the update again.
-
 ## Crate structure
 
 Rust does not allow circular dependencies between crates. To visualize the crate hierarchy, install
