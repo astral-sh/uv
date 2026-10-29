@@ -7998,6 +7998,7 @@ dependencies = [
  "uv-python-managed",
  "uv-python-types",
  "uv-redacted",
+ "uv-state",
  "uv-static",
  "uv-version",
  "uv-virtualenv",

@@ -25,13 +25,11 @@ use std::{env, io};
 use uv_python_managed::downloads::ManagedPythonDownloadList;
 
 use assert_cmd::assert::{Assert, OutputAssertExt};
-use assert_fs::assert::PathAssert;
 use assert_fs::fixture::{ChildPath, FileWriteStr, PathChild, PathCreateDir, SymlinkToFile};
 use base64::{Engine, prelude::BASE64_STANDARD as base64};
 use futures::StreamExt;
 use indoc::{formatdoc, indoc};
 use itertools::Itertools;
-use predicates::prelude::predicate;
 use regex::{Regex, regex};
 use tokio::io::AsyncWriteExt;
 use walkdir::WalkDir;
@@ -40,7 +38,9 @@ use uv_cache::{Cache, CacheBucket};
 use uv_fs::Simplified;
 use uv_python_discovery::PythonInstallation;
 use uv_python_interpreter::Interpreter;
+use uv_python_managed::ManagedPythonInstallations;
 use uv_python_types::{EnvironmentPreference, PythonPreference, PythonRequest, PythonVersion};
+use uv_state::{StateBucket, StateStore};
 use uv_static::EnvVars;
 
 // Shared test timestamp for deterministic package availability and relative times.
@@ -2032,11 +2032,43 @@ impl TestContext {
             .expect("A Python version must be provided to create a test virtual environment");
         let cache = Cache::from_path(self.cache_dir.path())
             .init_no_wait()
-            .expect("Failed to initialize the test cache")
-            .expect("No cache contention when creating a test virtual environment");
+            .expect("Failed to initialize the test cache");
+        // A reset can encounter a centralized environment reference or a cache being cleaned.
+        // Let the command handle the reference or wait for the cache lock in those cases.
+        let Some(cache) = cache.filter(|_| {
+            !self
+                .venv
+                .symlink_metadata()
+                .is_ok_and(|entry| !entry.is_dir())
+        }) else {
+            self.new_command()
+                .arg("venv")
+                .arg(self.venv.path())
+                .arg("--clear")
+                .arg("--cache-dir")
+                .arg(self.cache_dir.path())
+                .arg("--python")
+                .arg(executable)
+                .current_dir(self.venv.parent().unwrap())
+                .assert()
+                .success();
+            return;
+        };
         let interpreter = Interpreter::query(executable, &cache)
             .expect("Failed to query the test Python interpreter");
 
+        // The fixture command clears UV_PYTHON_INSTALL_DIR. Only interpreters in the default
+        // managed directory can use its minor-version link for automatic patch upgrades.
+        let managed_dir = StateStore::from_settings(None)
+            .expect("Failed to resolve the managed Python directory")
+            .bucket(StateBucket::ManagedPython);
+        let installations = ManagedPythonInstallations::from_settings(Some(managed_dir))
+            .expect("Failed to locate managed Python installations");
+        let upgrade = if installations.contains(&interpreter) {
+            uv_virtualenv::UpgradePolicy::Patch
+        } else {
+            uv_virtualenv::UpgradePolicy::Fixed
+        };
         uv_virtualenv::create_venv(
             self.venv.path(),
             interpreter,
@@ -2047,7 +2079,7 @@ impl TestContext {
             )),
             false,
             uv_virtualenv::Seed::Disabled,
-            uv_virtualenv::UpgradePolicy::Patch,
+            upgrade,
         )
         .expect("Failed to create the test virtual environment");
     }

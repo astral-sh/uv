@@ -137,7 +137,7 @@ pub fn run(
     run_command(cli, global_initialization, None)
 }
 
-/// Run an export or pip install with the caller’s directory and environment settings.
+/// Run an export, pip install, or venv with the caller’s directory and environment settings.
 #[doc(hidden)]
 pub async fn run_in_project(
     cli: Cli,
@@ -152,9 +152,16 @@ pub async fn run_in_project(
                     command: PipCommand::Install(_),
                     ..
                 })
-            ),
-        "expected an export or pip install command"
+            )
+            || matches!(&*cli.command, Commands::Venv(_)),
+        "expected an export, pip install, or venv command"
     );
+    if let Commands::Venv(args) = &*cli.command {
+        anyhow::ensure!(
+            args.path.as_deref().is_some_and(Path::is_absolute),
+            "in-process venv requires an absolute destination"
+        );
+    }
     anyhow::ensure!(
         project_dir.is_absolute() && cli.top_level.global_args.directory.is_none(),
         "expected an absolute project directory and no process-wide --directory"
