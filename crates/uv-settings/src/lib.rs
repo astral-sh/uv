@@ -17,7 +17,7 @@ use uv_fs::Simplified;
 use uv_normalize::{GroupName, PackageName};
 use uv_pep440::Version;
 use uv_python_types::PythonArchitecture;
-use uv_redacted::SafeUrl;
+use uv_redacted::{SafeUrl, SafeUrlError};
 use uv_static::{EnvVars, InvalidEnvironmentVariable, parse_boolish_environment_variable};
 use uv_torch::AmdGpuArchitecture;
 use uv_warnings::warn_user;
@@ -725,6 +725,9 @@ pub enum Error {
         package_version: Version,
     },
 
+    #[error("Invalid `{0}`")]
+    InvalidEndpointUrl(&'static str, #[source] SafeUrlError),
+
     #[error(transparent)]
     InvalidEnvironmentVariable(#[from] InvalidEnvironmentVariable),
 }
@@ -777,6 +780,9 @@ pub struct EnvironmentOptions {
     pub lfs: Option<bool>,
     pub cuda_driver_version: Option<Version>,
     pub amd_gpu_architecture: Option<AmdGpuArchitecture>,
+    pub s3_endpoint_url: Option<SafeUrl>,
+    pub gcs_endpoint_url: Option<SafeUrl>,
+    pub azure_endpoint_url: Option<SafeUrl>,
     pub http_connect_timeout: Duration,
     pub http_read_timeout: Duration,
     /// There's no upload timeout in reqwest, instead we have to use a read timeout as upload
@@ -935,6 +941,11 @@ impl EnvironmentOptions {
             )?
             .map(Duration::from_secs)
             .unwrap_or(DEFAULT_CONNECT_TIMEOUT),
+            s3_endpoint_url: parse_endpoint_environment_variable(EnvVars::UV_S3_ENDPOINT_URL)?,
+            gcs_endpoint_url: parse_endpoint_environment_variable(EnvVars::UV_GCS_ENDPOINT_URL)?,
+            azure_endpoint_url: parse_endpoint_environment_variable(
+                EnvVars::UV_AZURE_ENDPOINT_URL,
+            )?,
             http_retries: parse_integer_environment_variable(EnvVars::UV_HTTP_RETRIES, None)?
                 .unwrap_or(uv_client::DEFAULT_RETRIES),
             #[cfg(feature = "tracing-durations-export")]
@@ -1013,6 +1024,15 @@ impl EnvironmentOptions {
             )?,
         })
     }
+}
+
+/// Parse a cloud endpoint without including potentially sensitive URL contents in errors.
+fn parse_endpoint_environment_variable(name: &'static str) -> Result<Option<SafeUrl>, Error> {
+    std::env::var(name)
+        .ok()
+        .map(|value| SafeUrl::parse_relaxed(&value))
+        .transpose()
+        .map_err(|err| Error::InvalidEndpointUrl(name, err.into()))
 }
 
 /// Parse a string environment variable.

@@ -1,12 +1,10 @@
 use std::borrow::Cow;
 use std::sync::LazyLock;
 
-use anyhow::{Context, Result};
 use reqsign::aws::DefaultSigner as AwsDefaultSigner;
 use reqsign::azure::DefaultSigner as AzureDefaultSigner;
 use reqsign::google::DefaultSigner as GcsDefaultSigner;
 use tracing::debug;
-use url::ParseError;
 
 use uv_preview::{Preview, PreviewFeature};
 use uv_redacted::SafeUrl;
@@ -59,17 +57,13 @@ impl HuggingFaceProvider {
     }
 }
 
-/// Cloud storage endpoints supplied by configuration files.
+/// The resolved cloud storage endpoints used for authentication.
 #[derive(Debug, Default, Clone)]
 pub struct CloudEndpoints {
     pub s3: Option<SafeUrl>,
     pub gcs: Option<SafeUrl>,
     pub azure: Option<SafeUrl>,
 }
-
-/// The [`SafeUrl`] for the S3 endpoint, if set.
-static S3_ENDPOINT_URL: LazyLock<Result<Option<SafeUrl>, ParseError>> =
-    LazyLock::new(|| endpoint_url(EnvVars::UV_S3_ENDPOINT_URL));
 
 /// A provider for authentication credentials for S3 endpoints.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -79,30 +73,10 @@ impl S3EndpointProvider {
     /// Returns `true` if the URL matches the configured S3 endpoint.
     pub(crate) fn is_s3_endpoint(
         url: &SafeUrl,
-        configured: Option<&SafeUrl>,
+        endpoint: Option<&SafeUrl>,
         preview: Preview,
-    ) -> Result<bool> {
-        if let Some(s3_endpoint_url) = S3_ENDPOINT_URL
-            .as_ref()
-            .map_err(|error| *error)
-            .with_context(|| format!("Invalid `{}`", EnvVars::UV_S3_ENDPOINT_URL))?
-            .as_ref()
-            .or(configured)
-        {
-            if !preview.is_enabled(PreviewFeature::S3Endpoint) {
-                warn_user_once!(
-                    "The `s3-endpoint` option is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
-                    PreviewFeature::S3Endpoint
-                );
-            }
-
-            // Treat any URL under the endpoint path on the same domain or subdomain as available
-            // for S3 signing.
-            if is_endpoint_url(url, s3_endpoint_url) {
-                return Ok(true);
-            }
-        }
-        Ok(false)
+    ) -> bool {
+        matches_endpoint(url, endpoint, preview, PreviewFeature::S3Endpoint)
     }
 
     /// Creates a new S3 signer with the configured region.
@@ -123,10 +97,6 @@ impl S3EndpointProvider {
     }
 }
 
-/// The [`SafeUrl`] for the GCS endpoint, if set.
-static GCS_ENDPOINT_URL: LazyLock<Result<Option<SafeUrl>, ParseError>> =
-    LazyLock::new(|| endpoint_url(EnvVars::UV_GCS_ENDPOINT_URL));
-
 /// A provider for authentication credentials for GCS endpoints.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct GcsEndpointProvider;
@@ -135,30 +105,10 @@ impl GcsEndpointProvider {
     /// Returns `true` if the URL matches the configured GCS endpoint.
     pub(crate) fn is_gcs_endpoint(
         url: &SafeUrl,
-        configured: Option<&SafeUrl>,
+        endpoint: Option<&SafeUrl>,
         preview: Preview,
-    ) -> Result<bool> {
-        if let Some(gcs_endpoint_url) = GCS_ENDPOINT_URL
-            .as_ref()
-            .map_err(|error| *error)
-            .with_context(|| format!("Invalid `{}`", EnvVars::UV_GCS_ENDPOINT_URL))?
-            .as_ref()
-            .or(configured)
-        {
-            if !preview.is_enabled(PreviewFeature::GcsEndpoint) {
-                warn_user_once!(
-                    "The `gcs-endpoint` option is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
-                    PreviewFeature::GcsEndpoint
-                );
-            }
-
-            // Treat any URL under the endpoint path on the same domain or subdomain as available
-            // for GCS signing.
-            if is_endpoint_url(url, gcs_endpoint_url) {
-                return Ok(true);
-            }
-        }
-        Ok(false)
+    ) -> bool {
+        matches_endpoint(url, endpoint, preview, PreviewFeature::GcsEndpoint)
     }
 
     /// Creates a new GCS signer.
@@ -170,42 +120,14 @@ impl GcsEndpointProvider {
     }
 }
 
-/// The [`SafeUrl`] for the Azure endpoint, if set.
-static AZURE_ENDPOINT_URL: LazyLock<Result<Option<SafeUrl>, ParseError>> =
-    LazyLock::new(|| endpoint_url(EnvVars::UV_AZURE_ENDPOINT_URL));
-
 /// A provider for authentication credentials for Azure endpoints.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AzureEndpointProvider;
 
 impl AzureEndpointProvider {
     /// Returns `true` if the URL matches the configured Azure endpoint.
-    pub fn is_azure_endpoint(
-        url: &SafeUrl,
-        configured: Option<&SafeUrl>,
-        preview: Preview,
-    ) -> Result<bool> {
-        if let Some(azure_endpoint_url) = AZURE_ENDPOINT_URL
-            .as_ref()
-            .map_err(|error| *error)
-            .with_context(|| format!("Invalid `{}`", EnvVars::UV_AZURE_ENDPOINT_URL))?
-            .as_ref()
-            .or(configured)
-        {
-            if !preview.is_enabled(PreviewFeature::AzureEndpoint) {
-                warn_user_once!(
-                    "The `azure-endpoint` option is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
-                    PreviewFeature::AzureEndpoint
-                );
-            }
-
-            // Treat any URL under the endpoint path on the same domain or subdomain as available
-            // for Azure signing.
-            if is_endpoint_url(url, azure_endpoint_url) {
-                return Ok(true);
-            }
-        }
-        Ok(false)
+    pub fn is_azure_endpoint(url: &SafeUrl, endpoint: Option<&SafeUrl>, preview: Preview) -> bool {
+        matches_endpoint(url, endpoint, preview, PreviewFeature::AzureEndpoint)
     }
 
     /// Creates a new Azure signer using the default Azure credential chain.
@@ -217,12 +139,21 @@ impl AzureEndpointProvider {
     }
 }
 
-/// Returns the configured endpoint [`SafeUrl`], if set and valid.
-fn endpoint_url(env_var: &str) -> Result<Option<SafeUrl>, ParseError> {
-    let Some(endpoint_url) = std::env::var(env_var).ok() else {
-        return Ok(None);
+fn matches_endpoint(
+    url: &SafeUrl,
+    endpoint: Option<&SafeUrl>,
+    preview: Preview,
+    feature: PreviewFeature,
+) -> bool {
+    let Some(endpoint) = endpoint else {
+        return false;
     };
-    SafeUrl::parse_relaxed(&endpoint_url).map(Some)
+    if !preview.is_enabled(feature) {
+        warn_user_once!(
+            "The `{feature}` option is experimental and may change without warning. Pass `--preview-features {feature}` to disable this warning."
+        );
+    }
+    is_endpoint_url(url, endpoint)
 }
 
 /// Returns `true` if `url` is within the configured S3, GCS, or Azure-compatible endpoint URL.

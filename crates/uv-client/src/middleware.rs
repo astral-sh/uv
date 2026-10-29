@@ -25,7 +25,7 @@ impl Middleware for AzureStorageMiddleware {
             SafeUrl::ref_cast(request.url()),
             self.endpoint.as_ref(),
             self.preview,
-        )? {
+        ) {
             // Anonymous requests need 2019-12-12 or later to return a 401
             // bearer challenge instead of 409 when account-level public access
             // is disabled. Use the earliest such version supported by Azure

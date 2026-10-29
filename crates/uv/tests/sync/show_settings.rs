@@ -3046,6 +3046,40 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Each environment variable overrides only its own provider's endpoint.
+#[test]
+fn cloud_endpoint_env_override() -> anyhow::Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]);
+    context
+        .temp_dir
+        .child("uv.toml")
+        .write_str(indoc::indoc! {r#"
+        s3-endpoint-url = "https://storage.example.com/s3"
+        gcs-endpoint-url = "https://storage.example.com/gcs"
+        azure-endpoint-url = "https://storage.example.com/azure"
+    "#})?;
+
+    let configured = capture_uv_snapshot!(
+        context.filters(),
+        context.command().args(["cache", "dir", "--show-settings"])
+    );
+    diff_uv_snapshot!(context.filters(), &configured, context.command()
+        .args(["cache", "dir", "--show-settings"])
+        .env(EnvVars::UV_GCS_ENDPOINT_URL, "https://storage.example.com/override"), @r#"
+    ...
+                             ),
+                         ),
+                         port: None,
+    -                    path: "/gcs",
+    +                    path: "/override",
+                         query: None,
+                         fragment: None,
+                     },
+    ...
+    "#);
+    Ok(())
+}
+
 /// Deserialize an insecure host.
 #[test]
 #[cfg_attr(

@@ -413,9 +413,15 @@ impl NetworkSettings {
             http_proxy,
             https_proxy,
             cloud_endpoints: CloudEndpoints {
-                s3: workspace.and_then(|workspace| workspace.globals.s3_endpoint_url.clone()),
-                gcs: workspace.and_then(|workspace| workspace.globals.gcs_endpoint_url.clone()),
-                azure: workspace.and_then(|workspace| workspace.globals.azure_endpoint_url.clone()),
+                s3: environment.s3_endpoint_url.clone().or_else(|| {
+                    workspace.and_then(|workspace| workspace.globals.s3_endpoint_url.clone())
+                }),
+                gcs: environment.gcs_endpoint_url.clone().or_else(|| {
+                    workspace.and_then(|workspace| workspace.globals.gcs_endpoint_url.clone())
+                }),
+                azure: environment.azure_endpoint_url.clone().or_else(|| {
+                    workspace.and_then(|workspace| workspace.globals.azure_endpoint_url.clone())
+                }),
             },
             no_proxy,
             allow_insecure_host,
