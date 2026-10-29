@@ -1,4 +1,3 @@
-# Keep the Cargo rules in `renovate.json5` in sync with this policy.
 cooldown-days = 7
 
 # Omit `version` to exempt every release of an exact crate name.
@@ -17,5 +16,4 @@ exclusions = [
   { name = "astral_async_zip", reason = "Maintained by Astral." },
   { name = "tar-codec", reason = "Maintained by Astral." },
   { name = "tar-framing", reason = "Maintained by Astral." },
-  { name = "http-body-util", version = "0.1.5", reason = "Reviewed release for the development environment." },
 ]
