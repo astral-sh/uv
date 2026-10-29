@@ -413,7 +413,7 @@ impl Osv {
             .flat_map(|(dep, vuln_ids)| {
                 let records = vuln_ids.iter().filter_map(|id| vuln_details.get(id));
                 Vulnerability::deduplicate(records)
-                    .map(move |record| Self::vulnerability_to_finding(dep, record))
+                    .map(move |record| Self::vulnerability_to_finding(dep, record, vuln_ids))
             })
             .collect();
 
@@ -465,6 +465,7 @@ impl Osv {
     fn vulnerability_to_finding(
         dependency: &types::Dependency,
         vuln: Vulnerability,
+        advisory_ids: &FxHashSet<VulnerabilityID>,
     ) -> types::Finding {
         // Extract a link for the advisory. We prefer the first
         // `ADVISORY` reference, then the first `WEB` reference, and then
@@ -520,18 +521,30 @@ impl Osv {
             })
             .collect();
 
-        // Extract aliases
-        let aliases = vuln
+        let mut id = VulnerabilityID::new(vuln.id);
+        let mut aliases: Vec<_> = vuln
             .aliases
             .unwrap_or_default()
             .into_iter()
-            .map(types::VulnerabilityID::new)
+            .map(VulnerabilityID::new)
             .collect();
+
+        // Use the smallest primary ID returned for this group so that its SARIF identity
+        // stays stable when a different advisory supplies the newest metadata.
+        if let Some(primary) = aliases
+            .iter_mut()
+            .filter(|id| advisory_ids.contains(*id))
+            .min()
+            && *primary < id
+        {
+            std::mem::swap(&mut id, primary);
+            aliases.sort_unstable();
+        }
 
         types::Finding::Vulnerability(
             types::Vulnerability::new(
                 dependency.clone(),
-                types::VulnerabilityID::new(vuln.id),
+                id,
                 vuln.summary,
                 vuln.details,
                 Some(link),

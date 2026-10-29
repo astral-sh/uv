@@ -2885,6 +2885,90 @@ async fn audit_sarif_vulnerability_and_project_status() -> Result<()> {
     Ok(())
 }
 
+/// Updating one of two aliased advisories changes the report metadata but keeps the same SARIF identity.
+#[tokio::test]
+async fn audit_sarif_alias_identity() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
+    write_audit_output_project(&context.temp_dir, &proxy.url("/simple"));
+
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": [{"vulns": [{"id": "PYSEC-1"}, {"id": "GHSA-1"}]}]
+        })))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/v1/vulns/GHSA-1"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "id": "GHSA-1", "aliases": ["CVE-1"], "modified": "2026-01-02T00:00:00Z"
+        })))
+        .mount(&server)
+        .await;
+    let mut pysec = json!({
+        "id": "PYSEC-1", "aliases": ["CVE-1"], "modified": "2026-01-01T00:00:00Z"
+    });
+    let original = Mock::given(method("GET"))
+        .and(path("/v1/vulns/PYSEC-1"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(&pysec))
+        .mount_as_scoped(&server)
+        .await;
+
+    let mut audit = context.audit();
+    audit
+        .arg("--preview-features")
+        .arg("audit")
+        .arg("--output-format")
+        .arg("sarif")
+        .arg("--frozen")
+        .arg("--no-cache")
+        .arg("--service-url")
+        .arg(server.uri());
+    let output = audit.assert().failure().code(1);
+    let before: serde_json::Value = serde_json::from_slice(&output.get_output().stdout)?;
+
+    drop(original);
+    pysec["modified"] = json!("2026-01-03T00:00:00Z");
+    Mock::given(method("GET"))
+        .and(path("/v1/vulns/PYSEC-1"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(pysec))
+        .mount(&server)
+        .await;
+    let output = audit.assert().failure().code(1);
+    let after: serde_json::Value = serde_json::from_slice(&output.get_output().stdout)?;
+
+    let finding = |report: &serde_json::Value| {
+        let run = &report["runs"][0];
+        let result = &run["results"][0];
+        json!({
+            "rule": run["tool"]["driver"]["rules"][0]["id"],
+            "ruleId": result["ruleId"],
+            "fingerprint": result["partialFingerprints"]["uv/vulnerability"],
+            "modified": result["properties"]["uv/modified"],
+        })
+    };
+    insta::assert_json_snapshot!([finding(&before), finding(&after)], @r#"
+    [
+      {
+        "fingerprint": "GHSA-1:iniconfig:2.0.0",
+        "modified": "2026-01-02T00:00:00Z",
+        "rule": "GHSA-1",
+        "ruleId": "GHSA-1"
+      },
+      {
+        "fingerprint": "GHSA-1:iniconfig:2.0.0",
+        "modified": "2026-01-03T00:00:00Z",
+        "rule": "GHSA-1",
+        "ruleId": "GHSA-1"
+      }
+    ]
+    "#);
+
+    Ok(())
+}
+
 /// SARIF artifact locations are relative to the repository root, whether the
 /// project is selected with `--project` or uv is invoked from the project directory.
 #[tokio::test]
