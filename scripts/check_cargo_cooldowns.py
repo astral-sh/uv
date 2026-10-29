@@ -15,6 +15,7 @@ import re
 import subprocess
 import sys
 import tomllib
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from functools import cache
 from pathlib import Path
@@ -31,7 +32,38 @@ CRATES_IO = {
 }
 
 
-def load_policy() -> tuple[timedelta, dict[tuple[str, str | None], str]]:
+@dataclass(frozen=True, order=True)
+class LockedPackage:
+    name: str
+    version: str
+    source: str
+    checksum: str
+
+
+@dataclass(frozen=True)
+class ExclusionKey:
+    name: str
+    version: str | None = None
+
+
+@dataclass(frozen=True)
+class CooldownPolicy:
+    cooldown: timedelta
+    exclusions: dict[ExclusionKey, str]
+
+    def exclusion_reason(self, package: LockedPackage) -> str | None:
+        return self.exclusions.get(
+            ExclusionKey(name=package.name, version=package.version)
+        ) or self.exclusions.get(ExclusionKey(name=package.name))
+
+
+@dataclass(frozen=True)
+class RegistryRelease:
+    published_at: str
+    checksum: str
+
+
+def load_policy() -> CooldownPolicy:
     with POLICY.open("rb") as file:
         policy = tomllib.load(file)
     if policy.keys() != {"cooldown-days", "exclusions"} or not isinstance(
@@ -56,15 +88,16 @@ def load_policy() -> tuple[timedelta, dict[tuple[str, str | None], str]]:
             not isinstance(value, str) or not value.strip() for value in entry.values()
         ):
             raise ValueError("Exclusion fields must be nonempty strings")
-        exclusions[entry["name"], entry.get("version")] = entry["reason"]
-    return timedelta(days=days), exclusions
+        key = ExclusionKey(name=entry["name"], version=entry.get("version"))
+        exclusions[key] = entry["reason"]
+    return CooldownPolicy(cooldown=timedelta(days=days), exclusions=exclusions)
 
 
-def locked_packages() -> dict[tuple[str, str, str, str], set[Path]]:
+def locked_packages() -> dict[LockedPackage, set[Path]]:
     paths = subprocess.check_output(
         ["git", "ls-files", "-z", "--", ":(glob)**/Cargo.lock"]
     )
-    packages: dict[tuple[str, str, str, str], set[Path]] = {}
+    packages: dict[LockedPackage, set[Path]] = {}
     for raw in paths.split(b"\0"):
         if not raw:
             continue
@@ -82,15 +115,20 @@ def locked_packages() -> dict[tuple[str, str, str, str], set[Path]]:
                 checksum = package.get("checksum") or lockfile.get("metadata", {}).get(
                     f"checksum {name} {version} ({source})", ""
                 )
-                key = (name, version, source, "" if checksum == "<none>" else checksum)
-                packages.setdefault(key, set()).add(path)
+                locked = LockedPackage(
+                    name=name,
+                    version=version,
+                    source=source,
+                    checksum="" if checksum == "<none>" else checksum,
+                )
+                packages.setdefault(locked, set()).add(path)
     return packages
 
 
 @cache
 def registry_releases(
     http: urllib3.PoolManager, name: str
-) -> dict[str, tuple[str, str]]:
+) -> dict[str, RegistryRelease]:
     if not re.fullmatch(r"[a-zA-Z0-9_-]+", name):
         raise ValueError(f"Invalid crates.io name: {name!r}")
     lower = name.lower()
@@ -120,14 +158,16 @@ def registry_releases(
         raise ValueError(f"{url} returned HTTP {response.status}")
     entries = map(json.loads, response.data.splitlines())
     return {
-        entry["vers"]: (entry["pubtime"], entry["cksum"])
+        entry["vers"]: RegistryRelease(
+            published_at=entry["pubtime"], checksum=entry["cksum"]
+        )
         for entry in entries
         if entry["name"] == name and "pubtime" in entry
     }
 
 
 def check(cache_path: Path | None) -> int:
-    cooldown, exclusions = load_policy()
+    policy = load_policy()
     packages = locked_packages()
     cached: dict[str, str] = {}
     if cache_path is not None and cache_path.exists():
@@ -148,38 +188,40 @@ def check(cache_path: Path | None) -> int:
     now = datetime.now(UTC)
     failed = False
     hits = 0
-    for (name, version, source, checksum), paths in sorted(packages.items()):
-        key = f"{name}@{version}"
-        reason = exclusions.get((name, version)) or exclusions.get((name, None))
+    for package, paths in sorted(packages.items()):
+        key = f"{package.name}@{package.version}"
+        reason = policy.exclusion_reason(package)
         if reason:
             print(f"Excluded {key!r}: {reason!r}")
             continue
-        if source not in CRATES_IO:
-            raise ValueError(f"Cannot verify {key}: unsupported registry {source!r}")
+        if package.source not in CRATES_IO:
+            raise ValueError(
+                f"Cannot verify {key}: unsupported registry {package.source!r}"
+            )
         # A deleted crate can be republished under the same name and version.
-        cache_key = f"{key}#{checksum}"
-        timestamp = cached.get(cache_key) if checksum else None
+        cache_key = f"{key}#{package.checksum}"
+        timestamp = cached.get(cache_key) if package.checksum else None
         if timestamp is None:
-            release = registry_releases(http, name).get(version)
+            release = registry_releases(http, package.name).get(package.version)
             if release is None:
                 raise ValueError(
                     f"Cannot find the publication time for {key} in the crates.io index"
                 )
-            timestamp, index_checksum = release
-            if checksum and checksum != index_checksum:
+            timestamp = release.published_at
+            if package.checksum and package.checksum != release.checksum:
                 raise ValueError(
                     f"Checksum for {key} does not match the crates.io index"
                 )
         else:
             hits += 1
-        if checksum:
+        if package.checksum:
             timestamps[cache_key] = timestamp
         published = datetime.fromisoformat(timestamp)
-        eligible = published + cooldown
+        eligible = published + policy.cooldown
         if now < eligible:
             location = ", ".join(repr(str(path)) for path in sorted(paths))
             print(
-                f"{key!r} in {location} was published at {published.isoformat()}; its {cooldown.days}-day cooldown ends at {eligible.isoformat()}.",
+                f"{key!r} in {location} was published at {published.isoformat()}; its {policy.cooldown.days}-day cooldown ends at {eligible.isoformat()}.",
                 file=sys.stderr,
             )
             failed = True
