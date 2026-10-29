@@ -8,6 +8,20 @@
       "environment": "automations",
       "reusable_workflow": "astral-sh/uv-dev/.github/workflows/publish-binary-size.yml@373da20ba8956b8b585d29d706ebb2f5d565432b",
       "permissions": { "pull-request": ["read", "write"] }
+    },
+    {
+      "on": ["pull_request"],
+      "caller_workflow": "ci.yml",
+      "caller_ref": "refs/pull/*/merge",
+      "environment": "automations",
+      "permissions": { "repository": ["read"] }
+    },
+    {
+      "on": ["push"],
+      "caller_workflow": "ci.yml",
+      "caller_ref": "refs/heads/main",
+      "environment": "automations",
+      "permissions": { "repository": ["read", "write"] }
     }
   ]
 }
