@@ -75,7 +75,8 @@ fn export_reuses_settings_workspace_discovery() -> Result<()> {
 /// Filter the current project when exporting every workspace member.
 #[test]
 fn export_no_emit_project_all_packages() -> Result<()> {
-    in_process::with_runtime(check_workspace_export)
+    // A resident test worker can run this fixture more than once in the same process.
+    in_process::with_runtime(|runtime| insta::allow_duplicates! { check_workspace_export(runtime) })
 }
 
 fn check_workspace_export(runtime: &tokio::runtime::Runtime) -> Result<()> {
