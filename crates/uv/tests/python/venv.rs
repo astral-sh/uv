@@ -21,6 +21,49 @@ use std::{ffi::OsString, os::windows::ffi::OsStringExt};
 use uv_test::LATEST_PYTHON_3_12;
 use uv_test::{assert_link_target, site_packages_path, uv_snapshot};
 
+#[path = "../it/in_process.rs"]
+mod in_process;
+
+#[test]
+fn create_venv_in_process() -> Result<()> {
+    in_process::with_runtime(|runtime| {
+        let context = uv_test::test_context_with_versions!(&["3.12"]);
+        let mut environment = uv_settings::EnvironmentOptions::new()?;
+        environment.venv_seed.value = None;
+        let output = in_process::run(
+            runtime,
+            &context,
+            context.temp_dir.path(),
+            [
+                "venv",
+                "--offline",
+                "--no-project",
+                "--no-relocatable",
+                "--python",
+            ]
+            .map(std::ffi::OsStr::new)
+            .into_iter()
+            .chain([
+                context.python_versions[0].1.as_os_str(),
+                context.venv.as_os_str(),
+            ]),
+            environment,
+        )?;
+        assert!(output.starts_with("exit_code: 0 (success)"), "{output}");
+        assert!(
+            output.contains("Creating virtual environment at:"),
+            "{output}"
+        );
+        context
+            .python_command()
+            .args(["-I", "-c", "import os, sys; assert os.path.samefile(sys.prefix, sys.argv[1]); assert sys.prefix != sys.base_prefix"])
+            .arg(context.venv.path())
+            .assert()
+            .success();
+        Ok(())
+    })
+}
+
 #[test]
 fn create_venv() {
     let context = uv_test::test_context_with_versions!(&["3.12"]);

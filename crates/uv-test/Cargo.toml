@@ -36,9 +36,12 @@ uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
 uv-preview = { workspace = true, features = ["testing"] }
 uv-python-discovery = { workspace = true }
+uv-python-interpreter = { workspace = true }
 uv-redacted = { workspace = true }
+uv-state = { workspace = true }
 uv-static = { workspace = true }
 uv-version = { workspace = true }
+uv-virtualenv = { workspace = true }
 
 anyhow = { workspace = true }
 assert_cmd = { workspace = true }
