@@ -1,6 +1,6 @@
 cooldown-days = 7
 
-# Omit `version` to exempt every release of an exact crate name.
+# Include `version` to exempt only a single release.
 exclusions = [
   { name = "ambient-id", reason = "Maintained by Astral." },
   { name = "archive-trait", reason = "Maintained by Astral." },

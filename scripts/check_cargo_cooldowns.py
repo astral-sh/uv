@@ -60,26 +60,37 @@ def load_policy() -> tuple[timedelta, dict[tuple[str, str | None], str]]:
     return timedelta(days=days), exclusions
 
 
-def locked_packages() -> dict[tuple[str, str, str], set[Path]]:
+def locked_packages() -> dict[tuple[str, str, str, str], set[Path]]:
     paths = subprocess.check_output(
         ["git", "ls-files", "-z", "--", ":(glob)**/Cargo.lock"]
     )
-    packages: dict[tuple[str, str, str], set[Path]] = {}
+    packages: dict[tuple[str, str, str, str], set[Path]] = {}
     for raw in paths.split(b"\0"):
         if not raw:
             continue
         path = Path(os.fsdecode(raw))
         with path.open("rb") as file:
-            for package in tomllib.load(file)["package"]:
-                source = package.get("source", "")
-                if source.startswith(("registry+", "sparse+")):
-                    key = (package["name"], package["version"], source)
-                    packages.setdefault(key, set()).add(path)
+            lockfile = tomllib.load(file)
+        entries = lockfile.get("package", [])
+        if "root" in lockfile:
+            entries.append(lockfile["root"])
+        for package in entries:
+            source = package.get("source", "")
+            if source.startswith(("registry+", "sparse+")):
+                name, version = package["name"], package["version"]
+                # Cargo's v1 lockfiles store checksums in the metadata table.
+                checksum = package.get("checksum") or lockfile.get("metadata", {}).get(
+                    f"checksum {name} {version} ({source})", ""
+                )
+                key = (name, version, source, "" if checksum == "<none>" else checksum)
+                packages.setdefault(key, set()).add(path)
     return packages
 
 
 @cache
-def release_times(http: urllib3.PoolManager, name: str) -> dict[str, str]:
+def registry_releases(
+    http: urllib3.PoolManager, name: str
+) -> dict[str, tuple[str, str]]:
     if not re.fullmatch(r"[a-zA-Z0-9_-]+", name):
         raise ValueError(f"Invalid crates.io name: {name!r}")
     lower = name.lower()
@@ -109,7 +120,7 @@ def release_times(http: urllib3.PoolManager, name: str) -> dict[str, str]:
         raise ValueError(f"{url} returned HTTP {response.status}")
     entries = map(json.loads, response.data.splitlines())
     return {
-        entry["vers"]: entry["pubtime"]
+        entry["vers"]: (entry["pubtime"], entry["cksum"])
         for entry in entries
         if entry["name"] == name and "pubtime" in entry
     }
@@ -137,7 +148,7 @@ def check(cache_path: Path | None) -> int:
     now = datetime.now(UTC)
     failed = False
     hits = 0
-    for (name, version, source), paths in sorted(packages.items()):
+    for (name, version, source, checksum), paths in sorted(packages.items()):
         key = f"{name}@{version}"
         reason = exclusions.get((name, version)) or exclusions.get((name, None))
         if reason:
@@ -145,16 +156,24 @@ def check(cache_path: Path | None) -> int:
             continue
         if source not in CRATES_IO:
             raise ValueError(f"Cannot verify {key}: unsupported registry {source!r}")
-        timestamp = cached.get(key)
+        # A deleted crate can be republished under the same name and version.
+        cache_key = f"{key}#{checksum}"
+        timestamp = cached.get(cache_key) if checksum else None
         if timestamp is None:
-            timestamp = release_times(http, name).get(version)
-            if timestamp is None:
+            release = registry_releases(http, name).get(version)
+            if release is None:
                 raise ValueError(
                     f"Cannot find the publication time for {key} in the crates.io index"
                 )
+            timestamp, index_checksum = release
+            if checksum and checksum != index_checksum:
+                raise ValueError(
+                    f"Checksum for {key} does not match the crates.io index"
+                )
         else:
             hits += 1
-        timestamps[key] = timestamp
+        if checksum:
+            timestamps[cache_key] = timestamp
         published = datetime.fromisoformat(timestamp)
         eligible = published + cooldown
         if now < eligible:
