@@ -147,7 +147,7 @@ jobs:
       id-token: write
 
   check-cargo-cooldowns:
-    name: "Cargo dependency cooldowns"
+    name: "check | crates cooldowns"
     needs: plan
     runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-2' || 'ubuntu-latest' }}
     timeout-minutes: 15
