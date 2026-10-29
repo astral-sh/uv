@@ -6,6 +6,7 @@
 //!
 //! [OSV]: https://osv.dev/
 
+use std::cmp::Reverse;
 use std::str::FromStr as _;
 use std::sync::LazyLock;
 
@@ -170,6 +171,41 @@ struct Vulnerability {
     affected: Option<Vec<Affected>>,
     aliases: Option<Vec<String>>,
     references: Option<Vec<Reference>>,
+}
+
+impl Vulnerability {
+    fn ids(&self) -> impl Iterator<Item = &str> {
+        std::iter::once(&self.id)
+            .chain(self.aliases.iter().flatten())
+            .map(String::as_str)
+    }
+
+    /// Group the records returned for one dependency by overlapping identifiers.
+    fn deduplicate<'a>(records: impl IntoIterator<Item = &'a Self>) -> impl Iterator<Item = Self> {
+        let mut groups: Vec<Self> = Vec::new();
+        for record in records {
+            let ids: FxHashSet<_> = record.ids().collect();
+            let overlaps = |group: &Self| group.ids().any(|id| ids.contains(id));
+            // A record can join several groups. Keep the position of the first matching group.
+            let first = groups.iter().position(overlaps).unwrap_or(groups.len());
+            let mut newest = record.clone();
+            for mut other in groups.extract_if(first.., |group| overlaps(group)) {
+                // Keep the newest advisory's fix ranges. If timestamps match, choose the record
+                // whose `id` comes first in string order.
+                if (Reverse(other.modified), &other.id) < (Reverse(newest.modified), &newest.id) {
+                    std::mem::swap(&mut newest, &mut other);
+                }
+                let aliases = newest.aliases.get_or_insert_default();
+                aliases.push(other.id);
+                aliases.extend(other.aliases.into_iter().flatten());
+                aliases.retain(|id| *id != newest.id);
+                aliases.sort_unstable();
+                aliases.dedup();
+            }
+            groups.insert(first, newest);
+        }
+        groups.into_iter()
+    }
 }
 
 /// Request body for the batch query API.
@@ -376,11 +412,9 @@ impl Osv {
         let findings = dep_vuln_ids
             .iter()
             .flat_map(|(dep, vuln_ids)| {
-                vuln_ids.iter().filter_map(|vuln_id| {
-                    vuln_details
-                        .get(vuln_id)
-                        .map(|vuln| Self::vulnerability_to_finding(dep, vuln.clone()))
-                })
+                let records = vuln_ids.iter().filter_map(|id| vuln_details.get(id));
+                Vulnerability::deduplicate(records)
+                    .map(move |record| Self::vulnerability_to_finding(dep, record, vuln_ids))
             })
             .collect();
 
@@ -432,6 +466,7 @@ impl Osv {
     fn vulnerability_to_finding(
         dependency: &types::Dependency,
         vuln: Vulnerability,
+        advisory_ids: &FxHashSet<VulnerabilityID>,
     ) -> types::Finding {
         // Extract a link for the advisory. We prefer the first
         // `ADVISORY` reference, then the first `WEB` reference, and then
@@ -487,18 +522,31 @@ impl Osv {
             })
             .collect();
 
-        // Extract aliases
-        let aliases = vuln
+        let mut id = VulnerabilityID::new(vuln.id);
+        let mut aliases: Vec<_> = vuln
             .aliases
             .unwrap_or_default()
             .into_iter()
-            .map(types::VulnerabilityID::new)
+            .map(VulnerabilityID::new)
             .collect();
+
+        // Choose the first `id` in string order among the records OSV returned for this group.
+        // An alias qualifies only if it is also a returned record's `id`. This keeps the SARIF
+        // rule ID and fingerprint stable when an advisory's modification time changes.
+        if let Some(primary) = aliases
+            .iter_mut()
+            .filter(|id| advisory_ids.contains(*id))
+            .min()
+            && *primary < id
+        {
+            std::mem::swap(&mut id, primary);
+            aliases.sort_unstable();
+        }
 
         types::Finding::Vulnerability(
             types::Vulnerability::new(
                 dependency.clone(),
-                types::VulnerabilityID::new(vuln.id),
+                id,
                 vuln.summary,
                 vuln.details,
                 Some(link),
@@ -529,7 +577,7 @@ mod tests {
     use crate::service::osv::{Filter, RangeType};
     use crate::types::{Dependency, Finding};
 
-    use super::{Event, OSV_QUERY_BATCH_SIZE, Osv};
+    use super::{Event, OSV_QUERY_BATCH_SIZE, Osv, Vulnerability};
 
     /// Create a [`CachedClient`] suitable for tests (no retries, no cache).
     fn test_client() -> CachedClient {
@@ -579,6 +627,41 @@ mod tests {
             Other,
         ]
         ");
+    }
+
+    /// A third advisory can connect two records even when neither lists the other's ID.
+    #[test]
+    fn test_deduplicate_transitive_aliases() {
+        let records: Vec<Vulnerability> = serde_json::from_value(json!([
+            {"id": "PYSEC-B", "aliases": ["CVE-1"], "modified": "2026-01-02T00:00:00Z"},
+            {"id": "GHSA-B", "modified": "2026-01-03T00:00:00Z"},
+            {"id": "PYSEC-A", "aliases": ["CVE-2"], "modified": "2026-01-02T00:00:00Z"},
+            {"id": "GHSA-A", "aliases": ["CVE-1", "CVE-2"], "modified": "2026-01-01T00:00:00Z"}
+        ]))
+        .expect("valid OSV vulnerability records");
+
+        let findings: Vec<_> = Vulnerability::deduplicate(&records)
+            .map(|record| (record.id, record.aliases))
+            .collect();
+        insta::assert_debug_snapshot!(findings, @r#"
+        [
+            (
+                "PYSEC-A",
+                Some(
+                    [
+                        "CVE-1",
+                        "CVE-2",
+                        "GHSA-A",
+                        "PYSEC-B",
+                    ],
+                ),
+            ),
+            (
+                "GHSA-B",
+                None,
+            ),
+        ]
+        "#);
     }
 
     /// Ensure that `query_identifiers` returns the correct vulnerability ID mapping.
@@ -764,12 +847,13 @@ mod tests {
             .mount(&server)
             .await;
 
-        // Individual vuln detail requests.
+        // Even when the two records are aliases, each affected dependency needs its own finding.
         Mock::given(method("GET"))
             .and(path("/v1/vulns/VULN-1"))
             .respond_with(ResponseTemplate::new(200).set_body_json(json!({
                 "id": "VULN-1",
                 "modified": "2026-01-01T00:00:00Z",
+                "aliases": ["VULN-2"],
             })))
             .mount(&server)
             .await;
@@ -839,7 +923,11 @@ mod tests {
                         },
                     ),
                     fix_versions: [],
-                    aliases: [],
+                    aliases: [
+                        VulnerabilityID(
+                            "VULN-2",
+                        ),
+                    ],
                     published: None,
                     modified: Some(
                         2026-01-01T00:00:00Z,

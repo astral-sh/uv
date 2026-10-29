@@ -531,6 +531,139 @@ async fn audit_best_id_selection() {
     ");
 }
 
+/// Alias records with conflicting fixes use the most recently modified advisory's fix versions.
+#[tokio::test]
+async fn audit_duplicate_vulnerability_aliases() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-01T00:00:00Z");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.10"
+        dependencies = ["certifi==2024.12.14"]
+    "#})?;
+
+    let server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": [{"vulns": [
+                {"id": "PYSEC-2026-4320"},
+                {"id": "GHSA-6q48-6c7w-9gw2"}
+            ]}]
+        })))
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/v1/vulns/PYSEC-2026-4320"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "id": "PYSEC-2026-4320",
+            "modified": "2026-10-20T22:00:02Z",
+            "summary": "certifi bundles emSign root CAs with compromised intermediate CA keys",
+            "aliases": ["GHSA-6q48-6c7w-9gw2"],
+            "affected": [{
+                "package": {
+                    "ecosystem": "PyPI",
+                    "name": "certifi"
+                },
+                "ranges": [{
+                    "type": "ECOSYSTEM",
+                    "events": [
+                        {"introduced": "2019.03.09"},
+                        {"fixed": "2026.10.19"}
+                    ]
+                }]
+            }],
+            "references": [{
+                "type": "ADVISORY",
+                "url": "https://github.com/advisories/GHSA-6q48-6c7w-9gw2"
+            }]
+        })))
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/v1/vulns/GHSA-6q48-6c7w-9gw2"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "id": "GHSA-6q48-6c7w-9gw2",
+            "modified": "2026-10-26T16:15:35Z",
+            "summary": "certifi bundles emSign root CAs with compromised intermediate CA keys",
+            "aliases": ["PYSEC-2026-4320"],
+            "affected": [{
+                "package": {
+                    "ecosystem": "PyPI",
+                    "name": "certifi"
+                },
+                "ranges": [{
+                    "type": "ECOSYSTEM",
+                    "events": [
+                        {"introduced": "2019.03.09"},
+                        {"fixed": "2026.10.18"}
+                    ]
+                }]
+            }],
+            "references": [{
+                "type": "WEB",
+                "url": "https://github.com/certifi/python-certifi/security/advisories/GHSA-6q48-6c7w-9gw2"
+            }]
+        })))
+        .mount(&server)
+        .await;
+
+    // The newer GHSA record supplies the fix version, while the PYSEC ID is preferred for display.
+    uv_snapshot!(context.filters(), context
+        .audit()
+        .arg("--preview-features")
+        .arg("audit")
+        .arg("--no-build")
+        .arg("--service-url")
+        .arg(server.uri()), @"
+    exit_code: 1 (failure)
+    ----- stdout -----
+
+    Vulnerabilities:
+
+    certifi 2024.12.14 has 1 known vulnerability:
+
+    - PYSEC-2026-4320: certifi bundles emSign root CAs with compromised intermediate CA keys
+
+      Fixed in: 2026.10.18
+
+      Advisory information: https://github.com/certifi/python-certifi/security/advisories/GHSA-6q48-6c7w-9gw2
+
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Found 1 known vulnerability and no adverse project statuses in 1 package
+    ");
+
+    // Both primary IDs match the grouped finding.
+    uv_snapshot!(context.filters(), context
+        .audit()
+        .arg("--preview-features")
+        .arg("audit")
+        .arg("--no-build")
+        .arg("--service-url")
+        .arg(server.uri())
+        .arg("--ignore")
+        .arg("PYSEC-2026-4320")
+        .arg("--ignore")
+        .arg("GHSA-6q48-6c7w-9gw2"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Found no known vulnerabilities and no adverse project statuses in 1 package
+    ");
+
+    Ok(())
+}
+
 /// A vulnerability without fix versions shows "No fix versions available".
 #[tokio::test]
 async fn audit_no_fix_versions() {
@@ -1711,6 +1844,7 @@ async fn audit_ignore_mixed_matched_unmatched() {
             "id": "PYSEC-2023-0001",
             "modified": "2026-01-01T00:00:00Z",
             "summary": "A test vulnerability in iniconfig",
+            "aliases": ["GHSA-abcd-efgh-ijkl", "CVE-2023-9999"],
             "affected": [{
                 "package": {
                     "ecosystem": "PyPI",
@@ -1728,8 +1862,7 @@ async fn audit_ignore_mixed_matched_unmatched() {
         .mount(&server)
         .await;
 
-    // Ignore one real and one non-existent vulnerability: the real one is suppressed,
-    // and the non-existent one triggers a warning.
+    // The unconditional ignore suppresses the finding. Both conditional aliases still match.
     uv_snapshot!(context.filters(), context
         .audit()
         .arg("--preview-features")
@@ -1738,6 +1871,10 @@ async fn audit_ignore_mixed_matched_unmatched() {
         .arg("PYSEC-2023-0001")
         .arg("--ignore")
         .arg("CVE-DOES-NOT-EXIST")
+        .arg("--ignore-until-fixed")
+        .arg("GHSA-abcd-efgh-ijkl")
+        .arg("--ignore-until-fixed")
+        .arg("CVE-2023-9999")
         .arg("--service-url")
         .arg(server.uri()), @"
     exit_code: 0 (success)
@@ -2553,7 +2690,8 @@ async fn audit_json_vulnerability_and_project_status() {
 }
 
 /// SARIF output includes vulnerabilities and adverse project statuses in the
-/// same audit report.
+/// same audit report. The older OSV record supplies the rule ID and fingerprint,
+/// while the newer PYSEC record supplies the fix version and advisory details.
 #[tokio::test]
 async fn audit_sarif_vulnerability_and_project_status() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_filter((uv_version::version(), "[VERSION]"));
@@ -2565,7 +2703,7 @@ async fn audit_sarif_vulnerability_and_project_status() -> Result<()> {
     Mock::given(method("POST"))
         .and(path("/v1/querybatch"))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-            "results": [{"vulns": [{"id": "OSV-2023-0001"}]}]
+            "results": [{"vulns": [{"id": "OSV-2023-0001"}, {"id": "PYSEC-2023-0001"}]}]
         })))
         .mount(&server)
         .await;
@@ -2574,7 +2712,17 @@ async fn audit_sarif_vulnerability_and_project_status() -> Result<()> {
         .and(path("/v1/vulns/OSV-2023-0001"))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
             "id": "OSV-2023-0001",
-            "aliases": ["PYSEC-2023-0001"],
+            "aliases": ["CVE-2023-0001"],
+            "modified": "2025-12-01T00:00:00Z"
+        })))
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/v1/vulns/PYSEC-2023-0001"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "id": "PYSEC-2023-0001",
+            "aliases": ["CVE-2023-0001"],
             "modified": "2026-01-01T00:00:00Z",
             "published": "2025-12-01T00:00:00Z",
             "summary": "A test vulnerability in iniconfig",
@@ -2651,6 +2799,7 @@ async fn audit_sarif_vulnerability_and_project_status() -> Result<()> {
               },
               "properties": {
                 "uv/aliases": [
+                  "CVE-2023-0001",
                   "PYSEC-2023-0001"
                 ],
                 "uv/displayId": "PYSEC-2023-0001",
