@@ -126,7 +126,6 @@ def check(cache_path: Path | None) -> int:
                 cached = data
         except (OSError, ValueError) as error:
             print(f"Cannot read cached publication times: {error}", file=sys.stderr)
-    # Keep only timestamps for currently locked versions so the KV value stays small.
     timestamps: dict[str, str] = {}
     proxy = getproxies().get("https")
     http = (
