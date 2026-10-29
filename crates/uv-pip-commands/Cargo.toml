@@ -42,6 +42,7 @@ uv-preview = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-python-discovery = { workspace = true }
 uv-python-managed = { workspace = true }
+uv-redacted = { workspace = true }
 uv-requirements = { workspace = true }
 uv-resolve-operations = { workspace = true }
 uv-resolver = { workspace = true }

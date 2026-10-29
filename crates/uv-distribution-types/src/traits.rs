@@ -2,7 +2,7 @@ use std::borrow::Cow;
 
 use uv_normalize::PackageName;
 use uv_pep508::VerbatimUrl;
-use uv_redacted::policy::SerializationPolicy;
+use uv_redacted::policy::{SerializationPolicy, Stripped};
 
 use crate::error::Error;
 use crate::{
@@ -105,7 +105,7 @@ impl<P: SerializationPolicy> Verbatim for VerbatimUrl<P> {
         if let Some(given) = self.given() {
             Cow::Borrowed(given)
         } else {
-            Cow::Borrowed(self.as_str())
+            self.with_policy_ref(Stripped).to_serialized_string()
         }
     }
 }

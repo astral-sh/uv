@@ -15147,7 +15147,7 @@ fn tool_uv_sources() -> Result<()> {
     Ok(())
 }
 
-/// Compiled URL sources retain the credentials needed to install the generated requirements.
+/// Compiled URL sources retain signed queries while removing sensitive userinfo.
 #[tokio::test]
 async fn tool_uv_sources_signed_url() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -15161,8 +15161,8 @@ async fn tool_uv_sources_signed_url() -> Result<()> {
         .mount(&server)
         .await;
     let url = format!(
-        "{}/{filename}?X-Amz-Credential=synthetic-credential&X-Amz-Signature=synthetic-signature",
-        server.uri()
+        "http://user:password@{}/{filename}?X-Amz-Credential=synthetic-credential&X-Amz-Signature=synthetic-signature",
+        server.address()
     );
     let pyproject = context.temp_dir.child("pyproject.toml");
     pyproject.write_str(&formatdoc! {r#"

@@ -16,6 +16,7 @@ use uv_python_discovery::find_environment;
 use uv_python_types::{
     EnvironmentPreference, Prefix, PythonArchitecture, PythonPreference, PythonRequest, Target,
 };
+use uv_redacted::policy::Stripped;
 
 use crate::reporters::report_target_environment;
 use uv_command_support::ExitStatus;
@@ -101,8 +102,7 @@ pub fn pip_freeze(
             }
             InstalledDistKind::Url(dist) => {
                 // Requirement output needs signed query values to fetch the source again.
-                let url = dist.url.without_credentials();
-                let url = url.displayable_with_credentials();
+                let url = dist.url.with_policy_ref(Stripped).to_serialized_string();
                 if dist.editable {
                     format!("-e {url}")
                 } else {
