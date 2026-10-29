@@ -838,7 +838,7 @@ fn proxy_url_without_host() -> Result<()> {
 
 /// Azure needs a storage API version even on the initial anonymous request.
 #[tokio::test]
-async fn azure_endpoint_from_config_file() -> Result<()> {
+async fn azure_endpoint_from_project_config() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let server = MockServer::start().await;
     Mock::given(header("x-ms-version", "2020-10-02"))
@@ -850,7 +850,6 @@ async fn azure_endpoint_from_config_file() -> Result<()> {
     let config = context.temp_dir.child("uv.toml");
     config.write_str(&format!(r#"azure-endpoint-url = "{}""#, server.uri()))?;
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg("--config-file").arg(config.path())
         .arg("--preview-features").arg("azure-endpoint")
         .arg("--default-index").arg(server.uri())
         .arg("iniconfig"), @"

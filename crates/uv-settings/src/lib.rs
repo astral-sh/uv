@@ -163,9 +163,7 @@ impl FilesystemOptions {
 
                 tracing::debug!("Found workspace configuration at `{}`", path.display());
                 validate_uv_toml(&path, &options)?;
-                return Ok(Some(Self::from_project(
-                    options.with_origin(Origin::Project),
-                )));
+                return Ok(Some(Self(options.with_origin(Origin::Project))));
             }
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
             Err(err) => return Err(err.into()),
@@ -200,7 +198,7 @@ impl FilesystemOptions {
                 let options = options.relative_to(&std::path::absolute(dir)?)?;
 
                 tracing::debug!("Found workspace configuration at `{}`", path.display());
-                return Ok(Some(Self::from_project(options)));
+                return Ok(Some(Self(options)));
             }
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
             Err(err) => return Err(err.into()),
@@ -220,22 +218,8 @@ impl FilesystemOptions {
     }
 }
 
-impl FilesystemOptions {
-    /// Load options from a discovered project or inline script.
-    pub fn from_project(mut options: Options) -> Self {
-        // A project must not choose where to send the user's cloud credentials.
-        let globals = &mut options.globals;
-        if globals.s3_endpoint_url.is_some()
-            || globals.gcs_endpoint_url.is_some()
-            || globals.azure_endpoint_url.is_some()
-        {
-            warn_user!(
-                "Cloud endpoints can only be configured in user or system configuration, or with `--config-file`."
-            );
-            globals.s3_endpoint_url = None;
-            globals.gcs_endpoint_url = None;
-            globals.azure_endpoint_url = None;
-        }
+impl From<Options> for FilesystemOptions {
+    fn from(options: Options) -> Self {
         Self(options)
     }
 }

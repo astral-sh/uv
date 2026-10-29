@@ -33,7 +33,7 @@
       ]
     },
     "azure-endpoint-url": {
-      "description": "The Azure Storage endpoint to authenticate requests to.\n\nSet this in a user or system `uv.toml`, or a file passed to `--config-file`.\n`UV_AZURE_ENDPOINT_URL` takes precedence.",
+      "description": "The Azure Storage endpoint to authenticate requests to.\n\n`UV_AZURE_ENDPOINT_URL` takes precedence.",
       "anyOf": [
         {
           "$ref": "#/definitions/SafeUrl"
@@ -265,7 +265,7 @@
       ]
     },
     "gcs-endpoint-url": {
-      "description": "The Google Cloud Storage endpoint to authenticate requests to.\n\nSet this in a user or system `uv.toml`, or a file passed to `--config-file`.\n`UV_GCS_ENDPOINT_URL` takes precedence.",
+      "description": "The Google Cloud Storage endpoint to authenticate requests to.\n\n`UV_GCS_ENDPOINT_URL` takes precedence.",
       "anyOf": [
         {
           "$ref": "#/definitions/SafeUrl"
@@ -589,7 +589,7 @@
       ]
     },
     "s3-endpoint-url": {
-      "description": "The Amazon S3 endpoint to authenticate requests to.\n\nSet this in a user or system `uv.toml`, or a file passed to `--config-file`.\n`UV_S3_ENDPOINT_URL` takes precedence.",
+      "description": "The Amazon S3 endpoint to authenticate requests to.\n\n`UV_S3_ENDPOINT_URL` takes precedence.",
       "anyOf": [
         {
           "$ref": "#/definitions/SafeUrl"

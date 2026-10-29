@@ -59,7 +59,7 @@ impl HuggingFaceProvider {
     }
 }
 
-/// Cloud storage endpoints supplied by trusted configuration files.
+/// Cloud storage endpoints supplied by configuration files.
 #[derive(Debug, Default, Clone)]
 pub struct CloudEndpoints {
     pub s3: Option<SafeUrl>,

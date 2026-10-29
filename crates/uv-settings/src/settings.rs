@@ -414,12 +414,10 @@ pub struct GlobalOptions {
     pub https_proxy: Option<ProxyUrl>,
     /// The Amazon S3 endpoint to authenticate requests to.
     ///
-    /// Set this in a user or system `uv.toml`, or a file passed to `--config-file`.
     /// `UV_S3_ENDPOINT_URL` takes precedence.
     #[option(
         default = "None",
         value_type = "str",
-        uv_toml_only = true,
         example = r#"
             s3-endpoint-url = "https://storage.example.com/packages"
         "#
@@ -427,12 +425,10 @@ pub struct GlobalOptions {
     pub s3_endpoint_url: Option<SafeUrl>,
     /// The Google Cloud Storage endpoint to authenticate requests to.
     ///
-    /// Set this in a user or system `uv.toml`, or a file passed to `--config-file`.
     /// `UV_GCS_ENDPOINT_URL` takes precedence.
     #[option(
         default = "None",
         value_type = "str",
-        uv_toml_only = true,
         example = r#"
             gcs-endpoint-url = "https://storage.example.com/packages"
         "#
@@ -440,12 +436,10 @@ pub struct GlobalOptions {
     pub gcs_endpoint_url: Option<SafeUrl>,
     /// The Azure Storage endpoint to authenticate requests to.
     ///
-    /// Set this in a user or system `uv.toml`, or a file passed to `--config-file`.
     /// `UV_AZURE_ENDPOINT_URL` takes precedence.
     #[option(
         default = "None",
         value_type = "str",
-        uv_toml_only = true,
         example = r#"
             azure-endpoint-url = "https://storage.example.com/packages"
         "#
