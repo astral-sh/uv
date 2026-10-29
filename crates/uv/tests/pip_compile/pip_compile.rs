@@ -17,6 +17,7 @@ use std::thread;
 use anyhow::Result;
 #[cfg(all(feature = "test-git", feature = "test-universal"))]
 use anyhow::{Context, anyhow};
+#[cfg(feature = "test-universal")]
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use fs_err::{File, read};
@@ -15187,15 +15188,19 @@ async fn tool_uv_sources_signed_url() -> Result<()> {
     ");
     let requirements = context.temp_dir.child("requirements.txt");
     requirements.write_binary(&compiled.stdout)?;
-    context
-        .pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg(requirements.path())
         .arg("--no-deps")
         .arg("--no-index")
-        .arg("--no-cache")
-        .assert()
-        .success();
+        .arg("--no-cache"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0 (from http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl?X-Amz-Credential=****&X-Amz-Signature=****)
+    ");
 
     Ok(())
 }
@@ -15272,12 +15277,21 @@ fn invalid_tool_uv_sources() -> Result<()> {
     "
     );
 
-    // A local source error uses the path from the project configuration.
+    Ok(())
+}
+
+/// A local source error uses the path from the project configuration.
+#[test]
+fn tool_uv_sources_path_name_mismatch() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
     let filename = "ok-1.0.0-py3-none-any.whl";
     context.temp_dir.child(filename).write_binary(&read(
         context.workspace_root.join("test/links").join(filename),
     )?)?;
-    pyproject_toml.write_str(indoc! {r#"
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
         [project]
         name = "project"
         version = "0.0.0"
