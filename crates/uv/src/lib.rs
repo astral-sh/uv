@@ -137,13 +137,23 @@ pub fn run(
     run_command(cli, global_initialization, None)
 }
 
-/// Run an export with an explicit workspace discovery directory in a library caller.
-/// The caller supplies an absolute directory and leaves process initialization to its host.
+/// Run an export or pip install with the caller’s directory and environment settings.
 #[doc(hidden)]
-pub async fn run_export_in_project(cli: Cli, project_dir: &Path) -> Result<ExitStatus> {
+pub async fn run_in_project(
+    cli: Cli,
+    project_dir: &Path,
+    environment: EnvironmentOptions,
+) -> Result<ExitStatus> {
     anyhow::ensure!(
-        matches!(&*cli.command, Commands::Project(command) if matches!(&**command, ProjectCommand::Export(_))),
-        "expected an export command"
+        matches!(&*cli.command, Commands::Project(command) if matches!(&**command, ProjectCommand::Export(_)))
+            || matches!(
+                &*cli.command,
+                Commands::Pip(PipNamespace {
+                    command: PipCommand::Install(_),
+                    ..
+                })
+            ),
+        "expected an export or pip install command"
     );
     anyhow::ensure!(
         project_dir.is_absolute() && cli.top_level.global_args.directory.is_none(),
@@ -154,7 +164,7 @@ pub async fn run_export_in_project(cli: Cli, project_dir: &Path) -> Result<ExitS
     let result = Box::pin(run_command(
         cli,
         GlobalInitialization::Reuse,
-        Some(project_dir),
+        Some((project_dir, environment)),
     ))
     .await;
     Ok(report_command_result(result, printer))
@@ -164,11 +174,11 @@ pub async fn run_export_in_project(cli: Cli, project_dir: &Path) -> Result<ExitS
 async fn run_command(
     cli: Cli,
     global_initialization: GlobalInitialization,
-    default_project_dir: Option<&Path>,
+    invocation: Option<(&Path, EnvironmentOptions)>,
 ) -> Result<ExitStatus> {
     let config_discovery = ConfigDiscovery::from_args(cli.top_level.no_config);
 
-    if default_project_dir.is_none() {
+    if invocation.is_none() {
         // Configure color before resolving settings so argument errors retain their styling.
         anstream::ColorChoice::write_global(resolve_color(&cli.top_level.global_args).into());
 
@@ -209,7 +219,10 @@ async fn run_command(
     };
 
     // Load environment variables not handled by Clap.
-    let environment = EnvironmentOptions::new()?;
+    let (default_project_dir, environment) = match invocation {
+        Some((directory, environment)) => (Some(directory), environment),
+        None => (None, EnvironmentOptions::new()?),
+    };
 
     // Resolve preview flags before config discovery for decisions that affect the discovery root.
     let early_preview = settings::resolve_preview(&cli.top_level.global_args, None, &environment)?;
@@ -1065,6 +1078,7 @@ async fn run_command(
             );
 
             Box::pin(commands::pip_install(
+                default_project_dir.unwrap_or(Path::new("")),
                 &requirements,
                 &constraints,
                 &overrides,

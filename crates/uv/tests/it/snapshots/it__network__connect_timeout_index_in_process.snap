@@ -1,0 +1,10 @@
+---
+source: crates/uv/tests/it/network.rs
+expression: output
+---
+exit_code: 2 (failure)
+----- stderr -----
+error: Failed to fetch: https://[LOCALHOST]/tqdm/
+  cause: error sending request for url (https://[LOCALHOST]/tqdm/)
+  cause: client error (Connect)
+  cause: operation timed out

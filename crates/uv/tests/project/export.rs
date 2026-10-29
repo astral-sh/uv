@@ -3,7 +3,6 @@
 use anyhow::{Ok, Result};
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
-use clap::Parser;
 use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 #[cfg(all(unix, feature = "test-universal"))]
@@ -22,6 +21,9 @@ use uv_test::packse::{PackseServer, WheelBuilder, scenario::Scenario};
 #[cfg(all(feature = "test-universal", feature = "test-git"))]
 use uv_test::{READ_ONLY_GITHUB_SSH_DEPLOY_KEY, READ_ONLY_GITHUB_TOKEN, decode_token};
 use uv_test::{TestContext, apply_filters, uv_snapshot};
+
+#[path = "../common/in_process.rs"]
+mod in_process;
 
 /// The workspace discovered while resolving settings is reused by a normal `uv export`.
 #[test]
@@ -73,15 +75,10 @@ fn export_reuses_settings_workspace_discovery() -> Result<()> {
 /// Filter the current project when exporting every workspace member.
 #[test]
 fn export_no_emit_project_all_packages() -> Result<()> {
-    // The CLI runs the command dispatcher on a larger stack than libtest provides.
-    std::thread::Builder::new()
-        .stack_size(uv_threads::min_stack_size())
-        .spawn(check_workspace_export)?
-        .join()
-        .unwrap_or_else(|panic| std::panic::resume_unwind(panic))
+    in_process::with_runtime(check_workspace_export)
 }
 
-fn check_workspace_export() -> Result<()> {
+fn check_workspace_export(runtime: &tokio::runtime::Runtime) -> Result<()> {
     let context = uv_test::test_context!("3.12");
     context.temp_dir.child("pyproject.toml").write_str(
         r#"
@@ -116,40 +113,23 @@ fn check_workspace_export() -> Result<()> {
         "#,
     )?;
 
-    let _preview = uv_preview::test::with_features(&[]);
-    let runtime = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()?;
-    let export = |directory: &Path, selection: &str| -> Result<String> {
-        let cli = uv_cli::Cli::try_parse_from(
+    let export = |directory: &Path, selection: &str| {
+        in_process::run(
+            runtime,
+            &context,
+            directory,
             [
-                "uv",
                 "export",
                 "--all-packages",
                 selection,
                 "--no-header",
                 "--offline",
-                "--no-config",
                 // The fixture needs to create its lockfile, even in a locked CI environment.
                 "--no-locked",
                 "--no-frozen",
-                "--no-python-downloads",
-                "--cache-dir",
-            ]
-            .map(std::ffi::OsStr::new)
-            .into_iter()
-            .chain([context.cache_dir.as_os_str()]),
-        )?;
-        let (status, output) = runtime.block_on(uv_command_support::test_output::capture(
-            Box::pin(uv::run_export_in_project(cli, directory)),
-        ));
-        Ok(uv_test::format_command_output(
-            std::result::Result::Ok(i32::from(u8::from(status?))),
-            &output.stdout,
-            &output.stderr,
-            context.filters(),
-            Some(uv_test::WindowsFilters::Platform),
-        ))
+            ],
+            uv_settings::EnvironmentOptions::new()?,
+        )
     };
 
     // Exclude the root project, but emit its child dependency.

@@ -28,6 +28,9 @@ use uv_redacted::SafeUrl;
 use uv_static::EnvVars;
 use uv_test::{TestContext, uv_snapshot};
 
+#[path = "../common/in_process.rs"]
+mod in_process;
+
 /// Creates a CONNECT tunnel proxy that forwards connections to the target.
 ///
 /// Returns the proxy address. The proxy runs in a background thread.
@@ -1083,6 +1086,48 @@ fn connect_timeout_index() {
         elapsed < Duration::from_secs(3),
         "Test with 1s connect timeout took too long"
     );
+}
+
+/// Exercise the index timeout and its diagnostic on a shared command runtime.
+#[test]
+fn connect_timeout_index_in_process() -> Result<()> {
+    in_process::with_runtime(check_index_timeout_in_process)
+}
+
+fn check_index_timeout_in_process(runtime: &tokio::runtime::Runtime) -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let listener = std::net::TcpListener::bind("127.0.0.1:0")?;
+    let url = format!("https://{}", listener.local_addr()?);
+    let python = context.interpreter();
+    let start = Instant::now();
+    let output = in_process::run(
+        runtime,
+        &context,
+        context.temp_dir.path(),
+        [
+            "pip",
+            "install",
+            "tqdm",
+            "--index-url",
+            &url,
+            "--no-offline",
+            "--python",
+        ]
+        .map(std::ffi::OsStr::new)
+        .into_iter()
+        .chain([python.as_os_str()]),
+        uv_settings::EnvironmentOptions {
+            http_connect_timeout: Duration::from_secs(1),
+            http_retries: 0,
+            ..uv_settings::EnvironmentOptions::new()?
+        },
+    )?;
+    assert_snapshot!("connect_timeout_index_in_process", output);
+    assert!(
+        start.elapsed() < Duration::from_secs(3),
+        "Test with 1s connect timeout took too long"
+    );
+    Ok(())
 }
 
 #[test]
