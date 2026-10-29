@@ -1,4 +1,4 @@
-# Keep this in sync with `cargo.minimumReleaseAge` in `renovate.json5`.
+# Keep this in sync with the Cargo package rule in `renovate.json5`.
 cooldown-days = 7
 
 # Exclusions require an exact crate name and a reason. Include `version` to limit
