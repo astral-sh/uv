@@ -7994,11 +7994,13 @@ dependencies = [
  "uv-pep508",
  "uv-preview",
  "uv-python-discovery",
+ "uv-python-interpreter",
  "uv-python-managed",
  "uv-python-types",
  "uv-redacted",
  "uv-static",
  "uv-version",
+ "uv-virtualenv",
  "walkdir",
  "wiremock",
 ]

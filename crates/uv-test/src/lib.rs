@@ -39,6 +39,7 @@ use walkdir::WalkDir;
 use uv_cache::{Cache, CacheBucket};
 use uv_fs::Simplified;
 use uv_python_discovery::PythonInstallation;
+use uv_python_interpreter::Interpreter;
 use uv_python_types::{EnvironmentPreference, PythonPreference, PythonRequest, PythonVersion};
 use uv_static::EnvVars;
 
@@ -2029,7 +2030,26 @@ impl TestContext {
             .python_versions
             .first()
             .expect("A Python version must be provided to create a test virtual environment");
-        create_venv_from_executable(&self.venv, &self.cache_dir, executable, &self.uv_bin);
+        let cache = Cache::from_path(self.cache_dir.path())
+            .init_no_wait()
+            .expect("Failed to initialize the test cache")
+            .expect("No cache contention when creating a test virtual environment");
+        let interpreter = Interpreter::query(executable, &cache)
+            .expect("Failed to query the test Python interpreter");
+
+        uv_virtualenv::create_venv(
+            self.venv.path(),
+            interpreter,
+            uv_virtualenv::Prompt::None,
+            false,
+            uv_virtualenv::OnExisting::Remove(uv_virtualenv::RemovalReason::UserRequest(
+                uv_virtualenv::ClearNonVirtualenv::Error,
+            )),
+            false,
+            uv_virtualenv::Seed::Disabled,
+            uv_virtualenv::UpgradePolicy::Patch,
+        )
+        .expect("Failed to create the test virtual environment");
     }
 
     /// Copies the files from the ecosystem project given into this text
@@ -2227,27 +2247,6 @@ pub fn venv_bin_path(venv: impl AsRef<Path>) -> PathBuf {
     } else {
         unimplemented!("Only Windows and Unix are supported")
     }
-}
-
-/// Create a virtual environment at the given path.
-fn create_venv_from_executable<P: AsRef<Path>>(
-    path: P,
-    cache_dir: &ChildPath,
-    python: &Path,
-    uv_bin: &Path,
-) {
-    TestContext::new_command_with(uv_bin)
-        .arg("venv")
-        .arg(path.as_ref().as_os_str())
-        .arg("--clear")
-        .arg("--cache-dir")
-        .arg(cache_dir.path())
-        .arg("--python")
-        .arg(python)
-        .current_dir(path.as_ref().parent().unwrap())
-        .assert()
-        .success();
-    ChildPath::new(path.as_ref()).assert(predicate::path::is_dir());
 }
 
 /// Create a `PATH` with the requested Python versions available in order.
