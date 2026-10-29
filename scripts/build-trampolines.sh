@@ -30,6 +30,7 @@ docker buildx build -t uv-trampoline-builder --load \
 # Build trampolines inside the container.
 docker run --rm \
     --platform "$PLATFORM" \
+    -e UV_PYTHON_DOWNLOADS_JSON_URL=/source/crates/uv-python-managed/download-metadata.json \
     -v "$REPO_ROOT:/source:ro" \
     -v "$OUTPUT_DIR:/output" \
     -v "$SCRIPT_DIR/build-trampolines-in-docker.sh:/build-trampolines-in-docker.sh:ro" \
