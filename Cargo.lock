@@ -5779,7 +5779,6 @@ dependencies = [
  "indexmap",
  "insta",
  "jiff",
- "petgraph",
  "reqwest",
  "rkyv",
  "rustc-hash",

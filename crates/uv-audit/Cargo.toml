@@ -31,7 +31,6 @@ http = { workspace = true }
 futures = { workspace = true }
 indexmap = { workspace = true }
 jiff = { workspace = true }
-petgraph = { workspace = true }
 reqwest-middleware = { workspace = true, features = ["json"] }
 rkyv = { workspace = true }
 rustc-hash = { workspace = true }

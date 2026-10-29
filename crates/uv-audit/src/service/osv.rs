@@ -11,7 +11,6 @@ use std::str::FromStr as _;
 use std::sync::LazyLock;
 
 use indexmap::IndexMap;
-use petgraph::unionfind::UnionFind;
 use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::trace;
 
@@ -182,45 +181,29 @@ impl Vulnerability {
     }
 
     /// Group the records returned for one dependency by overlapping identifiers.
-    fn deduplicate(records: Vec<&Self>) -> impl Iterator<Item = Self> {
-        let mut components = UnionFind::new(records.len());
-        let mut seen = FxHashMap::default();
-        for (index, record) in records.iter().enumerate() {
-            for id in record.ids() {
-                if let Some(previous) = seen.insert(id, index) {
-                    components.union(previous, index);
+    fn deduplicate<'a>(records: impl IntoIterator<Item = &'a Self>) -> impl Iterator<Item = Self> {
+        let mut groups: Vec<Self> = Vec::new();
+        for record in records {
+            let ids: FxHashSet<_> = record.ids().collect();
+            let overlaps = |group: &Self| group.ids().any(|id| ids.contains(id));
+            // A record can join several groups. Keep the position of the first matching group.
+            let first = groups.iter().position(overlaps).unwrap_or(groups.len());
+            let mut newest = record.clone();
+            for mut other in groups.extract_if(first.., |group| overlaps(group)) {
+                // Keep the newest advisory's fix ranges. Break timestamp ties by primary ID.
+                if (Reverse(other.modified), &other.id) < (Reverse(newest.modified), &newest.id) {
+                    std::mem::swap(&mut newest, &mut other);
                 }
-            }
-        }
-
-        let mut groups: IndexMap<_, Vec<_>> = IndexMap::new();
-        for (index, record) in records.into_iter().enumerate() {
-            groups
-                .entry(components.find(index))
-                .or_default()
-                .push(record);
-        }
-
-        groups.into_values().filter_map(|group| {
-            // Use the newest advisory's metadata, including its package-specific fix ranges.
-            // Break timestamp ties by primary ID so the choice is independent of fetch order.
-            let newest = group
-                .iter()
-                .copied()
-                .min_by_key(|record| (Reverse(record.modified), record.id.as_str()))?;
-            let mut record = newest.clone();
-            if group.len() > 1 {
-                let mut aliases: Vec<_> = group
-                    .into_iter()
-                    .flat_map(Self::ids)
-                    .filter(|id| *id != newest.id)
-                    .collect();
+                let aliases = newest.aliases.get_or_insert_default();
+                aliases.push(other.id);
+                aliases.extend(other.aliases.into_iter().flatten());
+                aliases.retain(|id| *id != newest.id);
                 aliases.sort_unstable();
                 aliases.dedup();
-                record.aliases = Some(aliases.into_iter().map(str::to_owned).collect());
             }
-            Some(record)
-        })
+            groups.insert(first, newest);
+        }
+        groups.into_iter()
     }
 }
 
@@ -428,10 +411,7 @@ impl Osv {
         let findings = dep_vuln_ids
             .iter()
             .flat_map(|(dep, vuln_ids)| {
-                let records = vuln_ids
-                    .iter()
-                    .filter_map(|id| vuln_details.get(id))
-                    .collect();
+                let records = vuln_ids.iter().filter_map(|id| vuln_details.get(id));
                 Vulnerability::deduplicate(records)
                     .map(move |record| Self::vulnerability_to_finding(dep, record))
             })
@@ -639,13 +619,13 @@ mod tests {
     fn test_deduplicate_transitive_aliases() {
         let records: Vec<Vulnerability> = serde_json::from_value(json!([
             {"id": "PYSEC-B", "aliases": ["CVE-1"], "modified": "2026-01-02T00:00:00Z"},
+            {"id": "GHSA-B", "modified": "2026-01-03T00:00:00Z"},
             {"id": "PYSEC-A", "aliases": ["CVE-2"], "modified": "2026-01-02T00:00:00Z"},
-            {"id": "GHSA-A", "aliases": ["CVE-1", "CVE-2"], "modified": "2026-01-01T00:00:00Z"},
-            {"id": "GHSA-B", "modified": "2026-01-03T00:00:00Z"}
+            {"id": "GHSA-A", "aliases": ["CVE-1", "CVE-2"], "modified": "2026-01-01T00:00:00Z"}
         ]))
         .expect("valid OSV vulnerability records");
 
-        let findings: Vec<_> = Vulnerability::deduplicate(records.iter().collect())
+        let findings: Vec<_> = Vulnerability::deduplicate(&records)
             .map(|record| (record.id, record.aliases))
             .collect();
         insta::assert_debug_snapshot!(findings, @r#"
