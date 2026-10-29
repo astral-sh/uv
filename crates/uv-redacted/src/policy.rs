@@ -1,10 +1,13 @@
-//! Type-level policies for ordinary URL serialization.
+//! Type-level policies for URL serialization.
 //!
 //! Policies govern Serde serialization of the normalized URL, not its original
-//! input bytes. Changing a policy leaves the parsed URL and its credentials in
-//! memory. Display and debug output use the same redaction for every policy;
-//! ordinary deserialization uses URL parsing independently of the policy.
+//! input bytes. The [`Stripped`] policy also supports plain-text persistence via
+//! `to_serialized_string`. Changing a policy leaves the parsed URL and its
+//! credentials in memory. Display and debug output use the same redaction for
+//! every policy; ordinary deserialization uses URL parsing independently of the
+//! policy.
 
+use std::borrow::Cow;
 use std::hash::Hash;
 
 use serde::Serialize;
@@ -26,6 +29,16 @@ pub trait InternalSerializationPolicy: SerializationPolicy {}
 /// This is the default policy for [`SafeUrl`]. A serializing policy must be
 /// selected to serialize a [`SafeUrl`] using its [`Serialize`] implementation.
 /// The URL remains accessible and can still be written by other means.
+///
+/// Plain-text serialization also requires a serializing policy:
+///
+/// ```compile_fail
+/// use uv_redacted::SafeUrl;
+///
+/// let url = SafeUrl::parse("https://example.com/file.whl?sig=signature")?;
+/// url.to_serialized_string();
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Unserializable;
 
@@ -62,7 +75,31 @@ impl Serialize for SafeUrl<Stripped> {
     where
         S: serde::Serializer,
     {
-        serializer.serialize_str(self.without_credentials().as_str())
+        serializer.serialize_str(&self.to_serialized_string())
+    }
+}
+
+impl SafeUrl<Stripped> {
+    /// Return the normalized URL for plain-text persistence with sensitive userinfo removed.
+    ///
+    /// This applies the same policy as Serde serialization, retaining the complete query,
+    /// including signed credentials. [`std::fmt::Display`] and [`std::fmt::Debug`] remain redacted.
+    ///
+    /// ```
+    /// use uv_redacted::{SafeUrl, policy::Stripped};
+    ///
+    /// let url = SafeUrl::parse("https://user:password@example.com/file.whl?sig=abc%2Bdef%3D")?;
+    /// assert_eq!(
+    ///     url.with_policy_ref(Stripped).to_serialized_string(),
+    ///     "https://example.com/file.whl?sig=abc%2Bdef%3D",
+    /// );
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn to_serialized_string(&self) -> Cow<'_, str> {
+        match self.without_credentials() {
+            Cow::Borrowed(url) => Cow::Borrowed(url.as_str()),
+            Cow::Owned(url) => Cow::Owned(url.0.into()),
+        }
     }
 }
 
@@ -162,6 +199,7 @@ mod tests {
         let input = "https://user:password@example.com/file.whl?sig=abc%2Bdef%3D";
         let url = SafeUrl::parse(input)?;
         let stripped = url.clone().with_policy(Stripped);
+        assert_snapshot!(stripped.to_serialized_string(), @"https://example.com/file.whl?sig=abc%2Bdef%3D");
         assert_snapshot!(stripped.serialize(serde_json::value::Serializer)?, @r#""https://example.com/file.whl?sig=abc%2Bdef%3D""#);
 
         let raw = url.with_policy(Raw);
@@ -179,6 +217,7 @@ mod tests {
     #[test]
     fn borrowed_policy_retains_git_username() -> Result<(), Box<dyn Error>> {
         let url = SafeUrl::parse("ssh://git@github.com/astral-sh/uv?sig=abc%2Bdef%3D")?;
+        assert_snapshot!(url.with_policy_ref(Stripped).to_serialized_string(), @"ssh://git@github.com/astral-sh/uv?sig=abc%2Bdef%3D");
         assert_snapshot!(serde_json::to_string(url.with_policy_ref(Stripped))?, @r#""ssh://git@github.com/astral-sh/uv?sig=abc%2Bdef%3D""#);
         assert_snapshot!(url.without_credentials().to_string(), @"ssh://git@github.com/astral-sh/uv?sig=****");
         Ok(())
