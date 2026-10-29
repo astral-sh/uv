@@ -531,7 +531,7 @@ async fn audit_best_id_selection() {
     ");
 }
 
-/// OSV can return separate records for the same vulnerability with conflicting fix versions.
+/// Alias records with conflicting fixes use the most recently modified advisory's fix versions.
 #[tokio::test]
 async fn audit_duplicate_vulnerability_aliases() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-01T00:00:00Z");
@@ -616,8 +616,7 @@ async fn audit_duplicate_vulnerability_aliases() -> Result<()> {
         .mount(&server)
         .await;
 
-    // These aliases identify one vulnerability, so reporting and counting both is misleading.
-    // The conflicting fix versions come from OSV; see astral-sh/uv#22985.
+    // The newer GHSA record supplies the fix version, while the PYSEC ID is preferred for display.
     uv_snapshot!(context.filters(), context
         .audit()
         .arg("--preview-features")
@@ -630,13 +629,7 @@ async fn audit_duplicate_vulnerability_aliases() -> Result<()> {
 
     Vulnerabilities:
 
-    certifi 2024.12.14 has 2 known vulnerabilities:
-
-    - PYSEC-2026-4320: certifi bundles emSign root CAs with compromised intermediate CA keys
-
-      Fixed in: 2026.10.19
-
-      Advisory information: https://github.com/advisories/GHSA-6q48-6c7w-9gw2
+    certifi 2024.12.14 has 1 known vulnerability:
 
     - PYSEC-2026-4320: certifi bundles emSign root CAs with compromised intermediate CA keys
 
@@ -647,7 +640,7 @@ async fn audit_duplicate_vulnerability_aliases() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Found 2 known vulnerabilities and no adverse project statuses in 1 package
+    Found 1 known vulnerability and no adverse project statuses in 1 package
     ");
 
     Ok(())
