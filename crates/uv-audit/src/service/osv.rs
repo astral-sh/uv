@@ -190,7 +190,8 @@ impl Vulnerability {
             let first = groups.iter().position(overlaps).unwrap_or(groups.len());
             let mut newest = record.clone();
             for mut other in groups.extract_if(first.., |group| overlaps(group)) {
-                // Keep the newest advisory's fix ranges. Break timestamp ties by primary ID.
+                // Keep the newest advisory's fix ranges. If timestamps match, choose the record
+                // whose `id` comes first in string order.
                 if (Reverse(other.modified), &other.id) < (Reverse(newest.modified), &newest.id) {
                     std::mem::swap(&mut newest, &mut other);
                 }
@@ -529,8 +530,9 @@ impl Osv {
             .map(VulnerabilityID::new)
             .collect();
 
-        // Use the smallest primary ID returned for this group so that its SARIF identity
-        // stays stable when a different advisory supplies the newest metadata.
+        // Choose the first `id` in string order among the records OSV returned for this group.
+        // An alias qualifies only if it is also a returned record's `id`. This keeps the SARIF
+        // rule ID and fingerprint stable when an advisory's modification time changes.
         if let Some(primary) = aliases
             .iter_mut()
             .filter(|id| advisory_ids.contains(*id))
