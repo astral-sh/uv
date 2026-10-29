@@ -266,7 +266,7 @@ impl TryFrom<SafeUrl> for GitUrl {
 
 impl GitUrl {
     /// Initialize a [`GitUrl`] source from a URL and an explicit Git LFS setting.
-    pub fn from_url(mut url: SafeUrl, lfs: GitLfs) -> Result<Self, GitUrlParseError> {
+    pub(crate) fn from_url(mut url: SafeUrl, lfs: GitLfs) -> Result<Self, GitUrlParseError> {
         // Remove any query parameters and fragments.
         url.set_fragment(None);
         url.set_query(None);
