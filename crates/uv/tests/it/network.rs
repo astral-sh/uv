@@ -28,8 +28,7 @@ use uv_redacted::SafeUrl;
 use uv_static::EnvVars;
 use uv_test::{TestContext, uv_snapshot};
 
-#[path = "../common/in_process.rs"]
-mod in_process;
+use crate::in_process;
 
 /// Creates a CONNECT tunnel proxy that forwards connections to the target.
 ///

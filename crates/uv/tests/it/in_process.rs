@@ -21,7 +21,7 @@ pub(super) fn with_runtime(test: fn(&Runtime) -> Result<()>) -> Result<()> {
         .unwrap_or_else(|panic| std::panic::resume_unwind(panic))
 }
 
-/// TestContext clears the parent’s uv options when launching the executable. Use only
+/// [`TestContext`] clears the parent’s uv options when launching the executable. Use only
 /// fixture arguments for options that Clap would otherwise take from the environment.
 fn fixture_arguments(command: Command) -> Command {
     command

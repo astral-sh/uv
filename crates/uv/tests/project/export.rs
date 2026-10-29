@@ -22,7 +22,7 @@ use uv_test::packse::{PackseServer, WheelBuilder, scenario::Scenario};
 use uv_test::{READ_ONLY_GITHUB_SSH_DEPLOY_KEY, READ_ONLY_GITHUB_TOKEN, decode_token};
 use uv_test::{TestContext, apply_filters, uv_snapshot};
 
-#[path = "../common/in_process.rs"]
+#[path = "../it/in_process.rs"]
 mod in_process;
 
 /// The workspace discovered while resolving settings is reused by a normal `uv export`.
