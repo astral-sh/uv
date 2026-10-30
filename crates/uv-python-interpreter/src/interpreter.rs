@@ -1477,6 +1477,9 @@ impl InterpreterInfo {
                     &error,
                     Hints::from("CPU detection failures will become errors in a future release.")
                 );
+                // Cache the interpreter so ordinary commands don't retry the failed probe on every
+                // run. While wheel variants are in preview, we accept that enabling them later can
+                // reuse this entry and fall back to x86-64-v2.
                 None
             }
         };
