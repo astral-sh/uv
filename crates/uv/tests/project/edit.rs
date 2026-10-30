@@ -3473,50 +3473,110 @@ fn update() -> Result<()> {
     Ok(())
 }
 
-/// Adding a second wheel for a disjoint marker must preserve the first wheel in the lockfile.
+/// Add two wheels for the same package with disjoint platform markers.
 #[test]
-fn add_wheels_with_disjoint_markers() {
+fn add_wheels_with_disjoint_markers() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
     let links = context.workspace_root.join("test/links");
-    context
-        .init()
-        .args(["--bare", "--name", "project"])
-        .assert()
-        .success();
+    for wheel in ["ok-1.0.0-py3-none-any.whl", "ok-2.0.0-py3-none-any.whl"] {
+        fs_err::copy(links.join(wheel), context.temp_dir.join(wheel))?;
+    }
 
-    context
-        .add()
-        .arg(links.join("ok-1.0.0-py3-none-any.whl"))
-        .args(["--marker", "sys_platform == 'win32'", "--no-sync"])
-        .assert()
-        .success();
-    context
-        .add()
-        .arg(links.join("ok-2.0.0-py3-none-any.whl"))
-        .args(["--marker", "sys_platform == 'linux'", "--no-sync"])
-        .assert()
-        .success();
+    uv_snapshot!(context.filters(), context.add()
+        .arg("./ok-1.0.0-py3-none-any.whl")
+        .args(["--marker", "sys_platform == 'win32'", "--no-sync"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
 
-    let installed_version = "from importlib.metadata import version; print(version('ok'), end='')";
-    context
-        .sync()
-        .args(["--frozen", "--python-platform", "windows"])
-        .assert()
-        .success();
-    context
-        .assert_command(installed_version)
-        .success()
-        .stdout("1.0.0");
+    uv_snapshot!(context.filters(), context.add()
+        .arg("./ok-2.0.0-py3-none-any.whl")
+        .args(["--marker", "sys_platform == 'linux'", "--no-sync"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
 
-    context
-        .sync()
-        .args(["--frozen", "--python-platform", "linux"])
-        .assert()
-        .success();
-    context
-        .assert_command(installed_version)
-        .success()
-        .stdout("2.0.0");
+    assert_snapshot!(context.read("pyproject.toml"), @r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    dependencies = [
+        "ok ; sys_platform == 'linux'",
+        "ok ; sys_platform == 'win32'",
+    ]
+
+    [tool.uv.sources]
+    ok = [
+        { path = "ok-1.0.0-py3-none-any.whl", marker = "sys_platform == 'win32'" },
+        { path = "ok-2.0.0-py3-none-any.whl", marker = "sys_platform == 'linux'" },
+    ]
+    "#);
+
+    assert_snapshot!(context.read("uv.lock"), @r#"
+    version = 1
+    revision = 5
+    requires-python = ">=3.12"
+    resolution-markers = [
+        "sys_platform == 'linux'",
+        "sys_platform == 'win32'",
+        "sys_platform != 'linux' and sys_platform != 'win32'",
+    ]
+
+    [options]
+    exclude-newer = "2024-03-25T00:00:00Z"
+
+    [[package]]
+    name = "ok"
+    version = "1.0.0"
+    source = { path = "ok-1.0.0-py3-none-any.whl" }
+    resolution-markers = [
+        "sys_platform == 'win32'",
+    ]
+    wheels = [
+        { filename = "ok-1.0.0-py3-none-any.whl", hash = "sha256:79f0b33e6ce1e09eaa1784c8eee275dfe84d215d9c65c652f07c18e85fdaac5f" },
+    ]
+
+    [[package]]
+    name = "ok"
+    version = "2.0.0"
+    source = { path = "ok-2.0.0-py3-none-any.whl" }
+    resolution-markers = [
+        "sys_platform == 'linux'",
+    ]
+    wheels = [
+        { filename = "ok-2.0.0-py3-none-any.whl", hash = "sha256:8163cd4f0477f8e93b856ac6a517fe5fa0f29339291fe2807d5376df685f6697" },
+    ]
+
+    [[package]]
+    name = "project"
+    version = "0.1.0"
+    source = { virtual = "." }
+    dependencies = [
+        { name = "ok", version = "1.0.0", source = { path = "ok-1.0.0-py3-none-any.whl" }, marker = "sys_platform == 'win32'" },
+        { name = "ok", version = "2.0.0", source = { path = "ok-2.0.0-py3-none-any.whl" }, marker = "sys_platform == 'linux'" },
+    ]
+
+    [package.metadata]
+    requires-dist = [
+        { name = "ok", marker = "sys_platform == 'linux'", path = "ok-2.0.0-py3-none-any.whl" },
+        { name = "ok", marker = "sys_platform == 'win32'", path = "ok-1.0.0-py3-none-any.whl" },
+    ]
+    "#);
+
+    Ok(())
 }
 
 /// Add and update a requirement, with different markers
