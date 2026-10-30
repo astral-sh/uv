@@ -10,7 +10,7 @@ use tracing::info_span;
 use uv_auth::CredentialsCache;
 use uv_cache::Cache;
 use uv_configuration::{
-    Constraints, DependencyGroupsWithDefaults, ExcludeDependency, NoSources, Upgrade,
+    Constraints, DependencyGroupsWithDefaults, ExcludeDependency, NoSources, Override, Upgrade,
 };
 use uv_distribution::LoweredRequirement;
 use uv_distribution_types::{
@@ -126,6 +126,25 @@ impl<'lock> LockTarget<'lock> {
                 .cloned()
                 .collect(),
         }
+    }
+
+    /// Requirements from constraints and overrides can select sources even without a direct dependency.
+    pub fn constraints_and_overrides(
+        self,
+    ) -> impl Iterator<Item = uv_pep508::Requirement<VerbatimParsedUrl>> {
+        self.constraints()
+            .into_iter()
+            .chain(
+                self.build_constraints()
+                    .into_iter()
+                    .map(|constraint| constraint.into_parts().0),
+            )
+            .chain(self.overrides().into_iter().flat_map(|entry| match entry {
+                Override::Requirement(requirement) => Either::Left(std::iter::once(requirement)),
+                Override::Package(package) => {
+                    Either::Right(package.dependencies.into_vec().into_iter())
+                }
+            }))
     }
 
     /// Return the dependency groups that are attached to the target directly, as opposed to being

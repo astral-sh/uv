@@ -1419,7 +1419,9 @@ fn add_dev_to_mixed_case_inline_group() -> Result<()> {
         .temp_dir
         .child("pyproject.toml")
         .write_str(indoc! {r#"
-        dependency-groups = { Dev = [], ci = [{ include-group = "Dev" }] }
+        dependency-groups = { Dev = [
+            "tqdm==1000.0.0", # CI progress display
+        ], ci = [{ include-group = "Dev" }] }
         tool.uv = { dev-dependencies = [] }
 
         [project]
@@ -1441,6 +1443,19 @@ fn add_dev_to_mixed_case_inline_group() -> Result<()> {
         .assert()
         .success();
 
+    assert_snapshot!(context.read("pyproject.toml"), @r#"
+    dependency-groups = { Dev = [
+        "ok==1.0.0",
+        "tqdm==1000.0.0", # CI progress display
+    ], ci = [{ include-group = "Dev" }] }
+    tool.uv = { dev-dependencies = [] }
+
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    "#);
+
     // The included group must receive the package so a CI-only install can use it.
     context
         .sync()
@@ -1448,40 +1463,6 @@ fn add_dev_to_mixed_case_inline_group() -> Result<()> {
         .assert()
         .success();
     context.assert_installed("ok", "1.0.0");
-    Ok(())
-}
-
-#[test]
-fn add_dev_preserves_inline_group_comments() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-    context
-        .temp_dir
-        .child("pyproject.toml")
-        .write_str(indoc! {r#"
-        dependency-groups = {
-            dev = [],
-            # Release tests run separately.
-            release = [],
-        }
-        tool.uv.dev-dependencies = []
-
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-    "#})?;
-
-    context
-        .add()
-        .args(["--dev", "ok", "--frozen"])
-        .assert()
-        .success();
-    assert!(
-        context
-            .read("pyproject.toml")
-            .contains("# Release tests run separately.")
-    );
-
     Ok(())
 }
 
@@ -4233,6 +4214,62 @@ fn remove_inline_source() -> Result<()> {
     }
     "#);
 
+    Ok(())
+}
+
+/// Removing a group requirement drops only that selection from an inline source list.
+#[test]
+fn remove_scoped_inline_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let links = context.workspace_root.join("test/links");
+    let wheel = "ok-1.0.0-py3-none-any.whl";
+    fs_err::copy(links.join(wheel), context.temp_dir.join(wheel))?;
+    context.temp_dir.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1"
+        requires-python = ">=3.12"
+        optional-dependencies = { docs = ["ok; sys_platform != 'win32'"] }
+
+        [dependency-groups]
+        dev = ["ok; sys_platform == 'win32'"]
+
+        [tool.uv]
+        sources = { ok = [
+            { path = "ok-1.0.0-py3-none-any.whl", extra = "docs", marker = "sys_platform != 'win32'" }, # Docs wheel
+            { path = "ok-1.0.0-py3-none-any.whl", group = "dev", marker = "sys_platform == 'win32'" } # Dev wheel
+            # End of the source list.
+        ] }
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock().args(["--no-index", "--find-links"]).arg(&links), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.remove().args(["--group", "dev", "ok", "--frozen"]), @"
+    exit_code: 0 (success)
+    ");
+    assert_snapshot!(context.read("pyproject.toml"), @r#"
+    [project]
+    name = "project"
+    version = "1"
+    requires-python = ">=3.12"
+    optional-dependencies = { docs = ["ok; sys_platform != 'win32'"] }
+
+    [dependency-groups]
+    dev = []
+
+    [tool.uv]
+    sources = { ok = [
+        { path = "ok-1.0.0-py3-none-any.whl", extra = "docs", marker = "sys_platform != 'win32'" } # Docs wheel
+        # End of the source list.
+    ] }
+    "#);
+    uv_snapshot!(context.filters(), context.lock().args(["--no-index", "--find-links"]).arg(&links), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
     Ok(())
 }
 

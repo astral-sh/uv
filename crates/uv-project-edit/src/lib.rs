@@ -1,6 +1,6 @@
 //! Edit project and script metadata while preserving TOML formatting.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
 use std::str::FromStr;
 use std::{fmt, mem};
@@ -20,7 +20,8 @@ use uv_fs::{PortablePath, is_same_file_allow_missing, try_relative_to_if};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionParseError};
 use uv_pep508::{MarkerTree, Requirement, VersionOrUrl};
-use uv_workspace::pyproject::{DependencyType, Source};
+use uv_workspace::dependency_groups::{DependencyGroupError, FlatDependencyGroups};
+use uv_workspace::pyproject::{DependencyType, ExtraBuildDependencies, Source, Sources};
 
 /// Raw and mutable representation of a `pyproject.toml`.
 ///
@@ -54,7 +55,9 @@ pub enum Error {
     #[error("Failed to serialize `pyproject.toml`")]
     Serialize(#[from] Box<toml::ser::Error>),
     #[error("Failed to deserialize `pyproject.toml`")]
-    Deserialize(#[from] Box<toml::de::Error>),
+    Deserialize(#[from] Box<toml_edit::de::Error>),
+    #[error(transparent)]
+    DependencyGroup(#[from] DependencyGroupError),
     #[error("Dependencies in `pyproject.toml` are malformed")]
     MalformedDependencies,
     #[error("Sources in `pyproject.toml` are malformed")]
@@ -128,6 +131,11 @@ impl PyProjectTomlMut {
             target,
             inline_source_comments,
         })
+    }
+
+    /// Return whether the project declares its sources in an inline table.
+    pub fn has_inline_sources(&self) -> bool {
+        has_inline_sources(self.doc.as_item())
     }
 
     /// Restore comments to the source fields still present after a removal.
@@ -977,52 +985,12 @@ impl PyProjectTomlMut {
 
     /// Removes all occurrences of dependencies with the given name.
     pub fn remove_dependency(&mut self, name: &PackageName) -> Result<Vec<Requirement>, Error> {
-        // Try to get `project.dependencies`.
-        let Some(dependencies) = self
-            .project_mut()?
-            .and_then(|project| project.get_mut("dependencies"))
-            .map(|dependencies| {
-                dependencies
-                    .as_array_mut()
-                    .ok_or(Error::MalformedDependencies)
-            })
-            .transpose()?
-        else {
-            return Ok(Vec::new());
-        };
-
-        let requirements = remove_dependency(name, dependencies);
-        self.remove_source(name)?;
-
-        Ok(requirements)
+        self.remove_dependency_from(name, &DependencyType::Production)
     }
 
     /// Removes all occurrences of development dependencies with the given name.
     pub fn remove_dev_dependency(&mut self, name: &PackageName) -> Result<Vec<Requirement>, Error> {
-        // Try to get `tool.uv.dev-dependencies`.
-        let Some(dev_dependencies) = self
-            .doc
-            .get_mut("tool")
-            .map(|tool| tool.as_table_mut().ok_or(Error::MalformedDependencies))
-            .transpose()?
-            .and_then(|tool| tool.get_mut("uv"))
-            .map(|tool_uv| tool_uv.as_table_mut().ok_or(Error::MalformedDependencies))
-            .transpose()?
-            .and_then(|tool_uv| tool_uv.get_mut("dev-dependencies"))
-            .map(|dependencies| {
-                dependencies
-                    .as_array_mut()
-                    .ok_or(Error::MalformedDependencies)
-            })
-            .transpose()?
-        else {
-            return Ok(Vec::new());
-        };
-
-        let requirements = remove_dependency(name, dev_dependencies);
-        self.remove_source(name)?;
-
-        Ok(requirements)
+        self.remove_dependency_from(name, &DependencyType::Dev)
     }
 
     /// Removes all occurrences of optional dependencies in the group with the given name.
@@ -1031,39 +999,7 @@ impl PyProjectTomlMut {
         name: &PackageName,
         group: &ExtraName,
     ) -> Result<Vec<Requirement>, Error> {
-        // Try to get `project.optional-dependencies.<group>`.
-        let Some(optional_dependencies) = self
-            .project_mut()?
-            .and_then(|project| project.get_mut("optional-dependencies"))
-            .map(|extras| {
-                extras
-                    .as_table_like_mut()
-                    .ok_or(Error::MalformedDependencies)
-            })
-            .transpose()?
-            .and_then(|extras| {
-                extras.iter_mut().find_map(|(key, value)| {
-                    if ExtraName::from_str(key.get()).is_ok_and(|g| g == *group) {
-                        Some(value)
-                    } else {
-                        None
-                    }
-                })
-            })
-            .map(|dependencies| {
-                dependencies
-                    .as_array_mut()
-                    .ok_or(Error::MalformedDependencies)
-            })
-            .transpose()?
-        else {
-            return Ok(Vec::new());
-        };
-
-        let requirements = remove_dependency(name, optional_dependencies);
-        self.remove_source(name)?;
-
-        Ok(requirements)
+        self.remove_dependency_from(name, &DependencyType::Optional(group.clone()))
     }
 
     /// Removes all occurrences of the dependency in the group with the given name.
@@ -1072,57 +1008,29 @@ impl PyProjectTomlMut {
         name: &PackageName,
         group: &GroupName,
     ) -> Result<Vec<Requirement>, Error> {
-        // Try to get `project.optional-dependencies.<group>`.
-        let Some(group_dependencies) = self
-            .doc
-            .get_mut("dependency-groups")
-            .map(|groups| {
-                groups
-                    .as_table_like_mut()
-                    .ok_or(Error::MalformedDependencies)
-            })
-            .transpose()?
-            .and_then(|groups| {
-                groups.iter_mut().find_map(|(key, value)| {
-                    if GroupName::from_str(key.get()).is_ok_and(|g| g == *group) {
-                        Some(value)
-                    } else {
-                        None
-                    }
-                })
-            })
-            .map(|dependencies| {
-                dependencies
-                    .as_array_mut()
-                    .ok_or(Error::MalformedDependencies)
-            })
-            .transpose()?
-        else {
+        self.remove_dependency_from(name, &DependencyType::Group(group.clone()))
+    }
+
+    /// Remove a package from one section while preserving the comments in the serialized document.
+    fn remove_dependency_from(
+        &mut self,
+        name: &PackageName,
+        dependency_type: &DependencyType,
+    ) -> Result<Vec<Requirement>, Error> {
+        let Some(dependencies) = self.dependency_type_array_mut(dependency_type)? else {
             return Ok(Vec::new());
         };
-
-        let requirements = remove_dependency(name, group_dependencies);
-        self.remove_source(name)?;
-
-        Ok(requirements)
-    }
-
-    /// Remove a matching source from `tool.uv.sources`, if it exists.
-    fn remove_source(&mut self, name: &PackageName) -> Result<(), Error> {
-        self.remove_unused_source(name)?;
+        let removed = remove_dependency(name, dependencies);
+        if !self.has_inline_sources() {
+            self.remove_regular_source(name)?;
+        }
         self.restore_inline_source_comments();
-        Ok(())
+        Ok(removed)
     }
 
-    /// Remove the source if the dependency no longer occurs in the manifest.
-    fn remove_unused_source(&mut self, name: &PackageName) -> Result<(), Error> {
-        // An inline source can be shared with a dependency declared in another inline table.
-        let remaining = if has_inline_sources(self.doc.as_item()) {
-            self.find_dependency_with(name, None, Item::as_table_like)
-        } else {
-            self.find_dependency(name, None)
-        };
-        if !remaining.is_empty() {
+    /// Remove an ordinary source table entry after its last local declaration is removed.
+    fn remove_regular_source(&mut self, name: &PackageName) -> Result<(), Error> {
+        if !self.find_dependency(name, None).is_empty() {
             return Ok(());
         }
 
@@ -1152,6 +1060,160 @@ impl PyProjectTomlMut {
             }
         }
 
+        Ok(())
+    }
+
+    /// Read extra build requirements from the manifest even when its configuration is disabled.
+    pub fn extra_build_dependencies(&self) -> Option<ExtraBuildDependencies> {
+        let table = self
+            .doc
+            .get("tool")?
+            .get("uv")?
+            .get("extra-build-dependencies")?
+            .clone()
+            .into_table()
+            .ok()?;
+        toml_edit::de::from_document(DocumentMut::from(table)).ok()
+    }
+
+    /// Return whether a member can use an inherited source with the given extra, if any.
+    pub fn uses_source(&self, name: &PackageName, extra: Option<&ExtraName>) -> bool {
+        self.declares_dependency(name, extra)
+            || self
+                .doc
+                .get("build-system")
+                .and_then(|build| build.get("requires"))
+                .is_some_and(|requirements| requirements_contain(requirements, name, extra))
+    }
+
+    /// Check runtime and group requirements, including backend-provided metadata.
+    fn declares_dependency(&self, name: &PackageName, extra: Option<&ExtraName>) -> bool {
+        if self.target == DependencyTarget::Script {
+            return self
+                .doc
+                .get("dependencies")
+                .is_some_and(|requirements| requirements_contain(requirements, name, extra));
+        }
+        let project = self.doc.get("project");
+        let optional = project
+            .and_then(|project| project.get("optional-dependencies"))
+            .and_then(Item::as_table_like);
+        let matches_extra =
+            |key: &str| extra.is_none_or(|extra| ExtraName::from_str(key).as_ref() == Ok(extra));
+        if project
+            .and_then(|project| project.get("dynamic"))
+            .and_then(Item::as_array)
+            .is_some_and(|fields| {
+                fields.iter().any(|field| match field.as_str() {
+                    Some("optional-dependencies") => true,
+                    Some("dependencies") => extra.is_none(),
+                    _ => false,
+                })
+            })
+        {
+            return true;
+        }
+        if project
+            .and_then(|project| project.get("dependencies"))
+            .is_some_and(|requirements| requirements_contain(requirements, name, extra))
+            || optional.is_some_and(|extras| {
+                extras.iter().any(|(key, requirements)| {
+                    matches_extra(key) && requirements_contain(requirements, name, None)
+                })
+            })
+        {
+            return true;
+        }
+        if extra.is_some() {
+            return false;
+        }
+        let dev = self
+            .doc
+            .get("tool")
+            .and_then(|tool| tool.get("uv"))
+            .and_then(|uv| uv.get("dev-dependencies"));
+        let groups = self
+            .doc
+            .get("dependency-groups")
+            .and_then(Item::as_table_like);
+        dev.is_some_and(|requirements| requirements_contain(requirements, name, None))
+            || groups.is_some_and(|groups| {
+                groups
+                    .iter()
+                    .any(|(_, requirements)| requirements_contain(requirements, name, None))
+            })
+    }
+
+    /// Remove unused selections for the edited packages, checking their original sources in TOML order.
+    pub fn remove_unused_sources(
+        &mut self,
+        root: &Path,
+        names: &[PackageName],
+        sources: &BTreeMap<PackageName, Sources>,
+        used_elsewhere: impl Fn(&PackageName, &Source) -> bool,
+    ) -> Result<(), Error> {
+        // Expand group includes once, after all dependency edits. Scripts ignore group selectors.
+        let groups = if self.target == DependencyTarget::PyProjectToml
+            && names
+                .iter()
+                .filter_map(|name| sources.get(name))
+                .any(|entries| entries.iter().any(|source| source.group().is_some()))
+        {
+            let project = toml_edit::de::from_document(self.doc.clone()).map_err(Box::new)?;
+            Some(FlatDependencyGroups::from_pyproject_toml(root, &project)?)
+        } else {
+            None
+        };
+
+        for name in names {
+            let Some(entries) = sources.get(name) else {
+                continue;
+            };
+            let mut unused = Vec::new();
+            for (index, source) in entries.iter().enumerate() {
+                let keep = if self.target == DependencyTarget::Script {
+                    self.declares_dependency(name, source.extra()) || used_elsewhere(name, source)
+                } else if let Some(extra) = source.extra() {
+                    // A project's own extra must validate against its metadata. A virtual
+                    // workspace root can instead supply an extra source to a member.
+                    self.declares_dependency(name, Some(extra))
+                        || (self.doc.get("project").is_none() && used_elsewhere(name, source))
+                } else if let Some(group) = source.group() {
+                    groups
+                        .as_ref()
+                        .and_then(|groups| groups.get(group))
+                        .is_some_and(|group| group.requirements.iter().any(|req| req.name == *name))
+                } else {
+                    self.uses_source(name, None) || used_elsewhere(name, source)
+                };
+                if !keep {
+                    unused.push(index);
+                }
+            }
+            if unused.is_empty() {
+                continue;
+            }
+            let uv = self.doc["tool"]["uv"]
+                .as_table_like_mut()
+                .ok_or(Error::MalformedSources)?;
+            let sources = uv
+                .get_mut("sources")
+                .and_then(Item::as_table_like_mut)
+                .ok_or(Error::MalformedSources)?;
+            let key = find_source(name, sources).ok_or(Error::MalformedSources)?;
+            if unused.len() == entries.iter().count() {
+                sources.remove(&key);
+                if sources.is_empty() {
+                    uv.remove("sources");
+                }
+            } else {
+                let source = sources.get_mut(&key).ok_or(Error::MalformedSources)?;
+                for index in unused.into_iter().rev() {
+                    remove_source_at(index, source)?;
+                }
+            }
+        }
+        self.restore_inline_source_comments();
         Ok(())
     }
 
@@ -1185,19 +1247,9 @@ impl PyProjectTomlMut {
         name: &PackageName,
         marker: Option<&MarkerTree>,
     ) -> Vec<DependencyType> {
-        self.find_dependency_with(name, marker, |item| item.as_table().map(|table| table as _))
-    }
-
-    /// Find matching declarations using the table forms supported by the caller.
-    fn find_dependency_with(
-        &self,
-        name: &PackageName,
-        marker: Option<&MarkerTree>,
-        as_table: fn(&Item) -> Option<&dyn TableLike>,
-    ) -> Vec<DependencyType> {
         let mut types = Vec::new();
 
-        if let Some(project) = self.doc.get("project").and_then(as_table) {
+        if let Some(project) = self.doc.get("project").and_then(Item::as_table) {
             // Check `project.dependencies`.
             if let Some(dependencies) = project.get("dependencies").and_then(Item::as_array)
                 && !find_dependencies(name, marker, dependencies).is_empty()
@@ -1206,8 +1258,11 @@ impl PyProjectTomlMut {
             }
 
             // Check `project.optional-dependencies`.
-            if let Some(extras) = project.get("optional-dependencies").and_then(as_table) {
-                for (extra, dependencies) in extras.iter() {
+            if let Some(extras) = project
+                .get("optional-dependencies")
+                .and_then(Item::as_table)
+            {
+                for (extra, dependencies) in extras {
                     let Some(dependencies) = dependencies.as_array() else {
                         continue;
                     };
@@ -1223,8 +1278,8 @@ impl PyProjectTomlMut {
         }
 
         // Check `dependency-groups`.
-        if let Some(groups) = self.doc.get("dependency-groups").and_then(as_table) {
-            for (group, dependencies) in groups.iter() {
+        if let Some(groups) = self.doc.get("dependency-groups").and_then(Item::as_table) {
+            for (group, dependencies) in groups {
                 let Some(dependencies) = dependencies.as_array() else {
                     continue;
                 };
@@ -1242,9 +1297,9 @@ impl PyProjectTomlMut {
         if let Some(dev_dependencies) = self
             .doc
             .get("tool")
-            .and_then(as_table)
+            .and_then(Item::as_table)
             .and_then(|tool| tool.get("uv"))
-            .and_then(as_table)
+            .and_then(Item::as_table)
             .and_then(|uv| uv.get("dev-dependencies"))
             .and_then(Item::as_array)
             && !find_dependencies(name, marker, dev_dependencies).is_empty()
@@ -1637,34 +1692,40 @@ fn remove_dependency(name: &PackageName, deps: &mut Array) -> Vec<Requirement> {
 }
 
 fn remove_dependency_at(index: usize, deps: &mut Array) -> Option<Requirement> {
-    if let Some(prefix) = deps
-        .get(index)
-        .and_then(|item| item.decor().prefix().and_then(|s| s.as_str()))
-        .filter(|s| !s.is_empty())
-    {
-        let prefix = prefix.to_string();
-        if let Some(next) = deps.get(index + 1)
-            && let Some(existing) = next.decor().prefix().and_then(|s| s.as_str())
-        {
-            // Transfer removed item's prefix to the next item's prefix.
-            let existing = existing.to_string();
-            if let Some(next) = deps.get_mut(index + 1) {
-                next.decor_mut().set_prefix(format!("{prefix}{existing}"));
-            }
-        } else if let Some(next) = deps.get_mut(index + 1) {
-            // Next item exists but has no prefix; use ours directly.
-            next.decor_mut().set_prefix(&prefix);
-        } else if let Some(existing) = deps.trailing().as_str() {
-            // No next item; move comments to the array trailing.
-            deps.set_trailing(format!("{prefix}{existing}"));
-        } else {
-            deps.set_trailing(&prefix);
-        }
-    }
-
-    deps.remove(index)
+    remove_array_item(index, deps)
         .as_str()
         .and_then(|req| Requirement::from_str(req).ok())
+}
+
+/// Remove an array item, retaining comments that TOML stores between consecutive values.
+fn remove_array_item(index: usize, array: &mut Array) -> Value {
+    let removed = array.remove(index);
+    let Some(prefix) = removed.decor().prefix().and_then(RawString::as_str) else {
+        return removed;
+    };
+    let join = |following: Option<&str>| {
+        let following = following.unwrap_or_default();
+        let start = following.trim_start_matches([' ', '\t']);
+        if !prefix.contains('#') && !start.starts_with('#') {
+            return None;
+        }
+        // The next line already has its own indentation.
+        let prefix = if start.starts_with(['\r', '\n']) {
+            prefix.trim_end()
+        } else {
+            prefix
+        };
+        Some(format!("{prefix}{following}"))
+    };
+    if let Some(next) = array.get_mut(index) {
+        let decor = next.decor_mut();
+        if let Some(prefix) = join(decor.prefix().and_then(RawString::as_str)) {
+            decor.set_prefix(prefix);
+        }
+    } else if let Some(trailing) = join(array.trailing().as_str()) {
+        array.set_trailing(trailing);
+    }
+    removed
 }
 
 /// Returns a `Vec` containing the all dependencies with the given name, along with their positions
@@ -1692,6 +1753,59 @@ fn same_requirement_declaration(left: &Requirement, right: &Requirement) -> bool
         && left.extras == right.extras
         && left.version_or_url == right.version_or_url
         && left.marker == right.marker
+}
+
+/// Remove one entry from a source array, preserving the surrounding TOML formatting.
+fn remove_source_at(index: usize, source: &mut Item) -> Result<(), Error> {
+    if let Some(entries) = source.as_array_mut() {
+        // Without a trailing comma, comments and whitespace before `]` belong to the last value.
+        if index + 1 == entries.len()
+            && !entries.trailing_comma()
+            && let Some(suffix) = entries
+                .get(index)
+                .and_then(|entry| entry.decor().suffix())
+                .and_then(RawString::as_str)
+        {
+            // Discard the removed value's end-of-line comment and keep the following lines.
+            let first_line = suffix.lines().next().unwrap_or_default();
+            let closing = if first_line.trim_start().starts_with('#') {
+                &suffix[first_line.len()..]
+            } else {
+                suffix
+            };
+            let trailing = format!(
+                "{closing}{}",
+                entries.trailing().as_str().unwrap_or_default()
+            );
+            entries.set_trailing(trailing);
+        }
+        remove_array_item(index, entries);
+    } else if let Some(entries) = source.as_array_of_tables_mut() {
+        entries.remove(index);
+    } else {
+        return Err(Error::MalformedSources);
+    }
+    Ok(())
+}
+
+/// Return whether a PEP 508 requirement in the array names this package.
+fn requirements_contain(
+    requirements: &Item,
+    name: &PackageName,
+    extra: Option<&ExtraName>,
+) -> bool {
+    requirements.as_array().is_some_and(|requirements| {
+        requirements
+            .iter()
+            .filter_map(Value::as_str)
+            .filter_map(try_parse_requirement)
+            .any(|requirement| {
+                &requirement.name == name
+                    && extra.is_none_or(|extra| {
+                        requirement.marker.top_level_extra_name().as_deref() == Some(extra)
+                    })
+            })
+    })
 }
 
 const SOURCE_PATH: [&str; 3] = ["tool", "uv", "sources"];
@@ -2144,6 +2258,37 @@ test = ["anyio<3"]
 dev = ["anyio<4"]
 "#
         );
+        Ok(())
+    }
+
+    #[test]
+    fn remove_unmapped_dependency_preserves_inline_source_comments() -> Result<()> {
+        let mut project = PyProjectTomlMut::from_toml(
+            r#"
+[project]
+dependencies = ["anyio"]
+
+[tool.uv]
+sources = {
+    a.path = "a", # First wheel
+    b.path = "b", # Second wheel
+    a.marker = "sys_platform == 'win32'"
+}
+"#,
+            DependencyTarget::PyProjectToml,
+        )?;
+        project.remove_dependency(&PackageName::from_str("anyio")?)?;
+        assert_snapshot!(project.to_string(), @r#"
+        [project]
+        dependencies = []
+
+        [tool.uv]
+        sources = {
+            a.path = "a", # First wheel
+            a.marker = "sys_platform == 'win32'",
+            b.path = "b" # Second wheel
+        }
+        "#);
         Ok(())
     }
 

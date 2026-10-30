@@ -1,8 +1,10 @@
+use std::collections::BTreeMap;
 use std::fmt::Write;
 use std::path::Path;
 
 use anyhow::Result;
 use owo_colors::OwoColorize;
+use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::warn;
 
 use uv_cache::Cache;
@@ -35,7 +37,7 @@ use uv_settings::{
     FrozenSource, LockCheck, MalwareCheckSettings, PythonInstallMirrors, ResolverInstallerSettings,
 };
 use uv_warnings::warn_user_once;
-use uv_workspace::pyproject::DependencyType;
+use uv_workspace::pyproject::{DependencyType, PyProjectToml, Sources, ToolUvSources};
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache};
 
 use crate::edit::{EditTarget, ProjectEdit, PythonTarget};
@@ -123,69 +125,73 @@ pub async fn remove(
     };
     let mut toml = PyProjectTomlMut::from_toml(raw, kind)?;
 
-    for package in packages {
+    for package in &packages {
         match dependency_type {
             DependencyType::Production => {
-                let deps = toml.remove_dependency(&package)?;
+                let deps = toml.remove_dependency(package)?;
                 if deps.is_empty() {
                     return Err(DependencyNotFoundError {
                         package: package.clone(),
                         dependency_type: dependency_type.clone(),
-                        found_in: toml.find_dependency(&package, None),
+                        found_in: toml.find_dependency(package, None),
                     }
                     .into());
                 }
             }
             DependencyType::Dev => {
-                let dev_deps = toml.remove_dev_dependency(&package)?;
+                let dev_deps = toml.remove_dev_dependency(package)?;
                 let group_deps =
-                    toml.remove_dependency_group_requirement(&package, &DEV_DEPENDENCIES)?;
+                    toml.remove_dependency_group_requirement(package, &DEV_DEPENDENCIES)?;
                 if dev_deps.is_empty() && group_deps.is_empty() {
                     return Err(DependencyNotFoundError {
                         package: package.clone(),
                         dependency_type: dependency_type.clone(),
-                        found_in: toml.find_dependency(&package, None),
+                        found_in: toml.find_dependency(package, None),
                     }
                     .into());
                 }
             }
             DependencyType::Optional(ref extra) => {
-                let deps = toml.remove_optional_dependency(&package, extra)?;
+                let deps = toml.remove_optional_dependency(package, extra)?;
                 if deps.is_empty() {
                     return Err(DependencyNotFoundError {
                         package: package.clone(),
                         dependency_type: dependency_type.clone(),
-                        found_in: toml.find_dependency(&package, None),
+                        found_in: toml.find_dependency(package, None),
                     }
                     .into());
                 }
             }
             DependencyType::Group(ref group) => {
                 if group == &*DEV_DEPENDENCIES {
-                    let dev_deps = toml.remove_dev_dependency(&package)?;
+                    let dev_deps = toml.remove_dev_dependency(package)?;
                     let group_deps =
-                        toml.remove_dependency_group_requirement(&package, &DEV_DEPENDENCIES)?;
+                        toml.remove_dependency_group_requirement(package, &DEV_DEPENDENCIES)?;
                     if dev_deps.is_empty() && group_deps.is_empty() {
                         return Err(DependencyNotFoundError {
                             package: package.clone(),
                             dependency_type: dependency_type.clone(),
-                            found_in: toml.find_dependency(&package, None),
+                            found_in: toml.find_dependency(package, None),
                         }
                         .into());
                     }
                 } else {
-                    let deps = toml.remove_dependency_group_requirement(&package, group)?;
+                    let deps = toml.remove_dependency_group_requirement(package, group)?;
                     if deps.is_empty() {
                         return Err(DependencyNotFoundError {
                             package: package.clone(),
                             dependency_type: dependency_type.clone(),
-                            found_in: toml.find_dependency(&package, None),
+                            found_in: toml.find_dependency(package, None),
                         }
                         .into());
                     }
                 }
             }
         }
+    }
+
+    if toml.has_inline_sources() {
+        remove_unused_sources(&target, &mut toml, &packages, &settings)?;
     }
 
     let content = toml.to_string();
@@ -408,6 +414,99 @@ pub async fn remove(
 
     edit.commit();
     Ok(ExitStatus::Success)
+}
+
+/// Remove sources after all dependency edits, accounting for consumers outside the edited manifest.
+fn remove_unused_sources(
+    target: &EditTarget,
+    toml: &mut PyProjectTomlMut,
+    packages: &[PackageName],
+    settings: &ResolverInstallerSettings,
+) -> Result<()> {
+    let (sources, workspace) = match target {
+        EditTarget::Script(script) => (script.sources(), None),
+        EditTarget::Project(project) => {
+            let Some(sources) = project_sources(project.pyproject_toml()) else {
+                return Ok(());
+            };
+            if project.root() != project.workspace().install_path() {
+                // Other members and workspace settings only inherit sources from the root.
+                return Ok(toml.remove_unused_sources(
+                    project.root(),
+                    packages,
+                    sources,
+                    |_, _| false,
+                )?);
+            }
+            (sources, Some(project.workspace()))
+        }
+    };
+    if !packages.iter().any(|name| sources.contains_key(name)) {
+        return Ok(());
+    }
+
+    // An override, constraint, or extra build requirement can itself select an extra's source.
+    let declared = toml.extra_build_dependencies();
+    let configured = workspace.map(|_| &settings.resolver.extra_build_dependencies);
+    let extra_build = declared
+        .iter()
+        .chain(configured)
+        .flat_map(|dependencies| dependencies.values().flatten())
+        .map(|dep| dep.requirement.clone());
+    let mut settings_uses = FxHashMap::default();
+    for requirement in LockTarget::from(target)
+        .constraints_and_overrides()
+        .chain(extra_build)
+    {
+        let extras = settings_uses
+            .entry(requirement.name)
+            .or_insert_with(FxHashSet::default);
+        if let Some(extra) = requirement.marker.top_level_extra_name() {
+            extras.insert(extra.into_owned());
+        }
+    }
+
+    let mut members = Vec::new();
+    if let Some(workspace) = workspace {
+        for member in workspace
+            .packages()
+            .values()
+            .filter(|member| member.root() != workspace.install_path())
+        {
+            let manifest = member.pyproject_toml();
+            let local = project_sources(manifest);
+            if packages.iter().any(|name| {
+                sources.contains_key(name) && !local.is_some_and(|local| local.contains_key(name))
+            }) {
+                let doc =
+                    PyProjectTomlMut::from_toml(&manifest.raw, DependencyTarget::PyProjectToml)?;
+                members.push((local, doc));
+            }
+        }
+    }
+    let root = LockTarget::from(target).install_path();
+    toml.remove_unused_sources(root, packages, sources, |name, source| {
+        settings_uses
+            .get(name)
+            .is_some_and(|extras| source.extra().is_none_or(|extra| extras.contains(extra)))
+            || members.iter().any(|(local, doc)| {
+                !local.is_some_and(|sources| sources.contains_key(name))
+                    && doc.uses_source(name, source.extra())
+            })
+    })?;
+    Ok(())
+}
+
+/// Return the sources defined by this manifest, before workspace inheritance.
+fn project_sources(project: &PyProjectToml) -> Option<&BTreeMap<PackageName, Sources>> {
+    project
+        .tool
+        .as_ref()?
+        .uv
+        .as_ref()?
+        .sources
+        .as_ref()
+        .map(ToolUvSources::inner)
 }
 
 /// A dependency was not found in the expected dependency type, but may exist elsewhere.
