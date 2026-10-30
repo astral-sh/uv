@@ -207,7 +207,7 @@ impl SafeUrl {
     pub fn parse(input: &str) -> Result<Self, SafeUrlError> {
         let url = Self::parse_relaxed(input)?;
 
-        Self::reject_ambiguous_credentials(input, &url.0)?;
+        url.reject_ambiguous_credentials(input)?;
 
         Ok(url)
     }
@@ -233,25 +233,8 @@ impl SafeUrl {
     ///
     /// To detect it, we use a heuristic: if the password component is missing but the path or
     /// fragment contain a `:` followed by a `@`, then we assume the URL is ambiguous.
-    fn reject_ambiguous_credentials(input: &str, url: &Url) -> Result<(), SafeUrlError> {
-        // `git://`, `http://`, and `https://` URLs may carry credentials, while `file://` URLs
-        // on Windows may contain both sigils, but it's always safe, e.g.
-        // `file://C:/Users/ferris/project@home/workspace`. The same holds for VCS URLs that use a
-        // file transport, such as `git+file://C:/Users/ferris/repo.git@v1.0`, which likewise carry
-        // no network credentials but can pair a drive-letter `:` with an `@` revision.
-        let scheme = url.scheme();
-        if scheme == "file" || scheme.ends_with("+file") {
-            return Ok(());
-        }
-
-        if url.password().is_some() {
-            return Ok(());
-        }
-
-        // Check for the suspicious pattern.
-        if !has_credential_like_pattern(url.path())
-            && !url.fragment().is_some_and(has_credential_like_pattern)
-        {
+    fn reject_ambiguous_credentials(&self, input: &str) -> Result<(), SafeUrlError> {
+        if self.password().is_some() || !self.is_ambiguous_without_credentials() {
             return Ok(());
         }
 
@@ -472,6 +455,16 @@ impl<P: SerializationPolicy> SafeUrl<P> {
     #[inline]
     pub fn join(&self, input: &str) -> Result<Self, SafeUrlError> {
         Ok(Self(self.0.join(input)?, PhantomData))
+    }
+
+    /// Whether the path or fragment would make [`SafeUrl::parse`] reject this URL without userinfo.
+    pub fn is_ambiguous_without_credentials(&self) -> bool {
+        // File URLs cannot carry network credentials. On Windows a drive letter can precede an
+        // `@` in a path or in a Git revision, e.g., `git+file://C:/repo.git@v1`.
+        self.scheme() != "file"
+            && !self.scheme().ends_with("+file")
+            && (has_credential_like_pattern(self.path())
+                || self.fragment().is_some_and(has_credential_like_pattern))
     }
 
     /// Remove the credentials from a URL, allowing the generic `git` username (without a password)
