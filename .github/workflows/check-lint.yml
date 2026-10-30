@@ -195,57 +195,40 @@ jobs:
           uv run --only-dev cargo deny --manifest-path crates/uv-build/Cargo.toml --all-features check bans
 
   hawk:
-    timeout-minutes: 15
+    timeout-minutes: 30
     if: ${{ inputs.code-changed == 'true' || github.ref == 'refs/heads/main' }}
     runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
+    env:
+      RUSTUP_TOOLCHAIN: "1.99.0"
+      RUSTC_BOOTSTRAP: "1"
+      CARGO_UNSTABLE_CHECKSUM_FRESHNESS: "true"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      # Refresh the workspace snapshot weekly so old Cargo artifacts do not accumulate.
-      - name: Select Hawk cache
-        id: hawk-key
-        run: echo "key=hawk-workspace-v1-$RUNNER_OS-$RUNNER_ARCH-$HAWK_VERSION-$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
-      - name: Restore Hawk workspace
-        id: hawk-cache
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+          ref: 52ff39db058e14a2c1f500bf5003d3852cd353ac
+      - name: Install Rust toolchain
+        run: rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal
+      - name: Select weekly Hawk cache
+        id: hawk-cache-week
+        run: echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
+      - uses: astral-sh/github-actions/rust-workspace-cache@c45ae2f92d53b00fc1d0e886c959d1533102fd22
         with:
-          key: ${{ steps.hawk-key.outputs.key }}
-          path: &hawk-cache-paths |
-            target/hawk
-            ~/.cargo/registry/cache
-            ~/.cargo/registry/index
-            ~/.cargo/git
-      - name: Restore dependencies on a workspace cache miss
-        if: steps.hawk-cache.outputs.cache-hit != 'true'
-        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-        with:
-          workspaces: ". -> target/hawk"
-          cache-workspace-crates: "false"
-          save-if: ${{ inputs.save-rust-cache == 'true' }}
-      - name: Install uv
-        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
-        with:
-          # renovate: datasource=github-release-attachments depName=astral-sh/uv
-          version: "0.13.5"
-          checksum: "f68d291c75783122dad58ab77def0e13f3233f358731db5d6d7e8715603b928f"
-          enable-cache: false
-      - name: Restore verified source timestamps
-        run: uv run --offline --python /usr/bin/python3 --script scripts/hawk-source-times.py
-      - name: "Install Rust toolchain"
-        run: rustup toolchain install 1.99.0
+          target-directory: target/hawk
+          extra-target-directory: hawk-fragments
+          profile: |
+            debug
+            x86_64-unknown-linux-gnu/debug
+          prefix-key: hawk-workspace-${{ env.HAWK_VERSION }}
+          key: ${{ steps.hawk-cache-week.outputs.week }}
+          cache-bin: false
+          save-if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.number == 23000 }}
       - name: "Install Hawk"
         run: |
           curl --proto '=https' --tlsv1.2 -LsSf \
             "https://github.com/astral-sh/hawk/releases/download/${HAWK_VERSION}/cargo-hawk-installer.sh" | sh
       - name: "Hawk"
-        run: cargo +1.99.0 hawk check --target-dir target/hawk -D warnings
-      - name: Save Hawk workspace
-        if: github.ref == 'refs/heads/main' && steps.hawk-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          key: ${{ steps.hawk-cache.outputs.cache-primary-key }}
-          path: *hawk-cache-paths
+        run: cargo hawk check --target-dir target/hawk -D warnings
 
   shear:
     name: "cargo shear"
