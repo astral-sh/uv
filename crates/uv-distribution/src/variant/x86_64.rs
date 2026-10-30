@@ -44,11 +44,11 @@ static LEVEL_PROPERTIES: LazyLock<[SupportedVariantFeature; 4]> = LazyLock::new(
 ///
 /// The following scenarios are unsupported.
 ///
-/// * Sharing an interpreter cache between machines that use the same Python interpreter but
+/// - Sharing an interpreter cache between machines that use the same Python interpreter but
 ///   support different x86-64 levels.
-/// * Emulating an x86-64 CPU in user mode on an x86-64 Linux host. `/proc/cpuinfo` reports the
+/// - Emulating an x86-64 CPU in user mode on an x86-64 Linux host. `/proc/cpuinfo` reports the
 ///   host's CPU flags even when the emulated CPU exposes fewer features.
-/// * Building an environment on one machine and deploying it to another. This requires an override
+/// - Building an environment on one machine and deploying it to another. This requires an override
 ///   to specify the target machine. TODO(konsti): Add that override as part of the wheel variants
 ///   stack.
 pub(super) struct X86_64VariantProvider;
