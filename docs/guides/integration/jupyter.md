@@ -60,10 +60,14 @@ From there, start the server with:
 $ uv run --with jupyter jupyter lab
 ```
 
-When creating a notebook, select the `project` kernel from the dropdown. Then use `!uv add pydantic`
-to add `pydantic` to the project's dependencies, or `!uv pip install pydantic` to install `pydantic`
-into the project's virtual environment without persisting the change to the project `pyproject.toml`
-or `uv.lock` files. Either command will make `import pydantic` work within the notebook.
+When creating a notebook, select the `project` kernel from the dropdown. If you encounter a
+`VIRTUAL_ENV=... does not match the project environment path` error when running `!uv add`, ensure
+you have selected the `project` kernel (you may need to use **Change Kernel** in the notebook menu).
+
+Then use `!uv add pydantic` to add `pydantic` to the project's dependencies, or
+`!uv pip install pydantic` to install `pydantic` into the project's virtual environment without
+persisting the change to the project `pyproject.toml` or `uv.lock` files. Either command will make
+`import pydantic` work within the notebook.
 
 ### Installing packages without a kernel
 
