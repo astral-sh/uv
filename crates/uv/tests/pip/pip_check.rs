@@ -5,12 +5,12 @@ use assert_fs::fixture::FileWriteStr;
 use assert_fs::fixture::PathChild;
 use indoc::indoc;
 
-use uv_test::packse::{PackseServer, scenario::Scenario};
+use uv_test::packse::PackseServer;
 use uv_test::uv_snapshot;
 
 #[test]
 fn check_incompatible_packages_quiet() -> Result<()> {
-    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+    let index = PackseServer::from_toml(indoc! {r#"
         name = "check-quiet-policy"
 
         [root]
@@ -25,7 +25,6 @@ fn check_incompatible_packages_quiet() -> Result<()> {
         [packages.package-b.versions."1.0.0"]
         sdist = false
     "#})?;
-    let index = PackseServer::from_scenario(&scenario);
     let context = uv_test::test_context!("3.12");
     context
         .pip_install()
@@ -83,7 +82,7 @@ fn check_compatible_packages() -> Result<()> {
 
 #[test]
 fn check_arbitrary_equality() -> Result<()> {
-    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+    let index = PackseServer::from_toml(indoc! {r#"
         name = "arbitrary-equality"
 
         [root]
@@ -101,7 +100,6 @@ fn check_arbitrary_equality() -> Result<()> {
         [packages.package-b.versions."1.0.0+local"]
         sdist = false
     "#})?;
-    let index = PackseServer::from_scenario(&scenario);
     let context = uv_test::test_context!("3.12");
 
     uv_snapshot!(context.filters(), context.pip_install()
@@ -163,7 +161,7 @@ fn check_arbitrary_equality() -> Result<()> {
 
 #[test]
 fn check_post_release_after_prerelease() -> Result<()> {
-    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+    let index = PackseServer::from_toml(indoc! {r#"
         name = "post-release-after-prerelease"
 
         [root]
@@ -178,7 +176,6 @@ fn check_post_release_after_prerelease() -> Result<()> {
         [packages.package-b.versions."1.0.post0"]
         sdist = false
     "#})?;
-    let index = PackseServer::from_scenario(&scenario);
     let context = uv_test::test_context!("3.12");
 
     uv_snapshot!(context.filters(), context.pip_install()
@@ -395,7 +392,7 @@ fn check_python_version() {
 /// Packages accepted by the resolver must not trigger Python upper-bound diagnostics.
 #[test]
 fn check_python_version_upper_bound() -> Result<()> {
-    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+    let index = PackseServer::from_toml(indoc! {r#"
         name = "python-version-upper-bound"
 
         [root]
@@ -407,7 +404,6 @@ fn check_python_version_upper_bound() -> Result<()> {
         sdist = false
         requires_python = ">=3.8.6,<3.11"
     "#})?;
-    let index = PackseServer::from_scenario(&scenario);
     let context = uv_test::test_context!("3.12");
 
     uv_snapshot!(context.filters(), context.pip_install()

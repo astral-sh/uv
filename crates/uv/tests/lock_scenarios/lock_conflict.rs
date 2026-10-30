@@ -7,7 +7,6 @@ use insta::assert_snapshot;
 
 use uv_redacted::SafeUrl;
 use uv_test::packse::PackseServer;
-use uv_test::packse::scenario::Scenario;
 use uv_test::uv_snapshot;
 
 // All of the tests in this file should use `tool.uv.conflicts` in some way.
@@ -20,7 +19,7 @@ use uv_test::uv_snapshot;
 #[test]
 fn conflicting_extras_with_python_forks() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let scenario = toml::from_str::<Scenario>(
+    let server = PackseServer::from_toml(
         r#"
         name = "conflicting-extras-with-python-forks"
 
@@ -39,7 +38,6 @@ fn conflicting_extras_with_python_forks() -> Result<()> {
         sdist = false
         "#,
     )?;
-    let server = PackseServer::from_scenario(&scenario);
     context.temp_dir.child("pyproject.toml").write_str(
         r#"
         [project]
@@ -8115,7 +8113,7 @@ fn deduplicate_resolution_markers() -> Result<()> {
 #[test]
 fn incorrect_extra_simplification_leads_to_multiple_torch_packages() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let scenario = toml::from_str::<Scenario>(
+    let server = PackseServer::from_toml(
         r#"
         name = "multiple-torch-packages"
 
@@ -8148,7 +8146,6 @@ fn incorrect_extra_simplification_leads_to_multiple_torch_packages() -> Result<(
         sdist = false
         "#,
     )?;
-    let server = PackseServer::from_scenario(&scenario);
 
     context.temp_dir.child("pyproject.toml").write_str(
         r#"
@@ -8331,7 +8328,7 @@ fn incorrect_extra_simplification_leads_to_multiple_torch_packages() -> Result<(
 #[test]
 fn duplicate_torch_and_sympy_because_of_wrong_inferences() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let scenario = toml::from_str::<Scenario>(
+    let server = PackseServer::from_toml(
         r#"
         name = "duplicate-torch-and-sympy"
 
@@ -8378,7 +8375,6 @@ fn duplicate_torch_and_sympy_because_of_wrong_inferences() -> Result<()> {
         sdist = false
         "#,
     )?;
-    let server = PackseServer::from_scenario(&scenario);
 
     context.temp_dir.child("pyproject.toml").write_str(
         r#"
@@ -11045,7 +11041,7 @@ fn lock_conflicting_workspace_member_transitive_source() -> Result<()> {
 /// A registry release cannot replace a workspace member in a conflict fork.
 #[test]
 fn lock_conflicting_workspace_member_transitive_registry() -> Result<()> {
-    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+    let server = PackseServer::from_toml(indoc! {r#"
         name = "workspace-member-registry-identity"
 
         [root]
@@ -11056,7 +11052,6 @@ fn lock_conflicting_workspace_member_transitive_registry() -> Result<()> {
         [packages.foo.versions."2.0"]
         sdist = false
     "#})?;
-    let server = PackseServer::from_scenario(&scenario);
     let context = uv_test::test_context!("3.12");
 
     context

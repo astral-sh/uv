@@ -15,7 +15,7 @@ use wiremock::{
 use uv_static::EnvVars;
 
 use uv_test::package_server::PackageServer;
-use uv_test::packse::{PackseServer, scenario::Scenario};
+use uv_test::packse::PackseServer;
 use uv_test::{uv_snapshot, venv_bin_path};
 
 #[test]
@@ -1936,7 +1936,7 @@ fn tool_upgrade_lock_uses_requested_python() -> Result<()> {
 
 /// An index containing earlier synthetic tool releases and their dependencies.
 fn old_tool_index() -> PackseServer {
-    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+    PackseServer::from_toml(indoc! {r#"
         name = "old-tool-index"
 
         [root]
@@ -1959,13 +1959,12 @@ fn old_tool_index() -> PackseServer {
         sdist = false
         entry_points = ["dotenv"]
     "#})
-    .expect("old tool scenario should parse");
-    PackseServer::from_scenario(&scenario)
+    .expect("old tool scenario should parse")
 }
 
 /// Later synthetic releases change dependencies to exercise upgrade and removal behavior.
 fn new_tool_index() -> PackseServer {
-    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+    PackseServer::from_toml(indoc! {r#"
         name = "new-tool-index"
 
         [root]
@@ -2020,6 +2019,5 @@ fn new_tool_index() -> PackseServer {
         sdist = false
         entry_points = ["dotenv"]
     "#})
-    .expect("new tool scenario should parse");
-    PackseServer::from_scenario(&scenario)
+    .expect("new tool scenario should parse")
 }

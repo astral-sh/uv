@@ -35,8 +35,6 @@ use uv_test::archive::{generate_source_archive, write_tar_gz};
 use uv_test::decode_token;
 use uv_test::find_links::FindLinksServer;
 use uv_test::package_server::PackageServer;
-#[cfg(feature = "test-universal")]
-use uv_test::packse::scenario::Scenario;
 use uv_test::packse::{PackseServer, WheelBuilder};
 use uv_test::{
     DEFAULT_PYTHON_VERSION, TestContext, apply_filters, copy_dir_ignore, download_to_disk, get_bin,
@@ -4527,7 +4525,7 @@ fn install_build_policy_cache() {
 #[cfg(feature = "test-universal")]
 #[test]
 fn exclude_newer_does_not_reuse_cached_wheel() -> Result<()> {
-    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+    let server = PackseServer::from_toml(indoc! {r#"
         name = "exclude-newer-cached-wheel"
 
         [root]
@@ -4539,7 +4537,6 @@ fn exclude_newer_does_not_reuse_cached_wheel() -> Result<()> {
         sdist = { upload_time = "2024-03-24T00:00:00Z" }
         wheel = { upload_time = "2024-03-24T12:00:00Z" }
     "#})?;
-    let server = PackseServer::from_scenario(&scenario);
     let context = uv_test::test_context!("3.12");
 
     // Cache the published wheel, then clear the environment but keep the cache.

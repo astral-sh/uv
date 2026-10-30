@@ -98,6 +98,12 @@ impl PackseServer {
         Self::from_scenario(&Scenario::empty())
     }
 
+    /// Start a mock server from a Packse scenario given as a TOML string.
+    pub fn from_toml(toml: &str) -> Result<Self, toml::de::Error> {
+        let scenario = toml::from_str(toml)?;
+        Ok(Self::from_scenario(&scenario))
+    }
+
     /// Start a mock server for the given scenario.
     pub fn from_scenario(scenario: &Scenario) -> Self {
         Self::start(scenario, true)
@@ -562,7 +568,7 @@ mod tests {
 
     #[tokio::test]
     async fn serves_artifact_upload_times() -> Result<()> {
-        let scenario = toml::from_str::<Scenario>(
+        let server = PackseServer::from_toml(
             r#"
 name = "artifact-upload-times"
 
@@ -585,7 +591,6 @@ wheel = {}
 wheel = false
 "#,
         )?;
-        let server = PackseServer::from_scenario(&scenario);
 
         let a: serde_json::Value = reqwest::get(format!("{}a/", server.index_url()))
             .await?
@@ -623,7 +628,7 @@ wheel = false
 
     #[tokio::test]
     async fn file_requests_support_byte_ranges() -> Result<()> {
-        let scenario = toml::from_str::<Scenario>(
+        let server = PackseServer::from_toml(
             r#"
 name = "range-requests"
 
@@ -637,7 +642,6 @@ satisfiable = true
 sdist = false
 "#,
         )?;
-        let server = PackseServer::from_scenario(&scenario);
         let url = server.file_url("a-1.0.0-py3-none-any.whl");
         let client = reqwest::Client::new();
 

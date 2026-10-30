@@ -5463,7 +5463,7 @@ fn generate_hashes_no_binary_preview() -> Result<()> {
 fn generate_hashes_exclude_newer_no_build_no_binary() -> Result<()> {
     // The cutoff falls between the 2024-03-23 uploads and the 2024-03-25 uploads.
     let context = uv_test::test_context!("3.12").with_exclude_newer("2024-03-24T00:00:00Z");
-    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+    let server = PackseServer::from_toml(indoc! {r#"
         name = "exclude-newer-binary-policies"
 
         [root]
@@ -5479,7 +5479,6 @@ fn generate_hashes_exclude_newer_no_build_no_binary() -> Result<()> {
         sdist = { upload_time = "2024-03-25T00:00:00Z" }
         wheel = { upload_time = "2024-03-23T00:00:00Z" }
     "#})?;
-    let server = PackseServer::from_scenario(&scenario);
     let context = context.with_filters(
         server
             .files()
@@ -5522,7 +5521,7 @@ fn generate_hashes_exclude_newer_no_build_no_binary() -> Result<()> {
 #[test]
 fn generate_hashes_binary_package_overrides_preview() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+    let server = PackseServer::from_toml(indoc! {r#"
         name = "artifact-hash-filtering"
 
         [root]
@@ -5537,7 +5536,6 @@ fn generate_hashes_binary_package_overrides_preview() -> Result<()> {
 
         [packages.c.versions."1.0.0"]
     "#})?;
-    let server = PackseServer::from_scenario(&scenario);
     context
         .temp_dir
         .child("requirements.in")
@@ -16101,7 +16099,7 @@ fn universal_required_environment() -> Result<()> {
 #[test]
 fn universal_required_environment_find_links_no_build() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+    let server = PackseServer::from_toml(indoc! {r#"
         name = "required-environment-find-links-no-build"
 
         [root]
@@ -16112,7 +16110,6 @@ fn universal_required_environment_find_links_no_build() -> Result<()> {
         [packages.a.versions."1.0.0"]
         wheel_tags = ["py3-none-manylinux_2_17_x86_64"]
     "#})?;
-    let server = PackseServer::from_scenario(&scenario);
     context
         .temp_dir
         .child("links.html")
@@ -19718,7 +19715,7 @@ fn compile_broken_active_venv() -> Result<()> {
 #[test]
 fn pubgrub_incompatible_self_dependency() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+    let server = PackseServer::from_toml(indoc! {r#"
         name = "incompatible-self-dependency"
 
         [root]
@@ -19730,7 +19727,6 @@ fn pubgrub_incompatible_self_dependency() -> Result<()> {
         [packages.a.versions."1.0.0"]
         requires = ["a>=2.0.0"]
     "#})?;
-    let server = PackseServer::from_scenario(&scenario);
     context.temp_dir.child("requirements.in").write_str("a")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()

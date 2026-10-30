@@ -8,7 +8,7 @@ use serde_json::{Map, Value, json};
 use uv_distribution_types::PEP_850_SCHEMA;
 use uv_static::EnvVars;
 use uv_test::find_links::FindLinksServer;
-use uv_test::packse::{PackseServer, WheelBuilder, scenario::Scenario};
+use uv_test::packse::{PackseServer, WheelBuilder};
 use uv_test::uv_snapshot;
 
 fn null_variant() -> Value {
@@ -112,7 +112,7 @@ fn pylock_rejects_selected_wheel_variant() -> Result<()> {
 #[test]
 fn select_variant_by_static_provider_order() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+    let server = PackseServer::from_toml(indoc! {r#"
         name = "static-provider-order"
         root = {}
         expected.satisfiable = true
@@ -135,7 +135,6 @@ fn select_variant_by_static_provider_order() -> Result<()> {
             "blas_lapack :: library :: openblas",
         ]
     "#})?;
-    let server = PackseServer::from_scenario(&scenario);
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--index-url")

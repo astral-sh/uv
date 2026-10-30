@@ -6,7 +6,7 @@ use insta::assert_snapshot;
 
 use uv_test::archive::write_tar_gz;
 use uv_test::find_links::FindLinksServer;
-use uv_test::packse::{PackseServer, WheelBuilder, scenario::Scenario};
+use uv_test::packse::{PackseServer, WheelBuilder};
 use uv_test::{TestContext, uv_snapshot};
 
 fn wheel(context: &TestContext, name: &str, version: &str, tag: &str) -> Result<ChildPath> {
@@ -23,7 +23,7 @@ fn wheel(context: &TestContext, name: &str, version: &str, tag: &str) -> Result<
 /// A libc baseline preserves all wheels and hashes, including wheels for newer hosts.
 #[test]
 fn minimum_libc_retains_locked_wheels() -> Result<()> {
-    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+    let server = PackseServer::from_toml(indoc! {r#"
         name = "minimum-libc-retains-wheels"
 
         [root]
@@ -35,7 +35,6 @@ fn minimum_libc_retains_locked_wheels() -> Result<()> {
         sdist = false
         wheel_tags = ["py3-none-manylinux_2_17_x86_64", "py3-none-manylinux_2_34_x86_64", "py3-none-musllinux_1_2_x86_64", "py3-none-macosx_11_0_arm64", "py3-none-win_amd64"]
     "#})?;
-    let server = PackseServer::from_scenario(&scenario);
     let context = uv_test::test_context!("3.12").with_filters(
         server
             .files()
