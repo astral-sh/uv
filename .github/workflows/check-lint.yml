@@ -208,9 +208,6 @@ jobs:
           persist-credentials: false
       - name: Install Rust toolchain
         run: rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal
-      - name: Select weekly Hawk cache
-        id: hawk-cache-week
-        run: echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
       - uses: astral-sh/github-actions/rust-workspace-cache@ecaa281a478297a7f6ad7ab58da2779de4771ca0
         with:
           target-directory: target/hawk
@@ -219,7 +216,6 @@ jobs:
             debug
             x86_64-unknown-linux-gnu/debug
           prefix-key: hawk-workspace-${{ env.HAWK_VERSION }}
-          key: ${{ steps.hawk-cache-week.outputs.week }}
           cache-bin: false
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: "Install Hawk"
