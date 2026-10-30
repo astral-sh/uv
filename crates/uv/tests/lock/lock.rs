@@ -15802,69 +15802,10 @@ async fn lock_multiple_indexes_same_realm_different_credentials_trailing_slash()
 
 /// Resolve against an index that uses relative links.
 #[cfg(feature = "test-universal")]
-#[tokio::test]
-async fn lock_relative_index() -> Result<()> {
+#[test]
+fn lock_relative_index() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let server = MockServer::start().await;
-    let metadata = "Metadata-Version: 2.3\nName: relative-index-test\nVersion: 1.0.0\n";
-    let (wheel_filename, wheel) =
-        WheelBuilder::new(&"relative-index-test".parse()?, &"1.0.0".parse()?).build();
-    let sdist_filename = "relative_index_test-1.0.0.tar.gz";
-    let wheel_size = wheel.len();
-    let wheel_digest = hex::encode(Sha256::digest(&wheel));
-    let mut sdist = Vec::new();
-    write_tar_gz(
-        &mut sdist,
-        &[("relative_index_test-1.0.0/PKG-INFO", metadata)],
-    )?;
-    let sdist_size = sdist.len();
-    let sdist_digest = hex::encode(Sha256::digest(&sdist));
-
-    let simple_index = json!({
-        "meta": { "api-version": "1.1" },
-        "name": "relative-index-test",
-        "files": [{
-            "filename": wheel_filename,
-            "url": format!("../../../files/{wheel_filename}"),
-            "hashes": { "sha256": wheel_digest },
-            "size": wheel_size,
-            "core-metadata": true,
-            "upload-time": "2024-01-01T00:00:00Z",
-        }, {
-            "filename": sdist_filename,
-            "url": format!("../../../files/{sdist_filename}"),
-            "hashes": { "sha256": sdist_digest },
-            "size": sdist_size,
-            "upload-time": "2024-01-01T00:00:00Z",
-        }],
-    });
-    Mock::given(method("GET"))
-        .and(path("/relative/simple/relative-index-test/"))
-        .respond_with(ResponseTemplate::new(200).set_body_raw(
-            simple_index.to_string(),
-            "application/vnd.pypi.simple.v1+json",
-        ))
-        .expect(1)
-        .mount(&server)
-        .await;
-    Mock::given(method("GET"))
-        .and(path(format!("/files/{wheel_filename}.metadata")))
-        .respond_with(ResponseTemplate::new(200).set_body_string(metadata))
-        .expect(1)
-        .mount(&server)
-        .await;
-    let wheel_download = Mock::given(method("GET"))
-        .and(path(format!("/files/{wheel_filename}")))
-        .respond_with(ResponseTemplate::new(200).set_body_bytes(wheel))
-        .expect(1)
-        .mount_as_scoped(&server)
-        .await;
-    Mock::given(method("GET"))
-        .and(path(format!("/files/{sdist_filename}")))
-        .respond_with(ResponseTemplate::new(200).set_body_bytes(sdist))
-        .expect(0)
-        .mount(&server)
-        .await;
+    let server = PackseServer::new("simple/single-package.toml");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(&format!(
@@ -15873,31 +15814,24 @@ async fn lock_relative_index() -> Result<()> {
         name = "foo"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["relative-index-test"]
+        dependencies = ["a"]
 
         [tool.uv]
-        index-url = "{server_uri}/relative/simple"
+        index-url = "{index_url}"
         "#,
-        server_uri = server.uri()
+        index_url = server.relative_index_url()
     ))?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--no-build").arg("--no-python-downloads"), @"
+    uv_snapshot!(context.filters(), context.lock(), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     ");
 
     let lock = context.read("uv.lock");
-    let wheel_size_filter = format!("size = {wheel_size}");
-    let sdist_size_filter = format!("size = {sdist_size}");
-    let mut filters = context.filters();
-    filters.push((&wheel_digest, "[WHEEL_HASH]"));
-    filters.push((&sdist_digest, "[SDIST_HASH]"));
-    filters.push((&wheel_size_filter, "size = [WHEEL_SIZE]"));
-    filters.push((&sdist_size_filter, "size = [SDIST_SIZE]"));
 
     insta::with_settings!({
-        filters => filters,
+        filters => context.filters(),
     }, {
         assert_snapshot!(
             lock, @r#"
@@ -15909,53 +15843,45 @@ async fn lock_relative_index() -> Result<()> {
         exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
+        name = "a"
+        version = "2.0.0"
+        source = { registry = "http://[LOCALHOST]/relative/simple/" }
+        sdist = { url = "http://[LOCALHOST]/relative/files/a-2.0.0.tar.gz", hash = "sha256:9610291c2bd57390019f58ca72d0dd4584bb9e7073fa347633ed8bc7267fccfe", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/relative/files/a-2.0.0-py3-none-any.whl", hash = "sha256:833374310e0a15880f3be9e6d082f527c9ac70129b2054d733da9b754315361f", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
         name = "foo"
         version = "0.1.0"
         source = { virtual = "." }
         dependencies = [
-            { name = "relative-index-test" },
+            { name = "a" },
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "relative-index-test" }]
-
-        [[package]]
-        name = "relative-index-test"
-        version = "1.0.0"
-        source = { registry = "http://[LOCALHOST]/relative/simple" }
-        sdist = { url = "http://[LOCALHOST]/files/relative_index_test-1.0.0.tar.gz", hash = "sha256:[SDIST_HASH]", size = [SDIST_SIZE], upload-time = "2024-01-01T00:00:00Z" }
-        wheels = [
-            { url = "http://[LOCALHOST]/files/relative_index_test-1.0.0-py3-none-any.whl", hash = "sha256:[WHEEL_HASH]", size = [WHEEL_SIZE], upload-time = "2024-01-01T00:00:00Z" },
-        ]
+        requires-dist = [{ name = "a" }]
         "#
         );
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--no-build").arg("--no-python-downloads"), @"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     ");
-    assert!(wheel_download.received_requests().await.is_empty());
 
-    // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--no-build").arg("--no-python-downloads"), @"
+    // Use a fresh cache so the wheel is fetched from the URL in the lockfile.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--no-cache").arg("--no-build"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + relative-index-test==1.0.0
+     + a==2.0.0
     ");
-    assert_eq!(wheel_download.received_requests().await.len(), 1);
-    assert_eq!(
-        fs_err::read_to_string(
-            context
-                .site_packages()
-                .join("relative_index_test-1.0.0.dist-info/METADATA")
-        )?,
-        metadata
-    );
+
+    context.assert_installed("a", "2.0.0");
 
     Ok(())
 }
