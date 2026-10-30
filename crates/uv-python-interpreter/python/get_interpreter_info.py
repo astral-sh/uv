@@ -607,7 +607,7 @@ def get_operating_system_and_architecture():
             )
         )
         sys.exit(0)
-    return {"os": operating_system, "arch": architecture}
+    return operating_system, architecture
 
 
 def _get_cpu_info():
@@ -847,28 +847,28 @@ def main() -> None:
         "sys_platform": sys.platform,
     }
 
-    os_and_arch = get_operating_system_and_architecture()
+    operating_system, architecture = get_operating_system_and_architecture()
 
     manylinux_compatible = False
 
-    if os_and_arch["os"]["name"] == "manylinux":
+    if operating_system["name"] == "manylinux":
         # noinspection PyProtectedMember
         from .packaging._manylinux import _get_glibc_version, _is_compatible
 
         manylinux_compatible = _is_compatible(
-            arch=os_and_arch["arch"], version=_get_glibc_version()
+            arch=architecture, version=_get_glibc_version()
         )
-    elif os_and_arch["os"]["name"] == "musllinux":
+    elif operating_system["name"] == "musllinux":
         manylinux_compatible = True
 
-    if os_and_arch["arch"].lower() in ("x86_64", "amd64"):
+    if architecture.lower() in ("x86_64", "amd64"):
         try:
             cpu_info = _get_cpu_info()
         except Exception as error:  # noqa: BLE001
             # Rust applies the preview policy to unexpected failures.
             cpu_info = {"error": f"{type(error).__name__}: {error}"}
     else:
-        cpu_info = {"unsupported_architecture": os_and_arch["arch"]}
+        cpu_info = {"unsupported_architecture": architecture}
 
     # By default, pip uses sysconfig on Python 3.10+.
     # But Python distributors can override this decision by setting:
@@ -935,7 +935,8 @@ def main() -> None:
         ),
         "scheme": get_scheme(use_sysconfig_scheme),
         "virtualenv": get_virtualenv(),
-        **os_and_arch,
+        "os": operating_system,
+        "arch": architecture,
         "cpu_info": cpu_info,
         "manylinux_compatible": manylinux_compatible,
         # The `t` abiflag for freethreading Python.
