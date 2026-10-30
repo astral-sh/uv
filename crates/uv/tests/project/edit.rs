@@ -1960,6 +1960,62 @@ fn add_remove_workspace() -> Result<()> {
     Ok(())
 }
 
+/// Removing the root's last group requirement must not drop a member's wheel source.
+#[test]
+fn remove_inherited_group_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let links = context.workspace_root.join("test/links");
+    let wheel = "ok-1.0.0-py3-none-any.whl";
+    fs_err::copy(links.join(wheel), context.temp_dir.child(wheel))?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "1"
+        requires-python = ">=3.12"
+
+        [dependency-groups]
+        test = ["ok"]
+
+        [tool.uv]
+        no-index = true
+        find-links = ["."]
+
+        [tool.uv.workspace]
+        members = ["member"]
+
+        [tool.uv.sources]
+        ok = { path = "ok-1.0.0-py3-none-any.whl", group = "test" }
+    "#})?;
+    context
+        .temp_dir
+        .child("member/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "member"
+        version = "1"
+        requires-python = ">=3.12"
+
+        [dependency-groups]
+        test = ["ok"]
+    "#})?;
+
+    context.lock().assert().success();
+    let pyproject = context.read_bytes("pyproject.toml");
+    let lock = context.read_bytes("uv.lock");
+
+    uv_snapshot!(context.filters(), context.remove().args(["--group", "test", "ok", "--no-sync"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Cannot remove the source for `ok` because workspace member `member` may still inherit it
+    ");
+    assert_eq!(context.read_bytes("pyproject.toml"), pyproject);
+    assert_eq!(context.read_bytes("uv.lock"), lock);
+    Ok(())
+}
+
 /// A virtual root can provide different sources for different member extras.
 #[test]
 fn remove_preserves_inherited_extra_source() -> Result<()> {
