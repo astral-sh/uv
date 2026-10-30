@@ -4,6 +4,7 @@ use std::path::Path;
 use std::str::FromStr;
 use std::{fmt, mem};
 
+use glob::Pattern;
 use itertools::Itertools;
 use thiserror::Error;
 use toml_edit::{
@@ -133,8 +134,9 @@ impl PyProjectTomlMut {
             .as_array_mut()
             .ok_or(Error::MalformedWorkspace)?;
 
-        // Add the path to the workspace.
-        members.push(PortablePath::from(path.as_ref()).to_string());
+        // Workspace members are glob patterns, so escape the literal project path.
+        let path = PortablePath::from(path.as_ref()).to_string();
+        members.push(Pattern::escape(&path));
 
         reformat_array_multiline(members);
 
