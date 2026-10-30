@@ -14188,8 +14188,8 @@ fn compile_index_url_first_match_marker() -> Result<()> {
 /// should fail by default (even though a compatible version exists on the "primary" index).
 #[test]
 fn compile_index_url_first_match_all_versions() -> Result<()> {
-    let default_index = PackseServer::new("indexes/pip-compile-default.toml");
-    let extra_index = PackseServer::new("indexes/pip-compile-extra.toml");
+    let default_index = PackseServer::new("indexes/default.toml");
+    let extra_index = PackseServer::new("indexes/extra.toml");
     let context = uv_test::test_context!("3.12");
 
     let requirements_in = context.temp_dir.child("requirements.in");
@@ -14258,8 +14258,8 @@ fn compile_index_url_fallback() -> Result<()> {
 /// preferred index.
 #[test]
 fn compile_index_url_fallback_prefer_primary() -> Result<()> {
-    let default_index = PackseServer::new("indexes/pip-compile-default.toml");
-    let extra_index = PackseServer::new("indexes/pip-compile-extra.toml");
+    let default_index = PackseServer::new("indexes/default.toml");
+    let extra_index = PackseServer::new("indexes/extra.toml");
     let context = uv_test::test_context!("3.12");
 
     let requirements_in = context.temp_dir.child("requirements.in");
@@ -14299,8 +14299,8 @@ fn compile_index_url_fallback_prefer_primary() -> Result<()> {
 /// "extra" index being the preferred index.
 #[test]
 fn compile_index_url_unsafe_highest() -> Result<()> {
-    let default_index = PackseServer::new("indexes/pip-compile-default.toml");
-    let extra_index = PackseServer::new("indexes/pip-compile-extra.toml");
+    let default_index = PackseServer::new("indexes/default.toml");
+    let extra_index = PackseServer::new("indexes/extra.toml");
     let context = uv_test::test_context!("3.12");
 
     let requirements_in = context.temp_dir.child("requirements.in");
@@ -14343,8 +14343,8 @@ fn compile_index_url_unsafe_highest() -> Result<()> {
 /// `--resolution lowest`.
 #[test]
 fn compile_index_url_unsafe_lowest() -> Result<()> {
-    let default_index = PackseServer::new("indexes/pip-compile-default.toml");
-    let extra_index = PackseServer::new("indexes/pip-compile-extra.toml");
+    let default_index = PackseServer::new("indexes/default.toml");
+    let extra_index = PackseServer::new("indexes/extra.toml");
     let context = uv_test::test_context!("3.12");
 
     let requirements_in = context.temp_dir.child("requirements.in");
@@ -14534,8 +14534,8 @@ fn emit_index_annotation_line() -> Result<()> {
 /// `--emit-index-annotation` where packages are pulled from two distinct indexes.
 #[test]
 fn emit_index_annotation_multiple_indexes() -> Result<()> {
-    let default_index = PackseServer::new("indexes/pip-compile-default.toml");
-    let extra_index = PackseServer::new("indexes/pip-compile-extra.toml");
+    let default_index = PackseServer::new("indexes/default.toml");
+    let extra_index = PackseServer::new("indexes/extra.toml");
     let context = uv_test::test_context!("3.12");
 
     let requirements_in = context.temp_dir.child("requirements.in");
@@ -16667,8 +16667,8 @@ fn negation_not_imply_prerelease() -> Result<()> {
 /// See: <https://github.com/astral-sh/uv/issues/8922>
 #[test]
 fn same_version_multi_index_incompatibility() -> Result<()> {
-    let default_index = PackseServer::new("indexes/pip-compile-default.toml");
-    let extra_index = PackseServer::new("indexes/pip-compile-extra.toml");
+    let default_index = PackseServer::new("indexes/default.toml");
+    let extra_index = PackseServer::new("indexes/extra.toml");
     let context = uv_test::test_context!("3.10");
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("cffi==1.15.1")?;

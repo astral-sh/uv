@@ -7,6 +7,7 @@ use assert_fs::prelude::*;
 use indoc::{formatdoc, indoc};
 
 use uv_static::EnvVars;
+use uv_test::packse::PackseServer;
 use uv_test::uv_snapshot;
 
 #[test]
@@ -222,9 +223,10 @@ fn list_single_no_editable() -> Result<()> {
 }
 
 #[test]
-#[cfg(feature = "test-pypi")]
 fn list_outdated_columns() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let index = PackseServer::new("indexes/default.toml");
+    let context =
+        uv_test::test_context!("3.12").with_env(EnvVars::UV_DEFAULT_INDEX, index.index_url());
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("anyio==3.0.0")?;
@@ -257,9 +259,10 @@ fn list_outdated_columns() -> Result<()> {
 }
 
 #[test]
-#[cfg(feature = "test-pypi")]
 fn list_outdated_json() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let index = PackseServer::new("indexes/default.toml");
+    let context =
+        uv_test::test_context!("3.12").with_env(EnvVars::UV_DEFAULT_INDEX, index.index_url());
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("anyio==3.0.0")?;
@@ -395,9 +398,10 @@ fn list_outdated_git() -> Result<()> {
 }
 
 #[test]
-#[cfg(feature = "test-pypi")]
 fn list_outdated_index() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let index = PackseServer::new("indexes/default.toml");
+    let extra_index = PackseServer::new("indexes/extra.toml");
+    let context = uv_test::test_context!("3.12").with_env(EnvVars::UV_INDEX_URL, index.index_url());
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("anyio==3.0.0")?;
@@ -420,7 +424,7 @@ fn list_outdated_index() -> Result<()> {
     uv_snapshot!(context.pip_list()
         .arg("--outdated")
         .arg("--index-url")
-        .arg("https://test.pypi.org/simple"), @"
+        .arg(extra_index.index_url()), @"
     exit_code: 0 (success)
     ----- stdout -----
     Package Version Latest Type

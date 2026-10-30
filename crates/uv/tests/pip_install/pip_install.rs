@@ -12893,19 +12893,43 @@ fn static_metadata_already_installed() -> Result<()> {
 }
 
 /// `circular-one` depends on `circular-two` as a build dependency, but `circular-two` depends on
-/// `circular-one` was a runtime dependency.
+/// `circular-one` as a runtime dependency.
 #[test]
-fn cyclic_build_dependency() {
-    let context = uv_test::test_context!("3.13").with_exclude_newer("2025-01-02T00:00:00Z");
+fn cyclic_build_dependency() -> Result<()> {
+    let context = uv_test::test_context!("3.13");
+    let packages = context.temp_dir.child("packages");
+    packages.create_dir_all()?;
+
+    let version = "0.2.0".parse()?;
+    let (filename, wheel) = WheelBuilder::new(&"circular-one".parse()?, &version).build();
+    fs::write(packages.join(filename), wheel)?;
+    let (filename, wheel) = WheelBuilder::new(&"circular-two".parse()?, &version)
+        .requires(&["circular-one".parse()?])
+        .build();
+    fs::write(packages.join(filename), wheel)?;
+
+    let pyproject = indoc! {r#"
+        [project]
+        name = "circular-one"
+        version = "0.2.0"
+
+        [build-system]
+        requires = ["circular-two"]
+        build-backend = "circular_two"
+    "#};
+    write_tar_gz(
+        File::create(packages.join("circular_one-0.2.0.tar.gz"))?,
+        &[("circular_one-0.2.0/pyproject.toml", pyproject)],
+    )?;
+    let links = FindLinksServer::new(packages.path());
 
     // Installing with `--no-binary circular-one` should fail, since we'll end up in a recursive
     // build.
     uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(links.url())
         .arg("circular-one")
-        .arg("--extra-index-url")
-        .arg("https://test.pypi.org/simple")
-        .arg("--index-strategy")
-        .arg("unsafe-best-match")
         .arg("--no-binary")
         .arg("circular-one"), @"
     exit_code: 1 (failure)
@@ -12919,11 +12943,10 @@ fn cyclic_build_dependency() {
 
     // Installing without `--no-binary circular-one` should succeed, since we can use the wheel.
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg("circular-one")
-        .arg("--extra-index-url")
-        .arg("https://test.pypi.org/simple")
-        .arg("--index-strategy")
-        .arg("unsafe-best-match"), @"
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(links.url())
+        .arg("circular-one"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
@@ -12932,6 +12955,8 @@ fn cyclic_build_dependency() {
      + circular-one==0.2.0
     "
     );
+
+    Ok(())
 }
 
 #[test]
