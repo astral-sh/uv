@@ -3873,7 +3873,7 @@ fn python_install_upgrade() {
     All requested versions already on latest supported patch release
     ");
 
-    // Mix in an unsatisfied version and a missing one
+    // Upgrade 3.9 and install 3.12 while leaving 3.11 and 3.15 alone.
     uv_snapshot!(context.filters(), context.python_install().arg("--upgrade").arg("3.9").arg("3.11").arg("3.12").arg("3.15"), @"
     exit_code: 0 (success)
     ----- stderr -----
