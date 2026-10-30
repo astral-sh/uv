@@ -1941,8 +1941,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         python_requirement: &PythonRequirement,
         pubgrub: &State<UvDependencyProvider>,
     ) -> Result<Dependencies, ResolveError> {
-        let expander =
-            RequirementExpander::new(&self.constraints, &self.modifiers, env, python_requirement);
+        let expander = RequirementExpander::new(
+            &self.constraints,
+            &self.modifiers,
+            env,
+            python_requirement,
+            self.options.torch_backend.as_ref(),
+        );
         let dependencies = match &**package {
             PubGrubPackageInner::Root(_) => {
                 let requirements = expander.expand(&self.requirements, RequirementContext::Root);

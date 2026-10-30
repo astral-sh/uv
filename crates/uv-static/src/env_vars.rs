@@ -1458,6 +1458,10 @@ impl EnvVars {
     pub const NV_VARIANT_PROVIDER_FORCE_SM_ARCH: &'static str = "NV_VARIANT_PROVIDER_FORCE_SM_ARCH";
 
     /// The AMD GPU architecture to assume when inferring the PyTorch backend (e.g., `gfx1100`).
+    ///
+    /// For ROCm 10.0, this also selects the architecture-specific extra that provides the GPU
+    /// kernels (e.g., `torch[device-gfx1100]`), which is required on machines with multiple GPU
+    /// architectures.
     #[attr_hidden]
     #[attr_added_in("0.7.14")]
     pub const UV_AMD_GPU_ARCHITECTURE: &'static str = "UV_AMD_GPU_ARCHITECTURE";
