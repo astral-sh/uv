@@ -191,9 +191,7 @@ pub async fn remove(
         }
     }
 
-    if toml.has_inline_sources() {
-        remove_unused_sources(&target, &mut toml, &packages, &settings)?;
-    }
+    remove_unused_sources(&target, &mut toml, &packages, &settings)?;
 
     let content = toml.to_string();
 

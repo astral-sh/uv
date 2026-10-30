@@ -141,11 +141,6 @@ impl PyProjectTomlMut {
         })
     }
 
-    /// Return whether the project declares its sources in an inline table.
-    pub fn has_inline_sources(&self) -> bool {
-        has_inline_sources(self.doc.as_item())
-    }
-
     /// Restore comments to the source fields still present after a removal.
     fn restore_inline_source_comments(&mut self) {
         for (depth, comments) in &self.inline_source_comments {
@@ -1025,50 +1020,12 @@ impl PyProjectTomlMut {
         name: &PackageName,
         dependency_type: &DependencyType,
     ) -> Result<Vec<Requirement>, Error> {
-        let Some(dependencies) = self.dependency_type_array_mut(dependency_type)? else {
-            return Ok(Vec::new());
-        };
-        let removed = remove_dependency(name, dependencies);
-        if !self.has_inline_sources() {
-            self.remove_regular_source(name)?;
-        }
+        let removed = self
+            .dependency_type_array_mut(dependency_type)?
+            .map(|dependencies| remove_dependency(name, dependencies))
+            .unwrap_or_default();
         self.restore_inline_source_comments();
         Ok(removed)
-    }
-
-    /// Remove an ordinary source table entry after its last local declaration is removed.
-    fn remove_regular_source(&mut self, name: &PackageName) -> Result<(), Error> {
-        if !self.find_dependency(name, None).is_empty() {
-            return Ok(());
-        }
-
-        let Some(uv) = self
-            .doc
-            .get_mut("tool")
-            .map(|tool| tool.as_table_like_mut().ok_or(Error::MalformedSources))
-            .transpose()?
-            .and_then(|tool| tool.get_mut("uv"))
-            .map(|uv| uv.as_table_like_mut().ok_or(Error::MalformedSources))
-            .transpose()?
-        else {
-            return Ok(());
-        };
-        let Some(sources) = uv
-            .get_mut("sources")
-            .map(|sources| sources.as_table_like_mut().ok_or(Error::MalformedSources))
-            .transpose()?
-        else {
-            return Ok(());
-        };
-
-        if let Some(key) = find_source(name, sources) {
-            sources.remove(&key);
-            if sources.is_empty() {
-                uv.remove("sources");
-            }
-        }
-
-        Ok(())
     }
 
     /// Read extra build requirements from the manifest even when its configuration is disabled.

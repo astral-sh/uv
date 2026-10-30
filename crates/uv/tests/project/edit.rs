@@ -1960,6 +1960,122 @@ fn add_remove_workspace() -> Result<()> {
     Ok(())
 }
 
+/// A virtual root can provide different sources for different member extras.
+#[test]
+fn remove_preserves_inherited_extra_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [dependency-groups]
+        dev = ["iniconfig"]
+
+        [tool.uv.workspace]
+        members = ["member"]
+
+        [[tool.uv.index]]
+        name = "pypi"
+        url = "https://pypi.org/simple"
+        default = true
+
+        [tool.uv.sources]
+        iniconfig = [
+            { index = "pypi", extra = "docs" },
+            { index = "pypi", extra = "lint" },
+        ]
+    "#})?;
+    context
+        .temp_dir
+        .child("member/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "member"
+        version = "1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [project.optional-dependencies]
+        docs = ["iniconfig"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.remove().args(["--group", "dev", "iniconfig", "--no-sync"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    assert_snapshot!(context.read("pyproject.toml"), @r#"
+    [dependency-groups]
+    dev = []
+
+    [tool.uv.workspace]
+    members = ["member"]
+
+    [[tool.uv.index]]
+    name = "pypi"
+    url = "https://pypi.org/simple"
+    default = true
+
+    [tool.uv.sources]
+    iniconfig = [
+        { index = "pypi", extra = "docs" },
+    ]
+    "#);
+    Ok(())
+}
+
+/// Removing a root dependency keeps the source inherited by a workspace member.
+#[test]
+fn remove_workspace_root_dependency_with_inherited_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "1.0"
+        requires-python = ">=3.12"
+        dependencies = ["ok"]
+
+        [tool.uv.workspace]
+        members = ["member"]
+
+        [tool.uv.sources]
+        ok = { path = "ok-1.0.0-py3-none-any.whl" }
+    "#})?;
+    context
+        .temp_dir
+        .child("member/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "member"
+        version = "1.0"
+        requires-python = ">=3.12"
+        dependencies = ["ok"]
+    "#})?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-1.0.0-py3-none-any.whl"),
+        context.temp_dir.child("ok-1.0.0-py3-none-any.whl"),
+    )?;
+
+    uv_snapshot!(context.filters(), context.remove().args(["ok", "--no-sync", "--no-index"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.tree().args(["--frozen", "--package", "member"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    member v1.0
+    └── ok v1.0.0
+    ");
+
+    Ok(())
+}
+
 /// `uv add --dev` should update `dev-dependencies` (rather than `dependency-groups.dev`) if a
 /// dependency already exists in `dev-dependencies`.
 #[test]
@@ -3987,6 +4103,273 @@ fn add_update_git_reference_script() -> Result<()> {
         );
     });
 
+    Ok(())
+}
+
+/// Remove a group or extra's source when the package is still declared elsewhere.
+#[test]
+fn remove_scoped_sources() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let wheel = "ok-1.0.0-py3-none-any.whl";
+    let wheels = context.temp_dir.child("wheels");
+    wheels.create_dir_all()?;
+    fs_err::copy(
+        context.workspace_root.join("test/links").join(wheel),
+        wheels.child(wheel),
+    )?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0"
+        requires-python = ">=3.12"
+        dependencies = ["ok"]
+        optional-dependencies = { docs = ["ok"] }
+
+        [dependency-groups]
+        dev = ["ok"]
+        ci = [{ include-group = "dev" }]
+
+        [[tool.uv.index]]
+        name = "local"
+        url = "wheels"
+        format = "flat"
+        default = true
+
+        [tool.uv.sources]
+        ok = [
+            { index = "local", group = "ci" }, # CI source
+            { index = "local", extra = "docs" } # Docs source
+
+            # End of the source list.
+        ] # Sources for ok
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.remove().args(["--optional", "docs", "ok", "--no-sync"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    assert_snapshot!(context.read("pyproject.toml"), @r#"
+    [project]
+    name = "project"
+    version = "1.0"
+    requires-python = ">=3.12"
+    dependencies = ["ok"]
+    optional-dependencies = { docs = [] }
+
+    [dependency-groups]
+    dev = ["ok"]
+    ci = [{ include-group = "dev" }]
+
+    [[tool.uv.index]]
+    name = "local"
+    url = "wheels"
+    format = "flat"
+    default = true
+
+    [tool.uv.sources]
+    ok = [
+        { index = "local", group = "ci" } # CI source
+
+        # End of the source list.
+    ] # Sources for ok
+    "#);
+    uv_snapshot!(context.filters(), context.remove().args(["--group", "dev", "ok", "--no-sync"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    Ok(())
+}
+
+/// A malformed group should report the failed include while pruning its source.
+#[test]
+fn remove_source_with_missing_group_include() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let wheel = "ok-1.0.0-py3-none-any.whl";
+    fs_err::copy(
+        context.workspace_root.join("test/links").join(wheel),
+        context.temp_dir.child(wheel),
+    )?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0"
+        requires-python = ">=3.12"
+
+        [dependency-groups]
+        dev = ["ok", { include-group = "missing" }]
+
+        [tool.uv.sources]
+        ok = { path = "ok-1.0.0-py3-none-any.whl", group = "dev" }
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.remove().args(["--group", "dev", "ok", "--no-sync"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Project `project` has malformed dependency groups
+      cause: Failed to find group `missing` included by `dev`
+    ");
+    Ok(())
+}
+
+/// Removing a runtime declaration must keep a source used by a backend-provided extra.
+#[test]
+fn remove_preserves_dynamic_extra_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let wheel = "ok-1.0.0-py3-none-any.whl";
+    fs_err::copy(
+        context.workspace_root.join("test/links").join(wheel),
+        context.temp_dir.child(wheel),
+    )?;
+    context.temp_dir.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0"
+        requires-python = ">=3.11"
+        dependencies = ["ok; python_version < '3.12'"]
+        dynamic = ["optional-dependencies"]
+
+        [build-system]
+        requires = ["setuptools>=68"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.setuptools.dynamic.optional-dependencies]
+        feature = { file = "feature.txt" }
+
+        [tool.uv.sources]
+        ok = { path = "ok-1.0.0-py3-none-any.whl", extra = "feature", marker = "python_version >= '3.12'" }
+    "#})?;
+    context
+        .temp_dir
+        .child("feature.txt")
+        .write_str("ok; python_version >= '3.12'")?;
+
+    uv_snapshot!(context.filters(), context.remove().args(["ok", "--no-sync"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.sync().args(["--locked", "--extra", "feature", "--no-install-project"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0 (from file://[TEMP_DIR]/ok-1.0.0-py3-none-any.whl)
+    ");
+    Ok(())
+}
+
+/// Dynamic runtime dependencies do not keep a source scoped to an emptied static extra.
+#[test]
+fn remove_extra_source_with_dynamic_dependencies() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let wheel = "ok-1.0.0-py3-none-any.whl";
+    fs_err::copy(
+        context.workspace_root.join("test/links").join(wheel),
+        context.temp_dir.child(wheel),
+    )?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0"
+        requires-python = ">=3.12"
+        dynamic = ["dependencies"]
+        optional-dependencies = { feature = ["ok"] }
+
+        [build-system]
+        requires = ["setuptools>=68"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.setuptools.dynamic]
+        dependencies = { file = "requirements.txt" }
+
+        [tool.uv.sources]
+        ok = { path = "ok-1.0.0-py3-none-any.whl", extra = "feature" }
+    "#})?;
+    context.temp_dir.child("requirements.txt").write_str("")?;
+
+    uv_snapshot!(context.filters(), context.remove().args(["--optional", "feature", "ok", "--no-sync"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    Ok(())
+}
+
+/// Removing a dependency group entry must retain the source its build backend still uses.
+#[test]
+fn remove_preserves_build_requirement_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    for wheel in [
+        "maturin-1.4.0-py3-none-any.whl",
+        "maturin-2.0.0-py3-none-linux_x86_64.whl",
+    ] {
+        fs_err::copy(
+            context.workspace_root.join("test/links").join(wheel),
+            context.temp_dir.child(wheel),
+        )?;
+    }
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "app"
+        version = "1.0"
+        requires-python = ">=3.12"
+
+        [dependency-groups]
+        dev = ["maturin; sys_platform == 'linux' and platform_machine == 'x86_64'"]
+
+        [build-system]
+        requires = ["maturin>=1"]
+        build-backend = "maturin"
+
+        [tool.uv.sources]
+        maturin = [
+            { path = "maturin-1.4.0-py3-none-any.whl", marker = "sys_platform != 'linux' or platform_machine != 'x86_64'" }, # Portable build backend
+            { path = "maturin-2.0.0-py3-none-linux_x86_64.whl", group = "dev", marker = "sys_platform == 'linux' and platform_machine == 'x86_64'" }
+        ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.remove().args(["--group", "dev", "maturin", "--no-sync", "--no-index"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    assert_snapshot!(context.read("pyproject.toml"), @r#"
+    [project]
+    name = "app"
+    version = "1.0"
+    requires-python = ">=3.12"
+
+    [dependency-groups]
+    dev = []
+
+    [build-system]
+    requires = ["maturin>=1"]
+    build-backend = "maturin"
+
+    [tool.uv.sources]
+    maturin = [
+        { path = "maturin-1.4.0-py3-none-any.whl", marker = "sys_platform != 'linux' or platform_machine != 'x86_64'" } # Portable build backend
+    ]
+    "#);
     Ok(())
 }
 
@@ -8621,6 +9004,55 @@ fn add_remove_script_lock() -> Result<()> {
         );
     });
 
+    Ok(())
+}
+
+/// Removing direct script dependencies keeps the sources used by constraints and overrides.
+#[test]
+fn remove_preserves_script_constraint_and_override_sources() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let links = context.workspace_root.join("test/links");
+    fs_err::copy(
+        links.join("ok-1.0.0-py3-none-any.whl"),
+        context.temp_dir.child("ok-1.0.0-py3-none-any.whl"),
+    )?;
+    fs_err::copy(
+        links.join("validation-1.0.0-py3-none-any.whl"),
+        context.temp_dir.child("validation-1.0.0-py3-none-any.whl"),
+    )?;
+    context
+        .temp_dir
+        .child("helper/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "helper"
+        version = "1.0"
+        dependencies = ["ok", "validation"]
+    "#})?;
+    context.temp_dir.child("script.py").write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = ["helper", "ok", "validation"]
+        # [tool.uv]
+        # constraint-dependencies = ["ok"]
+        # override-dependencies = ["validation"]
+        # [tool.uv.sources]
+        # helper = { path = "helper" }
+        # ok = { path = "ok-1.0.0-py3-none-any.whl" }
+        # validation = { path = "validation-1.0.0-py3-none-any.whl" }
+        # ///
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.remove().args(["--script", "script.py", "ok", "validation"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Updated `script.py`
+    ");
+    uv_snapshot!(context.filters(), context.lock().args(["--script", "script.py", "--no-index"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
     Ok(())
 }
 
