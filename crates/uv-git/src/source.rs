@@ -10,7 +10,7 @@ use anyhow::Result;
 use tracing::{debug, instrument};
 
 use uv_cache_key::cache_digest;
-use uv_git_types::{GitOid, GitUrl};
+use uv_git_types::{GitOid, GitUrl, GitUrlParseError};
 use uv_redacted::SafeUrl;
 
 use crate::credentials::GIT_STORE;
@@ -122,7 +122,19 @@ impl GitSource {
         }()?;
 
         // Validate the resolved commit before checking out its contents.
-        let git = self.git.clone().with_precise(actual_rev)?;
+        let git = if let Some(precise) = self.git.precise()
+            && precise != actual_rev
+            && db.contains_tag_object(precise)
+        {
+            return Err(GitUrlParseError::AnnotatedTagRevision {
+                revision: precise.to_string(),
+                precise: actual_rev,
+                url: Box::new(self.git.url().clone()),
+            }
+            .into());
+        } else {
+            self.git.clone().with_precise(actual_rev)?
+        };
 
         // Don’t use the full hash, in order to contribute less to reaching the
         // path length limit on Windows.

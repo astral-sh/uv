@@ -342,6 +342,12 @@ dependencies = ["httpx"]
 httpx = { git = "https://github.com/encode/httpx", rev = "326b9431c761e1ef1e00b9f760d1f654c8db48c6" }
 ```
 
+!!! note
+
+    A full commit revision must be a commit id. For an annotated tag, `git rev-parse <tag>` returns the
+    id of the tag object, not the commit it points to. Use `git rev-parse <tag>^{commit}` to get the
+    commit id.
+
 A `subdirectory` may be specified if the package isn't in the repository root:
 
 ```console

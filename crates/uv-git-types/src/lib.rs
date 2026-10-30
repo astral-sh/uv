@@ -92,6 +92,14 @@ pub enum GitUrlParseError {
         precise: GitOid,
         url: Box<SafeUrl>,
     },
+    #[error(
+        "Git revision `{revision}` for `{url}` is an annotated tag object, not a commit; pin its commit `{precise}` instead"
+    )]
+    AnnotatedTagRevision {
+        revision: String,
+        precise: GitOid,
+        url: Box<SafeUrl>,
+    },
 }
 
 /// A URL reference to a Git repository.

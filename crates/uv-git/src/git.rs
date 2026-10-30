@@ -347,6 +347,13 @@ impl GitDatabase {
             .is_ok_and(|commit| commit == oid)
     }
 
+    /// Checks if `oid` identifies an annotated tag object in this database.
+    pub(crate) fn contains_tag_object(&self, oid: GitOid) -> bool {
+        self.repo
+            .rev_parse(&format!("{oid}^{{tag}}"))
+            .is_ok_and(|tag| tag == oid)
+    }
+
     /// Checks if `oid` contains necessary LFS artifacts in this database.
     pub(crate) fn contains_lfs_artifacts(&self, oid: GitOid) -> bool {
         self.repo.lfs_fsck_objects(&format!("{oid}^0"))
