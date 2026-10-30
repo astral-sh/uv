@@ -113,7 +113,10 @@ impl Aarch64Version {
                     Some("processor" | "M1") => Self::V8_4,
                     Some("M2") => Self::V8_5,
                     Some("M3" | "M4" | "M5") => Self::V8_6,
-                    Some(model) if model.starts_with('M') => {
+                    Some(model)
+                        if model.starts_with('M')
+                            && model.as_bytes().get(1).is_some_and(u8::is_ascii_digit) =>
+                    {
                         debug!("Unknown Apple chip `{brand}`, assuming Armv8.6-A");
                         Self::V8_6
                     }
