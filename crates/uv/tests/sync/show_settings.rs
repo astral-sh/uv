@@ -953,7 +953,8 @@ fn version_baseline() {
         frozen: None,
         active: Warn,
         no_sync: false,
-        package: None,
+        package: [],
+        all_packages: false,
         python: None,
         install_mirrors: PythonInstallMirrors {
             python_install_mirror: None,
