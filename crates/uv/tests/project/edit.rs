@@ -4037,7 +4037,7 @@ fn remove_non_normalized_source() -> Result<()> {
     Ok(())
 }
 
-/// Removing a group requirement also removes its group-specific source when an inline extra remains.
+/// Remove the last inline source when its group no longer uses the package but an extra still does.
 #[test]
 fn remove_group_source_with_inline_extra() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -4054,25 +4054,29 @@ fn remove_group_source_with_inline_extra() -> Result<()> {
         [dependency-groups]
         dev = ["ok; sys_platform == 'win32'"]
 
-        [tool.uv.sources]
-        ok = { path = "ok-1.0.0-py3-none-any.whl", group = "dev", marker = "sys_platform == 'win32'" }
+        [tool.uv]
+        sources = { ok = { path = "ok-1.0.0-py3-none-any.whl", group = "dev", marker = "sys_platform == 'win32'" } }
     "#})?;
 
-    context
-        .remove()
-        .args([
-            "--group",
-            "dev",
-            "ok",
-            "--no-sync",
-            "--no-index",
-            "--find-links",
-        ])
-        .arg(&links)
-        .assert()
-        .success();
+    uv_snapshot!(context.filters(), context.remove().args(["--group", "dev", "ok", "--no-sync", "--no-index", "--find-links"]).arg(&links), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
 
-    assert!(!context.read("pyproject.toml").contains("tool.uv.sources"));
+    assert_snapshot!(context.read("pyproject.toml"), @r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    optional-dependencies = { docs = ["ok; sys_platform != 'win32'"] }
+
+    [dependency-groups]
+    dev = []
+
+    [tool.uv]
+    "#);
+
     Ok(())
 }
 
