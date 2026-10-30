@@ -7,6 +7,7 @@ use assert_fs::prelude::*;
 use indoc::{formatdoc, indoc};
 
 use uv_static::EnvVars;
+#[cfg(feature = "test-python")]
 use uv_test::packse::PackseServer;
 use uv_test::uv_snapshot;
 
@@ -223,6 +224,7 @@ fn list_single_no_editable() -> Result<()> {
 }
 
 #[test]
+#[cfg(feature = "test-python")]
 fn list_outdated_columns() -> Result<()> {
     let index = PackseServer::new("indexes/default.toml");
     let context =
@@ -259,6 +261,7 @@ fn list_outdated_columns() -> Result<()> {
 }
 
 #[test]
+#[cfg(feature = "test-python")]
 fn list_outdated_json() -> Result<()> {
     let index = PackseServer::new("indexes/default.toml");
     let context =
@@ -398,6 +401,7 @@ fn list_outdated_git() -> Result<()> {
 }
 
 #[test]
+#[cfg(feature = "test-python")]
 fn list_outdated_index() -> Result<()> {
     let index = PackseServer::new("indexes/default.toml");
     let extra_index = PackseServer::new("indexes/extra.toml");
