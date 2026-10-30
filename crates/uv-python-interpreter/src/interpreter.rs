@@ -1120,6 +1120,8 @@ enum CpuProbe {
     /// An expected limitation prevented detection. Continue with the platform defaults.
     Unavailable(Box<str>),
     /// An unexpected probe failure, fatal with wheel variants enabled and a warning otherwise.
+    ///
+    /// TODO(konsti): Make probe failures unconditionally fatal when wheel variants stabilize.
     Error(CpuDetectionError),
 }
 
