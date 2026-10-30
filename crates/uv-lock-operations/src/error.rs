@@ -1,5 +1,6 @@
 //! Failures from lockfile policy, parsing, and resolution.
 
+use std::error::Error;
 use std::fmt;
 use std::io;
 use std::path::PathBuf;
@@ -22,6 +23,8 @@ use uv_settings::{FrozenSource, LockedSource};
 use uv_types::HashStrategyError;
 use uv_workspace::dependency_groups::DependencyGroupError;
 use uv_workspace::{DefaultGroupsError, WorkspaceError};
+
+use crate::RequirementsMismatch;
 
 /// The source of a missing lockfile error.
 #[derive(Debug, Clone, Copy)]
@@ -144,6 +147,9 @@ pub enum LockError {
     Resolve(#[from] Box<ResolveError>),
 
     #[error(transparent)]
+    ResolveWithMismatch(Box<LockRequirementsError>),
+
+    #[error(transparent)]
     HashStrategy(#[from] HashStrategyError),
 
     #[error(transparent)]
@@ -163,6 +169,35 @@ pub enum LockError {
 
     #[error(transparent)]
     Anyhow(#[from] anyhow::Error),
+}
+
+/// A resolution error accompanied by a lockfile requirements mismatch.
+#[derive(Debug)]
+pub struct LockRequirementsError {
+    pub(crate) error: ResolveError,
+    pub(crate) reason: RequirementsMismatch,
+    pub(crate) is_user_failure: bool,
+}
+
+impl fmt::Display for LockRequirementsError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(&self.error, f)
+    }
+}
+
+impl Error for LockRequirementsError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        // The resolution error's message is already displayed by this wrapper.
+        self.error.source()
+    }
+}
+
+impl Hinted for LockRequirementsError {
+    fn hints(&self) -> Hints<'_> {
+        let mut hints = self.error.hints();
+        hints.push(self.reason.to_string());
+        hints
+    }
 }
 
 impl From<LockParseError> for LockError {
@@ -189,6 +224,15 @@ impl From<LockError> for UvError {
             | LockError::MissingLockfile(..)
             | LockError::LockWorkspaceMismatch(..)) => Self::user(error),
             LockError::Resolve(error) => Self::from(*error),
+            LockError::ResolveWithMismatch(error) => {
+                let is_user_failure = error.is_user_failure;
+                let error = LockError::ResolveWithMismatch(error);
+                if is_user_failure {
+                    Self::user(error)
+                } else {
+                    Self::unexpected(error.into())
+                }
+            }
             error @ (LockError::UnsupportedLockVersion(..)
             | LockError::UnparsableLockVersion(..)
             | LockError::LockSerialization(_)
@@ -233,6 +277,7 @@ impl Hinted for LockError {
                 Hints::from(format!("replace `{rhs}` with `{replacement}`"))
             }
             Self::Resolve(error) => error.hints(),
+            Self::ResolveWithMismatch(error) => error.hints(),
             Self::Lock(error) => error.hints(),
             Self::PythonSelection(error) => error.hints(),
             Self::MissingLockfile(..)
