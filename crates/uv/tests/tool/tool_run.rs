@@ -8,6 +8,7 @@ use assert_fs::prelude::*;
 use fs_err::{metadata, set_permissions};
 use indoc::indoc;
 use uv_static::EnvVars;
+use uv_test::packse::PackseServer;
 use uv_test::{copy_dir_ignore, uv_snapshot, venv_bin_path};
 
 #[test]
@@ -2918,7 +2919,9 @@ fn tool_run_with_from_url_ending_in_py() {
 /// we show a helpful hint.
 #[test]
 fn tool_run_verbose_hint() {
+    let index = PackseServer::empty();
     let context = uv_test::test_context!("3.12")
+        .with_env(EnvVars::UV_DEFAULT_INDEX, index.index_url())
         .with_filtered_counts()
         .with_tool_dirs();
 
