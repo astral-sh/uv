@@ -17,7 +17,7 @@ env:
   CARGO_NET_RETRY: 10
   CARGO_TERM_COLOR: always
   # renovate: datasource=github-releases depName=astral-sh/hawk
-  HAWK_VERSION: 0.1.15
+  HAWK_VERSION: 0.1.16
   RUSTUP_MAX_RETRIES: 10
   UV_LOCKED: 1
   UV_PYTHON_DOWNLOADS_JSON_URL: ${{ github.workspace }}/crates/uv-python-managed/download-metadata.json
