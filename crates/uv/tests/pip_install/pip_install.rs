@@ -2998,7 +2998,8 @@ async fn install_deduplicated_indices() {
 
     Mock::given(method("GET"))
         .respond_with(
-            ResponseTemplate::new(302).insert_header("Location", format!("{}a/", index.index_url())),
+            ResponseTemplate::new(302)
+                .insert_header("Location", format!("{}a/", index.index_url())),
         )
         .expect(1)
         .mount(&redirect_server)
