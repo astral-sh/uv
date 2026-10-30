@@ -9,6 +9,8 @@ use predicates::{prelude::predicate, str::contains};
 use serde_json::json;
 use std::io;
 use std::path::Path;
+#[cfg(unix)]
+use std::{os::fd::OwnedFd, os::unix::net::UnixStream, process::Stdio};
 use uv_python_discovery::PYTHON_VERSION_FILENAME;
 use uv_static::EnvVars;
 use wiremock::matchers::{method, path};
@@ -8076,5 +8078,34 @@ fn run_centralized_environment_path_file() -> Result<()> {
     ----- stderr -----
     warning: Using incompatible environment (`project-cp3.12.[X]-[HASH]`) due to `--no-sync` (The project environment's Python version does not satisfy the request: `Python 3.11`)
     "#);
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn sigpipe_not_forwarded_to_child() -> Result<()> {
+    let context = uv_test::test_context!("3.11");
+
+    // Send uv's verbose output to a closed socket. SIGWINCH is ignored by default, so use it to
+    // prompt uv to log while the child is running; that failed uv-owned write generates SIGPIPE.
+    let (stderr, peer) = UnixStream::pair()?;
+    drop(peer);
+
+    let mut command = context.command();
+    command
+        .arg("-vv")
+        .arg("run")
+        .arg("--no-project")
+        .arg("--")
+        .arg("sh")
+        .arg("-c")
+        .arg("trap - PIPE; kill -WINCH \"$PPID\"; sleep 1; echo survived")
+        .stderr(Stdio::from(OwnedFd::from(stderr)));
+
+    uv_snapshot!(context.filters(), command, @r"
+    exit_code: 0 (success)
+    ----- stdout -----
+    survived
+    ");
     Ok(())
 }
