@@ -8,7 +8,8 @@ use glob::Pattern;
 use itertools::Itertools;
 use thiserror::Error;
 use toml_edit::{
-    Array, ArrayOfTables, DocumentMut, Formatted, Item, RawString, Table, TomlError, Value,
+    Array, ArrayOfTables, DocumentMut, Formatted, InlineTable, Item, RawString, Table, TomlError,
+    Value,
 };
 
 use uv_cache_key::CanonicalUrl;
@@ -1092,6 +1093,8 @@ impl PyProjectTomlMut {
             .map(|tool_uv| tool_uv.as_table_mut().ok_or(Error::MalformedSources))
             .transpose()?
             .and_then(|tool_uv| tool_uv.get_mut("sources"))
+            // An empty inline table has no source to remove.
+            .filter(|item| !item.as_inline_table().is_some_and(InlineTable::is_empty))
             .map(|sources| sources.as_table_mut().ok_or(Error::MalformedSources))
             .transpose()?
         {
