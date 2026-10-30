@@ -9,14 +9,17 @@ use std::path::Path;
 use std::str::FromStr;
 
 use anyhow::{Context, Result};
-use serde::Deserialize;
+use itertools::Itertools;
+use serde::{Deserialize, de::Error};
 
 use uv_configuration::TargetTriple;
-use uv_distribution_filename::WheelFilename;
+use uv_distribution_filename::{VariantLabel, WheelFilename};
+use uv_distribution_types::{VariantNamespace, VariantProperties, VariantProvider};
+use uv_macros::DeserializeUntagged;
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::{MarkerTree, Requirement};
-use uv_python::PythonVersion;
+use uv_python_types::PythonVersion;
 
 /// A complete packse scenario definition.
 #[derive(Debug, Deserialize)]
@@ -106,6 +109,10 @@ pub struct PackageMetadata {
     #[serde(default)]
     pub extras: BTreeMap<ExtraName, Vec<Requirement>>,
 
+    /// Console script names that invoke the package's generated stub.
+    #[serde(default)]
+    pub entry_points: Vec<String>,
+
     /// Whether to produce a source distribution, and optionally its metadata.
     #[serde(
         default = "default_artifact",
@@ -113,7 +120,7 @@ pub struct PackageMetadata {
     )]
     pub sdist: Option<ArtifactMetadata>,
 
-    /// Whether to produce wheels, and optionally their shared metadata.
+    /// Whether to produce wheels (without a variant label), and optionally their shared metadata.
     #[serde(
         default = "default_artifact",
         deserialize_with = "deserialize_artifact"
@@ -128,6 +135,59 @@ pub struct PackageMetadata {
     /// An empty list means produce only the default `py3-none-any` wheel.
     #[serde(default)]
     pub wheel_tags: Vec<WheelTag>,
+
+    /// Variant wheels and their shared metadata.
+    pub variants: Option<Variants>,
+}
+
+/// Variant metadata and variant wheels for a package version.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Variants {
+    /// Namespaces in priority order.
+    pub namespaces: Vec<VariantNamespace>,
+    /// PEP 850 provider definitions, keyed by namespace.
+    // TODO(konsti): Require providers once the variant metadata schemas are unified.
+    pub providers: Option<BTreeMap<VariantNamespace, VariantProvider>>,
+    /// Wheels keyed by variant label.
+    pub wheels: BTreeMap<VariantLabel, VariantWheel>,
+}
+
+/// Properties and wheel tags for a variant wheel.
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct VariantWheel {
+    /// Variant properties, each written as `namespace :: feature :: value`.
+    #[serde(default, deserialize_with = "deserialize_variant_properties")]
+    pub properties: VariantProperties,
+    /// Wheel tags, defaulting to the package version's wheel tags.
+    #[serde(default)]
+    pub wheel_tags: Vec<WheelTag>,
+}
+
+fn deserialize_variant_properties<'de, D>(deserializer: D) -> Result<VariantProperties, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let mut properties = VariantProperties::new();
+    for property in Vec::<String>::deserialize(deserializer)? {
+        let Some((namespace, feature, value)) = property.split("::").map(str::trim).collect_tuple()
+        else {
+            return Err(D::Error::custom(format!(
+                "invalid variant property `{property}`: expected `namespace :: feature :: value`"
+            )));
+        };
+        let namespace = namespace.parse().map_err(D::Error::custom)?;
+        let feature = feature.parse().map_err(D::Error::custom)?;
+        let value = value.parse().map_err(D::Error::custom)?;
+        properties
+            .entry(namespace)
+            .or_default()
+            .entry(feature)
+            .or_default()
+            .push(value);
+    }
+    Ok(properties)
 }
 
 fn deserialize_artifact<'de, D>(
@@ -136,10 +196,11 @@ fn deserialize_artifact<'de, D>(
 where
     D: serde::Deserializer<'de>,
 {
-    #[derive(Debug, Deserialize)]
-    #[serde(untagged)]
+    #[derive(DeserializeUntagged)]
     enum Helper {
+        #[untagged(bool)]
         Bool(bool),
+        #[untagged(map)]
         Metadata(ArtifactMetadata),
     }
 

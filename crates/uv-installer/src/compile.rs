@@ -15,6 +15,7 @@ use walkdir::WalkDir;
 
 use uv_configuration::Concurrency;
 use uv_fs::Simplified;
+use uv_macros::DebugNoInline;
 use uv_static::EnvVars;
 use uv_warnings::warn_user;
 
@@ -25,7 +26,7 @@ const DEFAULT_COMPILE_TIMEOUT: Duration = Duration::from_mins(1);
 type WorkerOutcome = std::thread::Result<Result<(), CompileError>>;
 type WorkerHandle = oneshot::Receiver<WorkerOutcome>;
 
-#[derive(Debug, Error)]
+#[derive(DebugNoInline, Error)]
 pub enum CompileError {
     #[error("Failed to list files in `site-packages`")]
     Walkdir(#[from] walkdir::Error),
@@ -53,7 +54,7 @@ pub enum CompileError {
         #[source]
         err: Box<Self>,
     },
-    #[error("Bytecode timed out ({}s) compiling file: `{}`", elapsed.as_secs_f32(), source_file)]
+    #[error("Bytecode timed out ({}s) compiling file: {}", elapsed.as_secs_f32(), source_file)]
     CompileTimeout {
         elapsed: Duration,
         source_file: String,
@@ -379,7 +380,7 @@ async fn worker(
         match result {
             Ok(()) => {
                 debug!(
-                    "Bytecode compilation `python` at {} stderr:\n{}\n---",
+                    "Bytecode compilation `python` at `{}` stderr:\n{}\n---",
                     interpreter.user_display(),
                     stderr
                 );

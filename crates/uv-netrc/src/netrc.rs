@@ -170,6 +170,8 @@ impl std::str::FromStr for Netrc {
 mod tests {
     use std::str::FromStr;
 
+    use indoc::indoc;
+
     use super::*;
 
     #[test]
@@ -638,7 +640,13 @@ mod tests {
 
     #[test]
     fn test_lineno_after_macdef() {
-        let nrc = Netrc::from_str("macdef mymacro\nline1\nline2\n\nbad_token foo");
+        let nrc = Netrc::from_str(indoc! {"
+            macdef mymacro
+            line1
+            line2
+
+            bad_token foo
+        "});
         let err = nrc.unwrap_err();
         assert_eq!(
             err.to_string(),
@@ -647,7 +655,11 @@ mod tests {
     }
     #[test]
     fn test_lineno_after_comment() {
-        let nrc = Netrc::from_str("# comment\n# comment\nbad_token foo");
+        let nrc = Netrc::from_str(indoc! {"
+            # comment
+            # comment
+            bad_token foo
+        "});
         let err = nrc.unwrap_err();
         assert_eq!(
             err.to_string(),

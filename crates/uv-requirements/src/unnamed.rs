@@ -3,7 +3,7 @@ use std::path::Path;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use configparser::ini::Ini;
+use astral_ini::Options;
 use futures::{TryStreamExt, stream::FuturesOrdered};
 use tracing::debug;
 use url::Host;
@@ -12,7 +12,8 @@ use uv_distribution::{DistributionDatabase, Reporter};
 use uv_distribution_filename::{DistExtension, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
     BuildableSource, DirectSourceUrl, DirectorySourceUrl, GitDirectorySourceUrl, GitPathSourceUrl,
-    Identifier, PathSourceUrl, RemoteSource, Requirement, SourceUrl,
+    Identifier, PathSourceUrl, RemoteSource, Requirement, SourceUrl, UnresolvedRequirement,
+    UnresolvedRequirementSpecification,
 };
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
@@ -151,7 +152,7 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
                         .and_then(|contents| Metadata10::parse_pkg_info(&contents).ok())
                 {
                     debug!(
-                        "Found PKG-INFO metadata for {path} ({name})",
+                        "Found `PKG-INFO` metadata for `{path}` ({name})",
                         path = parsed_directory_url.install_path.display(),
                         name = metadata.name
                     );
@@ -176,7 +177,7 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
                     // Read PEP 621 metadata from the `pyproject.toml`.
                     if let Some(project) = pyproject.project {
                         debug!(
-                            "Found PEP 621 metadata for {path} in `pyproject.toml` ({name})",
+                            "Found PEP 621 metadata for `{path}` in `pyproject.toml` ({name})",
                             path = parsed_directory_url.install_path.display(),
                             name = project.name
                         );
@@ -195,7 +196,7 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
                         && let Some(name) = poetry.name
                     {
                         debug!(
-                            "Found Poetry metadata for {path} in `pyproject.toml` ({name})",
+                            "Found Poetry metadata for `{path}` in `pyproject.toml` ({name})",
                             path = parsed_directory_url.install_path.display(),
                             name = name
                         );
@@ -210,32 +211,24 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
                 }
 
                 // Attempt to read a `setup.cfg` from the directory.
-                if let Some(setup_cfg) =
+                if let Ok(contents) =
                     fs_err::read_to_string(parsed_directory_url.install_path.join("setup.cfg"))
-                        .ok()
-                        .and_then(|contents| {
-                            let mut ini = Ini::new_cs();
-                            ini.set_multiline(true);
-                            ini.read(contents).ok()
-                        })
+                    && let Ok(setup_cfg) = Options::default().case_sensitive(true).parse(&contents)
+                    && let Some(name) = setup_cfg.get("metadata", "name")
+                    && let Ok(name) = PackageName::from_str(name)
                 {
-                    if let Some(section) = setup_cfg.get("metadata")
-                        && let Some(Some(name)) = section.get("name")
-                        && let Ok(name) = PackageName::from_str(name)
-                    {
-                        debug!(
-                            "Found setuptools metadata for {path} in `setup.cfg` ({name})",
-                            path = parsed_directory_url.install_path.display(),
-                            name = name
-                        );
-                        return Ok(uv_pep508::Requirement {
-                            name,
-                            extras: requirement.extras,
-                            version_or_url: Some(VersionOrUrl::Url(requirement.url)),
-                            marker: requirement.marker,
-                            origin: requirement.origin,
-                        });
-                    }
+                    debug!(
+                        "Found setuptools metadata for `{path}` in `setup.cfg` ({name})",
+                        path = parsed_directory_url.install_path.display(),
+                        name = name
+                    );
+                    return Ok(uv_pep508::Requirement {
+                        name,
+                        extras: requirement.extras,
+                        version_or_url: Some(VersionOrUrl::Url(requirement.url)),
+                        marker: requirement.marker,
+                        origin: requirement.origin,
+                    });
                 }
 
                 SourceUrl::Directory(DirectorySourceUrl {
@@ -261,7 +254,7 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
                     DistExtension::Wheel => unreachable!(),
                 };
                 SourceUrl::Direct(DirectSourceUrl {
-                    url: &parsed_archive_url.url,
+                    url: &requirement.url.verbatim,
                     subdirectory: parsed_archive_url.subdirectory.as_deref(),
                     ext,
                 })
@@ -306,7 +299,7 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
                 archive.metadata.name.clone()
             } else {
                 // Run the PEP 517 build process to extract metadata from the source distribution.
-                let hashes = hasher.get_url(source.url());
+                let hashes = hasher.metadata_policy_for_url(source.url());
                 let source = BuildableSource::Url(source);
                 let archive = database
                     .build_wheel_metadata(&source, hashes)
@@ -332,4 +325,19 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
             origin: requirement.origin,
         })
     }
+}
+
+/// Partition input requirements into those with known names and those needing name resolution.
+pub fn partition_requirements(
+    requirements: Vec<UnresolvedRequirementSpecification>,
+) -> (Vec<Requirement>, Vec<UnnamedRequirement<VerbatimParsedUrl>>) {
+    let mut named = Vec::new();
+    let mut unnamed = Vec::new();
+    for spec in requirements {
+        match spec.requirement {
+            UnresolvedRequirement::Named(req) => named.push(req),
+            UnresolvedRequirement::Unnamed(req) => unnamed.push(req),
+        }
+    }
+    (named, unnamed)
 }

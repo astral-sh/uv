@@ -15,7 +15,7 @@ use rayon::prelude::*;
 use rustc_hash::FxHashSet;
 use tokio_util::compat::{FuturesAsyncReadCompatExt, FuturesAsyncWriteCompatExt};
 use tracing::warn;
-use uv_configuration::initialize_rayon_once;
+use uv_threads::initialize_rayon_once;
 
 use super::{
     DirhashTree, HashedFile, UnhashedFile, UnzipOutput, blake3_copy, directory_tree_from_extracted,

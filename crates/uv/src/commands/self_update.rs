@@ -14,18 +14,15 @@ use tempfile::TempDir;
 use thiserror::Error;
 use tokio::process::Command;
 use tracing::{debug, warn};
-use url::Url;
 use uv_bin_install::{Binary, find_matching_version};
 use uv_client::{BaseClientBuilder, RetriableError, WrappedReqwestError, fetch_with_url_fallback};
+use uv_command_support::{ExitStatus, Printer};
 use uv_fs::Simplified;
 use uv_pep440::{Version as Pep440Version, VersionSpecifier, VersionSpecifiers};
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 use uv_static::{
     EnvVars, astral_mirror_base_url, astral_mirror_url_from_env, custom_astral_mirror_url,
 };
-
-use crate::commands::ExitStatus;
-use crate::printer::Printer;
 
 const UV_GITHUB_RELEASES_DOWNLOAD_PREFIX: &str =
     "https://github.com/astral-sh/uv/releases/download/";
@@ -407,22 +404,20 @@ fn installer_filename() -> &'static str {
 fn official_installer_urls_with_mirror(
     version: &Pep440Version,
     astral_mirror_url: Option<&str>,
-) -> Result<Vec<DisplaySafeUrl>> {
+) -> Result<Vec<SafeUrl>> {
     let astral_mirror_url = custom_astral_mirror_url(astral_mirror_url);
     let filename = installer_filename();
     let mirror_prefix = effective_uv_mirror_prefix(astral_mirror_url);
     let mirror = format!("{mirror_prefix}{version}/{filename}");
 
-    let mut urls = vec![
-        DisplaySafeUrl::parse(&mirror).with_context(|| format!("Failed to parse `{mirror}`"))?,
-    ];
+    let mut urls =
+        vec![SafeUrl::parse(&mirror).with_context(|| format!("Failed to parse `{mirror}`"))?];
 
     // When using the default mirror, also fall back to the canonical GitHub URL.
     if astral_mirror_url.is_none() {
         let canonical = format!("{UV_GITHUB_RELEASES_DOWNLOAD_PREFIX}{version}/{filename}");
         urls.push(
-            DisplaySafeUrl::parse(&canonical)
-                .with_context(|| format!("Failed to parse `{canonical}`"))?,
+            SafeUrl::parse(&canonical).with_context(|| format!("Failed to parse `{canonical}`"))?,
         );
     }
     Ok(urls)
@@ -430,7 +425,7 @@ fn official_installer_urls_with_mirror(
 
 /// Download the official installer from the provided mirror/canonical URL list.
 async fn download_installer_from_urls(
-    urls: &[DisplaySafeUrl],
+    urls: &[SafeUrl],
     installer_path: &Path,
     client_builder: BaseClientBuilder<'_>,
     github_token: Option<&str>,
@@ -444,7 +439,7 @@ async fn download_installer_from_urls(
         .context("Failed to build HTTP client for self-update")?;
 
     fetch_with_url_fallback(urls, retry_policy, "official uv installer", |url| async {
-        let mut request = client.for_host(&url).get(Url::from(url.clone()));
+        let mut request = client.for_host(&url).get(url.clone());
         if let Some(github_token) = installer_download_github_token(&url, github_token) {
             request = request.header("Authorization", format!("Bearer {github_token}"));
         }
@@ -496,7 +491,7 @@ async fn download_installer_from_urls(
 }
 
 fn installer_download_github_token<'a>(
-    url: &DisplaySafeUrl,
+    url: &SafeUrl,
     github_token: Option<&'a str>,
 ) -> Option<&'a str> {
     match url.host_str() {
@@ -749,7 +744,7 @@ const fn default_modify_path() -> bool {
 enum InstallerDownloadError {
     #[error("Failed to download installer from: {url}")]
     Download {
-        url: DisplaySafeUrl,
+        url: SafeUrl,
         #[source]
         source: WrappedReqwestError,
     },
@@ -849,11 +844,14 @@ mod tests {
     use std::thread::JoinHandle;
     use std::time::Duration;
 
+    #[cfg(unix)]
+    use indoc::{formatdoc, indoc};
+
     use super::*;
 
     fn spawn_http_server(
         response: String,
-    ) -> (DisplaySafeUrl, Arc<AtomicUsize>, Sender<()>, JoinHandle<()>) {
+    ) -> (SafeUrl, Arc<AtomicUsize>, Sender<()>, JoinHandle<()>) {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         listener.set_nonblocking(true).unwrap();
         let addr = listener.local_addr().unwrap();
@@ -882,7 +880,7 @@ mod tests {
             }
         });
         (
-            DisplaySafeUrl::parse(&format!("http://{addr}/uv-installer.sh")).unwrap(),
+            SafeUrl::parse(&format!("http://{addr}/uv-installer.sh")).unwrap(),
             requests,
             shutdown_tx,
             handle,
@@ -1057,11 +1055,11 @@ mod tests {
 
     #[test]
     fn test_installer_download_github_token() {
-        let mirror = DisplaySafeUrl::parse(
+        let mirror = SafeUrl::parse(
             "https://releases.astral.sh/github/uv/releases/download/1.2.3/uv-installer.sh",
         )
         .unwrap();
-        let github = DisplaySafeUrl::parse(
+        let github = SafeUrl::parse(
             "https://github.com/astral-sh/uv/releases/download/1.2.3/uv-installer.sh",
         )
         .unwrap();
@@ -1154,7 +1152,12 @@ mod tests {
 
         fs_err::write(
             &installer_path,
-            "#!/bin/sh\nprintf 'hello from stdout\\n'\nprintf 'hello from stderr\\n' >&2\nexit 23\n",
+            indoc! {r"
+                #!/bin/sh
+                printf 'hello from stdout\n'
+                printf 'hello from stderr\n' >&2
+                exit 23
+            "},
         )
         .unwrap();
         fs_err::set_permissions(&installer_path, std::fs::Permissions::from_mode(0o744)).unwrap();
@@ -1194,10 +1197,17 @@ mod tests {
 
         fs_err::write(
             &installer_path,
-            format!(
-                "#!/bin/sh\nset -eu\n{{\nprintf 'CARGO_DIST_FORCE_INSTALL_DIR=%s\\n' \"$CARGO_DIST_FORCE_INSTALL_DIR\"\nprintf 'UV_INSTALL_DIR=%s\\n' \"$UV_INSTALL_DIR\"\nprintf 'UV_NO_MODIFY_PATH=%s\\n' \"${{UV_NO_MODIFY_PATH-}}\"\n}} > \"{}\"\n",
+            formatdoc! {r#"
+                #!/bin/sh
+                set -eu
+                {{
+                printf 'CARGO_DIST_FORCE_INSTALL_DIR=%s\n' "$CARGO_DIST_FORCE_INSTALL_DIR"
+                printf 'UV_INSTALL_DIR=%s\n' "$UV_INSTALL_DIR"
+                printf 'UV_NO_MODIFY_PATH=%s\n' "${{UV_NO_MODIFY_PATH-}}"
+                }} > "{}"
+            "#,
                 output_path.display()
-            ),
+            },
         )
         .unwrap();
         fs_err::set_permissions(&installer_path, std::fs::Permissions::from_mode(0o744)).unwrap();
@@ -1214,11 +1224,14 @@ mod tests {
 
         assert_eq!(
             fs_err::read_to_string(&output_path).unwrap(),
-            format!(
-                "CARGO_DIST_FORCE_INSTALL_DIR={}\nUV_INSTALL_DIR={}\nUV_NO_MODIFY_PATH=1\n",
+            formatdoc! {"
+                CARGO_DIST_FORCE_INSTALL_DIR={}
+                UV_INSTALL_DIR={}
+                UV_NO_MODIFY_PATH=1
+            ",
                 install_prefix.display(),
                 install_prefix.display(),
-            )
+            }
         );
     }
 
@@ -1234,10 +1247,15 @@ mod tests {
 
         fs_err::write(
             &installer_path,
-            format!(
-                "#!/bin/sh\nset -eu\n{{\nprintf 'UV_DOWNLOAD_URL=%s\\n' \"${{UV_DOWNLOAD_URL-}}\"\n}} > \"{}\"\n",
+            formatdoc! {r#"
+                #!/bin/sh
+                set -eu
+                {{
+                printf 'UV_DOWNLOAD_URL=%s\n' "${{UV_DOWNLOAD_URL-}}"
+                }} > "{}"
+            "#,
                 output_path.display()
-            ),
+            },
         )
         .unwrap();
         fs_err::set_permissions(&installer_path, std::fs::Permissions::from_mode(0o744)).unwrap();
@@ -1270,10 +1288,15 @@ mod tests {
 
         fs_err::write(
             &installer_path,
-            format!(
-                "#!/bin/sh\nset -eu\n{{\nprintf 'UV_NO_MODIFY_PATH=%s\\n' \"${{UV_NO_MODIFY_PATH-}}\"\n}} > \"{}\"\n",
+            formatdoc! {r#"
+                #!/bin/sh
+                set -eu
+                {{
+                printf 'UV_NO_MODIFY_PATH=%s\n' "${{UV_NO_MODIFY_PATH-}}"
+                }} > "{}"
+            "#,
                 output_path.display()
-            ),
+            },
         )
         .unwrap();
         fs_err::set_permissions(&installer_path, std::fs::Permissions::from_mode(0o744)).unwrap();

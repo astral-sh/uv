@@ -3,24 +3,31 @@ use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::time::Duration;
+
+use clap::ValueEnum;
 use tracing::info_span;
 use uv_client::{DEFAULT_CONNECT_TIMEOUT, DEFAULT_READ_TIMEOUT, DEFAULT_READ_TIMEOUT_UPLOAD};
-use uv_configuration::RequiredVersion;
+use uv_configuration::{
+    ProjectBuildBackend, RequiredVersion, RequirementsInput, RequirementsInputError,
+};
 use uv_dirs::{system_config_file, user_config_dir};
 use uv_distribution_types::{IndexUrlError, Origin};
 use uv_flags::EnvironmentFlags;
 use uv_fs::Simplified;
 use uv_normalize::{GroupName, PackageName};
 use uv_pep440::Version;
-use uv_redacted::DisplaySafeUrl;
+use uv_python_types::PythonArchitecture;
+use uv_redacted::SafeUrl;
 use uv_static::{EnvVars, InvalidEnvironmentVariable, parse_boolish_environment_variable};
 use uv_torch::AmdGpuArchitecture;
 use uv_warnings::warn_user;
 
 pub use crate::combine::*;
+pub use crate::resolved::*;
 pub use crate::settings::*;
 
 mod combine;
+mod resolved;
 mod settings;
 
 /// The [`Options`] as loaded from a configuration file on disk.
@@ -56,10 +63,10 @@ impl FilesystemOptions {
         let root = dir.join("uv");
         let file = root.join("uv.toml");
 
-        tracing::debug!("Searching for user configuration in: `{}`", file.display());
+        tracing::debug!("Searching for user configuration in: {}", file.display());
         match read_file(&file) {
             Ok(options) => {
-                tracing::debug!("Found user configuration in: `{}`", file.display());
+                tracing::debug!("Found user configuration in: {}", file.display());
                 validate_uv_toml(&file, &options)?;
                 Ok(Some(Self(options.with_origin(Origin::User))))
             }
@@ -86,7 +93,7 @@ impl FilesystemOptions {
             return Ok(None);
         };
 
-        tracing::debug!("Found system configuration in: `{}`", file.display());
+        tracing::debug!("Found system configuration in: {}", file.display());
         let options = read_file(&file)?;
         validate_uv_toml(&file, &options)?;
         Ok(Some(Self(options.with_origin(Origin::System))))
@@ -203,7 +210,7 @@ impl FilesystemOptions {
     /// Load a [`FilesystemOptions`] from a `uv.toml` file.
     pub fn from_file(path: impl AsRef<Path>) -> Result<Self, Error> {
         let path = path.as_ref();
-        tracing::debug!("Reading user configuration from: `{}`", path.display());
+        tracing::debug!("Reading user configuration from: {}", path.display());
 
         let options = read_file(path)?;
         validate_uv_toml(path, &options)?;
@@ -306,6 +313,7 @@ fn validate_uv_toml(path: &Path, options: &Options) -> Result<(), Error> {
         build_constraint_dependencies: _,
         environments,
         required_environments,
+        minimum_libc_version,
         conflicts,
         workspace,
         sources,
@@ -370,6 +378,12 @@ fn validate_uv_toml(path: &Path, options: &Options) -> Result<(), Error> {
             "required-environments",
         ));
     }
+    if minimum_libc_version.is_some() {
+        return Err(Error::PyprojectOnlyField(
+            path.to_path_buf(),
+            "minimum-libc-version",
+        ));
+    }
     Ok(())
 }
 
@@ -424,6 +438,7 @@ fn warn_uv_toml_masked_fields(options: &Options) {
                 compile_bytecode,
                 no_sources,
                 no_sources_package: _,
+                require_build_hashes: _,
                 upgrade,
                 upgrade_package,
                 reinstall,
@@ -438,6 +453,8 @@ fn warn_uv_toml_masked_fields(options: &Options) {
             PythonInstallMirrors {
                 python_install_mirror,
                 pypy_install_mirror,
+                graalpy_install_mirror,
+                pyodide_install_mirror,
                 python_downloads_json_url,
             },
         publish:
@@ -456,6 +473,7 @@ fn warn_uv_toml_masked_fields(options: &Options) {
         build_constraint_dependencies,
         environments: _,
         required_environments: _,
+        minimum_libc_version: _,
         conflicts: _,
         workspace: _,
         sources: _,
@@ -621,6 +639,12 @@ fn warn_uv_toml_masked_fields(options: &Options) {
     if pypy_install_mirror.is_some() {
         masked_fields.push("pypy-install-mirror");
     }
+    if graalpy_install_mirror.is_some() {
+        masked_fields.push("graalpy-install-mirror");
+    }
+    if pyodide_install_mirror.is_some() {
+        masked_fields.push("pyodide-install-mirror");
+    }
     if python_downloads_json_url.is_some() {
         masked_fields.push("python-downloads-json-url");
     }
@@ -671,13 +695,13 @@ pub enum Error {
     #[error(transparent)]
     Index(#[from] uv_distribution_types::IndexUrlError),
 
-    #[error("Failed to parse: `{}`", _0.user_display())]
+    #[error("Failed to parse: {}", _0.user_display())]
     PyprojectToml(PathBuf, #[source] Box<toml::de::Error>),
 
-    #[error("Failed to parse: `{}`", _0.user_display())]
+    #[error("Failed to parse: {}", _0.user_display())]
     UvToml(PathBuf, #[source] Box<toml::de::Error>),
 
-    #[error("Failed to parse: `{}`. The `{}` field is not allowed in a `uv.toml` file. `{}` is only applicable in the context of a project, and should be placed in a `pyproject.toml` file instead.", _0.user_display(), _1, _1
+    #[error("Failed to parse `{}`. The `{}` field is not allowed in a `uv.toml` file. `{}` is only applicable in the context of a project, and should be placed in a `pyproject.toml` file instead.", _0.user_display(), _1, _1
     )]
     PyprojectOnlyField(PathBuf, &'static str),
 
@@ -731,6 +755,8 @@ pub struct EnvironmentOptions {
     pub skip_wheel_filename_check: Option<bool>,
     pub require_metadata_range_requests: Option<bool>,
     pub hide_build_output: Option<bool>,
+    pub python_arch: Option<PythonArchitecture>,
+    pub require_build_hashes: Option<bool>,
     pub python_install_bin: Option<bool>,
     pub python_install_registry: Option<bool>,
     pub python_no_registry: EnvFlag,
@@ -751,6 +777,7 @@ pub struct EnvironmentOptions {
     pub frozen: EnvFlag,
     pub locked: EnvFlag,
     pub offline: EnvFlag,
+    pub no_cache: EnvFlag,
     pub no_sync: EnvFlag,
     pub managed_python: EnvFlag,
     pub no_managed_python: EnvFlag,
@@ -772,6 +799,10 @@ pub struct EnvironmentOptions {
     pub only_install_local: EnvFlag,
     pub no_env_file: EnvFlag,
     pub no_group: Option<Vec<GroupName>>,
+    pub constraints: Option<Vec<RequirementsInput>>,
+    pub overrides: Option<Vec<RequirementsInput>>,
+    pub excludes: Option<Vec<RequirementsInput>>,
+    pub build_constraints: Option<Vec<RequirementsInput>>,
     pub no_binary_package: Option<Vec<PackageName>>,
     pub no_build_package: Option<Vec<PackageName>>,
     pub no_sources_package: Option<Vec<PackageName>>,
@@ -779,8 +810,10 @@ pub struct EnvironmentOptions {
     pub venv_clear: EnvFlag,
     pub venv_relocatable: EnvFlag,
     pub init_bare: EnvFlag,
+    pub init_build_backend: Option<ProjectBuildBackend>,
     pub malware_check: EnvFlag,
-    pub malware_check_url: Option<DisplaySafeUrl>,
+    pub malware_check_url: Option<SafeUrl>,
+    pub run_recursion_depth: Option<u32>,
     #[cfg(unix)]
     pub run_rlimit_nofile: Option<u32>,
 }
@@ -804,7 +837,21 @@ impl EnvironmentOptions {
         )?)
         .map(Duration::from_secs);
 
+        // Ignore the deprecated `UV_NATIVE_TLS` variable when its replacement is set.
+        let system_certs = EnvFlag::new(EnvVars::UV_SYSTEM_CERTS)?;
+        let native_tls = if system_certs.value.is_some() {
+            EnvFlag {
+                value: None,
+                env_var: EnvVars::UV_NATIVE_TLS,
+            }
+        } else {
+            EnvFlag::new(EnvVars::UV_NATIVE_TLS)?
+        };
+
         Ok(Self {
+            require_build_hashes: parse_boolish_environment_variable(
+                EnvVars::UV_REQUIRE_BUILD_HASHES,
+            )?,
             ruff_path: parse_path_environment_variable(EnvVars::RUFF),
             ty_path: parse_path_environment_variable(EnvVars::TY),
             skip_wheel_filename_check: parse_boolish_environment_variable(
@@ -814,6 +861,7 @@ impl EnvironmentOptions {
                 EnvVars::UV_REQUIRE_METADATA_RANGE_REQUESTS,
             )?,
             hide_build_output: parse_boolish_environment_variable(EnvVars::UV_HIDE_BUILD_OUTPUT)?,
+            python_arch: parse_typed_environment_variable(EnvVars::UV_PYTHON_ARCH, None)?,
             python_install_bin: parse_boolish_environment_variable(EnvVars::UV_PYTHON_INSTALL_BIN)?,
             python_install_registry: parse_boolish_environment_variable(
                 EnvVars::UV_PYTHON_INSTALL_REGISTRY,
@@ -840,6 +888,12 @@ impl EnvironmentOptions {
                 )?,
                 pypy_install_mirror: parse_string_environment_variable(
                     EnvVars::UV_PYPY_INSTALL_MIRROR,
+                )?,
+                graalpy_install_mirror: parse_string_environment_variable(
+                    EnvVars::UV_GRAALPY_INSTALL_MIRROR,
+                )?,
+                pyodide_install_mirror: parse_string_environment_variable(
+                    EnvVars::UV_PYODIDE_INSTALL_MIRROR,
                 )?,
                 python_downloads_json_url: parse_string_environment_variable(
                     EnvVars::UV_PYTHON_DOWNLOADS_JSON_URL,
@@ -878,11 +932,12 @@ impl EnvironmentOptions {
             frozen: EnvFlag::new(EnvVars::UV_FROZEN)?,
             locked: EnvFlag::new(EnvVars::UV_LOCKED)?,
             offline: EnvFlag::new(EnvVars::UV_OFFLINE)?,
+            no_cache: EnvFlag::new(EnvVars::UV_NO_CACHE)?,
             no_sync: EnvFlag::new(EnvVars::UV_NO_SYNC)?,
             managed_python: EnvFlag::new(EnvVars::UV_MANAGED_PYTHON)?,
             no_managed_python: EnvFlag::new(EnvVars::UV_NO_MANAGED_PYTHON)?,
-            native_tls: EnvFlag::new(EnvVars::UV_NATIVE_TLS)?,
-            system_certs: EnvFlag::new(EnvVars::UV_SYSTEM_CERTS)?,
+            native_tls,
+            system_certs,
             preview: EnvFlag::new(EnvVars::UV_PREVIEW)?,
             isolated: EnvFlag::new(EnvVars::UV_ISOLATED)?,
             no_progress: EnvFlag::new(EnvVars::UV_NO_PROGRESS)?,
@@ -899,6 +954,10 @@ impl EnvironmentOptions {
             only_install_local: EnvFlag::new(EnvVars::UV_ONLY_INSTALL_LOCAL)?,
             no_env_file: EnvFlag::new(EnvVars::UV_NO_ENV_FILE)?,
             no_group: parse_name_list_environment_variable(EnvVars::UV_NO_GROUP)?,
+            constraints: parse_path_list_environment_variable(EnvVars::UV_CONSTRAINT)?,
+            overrides: parse_path_list_environment_variable(EnvVars::UV_OVERRIDE)?,
+            excludes: parse_path_list_environment_variable(EnvVars::UV_EXCLUDE)?,
+            build_constraints: parse_path_list_environment_variable(EnvVars::UV_BUILD_CONSTRAINT)?,
             no_binary_package: parse_name_list_environment_variable(EnvVars::UV_NO_BINARY_PACKAGE)?,
             no_build_package: parse_name_list_environment_variable(EnvVars::UV_NO_BUILD_PACKAGE)?,
             no_sources_package: parse_name_list_environment_variable(
@@ -908,10 +967,21 @@ impl EnvironmentOptions {
             venv_clear: EnvFlag::new(EnvVars::UV_VENV_CLEAR)?,
             venv_relocatable: EnvFlag::new(EnvVars::UV_VENV_RELOCATABLE)?,
             init_bare: EnvFlag::new(EnvVars::UV_INIT_BARE)?,
+            init_build_backend: parse_string_environment_variable(EnvVars::UV_INIT_BUILD_BACKEND)?
+                .map(|value| {
+                    ProjectBuildBackend::from_str(&value, false).map_err(|err| {
+                        InvalidEnvironmentVariable {
+                            name: EnvVars::UV_INIT_BUILD_BACKEND.to_string(),
+                            value,
+                            err,
+                        }
+                    })
+                })
+                .transpose()?,
             malware_check: EnvFlag::new(EnvVars::UV_MALWARE_CHECK)?,
             malware_check_url: parse_string_environment_variable(EnvVars::UV_MALWARE_CHECK_URL)?
                 .map(|value| {
-                    value.parse::<DisplaySafeUrl>().map_err(|err| {
+                    value.parse::<SafeUrl>().map_err(|err| {
                         Error::InvalidEnvironmentVariable(InvalidEnvironmentVariable {
                             name: EnvVars::UV_MALWARE_CHECK_URL.to_string(),
                             value,
@@ -920,6 +990,10 @@ impl EnvironmentOptions {
                     })
                 })
                 .transpose()?,
+            run_recursion_depth: parse_integer_environment_variable(
+                EnvVars::UV_RUN_RECURSION_DEPTH,
+                None,
+            )?,
             #[cfg(unix)]
             run_rlimit_nofile: parse_integer_environment_variable(
                 EnvVars::UV_RUN_RLIMIT_NOFILE,
@@ -979,6 +1053,34 @@ where
         Ok(None)
     } else {
         Ok(Some(names))
+    }
+}
+
+/// Parse an environment variable containing a whitespace-delimited list of requirements inputs.
+fn parse_path_list_environment_variable(
+    name: &'static str,
+) -> Result<Option<Vec<RequirementsInput>>, Error> {
+    let Some(value) = parse_string_environment_variable(name)? else {
+        return Ok(None);
+    };
+
+    let inputs = value
+        .split_whitespace()
+        .map(|entry| {
+            entry.parse().map_err(|err: RequirementsInputError| {
+                Error::InvalidEnvironmentVariable(InvalidEnvironmentVariable {
+                    name: name.to_string(),
+                    value: value.clone(),
+                    err: err.to_string(),
+                })
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+
+    if inputs.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(inputs))
     }
 }
 

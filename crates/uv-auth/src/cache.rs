@@ -5,10 +5,9 @@ use std::sync::RwLock;
 
 use rustc_hash::{FxHashMap, FxHasher};
 use tracing::trace;
-use url::Url;
 
 use uv_once_map::OnceMap;
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 
 use crate::credentials::{Authentication, CredentialsFromUrlError, Username};
 use crate::{Credentials, Realm};
@@ -18,7 +17,7 @@ type FxOnceMap<K, V> = OnceMap<K, V, BuildHasherDefault<FxHasher>>;
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) enum FetchUrl {
     /// A full index URL
-    Index(DisplaySafeUrl),
+    Index(SafeUrl),
     /// A realm URL
     Realm(Realm),
 }
@@ -63,10 +62,10 @@ impl CredentialsCache {
     /// Returns `true` if the store was updated.
     pub fn store_credentials_from_url(
         &self,
-        url: &DisplaySafeUrl,
+        url: &SafeUrl,
     ) -> Result<bool, CredentialsFromUrlError> {
         if let Some(credentials) = Credentials::from_url(url)? {
-            trace!("Caching credentials for {url}");
+            trace!("Caching credentials for `{url}`");
             self.insert(url, Arc::new(Authentication::from(credentials)));
             Ok(true)
         } else {
@@ -77,8 +76,8 @@ impl CredentialsCache {
     /// Populate the global authentication store with credentials on a URL, if there are any.
     ///
     /// Returns `true` if the store was updated.
-    pub fn store_credentials(&self, url: &DisplaySafeUrl, credentials: Credentials) {
-        trace!("Caching credentials for {url}");
+    pub fn store_credentials(&self, url: &SafeUrl, credentials: Credentials) {
+        trace!("Caching credentials for `{url}`");
         self.insert(url, Arc::new(Authentication::from(credentials)));
     }
 
@@ -122,7 +121,7 @@ impl CredentialsCache {
     /// If multiple usernames are used per URL, the realm cache should be queried instead.
     pub(crate) fn get_url(
         &self,
-        url: &DisplaySafeUrl,
+        url: &SafeUrl,
         username: &Username,
     ) -> Option<Arc<Authentication>> {
         let urls = self.urls.read().unwrap();
@@ -131,19 +130,19 @@ impl CredentialsCache {
             if username.is_none() || username.as_deref() == credentials.username() {
                 if username.is_some() && credentials.password().is_none() {
                     // If given a username, don't return password-less credentials
-                    trace!("No password in cache for URL {url}");
+                    trace!("No password in cache for URL `{url}`");
                     return None;
                 }
-                trace!("Found cached credentials for URL {url}");
+                trace!("Found cached credentials for URL `{url}`");
                 return Some(credentials.clone());
             }
         }
-        trace!("No credentials in cache for URL {url}");
+        trace!("No credentials in cache for URL `{url}`");
         None
     }
 
     /// Update the cache with the given credentials.
-    pub(crate) fn insert(&self, url: &DisplaySafeUrl, credentials: Arc<Authentication>) {
+    pub(crate) fn insert(&self, url: &SafeUrl, credentials: Arc<Authentication>) {
         // Do not cache empty credentials
         if credentials.is_empty() {
             return;
@@ -221,12 +220,13 @@ impl<T> UrlTrie<T> {
         trie
     }
 
-    fn get(&self, url: &Url) -> Option<&T> {
+    fn get(&self, url: &SafeUrl) -> Option<&T> {
+        let segments = url.path_segments()?;
         let mut state = 0;
         let realm = Realm::from(url).to_string();
         for component in [realm.as_str()]
             .into_iter()
-            .chain(url.path_segments().unwrap().filter(|item| !item.is_empty()))
+            .chain(segments.filter(|item| !item.is_empty()))
         {
             state = self.states[state].get(component)?;
             if let Some(ref value) = self.states[state].value {
@@ -236,12 +236,16 @@ impl<T> UrlTrie<T> {
         self.states[state].value.as_ref()
     }
 
-    fn insert(&mut self, url: &Url, value: T) {
+    fn insert(&mut self, url: &SafeUrl, value: T) {
+        // Opaque URLs have no path hierarchy for prefix matching.
+        let Some(segments) = url.path_segments() else {
+            return;
+        };
         let mut state = 0;
         let realm = Realm::from(url).to_string();
         for component in [realm.as_str()]
             .into_iter()
-            .chain(url.path_segments().unwrap().filter(|item| !item.is_empty()))
+            .chain(segments.filter(|item| !item.is_empty()))
         {
             match self.states[state].index(component) {
                 Ok(i) => state = self.states[state].children[i].1,
@@ -278,6 +282,8 @@ impl<T> TrieState<T> {
 
 #[cfg(test)]
 mod tests {
+    use uv_redacted::SafeUrlError;
+
     use crate::Credentials;
     use crate::credentials::Password;
 
@@ -296,54 +302,75 @@ mod tests {
 
         let mut trie = UrlTrie::new();
         trie.insert(
-            &Url::parse("https://burntsushi.net").unwrap(),
+            &SafeUrl::parse("https://burntsushi.net").unwrap(),
             credentials1.clone(),
         );
         trie.insert(
-            &Url::parse("https://astral.sh").unwrap(),
+            &SafeUrl::parse("https://astral.sh").unwrap(),
             credentials2.clone(),
         );
         trie.insert(
-            &Url::parse("https://example.com/foo").unwrap(),
+            &SafeUrl::parse("https://example.com/foo").unwrap(),
             credentials3.clone(),
         );
         trie.insert(
-            &Url::parse("https://example.com/bar").unwrap(),
+            &SafeUrl::parse("https://example.com/bar").unwrap(),
             credentials4.clone(),
         );
 
-        let url = Url::parse("https://burntsushi.net/regex-internals").unwrap();
+        let url = SafeUrl::parse("https://burntsushi.net/regex-internals").unwrap();
         assert_eq!(trie.get(&url), Some(&credentials1));
 
-        let url = Url::parse("https://burntsushi.net/").unwrap();
+        let url = SafeUrl::parse("https://burntsushi.net/").unwrap();
         assert_eq!(trie.get(&url), Some(&credentials1));
 
-        let url = Url::parse("https://astral.sh/about").unwrap();
+        let url = SafeUrl::parse("https://astral.sh/about").unwrap();
         assert_eq!(trie.get(&url), Some(&credentials2));
 
-        let url = Url::parse("https://example.com/foo").unwrap();
+        let url = SafeUrl::parse("https://example.com/foo").unwrap();
         assert_eq!(trie.get(&url), Some(&credentials3));
 
-        let url = Url::parse("https://example.com/foo/").unwrap();
+        let url = SafeUrl::parse("https://example.com/foo/").unwrap();
         assert_eq!(trie.get(&url), Some(&credentials3));
 
-        let url = Url::parse("https://example.com/foo/bar").unwrap();
+        let url = SafeUrl::parse("https://example.com/foo/bar").unwrap();
         assert_eq!(trie.get(&url), Some(&credentials3));
 
-        let url = Url::parse("https://example.com/bar").unwrap();
+        let url = SafeUrl::parse("https://example.com/bar").unwrap();
         assert_eq!(trie.get(&url), Some(&credentials4));
 
-        let url = Url::parse("https://example.com/bar/").unwrap();
+        let url = SafeUrl::parse("https://example.com/bar/").unwrap();
         assert_eq!(trie.get(&url), Some(&credentials4));
 
-        let url = Url::parse("https://example.com/bar/foo").unwrap();
+        let url = SafeUrl::parse("https://example.com/bar/foo").unwrap();
         assert_eq!(trie.get(&url), Some(&credentials4));
 
-        let url = Url::parse("https://example.com/about").unwrap();
+        let url = SafeUrl::parse("https://example.com/about").unwrap();
         assert_eq!(trie.get(&url), None);
 
-        let url = Url::parse("https://example.com/foobar").unwrap();
+        let url = SafeUrl::parse("https://example.com/foobar").unwrap();
         assert_eq!(trie.get(&url), None);
+    }
+
+    #[test]
+    fn test_trie_opaque_url() -> Result<(), SafeUrlError> {
+        let mut trie = UrlTrie::new();
+        let url = SafeUrl::parse("git+https:foo")?;
+        let credentials =
+            Credentials::basic(Some("username".to_string()), Some("password".to_string()));
+
+        assert_eq!(trie.get(&url), None);
+        trie.insert(&url, credentials.clone());
+        assert_eq!(trie.get(&url), None);
+
+        // Opaque URLs must not share credentials with hierarchical URLs in the same realm.
+        let base_url = SafeUrl::parse("git+https:/")?;
+        assert_eq!(trie.get(&base_url), None);
+        trie.insert(&base_url, credentials.clone());
+        assert_eq!(trie.get(&url), None);
+        assert_eq!(trie.get(&base_url), Some(&credentials));
+
+        Ok(())
     }
 
     #[test]
@@ -356,12 +383,11 @@ mod tests {
         }));
         let cache = CredentialsCache::default();
         // Insert with URL with credentials and get with redacted URL.
-        let url = DisplaySafeUrl::parse("https://username:password@example.com/foobar").unwrap();
+        let url = SafeUrl::parse("https://username:password@example.com/foobar").unwrap();
         cache.insert(&url, credentials.clone());
         assert_eq!(cache.get_url(&url, &username), Some(credentials.clone()));
         // Insert with redacted URL and get with URL with credentials.
-        let url =
-            DisplaySafeUrl::parse("https://username:password@second-example.com/foobar").unwrap();
+        let url = SafeUrl::parse("https://username:password@second-example.com/foobar").unwrap();
         cache.insert(&url, credentials.clone());
         assert_eq!(cache.get_url(&url, &username), Some(credentials.clone()));
     }

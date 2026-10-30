@@ -27,9 +27,8 @@ use tokio::io::{AsyncReadExt, BufReader};
 use tokio::sync::Semaphore;
 use tokio_util::io::ReaderStream;
 use tracing::{Level, debug, enabled, trace, warn};
-use url::Url;
 
-use uv_auth::{Credentials, Realm};
+use uv_auth::{Credentials, CredentialsPrompt, CredentialsPromptError, Realm};
 use uv_cache::{Cache, Refresh};
 use uv_client::{
     BaseClient, ClientBuildError, DEFAULT_MAX_REDIRECTS, MetadataFormat, OwnedArchive,
@@ -40,19 +39,19 @@ use uv_distribution_filename::{DistFilename, SourceDistExtension, SourceDistFile
 use uv_distribution_types::{IndexCapabilities, IndexUrl};
 use uv_extract::hash::Hasher;
 use uv_fs::{ProgressReader, Simplified};
-use uv_metadata::read_metadata_async_seek;
-use uv_preview::PreviewFeature;
+use uv_metadata::read_archive_metadata;
 use uv_pypi_types::{HashAlgorithm, HashDigest, Metadata23, MetadataError};
-use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
+use uv_redacted::{SafeUrl, SafeUrlError};
+use uv_static::TarBackend;
 use uv_warnings::warn_user;
 
-pub use crate::trusted_publishing::TrustedPublishingToken;
+use crate::trusted_publishing::TrustedPublishingService;
 use crate::trusted_publishing::pypi::PyPIPublishingService;
-use crate::trusted_publishing::{TrustedPublishingError, TrustedPublishingService};
+pub use crate::trusted_publishing::{TrustedPublishingError, TrustedPublishingToken};
 
 #[derive(Error, Debug)]
 pub enum PublishError {
-    #[error("The publish path is not a valid glob pattern: `{0}`")]
+    #[error("The publish path `{0}` is not a valid glob pattern")]
     Pattern(String, #[source] PatternError),
     /// [`GlobError`] is a wrapped io error.
     #[error(transparent)]
@@ -61,16 +60,12 @@ pub enum PublishError {
     NoFiles,
     #[error(transparent)]
     Fmt(#[from] fmt::Error),
-    #[error("File is neither a wheel nor a source distribution: `{}`", _0.user_display())]
+    #[error("File is neither a wheel nor a source distribution: {}", _0.user_display())]
     InvalidFilename(PathBuf),
-    #[error("Failed to publish: `{}`", _0.user_display())]
+    #[error("Failed to publish: {}", _0.user_display())]
     PublishPrepare(PathBuf, #[source] Box<PublishPrepareError>),
-    #[error("Failed to publish `{}` to {}", _0.user_display(), _1)]
-    PublishSend(
-        PathBuf,
-        Box<DisplaySafeUrl>,
-        #[source] Box<PublishSendError>,
-    ),
+    #[error("Failed to publish `{}` to `{}`", _0.user_display(), _1)]
+    PublishSend(PathBuf, Box<SafeUrl>, #[source] Box<PublishSendError>),
     #[error("Failed to obtain token for trusted publishing")]
     TrustedPublishing(#[from] Box<TrustedPublishingError>),
     #[error("{0} are not allowed when using trusted publishing")]
@@ -80,7 +75,7 @@ pub enum PublishError {
     #[error(transparent)]
     ClientBuild(#[from] ClientBuildError),
     #[error(
-        "Local file and index file do not match for {filename}. \
+        "Local file and index file do not match for `{filename}`. \
         Local: {hash_algorithm}={local}, Remote: {hash_algorithm}={remote}"
     )]
     HashMismatch {
@@ -89,10 +84,12 @@ pub enum PublishError {
         local: String,
         remote: String,
     },
-    #[error("Hash is missing in index for {0}")]
+    #[error("Hash is missing in index for `{0}`")]
     MissingHash(Box<DistFilename>),
     #[error(transparent)]
     RetryParsing(#[from] RetryParsingError),
+    #[error(transparent)]
+    CredentialsPrompt(#[from] CredentialsPromptError),
 }
 
 /// Failure to get the metadata for a specific file.
@@ -106,21 +103,21 @@ pub enum PublishPrepareError {
     Metadata(#[from] uv_metadata::Error),
     #[error("Failed to read metadata")]
     Metadata23(#[from] MetadataError),
-    #[error("Only files ending in `.tar.gz` are valid source distributions: `{0}`")]
+    #[error("Only files ending in `.tar.gz` are valid source distributions: {0}")]
     InvalidExtension(SourceDistFilename),
-    #[error("No PKG-INFO file found")]
+    #[error("No `PKG-INFO` file found")]
     MissingPkgInfo,
-    #[error("Multiple PKG-INFO files found: `{0}`")]
-    MultiplePkgInfo(String),
+    #[error("Multiple `PKG-INFO` files found: {}", .0.iter().map(|path| format!("`{path}`")).join(", "))]
+    MultiplePkgInfo(Vec<String>),
     #[error("Failed to decode source distribution")]
     Decode(#[source] tar_codec::DecodeError),
-    #[error("Failed to read: `{0}`")]
+    #[error("Failed to read: {0}")]
     Read(String, #[source] tar_codec::DecodeError),
     #[error(transparent)]
     TokioTar(io::Error),
-    #[error("Failed to read: `{0}`")]
+    #[error("Failed to read: {0}")]
     TokioTarRead(String, #[source] io::Error),
-    #[error("Invalid PEP 740 attestation (not JSON): `{0}`")]
+    #[error("Invalid PEP 740 attestation (not JSON): {0}")]
     InvalidAttestation(PathBuf, #[source] serde_json::Error),
 }
 
@@ -155,7 +152,7 @@ pub enum PublishSendError {
     #[error("Request was redirected, but location header is not a UTF-8 string")]
     RedirectLocationInvalidStr(#[source] ToStrError),
     #[error("Request was redirected, but location header is not a URL")]
-    RedirectInvalidLocation(#[source] DisplaySafeUrlError),
+    RedirectInvalidLocation(#[source] SafeUrlError),
 }
 
 pub trait Reporter: Send + Sync + 'static {
@@ -260,6 +257,7 @@ impl PreparedDistribution {
     async fn read_metadata(
         &self,
         reporter: Arc<impl Reporter>,
+        tar_backend: TarBackend,
     ) -> Result<(FormMetadata, Option<String>, u64), PublishError> {
         let size = fs_err::tokio::metadata(&self.file)
             .await
@@ -274,7 +272,8 @@ impl PreparedDistribution {
 
         let metadata: Result<_, PublishPrepareError> = async {
             let form_metadata =
-                FormMetadata::read_from_file(&self.file, &self.filename, reporter).await?;
+                FormMetadata::read_from_file(&self.file, &self.filename, reporter, tar_backend)
+                    .await?;
             let mut attestations = Vec::with_capacity(self.attestations.len());
             for attestation_path in &self.attestations {
                 let contents = fs_err::tokio::read_to_string(attestation_path).await?;
@@ -315,11 +314,13 @@ struct CheckUrlClient<'a> {
 /// perform cleanup.
 #[must_use = "publishing sessions must be finalized after use"]
 pub struct PublishSession<'a> {
-    publish_url: DisplaySafeUrl,
+    publish_url: SafeUrl,
     credentials: PublishingCredentials,
+    credentials_prompt: Option<CredentialsPrompt>,
     upload_client: &'a BaseClient,
     oidc_client: &'a BaseClient,
     retry_policy: ExponentialBackoff,
+    tar_backend: TarBackend,
     check_url_client: Option<CheckUrlClient<'a>>,
     download_concurrency: Semaphore,
 }
@@ -397,9 +398,9 @@ impl PublishSendError {
     ///
     /// ```text
     /// error: Failed to publish `dist/astral_test_1-0.1.0-py3-none-any.whl` to `https://test.pypi.org/legacy/`
-    ///   Caused by: Incorrect credentials (status code 403 Forbidden): 403 Username/Password
-    ///     authentication is no longer supported. Migrate to API Tokens or Trusted Publishers
-    ///     instead. See https://test.pypi.org/help/#apitoken and https://test.pypi.org/help/#trusted-publishers
+    ///   └── Incorrect credentials (status code 403 Forbidden): 403 Username/Password
+    ///       authentication is no longer supported. Migrate to API Tokens or Trusted Publishers
+    ///       instead. See https://test.pypi.org/help/#apitoken and https://test.pypi.org/help/#trusted-publishers
     /// ```
     fn extract_error_message(body: String, content_type: Option<&str>) -> String {
         if content_type == Some("application/json") {
@@ -472,7 +473,7 @@ fn group_files(files: Vec<PathBuf>, no_attestations: bool) -> Vec<PreparedDistri
                 .push(file);
         } else {
             let Some(dist_filename) = DistFilename::try_from_normalized_filename(&filename) else {
-                debug!("Not a distribution filename: `{filename}`");
+                debug!("Not a distribution filename: {filename}");
                 // I've never seen these in upper case
                 #[expect(clippy::case_sensitive_file_extension_comparisons)]
                 if filename.ends_with(".whl")
@@ -484,7 +485,7 @@ fn group_files(files: Vec<PathBuf>, no_attestations: bool) -> Vec<PreparedDistri
                 {
                     warn_user!(
                         "Skipping file that looks like a distribution, \
-                        but is not a valid distribution filename: `{}`",
+                        but is not a valid distribution filename: {}",
                         file.user_display()
                     );
                 }
@@ -533,7 +534,7 @@ pub async fn check_trusted_publishing(
     password: Option<&str>,
     keyring_provider: KeyringProviderType,
     trusted_publishing: TrustedPublishing,
-    registry: &DisplaySafeUrl,
+    registry: &SafeUrl,
     client: &BaseClient,
 ) -> Result<TrustedPublishResult, PublishError> {
     match trusted_publishing {
@@ -605,22 +606,34 @@ impl<'a> PublishSession<'a> {
     /// The retry policy applies to streaming uploads, whose client must have automatic retries
     /// and redirects disabled. The OIDC client uses its own retry and timeout settings.
     pub fn new(
-        publish_url: DisplaySafeUrl,
+        publish_url: SafeUrl,
         credentials: PublishingCredentials,
         upload_client: &'a BaseClient,
         oidc_client: &'a BaseClient,
         retry_policy: ExponentialBackoff,
+        tar_backend: TarBackend,
     ) -> Self {
         Self {
             publish_url,
             credentials,
+            credentials_prompt: None,
             upload_client,
             oidc_client,
             retry_policy,
+            tar_backend,
             check_url_client: None,
             // Check URL requests are made one at a time against a single index.
             download_concurrency: Semaphore::new(1),
         }
+    }
+
+    /// Configure an interactive fallback for rejected credentials discovered by the middleware.
+    ///
+    /// Share the upload client's [`CredentialsPrompt`] to reuse entered credentials and avoid
+    /// prompting again if they are rejected. Explicit publishing credentials are never replaced.
+    pub fn with_credentials_prompt(mut self, prompt: CredentialsPrompt) -> Self {
+        self.credentials_prompt = Some(prompt);
+        self
     }
 
     /// Configure the index used to skip existing distributions and detect raced uploads.
@@ -665,7 +678,7 @@ impl<'a> PublishSession<'a> {
         prepared: &PreparedDistribution,
         reporter: Arc<impl Reporter>,
     ) -> Result<(), PublishError> {
-        prepared.read_metadata(reporter).await?;
+        prepared.read_metadata(reporter, self.tar_backend).await?;
         Ok(())
     }
 
@@ -679,7 +692,9 @@ impl<'a> PublishSession<'a> {
         prepared: PreparedDistribution,
         reporter: Arc<impl Reporter>,
     ) -> Result<UploadOutcome, PublishError> {
-        let (form_metadata, attestations, size) = prepared.read_metadata(reporter.clone()).await?;
+        let (form_metadata, attestations, size) = prepared
+            .read_metadata(reporter.clone(), self.tar_backend)
+            .await?;
         reporter.on_upload_ready(&prepared.filename, size)?;
 
         let mut n_past_redirections = 0;
@@ -702,6 +717,18 @@ impl<'a> PublishSession<'a> {
                 })?;
 
             let result = request.send().await;
+
+            // Keep credentials entered by the middleware for retries and subsequent files.
+            if let PublishingCredentials::Supplied(credentials) = &mut self.credentials
+                && credentials.is_empty()
+                && let Some(prompted) = self
+                    .credentials_prompt
+                    .as_ref()
+                    .and_then(CredentialsPrompt::credentials)
+            {
+                *credentials = prompted.clone();
+            }
+
             let response = match result {
                 Ok(response) => {
                     // When the user accidentally uses https://test.pypi.org/legacy (no slash) as publish URL, we
@@ -739,7 +766,7 @@ impl<'a> PublishSession<'a> {
                                     PublishSendError::RedirectLocationInvalidStr(err).into(),
                                 )
                             })?;
-                        current_registry = DisplaySafeUrl::parse(location).map_err(|err| {
+                        current_registry = SafeUrl::parse(location).map_err(|err| {
                             PublishError::PublishSend(
                                 prepared.file.clone(),
                                 current_registry.clone().into(),
@@ -783,6 +810,20 @@ impl<'a> PublishSession<'a> {
                     ));
                 }
             };
+
+            if matches!(
+                response.status(),
+                StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN
+            ) && let PublishingCredentials::Supplied(credentials) = &mut self.credentials
+                && credentials.is_empty()
+                && let Some(prompt) = &self.credentials_prompt
+                && prompt.credentials().is_none()
+                && let Some(prompted) = prompt.prompt().await?
+            {
+                // Reopen the streaming body, reusing the metadata and hashes already computed.
+                *credentials = prompted;
+                continue;
+            }
 
             return match Self::handle_response(&current_registry, response).await {
                 Ok(()) => {
@@ -846,7 +887,7 @@ impl<'a> PublishSession<'a> {
             .cache(cache_refresh)
             .wrap_existing(self.upload_client)?;
 
-        debug!("Checking for {filename} in the registry");
+        debug!("Checking for `{filename}` in the registry");
         let response = match registry_client
             .simple_detail(
                 filename.name(),
@@ -862,7 +903,7 @@ impl<'a> PublishSession<'a> {
                     uv_client::ErrorKind::RemotePackageNotFound(_) => {
                         // The package doesn't exist, so we can't have uploaded it.
                         warn!(
-                            "Package not found in the registry; skipping upload check for {filename}"
+                            "Package not found in the registry; skipping upload check for `{filename}`"
                         );
                         Ok(false)
                     }
@@ -897,28 +938,28 @@ impl<'a> PublishSession<'a> {
         if let Some(remote_hash) = archived_file.hashes().first() {
             // We accept the risk for TOCTOU errors here, since we already read the file once before the
             // streaming upload to compute the hash for the form metadata.
-            let local_hash = &hash_file(
+            let [local_hash] = hash_file(
                 file,
                 filename,
-                vec![Hasher::from(remote_hash.algorithm)],
+                [Hasher::from(remote_hash.algorithm())],
                 reporter,
             )
             .await
             .map_err(|err| {
                 PublishError::PublishPrepare(file.clone(), Box::new(PublishPrepareError::Io(err)))
-            })?[0];
-            if local_hash.digest == remote_hash.digest {
+            })?;
+            if &local_hash == remote_hash {
                 debug!(
-                    "Found {filename} in the registry with matching hash {}",
-                    remote_hash.digest
+                    "Found `{filename}` in the registry with matching hash {}",
+                    remote_hash.digest()
                 );
                 Ok(true)
             } else {
                 Err(PublishError::HashMismatch {
                     filename: Box::new(filename.clone()),
-                    hash_algorithm: remote_hash.algorithm,
-                    local: local_hash.digest.to_string(),
-                    remote: remote_hash.digest.to_string(),
+                    hash_algorithm: remote_hash.algorithm(),
+                    local: local_hash.digest().to_string(),
+                    remote: remote_hash.digest().to_string(),
                 })
             }
         } else {
@@ -948,14 +989,14 @@ impl<'a> PublishSession<'a> {
 }
 
 /// Calculate the requested hashes of a file.
-async fn hash_file(
+async fn hash_file<const COUNT: usize>(
     path: impl AsRef<Path>,
     filename: &DistFilename,
-    hashers: Vec<Hasher>,
+    hashers: [Hasher; COUNT],
     reporter: Arc<impl Reporter>,
-) -> Result<Vec<HashDigest>, io::Error> {
+) -> Result<[HashDigest; COUNT], io::Error> {
     let path = path.as_ref().to_path_buf();
-    debug!("Hashing {}", path.user_display());
+    debug!("Hashing `{}`", path.user_display());
     let filename = filename.clone();
 
     // Read and hash the file in one blocking task, instead of dispatching each read separately.
@@ -981,20 +1022,19 @@ async fn hash_file(
         reporter.on_hash_complete(index);
         result?;
 
-        Ok(hashers
-            .into_iter()
-            .map(HashDigest::from)
-            .collect::<Vec<_>>())
+        Ok(hashers.map(HashDigest::from))
     })
     .await?
 }
 
 // Not in `uv-metadata` because we only support tar files here.
-async fn source_dist_pkg_info(file: &Path) -> Result<Vec<u8>, PublishPrepareError> {
-    if uv_preview::is_enabled(PreviewFeature::TarCodec) {
-        source_dist_pkg_info_tar_codec(file).await
-    } else {
-        source_dist_pkg_info_tokio_tar(file).await
+async fn source_dist_pkg_info(
+    file: &Path,
+    tar_backend: TarBackend,
+) -> Result<Vec<u8>, PublishPrepareError> {
+    match tar_backend {
+        TarBackend::TarCodec => source_dist_pkg_info_tar_codec(file).await,
+        TarBackend::TokioTar => source_dist_pkg_info_tokio_tar(file).await,
     }
 }
 
@@ -1036,8 +1076,8 @@ async fn source_dist_pkg_info_tokio_tar(file: &Path) -> Result<Vec<u8>, PublishP
         _ => Err(PublishPrepareError::MultiplePkgInfo(
             pkg_infos
                 .iter()
-                .map(|(path, _buffer)| path.to_string_lossy())
-                .join(", "),
+                .map(|(path, _buffer)| path.to_string_lossy().into_owned())
+                .collect(),
         )),
     }
 }
@@ -1083,12 +1123,16 @@ async fn source_dist_pkg_info_tar_codec(file: &Path) -> Result<Vec<u8>, PublishP
         0 => Err(PublishPrepareError::MissingPkgInfo),
         1 => Ok(pkg_infos.remove(0).1),
         _ => Err(PublishPrepareError::MultiplePkgInfo(
-            pkg_infos.iter().map(|(path, _buffer)| path).join(", "),
+            pkg_infos.into_iter().map(|(path, _buffer)| path).collect(),
         )),
     }
 }
 
-async fn metadata(file: &Path, filename: &DistFilename) -> Result<Metadata23, PublishPrepareError> {
+async fn metadata(
+    file: &Path,
+    filename: &DistFilename,
+    tar_backend: TarBackend,
+) -> Result<Metadata23, PublishPrepareError> {
     let contents = match filename {
         DistFilename::SourceDistFilename(source_dist) => {
             if source_dist.extension != SourceDistExtension::TarGz {
@@ -1096,11 +1140,18 @@ async fn metadata(file: &Path, filename: &DistFilename) -> Result<Metadata23, Pu
                 // support creating and uploading them.
                 return Err(PublishPrepareError::InvalidExtension(source_dist.clone()));
             }
-            source_dist_pkg_info(file).await?
+            source_dist_pkg_info(file, tar_backend).await?
         }
         DistFilename::WheelFilename(wheel) => {
-            let reader = BufReader::new(File::open(&file).await?);
-            read_metadata_async_seek(wheel, reader).await?
+            let file = file.to_path_buf();
+            let wheel = wheel.clone();
+            return tokio::task::spawn_blocking(move || {
+                let reader = io::BufReader::new(fs_err::File::open(file)?);
+                let contents = read_archive_metadata(&wheel, reader)?;
+                Ok(Metadata23::parse(&contents)?)
+            })
+            .await
+            .map_err(io::Error::from)?;
         }
     };
     Ok(Metadata23::parse(&contents)?)
@@ -1117,35 +1168,26 @@ impl FormMetadata {
         file: &Path,
         filename: &DistFilename,
         reporter: Arc<impl Reporter>,
+        tar_backend: TarBackend,
     ) -> Result<Self, PublishPrepareError> {
-        let hashes = hash_file(
+        let [sha256_hash, blake2b_hash] = hash_file(
             file,
             filename,
-            vec![
+            [
                 Hasher::from(HashAlgorithm::Sha256),
-                Hasher::from(HashAlgorithm::Blake2b),
+                Hasher::from(HashAlgorithm::Blake2b256),
             ],
             reporter,
         )
         .await?;
 
-        let sha256_hash = hashes
-            .iter()
-            .find(|hash| hash.algorithm == HashAlgorithm::Sha256)
-            .unwrap();
-
-        let blake2b_hash = hashes
-            .iter()
-            .find(|hash| hash.algorithm == HashAlgorithm::Blake2b)
-            .unwrap();
-
-        let metadata = metadata(file, filename).await?;
+        let metadata = metadata(file, filename, tar_backend).await?;
 
         Ok(Self::from_metadata(
             metadata,
             filename,
-            sha256_hash,
-            blake2b_hash,
+            &sha256_hash,
+            &blake2b_hash,
         ))
     }
 
@@ -1190,8 +1232,8 @@ impl FormMetadata {
 
         let mut form_metadata = vec![
             (":action", "file_upload".to_string()),
-            ("sha256_digest", sha256_hash.digest.to_string()),
-            ("blake2_256_digest", blake2b_hash.digest.to_string()),
+            ("sha256_digest", sha256_hash.digest().to_string()),
+            ("blake2_256_digest", blake2b_hash.digest().to_string()),
             ("protocol_version", "1".to_string()),
             ("metadata_version", metadata_version),
             // Twine transforms the name with `re.sub("[^A-Za-z0-9.]+", "-", name)`
@@ -1278,7 +1320,7 @@ impl PublishSession<'_> {
         prepared: &PreparedDistribution,
         form_metadata: &FormMetadata,
         attestations: Option<&str>,
-        registry: &DisplaySafeUrl,
+        registry: &SafeUrl,
         reporter: Arc<impl Reporter>,
     ) -> Result<(RequestBuilder<'_>, usize), PublishPrepareError> {
         let credentials = self.credentials.as_credentials();
@@ -1322,7 +1364,7 @@ impl PublishSession<'_> {
         let mut request = self
             .upload_client
             .for_host(&url)
-            .post(Url::from(url))
+            .post(url)
             .multipart(form)
             // Ask PyPI for a structured error messages instead of HTML-markup error messages.
             // For other registries, we ask them to return plain text over HTML. See
@@ -1350,7 +1392,7 @@ impl PublishSession<'_> {
 
     /// Log response information and map response to an error variant if not successful.
     async fn handle_response(
-        registry: &DisplaySafeUrl,
+        registry: &SafeUrl,
         response: Response,
     ) -> Result<(), PublishSendError> {
         let status_code = response.status();
@@ -1424,33 +1466,36 @@ impl PublishSession<'_> {
 #[cfg(test)]
 mod tests {
     use std::assert_matches;
+    use std::io;
     use std::path::PathBuf;
     use std::sync::Arc;
 
     use async_compression::tokio::write::GzipEncoder;
     use insta::{allow_duplicates, assert_debug_snapshot, assert_snapshot};
     use itertools::Itertools;
+    use reqwest::StatusCode;
     use tar_codec::{ArchiveBuilder as _, EntryMetadata, TarEncoder};
     use tempfile::NamedTempFile;
     use tokio::io::AsyncWriteExt as _;
-    use uv_auth::Credentials;
+    use uv_auth::{Credentials, CredentialsPrompt, CredentialsPromptError};
     use uv_client::{AuthIntegration, BaseClient, BaseClientBuilder, RedirectPolicy};
     use uv_distribution_filename::DistFilename;
-    use uv_preview::PreviewFeature;
     use uv_pypi_types::{HashDigest, Metadata23};
-    use uv_redacted::DisplaySafeUrl;
+    use uv_redacted::SafeUrl;
+    use uv_static::TarBackend;
 
     use crate::{
-        FormMetadata, PublishError, PublishOutcome, PublishPrepareError, PublishSession,
-        PublishingCredentials, Reporter, UploadOutcome, group_files, source_dist_pkg_info,
+        FormMetadata, PublishError, PublishOutcome, PublishPrepareError, PublishSendError,
+        PublishSession, PublishingCredentials, Reporter, UploadOutcome, group_files,
+        source_dist_pkg_info,
     };
     use uv_errors::{ErrorOptions, Hints, write_error_chain_with_options};
-    use wiremock::matchers::{method, path};
+    use wiremock::matchers::{basic_auth, method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     struct DummyReporter;
 
-    const TAR_BACKENDS: &[&[PreviewFeature]] = &[&[], &[PreviewFeature::TarCodec]];
+    const TAR_BACKENDS: [TarBackend; 2] = [TarBackend::TarCodec, TarBackend::TokioTar];
 
     impl Reporter for DummyReporter {
         fn on_progress(&self, _name: &str, _id: usize) {}
@@ -1498,10 +1543,9 @@ mod tests {
         ])
         .await;
 
-        for features in TAR_BACKENDS {
-            let _preview = uv_preview::test::with_features(features);
+        for backend in TAR_BACKENDS {
             assert_eq!(
-                source_dist_pkg_info(file.path())
+                source_dist_pkg_info(file.path(), backend)
                     .await
                     .expect("top-level PKG-INFO should be read"),
                 expected
@@ -1513,10 +1557,9 @@ mod tests {
     async fn source_dist_pkg_info_requires_a_file() {
         let file = source_dist(&[("example-1.0/nested/PKG-INFO", b"ignored")]).await;
 
-        for features in TAR_BACKENDS {
-            let _preview = uv_preview::test::with_features(features);
+        for backend in TAR_BACKENDS {
             assert_matches!(
-                source_dist_pkg_info(file.path()).await,
+                source_dist_pkg_info(file.path(), backend).await,
                 Err(PublishPrepareError::MissingPkgInfo)
             );
         }
@@ -1530,17 +1573,16 @@ mod tests {
         ])
         .await;
 
-        for features in TAR_BACKENDS {
-            let _preview = uv_preview::test::with_features(features);
+        for backend in TAR_BACKENDS {
             assert_matches!(
-                source_dist_pkg_info(file.path()).await,
+                source_dist_pkg_info(file.path(), backend).await,
                 Err(PublishPrepareError::MultiplePkgInfo(paths))
-                    if paths == "example-1.0/PKG-INFO, other-1.0/PKG-INFO"
+                    if paths == ["example-1.0/PKG-INFO", "other-1.0/PKG-INFO"]
             );
         }
     }
 
-    fn test_session(registry: DisplaySafeUrl, client: &BaseClient) -> PublishSession<'_> {
+    fn test_session(registry: SafeUrl, client: &BaseClient) -> PublishSession<'_> {
         PublishSession::new(
             registry,
             PublishingCredentials::Supplied(Credentials::basic(
@@ -1550,6 +1592,7 @@ mod tests {
             client,
             client,
             client.retry_policy(),
+            TarBackend::default(),
         )
     }
 
@@ -1566,8 +1609,8 @@ mod tests {
             .build()
             .expect("failed to build base client");
 
-        let registry = DisplaySafeUrl::parse(&format!("{}/final", mock_server.uri()))
-            .expect("Valid registry URL");
+        let registry =
+            SafeUrl::parse(&format!("{}/final", mock_server.uri())).expect("Valid registry URL");
         let mut session = test_session(registry, &client);
         let prepared = preparation.pop().expect("Distribution should be found");
         let result = session.upload(prepared, Arc::new(DummyReporter)).await;
@@ -1864,8 +1907,14 @@ mod tests {
     #[test]
     fn form_metadata_import_names() {
         let filename = DistFilename::try_from_normalized_filename("pkg-1.0.0.tar.gz").unwrap();
-        let sha256_hash: HashDigest = "sha256:0123".parse().unwrap();
-        let blake2b_hash: HashDigest = "blake2b:4567".parse().unwrap();
+        let sha256_hash: HashDigest =
+            "sha256:0123012301230123012301230123012301230123012301230123012301230123"
+                .parse()
+                .unwrap();
+        let blake2b_hash: HashDigest =
+            "blake2b:4567456745674567456745674567456745674567456745674567456745674567"
+                .parse()
+                .unwrap();
         let metadata = Metadata23 {
             metadata_version: "2.5".to_string(),
             name: "pkg".to_string(),
@@ -1885,8 +1934,8 @@ mod tests {
 
         assert_snapshot!(formatted_metadata, @r###"
         :action: file_upload
-        sha256_digest: 0123
-        blake2_256_digest: 4567
+        sha256_digest: 0123012301230123012301230123012301230123012301230123012301230123
+        blake2_256_digest: 4567456745674567456745674567456745674567456745674567456745674567
         protocol_version: 1
         metadata_version: 2.5
         name: pkg
@@ -1914,12 +1963,11 @@ mod tests {
             .retries(0)
             .build()
             .expect("Failed to build client");
-        let registry =
-            DisplaySafeUrl::parse("https://example.org/upload").expect("Valid registry URL");
+        let registry = SafeUrl::parse("https://example.org/upload").expect("Valid registry URL");
         let session = test_session(registry, &client);
         let prepared = preparation.pop().expect("Distribution should be found");
         let (form_metadata, attestations, _) = prepared
-            .read_metadata(Arc::new(DummyReporter))
+            .read_metadata(Arc::new(DummyReporter), TarBackend::default())
             .await
             .expect("Failed to read upload metadata");
 
@@ -2043,12 +2091,11 @@ mod tests {
             .retries(0)
             .build()
             .expect("Failed to build client");
-        let registry =
-            DisplaySafeUrl::parse("https://example.org/upload").expect("Valid registry URL");
+        let registry = SafeUrl::parse("https://example.org/upload").expect("Valid registry URL");
         let session = test_session(registry, &client);
         let prepared = preparation.pop().expect("Distribution should be found");
         let (form_metadata, attestations, _) = prepared
-            .read_metadata(Arc::new(DummyReporter))
+            .read_metadata(Arc::new(DummyReporter), TarBackend::default())
             .await
             .expect("Failed to read upload metadata");
 
@@ -2196,6 +2243,172 @@ mod tests {
             .expect("Finalization failed");
     }
 
+    /// Entered credentials must survive cache updates for subsequent files. If they are rejected,
+    /// the upload must terminate without another authentication retry.
+    #[tokio::test]
+    async fn upload_rejected_prompt_credentials() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(basic_auth("reader", "read-password"))
+            .respond_with(ResponseTemplate::new(401))
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(basic_auth("writer", "secret"))
+            .respond_with(ResponseTemplate::new(200))
+            .up_to_n_times(1)
+            .with_priority(1)
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(basic_auth("writer", "secret"))
+            .respond_with(ResponseTemplate::new(401))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let registry = SafeUrl::parse(&server.uri()).expect("Valid registry URL");
+        let prompt = CredentialsPrompt::new(|| {
+            Ok(Some(Credentials::basic(
+                Some("writer".to_string()),
+                Some("secret".to_string()),
+            )))
+        });
+        let client_builder = BaseClientBuilder::default()
+            .auth_integration(AuthIntegration::OnlyAuthenticated)
+            .credentials_prompt(prompt.clone())
+            .retries(0);
+        client_builder.store_credentials(
+            &registry,
+            Credentials::basic(
+                Some("reader".to_string()),
+                Some("read-password".to_string()),
+            ),
+        );
+        let client = client_builder.build().expect("Client should build");
+        let mut session = PublishSession::new(
+            registry,
+            PublishingCredentials::Supplied(Credentials::basic(None, None)),
+            &client,
+            &client,
+            client.retry_policy(),
+            TarBackend::default(),
+        )
+        .with_credentials_prompt(prompt);
+        let prepared = PublishSession::prepare(
+            vec!["../../test/links/ok-1.0.0-py3-none-any.whl".to_string()],
+            false,
+        )
+        .expect("Distribution should be found")
+        .pop()
+        .expect("One distribution");
+
+        assert_matches!(
+            session
+                .upload(prepared, Arc::new(DummyReporter))
+                .await
+                .expect("Prompted credentials should authenticate the upload"),
+            UploadOutcome::Uploaded
+        );
+
+        // The next file's index check can reload read credentials into the shared cache.
+        client_builder.store_credentials(
+            &SafeUrl::parse(&server.uri()).expect("Valid registry URL"),
+            Credentials::basic(
+                Some("reader".to_string()),
+                Some("read-password".to_string()),
+            ),
+        );
+        let prepared = PublishSession::prepare(
+            vec!["../../test/links/ok-2.0.0-py3-none-any.whl".to_string()],
+            false,
+        )
+        .expect("Distribution should be found")
+        .pop()
+        .expect("One distribution");
+
+        let err = session
+            .upload(prepared, Arc::new(DummyReporter))
+            .await
+            .expect_err("Prompted credentials should be rejected");
+        assert_matches!(err, PublishError::PublishSend(_, _, err)
+            if matches!(*err, PublishSendError::Status(StatusCode::UNAUTHORIZED, _)));
+        assert_eq!(
+            server
+                .received_requests()
+                .await
+                .expect("Recorded requests")
+                .len(),
+            3
+        );
+        session
+            .finalize(PublishOutcome::Failed)
+            .await
+            .expect("Finalization should succeed");
+    }
+
+    /// Supplying a username explicitly must not allow an interactive replacement on rejection.
+    #[tokio::test]
+    async fn upload_rejected_explicit_username() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(basic_auth("writer", ""))
+            .respond_with(ResponseTemplate::new(401))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let registry = SafeUrl::parse(&server.uri()).expect("Valid registry URL");
+        let prompt = CredentialsPrompt::new(|| {
+            Err(CredentialsPromptError::ReadUsername(io::Error::other(
+                "Unexpected prompt",
+            )))
+        });
+        let client = BaseClientBuilder::default()
+            .auth_integration(AuthIntegration::OnlyAuthenticated)
+            .credentials_prompt(prompt.clone())
+            .retries(0)
+            .build()
+            .expect("Client should build");
+        let mut session = PublishSession::new(
+            registry,
+            PublishingCredentials::Supplied(Credentials::basic(Some("writer".to_string()), None)),
+            &client,
+            &client,
+            client.retry_policy(),
+            TarBackend::default(),
+        )
+        .with_credentials_prompt(prompt);
+        let prepared = PublishSession::prepare(
+            vec!["../../test/links/ok-1.0.0-py3-none-any.whl".to_string()],
+            false,
+        )
+        .expect("Distribution should be found")
+        .pop()
+        .expect("One distribution");
+
+        let err = session
+            .upload(prepared, Arc::new(DummyReporter))
+            .await
+            .expect_err("Explicit username should be rejected");
+        assert_matches!(err, PublishError::PublishSend(_, _, err)
+            if matches!(*err, PublishSendError::Status(StatusCode::UNAUTHORIZED, _)));
+        assert_eq!(
+            server
+                .received_requests()
+                .await
+                .expect("Recorded requests")
+                .len(),
+            1
+        );
+        session
+            .finalize(PublishOutcome::Failed)
+            .await
+            .expect("Finalization should succeed");
+    }
+
     #[tokio::test]
     async fn upload_redirect_308() {
         let mock_server = MockServer::start().await;
@@ -2246,7 +2459,7 @@ mod tests {
         let mut capture = String::new();
         write_error_chain_with_options(
             &err,
-            Hints::none(),
+            &Hints::none(),
             ErrorOptions::default().with_stream(&mut capture),
         )
         .unwrap();
@@ -2257,8 +2470,8 @@ mod tests {
         assert_snapshot!(
             &capture,
             @"
-        error: Failed to publish `../../test/links/tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl` to [SERVER]/final
-          Caused by: Too many redirects, only 10 redirects are allowed
+        error: Failed to publish `../../test/links/tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl` to `[SERVER]/final`
+          cause: Too many redirects, only 10 redirects are allowed
         "
         );
     }
@@ -2280,7 +2493,7 @@ mod tests {
         let mut capture = String::new();
         write_error_chain_with_options(
             &err,
-            Hints::none(),
+            &Hints::none(),
             ErrorOptions::default().with_stream(&mut capture),
         )
         .unwrap();
@@ -2291,8 +2504,8 @@ mod tests {
         assert_snapshot!(
             &capture,
             @"
-        error: Failed to publish `../../test/links/tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl` to https://different.auth.tld/final/
-          Caused by: Redirected URL is not in the same realm. Redirected to: https://different.auth.tld/final/
+        error: Failed to publish `../../test/links/tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl` to `https://different.auth.tld/final/`
+          cause: Redirected URL is not in the same realm. Redirected to: https://different.auth.tld/final/
         "
         );
     }
@@ -2319,7 +2532,7 @@ mod tests {
         let mut capture = String::new();
         write_error_chain_with_options(
             &err,
-            Hints::none(),
+            &Hints::none(),
             ErrorOptions::default().with_stream(&mut capture),
         )
         .unwrap();
@@ -2330,8 +2543,8 @@ mod tests {
         assert_snapshot!(
             &capture,
             @"
-        error: Failed to publish `../../test/links/tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl` to [SERVER]/final
-          Caused by: Server returned status code 400 Bad Request. Server says: 400 Error: Use 'source' as Python version for an sdist.
+        error: Failed to publish `../../test/links/tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl` to `[SERVER]/final`
+          cause: Server returned status code 400 Bad Request. Server says: 400 Error: Use 'source' as Python version for an sdist.
         "
         );
     }
@@ -2361,7 +2574,7 @@ mod tests {
         let mut capture = String::new();
         write_error_chain_with_options(
             &err,
-            Hints::none(),
+            &Hints::none(),
             ErrorOptions::default().with_stream(&mut capture),
         )
         .unwrap();
@@ -2372,8 +2585,8 @@ mod tests {
         assert_snapshot!(
             &capture,
             @"
-        error: Failed to publish `../../test/links/tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl` to [SERVER]/final
-          Caused by: Server returned status code 400 Bad Request. Server message: Bad Request, Missing required field `name`
+        error: Failed to publish `../../test/links/tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl` to `[SERVER]/final`
+          cause: Server returned status code 400 Bad Request. Server message: Bad Request, Missing required field `name`
         "
         );
     }

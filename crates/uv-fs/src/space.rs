@@ -8,12 +8,23 @@ use std::os::unix::ffi::OsStrExt;
 #[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
 
-#[cfg(target_os = "linux")]
+// `linux-raw-sys` does not provide FIEMAP definitions on SPARC.
+#[cfg(all(
+    target_os = "linux",
+    not(any(target_arch = "sparc", target_arch = "sparc64"))
+))]
 use linux_raw_sys::ioctl::{
     FIEMAP_EXTENT_DATA_INLINE, FIEMAP_EXTENT_DELALLOC, FIEMAP_EXTENT_ENCODED, FIEMAP_EXTENT_LAST,
     FIEMAP_EXTENT_NOT_ALIGNED, FIEMAP_EXTENT_SHARED, FIEMAP_EXTENT_UNKNOWN, FS_IOC_FIEMAP,
 };
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "ios"))]
+#[cfg(any(
+    all(
+        target_os = "linux",
+        not(any(target_arch = "sparc", target_arch = "sparc64"))
+    ),
+    target_os = "macos",
+    target_os = "ios"
+))]
 use rustix::io::Errno;
 use thiserror::Error;
 
@@ -31,7 +42,10 @@ pub enum PhysicalSpaceError {
 /// Return whether the current platform supports fine-grained space accounting.
 pub const fn supports_fine_grained_accounting() -> bool {
     cfg!(any(
-        target_os = "linux",
+        all(
+            target_os = "linux",
+            not(any(target_arch = "sparc", target_arch = "sparc64"))
+        ),
         target_os = "macos",
         target_os = "ios"
     ))
@@ -67,12 +81,22 @@ pub fn physical_space(
         apple_physical_space(path)
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(all(
+        target_os = "linux",
+        not(any(target_arch = "sparc", target_arch = "sparc64"))
+    ))]
     {
         linux_physical_space(path)
     }
 
-    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "ios")))]
+    #[cfg(not(any(
+        all(
+            target_os = "linux",
+            not(any(target_arch = "sparc", target_arch = "sparc64"))
+        ),
+        target_os = "macos",
+        target_os = "ios"
+    )))]
     {
         let _ = path;
         Err(PhysicalSpaceError::UnsupportedFilesystem)
@@ -125,7 +149,10 @@ fn apple_physical_space(path: &Path) -> Result<u64, PhysicalSpaceError> {
     Ok(u64::try_from(private_size).map_err(io::Error::other)?)
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(
+    target_os = "linux",
+    not(any(target_arch = "sparc", target_arch = "sparc64"))
+))]
 #[expect(unsafe_code)]
 fn linux_physical_space(path: &Path) -> Result<u64, PhysicalSpaceError> {
     const MAX_EXTENTS: usize = 32;

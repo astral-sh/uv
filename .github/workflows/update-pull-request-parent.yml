@@ -44,7 +44,7 @@ jobs:
   update:
     name: "Update parent of pull request #${{ inputs.number }}"
     if: github.repository == 'astral-sh/uv-dev' || github.repository == 'astral-sh/uv-security'
-    runs-on: ubuntu-slim
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-2' || 'ubuntu-slim' }}
     timeout-minutes: 10
     permissions:
       contents: read

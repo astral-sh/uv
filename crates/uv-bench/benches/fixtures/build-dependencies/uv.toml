@@ -1,0 +1,28 @@
+build-constraint-dependencies = [
+    "hatchling>=1.27",
+    "hatch-vcs>=0.4",
+    "Cython>=3",
+    "flit-core>=3.10",
+    "meson-python>=0.17",
+    "scikit-build-core>=0.10",
+    "setuptools-scm>=8",
+    "pybind11>=2.13",
+    { requirement = "setuptools==83.0.0", hashes = ["sha256:025bccbbf0fa05b6192bc64ae1e7b16e001fd6d6d4d5de03c97b1c1ade523bef"] },
+    { requirement = "wheel==0.46.2", hashes = ["sha256:3d79e48fde9847618a5a181f3cc35764c349c752e2fe911e65fa17faab9809b0"] },
+    { requirement = "packaging==26.3", hashes = ["sha256:94edc256424af38762eb31306eed28beb9f0efc50a8837492c9d6fd6004aed79"] },
+    { requirement = "poetry-core==2.4.0", hashes = ["sha256:4e8c7496cf797998ffc493f2e23eba4b038c894c08eadacdcdf688945de6b43a"] },
+    { requirement = "pyproject-hooks==1.1.0", hashes = ["sha256:4b37730834edbd6bd37f26ece6b44802fb1c1ee2ece0e54ddff8bfc06db86965"] },
+    { requirement = "tomli==2.0.1", hashes = ["sha256:de526c12914f0c550d15924c62d72abc48d6fe7364aa87328337a31007fe8a4f"] },
+    { requirement = "trove-classifiers==2024.7.2", hashes = ["sha256:8328f2ac2ce3fd773cbb37c765a0ed7a83f89dc564c7d452f039b69249d0ac35"] },
+    { requirement = "pathspec==1.1.1", hashes = ["sha256:17db5ecd524104a120e173814c90367a96a98d07c45b2e10c2f3919fff91bf5a"] },
+]
+
+[extra-build-dependencies]
+flash-attn = ["setuptools", { requirement = "torch", match-runtime = true }]
+deepspeed = ["wheel", { requirement = "torch", match-runtime = true }]
+xformers = ["ninja", { requirement = "torch", match-runtime = true }]
+torch-scatter = ["setuptools", { requirement = "torch", match-runtime = true }]
+scipy = ["meson-python", { requirement = "numpy", match-runtime = true }]
+pandas = ["Cython>=3", { requirement = "numpy", match-runtime = true }]
+scikit-image = ["pythran", { requirement = "numpy", match-runtime = true }]
+h5py = ["Cython>=3", { requirement = "numpy", match-runtime = true }]

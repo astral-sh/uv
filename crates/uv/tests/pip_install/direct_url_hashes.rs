@@ -1,20 +1,15 @@
 //! Tests for direct URL hashes discovered from package metadata.
 
-use std::collections::BTreeMap;
-
 use anyhow::Result;
 use assert_fs::fixture::ChildPath;
 use assert_fs::prelude::*;
-use fs_err as fs;
-use fs_err::File;
-use indoc::indoc;
 use predicates::prelude::predicate;
 use sha2::{Digest, Sha256};
-use url::Url;
 use wiremock::MockServer;
 
-use uv_test::archive::write_tar_gz;
-use uv_test::packse::{generate_wheel, mount_mismatched_distribution};
+use uv_redacted::SafeUrl;
+use uv_test::archive::generate_source_archive;
+use uv_test::packse::{WheelBuilder, mount_mismatched_distribution};
 use uv_test::{TestContext as UvTestContext, uv_snapshot};
 
 /// A test context for exercising hashes discovered from forged wheel metadata.
@@ -30,7 +25,7 @@ struct DirectUrlHashTestContext {
     /// The SHA-256 digest of the direct URL source distribution.
     source_hash: String,
     /// The file URL of the direct URL source distribution.
-    source_url: Url,
+    source_url: SafeUrl,
     /// The URL of the authentic parent wheel.
     wheel_url: String,
     /// The SHA-256 digest of the authentic parent wheel.
@@ -46,59 +41,24 @@ impl DirectUrlHashTestContext {
 
         let source = inner.temp_dir.child("ok-1.0.0.tar.gz");
         let backend_marker = inner.temp_dir.child("backend-marker");
-        let child_wheel = inner
-            .workspace_root
-            .join("test/links/ok-1.0.0-py3-none-any.whl");
-        let inner = inner
-            .with_env("WHEEL_METADATA_MARKER", backend_marker.path())
-            .with_env("WHEEL_METADATA_CHILD_WHEEL", child_wheel);
-        write_tar_gz(
-            File::create(source.path())?,
-            &[
-                (
-                    "ok-1.0.0/pyproject.toml",
-                    indoc! {r#"
-                        [build-system]
-                        requires = []
-                        build-backend = "backend"
-                        backend-path = ["."]
-                    "#},
-                ),
-                (
-                    "ok-1.0.0/backend.py",
-                    indoc! {r#"
-                        import os
-                        import shutil
-                        from pathlib import Path
-
-                        Path(os.environ["WHEEL_METADATA_MARKER"]).write_text("executed")
-
-                        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
-                            wheel = Path(os.environ["WHEEL_METADATA_CHILD_WHEEL"])
-                            shutil.copyfile(wheel, Path(wheel_directory) / wheel.name)
-                            return wheel.name
-                    "#},
-                ),
-            ],
+        let archive = generate_source_archive(
+            &"ok".parse()?,
+            &"1.0.0".parse()?,
+            "",
+            Some(backend_marker.path()),
         )?;
-        let source_hash = hex::encode(Sha256::digest(fs::read(source.path())?));
+        source.write_binary(&archive)?;
+        let source_hash = hex::encode(Sha256::digest(&archive));
         let inner = inner.with_filter((source_hash.clone(), "[SOURCE_HASH]"));
         let source_url =
-            Url::from_file_path(source.path()).expect("source path is an absolute path");
+            SafeUrl::from_file_path(source.path()).expect("source path is an absolute path");
         let dependency = format!("ok @ {source_url}#sha256={source_hash}").parse()?;
 
         let name = "metadata-parent".parse()?;
         let version = "1.0.0".parse()?;
-        let (wheel_filename, authentic_wheel) =
-            generate_wheel(&name, &version, &[], &BTreeMap::new(), None, "py3-none-any");
-        let (_, forged_wheel) = generate_wheel(
-            &name,
-            &version,
-            &[dependency],
-            &BTreeMap::new(),
-            None,
-            "py3-none-any",
-        );
+        let wheel = WheelBuilder::new(&name, &version);
+        let (wheel_filename, authentic_wheel) = wheel.build();
+        let (_, forged_wheel) = wheel.requires(&[dependency]).build();
         let wheel_hash = hex::encode(Sha256::digest(&authentic_wheel));
         let server = MockServer::start().await;
         let wheel_path = format!("/files/{wheel_filename}");
@@ -176,8 +136,8 @@ async fn require_hashes_rejects_direct_url_hash_discovered_in_wheel_metadata() -
         .arg("--require-hashes"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to build `ok @ file://[TEMP_DIR]/ok-1.0.0.tar.gz#sha256=[SOURCE_HASH]`
-      ╰─▶ Hash-checking is enabled, but no hashes were provided or computed for: `ok @ file://[TEMP_DIR]/ok-1.0.0.tar.gz#sha256=[SOURCE_HASH]`
+    error: Failed to build `ok @ file://[TEMP_DIR]/ok-1.0.0.tar.gz#sha256=[SOURCE_HASH]`
+      cause: Hash-checking is enabled, but no hashes were provided or computed for: ok @ file://[TEMP_DIR]/ok-1.0.0.tar.gz#sha256=[SOURCE_HASH]
     ");
 
     context.assert_backend_did_not_run();

@@ -18,6 +18,24 @@
     {
       "repository": "uv",
       "on": {
+        "workflow_run": ["completed"]
+      },
+      "target_repository": "uv-dev",
+      "head_repositories": ["uv"],
+      "conditions": {
+        "/workflow_run/event": "push",
+        "/workflow_run/head_branch": "main",
+        "/workflow/path": ".github/workflows/ci.yml"
+      },
+      "workflow": "import-codspeed-profiles.yml",
+      "inputs": {
+        "source-run": "/workflow_run/id",
+        "source-sha": "/workflow_run/head_sha"
+      }
+    },
+    {
+      "repository": "uv",
+      "on": {
         "pull_request": ["opened", "reopened"]
       },
       "conditions": {
@@ -36,6 +54,41 @@
       },
       "allow_draft": true,
       "workflow": "pull-request-conflicts.yml"
+    },
+    {
+      "repository": "uv",
+      "on": {
+        "pull_request": ["labeled"]
+      },
+      "conditions": {
+        "/label/name": {
+          "one_of": ["bot:ai-policy-comment", "bot:ai-policy-close"]
+        }
+      },
+      "allow_draft": true,
+      "allow_forks": true,
+      "allow_stale_head": true,
+      "workflow": "ai-policy.yml",
+      "inputs": {
+        "label": "/label/name"
+      }
+    },
+    {
+      "repository": "uv",
+      "on": {
+        "issues": ["labeled"]
+      },
+      "conditions": {
+        "/label/name": {
+          "one_of": ["bot:ai-policy-comment", "bot:ai-policy-close"]
+        },
+        "/issue/state": "open"
+      },
+      "workflow": "ai-policy.yml",
+      "inputs": {
+        "issue": "/issue/number",
+        "label": "/label/name"
+      }
     },
     {
       "repository": "uv-dev",
@@ -67,13 +120,30 @@
       "workflow": "promote-pull-request.yml"
     },
     {
-      "repository": "uv-security",
+      "repository": "uv-dev",
       "on": {
-        "pull_request": ["ready_for_review"]
+        "pull_request": ["labeled"]
       },
       "conditions": {
+        "/label/name": { "one_of": ["bot:promote", "bot:automerge"] },
         "/sender/type": "User"
       },
+      "allow_draft": true,
+      "workflow": "promote-pull-request.yml",
+      "inputs": {
+        "promotion_label": "/label/name"
+      }
+    },
+    {
+      "repository": "uv-security",
+      "on": {
+        "pull_request": ["labeled"]
+      },
+      "conditions": {
+        "/label/name": "bot:promote",
+        "/sender/type": "User"
+      },
+      "allow_draft": true,
       "workflow": "promote-pull-request.yml"
     },
     {

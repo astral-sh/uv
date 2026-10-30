@@ -31,8 +31,8 @@ $ docker run --rm -it ghcr.io/astral-sh/uv:debian uv --help
 The following distroless images are available:
 
 - `ghcr.io/astral-sh/uv:latest`
-- `ghcr.io/astral-sh/uv:{major}.{minor}.{patch}`, e.g., `ghcr.io/astral-sh/uv:0.12.12`
-- `ghcr.io/astral-sh/uv:{major}.{minor}`, e.g., `ghcr.io/astral-sh/uv:0.12` (the latest patch
+- `ghcr.io/astral-sh/uv:{major}.{minor}.{patch}`, e.g., `ghcr.io/astral-sh/uv:0.13.6`
+- `ghcr.io/astral-sh/uv:{major}.{minor}`, e.g., `ghcr.io/astral-sh/uv:0.13` (the latest patch
   version)
 
 And the following derived images are available:
@@ -63,8 +63,8 @@ And the following derived images are available:
     - `ghcr.io/astral-sh/uv:python3.11-dhi`
     - `ghcr.io/astral-sh/uv:python3.10-dhi`
 - Based on `python3.x-alpine`:
-    - `ghcr.io/astral-sh/uv:python3.15-rc-alpine`
-    - `ghcr.io/astral-sh/uv:python3.15-rc-alpine3.23`
+    - `ghcr.io/astral-sh/uv:python3.15-alpine`
+    - `ghcr.io/astral-sh/uv:python3.15-alpine3.23`
     - `ghcr.io/astral-sh/uv:python3.14-alpine`
     - `ghcr.io/astral-sh/uv:python3.14-alpine3.23`
     - `ghcr.io/astral-sh/uv:python3.13-alpine`
@@ -73,32 +73,24 @@ And the following derived images are available:
     - `ghcr.io/astral-sh/uv:python3.12-alpine3.23`
     - `ghcr.io/astral-sh/uv:python3.11-alpine`
     - `ghcr.io/astral-sh/uv:python3.11-alpine3.23`
-    - `ghcr.io/astral-sh/uv:python3.10-alpine`
-    - `ghcr.io/astral-sh/uv:python3.10-alpine3.23`
-    - `ghcr.io/astral-sh/uv:python3.9-alpine`
-    - `ghcr.io/astral-sh/uv:python3.9-alpine3.22`
 - Based on `python3.x-trixie`:
-    - `ghcr.io/astral-sh/uv:python3.15-rc-trixie`
+    - `ghcr.io/astral-sh/uv:python3.15-trixie`
     - `ghcr.io/astral-sh/uv:python3.14-trixie`
     - `ghcr.io/astral-sh/uv:python3.13-trixie`
     - `ghcr.io/astral-sh/uv:python3.12-trixie`
     - `ghcr.io/astral-sh/uv:python3.11-trixie`
-    - `ghcr.io/astral-sh/uv:python3.10-trixie`
-    - `ghcr.io/astral-sh/uv:python3.9-trixie`
 - Based on `python3.x-slim-trixie`:
-    - `ghcr.io/astral-sh/uv:python3.15-rc-trixie-slim`
+    - `ghcr.io/astral-sh/uv:python3.15-trixie-slim`
     - `ghcr.io/astral-sh/uv:python3.14-trixie-slim`
     - `ghcr.io/astral-sh/uv:python3.13-trixie-slim`
     - `ghcr.io/astral-sh/uv:python3.12-trixie-slim`
     - `ghcr.io/astral-sh/uv:python3.11-trixie-slim`
-    - `ghcr.io/astral-sh/uv:python3.10-trixie-slim`
-    - `ghcr.io/astral-sh/uv:python3.9-trixie-slim`
 
 <!-- prettier-ignore-end -->
 
 As with the distroless image, each derived image is published with uv version tags as
 `ghcr.io/astral-sh/uv:{major}.{minor}.{patch}-{base}` and
-`ghcr.io/astral-sh/uv:{major}.{minor}-{base}`, e.g., `ghcr.io/astral-sh/uv:0.12.12-alpine`.
+`ghcr.io/astral-sh/uv:{major}.{minor}-{base}`, e.g., `ghcr.io/astral-sh/uv:0.13.6-alpine`.
 
 In addition, starting with `0.8` each derived image also sets `UV_TOOL_BIN_DIR` to `/usr/local/bin`
 to allow `uv tool install` to work as expected with the default user.
@@ -139,7 +131,7 @@ Note this requires `curl` to be available.
 In either case, it is best practice to pin to a specific uv version, e.g., with:
 
 ```dockerfile
-COPY --from=ghcr.io/astral-sh/uv:0.12.12 /uv /uvx /bin/
+COPY --from=ghcr.io/astral-sh/uv:0.13.6 /uv /uvx /bin/
 ```
 
 !!! tip
@@ -150,14 +142,13 @@ COPY --from=ghcr.io/astral-sh/uv:0.12.12 /uv /uvx /bin/
     be moved across different commit SHAs.
 
     ```Dockerfile
-    # e.g., using a hash from a previous release
-    COPY --from=ghcr.io/astral-sh/uv@sha256:2381d6aa60c326b71fd40023f921a0a3b8f91b14d5db6b90402e65a635053709 /uv /uvx /bin/
+    COPY --from=ghcr.io/astral-sh/uv@sha256:32a7bb39b496babbd997b0a39a4d66c126bdaf5661b302bf6f06abda8deca6ff /uv /uvx /bin/
     ```
 
 Or, with the installer:
 
 ```dockerfile
-ADD https://astral.sh/uv/0.12.12/install.sh /uv-installer.sh
+ADD https://astral.sh/uv/0.13.6/install.sh /uv-installer.sh
 ```
 
 ### Installing a project
@@ -411,8 +402,7 @@ WORKDIR /app
 # Install dependencies
 RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=uv.lock,target=uv.lock \
-    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
-    uv sync --locked --no-install-project
+    uv sync --frozen --no-install-project
 
 # Copy the project into the image
 COPY . /app
@@ -422,8 +412,8 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked
 ```
 
-Note that the `pyproject.toml` is required to identify the project root and name, but the project
-_contents_ are not copied into the image until the final `uv sync` command.
+Note that only the `uv.lock` file is mounted for the first sync. The `pyproject.toml` and project
+_contents_ are copied into the image before the final `uv sync` command.
 
 !!! tip
 
@@ -432,11 +422,9 @@ _contents_ are not copied into the image until the final `uv sync` command.
 
 #### Intermediate layers in workspaces
 
-If you're using a [workspace](../../concepts/projects/workspaces.md), then a couple changes are
-needed:
-
-- Use `--frozen` instead of `--locked` during the initial sync.
-- Use the `--no-install-workspace` flag which excludes the project _and_ any workspace members.
+If you're using a [workspace](../../concepts/projects/workspaces.md), use the
+`--no-install-workspace` flag to exclude the project _and_ any workspace members from the initial
+sync:
 
 ```dockerfile title="Dockerfile"
 # Install uv
@@ -447,7 +435,6 @@ WORKDIR /app
 
 RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=uv.lock,target=uv.lock \
-    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
     uv sync --frozen --no-install-workspace
 
 COPY . /app
@@ -456,7 +443,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked
 ```
 
-uv cannot assert that the `uv.lock` file is up-to-date without each of the workspace member
+uv cannot assert that the `uv.lock` file is up-to-date without the project and workspace member
 `pyproject.toml` files, so we use `--frozen` instead of `--locked` to skip the check during the
 initial sync. The next sync, after all the workspace members have been copied, can still use
 `--locked` and will validate that the lockfile is correct for all workspace members.
@@ -489,8 +476,7 @@ WORKDIR /app
 # Install dependencies
 RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=uv.lock,target=uv.lock \
-    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
-    uv sync --locked --no-install-project --no-editable
+    uv sync --frozen --no-install-project --no-editable
 
 # Copy the project into the intermediate image
 COPY . /app
@@ -625,5 +611,5 @@ Verified OK
 !!! tip
 
     These examples use `latest`, but best practice is to verify the attestation for a specific
-    version tag, e.g., `ghcr.io/astral-sh/uv:0.12.12`, or (even better) the specific image digest,
-    such as `ghcr.io/astral-sh/uv:0.5.27@sha256:5adf09a5a526f380237408032a9308000d14d5947eafa687ad6c6a2476787b4f`.
+    version tag, e.g., `ghcr.io/astral-sh/uv:0.13.6`, or (even better) the specific image digest,
+    such as `ghcr.io/astral-sh/uv@sha256:32a7bb39b496babbd997b0a39a4d66c126bdaf5661b302bf6f06abda8deca6ff`.

@@ -1,6 +1,6 @@
 [package]
 name = "uv-netrc"
-version = "0.0.79"
+version = "0.0.98"
 description = "A vendored netrc parser for uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -22,4 +22,5 @@ thiserror = { workspace = true }
 
 [dev-dependencies]
 fs-err = { workspace = true }
+indoc = { workspace = true }
 temp-env = { workspace = true }

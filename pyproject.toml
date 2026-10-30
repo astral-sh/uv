@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "uv"
-version = "0.12.12"
+version = "0.13.6"
 description = "An extremely fast Python package and project manager, written in Rust."
 authors = [{ name = "Astral Software Inc.", email = "hey@astral.sh" }]
 requires-python = ">=3.8"
@@ -63,7 +63,7 @@ include = [
 changelog-contributors = false  # We exclude contributors from the CHANGELOG file
 major-labels = []  # We do not use the major version number yet
 minor-labels = ["breaking"]
-ignore-labels = ["internal", "ci", "testing", "automations"]
+ignore-labels = ["internal", "internal:ci", "internal:testing", "internal:automations"]
 version_files = [
   "README.md",
   "pyproject.toml",
@@ -79,6 +79,7 @@ version_files = [
   "docs/guides/integration/gitlab.md",
   "docs/guides/integration/aws-lambda.md",
   "docs/guides/projects.md",
+  "docs/reference/troubleshooting/reproducible-examples.md",
   "docs/concepts/build-backend.md",
   "docs/concepts/projects/init.md",
   "docs/concepts/projects/workspaces.md",
@@ -87,12 +88,12 @@ version_files = [
 
 [tool.rooster.section-labels]
 "Breaking changes" = ["breaking"]
-"Enhancements" = ["enhancement", "compatibility", "error messages"]
+"Enhancements" = ["enhancement", "compatibility", "area:error-messages"]
 "Preview features" = ["preview"]
-"Configuration" = ["configuration"]
+"Configuration" = ["area:configuration"]
 "Performance" = ["performance"]
 "Bug fixes" = ["bug"]
-"Rust API" = ["rustlib"]
+"Rust API" = ["area:rustlib"]
 "Documentation" = ["documentation"]
 "Other changes" = ["__unknown__"]
 
@@ -125,12 +126,44 @@ check = [
     "typos>=1.49.0",
     "validate-pyproject[all,store]>=0.25",
 ]
+test = [
+    "astral-dev-toolchain-cargo-nextest>=0.9.143",
+]
 dev = [
+    { include-group = "test" },
+    "astral-dev-toolchain-cargo-bloat>=0.12.1",
+    "astral-dev-toolchain-cargo-codspeed>=5.0.1",
+    "astral-dev-toolchain-cargo-deny>=0.20.2",
     "astral-dev-toolchain-cargo-dist>=0.32.0",
+    "astral-dev-toolchain-cargo-xwin>=0.23.1",
 ]
 
 [tool.uv]
 no-build = true
+require-build-hashes = true
+preview-features = ["build-dependency-hashes", "missing-exclude-newer-package-lock"]
+build-constraint-dependencies = [
+    { requirement = "maturin==1.15.0", hashes = [
+        "sha256:0ebf9767892725083138e671c34482c660317a2f3d6a29fc0e0f34e9d8c99136",
+        "sha256:126e12e618b4db42f68c779a56d41f82a390145ba36ac3f621d057eb34f5ad9d",
+        "sha256:4f9d33e6c3f9615c8caceecbbbd440f8eb25a3ddeb687077682cd5eca2e9ae15",
+        "sha256:552c2be4afd43fe8d5c9f3ec8d4c4756d973b8dcbe94c14084390301f50243e1",
+        "sha256:653020a63525bb224e5ab0adf02e17a2e08bc86dbea7fc1399c9a56d7529b99e",
+        "sha256:6bf6dc62e22d4dcfd5a51244ff0d58975fa4979c48209fe84159617648956d82",
+        "sha256:7ab7eebffd7b8debca2265985de4eaeb332141276d24b9560b5ad484d4b3add1",
+        "sha256:7eb066372f541f8eb4909c79c5d9bd0b9e8125980bdf1ec9e8aba23c6c8d6c55",
+        "sha256:94b26cc8e8aba61a5f2099715fe640e18c5f678e9a500408b38761263954228a",
+        "sha256:bf29beddd0c6708f112db51d5275fc28b28b9e9c9c5faae387eaef662918b176",
+        "sha256:c40b4eae7bf5ef1f4b1af8d623fe4105016f93578fb15b764e741d08ec3b92dd",
+        "sha256:c7dc0c66c78d3debdd9c5aa807e861fbcbf07f3505d34b125df74c03986b0f48",
+        "sha256:cd35772633f489841132bc8e71d6fc7f842df30b9c05cd5cdf1ee1ddcb744cc7",
+        "sha256:da649988be98e87e009e51b1bf0d301b6a301bc0cecbdd60d40d8ba60748d1ca",
+    ] },
+    { requirement = "tomli==2.4.1; python_version < '3.11'", hashes = [
+        "sha256:0d85819802132122da43cb86656f8d1f8c6587d54ae7dcaf30e90533028b49fe",
+        "sha256:7c7e1a961a0b2f2472c1ac5b69affa0ae1132c39adcb67aba98568702b9cc23f",
+    ] },
+]
 cache-keys = [
     { file = "pyproject.toml" },
     { file = "Cargo.toml" },
@@ -141,8 +174,12 @@ cache-keys = [
 exclude-newer = "P7D"
 
 [tool.uv.exclude-newer-package]
+astral-dev-toolchain-cargo-deny = "2026-09-15T19:10:00Z"
+astral-dev-toolchain-cargo-bloat = "2026-09-14T19:10:00Z"
 astral-dev-toolchain-cargo-shear = "2026-08-27T04:00:00Z"
 astral-dev-toolchain-cargo-dist = "2026-08-28T04:00:00Z"
+astral-dev-toolchain-cargo-xwin = "2026-08-27T04:00:00Z"
+certifi = "2026-10-20T02:24:17Z"
 
 [tool.uv.dependency-groups]
 docs = { requires-python = ">=3.12" }

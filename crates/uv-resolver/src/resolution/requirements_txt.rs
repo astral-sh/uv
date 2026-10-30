@@ -182,7 +182,7 @@ impl<'dist> RequirementsTxtDist<'dist> {
             // does not have a non-trivial conflicting marker
             // that we would otherwise need to care about.
             markers: annotated.marker.combined(),
-            extras: if let Some(extra) = annotated.extra.clone() {
+            extras: if let Some(extra) = annotated.kind.extra().cloned() {
                 vec![extra]
             } else {
                 vec![]

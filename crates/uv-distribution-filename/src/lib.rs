@@ -12,6 +12,7 @@ pub use extension::{
     DistExtension, ExtensionError, LegacySourceDistExtension, SourceDistExtension,
 };
 pub use source_dist::{SourceDistFilename, SourceDistFilenameError};
+pub use variant_label::{InvalidVariantLabel, VariantLabel};
 pub use wheel::{WheelFilename, WheelFilenameError};
 
 mod build_tag;
@@ -20,6 +21,7 @@ mod expanded_tags;
 mod extension;
 mod source_dist;
 mod splitter;
+mod variant_label;
 mod wheel;
 mod wheel_tag;
 
@@ -76,12 +78,17 @@ impl DistFilename {
     /// Source dist filenames can be ambiguous, e.g. `a-1-1.tar.gz`. Without knowing the package name, we assume that
     /// source dist filename version doesn't contain minus (the version is normalized).
     pub fn try_from_normalized_filename(filename: &str) -> Option<Self> {
-        if let Ok(filename) = WheelFilename::from_str(filename) {
-            Some(Self::WheelFilename(filename))
-        } else if let Ok(filename) = SourceDistFilename::parsed_normalized_filename(filename) {
-            Some(Self::SourceDistFilename(filename))
-        } else {
-            None
+        // Check the extension first to avoid allocating the error.
+        match DistExtension::from_path(filename) {
+            Ok(DistExtension::Wheel) => WheelFilename::from_str(filename)
+                .ok()
+                .map(Self::WheelFilename),
+            Ok(DistExtension::Source(_)) => {
+                SourceDistFilename::parsed_normalized_filename(filename)
+                    .ok()
+                    .map(Self::SourceDistFilename)
+            }
+            Err(_) => None,
         }
     }
 

@@ -481,9 +481,9 @@ pub(crate) enum CertificateError {
 pub enum CertificateFileError {
     #[error("Failed to read certificate file `{}`", .0.simplified_display())]
     Io(PathBuf, #[source] io::Error),
-    #[error("Certificate path is not a file: `{}`", .0.simplified_display())]
+    #[error("Certificate path is not a file: {}", .0.simplified_display())]
     NotFile(PathBuf),
-    #[error("No valid certificates found in: `{}`", .0.simplified_display())]
+    #[error("No valid certificates found in: {}", .0.simplified_display())]
     NoValidCertificates(PathBuf),
 }
 
