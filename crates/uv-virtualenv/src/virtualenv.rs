@@ -598,35 +598,42 @@ pub(crate) fn create(
     drop(pyvenv_cfg);
 
     // Construct the path to the `site-packages` directory.
-    let site_packages = location.join(&interpreter.virtualenv().purelib);
-    fs_err::create_dir_all(&site_packages)?;
+    let purelib = location.join(&interpreter.virtualenv().purelib);
+    let platlib = location.join(&interpreter.virtualenv().platlib);
+    fs_err::create_dir_all(&purelib)?;
 
-    // If necessary, create a symlink from `lib64` to `lib`.
-    // See: https://github.com/python/cpython/blob/b228655c227b2ca298a8ffac44d14ce3d22f6faa/Lib/venv/__init__.py#L135C11-L135C16
-    #[cfg(unix)]
-    if interpreter.pointer_size().is_64()
-        && interpreter.markers().os_name() == "posix"
-        && interpreter.markers().sys_platform() != "darwin"
-    {
-        match fs_err::os::unix::fs::symlink("lib", location.join("lib64")) {
-            Ok(()) => {}
-            Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {}
-            Err(err) => {
-                return Err(err.into());
+    if platlib != purelib {
+        if interpreter.python_tuple() >= (3, 15) {
+            // https://docs.python.org/3.15/whatsnew/3.15.html#venv
+            fs_err::create_dir_all(&platlib)?;
+        } else {
+            // Preserve `lib64->lib` symlink for compatibility in Python earlier than 3.15.
+            #[cfg(unix)]
+            if interpreter.pointer_size().is_64()
+                && interpreter.markers().os_name() == "posix"
+                && interpreter.markers().sys_platform() != "darwin"
+            {
+                match fs_err::os::unix::fs::symlink("lib", location.join("lib64")) {
+                    Ok(()) => {}
+                    Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {}
+                    Err(err) => {
+                        return Err(err.into());
+                    }
+                }
             }
         }
     }
 
     if install_distutils_patch(interpreter) {
-        fs_err::write(site_packages.join("_virtualenv.py"), VIRTUALENV_PATCH)?;
-        fs_err::write(site_packages.join("_virtualenv.pth"), "import _virtualenv")?;
+        fs_err::write(purelib.join("_virtualenv.py"), VIRTUALENV_PATCH)?;
+        fs_err::write(purelib.join("_virtualenv.pth"), "import _virtualenv")?;
     }
 
     Ok(VirtualEnvironment {
         scheme: Scheme {
-            purelib: location.join(&interpreter.virtualenv().purelib),
-            platlib: location.join(&interpreter.virtualenv().platlib),
-            scripts: location.join(&interpreter.virtualenv().scripts),
+            purelib,
+            platlib,
+            scripts,
             data: location.join(&interpreter.virtualenv().data),
             include: location.join(&interpreter.virtualenv().include),
         },
