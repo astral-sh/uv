@@ -37,8 +37,6 @@ pub enum CpuInfo {
     Flags { flags: Box<str> },
     /// Raw CPUID registers and OS-enabled register state (XCR0), queried directly on Windows.
     Cpuid { leaves: Vec<CpuidLeaf>, xstate: u64 },
-    /// No probe or CPU data was available; `error` contains a probe failure, if one occurred.
-    Unavailable { error: Option<Box<str>> },
 }
 
 /// Raw CPUID output for an input leaf and subleaf.
@@ -54,8 +52,7 @@ pub struct CpuidLeaf {
 pub struct Platform {
     os: Os,
     arch: Arch,
-    /// Interpreter-specific CPU data is cached separately from the platform.
-    #[serde(skip)]
+    /// CPU capabilities reported by the interpreter, if this platform came from a probe.
     cpu_info: Option<Arc<CpuInfo>>,
 }
 
@@ -69,11 +66,13 @@ impl Platform {
         }
     }
 
-    /// Attach raw CPU capabilities reported by the Python interpreter.
-    #[must_use]
-    pub fn with_cpu_info(mut self, cpu_info: Option<CpuInfo>) -> Self {
-        self.cpu_info = cpu_info.map(Arc::new);
-        self
+    /// Create a platform from the operating system, architecture, and CPU data of an interpreter.
+    pub fn from_interpreter(os: Os, arch: Arch, cpu_info: Option<CpuInfo>) -> Self {
+        Self {
+            os,
+            arch,
+            cpu_info: cpu_info.map(Arc::new),
+        }
     }
 
     /// The CPU capabilities reported by the interpreter, if available.

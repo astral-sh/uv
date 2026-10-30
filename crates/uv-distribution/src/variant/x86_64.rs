@@ -16,15 +16,16 @@ static PACKAGE_NAME: LazyLock<PackageName> = LazyLock::new(|| {
         .parse()
         .expect("valid provider name")
 });
-// When the target CPU cannot be queried, use the platform default. Mainstream x86-64 CPUs that
-// lack v2 are more than a decade old.
+/// The default value for cross-installs or when the CPU detection API wasn't available.
+///
+/// CPUs that aren't v2 are over 10 - 15 years old.
 const PLATFORM_DEFAULT_LEVEL: Level = Level::V2;
-/// Cached properties for each maximum supported [`Level`], from v4 to v1.
+/// Cached properties indexed by the maximum supported [`Level`].
 static LEVEL_PROPERTIES: LazyLock<[SupportedVariantFeature; 4]> = LazyLock::new(|| {
     let values = ["v4", "v3", "v2", "v1"].map(VariantValue::from_static);
-    std::array::from_fn(|index| SupportedVariantFeature {
+    [&values[3..], &values[2..], &values[1..], &values[..]].map(|values| SupportedVariantFeature {
         name: VariantFeature::from_static("level"),
-        values: values[index..].to_vec(),
+        values: values.to_vec(),
     })
 });
 
@@ -38,6 +39,13 @@ static LEVEL_PROPERTIES: LazyLock<[SupportedVariantFeature; 4]> = LazyLock::new(
 ///
 /// When CPU detection is unavailable, including for an explicit target (`--python-platform`),
 /// x86-64 targets use `v2` as the platform default, while other architectures emit nothing.
+///
+/// There are two cases we are not handling:
+/// * The cache is shared between machines with CPUs with different `x86_64` levels, but the same
+///   Python interpreter.
+/// * We are building the environment on one machine, and then deploying to another machine. This
+///   case requires an override specifying the target machine. TODO(konsti): Add support for that as
+///   part of the wheel variants stack.
 pub(super) struct X86_64VariantProvider;
 
 impl VendoredVariantProvider for X86_64VariantProvider {
@@ -63,9 +71,8 @@ impl VendoredVariantProvider for X86_64VariantProvider {
         }
         let level = target
             .cpu_info()
-            .and_then(Level::detect)
-            .unwrap_or(PLATFORM_DEFAULT_LEVEL);
-        let property = &LEVEL_PROPERTIES[LEVEL_PROPERTIES.len() - level as usize];
+            .map_or(PLATFORM_DEFAULT_LEVEL, Level::detect);
+        let property = &LEVEL_PROPERTIES[level as usize];
         Some(std::slice::from_ref(property))
     }
 }
@@ -73,14 +80,14 @@ impl VendoredVariantProvider for X86_64VariantProvider {
 /// An x86-64 microarchitecture level supported by the Python interpreter.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum Level {
-    V1 = 1,
-    V2 = 2,
-    V3 = 3,
-    V4 = 4,
+    V1,
+    V2,
+    V3,
+    V4,
 }
 
 impl Level {
-    fn detect(cpu_info: &CpuInfo) -> Option<Self> {
+    fn detect(cpu_info: &CpuInfo) -> Self {
         let ebx = 1;
         let ecx = 2;
         let extended = 0x8000_0001;
@@ -147,7 +154,7 @@ impl Level {
                         features.iter().all(|(name, ..)| flags.contains(name))
                     })
                     .last();
-                Some(level.map_or(Self::V1, |(level, _)| *level))
+                level.map_or(Self::V1, |(level, _)| *level)
             }
             CpuInfo::Cpuid { leaves, xstate } => {
                 // AVX requires XMM and YMM state (bits 1 and 2). AVX-512 additionally requires
@@ -171,14 +178,13 @@ impl Level {
                                 && entry.registers[register] & (1 << bit) != 0
                         });
                         if !supported {
-                            return Some(detected);
+                            return detected;
                         }
                     }
                     detected = level;
                 }
-                Some(detected)
+                detected
             }
-            CpuInfo::Unavailable { .. } => None,
         }
     }
 }
@@ -198,7 +204,7 @@ mod tests {
             )
             .into(),
         };
-        assert_eq!(Level::detect(&info), Some(Level::V3));
+        assert_eq!(Level::detect(&info), Level::V3);
     }
 
     #[test]
@@ -210,7 +216,7 @@ mod tests {
             )
             .into(),
         };
-        assert_eq!(Level::detect(&info), Some(Level::V3));
+        assert_eq!(Level::detect(&info), Level::V3);
     }
 
     /// CPUID support for x86-64-v4 is insufficient if the OS has not enabled AVX-512 register state.
@@ -244,7 +250,7 @@ mod tests {
             leaves,
             xstate: 0xe6,
         };
-        assert_eq!(Level::detect(&limited), Some(Level::V3));
-        assert_eq!(Level::detect(&full), Some(Level::V4));
+        assert_eq!(Level::detect(&limited), Level::V3);
+        assert_eq!(Level::detect(&full), Level::V4);
     }
 }

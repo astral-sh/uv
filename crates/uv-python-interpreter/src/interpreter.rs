@@ -74,7 +74,10 @@ impl Interpreter {
     /// Detect the interpreter info for the given Python executable.
     pub fn query(executable: impl AsRef<Path>, cache: &Cache) -> Result<Self, Error> {
         let executable = executable.as_ref();
-        let info = InterpreterInfo::query_cached(executable, cache)?;
+        let InterpreterInfo {
+            platform,
+            metadata: info,
+        } = InterpreterInfo::query_cached(executable, cache)?;
 
         debug_assert!(
             info.sys_executable.is_absolute(),
@@ -83,7 +86,7 @@ impl Interpreter {
         );
 
         Ok(Self {
-            platform: info.platform.with_cpu_info(info.cpu_info),
+            platform,
             markers: Box::new(info.markers),
             scheme: info.scheme,
             virtualenv: info.virtualenv,
@@ -1089,11 +1092,29 @@ impl uv_errors::Hinted for BrokenLink {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize)]
 #[serde(tag = "result", rename_all = "lowercase")]
 enum InterpreterInfoResult {
     Error(InterpreterInfoError),
-    Success(Box<InterpreterInfo>),
+    Success(Box<InterpreterInfoWire>),
+}
+
+/// A successful Python probe response, before applying the CPU detection policy.
+#[derive(Debug, Deserialize)]
+struct InterpreterInfoWire {
+    os: uv_platform_tags::Os,
+    arch: uv_platform_tags::Arch,
+    cpu_info: Option<CpuProbe>,
+    #[serde(flatten)]
+    metadata: InterpreterMetadata,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum CpuProbe {
+    Detected(CpuInfo),
+    Unavailable(Box<str>),
+    Error(Box<str>),
 }
 
 #[derive(Debug, Error, Deserialize, Serialize)]
@@ -1122,10 +1143,15 @@ pub enum InterpreterInfoError {
     EmscriptenNotPyodide,
 }
 
-#[expect(clippy::struct_excessive_bools)]
 #[derive(Debug, Deserialize, Serialize, Clone)]
 struct InterpreterInfo {
     platform: Platform,
+    metadata: InterpreterMetadata,
+}
+
+#[expect(clippy::struct_excessive_bools)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
+struct InterpreterMetadata {
     markers: MarkerEnvironment,
     scheme: Scheme,
     virtualenv: Scheme,
@@ -1143,13 +1169,11 @@ struct InterpreterInfo {
     pointer_size: PointerSize,
     gil_disabled: bool,
     debug_enabled: bool,
-    /// Raw processor capabilities, if the interpreter runs on x86-64.
-    cpu_info: Option<CpuInfo>,
 }
 
 impl InterpreterInfo {
-    /// Return the resolved [`InterpreterInfo`] for the given Python executable.
-    fn query(interpreter: &Path, cache: &Cache) -> Result<Self, Error> {
+    /// Query the given Python executable for its interpreter information.
+    fn query(interpreter: &Path, cache: &Cache) -> Result<InterpreterInfoWire, Error> {
         let tempdir = tempfile::tempdir_in(cache.root())?;
         Self::setup_python_query_files(tempdir.path())?;
 
@@ -1392,7 +1416,7 @@ impl InterpreterInfo {
                         if cached.timestamp == modified {
                             trace!(
                                 "Found cached interpreter info for Python {}, skipping query of: {}",
-                                cached.data.markers.python_full_version(),
+                                cached.data.metadata.markers.python_full_version(),
                                 executable.user_display()
                             );
                             return Ok(cached.data);
@@ -1419,30 +1443,39 @@ impl InterpreterInfo {
             "Querying interpreter executable at `{}`",
             executable.display()
         );
-        let mut info = Self::query(executable, cache)?;
-
-        // For the preview period, only show a warning. For stabilization, this will become
-        // a hard detection error.
-        if let Some(CpuInfo::Unavailable {
-            error: Some(message),
-        }) = info.cpu_info
-        {
-            let error = Error::CpuDetection {
-                path: executable.to_path_buf(),
-                message,
-            };
-            if uv_preview::is_enabled(PreviewFeature::WheelVariants) {
-                return Err(error);
+        let wire = Self::query(executable, cache)?;
+        let cpu_info = match wire.cpu_info {
+            Some(CpuProbe::Detected(info)) => Some(info),
+            Some(CpuProbe::Unavailable(reason)) => {
+                debug!(
+                    "CPU information unavailable for `{}`: {reason}",
+                    executable.display()
+                );
+                None
             }
-            warn_user_once!(
-                "Failed to detect CPU information, this will become a hard error in the future: {error}"
-            );
-            info.cpu_info = None;
-        }
+            Some(CpuProbe::Error(message)) => {
+                let error = Error::CpuDetection {
+                    path: executable.to_path_buf(),
+                    message,
+                };
+                if uv_preview::is_enabled(PreviewFeature::WheelVariants) {
+                    return Err(error);
+                }
+                warn_user_once!(
+                    "Failed to detect CPU information, this will become a hard error in the future: {error}"
+                );
+                None
+            }
+            None => None,
+        };
+        let info = Self {
+            platform: Platform::from_interpreter(wire.os, wire.arch, cpu_info),
+            metadata: wire.metadata,
+        };
 
         // If `executable` is a pyenv shim, a bash script that redirects to the activated
         // python executable at another path, we're not allowed to cache the interpreter info.
-        if is_same_file(executable, &info.sys_executable).unwrap_or(false) {
+        if is_same_file(executable, &info.metadata.sys_executable).unwrap_or(false) {
             fs::create_dir_all(cache_entry.dir())?;
             write_atomic_sync(
                 cache_entry.path(),
@@ -1566,6 +1599,7 @@ mod tests {
     use uv_cache::{Cache, CacheBucket, CachedByTimestamp};
     use uv_cache_info::Timestamp;
     use uv_pep440::Version;
+    use uv_platform_tags::CpuInfo;
 
     use crate::Interpreter;
     use crate::interpreter::{InterpreterInfo, canonicalize_executable};
@@ -1574,14 +1608,13 @@ mod tests {
         indoc! {r##"
         {
             "result": "success",
-            "platform": {
-                "os": {
-                    "name": "manylinux",
-                    "major": 2,
-                    "minor": 38
-                },
-                "arch": "x86_64"
+            "os": {
+                "name": "manylinux",
+                "major": 2,
+                "minor": 38
             },
+            "arch": "x86_64",
+            "cpu_info": { "detected": { "kind": "flags", "flags": "pni ssse3" } },
             "manylinux_compatible": false,
             "standalone": false,
             "markers": {
@@ -1665,6 +1698,10 @@ mod tests {
         assert_eq!(fs::read_to_string(&query_log)?, "queried\n");
 
         let interpreter = Interpreter::query(&mocked_interpreter, &cache)?;
+        let Some(CpuInfo::Flags { flags }) = interpreter.platform().cpu_info() else {
+            anyhow::bail!("CPU flags missing from cached platform");
+        };
+        assert_eq!(flags.as_ref(), "pni ssse3");
         assert_eq!(
             interpreter.markers.python_version().version,
             Version::from_str("3.12")?
@@ -1678,7 +1715,7 @@ mod tests {
             rmp_serde::from_slice(&fs::read(cache_entry.path())?)?;
         assert_eq!(cached.timestamp, Timestamp::from_path(&canonical)?);
         assert_eq!(
-            cached.data.markers.python_version().version,
+            cached.data.metadata.markers.python_version().version,
             Version::from_str("3.12")?
         );
 
@@ -1719,7 +1756,7 @@ mod tests {
             rmp_serde::from_slice(&fs::read(cache_entry.path())?)?;
         assert_eq!(refreshed.timestamp, Timestamp::from_path(&canonical)?);
         assert_eq!(
-            refreshed.data.markers.python_version().version,
+            refreshed.data.metadata.markers.python_version().version,
             Version::from_str("3.13")?
         );
 

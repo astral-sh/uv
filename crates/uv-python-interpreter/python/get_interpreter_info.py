@@ -607,7 +607,7 @@ def get_operating_system_and_architecture():
             )
         )
         sys.exit(0)
-    return {"os": operating_system, "arch": architecture}
+    return operating_system, architecture
 
 
 def _get_cpu_info():
@@ -615,41 +615,53 @@ def _get_cpu_info():
 
     Returns raw data to avoid bumping the cache when we want to do more detection in Rust.
     """
+    if sys.platform == "linux":
+        return _linux_cpu_info()
     if sys.platform == "darwin":
         return _macos_cpu_info()
-    elif os.name == "nt":
+    if os.name == "nt":
         return _windows_cpu_info()
-    elif sys.platform == "linux":
-        flags = _linux_cpu_flags()
-        if flags:
-            return {"kind": "flags", "flags": flags}
-    return {"kind": "unavailable"}
+    return {"unavailable": f"No CPU probe for {sys.platform}"}
 
 
-def _linux_cpu_flags():
+def _linux_cpu_info():
     """Read the first processor's raw flags, following archspec's Linux detection.
 
     https://github.com/archspec/archspec/blob/ebd3eb502d9205f1033ffc028d661f2fbece7dfc/archspec/cpu/detect.py#L78-L104
     """
-    with open("/proc/cpuinfo", encoding="utf-8") as cpuinfo:
-        for line in cpuinfo:
-            if not line.strip():
-                break
-            key, _, value = line.partition(":")
-            if key.strip() == "flags":
-                return value.strip()
+    try:
+        with open("/proc/cpuinfo", encoding="utf-8") as cpuinfo:
+            for line in cpuinfo:
+                if not line.strip():
+                    break
+                key, _, value = line.partition(":")
+                if key.strip() == "flags":
+                    flags = value.strip()
+                    if flags:
+                        return {"detected": {"kind": "flags", "flags": flags}}
+                    break
+    except (FileNotFoundError, NotADirectoryError, PermissionError) as error:
+        # A chroot may lack procfs, and a sandbox can hide or restrict /proc/cpuinfo.
+        return {"unavailable": str(error)}
     # An emulated interpreter may see a non-x86 host's /proc/cpuinfo, which lacks x86 flags.
-    return None
+    return {"unavailable": "No x86 flags in `/proc/cpuinfo`"}
 
 
 def _macos_cpu_info():
-    import ctypes
     import errno
+
+    try:
+        import ctypes
+    except ImportError as error:
+        # Python can be built without the optional _ctypes extension.
+        return {"unavailable": str(error)}
 
     # archspec reads these x86 feature keys using the sysctl command. Query them from this
     # process instead: a separate executable could run under a different architecture.
     # https://github.com/archspec/archspec/blob/ebd3eb502d9205f1033ffc028d661f2fbece7dfc/archspec/cpu/detect.py#L290-L300
-    sysctl = ctypes.CDLL(None, use_errno=True).sysctlbyname
+    sysctl = getattr(ctypes.CDLL(None, use_errno=True), "sysctlbyname", None)
+    if sysctl is None:
+        return {"unavailable": "sysctlbyname is unavailable"}
     sysctl.argtypes = [
         ctypes.c_char_p,
         ctypes.c_void_p,
@@ -668,20 +680,28 @@ def _macos_cpu_info():
         if result == 0 and size.value:
             buffer = ctypes.create_string_buffer(size.value)
             result = sysctl(key, buffer, ctypes.byref(size), None, 0)
-            if result == 0:
+            if result == 0 and buffer.value:
                 flags.append(buffer.value.decode("ascii", errors="replace"))
         if result != 0:
             error = ctypes.get_errno()
-            # A missing key must not hide features available through another key.
-            if error != errno.ENOENT:
-                raise OSError(error, os.strerror(error), key.decode("ascii"))
+            # An unsupported key must not hide features available through another key.
+            if error in (errno.ENOENT, errno.ENOTSUP, errno.EOPNOTSUPP):
+                continue
+            failure = OSError(error, os.strerror(error), key.decode("ascii"))
+            if error in (errno.EPERM, errno.EACCES, errno.ENOSYS):
+                return {"unavailable": str(failure)}
+            raise failure
     if flags:
-        return {"kind": "flags", "flags": " ".join(flags)}
-    return {"kind": "unavailable"}
+        return {"detected": {"kind": "flags", "flags": " ".join(flags)}}
+    return {"unavailable": "No x86 feature flags reported by sysctl"}
 
 
 def _windows_cpu_info():
-    import ctypes
+    try:
+        import ctypes
+    except ImportError as error:
+        # Python can be built without the optional _ctypes extension.
+        return {"unavailable": str(error)}
 
     # Probe inside the interpreter so emulation and per-process settings are reflected. Python
     # has no CPUID API, so the stub bridges the Windows x64 calling convention to CPUID's register
@@ -737,7 +757,12 @@ def _windows_cpu_info():
         ctypes.memmove(address, code, len(code))
         # 0x20 = PAGE_EXECUTE_READ.
         if not kernel32.VirtualProtect(address, len(code), 0x20, ctypes.byref(word())):
-            raise ctypes.WinError(ctypes.get_last_error())
+            error = ctypes.WinError(ctypes.get_last_error())
+            # Process policy can deny executable memory (ERROR_ACCESS_DENIED or
+            # ERROR_DYNAMIC_CODE_BLOCKED).
+            if error.winerror in (5, 1655):
+                return {"unavailable": str(error)}
+            raise error
         # -1 is the current-process pseudo-handle.
         if not kernel32.FlushInstructionCache(pointer(-1), address, len(code)):
             raise ctypes.WinError(ctypes.get_last_error())
@@ -778,7 +803,7 @@ def _query_cpuid(address, xgetbv_offset):
             elif leaf == 13:  # Leaf 0xD, subleaf 1: XSAVE feature flags.
                 leaves.append(_query_cpuid_leaf(probe, leaf, 1))
 
-    return {"kind": "cpuid", "leaves": leaves, "xstate": xstate}
+    return {"detected": {"kind": "cpuid", "leaves": leaves, "xstate": xstate}}
 
 
 def _query_cpuid_leaf(probe, leaf, subleaf):
@@ -806,28 +831,25 @@ def main() -> None:
         "sys_platform": sys.platform,
     }
 
-    os_and_arch = get_operating_system_and_architecture()
+    operating_system, architecture = get_operating_system_and_architecture()
     cpu_info = None
-    if os_and_arch["arch"].lower() in ("x86_64", "amd64"):
+    if architecture.lower() in ("x86_64", "amd64"):
         try:
             cpu_info = _get_cpu_info()
         except Exception as error:  # noqa: BLE001
-            # Forward all probe failures so Rust can apply the preview policy.
-            cpu_info = {
-                "kind": "unavailable",
-                "error": f"{type(error).__name__}: {error}",
-            }
+            # Rust applies the preview policy to unexpected failures.
+            cpu_info = {"error": f"{type(error).__name__}: {error}"}
 
     manylinux_compatible = False
 
-    if os_and_arch["os"]["name"] == "manylinux":
+    if operating_system["name"] == "manylinux":
         # noinspection PyProtectedMember
         from .packaging._manylinux import _get_glibc_version, _is_compatible
 
         manylinux_compatible = _is_compatible(
-            arch=os_and_arch["arch"], version=_get_glibc_version()
+            arch=architecture, version=_get_glibc_version()
         )
-    elif os_and_arch["os"]["name"] == "musllinux":
+    elif operating_system["name"] == "musllinux":
         manylinux_compatible = True
 
     # By default, pip uses sysconfig on Python 3.10+.
@@ -895,7 +917,8 @@ def main() -> None:
         ),
         "scheme": get_scheme(use_sysconfig_scheme),
         "virtualenv": get_virtualenv(),
-        "platform": os_and_arch,
+        "os": operating_system,
+        "arch": architecture,
         "cpu_info": cpu_info,
         "manylinux_compatible": manylinux_compatible,
         # The `t` abiflag for freethreading Python.

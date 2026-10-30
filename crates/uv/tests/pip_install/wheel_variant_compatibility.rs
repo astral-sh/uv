@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use anyhow::Result;
 use assert_fs::prelude::*;
 use indoc::indoc;
-use insta::assert_snapshot;
+use insta::{assert_json_snapshot, assert_snapshot};
 use serde_json::{Map, Value, json};
 use uv_distribution_types::PEP_850_SCHEMA;
 use uv_static::EnvVars;
@@ -209,10 +209,17 @@ fn x86_64_target_uses_platform_defaults() -> Result<()> {
             .site_packages()
             .join("ok-1.0.0.dist-info/variant.json"),
     );
-    assert_eq!(
-        serde_json::from_str::<Value>(&installed)?["variants"],
-        json!({ "v2": { "x86_64": { "level": ["v2"] } } })
-    );
+    assert_json_snapshot!(serde_json::from_str::<Value>(&installed)?["variants"], @r#"
+    {
+      "v2": {
+        "x86_64": {
+          "level": [
+            "v2"
+          ]
+        }
+      }
+    }
+    "#);
     Ok(())
 }
 
