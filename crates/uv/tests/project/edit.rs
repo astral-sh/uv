@@ -3500,6 +3500,34 @@ fn add_wheels_with_disjoint_markers() -> Result<()> {
     Resolved 2 packages in [TIME]
     ");
 
+    assert_snapshot!(context.read("uv.lock"), @r#"
+    version = 1
+    revision = 5
+    requires-python = ">=3.12"
+
+    [options]
+    exclude-newer = "2024-03-25T00:00:00Z"
+
+    [[package]]
+    name = "ok"
+    version = "1.0.0"
+    source = { path = "ok-1.0.0-py3-none-any.whl" }
+    wheels = [
+        { filename = "ok-1.0.0-py3-none-any.whl", hash = "sha256:79f0b33e6ce1e09eaa1784c8eee275dfe84d215d9c65c652f07c18e85fdaac5f" },
+    ]
+
+    [[package]]
+    name = "project"
+    version = "0.1.0"
+    source = { virtual = "." }
+    dependencies = [
+        { name = "ok", marker = "sys_platform == 'win32'" },
+    ]
+
+    [package.metadata]
+    requires-dist = [{ name = "ok", marker = "sys_platform == 'win32'", path = "ok-1.0.0-py3-none-any.whl" }]
+    "#);
+
     uv_snapshot!(context.filters(), context.add()
         .arg("./ok-2.0.0-py3-none-any.whl")
         .args(["--marker", "sys_platform == 'linux'", "--no-sync"]), @"
