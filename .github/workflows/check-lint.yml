@@ -211,7 +211,7 @@ jobs:
       - name: Select weekly Hawk cache
         id: hawk-cache-week
         run: echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
-      - uses: astral-sh/github-actions/rust-workspace-cache@1a06fa9d422a49786e9de10fcae5c14bcbccc474
+      - uses: astral-sh/github-actions/rust-workspace-cache@4a3ac8fb135d70bb5aa2ac5c8c9e003c2c63e5e4
         with:
           target-directory: target/hawk
           extra-target-directory: hawk-fragments
