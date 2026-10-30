@@ -21,7 +21,7 @@ use uv_fs::Simplified;
 use uv_static::EnvVars;
 
 use uv_test::packse::{PackseServer, WheelBuilder, scenario::Scenario};
-use uv_test::{copy_dir_ignore, uv_snapshot};
+use uv_test::{TestContext, copy_dir_ignore, uv_snapshot};
 
 #[cfg(feature = "test-git")]
 fn tool_install_git_path(bin_dir: &ChildPath) -> OsString {
@@ -444,12 +444,38 @@ fn tool_install_from_directory_uses_global_pin_within_requires_python_range() {
     ");
 }
 
+/// Provide a named tool that reports the interpreter used by its installed entry point.
+fn with_python_version_tool(context: TestContext) -> Result<TestContext> {
+    let wheels = context.temp_dir.child("wheels");
+    let (filename, wheel) = WheelBuilder::new(&"show-python".parse()?, &"1.0.0".parse()?)
+        .files(&[
+            (
+                "show_python/cli.py",
+                indoc! {r#"
+                    import sys
+
+                    def main():
+                        print(f"{sys.version_info.major}.{sys.version_info.minor}")
+                "#},
+            ),
+            (
+                "show_python-1.0.0.dist-info/entry_points.txt",
+                "[console_scripts]\nshow-python = show_python.cli:main\n",
+            ),
+        ])
+        .build();
+    wheels.child(filename).write_binary(&wheel)?;
+    Ok(context
+        .with_env(EnvVars::UV_OFFLINE, "1")
+        .with_env(EnvVars::UV_FIND_LINKS, "wheels"))
+}
+
 #[test]
-fn tool_install_python_from_global_version_file() {
+fn tool_install_python_from_global_version_file() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&["3.11", "3.12", "3.13"])
-        .with_filtered_counts()
         .with_filtered_exe_suffix()
         .with_tool_dirs();
+    let context = with_python_version_tool(context)?;
     let bin_dir = context.temp_dir.child("bin");
 
     // Pin to 3.12
@@ -462,30 +488,22 @@ fn tool_install_python_from_global_version_file() {
 
     // Install a tool
     uv_snapshot!(context.filters(), context.tool_install()
-        .arg("flask")
+        .arg("show-python")
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved [N] packages in [TIME]
-    Prepared [N] packages in [TIME]
-    Installed [N] packages in [TIME]
-     + blinker==1.7.0
-     + click==8.1.7
-     + flask==3.0.2
-     + itsdangerous==2.1.2
-     + jinja2==3.1.3
-     + markupsafe==2.1.5
-     + werkzeug==3.0.1
-    Installed 1 executable: flask
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + show-python==1.0.0
+    Installed 1 executable: show-python
     ");
 
     // It should use the version from the global file
-    uv_snapshot!(context.filters(), Command::new("flask").arg("--version").env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    uv_snapshot!(context.filters(), Command::new("show-python").env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stdout -----
-    Python 3.12.[X]
-    Flask 3.0.2
-    Werkzeug 3.0.1
+    3.12
     ");
 
     // Change global version
@@ -496,142 +514,115 @@ fn tool_install_python_from_global_version_file() {
         .assert()
         .success();
 
-    // Installing flask again should be a no-op, even though the global pin changed
+    // Installing show-python again should be a no-op, even though the global pin changed
     uv_snapshot!(context.filters(), context.tool_install()
-        .arg("flask")
+        .arg("show-python")
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    `flask` is already installed
+    `show-python` is already installed
     ");
 
-    uv_snapshot!(context.filters(), Command::new("flask").arg("--version").env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    uv_snapshot!(context.filters(), Command::new("show-python").env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stdout -----
-    Python 3.12.[X]
-    Flask 3.0.2
-    Werkzeug 3.0.1
+    3.12
     ");
 
     // Using `--upgrade` forces us to check the environment
     uv_snapshot!(context.filters(), context.tool_install()
-        .arg("flask")
+        .arg("show-python")
         .arg("--upgrade")
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved [N] packages in [TIME]
-    Checked [N] packages in [TIME]
-    Installed 1 executable: flask
+    Resolved 1 package in [TIME]
+    Checked 1 package in [TIME]
+    Installed 1 executable: show-python
     ");
 
     // This will not change to the new global pin, since there was not a reinstall request
-    uv_snapshot!(context.filters(), Command::new("flask").arg("--version").env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    uv_snapshot!(context.filters(), Command::new("show-python").env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stdout -----
-    Python 3.12.[X]
-    Flask 3.0.2
-    Werkzeug 3.0.1
+    3.12
     ");
 
-    // Using `--reinstall` forces us to install flask again
+    // Using `--reinstall` forces us to install show-python again
     uv_snapshot!(context.filters(), context.tool_install()
-        .arg("flask")
+        .arg("show-python")
         .arg("--reinstall")
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Ignoring existing environment for `flask`: the Python interpreter does not match the environment interpreter
-    Resolved [N] packages in [TIME]
-    Prepared [N] packages in [TIME]
-    Installed [N] packages in [TIME]
-     + blinker==1.7.0
-     + click==8.1.7
-     + flask==3.0.2
-     + itsdangerous==2.1.2
-     + jinja2==3.1.3
-     + markupsafe==2.1.5
-     + werkzeug==3.0.1
-    Installed 1 executable: flask
+    Ignoring existing environment for `show-python`: the Python interpreter does not match the environment interpreter
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + show-python==1.0.0
+    Installed 1 executable: show-python
     ");
 
     // This will change to the new global pin, since there was not an explicit request recorded in
     // the receipt
-    uv_snapshot!(context.filters(), Command::new("flask").arg("--version").env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    uv_snapshot!(context.filters(), Command::new("show-python").env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stdout -----
-    Python 3.13.[X]
-    Flask 3.0.2
-    Werkzeug 3.0.1
+    3.13
     ");
 
     // If we request a specific Python version, it takes precedence over the pin
     uv_snapshot!(context.filters(), context.tool_install()
-        .arg("flask")
+        .arg("show-python")
         .arg("--python")
         .arg("3.11")
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Ignoring existing environment for `flask`: the requested Python interpreter does not match the environment interpreter
-    Resolved [N] packages in [TIME]
-    Prepared [N] packages in [TIME]
-    Installed [N] packages in [TIME]
-     + blinker==1.7.0
-     + click==8.1.7
-     + flask==3.0.2
-     + itsdangerous==2.1.2
-     + jinja2==3.1.3
-     + markupsafe==2.1.5
-     + werkzeug==3.0.1
-    Installed 1 executable: flask
+    Ignoring existing environment for `show-python`: the requested Python interpreter does not match the environment interpreter
+    Resolved 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + show-python==1.0.0
+    Installed 1 executable: show-python
     ");
 
-    uv_snapshot!(context.filters(), Command::new("flask").arg("--version").env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    uv_snapshot!(context.filters(), Command::new("show-python").env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stdout -----
-    Python 3.11.[X]
-    Flask 3.0.2
-    Werkzeug 3.0.1
+    3.11
     ");
 
-    // Use `--reinstall` to install flask again
+    // Use `--reinstall` to install show-python again
     uv_snapshot!(context.filters(), context.tool_install()
-        .arg("flask")
+        .arg("show-python")
         .arg("--reinstall")
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved [N] packages in [TIME]
-    Prepared [N] packages in [TIME]
-    Uninstalled [N] packages in [TIME]
-    Installed [N] packages in [TIME]
-     ~ blinker==1.7.0
-     ~ click==8.1.7
-     ~ flask==3.0.2
-     ~ itsdangerous==2.1.2
-     ~ jinja2==3.1.3
-     ~ markupsafe==2.1.5
-     ~ werkzeug==3.0.1
-    Installed 1 executable: flask
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ show-python==1.0.0
+    Installed 1 executable: show-python
     ");
 
     // We should continue to use the version from the install, not the global pin
-    uv_snapshot!(context.filters(), Command::new("flask").arg("--version").env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    uv_snapshot!(context.filters(), Command::new("show-python").env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stdout -----
-    Python 3.11.[X]
-    Flask 3.0.2
-    Werkzeug 3.0.1
+    3.11
     ");
+
+    Ok(())
 }
 
 #[test]
-fn tool_install_force_respects_global_python_change() {
+fn tool_install_force_respects_global_python_change() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&["3.11", "3.12", "3.13"])
-        .with_filtered_counts()
         .with_filtered_exe_suffix()
         .with_tool_dirs();
+    let context = with_python_version_tool(context)?;
     let bin_dir = context.temp_dir.child("bin");
 
     context
@@ -642,29 +633,21 @@ fn tool_install_force_respects_global_python_change() {
         .success();
 
     uv_snapshot!(context.filters(), context.tool_install()
-        .arg("flask")
+        .arg("show-python")
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved [N] packages in [TIME]
-    Prepared [N] packages in [TIME]
-    Installed [N] packages in [TIME]
-     + blinker==1.7.0
-     + click==8.1.7
-     + flask==3.0.2
-     + itsdangerous==2.1.2
-     + jinja2==3.1.3
-     + markupsafe==2.1.5
-     + werkzeug==3.0.1
-    Installed 1 executable: flask
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + show-python==1.0.0
+    Installed 1 executable: show-python
     ");
 
-    uv_snapshot!(context.filters(), Command::new("flask").arg("--version").env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    uv_snapshot!(context.filters(), Command::new("show-python").env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stdout -----
-    Python 3.12.[X]
-    Flask 3.0.2
-    Werkzeug 3.0.1
+    3.12
     ");
 
     context
@@ -675,31 +658,24 @@ fn tool_install_force_respects_global_python_change() {
         .success();
 
     uv_snapshot!(context.filters(), context.tool_install()
-        .arg("flask")
+        .arg("show-python")
         .arg("--force")
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved [N] packages in [TIME]
-    Prepared [N] packages in [TIME]
-    Installed [N] packages in [TIME]
-     + blinker==1.7.0
-     + click==8.1.7
-     + flask==3.0.2
-     + itsdangerous==2.1.2
-     + jinja2==3.1.3
-     + markupsafe==2.1.5
-     + werkzeug==3.0.1
-    Installed 1 executable: flask
+    Resolved 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + show-python==1.0.0
+    Installed 1 executable: show-python
     ");
 
-    uv_snapshot!(context.filters(), Command::new("flask").arg("--version").env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    uv_snapshot!(context.filters(), Command::new("show-python").env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stdout -----
-    Python 3.13.[X]
-    Flask 3.0.2
-    Werkzeug 3.0.1
+    3.13
     ");
+
+    Ok(())
 }
 
 #[test]
