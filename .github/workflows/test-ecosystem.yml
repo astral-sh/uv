@@ -21,21 +21,21 @@ jobs:
         include:
           - repo: "prefecthq/prefect"
             ref: "7f25bbdf45fc81cca6dc23fb6a7377d436b70c83"
-            commands:
-              - "uv venv"
-              - "uv pip install -e '.[dev]'"
+            commands: |
+              ./uv venv
+              ./uv pip install -e '.[dev]'
             python: "3.9"
           - repo: "pallets/flask"
             ref: "b78b5a210bde49e7e04b62a2a4f453ca10e0048c"
-            commands:
-              - "uv venv"
-              - "uv pip install -r requirements/dev.txt"
+            commands: |
+              ./uv venv
+              ./uv pip install -r requirements/dev.txt
             python: "3.12"
           - repo: "pydantic/pydantic-core"
             ref: "d03bf4a01ca3b378cc8590bd481f307e82115bc6"
-            commands:
-              - "uv sync --group all"
-              - "uv lock --upgrade"
+            commands: |
+              ./uv sync --group all
+              ./uv lock --upgrade
             python: "3.12"
       fail-fast: false
     steps:
@@ -58,15 +58,8 @@ jobs:
         run: chmod +x ./uv
 
       - name: "Test"
+        shell: bash -ex {0}
         env:
           # These commands intentionally create and upgrade ecosystem lockfiles.
           UV_LOCKED: 0
-        run: |
-          echo '${{ toJSON(matrix.commands) }}' | jq -r '.[]' | while read cmd; do
-            echo "+ $cmd" >&2
-            if [[ $cmd == uv* ]]; then
-              ./$cmd
-            else
-              $cmd
-            fi
-          done
+        run: ${{ matrix.commands }}

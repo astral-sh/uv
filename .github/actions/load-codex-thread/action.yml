@@ -1,5 +1,5 @@
 name: "Load Codex thread"
-description: "Restore and verify a root Codex thread from a previous workflow run."
+description: "Restore and verify a root Codex thread from a previous workflow run. Requires uv on PATH."
 
 inputs:
   repository:
@@ -79,8 +79,9 @@ runs:
 
     - name: "Validate root Codex session"
       id: validate
-      shell: bash
+      shell: uv run --locked --only-group=jaq --python 3 bash -eo pipefail {0}
       env:
+        UV_PROJECT: ${{ github.action_path }}/../../..
         DIRECTORY: ${{ steps.source.outputs.path }}
       run: |
         while IFS= read -r -d '' compressed_rollout; do
@@ -91,7 +92,7 @@ runs:
         root_session_id=
         while IFS= read -r -d '' rollout; do
           metadata="$(head -n 1 "$rollout")"
-          if ! jq --exit-status '
+          if ! jaq --exit-status '
             .type == "session_meta"
             and (.payload | type == "object")
             and (.payload.id | type == "string")
@@ -100,10 +101,10 @@ runs:
             exit 1
           fi
 
-          if jq --exit-status '.payload.source == "exec"' <<< "$metadata" > /dev/null; then
+          if jaq --exit-status '.payload.source == "exec"' <<< "$metadata" > /dev/null; then
             root_sessions=$((root_sessions + 1))
-            root_session_id="$(jq --raw-output '.payload.id' <<< "$metadata")"
-            session_workspace="$(jq --raw-output '.payload.cwd' <<< "$metadata")"
+            root_session_id="$(jaq --raw-output '.payload.id' <<< "$metadata")"
+            session_workspace="$(jaq --raw-output '.payload.cwd' <<< "$metadata")"
             if ! [[ "$root_session_id" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]] ||
               [ "$session_workspace" != "$GITHUB_WORKSPACE" ]; then
               echo "The Codex session does not match the trusted workspace." >&2

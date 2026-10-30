@@ -174,8 +174,8 @@ docker run --rm -v .:/src/ -w /src/ node:alpine npx prettier@3.9.0 --write .
 ## Linting
 
 Linting requires [shellcheck](https://github.com/koalaman/shellcheck) and
-[hawk](https://github.com/astral-sh/hawk/) to be installed separately. Validating `pyproject.toml`
-against the checked-in uv schema also requires [jq](https://jqlang.org/).
+[hawk](https://github.com/astral-sh/hawk/) to be installed separately. The check and dev dependency
+groups include `jaq`. Use `uv run --only-group=jaq <script>` to put it on `PATH` for a script.
 
 ```shell
 # Rust

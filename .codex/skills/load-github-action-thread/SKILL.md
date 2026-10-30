@@ -19,7 +19,7 @@ issue_number="$(gh issue view "$issue" --repo "$repository" --json number --jq '
 
 gh run list --repo "$repository" --workflow issue-triage.yml --limit 500 \
   --json databaseId,displayTitle,event,status,conclusion,createdAt,url \
-  | jq -c --arg title "$issue_title" '.[] | select(.displayTitle == $title)'
+  | jaq -c --arg title "$issue_title" '.[] | select(.displayTitle == $title)'
 ```
 
 Use the newest matching run. An issue-triage run can contain both the triage and bug-reproduction
@@ -74,7 +74,7 @@ imported history to a different local checkout:
   --cwd /path/to/uv
 ```
 
-The utility requires `gh`, `jq`, and `codex`, plus `zstd` for compressed rollouts. It prints the
+The utility requires `gh`, `jaq`, and `codex`, plus `zstd` for compressed rollouts. It prints the
 resolved title and a `codex://threads/<id>` link for every imported task and automatically opens the
 Codex app when exactly one task is imported on macOS. For multiple steps, return a Markdown list
 with a clickable link labeled by the corresponding task title without repeatedly switching the app:

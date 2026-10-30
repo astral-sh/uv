@@ -1,0 +1,43 @@
+name: "Set up uv for toolchain commands"
+description: "Install uv and locate the workflow revision's toolchain project."
+
+outputs:
+  project:
+    description: "Path to the uv project containing the workflow's locked tools."
+    value: ${{ steps.project.outputs.path }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: "Check uv runner support"
+      if: ${{ !((runner.os == 'Linux' && runner.arch == 'X64') || (runner.os == 'macOS' && runner.arch == 'ARM64')) }}
+      shell: bash
+      run: |
+        echo "Unsupported uv runner: $RUNNER_OS/$RUNNER_ARCH" >&2
+        exit 1
+
+    - name: "Install uv on Linux x64"
+      if: ${{ runner.os == 'Linux' && runner.arch == 'X64' }}
+      uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+      with:
+        working-directory: ${{ github.action_path }}
+        # renovate: datasource=github-release-attachments depName=astral-sh/uv
+        version: "0.13.5"
+        checksum: "f68d291c75783122dad58ab77def0e13f3233f358731db5d6d7e8715603b928f"
+        enable-cache: false
+
+    - name: "Install uv on macOS ARM64"
+      if: ${{ runner.os == 'macOS' && runner.arch == 'ARM64' }}
+      uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+      with:
+        working-directory: ${{ github.action_path }}
+        # renovate: datasource=github-release-attachments depName=astral-sh/uv
+        version: "0.13.5"
+        checksum: "743f85035a1996ecb350659e01cd9faea9709829be09b1b4b03c73eaf3c9cd73"
+        enable-cache: false
+
+    - name: "Locate toolchain project"
+      id: project
+      shell: bash
+      working-directory: ${{ github.action_path }}/../../..
+      run: echo "path=$PWD" >> "$GITHUB_OUTPUT"

@@ -101,7 +101,7 @@ jobs:
           uv run --only-dev dist "${dist_args[@]}" --output-format=json > plan-dist-manifest.json
           echo "dist ran successfully"
           cat plan-dist-manifest.json
-          echo "manifest=$(jq -c "." plan-dist-manifest.json)" >> "$GITHUB_OUTPUT"
+          echo "manifest=$(uv run --only-group=jaq jaq -c "." plan-dist-manifest.json)" >> "$GITHUB_OUTPUT"
         env:
           PUBLISHING: ${{ !inputs.dry-run }}
           RELEASE_TAG: ${{ steps.release-tag.outputs.tag }}
@@ -232,7 +232,7 @@ jobs:
 
           # Parse out what we just built and upload it to scratch storage
           echo "paths<<EOF" >> "$GITHUB_OUTPUT"
-          jq --raw-output ".upload_files[]" dist-manifest.json >> "$GITHUB_OUTPUT"
+          uv run --only-group=jaq jaq --raw-output ".upload_files[]" dist-manifest.json >> "$GITHUB_OUTPUT"
           echo "EOF" >> "$GITHUB_OUTPUT"
 
           cp dist-manifest.json "$BUILD_MANIFEST_NAME"
@@ -241,7 +241,7 @@ jobs:
       - name: "Check planned GitHub release files"
         shell: bash
         run: |
-          jq -r '.releases[].artifacts[]' dist-manifest.json |
+          uv run --only-group=jaq jaq -r '.releases[].artifacts[]' dist-manifest.json |
             while IFS= read -r asset; do
               if [[ ! -f "target/distrib/$asset" ]]; then
                 echo "Missing GitHub release asset: $asset" >&2
@@ -302,7 +302,7 @@ jobs:
           uv run --only-dev dist host ${DIST_TAG_FLAG} --steps=upload --steps=release --output-format=json > dist-manifest.json
           echo "artifacts uploaded and released successfully"
           cat dist-manifest.json
-          echo "manifest=$(jq -c "." dist-manifest.json)" >> "$GITHUB_OUTPUT"
+          echo "manifest=$(uv run --only-group=jaq jaq -c "." dist-manifest.json)" >> "$GITHUB_OUTPUT"
         env:
           DIST_TAG_FLAG: ${{ needs.plan.outputs.tag-flag }}
       - name: "Upload dist-manifest.json"
@@ -417,6 +417,8 @@ jobs:
           permissions: |
             contents: write
             workflows: write
+      - uses: $/.github/actions/setup-uv-toolchain
+
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ steps.release-token.outputs.token }}
@@ -429,7 +431,7 @@ jobs:
           # Write and read notes from a file to avoid quoting breaking things
           echo "$ANNOUNCEMENT_BODY" > $RUNNER_TEMP/notes.txt
 
-          scripts/dist-manifest-to-files.sh artifacts/dist-manifest.json > "$RUNNER_TEMP/release-assets.txt"
+          uv run --only-group=jaq --python 3 scripts/dist-manifest-to-files.sh artifacts/dist-manifest.json > "$RUNNER_TEMP/release-assets.txt"
           mapfile -t assets < "$RUNNER_TEMP/release-assets.txt"
           gh release create "${NEEDS_PLAN_OUTPUTS_TAG}" --target "$RELEASE_COMMIT" $PRERELEASE_FLAG --title "$ANNOUNCEMENT_TITLE" --notes-file "$RUNNER_TEMP/notes.txt" "${assets[@]}"
 

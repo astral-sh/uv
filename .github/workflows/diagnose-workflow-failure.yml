@@ -39,8 +39,11 @@ jobs:
         with:
           persist-credentials: false
 
+      - uses: $/.github/actions/setup-uv-toolchain
+
       - name: "Collect workflow failure context"
         id: context
+        shell: uv run --only-group=jaq --python 3 bash -e {0}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HEAD_SHA: ${{ inputs.head_sha }}
@@ -64,32 +67,32 @@ jobs:
             --jq '{repository: .repository.full_name, head_repository: .head_repository.full_name}' \
             > "$RUNNER_TEMP/workflow-run-repositories.json"
 
-          if [ "$(jq -r '.headSha' .workflow-failure-event.json)" != "$HEAD_SHA" ]; then
+          if [ "$(jaq -r '.headSha' .workflow-failure-event.json)" != "$HEAD_SHA" ]; then
             echo "The workflow run head changed; refusing to diagnose a stale revision." >&2
             exit 1
           fi
-          if ! jq --exit-status --arg repository "$GITHUB_REPOSITORY" \
-            '.repository == $repository and (.head_repository | IN("astral-sh/uv", "astral-sh/uv-dev"))' \
+          if ! jaq --exit-status --arg repository "$GITHUB_REPOSITORY" \
+            '.repository == $repository and (.head_repository | . == "astral-sh/uv" or . == "astral-sh/uv-dev")' \
             "$RUNNER_TEMP/workflow-run-repositories.json" > /dev/null; then
             echo "The workflow run is not from a trusted repository; refusing to diagnose untrusted code." >&2
             exit 1
           fi
-          if ! jq --exit-status '.event | IN("pull_request", "push", "schedule", "workflow_dispatch")' \
+          if ! jaq --exit-status '.event | . == "pull_request" or . == "push" or . == "schedule" or . == "workflow_dispatch"' \
             .workflow-failure-event.json > /dev/null; then
             echo "The workflow run was not started by a trusted event; refusing to diagnose it." >&2
             exit 1
           fi
-          if ! jq --exit-status '.conclusion | IN("failure", "timed_out", "startup_failure")' \
+          if ! jaq --exit-status '.conclusion | . == "failure" or . == "timed_out" or . == "startup_failure"' \
             .workflow-failure-event.json > /dev/null; then
             echo "The workflow run is no longer failed; skipping diagnosis."
             exit 0
           fi
 
           # Fetch jobs separately to avoid gh's limit of 25 per-job log fallbacks.
-          run_attempt="$(jq -r '.attempt' .workflow-failure-event.json)"
-          jq -r '
+          run_attempt="$(jaq -r '.attempt' .workflow-failure-event.json)"
+          jaq -r '
             .jobs[]
-            | select(.conclusion | IN("action_required", "failure", "startup_failure", "timed_out"))
+            | select(.conclusion | . == "action_required" or . == "failure" or . == "startup_failure" or . == "timed_out")
             | .databaseId
           ' .workflow-failure-event.json > "$RUNNER_TEMP/workflow-failure-job-ids.txt"
 
@@ -161,8 +164,13 @@ jobs:
             actions: write
             pull_requests: read
 
+      - uses: $/.github/actions/setup-uv-toolchain
+        id: toolchain
+
       - name: "Retry flaky workflow failures"
+        shell: uv run --only-group=jaq --python 3 bash -e {0}
         env:
+          UV_PROJECT: ${{ steps.toolchain.outputs.project }}
           GH_TOKEN: ${{ steps.token.outputs.token }}
           HEAD_SHA: ${{ inputs.head_sha }}
           RUN_ID: ${{ inputs.run }}
@@ -170,7 +178,7 @@ jobs:
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID" \
             > "$RUNNER_TEMP/workflow-run.json"
 
-          run_attempt="$(jq --raw-output '.run_attempt' "$RUNNER_TEMP/workflow-run.json")"
+          run_attempt="$(jaq --raw-output '.run_attempt' "$RUNNER_TEMP/workflow-run.json")"
           if [ "$run_attempt" -ge "$MAX_FLAKE_RERUN_ATTEMPTS" ]; then
             echo "The workflow run has exhausted its automatic retry budget."
             exit 0
@@ -183,20 +191,20 @@ jobs:
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID" \
             > "$RUNNER_TEMP/workflow-run.json"
 
-          if ! jq --exit-status \
+          if ! jaq --exit-status \
             --arg head_sha "$HEAD_SHA" \
             --argjson attempt "$run_attempt" '
               .head_sha == $head_sha
               and .status == "completed"
-              and (.conclusion | IN("failure", "timed_out", "startup_failure"))
+              and (.conclusion | . == "failure" or . == "timed_out" or . == "startup_failure")
               and .run_attempt == $attempt
             ' "$RUNNER_TEMP/workflow-run.json" > /dev/null; then
             echo "The workflow run changed or was already retried."
             exit 0
           fi
 
-          if [ "$(jq --raw-output '.event' "$RUNNER_TEMP/workflow-run.json")" = "pull_request" ]; then
-            pull_request="$(jq --raw-output '
+          if [ "$(jaq --raw-output '.event' "$RUNNER_TEMP/workflow-run.json")" = "pull_request" ]; then
+            pull_request="$(jaq --raw-output '
               if (.pull_requests | length) == 1 then .pull_requests[0].number else empty end
             ' "$RUNNER_TEMP/workflow-run.json")"
             if [ -z "$pull_request" ]; then
@@ -208,7 +216,7 @@ jobs:
               --repo "$GITHUB_REPOSITORY" \
               --json state,headRefOid \
               > "$RUNNER_TEMP/workflow-run-pull-request.json"
-            if ! jq --exit-status --arg head_sha "$HEAD_SHA" '
+            if ! jaq --exit-status --arg head_sha "$HEAD_SHA" '
               .state == "OPEN" and .headRefOid == $head_sha
             ' "$RUNNER_TEMP/workflow-run-pull-request.json" > /dev/null; then
               echo "The pull request is closed or its head changed."
@@ -251,8 +259,13 @@ jobs:
           permissions: |
             issues: write
 
+      - uses: $/.github/actions/setup-uv-toolchain
+        id: toolchain
+
       - name: "Report workflow failure"
+        shell: uv run --only-group=jaq --python 3 bash -e {0}
         env:
+          UV_PROJECT: ${{ steps.toolchain.outputs.project }}
           DIAGNOSIS: ${{ needs.diagnose.outputs.result }}
           GH_TOKEN: ${{ steps.token.outputs.token }}
           ISSUE_REPOSITORY: astral-sh/uv-dev
@@ -265,7 +278,7 @@ jobs:
             exit 1
           fi
 
-          if ! jq --exit-status '
+          if ! jaq --exit-status '
             (.comment_note | type == "string")
             and (.comment_note | test("@[A-Za-z0-9][A-Za-z0-9-]*") | not)
           ' "$RUNNER_TEMP/diagnosis.json" > /dev/null; then
@@ -274,13 +287,13 @@ jobs:
           fi
 
           run_url="https://github.com/$GITHUB_REPOSITORY/actions/runs/$RUN_ID"
-          jq --raw-output --arg run_url "$run_url" '
+          jaq --raw-output --arg run_url "$run_url" '
             "Another workflow run encountered this failure: " + $run_url
             + (if (.comment_note | length) > 0 then "\n\n" + .comment_note else "" end)
           ' "$RUNNER_TEMP/diagnosis.json" > "$RUNNER_TEMP/comment.md"
 
-          if [ "$(jq -r '.decision' "$RUNNER_TEMP/diagnosis.json")" = "duplicate" ]; then
-            duplicate_issue="$(jq -r --arg repository "$ISSUE_REPOSITORY" '
+          if [ "$(jaq -r '.decision' "$RUNNER_TEMP/diagnosis.json")" = "duplicate" ]; then
+            duplicate_issue="$(jaq -r --arg repository "$ISSUE_REPOSITORY" '
               [
                 .related.items[]
                 | select(
@@ -302,20 +315,20 @@ jobs:
             exit 0
           fi
 
-          if ! jq --exit-status '
+          if ! jaq --exit-status '
             .decision == "create"
             and (.issue.title | type == "string" and length > 0)
             and (.issue.body | type == "string" and length > 0)
-            and (.issue.label | IN("bug", "internal:ci", "internal:ci-flake"))
+            and (.issue.label | . == "bug" or . == "internal:ci" or . == "internal:ci-flake")
             and (.issue.body | test("@[A-Za-z0-9][A-Za-z0-9-]*") | not)
           ' "$RUNNER_TEMP/diagnosis.json" > /dev/null; then
             echo "The workflow failure diagnosis is invalid or contains a user mention; refusing to open an issue." >&2
             exit 1
           fi
 
-          issue_title="$(jq -r '.issue.title' "$RUNNER_TEMP/diagnosis.json")"
-          issue_label="$(jq -r '.issue.label' "$RUNNER_TEMP/diagnosis.json")"
-          jq -r '.issue.body' "$RUNNER_TEMP/diagnosis.json" > "$RUNNER_TEMP/issue.md"
+          issue_title="$(jaq -r '.issue.title' "$RUNNER_TEMP/diagnosis.json")"
+          issue_label="$(jaq -r '.issue.label' "$RUNNER_TEMP/diagnosis.json")"
+          jaq -r '.issue.body' "$RUNNER_TEMP/diagnosis.json" > "$RUNNER_TEMP/issue.md"
 
           gh issue list \
             --repo "$ISSUE_REPOSITORY" \
@@ -324,7 +337,7 @@ jobs:
             --limit 100 \
             --json number,title,url \
             > "$RUNNER_TEMP/existing-issues.json"
-          existing_issue="$(jq -r --arg title "$issue_title" \
+          existing_issue="$(jaq -r --arg title "$issue_title" \
             '[.[] | select(.title == $title)][0].number // empty' \
             "$RUNNER_TEMP/existing-issues.json")"
           if [ -n "$existing_issue" ]; then

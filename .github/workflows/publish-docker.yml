@@ -14,6 +14,7 @@ on:
         default: false
 
 env:
+  UV_LOCKED: 1
   ACTIONS_CACHE_MODE: none
 
 permissions:
@@ -33,11 +34,19 @@ jobs:
           artifact-ids: ${{ inputs.manifest }}
           merge-multiple: true
 
+      - uses: $/.github/actions/setup-uv-toolchain
+        id: toolchain
+
       - name: Read image manifest
         id: plan
+        shell: uv run --only-group=jaq --python 3 bash -e {0}
+        env:
+          UV_PROJECT: ${{ steps.toolchain.outputs.project }}
         run: |
-          echo "base-image=$(jq -ce '.base' docker-manifest.json)" >> "$GITHUB_OUTPUT"
-          echo "extra-images=$(jq -ce '{include: .extra}' docker-manifest.json)" >> "$GITHUB_OUTPUT"
+          jaq -er '
+            "base-image=\(.base | tojson)",
+            "extra-images=\({include: .extra} | tojson)"
+          ' docker-manifest.json >> "$GITHUB_OUTPUT"
 
   publish-extra:
     name: publish ${{ matrix.name }}

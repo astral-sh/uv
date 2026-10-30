@@ -378,7 +378,11 @@ jobs:
           cd astral-test-pypa-gh-action
           ../uv init --package --no-workspace
           # Get the latest patch version
-          patch_version=$(curl https://test.pypi.org/simple/astral-test-pypa-gh-action/?format=application/vnd.pypi.simple.v1+json | jq --raw-output '[.files[].filename | select(endswith(".tar.gz"))] | last' | grep -oP '(?<=astral_test_pypa_gh_action-0\.1\.)\d+(?=\.tar\.gz)')
+          patch_version=$(
+            curl https://test.pypi.org/simple/astral-test-pypa-gh-action/?format=application/vnd.pypi.simple.v1+json |
+              ../uv run --project .. --only-group=jaq --python "$PYTHON_VERSION" jaq --raw-output '[.files[].filename | select(endswith(".tar.gz"))] | last' |
+              grep -oP '(?<=astral_test_pypa_gh_action-0\.1\.)\d+(?=\.tar\.gz)'
+          )
           # Set the current version to one higher (which should be unused)
           sed -i "s/0.1.0/0.1.$((patch_version + 1))/g" pyproject.toml
           ../uv build
@@ -464,10 +468,14 @@ jobs:
       - build-docker
     runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-2' || 'ubuntu-slim' }}
     steps:
+      - uses: $/.github/actions/setup-uv-toolchain
+        id: toolchain
+
       - name: "Check required jobs passed"
+        shell: uv run --only-group=jaq --python 3 bash -e {0}
         run: |
           failing=$(
-            echo "$NEEDS_JSON" | jq -r --argjson conditional_jobs "$CONDITIONAL_JOBS" '
+            echo "$NEEDS_JSON" | jaq -r --argjson conditional_jobs "$CONDITIONAL_JOBS" '
               to_entries[]
               | select($conditional_jobs[.key] != false)
               | select(.value.result != "success" and (.value.result != "skipped" or .key == "check-vet" or .key == "check-cargo-cooldowns"))
@@ -479,6 +487,7 @@ jobs:
             exit 1
           fi
         env:
+          UV_PROJECT: ${{ steps.toolchain.outputs.project }}
           NEEDS_JSON: ${{ toJSON(needs) }}
           # Jobs not listed here are always required.
           CONDITIONAL_JOBS: >-

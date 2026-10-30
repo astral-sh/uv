@@ -31,15 +31,18 @@ jobs:
         with:
           persist-credentials: false
 
+      - uses: $/.github/actions/setup-uv-toolchain
+
       - name: "Collect issue and comment context"
         id: issue
+        shell: uv run --only-group=jaq --python 3 bash -e {0}
         run: |
           gh issue view "$ISSUE_NUMBER" \
             --repo "$GITHUB_REPOSITORY" \
             --json number,title,body,author,url,comments \
             > "$RUNNER_TEMP/issue.json"
 
-          if ! jq --exit-status \
+          if ! jaq --exit-status \
             --arg repository "$GITHUB_REPOSITORY" \
             '.url | startswith("https://github.com/\($repository)/issues/")' \
             "$RUNNER_TEMP/issue.json" > /dev/null; then
@@ -47,7 +50,7 @@ jobs:
             exit 1
           fi
 
-          jq '.comment | {
+          jaq '.comment | {
             id,
             body,
             author: .user.login,
@@ -89,7 +92,7 @@ jobs:
           {
             printf 'Issue context update for #%s: %s\n\n' \
               "$ISSUE_NUMBER" \
-              "$(jq -r '.title | gsub("[\r\n]+"; " ")' "$RUNNER_TEMP/issue.json")"
+              "$(jaq -r '.title | gsub("[\r\n]+"; " ")' "$RUNNER_TEMP/issue.json")"
             cat agents/prompts/update-issue-context.md
           } > "$RUNNER_TEMP/update-issue-context-prompt.md"
         env:
@@ -99,6 +102,7 @@ jobs:
       - name: "Find previous Codex thread"
         id: find-thread
         if: steps.issue.outputs.exists == 'true'
+        shell: uv run --only-group=jaq --python 3 bash -e {0}
         run: |
           artifact_name="codex-thread-issue-$ISSUE_NUMBER"
           artifacts="$(gh api \
@@ -107,7 +111,7 @@ jobs:
           while IFS=$'\t' read -r run_id; do
             [ -n "$run_id" ] || continue
             workflow_run="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id")"
-            if jq --exit-status '
+            if jaq --exit-status '
               .head_branch == "main"
               and .status == "completed"
               and (
@@ -125,7 +129,7 @@ jobs:
               break
             fi
           done < <(
-            jq --raw-output '
+            jaq --raw-output '
               [.artifacts[] | select(.expired == false)]
               | sort_by(.created_at)
               | reverse
@@ -162,6 +166,7 @@ jobs:
       - name: "Validate Codex thread"
         id: thread
         if: steps.find-thread.outputs.found == 'true'
+        shell: uv run --only-group=jaq --python 3 bash -e {0}
         run: |
           while IFS= read -r -d '' compressed_rollout; do
             zstd --decompress --stdout "$compressed_rollout" > "${compressed_rollout%.zst}"
@@ -171,7 +176,7 @@ jobs:
           root_session_id=
           while IFS= read -r -d '' rollout; do
             metadata="$(head -n 1 "$rollout")"
-            if ! jq --exit-status '
+            if ! jaq --exit-status '
               .type == "session_meta"
               and (.payload | type == "object")
               and (.payload.id | type == "string")
@@ -180,10 +185,10 @@ jobs:
               exit 1
             fi
 
-            if jq --exit-status '.payload.source == "exec"' <<< "$metadata" > /dev/null; then
+            if jaq --exit-status '.payload.source == "exec"' <<< "$metadata" > /dev/null; then
               root_sessions=$((root_sessions + 1))
-              root_session_id="$(jq --raw-output '.payload.id' <<< "$metadata")"
-              session_workspace="$(jq --raw-output '.payload.cwd' <<< "$metadata")"
+              root_session_id="$(jaq --raw-output '.payload.id' <<< "$metadata")"
+              session_workspace="$(jaq --raw-output '.payload.cwd' <<< "$metadata")"
               if ! [[ "$root_session_id" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]] ||
                 [ "$session_workspace" != "$GITHUB_WORKSPACE" ]; then
                 echo "The Codex session does not match the trusted workspace." >&2

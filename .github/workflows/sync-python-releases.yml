@@ -42,7 +42,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Sync Sysconfig Targets
-        run: ./sync_sysconfig_targets.sh
+        run: uv run --only-group=jaq --python 3.12 ./sync_sysconfig_targets.sh
         working-directory: ./crates/uv-dev
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
