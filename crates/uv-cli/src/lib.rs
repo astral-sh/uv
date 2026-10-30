@@ -1704,6 +1704,12 @@ pub struct PipCompileArgs {
     #[arg(long, value_enum, env = EnvVars::UV_TORCH_BACKEND)]
     pub torch_backend: Option<TorchMode>,
 
+    /// The base URL to which uv appends the backend selected by `--torch-backend`.
+    ///
+    /// This option is in preview and may change in any future release.
+    #[arg(long, value_hint = ValueHint::Url)]
+    pub torch_backend_index: Option<IndexUrl>,
+
     #[command(flatten)]
     pub compat_args: compat::PipCompileCompatArgs,
 }
@@ -2000,6 +2006,12 @@ pub struct PipSyncArgs {
     /// This option is in preview and may change in any future release.
     #[arg(long, value_enum, env = EnvVars::UV_TORCH_BACKEND)]
     pub torch_backend: Option<TorchMode>,
+
+    /// The base URL to which uv appends the backend selected by `--torch-backend`.
+    ///
+    /// This option is in preview and may change in any future release.
+    #[arg(long, value_hint = ValueHint::Url)]
+    pub torch_backend_index: Option<IndexUrl>,
 
     #[command(flatten)]
     pub compat_args: compat::PipSyncCompatArgs,
@@ -2309,6 +2321,12 @@ pub struct PipInstallArgs {
     /// This option is in preview and may change in any future release.
     #[arg(long, value_enum, env = EnvVars::UV_TORCH_BACKEND)]
     pub torch_backend: Option<TorchMode>,
+
+    /// The base URL to which uv appends the backend selected by `--torch-backend`.
+    ///
+    /// This option is in preview and may change in any future release.
+    #[arg(long, value_hint = ValueHint::Url)]
+    pub torch_backend_index: Option<IndexUrl>,
 
     #[command(flatten)]
     pub compat_args: compat::PipInstallCompatArgs,
@@ -5457,6 +5475,12 @@ pub struct ToolRunArgs {
     #[arg(long, value_enum, env = EnvVars::UV_TORCH_BACKEND)]
     pub torch_backend: Option<TorchMode>,
 
+    /// The base URL to which uv appends the backend selected by `--torch-backend`.
+    ///
+    /// This option is in preview and may change in any future release.
+    #[arg(long, value_hint = ValueHint::Url)]
+    pub torch_backend_index: Option<IndexUrl>,
+
     #[arg(long, hide = true)]
     pub generate_shell_completion: Option<clap_complete_command::Shell>,
 }
@@ -5580,6 +5604,12 @@ pub struct ToolInstallArgs {
     /// This option is in preview and may change in any future release.
     #[arg(long, value_enum, env = EnvVars::UV_TORCH_BACKEND)]
     torch_backend: Option<TorchMode>,
+
+    /// The base URL to which uv appends the backend selected by `--torch-backend`.
+    ///
+    /// This option is in preview and may change in any future release.
+    #[arg(long, value_hint = ValueHint::Url)]
+    torch_backend_index: Option<IndexUrl>,
 }
 
 #[derive(Args)]

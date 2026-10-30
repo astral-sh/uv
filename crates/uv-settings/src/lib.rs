@@ -11,7 +11,7 @@ use uv_configuration::{
     ProjectBuildBackend, RequiredVersion, RequirementsInput, RequirementsInputError,
 };
 use uv_dirs::{system_config_file, user_config_dir};
-use uv_distribution_types::{IndexUrlError, Origin};
+use uv_distribution_types::{IndexUrl, IndexUrlError, Origin};
 use uv_flags::EnvironmentFlags;
 use uv_fs::Simplified;
 use uv_normalize::{GroupName, PackageName};
@@ -763,6 +763,7 @@ pub struct EnvironmentOptions {
     pub install_mirrors: PythonInstallMirrors,
     pub log_context: Option<bool>,
     pub lfs: Option<bool>,
+    pub torch_backend_index: Option<IndexUrl>,
     pub cuda_driver_version: Option<Version>,
     pub amd_gpu_architecture: Option<AmdGpuArchitecture>,
     pub http_connect_timeout: Duration,
@@ -901,6 +902,10 @@ impl EnvironmentOptions {
             },
             log_context: parse_boolish_environment_variable(EnvVars::UV_LOG_CONTEXT)?,
             lfs: parse_boolish_environment_variable(EnvVars::UV_GIT_LFS)?,
+            torch_backend_index: parse_typed_environment_variable(
+                EnvVars::UV_TORCH_BACKEND_INDEX,
+                None,
+            )?,
             cuda_driver_version: parse_typed_environment_variable(
                 EnvVars::UV_CUDA_DRIVER_VERSION,
                 None,

@@ -4,7 +4,8 @@ use uv_configuration::{
     PrereleasePackage, Reinstall, ResolutionMode, Upgrade,
 };
 use uv_distribution_types::{
-    ConfigSettings, DependencyMetadata, ExtraBuildVariables, IndexLocations, PackageConfigSettings,
+    ConfigSettings, DependencyMetadata, ExtraBuildVariables, IndexLocations, IndexUrl,
+    PackageConfigSettings,
 };
 use uv_install_wheel::LinkMode;
 use uv_pep440::Version;
@@ -164,6 +165,7 @@ pub struct ResolverSettings {
     pub resolution: ResolutionMode,
     pub sources: NoSources,
     pub torch_backend: Option<TorchMode>,
+    pub torch_backend_index: Option<IndexUrl>,
     pub cuda_driver_version: Option<Version>,
     pub amd_gpu_architecture: Option<AmdGpuArchitecture>,
     pub upgrade: Upgrade,
@@ -226,6 +228,7 @@ impl From<ResolverOptions> for ResolverSettings {
             ),
             link_mode: value.link_mode.unwrap_or_default(),
             torch_backend: value.torch_backend,
+            torch_backend_index: None,
             cuda_driver_version: None,
             amd_gpu_architecture: None,
             sources: NoSources::from_args(
@@ -298,6 +301,7 @@ impl From<ResolverInstallerOptions> for ResolverInstallerSettings {
                     value.no_sources_package.unwrap_or_default(),
                 ),
                 torch_backend: value.torch_backend,
+                torch_backend_index: None,
                 cuda_driver_version: None,
                 amd_gpu_architecture: None,
                 upgrade: value.upgrade.unwrap_or_default(),
