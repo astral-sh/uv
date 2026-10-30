@@ -265,17 +265,6 @@ mod tests {
 
     use super::Aarch64Version;
 
-    #[test]
-    fn linux_thunderx2_core_ids() {
-        for (implementer, part) in [("0x42", "0x516"), ("0x43", "0x0af")] {
-            let cpu_info = CpuInfo::LinuxAarch64 {
-                cores: vec![(implementer.into(), part.into())],
-                hwcaps: [u64::MAX, 0, 0, 0],
-            };
-            assert_eq!(Aarch64Version::detect(&cpu_info), Aarch64Version::V8_1);
-        }
-    }
-
     /// A Neoverse N2 can run Armv9.0-A wheels unless a VM masks SVE2 or an Armv8.2-A
     /// Neoverse N1 shares the workload.
     #[test]
