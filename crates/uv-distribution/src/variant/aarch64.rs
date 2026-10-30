@@ -120,6 +120,8 @@ impl Aarch64Version {
                 match model.split_ascii_whitespace().next() {
                     Some("processor" | "M1") => Self::V8_4,
                     Some("M2") => Self::V8_5,
+                    // TODO(konsti): Revisit this mapping when archspec fixes its Apple Silicon
+                    // detection. It reports SSBS on M5 Max even when hw.optional.arm.FEAT_SSBS is 0.
                     Some("M3" | "M4" | "M5") => Self::V8_6,
                     Some(model)
                         if model.starts_with('M')
@@ -238,7 +240,7 @@ fn linux_core_ceiling(implementer: &str, part: &str) -> Option<Aarch64Version> {
         ("0x41", 0xd0c) => Aarch64Version::V8_2, // Neoverse N1
         ("0x41", 0xd40) => Aarch64Version::V8_4, // Neoverse V1
         ("0x41", 0xd49 | 0xd4f | 0xd83) => Aarch64Version::V9_0, // Neoverse N2, V2, V3AE
-        ("0x43", 0x0af) => Aarch64Version::V8_1, // ThunderX2
+        ("0x42", 0x516) | ("0x43", 0x0af) => Aarch64Version::V8_1, // ThunderX2
         ("0x46", 0x001) => Aarch64Version::V8_2, // A64FX
         ("0xc0", 0xac3 | 0xac4) => Aarch64Version::V8_6, // AmpereOne, AmpereOneA
         ("0x61", 0x020..=0x025 | 0x028..=0x029) => Aarch64Version::V8_4, // Firestorm / Icestorm
@@ -262,6 +264,17 @@ mod tests {
     use uv_platform_tags::CpuInfo;
 
     use super::Aarch64Version;
+
+    #[test]
+    fn linux_thunderx2_core_ids() {
+        for (implementer, part) in [("0x42", "0x516"), ("0x43", "0x0af")] {
+            let cpu_info = CpuInfo::LinuxAarch64 {
+                cores: vec![(implementer.into(), part.into())],
+                hwcaps: [u64::MAX, 0, 0, 0],
+            };
+            assert_eq!(Aarch64Version::detect(&cpu_info), Aarch64Version::V8_1);
+        }
+    }
 
     /// A Neoverse N2 can run Armv9.0-A wheels unless a VM masks SVE2 or an Armv8.2-A
     /// Neoverse N1 shares the workload.
