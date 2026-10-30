@@ -8,7 +8,8 @@ use glob::Pattern;
 use itertools::Itertools;
 use thiserror::Error;
 use toml_edit::{
-    Array, ArrayOfTables, DocumentMut, Formatted, Item, RawString, Table, TomlError, Value,
+    Array, ArrayOfTables, DocumentMut, Formatted, Item, RawString, Table, TableLike, TomlError,
+    Value,
 };
 
 use uv_cache_key::CanonicalUrl;
@@ -1083,34 +1084,28 @@ impl PyProjectTomlMut {
             return Ok(());
         }
 
-        if let Some(sources) = self
+        let Some(uv) = self
             .doc
             .get_mut("tool")
-            .map(|tool| tool.as_table_mut().ok_or(Error::MalformedSources))
+            .map(|tool| tool.as_table_like_mut().ok_or(Error::MalformedSources))
             .transpose()?
             .and_then(|tool| tool.get_mut("uv"))
-            .map(|tool_uv| tool_uv.as_table_mut().ok_or(Error::MalformedSources))
+            .map(|uv| uv.as_table_like_mut().ok_or(Error::MalformedSources))
             .transpose()?
-            .and_then(|tool_uv| tool_uv.get_mut("sources"))
-            .map(|sources| sources.as_table_mut().ok_or(Error::MalformedSources))
+        else {
+            return Ok(());
+        };
+        if let Some(sources) = uv
+            .get_mut("sources")
+            .map(|sources| sources.as_table_like_mut().ok_or(Error::MalformedSources))
             .transpose()?
+            && let Some(key) = find_source(name, sources)
         {
-            if let Some(key) = find_source(name, sources) {
-                sources.remove(&key);
+            sources.remove(&key);
 
-                // Remove the `tool.uv.sources` table if it is empty.
-                if sources.is_empty() {
-                    self.doc
-                        .entry("tool")
-                        .or_insert(implicit())
-                        .as_table_mut()
-                        .ok_or(Error::MalformedSources)?
-                        .entry("uv")
-                        .or_insert(implicit())
-                        .as_table_mut()
-                        .ok_or(Error::MalformedSources)?
-                        .remove("sources");
-                }
+            // Remove the `tool.uv.sources` table if it is empty.
+            if sources.is_empty() {
+                uv.remove("sources");
             }
         }
 
@@ -1650,8 +1645,8 @@ fn same_requirement_declaration(left: &Requirement, right: &Requirement) -> bool
 }
 
 /// Returns the key in `tool.uv.sources` that matches the given package name.
-fn find_source(name: &PackageName, sources: &Table) -> Option<String> {
-    for (key, _) in sources {
+fn find_source(name: &PackageName, sources: &dyn TableLike) -> Option<String> {
+    for (key, _) in sources.iter() {
         if PackageName::from_str(key).is_ok_and(|ref key| key == name) {
             return Some(key.to_string());
         }
@@ -1844,6 +1839,43 @@ mod test {
     use uv_normalize::{ExtraName, GroupName, PackageName};
     use uv_pep508::{Requirement, RequirementOrigin};
     use uv_workspace::pyproject::DependencyType;
+
+    #[test]
+    fn remove_dependency_with_inline_sources() -> Result<()> {
+        let mut doc = PyProjectTomlMut::from_toml(
+            r#"tool = { uv = { sources = { Demo_Pkg = { path = "demo" }, keep = { path = "keep" } } } }
+[project]
+dependencies = ["demo-pkg", "keep"]
+"#,
+            DependencyTarget::PyProjectToml,
+        )?;
+        doc.remove_dependency(&PackageName::from_str("demo-pkg")?)?;
+        let sources = &doc.doc["tool"]["uv"]["sources"];
+        assert!(sources.get("Demo_Pkg").is_none());
+        assert_eq!(sources["keep"]["path"].as_str(), Some("keep"));
+        doc.remove_dependency(&PackageName::from_str("keep")?)?;
+        assert!(doc.doc["tool"]["uv"].get("sources").is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn remove_dependency_with_empty_inline_sources() -> Result<()> {
+        let mut doc = PyProjectTomlMut::from_toml(
+            r#"[project]
+dependencies = ["demo-pkg"]
+[tool.uv]
+sources = {}
+"#,
+            DependencyTarget::PyProjectToml,
+        )?;
+        assert_eq!(
+            doc.remove_dependency(&PackageName::from_str("demo-pkg")?)?
+                .len(),
+            1
+        );
+        assert!(doc.doc["tool"]["uv"]["sources"].as_inline_table().is_some());
+        Ok(())
+    }
 
     #[test]
     fn split() {
