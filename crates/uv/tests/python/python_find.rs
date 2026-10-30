@@ -1110,6 +1110,28 @@ fn python_find_script_python_not_found() {
     ");
 }
 
+/// Python builds without the optional `_ctypes` extension remain usable with wheel variants.
+#[test]
+fn python_find_without_ctypes() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    fs_err::write(
+        context.site_packages().join("without_ctypes.pth"),
+        "import sys; sys.modules['_ctypes'] = None\n",
+    )?;
+
+    uv_snapshot!(context.filters(), context.python_find()
+        .arg("--no-cache")
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("--show-version")
+        .arg(context.interpreter()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    3.12.[X]
+    ");
+    Ok(())
+}
+
 #[cfg(unix)]
 #[test]
 fn python_find_script_interpreter_error_chain() -> Result<()> {
