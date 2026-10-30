@@ -7028,6 +7028,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "uv-macho"
+version = "0.0.93"
+dependencies = [
+ "anyhow",
+ "thiserror",
+]
+
+[[package]]
 name = "uv-macros"
 version = "0.0.98"
 dependencies = [
