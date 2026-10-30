@@ -359,14 +359,13 @@ mod tests {
             let json = indoc! {r##"
                 {
                     "result": "success",
-                    "platform": {
-                        "os": {
-                            "name": "manylinux",
-                            "major": 2,
-                            "minor": 38
-                        },
-                        "arch": "x86_64"
+                    "os": {
+                        "name": "manylinux",
+                        "major": 2,
+                        "minor": 38
                     },
+                    "arch": "x86_64",
+                    "cpu_info": {"unavailable": "Mock interpreter has no CPU data"},
                     "manylinux_compatible": true,
                     "standalone": true,
                     "markers": {
@@ -452,14 +451,13 @@ mod tests {
             let json = indoc! {r##"
                 {
                     "result": "success",
-                    "platform": {
-                        "os": {
-                            "name": "pyodide",
-                            "major": 2025,
-                            "minor": 0
-                        },
-                        "arch": "wasm32"
+                    "os": {
+                        "name": "pyodide",
+                        "major": 2025,
+                        "minor": 0
                     },
+                    "arch": "wasm32",
+                    "cpu_info": { "unsupported_architecture": "wasm32" },
                     "manylinux_compatible": false,
                     "standalone": false,
                     "markers": {

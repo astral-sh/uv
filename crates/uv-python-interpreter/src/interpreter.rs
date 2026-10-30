@@ -17,6 +17,7 @@ use tracing::{debug, trace, warn};
 use uv_cache::{Cache, CacheBucket, CacheEntry, CachedByTimestamp, Freshness};
 use uv_cache_info::Timestamp;
 use uv_cache_key::cache_digest;
+use uv_errors::Hints;
 use uv_fs::{
     LockedFile, LockedFileError, LockedFileMode, PythonExt, Simplified, write_atomic_sync,
 };
@@ -24,9 +25,11 @@ use uv_install_wheel::Layout;
 use uv_pep440::Version;
 use uv_pep508::{MarkerEnvironment, StringVersion};
 use uv_platform::{Arch, Libc, Os};
-use uv_platform_tags::{Platform, Tags, TagsError, TagsOptions};
+use uv_platform_tags::{CpuInfo, Platform, Tags, TagsError, TagsOptions};
+use uv_preview::PreviewFeature;
 use uv_pypi_types::{ResolverMarkerEnvironment, Scheme};
 use uv_static::EnvVars;
+use uv_warnings::warn_user_once_with_chain;
 
 use crate::PointerSize;
 use crate::PyVenvConfiguration;
@@ -72,7 +75,10 @@ impl Interpreter {
     /// Detect the interpreter info for the given Python executable.
     pub fn query(executable: impl AsRef<Path>, cache: &Cache) -> Result<Self, Error> {
         let executable = executable.as_ref();
-        let info = InterpreterInfo::query_cached(executable, cache)?;
+        let InterpreterInfo {
+            platform,
+            metadata: info,
+        } = InterpreterInfo::query_cached(executable, cache)?;
 
         debug_assert!(
             info.sys_executable.is_absolute(),
@@ -81,7 +87,7 @@ impl Interpreter {
         );
 
         Ok(Self {
-            platform: info.platform,
+            platform,
             markers: Box::new(info.markers),
             scheme: info.scheme,
             virtualenv: info.virtualenv,
@@ -202,7 +208,7 @@ impl Interpreter {
         Ok(base_python)
     }
 
-    /// Returns the path to the Python virtual environment.
+    /// Returns the Python interpreter's platform.
     #[inline]
     pub fn platform(&self) -> &Platform {
         &self.platform
@@ -996,6 +1002,8 @@ impl Display for StatusCodeError {
 
 #[derive(Debug, Error)]
 pub enum Error {
+    #[error("Failed to detect CPU capabilities")]
+    CpuDetection(#[source] CpuDetectionError),
     #[error("Failed to query Python interpreter")]
     Io(#[from] io::Error),
     #[error(transparent)]
@@ -1085,12 +1093,42 @@ impl uv_errors::Hinted for BrokenLink {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize)]
 #[serde(tag = "result", rename_all = "lowercase")]
 enum InterpreterInfoResult {
     Error(InterpreterInfoError),
-    Success(Box<InterpreterInfo>),
+    Success(Box<InterpreterInfoWire>),
 }
+
+/// A successful Python probe response, before applying the CPU detection policy.
+#[derive(Debug, Deserialize)]
+struct InterpreterInfoWire {
+    os: uv_platform_tags::Os,
+    arch: uv_platform_tags::Arch,
+    cpu_info: CpuProbe,
+    #[serde(flatten)]
+    metadata: InterpreterMetadata,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum CpuProbe {
+    /// CPU capabilities were detected successfully.
+    Detected(CpuInfo),
+    /// No probe supports this interpreter architecture. Continue without CPU data.
+    UnsupportedArchitecture(Box<str>),
+    /// An expected limitation prevented detection. Continue with the platform defaults.
+    Unavailable(Box<str>),
+    /// An unexpected probe failure, fatal with wheel variants enabled and a warning otherwise.
+    ///
+    /// TODO(konsti): Make probe failures unconditionally fatal when wheel variants stabilize.
+    Error(CpuDetectionError),
+}
+
+/// The failure reported by the interpreter's CPU probe.
+#[derive(Debug, Deserialize, Error)]
+#[error("{0}")]
+pub struct CpuDetectionError(Box<str>);
 
 #[derive(Debug, Error, Deserialize, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
@@ -1118,10 +1156,15 @@ pub enum InterpreterInfoError {
     EmscriptenNotPyodide,
 }
 
-#[expect(clippy::struct_excessive_bools)]
 #[derive(Debug, Deserialize, Serialize, Clone)]
 struct InterpreterInfo {
     platform: Platform,
+    metadata: InterpreterMetadata,
+}
+
+#[expect(clippy::struct_excessive_bools)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
+struct InterpreterMetadata {
     markers: MarkerEnvironment,
     scheme: Scheme,
     virtualenv: Scheme,
@@ -1142,8 +1185,8 @@ struct InterpreterInfo {
 }
 
 impl InterpreterInfo {
-    /// Return the resolved [`InterpreterInfo`] for the given Python executable.
-    fn query(interpreter: &Path, cache: &Cache) -> Result<Self, Error> {
+    /// Query the given Python executable for its interpreter information.
+    fn query(interpreter: &Path, cache: &Cache) -> Result<InterpreterInfoWire, Error> {
         let tempdir = tempfile::tempdir_in(cache.root())?;
         Self::setup_python_query_files(tempdir.path())?;
 
@@ -1386,7 +1429,7 @@ impl InterpreterInfo {
                         if cached.timestamp == modified {
                             trace!(
                                 "Found cached interpreter info for Python {}, skipping query of: {}",
-                                cached.data.markers.python_full_version(),
+                                cached.data.metadata.markers.python_full_version(),
                                 executable.user_display()
                             );
                             return Ok(cached.data);
@@ -1413,11 +1456,47 @@ impl InterpreterInfo {
             "Querying interpreter executable at `{}`",
             executable.display()
         );
-        let info = Self::query(executable, cache)?;
+        let wire = Self::query(executable, cache)?;
+        let cpu_info = match wire.cpu_info {
+            CpuProbe::Detected(info) => Some(info),
+            CpuProbe::UnsupportedArchitecture(architecture) => {
+                debug!("CPU detection is unsupported for architecture `{architecture}`");
+                None
+            }
+            CpuProbe::Unavailable(reason) => {
+                debug!(
+                    "CPU information unavailable for `{}`: {reason}",
+                    executable.display()
+                );
+                None
+            }
+            CpuProbe::Error(err) => {
+                if uv_preview::is_enabled(PreviewFeature::WheelVariants) {
+                    return Err(Error::CpuDetection(err));
+                }
+                warn_user_once_with_chain!(
+                    anyhow::Error::from(err)
+                        .context(format!(
+                            "Failed to detect CPU capabilities for interpreter at `{}`",
+                            executable.display()
+                        ))
+                        .as_ref(),
+                    Hints::from("CPU detection failures will become errors in a future release.")
+                );
+                // Cache the interpreter so ordinary commands don't retry the failed probe on every
+                // run. While wheel variants are in preview, we accept that enabling them later can
+                // reuse this entry and fall back to x86-64-v2.
+                None
+            }
+        };
+        let info = Self {
+            platform: Platform::from_interpreter(wire.os, wire.arch, cpu_info),
+            metadata: wire.metadata,
+        };
 
         // If `executable` is a pyenv shim, a bash script that redirects to the activated
         // python executable at another path, we're not allowed to cache the interpreter info.
-        if is_same_file(executable, &info.sys_executable).unwrap_or(false) {
+        if is_same_file(executable, &info.metadata.sys_executable).unwrap_or(false) {
             fs::create_dir_all(cache_entry.dir())?;
             write_atomic_sync(
                 cache_entry.path(),
@@ -1541,6 +1620,7 @@ mod tests {
     use uv_cache::{Cache, CacheBucket, CachedByTimestamp};
     use uv_cache_info::Timestamp;
     use uv_pep440::Version;
+    use uv_platform_tags::CpuInfo;
 
     use crate::Interpreter;
     use crate::interpreter::{InterpreterInfo, canonicalize_executable};
@@ -1549,14 +1629,13 @@ mod tests {
         indoc! {r##"
         {
             "result": "success",
-            "platform": {
-                "os": {
-                    "name": "manylinux",
-                    "major": 2,
-                    "minor": 38
-                },
-                "arch": "x86_64"
+            "os": {
+                "name": "manylinux",
+                "major": 2,
+                "minor": 38
             },
+            "arch": "x86_64",
+            "cpu_info": { "detected": { "kind": "flags", "flags": "pni ssse3" } },
             "manylinux_compatible": false,
             "standalone": false,
             "markers": {
@@ -1640,6 +1719,10 @@ mod tests {
         assert_eq!(fs::read_to_string(&query_log)?, "queried\n");
 
         let interpreter = Interpreter::query(&mocked_interpreter, &cache)?;
+        let Some(CpuInfo::Flags { flags }) = interpreter.platform().cpu_info() else {
+            anyhow::bail!("CPU flags missing from cached platform");
+        };
+        assert_eq!(flags.as_ref(), "pni ssse3");
         assert_eq!(
             interpreter.markers.python_version().version,
             Version::from_str("3.12")?
@@ -1653,7 +1736,7 @@ mod tests {
             rmp_serde::from_slice(&fs::read(cache_entry.path())?)?;
         assert_eq!(cached.timestamp, Timestamp::from_path(&canonical)?);
         assert_eq!(
-            cached.data.markers.python_version().version,
+            cached.data.metadata.markers.python_version().version,
             Version::from_str("3.12")?
         );
 
@@ -1694,7 +1777,7 @@ mod tests {
             rmp_serde::from_slice(&fs::read(cache_entry.path())?)?;
         assert_eq!(refreshed.timestamp, Timestamp::from_path(&canonical)?);
         assert_eq!(
-            refreshed.data.markers.python_version().version,
+            refreshed.data.metadata.markers.python_version().version,
             Version::from_str("3.13")?
         );
 

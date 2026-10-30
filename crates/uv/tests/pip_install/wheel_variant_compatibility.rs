@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use anyhow::Result;
 use assert_fs::prelude::*;
 use indoc::indoc;
-use insta::assert_snapshot;
+use insta::{assert_json_snapshot, assert_snapshot};
 use serde_json::{Map, Value, json};
 use uv_distribution_types::PEP_850_SCHEMA;
 use uv_static::EnvVars;
@@ -160,6 +160,126 @@ fn select_variant_by_static_provider_order() -> Result<()> {
             "openblas_or_accelerate": { "blas_lapack": { "library": ["accelerate", "openblas"] } }
         })
     );
+    Ok(())
+}
+
+const X86_64_VARIANTS: &str = indoc! {r#"
+    name = "x86-64-target-defaults"
+    root = {}
+
+    [expected]
+    satisfiable = true
+
+    [packages.ok.versions."1.0.0"]
+    wheel = false
+    sdist = false
+
+    [packages.ok.versions."1.0.0".variants]
+    namespaces = ["x86_64"]
+
+    [packages.ok.versions."1.0.0".variants.providers]
+    x86_64.requires = ["x86_64-variant-provider==0.2.1"]
+
+    [packages.ok.versions."1.0.0".variants.wheels]
+    v1.properties = ["x86_64 :: level :: v1"]
+    v2.properties = ["x86_64 :: level :: v2"]
+    v3.properties = ["x86_64 :: level :: v3"]
+    v4.properties = ["x86_64 :: level :: v4"]
+"#};
+
+/// An explicit x86-64 target uses the platform defaults even when higher-level wheels exist.
+#[test]
+fn x86_64_target_uses_platform_defaults() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::from_toml(X86_64_VARIANTS)?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--index-url")
+        .arg(server.index_url())
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("--python-platform")
+        .arg("x86_64-unknown-linux-gnu")
+        .arg("ok==1.0.0"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0
+    ");
+    let installed = context.read(
+        context
+            .site_packages()
+            .join("ok-1.0.0.dist-info/variant.json"),
+    );
+    assert_json_snapshot!(serde_json::from_str::<Value>(&installed)?["variants"], @r#"
+    {
+      "v2": {
+        "x86_64": {
+          "level": [
+            "v2"
+          ]
+        }
+      }
+    }
+    "#);
+    Ok(())
+}
+
+/// On macOS and Windows, an x86-64 interpreter without `_ctypes` falls back to the v2 wheel.
+#[cfg(any(target_os = "macos", windows))]
+#[test]
+fn x86_64_without_ctypes_installs_v2() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::from_toml(X86_64_VARIANTS)?;
+    fs_err::write(
+        context.site_packages().join("sitecustomize.py"),
+        indoc! {r#"
+            import platform
+            import sys
+            import sysconfig
+
+            sys.modules["_ctypes"] = None
+            # Exercise the x86-64 probe on arm64 runners too.
+            if sys.platform == "darwin":
+                release, versioninfo, _ = platform.mac_ver()
+                platform.mac_ver = lambda: (release, versioninfo, "x86_64")
+            else:
+                sysconfig.get_platform = lambda: "win-amd64"
+        "#},
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--no-cache")
+        .arg("--index-url")
+        .arg(server.index_url())
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("ok==1.0.0"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0
+    ");
+    let installed = context.read(
+        context
+            .site_packages()
+            .join("ok-1.0.0.dist-info/variant.json"),
+    );
+    assert_json_snapshot!(serde_json::from_str::<Value>(&installed)?["variants"], @r#"
+    {
+      "v2": {
+        "x86_64": {
+          "level": [
+            "v2"
+          ]
+        }
+      }
+    }
+    "#);
     Ok(())
 }
 

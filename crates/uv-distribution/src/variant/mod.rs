@@ -1,4 +1,5 @@
 mod nvidia;
+mod x86_64;
 
 use tracing::debug;
 use uv_distribution_types::{
@@ -8,12 +9,15 @@ use uv_distribution_types::{
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pep508::{Requirement, VersionOrUrl};
+use uv_platform_tags::Platform;
 use uv_pypi_types::{Identifier, ModuleName};
 
 use crate::variant::nvidia::NvidiaVariantProvider;
+use crate::variant::x86_64::X86_64VariantProvider;
 
 static NVIDIA_PROVIDER: NvidiaVariantProvider = NvidiaVariantProvider::new();
-static VENDORED_PROVIDERS: &[&dyn VendoredVariantProvider] = &[&NVIDIA_PROVIDER];
+static VENDORED_PROVIDERS: &[&dyn VendoredVariantProvider] =
+    &[&NVIDIA_PROVIDER, &X86_64VariantProvider];
 
 /// A Python module and optional path to an object within it, identifying a provider plugin.
 struct PluginApi {
@@ -47,12 +51,15 @@ trait VendoredVariantProvider: Sync {
     fn package_version(&self) -> Version;
     /// The namespace of the emitted properties.
     fn namespace(&self) -> &VariantNamespace;
-    /// Query the host for the compatible properties and their order.
-    fn properties(&self) -> Option<&[SupportedVariantFeature]>;
+    /// Return compatible properties in preference order.
+    fn properties(&self, target: &Platform) -> Option<&[SupportedVariantFeature]>;
 }
 
 /// Collect the variant properties supported by enabled static and vendored providers.
-pub fn supported_variant_properties(metadata: &VariantsJsonContent) -> SupportedVariantProperties {
+pub fn supported_variant_properties(
+    metadata: &VariantsJsonContent,
+    target: &Platform,
+) -> SupportedVariantProperties {
     let detected = metadata
         .provider_requests()
         .filter_map(|(namespace, request)| {
@@ -74,7 +81,7 @@ pub fn supported_variant_properties(metadata: &VariantsJsonContent) -> Supported
                 }
                 return None;
             };
-            Some((namespace, provider.properties()?))
+            Some((namespace, provider.properties(target)?))
         });
     metadata.supported_properties(detected)
 }

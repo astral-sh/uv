@@ -227,7 +227,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             Dist::Built(built) => {
                 check_supported_wheel_variant(built)?;
                 let wheel = self.get_wheel(built, hashes).await?;
-                check_wheel_variant_compatibility(&wheel.filename, &wheel.archive)?;
+                check_wheel_variant_compatibility(
+                    &wheel.filename,
+                    &wheel.archive,
+                    tags.python_platform(),
+                )?;
                 Ok(wheel)
             }
             // TODO(konsti): Support source distributions that build variant wheels.
@@ -539,7 +543,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             return if tags.is_cross() {
                 Err(Error::BuiltWheelIncompatibleTargetPlatform {
                     filename: built_wheel.filename,
-                    python_platform: tags.python_platform().clone(),
+                    python_platform: Box::new(tags.python_platform().clone()),
                     python_version: PythonVersion {
                         version: tags.python_version(),
                         variant: if tags.is_freethreaded() {
@@ -552,7 +556,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             } else {
                 Err(Error::BuiltWheelIncompatibleHostPlatform {
                     filename: built_wheel.filename,
-                    python_platform: tags.python_platform().clone(),
+                    python_platform: Box::new(tags.python_platform().clone()),
                     python_version: PythonVersion {
                         version: tags.python_version(),
                         variant: if tags.is_freethreaded() {

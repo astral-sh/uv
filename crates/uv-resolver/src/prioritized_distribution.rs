@@ -4,11 +4,11 @@ use arcstr::ArcStr;
 use owo_colors::OwoColorize;
 use tracing::debug;
 
-use uv_distribution::supported_variant_properties;
 use uv_distribution_filename::{BuildTag, WheelFilename};
 use uv_distribution_types::{
     File, IndexUrl, InstalledDist, MinimumLibcVersion, Name, RegistryBuiltDist, RegistryBuiltWheel,
-    RegistrySourceDist, RequiresPython, VariantsJsonContent, VariantsJsonFilename,
+    RegistrySourceDist, RequiresPython, SupportedVariantProperties, VariantsJsonContent,
+    VariantsJsonFilename,
 };
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
@@ -437,15 +437,11 @@ impl PrioritizedDist {
     /// Choose the best compatible variant, or return `None` to use the ordinary wheel or sdist.
     pub(crate) fn prioritize_variants(
         &self,
-        metadata: &[(&IndexUrl, &VariantsJsonContent)],
+        metadata: &[(&IndexUrl, &VariantsJsonContent, SupportedVariantProperties)],
     ) -> Option<Self> {
         if metadata.is_empty() {
             return None;
         }
-        let metadata: Vec<_> = metadata
-            .iter()
-            .map(|(source, metadata)| (*source, *metadata, supported_variant_properties(metadata)))
-            .collect();
         // Prefer wheels whose advertised hash matches a required hash, followed by wheels with
         // no advertised hash, then mismatches. If no hashes are required, all wheels match.
         // The installer verifies required hashes against the downloaded wheel.

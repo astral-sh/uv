@@ -172,12 +172,14 @@ impl<'a> RegistryWheelIndex<'a> {
     ///
     /// If the package is not yet indexed, this will index the package by reading from the cache.
     pub fn get(&mut self, name: &'a PackageName) -> impl Iterator<Item = &IndexEntry<'_>> {
+        let target = self.tags.python_platform();
         self.get_impl(name)
             .iter()
             .rev()
             // A cached wheel with invalid variant metadata cannot satisfy the resolution.
-            .filter(|entry| {
-                check_wheel_variant_compatibility(&entry.dist.filename, &entry.dist.path).is_ok()
+            .filter(move |entry| {
+                check_wheel_variant_compatibility(&entry.dist.filename, &entry.dist.path, target)
+                    .is_ok()
             })
     }
 
