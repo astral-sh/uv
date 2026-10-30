@@ -10,7 +10,7 @@ An extremely fast Python package and project manager, written in Rust.
   <picture align="center">
     <source media="(prefers-color-scheme: dark)" srcset="https://github.com/astral-sh/uv/assets/1309177/03aa9163-1c79-4a87-a31d-7a9311ed9310">
     <source media="(prefers-color-scheme: light)" srcset="https://github.com/astral-sh/uv/assets/1309177/629e59c0-9c6e-4013-9ad4-adb2bcf5080d">
-    <img alt="Shows a bar chart with benchmark results." src="https://github.com/astral-sh/uv/assets/1309177/629e59c0-9c6e-4013-9ad4-adb2bcf5080d">
+    <img alt="An image of a horizontal bar chart showing the performance of different tools: uv, poetry, pdm, and pip-sync. Each tool has a bar representing its execution time, and the time is displayed to the right of each bar.  The tool uv has the shortest execution time, 0.06s, indicated by a very short bar. Poetry's execution time is 0.99s, with a bar slightly longer than uv's. PDM's execution time is 1.90s, and its bar is longer than poetry's. Pip-sync has the longest execution time at 4.63s, represented by the longest bar in the chart. The x-axis is labeled with time intervals in seconds, showing 0s, 2s, and 4s." src="https://github.com/astral-sh/uv/assets/1309177/629e59c0-9c6e-4013-9ad4-adb2bcf5080d">
   </picture>
 </p>
 
