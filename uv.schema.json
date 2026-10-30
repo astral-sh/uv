@@ -1900,7 +1900,8 @@
             "build-dependency-check",
             "build-lazy-imports",
             "build-dependency-hashes",
-            "wheel-variants"
+            "wheel-variants",
+            "system-certs-default"
           ]
         },
         {

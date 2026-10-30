@@ -36,7 +36,7 @@ use uv_install_wheel::LinkMode;
 use uv_normalize::{ExtraName, PackageName, PipGroupName};
 use uv_pep440::Version;
 use uv_pep508::{MarkerTree, RequirementOrigin};
-use uv_preview::Preview;
+use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::SupportedEnvironments;
 use uv_python_types::{
     Prefix, PythonArchitecture, PythonDownloads, PythonPreference, PythonVersion, Target,
@@ -105,8 +105,14 @@ impl GlobalSettings {
         environment: &EnvironmentOptions,
         custom_certificate_file: Option<&Path>,
     ) -> anyhow::Result<Self> {
-        let network_settings =
-            NetworkSettings::resolve(args, workspace, environment, custom_certificate_file)?;
+        let preview = resolve_preview(args, workspace, environment)?;
+        let network_settings = NetworkSettings::resolve(
+            args,
+            workspace,
+            environment,
+            preview,
+            custom_certificate_file,
+        )?;
         let python_preference = resolve_python_preference(args, workspace, environment)?;
         let color = resolve_color(args);
         Ok(Self {
@@ -142,7 +148,7 @@ impl GlobalSettings {
                     .unwrap_or(Concurrency::DEFAULT_CACHE_READS),
             ),
             show_settings: args.show_settings,
-            preview: resolve_preview(args, workspace, environment)?,
+            preview,
             python_preference,
             python_arch: environment.python_arch,
             python_downloads: flag(
@@ -298,6 +304,7 @@ impl NetworkSettings {
         args: &GlobalArgs,
         workspace: Option<&FilesystemOptions>,
         environment: &EnvironmentOptions,
+        preview: Preview,
         custom_certificate_file: Option<&Path>,
     ) -> anyhow::Result<Self> {
         // Resolve offline flag from CLI, environment variable, and workspace config.
@@ -375,7 +382,7 @@ impl NetworkSettings {
                             .system_certs
                             .or(workspace.globals.native_tls)
                     })
-                    .unwrap_or(false)
+                    .unwrap_or(preview.is_enabled(PreviewFeature::SystemCertsDefault))
             };
 
         let allow_insecure_host = args
