@@ -1,0 +1,23 @@
+name = "pip-compile-extra"
+
+[root]
+
+[expected]
+satisfiable = true
+
+[testgen]
+disable = true
+
+[packages.anyio.versions."3.5.0"]
+
+# The project exists on this index but has no distributions.
+[packages.pandas.versions]
+
+[packages.certifi.versions."2016.8.8"]
+[packages.requests.versions."2.5.4.1"]
+
+[packages.cffi.versions."1.15.1"]
+requires_python = ">=3.8"
+requires = ["pycparser"]
+sdist = false
+wheel_tags = ["cp311-cp311-win_arm64"]

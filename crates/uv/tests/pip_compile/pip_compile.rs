@@ -14188,6 +14188,8 @@ fn compile_index_url_first_match_marker() -> Result<()> {
 /// should fail by default (even though a compatible version exists on the "primary" index).
 #[test]
 fn compile_index_url_first_match_all_versions() -> Result<()> {
+    let default_index = PackseServer::new("indexes/pip-compile-default.toml");
+    let extra_index = PackseServer::new("indexes/pip-compile-extra.toml");
     let context = uv_test::test_context!("3.12");
 
     let requirements_in = context.temp_dir.child("requirements.in");
@@ -14195,9 +14197,9 @@ fn compile_index_url_first_match_all_versions() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("--index-url")
-        .arg("https://pypi.org/simple")
+        .arg(default_index.index_url())
         .arg("--extra-index-url")
-        .arg("https://test.pypi.org/simple")
+        .arg(extra_index.index_url())
         .arg("requirements.in")
         .arg("--no-deps"), @"
     exit_code: 1 (failure)
@@ -14256,6 +14258,8 @@ fn compile_index_url_fallback() -> Result<()> {
 /// preferred index.
 #[test]
 fn compile_index_url_fallback_prefer_primary() -> Result<()> {
+    let default_index = PackseServer::new("indexes/pip-compile-default.toml");
+    let extra_index = PackseServer::new("indexes/pip-compile-extra.toml");
     let context = uv_test::test_context!("3.12");
 
     let requirements_in = context.temp_dir.child("requirements.in");
@@ -14265,9 +14269,9 @@ fn compile_index_url_fallback_prefer_primary() -> Result<()> {
         .arg("--index-strategy")
         .arg("unsafe-any-match")
         .arg("--index-url")
-        .arg("https://pypi.org/simple")
+        .arg(default_index.index_url())
         .arg("--extra-index-url")
-        .arg("https://test.pypi.org/simple")
+        .arg(extra_index.index_url())
         .arg("requirements.in")
         .arg("--no-deps"), @"
     exit_code: 0 (success)
@@ -14295,6 +14299,8 @@ fn compile_index_url_fallback_prefer_primary() -> Result<()> {
 /// "extra" index being the preferred index.
 #[test]
 fn compile_index_url_unsafe_highest() -> Result<()> {
+    let default_index = PackseServer::new("indexes/pip-compile-default.toml");
+    let extra_index = PackseServer::new("indexes/pip-compile-extra.toml");
     let context = uv_test::test_context!("3.12");
 
     let requirements_in = context.temp_dir.child("requirements.in");
@@ -14304,9 +14310,9 @@ fn compile_index_url_unsafe_highest() -> Result<()> {
         .arg("--index-strategy")
         .arg("unsafe-best-match")
         .arg("--index-url")
-        .arg("https://pypi.org/simple")
+        .arg(default_index.index_url())
         .arg("--extra-index-url")
-        .arg("https://test.pypi.org/simple")
+        .arg(extra_index.index_url())
         .arg("requirements.in")
         .arg("--no-deps"), @"
     exit_code: 0 (success)
@@ -14337,6 +14343,8 @@ fn compile_index_url_unsafe_highest() -> Result<()> {
 /// `--resolution lowest`.
 #[test]
 fn compile_index_url_unsafe_lowest() -> Result<()> {
+    let default_index = PackseServer::new("indexes/pip-compile-default.toml");
+    let extra_index = PackseServer::new("indexes/pip-compile-extra.toml");
     let context = uv_test::test_context!("3.12");
 
     let requirements_in = context.temp_dir.child("requirements.in");
@@ -14348,9 +14356,9 @@ fn compile_index_url_unsafe_lowest() -> Result<()> {
         .arg("--index-strategy")
         .arg("unsafe-best-match")
         .arg("--index-url")
-        .arg("https://pypi.org/simple")
+        .arg(default_index.index_url())
         .arg("--extra-index-url")
-        .arg("https://test.pypi.org/simple")
+        .arg(extra_index.index_url())
         .arg("requirements.in")
         .arg("--no-deps"), @"
     exit_code: 0 (success)
@@ -14526,6 +14534,8 @@ fn emit_index_annotation_line() -> Result<()> {
 /// `--emit-index-annotation` where packages are pulled from two distinct indexes.
 #[test]
 fn emit_index_annotation_multiple_indexes() -> Result<()> {
+    let default_index = PackseServer::new("indexes/pip-compile-default.toml");
+    let extra_index = PackseServer::new("indexes/pip-compile-extra.toml");
     let context = uv_test::test_context!("3.12");
 
     let requirements_in = context.temp_dir.child("requirements.in");
@@ -14534,10 +14544,20 @@ fn emit_index_annotation_multiple_indexes() -> Result<()> {
         requests
     "})?;
 
-    uv_snapshot!(context.filters(), context.pip_compile()
+    let default_url = regex::escape(&default_index.index_url());
+    let extra_url = regex::escape(&extra_index.index_url());
+    let mut filters = vec![
+        (default_url.as_str(), "[DEFAULT_INDEX]"),
+        (extra_url.as_str(), "[EXTRA_INDEX]"),
+    ];
+    filters.extend(context.filters());
+
+    uv_snapshot!(filters, context.pip_compile()
         .arg("requirements.in")
+        .arg("--index-url")
+        .arg(default_index.index_url())
         .arg("--extra-index-url")
-        .arg("https://test.pypi.org/simple")
+        .arg(extra_index.index_url())
         .arg("--emit-index-annotation"), @"
     exit_code: 0 (success)
     ----- stdout -----
@@ -14545,16 +14565,16 @@ fn emit_index_annotation_multiple_indexes() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.in --emit-index-annotation
     certifi==2016.8.8
         # via httpcore
-        # from https://test.pypi.org/simple
+        # from [EXTRA_INDEX]
     h11==0.14.0
         # via httpcore
-        # from https://pypi.org/simple
+        # from [DEFAULT_INDEX]
     httpcore==1.0.4
         # via -r requirements.in
-        # from https://pypi.org/simple
+        # from [DEFAULT_INDEX]
     requests==2.5.4.1
         # via -r requirements.in
-        # from https://test.pypi.org/simple
+        # from [EXTRA_INDEX]
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
@@ -16647,17 +16667,21 @@ fn negation_not_imply_prerelease() -> Result<()> {
 /// See: <https://github.com/astral-sh/uv/issues/8922>
 #[test]
 fn same_version_multi_index_incompatibility() -> Result<()> {
+    let default_index = PackseServer::new("indexes/pip-compile-default.toml");
+    let extra_index = PackseServer::new("indexes/pip-compile-extra.toml");
     let context = uv_test::test_context!("3.10");
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("cffi==1.15.1")?;
 
-    // `cffi` is present on Test PyPI, but only as a single wheel: `cffi-1.15.1-cp311-cp311-win_arm64.whl`.
-    // If we don't check PyPI for the same version, we'll fail.
+    // The extra index only has a Windows ARM64 wheel. The default index has a compatible wheel
+    // for the same version.
     uv_snapshot!(context
         .pip_compile()
         .arg("requirements.in")
+        .arg("--index-url")
+        .arg(default_index.index_url())
         .arg("--extra-index-url")
-        .arg("https://test.pypi.org/simple")
+        .arg(extra_index.index_url())
         .arg("--index-strategy")
         .arg("unsafe-best-match")
         .arg("--python-platform")

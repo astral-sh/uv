@@ -1,0 +1,27 @@
+name = "pip-compile-default"
+
+[root]
+
+[expected]
+satisfiable = true
+
+[testgen]
+disable = true
+
+[packages.anyio.versions."1.0.0"]
+[packages.anyio.versions."4.3.0"]
+
+[packages.pandas.versions."2.2.1"]
+
+[packages.httpcore.versions."1.0.4"]
+requires = ["certifi", "h11"]
+[packages.h11.versions."0.14.0"]
+[packages.certifi.versions."2024.2.2"]
+[packages.requests.versions."2.31.0"]
+
+[packages.cffi.versions."1.15.1"]
+requires_python = ">=3.8"
+requires = ["pycparser"]
+sdist = false
+[packages.pycparser.versions."2.21"]
+requires_python = ">=3.8"
