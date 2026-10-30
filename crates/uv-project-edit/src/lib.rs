@@ -8,8 +8,8 @@ use glob::Pattern;
 use itertools::Itertools;
 use thiserror::Error;
 use toml_edit::{
-    Array, ArrayOfTables, DocumentMut, Formatted, Item, RawString, Table, TableLike, TomlError,
-    Value,
+    Array, ArrayOfTables, DocumentMut, Formatted, InlineTable, Item, Key, RawString, Table,
+    TableLike, TomlError, Value,
 };
 
 use uv_cache_key::CanonicalUrl;
@@ -271,23 +271,7 @@ impl PyProjectTomlMut {
         source: Option<&Source>,
         raw: bool,
     ) -> Result<ArrayEdit, Error> {
-        // Get or create `tool.uv.dev-dependencies`.
-        let dev_dependencies = self
-            .doc
-            .entry("tool")
-            .or_insert(implicit())
-            .as_table_mut()
-            .ok_or(Error::MalformedSources)?
-            .entry("uv")
-            .or_insert(Item::Table(Table::new()))
-            .as_table_mut()
-            .ok_or(Error::MalformedSources)?
-            .entry("dev-dependencies")
-            .or_insert(Item::Value(Value::Array(Array::new())))
-            .as_array_mut()
-            .ok_or(Error::MalformedDependencies)?;
-
-        let edit = add_dependency(req, dev_dependencies, source.is_some(), raw)?;
+        let edit = add_dependency(req, self.dev_dependencies_array()?, source.is_some(), raw)?;
 
         if let Some(source) = source {
             self.add_source(&req.name, source)?;
@@ -764,11 +748,11 @@ impl PyProjectTomlMut {
             .doc
             .entry("tool")
             .or_insert(implicit())
-            .as_table_mut()
+            .as_table_like_mut()
             .ok_or(Error::MalformedSources)?
             .entry("uv")
             .or_insert(Item::Table(Table::new()))
-            .as_table_mut()
+            .as_table_like_mut()
             .ok_or(Error::MalformedSources)?
             .entry("dev-dependencies")
             .or_insert(Item::Value(Value::Array(Array::new())))
@@ -1084,28 +1068,41 @@ impl PyProjectTomlMut {
             return Ok(());
         }
 
-        let Some(uv) = self
+        let Some(sources) = self
             .doc
-            .get_mut("tool")
-            .map(|tool| tool.as_table_like_mut().ok_or(Error::MalformedSources))
+            .get("tool")
+            .map(|tool| tool.as_table_like().ok_or(Error::MalformedSources))
             .transpose()?
-            .and_then(|tool| tool.get_mut("uv"))
-            .map(|uv| uv.as_table_like_mut().ok_or(Error::MalformedSources))
+            .and_then(|tool| tool.get("uv"))
+            .map(|uv| uv.as_table_like().ok_or(Error::MalformedSources))
+            .transpose()?
+            .and_then(|uv| uv.get("sources"))
+            .map(|sources| sources.as_table_like().ok_or(Error::MalformedSources))
             .transpose()?
         else {
             return Ok(());
         };
-        if let Some(sources) = uv
-            .get_mut("sources")
-            .map(|sources| sources.as_table_like_mut().ok_or(Error::MalformedSources))
-            .transpose()?
-            && let Some(key) = find_source(name, sources)
-        {
-            sources.remove(&key);
-
-            // Remove the `tool.uv.sources` table if it is empty.
-            if sources.is_empty() {
-                uv.remove("sources");
+        if let Some(key) = find_source(name, sources) {
+            // Remove the whole sources table when the package is its last entry.
+            let path = ["tool", "uv", "sources", key.as_str()];
+            let path = if sources.len() == 1 {
+                &path[..3]
+            } else {
+                &path[..]
+            };
+            let mut item = self.doc.as_item_mut();
+            for (depth, key) in path.iter().enumerate() {
+                if let Some(inline) = item.as_inline_table_mut()
+                    && !inline.is_dotted()
+                {
+                    preserve_inline_comment(inline, &path[depth..]);
+                }
+                let table = item.as_table_like_mut().ok_or(Error::MalformedSources)?;
+                if depth + 1 == path.len() {
+                    table.remove(key);
+                    break;
+                }
+                item = table.get_mut(key).ok_or(Error::MalformedSources)?;
             }
         }
 
@@ -1116,9 +1113,9 @@ impl PyProjectTomlMut {
     pub fn has_dev_dependencies(&self) -> bool {
         self.doc
             .get("tool")
-            .and_then(Item::as_table)
+            .and_then(Item::as_table_like)
             .and_then(|tool| tool.get("uv"))
-            .and_then(Item::as_table)
+            .and_then(Item::as_table_like)
             .and_then(|uv| uv.get("dev-dependencies"))
             .is_some()
     }
@@ -1127,7 +1124,7 @@ impl PyProjectTomlMut {
     pub fn has_dependency_group(&self, group: &GroupName) -> bool {
         self.doc
             .get("dependency-groups")
-            .and_then(Item::as_table)
+            .and_then(Item::as_table_like)
             .and_then(|groups| groups.get(group.as_ref()))
             .is_some()
     }
@@ -1646,6 +1643,62 @@ fn same_requirement_declaration(left: &Requirement, right: &Requirement) -> bool
         && left.extras == right.extras
         && left.version_or_url == right.version_or_url
         && left.marker == right.marker
+}
+
+/// Keep the preceding entry's end-of-line comment when removing a key from an inline table.
+fn preserve_inline_comment(mut table: &mut InlineTable, path: &[&str]) {
+    // Inline tables store the text after a comma on the next key's final path component.
+    // A dotted declaration can have several such keys for one logical table.
+    let matches = |keys: &[&Key]| {
+        keys.iter()
+            .take(path.len())
+            .map(|key| key.get())
+            .eq(path.iter().copied())
+    };
+    let mut entries = table.get_values().into_iter();
+    let Some((removed, _)) = entries.find(|(keys, _)| matches(keys)) else {
+        return;
+    };
+    let Some(comment) = removed
+        .last()
+        .and_then(|key| key.leaf_decor().prefix())
+        .and_then(RawString::as_str)
+        .and_then(|prefix| prefix.lines().next())
+        .filter(|line| line.trim_start().starts_with('#'))
+        .map(str::to_owned)
+    else {
+        return;
+    };
+    let next = entries.find(|(keys, _)| !matches(keys)).map(|(keys, _)| {
+        keys.iter()
+            .map(|key| key.get().to_owned())
+            .collect::<Vec<_>>()
+    });
+    let join = |following: Option<&str>| {
+        // The first line after the removed value can contain its own trailing comment.
+        let following = following.unwrap_or_default();
+        match following.find('\n') {
+            Some(index) => format!("{comment}{}", &following[index..]),
+            None => format!("{comment}\n{following}"),
+        }
+    };
+    if let Some(next) = next
+        && let Some((key, parents)) = next.split_last()
+    {
+        for parent in parents {
+            let Some(child) = table.get_mut(parent).and_then(Value::as_inline_table_mut) else {
+                return;
+            };
+            table = child;
+        }
+        if let Some(mut key) = table.key_mut(key) {
+            let decor = key.leaf_decor_mut();
+            decor.set_prefix(join(decor.prefix().and_then(RawString::as_str)));
+        }
+    } else {
+        table.set_trailing_comma(true);
+        table.set_trailing(join(table.trailing().as_str()));
+    }
 }
 
 /// Returns the key in `tool.uv.sources` that matches the given package name.

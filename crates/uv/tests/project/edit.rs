@@ -1412,6 +1412,52 @@ fn add_remove_dev() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn add_inline_legacy_dev_dependencies() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        tool.uv = { dev-dependencies = ["ok"] }
+
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+    "#})?;
+
+    let links = context.workspace_root.join("test/links");
+    uv_snapshot!(context.filters(), context.add().args(["--dev", "tqdm", "--no-sync", "--no-index", "--find-links"]).arg(&links), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
+    Resolved 3 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.add().args(["--group", "dev", "ok==1.0.0", "--no-sync", "--no-index", "--find-links"]).arg(&links), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
+    Resolved 3 packages in [TIME]
+    ");
+
+    assert_snapshot!(context.read("pyproject.toml"), @r#"
+    tool.uv = { dev-dependencies = [
+        "ok==1.0.0",
+        "tqdm>=1000.0.0",
+    ] }
+
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    "#);
+
+    Ok(())
+}
+
 /// Add and remove an optional dependency.
 #[test]
 fn add_remove_optional() -> Result<()> {
@@ -4044,8 +4090,14 @@ fn remove_inline_source() -> Result<()> {
         ]
         optional-dependencies = { test = ["ok"] }
 
-        [tool.uv]
-        sources = { tqdm = { path = "tqdm-1000.0.0-py3-none-any.whl" }, ok = { path = "ok-1.0.0-py3-none-any.whl" } }
+        [tool]
+        uv = {
+            offline = true, # Use local wheels
+            sources = {
+                ok.path = "ok-1.0.0-py3-none-any.whl", # Used by the test extra
+                tqdm.path = "tqdm-1000.0.0-py3-none-any.whl",
+            },
+        }
     "#})?;
 
     uv_snapshot!(context.filters(), context.remove().arg("tqdm"), @"
@@ -4066,8 +4118,13 @@ fn remove_inline_source() -> Result<()> {
     ]
     optional-dependencies = { test = ["ok"] }
 
-    [tool.uv]
-    sources = { ok = { path = "ok-1.0.0-py3-none-any.whl" } }
+    [tool]
+    uv = {
+        offline = true, # Use local wheels
+        sources = {
+            ok.path = "ok-1.0.0-py3-none-any.whl", # Used by the test extra
+        },
+    }
     "#);
 
     // The optional dependency still needs the wheel after removing the main dependency.
@@ -4083,8 +4140,31 @@ fn remove_inline_source() -> Result<()> {
     dependencies = []
     optional-dependencies = { test = ["ok"] }
 
-    [tool.uv]
-    sources = { ok = { path = "ok-1.0.0-py3-none-any.whl" } }
+    [tool]
+    uv = {
+        offline = true, # Use local wheels
+        sources = {
+            ok.path = "ok-1.0.0-py3-none-any.whl", # Used by the test extra
+        },
+    }
+    "#);
+
+    uv_snapshot!(context.filters(), context.remove().args(["--optional", "test", "ok", "--frozen"]), @"
+    exit_code: 0 (success)
+    ");
+
+    assert_snapshot!(context.read("pyproject.toml"), @r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    dependencies = []
+    optional-dependencies = { test = [] }
+
+    [tool]
+    uv = {
+        offline = true, # Use local wheels
+    }
     "#);
 
     Ok(())
