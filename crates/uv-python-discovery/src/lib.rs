@@ -457,7 +457,7 @@ mod tests {
                         "minor": 0
                     },
                     "arch": "wasm32",
-                    "cpu_info": "unsupported_architecture",
+                    "cpu_info": { "unsupported_architecture": "wasm32" },
                     "manylinux_compatible": false,
                     "standalone": false,
                     "markers": {
