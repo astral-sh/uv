@@ -2993,11 +2993,12 @@ fn install_extra_index_url_has_priority() {
 async fn install_deduplicated_indices() {
     let context = uv_test::test_context!("3.12");
 
+    let index = PackseServer::new("simple/single-package.toml");
     let redirect_server = MockServer::start().await;
 
     Mock::given(method("GET"))
         .respond_with(
-            ResponseTemplate::new(302).insert_header("Location", "https://pypi.org/simple/sniffio"),
+            ResponseTemplate::new(302).insert_header("Location", format!("{}a/", index.index_url())),
         )
         .expect(1)
         .mount(&redirect_server)
@@ -3005,7 +3006,7 @@ async fn install_deduplicated_indices() {
 
     uv_snapshot!(context
         .pip_install()
-        .arg("sniffio")  // Use a zero-dependency package
+        .arg("a")
         .arg("--index")
         .arg(redirect_server.uri())
         .arg("--default-index")
@@ -3018,7 +3019,7 @@ async fn install_deduplicated_indices() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + sniffio==1.3.1
+     + a==2.0.0
     ");
 }
 
@@ -12470,6 +12471,7 @@ fn build_tag() {
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("build-tag")
+        .arg("--no-index")
         .arg("--find-links")
         .arg(context.workspace_root.join("test/links/")), @"
     exit_code: 0 (success)

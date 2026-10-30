@@ -13389,6 +13389,7 @@ fn sync_build_tag() -> Result<()> {
         dependencies = ["build-tag"]
 
         [tool.uv]
+        no-index = true
         find-links = ["{}"]
         "#,
             context.temp_dir.join("links/").portable_display(),
