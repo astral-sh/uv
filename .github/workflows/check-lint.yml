@@ -230,32 +230,22 @@ jobs:
           version: "0.13.5"
           checksum: "f68d291c75783122dad58ab77def0e13f3233f358731db5d6d7e8715603b928f"
           enable-cache: false
+      - name: Restore verified source timestamps
+        run: uv run --offline --python /usr/bin/python3 --script scripts/hawk-source-times.py
       - name: "Install Rust toolchain"
         run: rustup toolchain install 1.99.0
       - name: "Install Hawk"
         run: |
           curl --proto '=https' --tlsv1.2 -LsSf \
             "https://github.com/astral-sh/hawk/releases/download/${HAWK_VERSION}/cargo-hawk-installer.sh" | sh
-      - name: Seed the benchmark from the previous source revision
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && steps.hawk-cache.outputs.cache-hit != 'true'
-        run: |
-          cp scripts/hawk-source-times.py scripts/hawk-source-times.py.lock "$RUNNER_TEMP/"
-          git fetch --no-tags --depth=1 origin 52ff39db058e14a2c1f500bf5003d3852cd353ac
-          git switch --detach FETCH_HEAD
-          uv run --offline --python /usr/bin/python3 --script "$RUNNER_TEMP/hawk-source-times.py"
-          cargo +1.99.0 hawk check --target-dir target/hawk -D warnings
-      - name: Save benchmark snapshot
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && steps.hawk-cache.outputs.cache-hit != 'true'
+      - name: "Hawk"
+        run: cargo +1.99.0 hawk check --target-dir target/hawk -D warnings
+      - name: Save Hawk workspace
+        if: github.ref == 'refs/heads/main' && steps.hawk-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           key: ${{ steps.hawk-cache.outputs.cache-primary-key }}
           path: *hawk-cache-paths
-      - name: Return to the pull request revision
-        run: git switch --detach "$GITHUB_SHA"
-      - name: Restore verified source timestamps
-        run: uv run --offline --python /usr/bin/python3 --script scripts/hawk-source-times.py
-      - name: "Hawk"
-        run: cargo +1.99.0 hawk check --target-dir target/hawk -D warnings
 
   shear:
     name: "cargo shear"
