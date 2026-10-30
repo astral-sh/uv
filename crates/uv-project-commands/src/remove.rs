@@ -37,6 +37,7 @@ use uv_settings::{
     FrozenSource, LockCheck, MalwareCheckSettings, PythonInstallMirrors, ResolverInstallerSettings,
 };
 use uv_warnings::warn_user_once;
+use uv_workspace::dependency_groups::FlatDependencyGroups;
 use uv_workspace::pyproject::{DependencyType, PyProjectToml, Sources, ToolUvSources};
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache};
 
@@ -436,6 +437,7 @@ fn remove_unused_sources(
                     packages,
                     sources,
                     |_, _| false,
+                    |_, _| Ok(None),
                 )?);
             }
             (sources, Some(project.workspace()))
@@ -480,20 +482,45 @@ fn remove_unused_sources(
             }) {
                 let doc =
                     PyProjectTomlMut::from_toml(&manifest.raw, DependencyTarget::PyProjectToml)?;
-                members.push((local, doc));
+                members.push((member, local, doc));
             }
         }
     }
     let root = LockTarget::from(target).install_path();
-    toml.remove_unused_sources(root, packages, sources, |name, source| {
-        settings_uses
-            .get(name)
-            .is_some_and(|extras| source.extra().is_none_or(|extra| extras.contains(extra)))
-            || members.iter().any(|(local, doc)| {
-                !local.is_some_and(|sources| sources.contains_key(name))
-                    && doc.uses_source(name, source.extra())
-            })
-    })?;
+    toml.remove_unused_sources(
+        root,
+        packages,
+        sources,
+        |name, source| {
+            settings_uses
+                .get(name)
+                .is_some_and(|extras| source.extra().is_none_or(|extra| extras.contains(extra)))
+        },
+        |name, source| {
+            for (member, local, doc) in &members {
+                if local.is_some_and(|sources| sources.contains_key(name)) {
+                    continue;
+                }
+                let inherits = if let Some(group) = source.group() {
+                    let groups = FlatDependencyGroups::from_pyproject_toml(
+                        member.root(),
+                        member.pyproject_toml(),
+                    )?;
+                    groups.get(group).is_some_and(|group| {
+                        group.requirements.iter().any(|req| {
+                            req.name == *name && !req.marker.is_disjoint(source.marker())
+                        })
+                    })
+                } else {
+                    doc.uses_source(name, source.extra(), source.marker())
+                };
+                if inherits {
+                    return Ok(Some(&member.project().name));
+                }
+            }
+            Ok(None)
+        },
+    )?;
     Ok(())
 }
 

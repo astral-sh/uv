@@ -4217,6 +4217,79 @@ fn remove_inline_source() -> Result<()> {
     Ok(())
 }
 
+/// Reject removing a root extra's source while a workspace member may still inherit it.
+#[test]
+fn remove_inherited_inline_extra_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let links = context.workspace_root.join("test/links");
+    for (index, wheel) in [
+        ("private", "ok-1.0.0-py3-none-any.whl"),
+        ("public", "ok-2.0.0-py3-none-any.whl"),
+    ] {
+        let dir = context.temp_dir.child(index);
+        dir.create_dir_all()?;
+        fs_err::copy(links.join(wheel), dir.child(wheel))?;
+    }
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "1"
+        requires-python = ">=3.12"
+        optional-dependencies = { cpu = ["ok; sys_platform == 'win32'"] }
+
+        [dependency-groups]
+        dev = ["ok; sys_platform == 'linux'"]
+
+        [tool.uv.workspace]
+        members = ["member"]
+
+        [tool.uv]
+        environments = ["sys_platform == 'win32'", "sys_platform == 'linux'"]
+        sources = { ok = [
+            { index = "private", extra = "cpu", marker = "sys_platform == 'win32'" },
+            { index = "private", group = "dev", marker = "sys_platform == 'linux'" },
+        ] }
+
+        [[tool.uv.index]]
+        name = "private"
+        url = "private"
+        format = "flat"
+        explicit = true
+
+        [[tool.uv.index]]
+        name = "public"
+        url = "public"
+        format = "flat"
+        default = true
+    "#})?;
+    context
+        .temp_dir
+        .child("member/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "member"
+        version = "1"
+        requires-python = ">=3.12"
+        optional-dependencies = { cpu = ["ok; sys_platform == 'win32'"] }
+    "#})?;
+
+    context.lock().assert().success();
+    let pyproject = context.read_bytes("pyproject.toml");
+    let lock = context.read_bytes("uv.lock");
+
+    uv_snapshot!(context.filters(), context.remove().args(["--optional", "cpu", "ok", "--no-sync"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Cannot remove the source for `ok` because workspace member `member` may still inherit it
+    ");
+    assert_eq!(context.read_bytes("pyproject.toml"), pyproject);
+    assert_eq!(context.read_bytes("uv.lock"), lock);
+    Ok(())
+}
+
 /// Removing a group requirement drops only that selection from an inline source list.
 #[test]
 fn remove_scoped_inline_source() -> Result<()> {

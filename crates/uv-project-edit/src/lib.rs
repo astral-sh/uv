@@ -20,6 +20,7 @@ use uv_fs::{PortablePath, is_same_file_allow_missing, try_relative_to_if};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionParseError};
 use uv_pep508::{MarkerTree, Requirement, VersionOrUrl};
+use uv_pypi_types::LenientRequirement;
 use uv_workspace::dependency_groups::{DependencyGroupError, FlatDependencyGroups};
 use uv_workspace::pyproject::{DependencyType, ExtraBuildDependencies, Source, Sources};
 
@@ -62,6 +63,13 @@ pub enum Error {
     MalformedDependencies,
     #[error("Sources in `pyproject.toml` are malformed")]
     MalformedSources,
+    #[error(
+        "Cannot remove the source for `{package}` because workspace member `{member}` may still inherit it"
+    )]
+    InheritedSource {
+        package: PackageName,
+        member: PackageName,
+    },
     #[error("Workspace in `pyproject.toml` is malformed")]
     MalformedWorkspace,
     #[error("Expected a dependency at index {0}")]
@@ -1076,30 +1084,39 @@ impl PyProjectTomlMut {
         toml_edit::de::from_document(DocumentMut::from(table)).ok()
     }
 
-    /// Return whether a member can use an inherited source with the given extra, if any.
-    pub fn uses_source(&self, name: &PackageName, extra: Option<&ExtraName>) -> bool {
-        self.declares_dependency(name, extra)
+    /// Return whether a member can use an inherited source for this extra and marker.
+    pub fn uses_source(
+        &self,
+        name: &PackageName,
+        extra: Option<&ExtraName>,
+        marker: MarkerTree,
+    ) -> bool {
+        self.declares_dependency(name, extra, marker)
             || self
                 .doc
                 .get("build-system")
                 .and_then(|build| build.get("requires"))
-                .is_some_and(|requirements| requirements_contain(requirements, name, extra))
+                .is_some_and(|requirements| {
+                    requirements_contain(requirements, name, extra, None, marker)
+                })
     }
 
     /// Check runtime and group requirements, including backend-provided metadata.
-    fn declares_dependency(&self, name: &PackageName, extra: Option<&ExtraName>) -> bool {
+    fn declares_dependency(
+        &self,
+        name: &PackageName,
+        extra: Option<&ExtraName>,
+        marker: MarkerTree,
+    ) -> bool {
         if self.target == DependencyTarget::Script {
-            return self
-                .doc
-                .get("dependencies")
-                .is_some_and(|requirements| requirements_contain(requirements, name, extra));
+            return self.doc.get("dependencies").is_some_and(|requirements| {
+                requirements_contain(requirements, name, extra, None, marker)
+            });
         }
         let project = self.doc.get("project");
         let optional = project
             .and_then(|project| project.get("optional-dependencies"))
             .and_then(Item::as_table_like);
-        let matches_extra =
-            |key: &str| extra.is_none_or(|extra| ExtraName::from_str(key).as_ref() == Ok(extra));
         if project
             .and_then(|project| project.get("dynamic"))
             .and_then(Item::as_array)
@@ -1115,10 +1132,14 @@ impl PyProjectTomlMut {
         }
         if project
             .and_then(|project| project.get("dependencies"))
-            .is_some_and(|requirements| requirements_contain(requirements, name, extra))
+            .is_some_and(|requirements| {
+                requirements_contain(requirements, name, extra, None, marker)
+            })
             || optional.is_some_and(|extras| {
                 extras.iter().any(|(key, requirements)| {
-                    matches_extra(key) && requirements_contain(requirements, name, None)
+                    ExtraName::from_str(key).is_ok_and(|declared| {
+                        requirements_contain(requirements, name, extra, Some(&declared), marker)
+                    })
                 })
             })
         {
@@ -1136,21 +1157,22 @@ impl PyProjectTomlMut {
             .doc
             .get("dependency-groups")
             .and_then(Item::as_table_like);
-        dev.is_some_and(|requirements| requirements_contain(requirements, name, None))
+        dev.is_some_and(|requirements| requirements_contain(requirements, name, None, None, marker))
             || groups.is_some_and(|groups| {
-                groups
-                    .iter()
-                    .any(|(_, requirements)| requirements_contain(requirements, name, None))
+                groups.iter().any(|(_, requirements)| {
+                    requirements_contain(requirements, name, None, None, marker)
+                })
             })
     }
 
     /// Remove unused selections for the edited packages, checking their original sources in TOML order.
-    pub fn remove_unused_sources(
+    pub fn remove_unused_sources<'a>(
         &mut self,
         root: &Path,
         names: &[PackageName],
         sources: &BTreeMap<PackageName, Sources>,
-        used_elsewhere: impl Fn(&PackageName, &Source) -> bool,
+        used_by_settings: impl Fn(&PackageName, &Source) -> bool,
+        inheriting_member: impl Fn(&PackageName, &Source) -> Result<Option<&'a PackageName>, Error>,
     ) -> Result<(), Error> {
         // Expand group includes once, after all dependency edits. Scripts ignore group selectors.
         let groups = if self.target == DependencyTarget::PyProjectToml
@@ -1171,24 +1193,40 @@ impl PyProjectTomlMut {
             };
             let mut unused = Vec::new();
             for (index, source) in entries.iter().enumerate() {
-                let keep = if self.target == DependencyTarget::Script {
-                    self.declares_dependency(name, source.extra()) || used_elsewhere(name, source)
-                } else if let Some(extra) = source.extra() {
-                    // A project's own extra must validate against its metadata. A virtual
-                    // workspace root can instead supply an extra source to a member.
-                    self.declares_dependency(name, Some(extra))
-                        || (self.doc.get("project").is_none() && used_elsewhere(name, source))
+                let declared = if self.target == DependencyTarget::Script
+                    || source.extra().is_some()
+                {
+                    self.declares_dependency(name, source.extra(), MarkerTree::TRUE)
                 } else if let Some(group) = source.group() {
                     groups
                         .as_ref()
                         .and_then(|groups| groups.get(group))
                         .is_some_and(|group| group.requirements.iter().any(|req| req.name == *name))
                 } else {
-                    self.uses_source(name, None) || used_elsewhere(name, source)
+                    self.uses_source(name, None, MarkerTree::TRUE)
                 };
-                if !keep {
-                    unused.push(index);
+                if declared {
+                    continue;
                 }
+
+                // Group sources must validate against the root's groups. Extra sources must
+                // validate against the root's project metadata, unless the root is virtual.
+                let needs_declaration = self.target == DependencyTarget::PyProjectToml
+                    && (source.group().is_some()
+                        || (source.extra().is_some() && self.doc.contains_key("project")));
+                if !needs_declaration && used_by_settings(name, source) {
+                    continue;
+                }
+                if let Some(member) = inheriting_member(name, source)? {
+                    if needs_declaration {
+                        return Err(Error::InheritedSource {
+                            package: name.clone(),
+                            member: member.clone(),
+                        });
+                    }
+                    continue;
+                }
+                unused.push(index);
             }
             if unused.is_empty() {
                 continue;
@@ -1788,19 +1826,30 @@ fn remove_source_at(index: usize, source: &mut Item) -> Result<(), Error> {
     Ok(())
 }
 
-/// Return whether a PEP 508 requirement in the array names this package.
+/// Return whether a PEP 508 requirement in the array matches the package, extra, and source marker.
 fn requirements_contain(
     requirements: &Item,
     name: &PackageName,
     extra: Option<&ExtraName>,
+    declared_extra: Option<&ExtraName>,
+    marker: MarkerTree,
 ) -> bool {
     requirements.as_array().is_some_and(|requirements| {
         requirements
             .iter()
             .filter_map(Value::as_str)
-            .filter_map(try_parse_requirement)
+            .filter_map(|raw| raw.parse::<LenientRequirement>().ok())
+            .map(Requirement::from)
             .any(|requirement| {
-                &requirement.name == name
+                if &requirement.name != name {
+                    return false;
+                }
+                let requirement = if let Some(declared_extra) = declared_extra {
+                    requirement.with_extra_marker(declared_extra.clone())
+                } else {
+                    requirement
+                };
+                !requirement.marker.is_disjoint(marker)
                     && extra.is_none_or(|extra| {
                         requirement.marker.top_level_extra_name().as_deref() == Some(extra)
                     })
