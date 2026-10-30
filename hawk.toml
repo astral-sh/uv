@@ -332,14 +332,6 @@ kind = "inherent_method"
 level = "expect"
 reason = "retained as part of the PyVenvConfiguration accessors"
 
-[[override]]
-lint = "hawk::unnecessary_public"
-crate = "uv_python_interpreter"
-item = "virtualenv::PyVenvConfiguration::set"
-kind = "inherent_method"
-level = "expect"
-reason = "retained as a public pyvenv.cfg editing helper"
-
 # Keep wheel variant component APIs consistent.
 
 [[override]]
