@@ -628,6 +628,8 @@ impl PyProjectTomlMut {
             }
         });
 
+        let new_group = existing_group.is_none();
+
         // If the group doesn't exist, create it.
         let group = match existing_group {
             Some(value) => value,
@@ -640,22 +642,20 @@ impl PyProjectTomlMut {
 
         let added = add_dependency(req, group, source.is_some(), raw)?;
 
-        // To avoid churn in pyproject.toml, we only sort new group keys if the
-        // existing keys were sorted.
-        if was_sorted {
-            dependency_groups.sort_values();
-        }
+        // Only inserting a key changes the table layout. Formatting after an array edit
+        // would clear the comments between inline groups.
+        if new_group {
+            if was_sorted {
+                dependency_groups.sort_values();
+            }
 
-        // If `dependency-groups` is an inline table, reformat it.
-        //
-        // Reformatting can drop comments between keys, but you can't put comments
-        // between items in an inline table anyway.
-        if let Some(dependency_groups) = self
-            .doc
-            .get_mut("dependency-groups")
-            .and_then(Item::as_inline_table_mut)
-        {
-            dependency_groups.fmt();
+            if let Some(dependency_groups) = self
+                .doc
+                .get_mut("dependency-groups")
+                .and_then(Item::as_inline_table_mut)
+            {
+                dependency_groups.fmt();
+            }
         }
 
         if let Some(source) = source {
@@ -682,26 +682,17 @@ impl PyProjectTomlMut {
             .map(|k| k.get())
             .is_sorted();
 
-        // Check if the group already exists.
-        let group_exists = dependency_groups
+        if dependency_groups
             .iter()
-            .any(|(key, _value)| GroupName::from_str(key).is_ok_and(|g| g == *group));
-
-        // If the group doesn't exist, create it.
-        if !group_exists {
-            dependency_groups.insert(group.as_ref(), Item::Value(Value::Array(Array::new())));
-
-            // To avoid churn in pyproject.toml, we only sort new group keys if the
-            // existing keys were sorted.
-            if was_sorted {
-                dependency_groups.sort_values();
-            }
+            .any(|(key, _value)| GroupName::from_str(key).is_ok_and(|g| g == *group))
+        {
+            return Ok(());
         }
 
-        // If `dependency-groups` is an inline table, reformat it.
-        //
-        // Reformatting can drop comments between keys, but you can't put comments
-        // between items in an inline table anyway.
+        dependency_groups.insert(group.as_ref(), Item::Value(Value::Array(Array::new())));
+        if was_sorted {
+            dependency_groups.sort_values();
+        }
         if let Some(dependency_groups) = self
             .doc
             .get_mut("dependency-groups")
