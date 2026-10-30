@@ -20,7 +20,7 @@ use sha2::{Digest, Sha256};
 use uv_fs::Simplified;
 use uv_static::EnvVars;
 
-use uv_test::packse::{PackseServer, WheelBuilder, scenario::Scenario};
+use uv_test::packse::{PackseServer, WheelBuilder};
 use uv_test::{TestContext, copy_dir_ignore, uv_snapshot};
 
 #[cfg(feature = "test-git")]
@@ -5473,7 +5473,7 @@ fn tool_install_publish_url_receipt() -> Result<()> {
 /// Test installing a tool with `--with-executables-from`.
 #[test]
 fn tool_install_with_executables_from() -> Result<()> {
-    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+    let index = PackseServer::from_toml(indoc! {r#"
         name = "tool-executables"
 
         [root]
@@ -5497,7 +5497,6 @@ fn tool_install_with_executables_from() -> Result<()> {
         sdist = false
         entry_points = ["extra"]
     "#})?;
-    let index = PackseServer::from_scenario(&scenario);
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
         .with_filtered_exe_suffix()
@@ -5566,7 +5565,7 @@ fn tool_install_with_executables_from() -> Result<()> {
 
 #[test]
 fn tool_install_sdist_entry_point() -> Result<()> {
-    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+    let index = PackseServer::from_toml(indoc! {r#"
         name = "sdist-entry-point"
 
         [root]
@@ -5578,7 +5577,6 @@ fn tool_install_sdist_entry_point() -> Result<()> {
         wheel = false
         entry_points = ["scenario.tool"]
     "#})?;
-    let index = PackseServer::from_scenario(&scenario);
     let context = uv_test::test_context!("3.12").with_tool_dirs();
     let bin_dir = context.temp_dir.child("bin");
 
