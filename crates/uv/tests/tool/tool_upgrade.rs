@@ -565,8 +565,12 @@ fn tool_upgrade_recomputes_relative_exclude_newer() {
         .assert()
         .success();
 
+    // The relative `exclude-newer` is re-resolved from the current configuration on upgrade,
+    // rather than reusing the receipt's stored value.
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("black")
+        .arg("--exclude-newer")
+        .arg("3 weeks")
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, "2024-04-15T00:00:00Z")
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
@@ -645,7 +649,93 @@ fn tool_upgrade_noop_updates_options() {
         "#);
     });
 }
+/// `uv tool upgrade` re-resolves `exclude-newer` from the current configuration instead of
+/// reusing the receipt's stored value: removing the setting stops enforcing the old cooldown,
+/// and the stale values are cleared from the receipt.
+#[test]
+fn tool_upgrade_ignores_stale_receipt_exclude_newer() {
+    let index = exclude_newer_tool_index();
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
+    let bin_dir = context.temp_dir.child("bin");
 
+    // Set `exclude-newer` in the configuration file.
+    let config = context.temp_dir.child("uv.toml");
+    config.write_str("exclude-newer = \"3 weeks\"\n").unwrap();
+
+    // Install `foo`; the newer release is excluded by the cooldown.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("foo")
+        .arg("--index-url")
+        .arg(index.index_url())
+        .env(EnvVars::UV_CONFIG_FILE, config.as_os_str())
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, "2024-04-01T00:00:00Z")
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + foo==1.0.0
+    Installed 1 executable: foo
+    ");
+
+    // The receipt records the configured `exclude-newer`.
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(context.read("tools/foo/uv-receipt.toml"), @r#"
+        [tool]
+        requirements = [{ name = "foo" }]
+        entrypoints = [
+            { name = "foo", install-path = "[TEMP_DIR]/bin/foo", from = "foo" },
+        ]
+
+        [tool.options]
+        index-url = "http://[LOCALHOST]/simple/"
+        exclude-newer = "2024-03-11T00:00:00Z"
+        exclude-newer-span = "P3W"
+        "#);
+    });
+
+    // Remove the setting, then upgrade: the stale cooldown must not apply.
+    config.write_str("").unwrap();
+
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("foo")
+        .arg("--index-url")
+        .arg(index.index_url())
+        .env(EnvVars::UV_CONFIG_FILE, config.as_os_str())
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, "2024-04-01T00:00:00Z")
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Updated foo v1.0.0 -> v2.0.0
+     - foo==1.0.0
+     + foo==2.0.0
+    Installed 1 executable: foo
+    ");
+
+    // The stale `exclude-newer` values are cleared from the receipt.
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(context.read("tools/foo/uv-receipt.toml"), @r#"
+        [tool]
+        requirements = [{ name = "foo" }]
+        entrypoints = [
+            { name = "foo", install-path = "[TEMP_DIR]/bin/foo", from = "foo" },
+        ]
+
+        [tool.options]
+        index-url = "http://[LOCALHOST]/simple/"
+        "#);
+    });
+}
 #[test]
 fn tool_upgrade_multiple_names() {
     let old_index = old_tool_index();
@@ -2021,5 +2111,31 @@ fn new_tool_index() -> PackseServer {
         entry_points = ["dotenv"]
     "#})
     .expect("new tool scenario should parse");
+    PackseServer::from_scenario(&scenario)
+}
+
+/// An index with two releases of a synthetic tool, uploaded at different times.
+fn exclude_newer_tool_index() -> PackseServer {
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "exclude-newer-tool-index"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.foo.versions."1.0.0"]
+        requires_python = ">=3.11"
+        sdist = false
+        entry_points = ["foo"]
+        wheel = { upload_time = "2024-01-01T00:00:00Z" }
+
+        [packages.foo.versions."2.0.0"]
+        requires_python = ">=3.11"
+        sdist = false
+        entry_points = ["foo"]
+        wheel = { upload_time = "2024-03-20T00:00:00Z" }
+    "#})
+    .expect("exclude-newer tool scenario should parse");
     PackseServer::from_scenario(&scenario)
 }
