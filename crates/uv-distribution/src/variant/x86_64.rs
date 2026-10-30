@@ -42,13 +42,15 @@ static LEVEL_PROPERTIES: LazyLock<[SupportedVariantFeature; 4]> = LazyLock::new(
 ///
 /// # Known limitations
 ///
-/// * The cache is shared between machines with CPUs with different `x86_64` levels, but the same
-///   Python interpreter.
-/// * We don't support x86-64 emulation on x86-64 in user mode, where `/proc/cpuinfo`
-///   reports the host's flags instead of the emulator's flags.
-/// * We are building the environment on one machine, and then deploying to another machine. This
-///   case requires an override specifying the target machine. TODO(konsti): Add support for that as
-///   part of the wheel variants stack.
+/// The following scenarios are unsupported.
+///
+/// * Sharing an interpreter cache between machines that use the same Python interpreter but
+///   support different x86-64 levels.
+/// * Emulating an x86-64 CPU in user mode on an x86-64 Linux host. `/proc/cpuinfo` reports the
+///   host's CPU flags even when the emulated CPU exposes fewer features.
+/// * Building an environment on one machine and deploying it to another. This requires an override
+///   to specify the target machine. TODO(konsti): Add that override as part of the wheel variants
+///   stack.
 pub(super) struct X86_64VariantProvider;
 
 impl VendoredVariantProvider for X86_64VariantProvider {
