@@ -1135,8 +1135,8 @@ impl PyProjectTomlMut {
     /// Returns all the places in this `pyproject.toml` that contain a dependency with the given
     /// name.
     ///
-    /// This method searches `project.dependencies`, `tool.uv.dev-dependencies`, and
-    /// `tool.uv.optional-dependencies`.
+    /// This method searches `project.dependencies`, `project.optional-dependencies`,
+    /// `dependency-groups`, and `tool.uv.dev-dependencies`.
     pub fn find_dependency(
         &self,
         name: &PackageName,
@@ -1144,7 +1144,7 @@ impl PyProjectTomlMut {
     ) -> Vec<DependencyType> {
         let mut types = Vec::new();
 
-        if let Some(project) = self.doc.get("project").and_then(Item::as_table) {
+        if let Some(project) = self.doc.get("project").and_then(Item::as_table_like) {
             // Check `project.dependencies`.
             if let Some(dependencies) = project.get("dependencies").and_then(Item::as_array)
                 && !find_dependencies(name, marker, dependencies).is_empty()
@@ -1155,9 +1155,9 @@ impl PyProjectTomlMut {
             // Check `project.optional-dependencies`.
             if let Some(extras) = project
                 .get("optional-dependencies")
-                .and_then(Item::as_table)
+                .and_then(Item::as_table_like)
             {
-                for (extra, dependencies) in extras {
+                for (extra, dependencies) in extras.iter() {
                     let Some(dependencies) = dependencies.as_array() else {
                         continue;
                     };
@@ -1173,8 +1173,12 @@ impl PyProjectTomlMut {
         }
 
         // Check `dependency-groups`.
-        if let Some(groups) = self.doc.get("dependency-groups").and_then(Item::as_table) {
-            for (group, dependencies) in groups {
+        if let Some(groups) = self
+            .doc
+            .get("dependency-groups")
+            .and_then(Item::as_table_like)
+        {
+            for (group, dependencies) in groups.iter() {
                 let Some(dependencies) = dependencies.as_array() else {
                     continue;
                 };
@@ -1192,9 +1196,9 @@ impl PyProjectTomlMut {
         if let Some(dev_dependencies) = self
             .doc
             .get("tool")
-            .and_then(Item::as_table)
+            .and_then(Item::as_table_like)
             .and_then(|tool| tool.get("uv"))
-            .and_then(Item::as_table)
+            .and_then(Item::as_table_like)
             .and_then(|uv| uv.get("dev-dependencies"))
             .and_then(Item::as_array)
             && !find_dependencies(name, marker, dev_dependencies).is_empty()

@@ -4042,6 +4042,7 @@ fn remove_inline_source() -> Result<()> {
             "tqdm",
             "ok",
         ]
+        optional-dependencies = { test = ["ok"] }
 
         [tool.uv]
         sources = { tqdm = { path = "tqdm-1000.0.0-py3-none-any.whl" }, ok = { path = "ok-1.0.0-py3-none-any.whl" } }
@@ -4063,6 +4064,24 @@ fn remove_inline_source() -> Result<()> {
     dependencies = [
         "ok",
     ]
+    optional-dependencies = { test = ["ok"] }
+
+    [tool.uv]
+    sources = { ok = { path = "ok-1.0.0-py3-none-any.whl" } }
+    "#);
+
+    // The optional dependency still needs the wheel after removing the main dependency.
+    uv_snapshot!(context.filters(), context.remove().arg("ok").arg("--frozen"), @"
+    exit_code: 0 (success)
+    ");
+
+    assert_snapshot!(context.read("pyproject.toml"), @r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    dependencies = []
+    optional-dependencies = { test = ["ok"] }
 
     [tool.uv]
     sources = { ok = { path = "ok-1.0.0-py3-none-any.whl" } }
