@@ -709,6 +709,7 @@ pub struct RunSettings {
     pub no_project: bool,
     pub active: ActiveEnvironment,
     pub no_sync: bool,
+    pub no_sync_cli: bool,
     pub python: Option<String>,
     pub python_platform: Option<TargetTriple>,
     pub install_mirrors: PythonInstallMirrors,
@@ -871,6 +872,13 @@ impl RunSettings {
             package,
             no_project,
             no_sync: no_sync.is_enabled(),
+            no_sync_cli: matches!(
+                no_sync,
+                Flag::Enabled {
+                    source: FlagSource::Cli,
+                    ..
+                }
+            ),
             active: flag(active, no_active, "active")?.into(),
             python: python.and_then(Maybe::into_option),
             python_platform,
