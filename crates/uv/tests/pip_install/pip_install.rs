@@ -28,6 +28,7 @@ use wiremock::{
 use uv_extract::dirhash::{DirectoryDigest, dirhash_path};
 use uv_fs::{PortablePath, Simplified};
 use uv_install_wheel::validate_and_heal_record;
+use uv_python_interpreter::PyVenvConfiguration;
 use uv_redacted::SafeUrl;
 use uv_static::EnvVars;
 use uv_test::archive::{generate_source_archive, write_tar_gz};
@@ -11576,6 +11577,14 @@ fn install_relocatable() -> Result<()> {
         .arg("--relocatable")
         .assert()
         .success();
+
+    // CPython development builds record a local version in pyvenv.cfg.
+    let pyvenv_cfg = context.venv.child("pyvenv.cfg");
+    pyvenv_cfg.write_str(&PyVenvConfiguration::set(
+        &context.read(&pyvenv_cfg),
+        "version_info",
+        "3.12.0+dev",
+    ))?;
 
     // Install a package with a hello-world console script entrypoint.
     // (we use black_editable because it's convenient, but we don't actually install it as editable)
