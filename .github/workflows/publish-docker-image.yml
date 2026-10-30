@@ -14,6 +14,7 @@ on:
         default: false
 
 env:
+  UV_LOCKED: 1
   ACTIONS_CACHE_MODE: none
   DEPOT_PROJECT_PROD_UV: 7hd4vdzmw5 # prod/uv
   DEPOT_PROJECT_DEV_UV: v094vdzkdt # dev/uv
@@ -98,15 +99,20 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - uses: $/.github/actions/setup-uv-toolchain
+        id: toolchain
+
       - name: Copy saved image and publish tags
         id: publish
+        shell: uv run --only-group=jaq --python 3 bash -e {0}
         env:
+          UV_PROJECT: ${{ steps.toolchain.outputs.project }}
           IMAGE_JSON: ${{ inputs.image }}
           IMAGES: "${{ env.UV_GHCR_IMAGE }} ${{ env.UV_DOCKERHUB_IMAGE }}"
         run: |
           set -euo pipefail
-          build_id=$(jq -er '.build_id | select(test("^[a-zA-Z0-9]+$"))' <<< "$IMAGE_JSON")
-          digest=$(jq -er '.digest | select(test("^sha256:[0-9a-f]{64}$"))' <<< "$IMAGE_JSON")
+          build_id=$(jaq -er '.build_id | select(test("^[a-zA-Z0-9]+$"))' <<< "$IMAGE_JSON")
+          digest=$(jaq -er '.digest | select(test("^sha256:[0-9a-f]{64}$"))' <<< "$IMAGE_JSON")
 
           # Verify that the Depot build ID resolves to the recorded index digest.
           token="$(depot pull-token --project "$DEPOT_PROJECT_ID" "$build_id")"
@@ -124,13 +130,13 @@ jobs:
           annotations=()
           while IFS= read -r annotation; do
             annotations+=(--annotation "$annotation")
-          done < <(jq -r '.annotations[]' <<< "$IMAGE_JSON")
+          done < <(jaq -r '.annotations[]' <<< "$IMAGE_JSON")
 
           # Only accept tag references for the destination repositories selected
           # by this workflow.
           for image in $IMAGES; do
             readarray -t image_tags < <(
-              jq -r --arg prefix "$image:" '.tags[] | select(startswith($prefix))' <<< "$IMAGE_JSON"
+              jaq -r --arg prefix "$image:" '.tags[] | select(startswith($prefix))' <<< "$IMAGE_JSON"
             )
             if [ "${#image_tags[@]}" -eq 0 ]; then
               echo "Missing tags for $image" >&2
@@ -163,7 +169,7 @@ jobs:
             # Adding index annotations changes the digest. Read the new digest
             # from `imagetools` so the attestation cannot race a mutable tag.
             if [ "$image" == "$UV_GHCR_IMAGE" ]; then
-              final_digest=$(jq -er '."containerimage.descriptor".digest' "$RUNNER_TEMP/docker-publish-metadata.json")
+              final_digest=$(jaq -er '."containerimage.descriptor".digest' "$RUNNER_TEMP/docker-publish-metadata.json")
               echo "digest=$final_digest" >> "$GITHUB_OUTPUT"
             fi
           done

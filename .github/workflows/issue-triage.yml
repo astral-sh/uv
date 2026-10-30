@@ -30,29 +30,29 @@ jobs:
       issues: read
     outputs:
       issue-context: ${{ steps.issue.outputs.context }}
+      prompt-title: ${{ steps.issue.outputs.prompt-title }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
+      - uses: $/.github/actions/setup-uv-toolchain
+
       - name: "Collect issue context"
         id: issue
+        shell: uv run --only-group=jaq --python 3 bash -e {0}
         run: |
           gh issue view "$ISSUE" \
             --repo "$GITHUB_REPOSITORY" \
             --json number,title,body,author,url \
             > "$RUNNER_TEMP/issue.json"
 
-          if ! jq --exit-status \
-            --arg repository "$GITHUB_REPOSITORY" \
-            '.url | startswith("https://github.com/\($repository)/issues/")' \
-            "$RUNNER_TEMP/issue.json" > /dev/null; then
-            echo "The issue must belong to $GITHUB_REPOSITORY." >&2
-            exit 1
-          fi
-
-          jq --raw-output '"context=\(tojson)"' \
-            "$RUNNER_TEMP/issue.json" >> "$GITHUB_OUTPUT"
+          jaq -er --arg repository "$GITHUB_REPOSITORY" '
+            if .url | startswith("https://github.com/\($repository)/issues/") then
+              "context=\(tojson)", "prompt-title=\(.title | gsub("[\r\n]+"; " "))"
+            else error("The issue must belong to \($repository).")
+            end
+          ' "$RUNNER_TEMP/issue.json" >> "$GITHUB_OUTPUT"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ISSUE: ${{ inputs.issue || github.event.issue.number }}
@@ -73,15 +73,14 @@ jobs:
 
       - name: "Initialize issue context"
         run: |
-          issue_number="$(jq --raw-output '.number' "$RUNNER_TEMP/issue.json")"
-          branch="issue/$issue_number"
+          branch="issue/$ISSUE_NUMBER"
 
           git init --quiet "$RUNNER_TEMP/issue-context"
           cd "$RUNNER_TEMP/issue-context"
           git remote add origin \
             "https://x-access-token:${GH_TOKEN}@github.com/astral-sh/uv-dev.git"
 
-          gh issue develop "$issue_number" \
+          gh issue develop "$ISSUE_NUMBER" \
             --repo "$GITHUB_REPOSITORY" \
             --branch-repo astral-sh/uv-dev \
             --base issue/base \
@@ -104,6 +103,7 @@ jobs:
           git push origin "HEAD:refs/heads/$branch"
         env:
           GH_TOKEN: ${{ steps.token.outputs.token }}
+          ISSUE_NUMBER: ${{ fromJSON(steps.issue.outputs.context).number }}
 
   triage:
     needs: initialize-context
@@ -127,22 +127,21 @@ jobs:
       - name: "Prepare issue triage"
         run: |
           printf '%s\n' "$ISSUE_CONTEXT" > .issue-triage-event.json
-          issue_number="$(jq --raw-output '.number' .issue-triage-event.json)"
 
           git init --quiet "$RUNNER_TEMP/issue-context"
           git -C "$RUNNER_TEMP/issue-context" fetch --quiet --depth 1 \
             https://github.com/astral-sh/uv-dev.git \
-            "refs/heads/issue/$issue_number"
+            "refs/heads/issue/$ISSUE_NUMBER"
           git -C "$RUNNER_TEMP/issue-context" checkout --quiet FETCH_HEAD
 
           {
-            printf 'Issue triage for #%s: %s\n\n' \
-              "$issue_number" \
-              "$(jq -r '.title | gsub("[\r\n]+"; " ")' .issue-triage-event.json)"
+            printf 'Issue triage for #%s: %s\n\n' "$ISSUE_NUMBER" "$PROMPT_TITLE"
             cat agents/prompts/triage-issue.md
           } > "$RUNNER_TEMP/triage-issue-prompt.md"
         env:
           ISSUE_CONTEXT: ${{ needs.initialize-context.outputs.issue-context }}
+          ISSUE_NUMBER: ${{ fromJSON(needs.initialize-context.outputs.issue-context).number }}
+          PROMPT_TITLE: ${{ needs.initialize-context.outputs.prompt-title }}
 
       - name: "Triage issue"
         id: triage
@@ -202,11 +201,11 @@ jobs:
       - name: "Prepare issue context"
         run: |
           printf '%s\n' "$ISSUE_CONTEXT" > "$RUNNER_TEMP/issue.json"
-          printf '%s\n' "$TRIAGE_RESULT" | jq '.' > "$RUNNER_TEMP/triage.json"
+          printf '%s\n' "$TRIAGE_RESULT" > "$RUNNER_TEMP/triage.json"
           printf '%s\n%s\n%s\n' '```json' "$TRIAGE_RESULT" '```' >> "$GITHUB_STEP_SUMMARY"
         env:
           ISSUE_CONTEXT: ${{ needs.triage.outputs.issue-context }}
-          TRIAGE_RESULT: ${{ needs.triage.outputs.result }}
+          TRIAGE_RESULT: ${{ toJSON(fromJSON(needs.triage.outputs.result)) }}
 
       - name: "Get issue context token"
         id: token
@@ -220,8 +219,7 @@ jobs:
 
       - name: "Persist issue context"
         run: |
-          issue_number="$(jq --raw-output '.number' "$RUNNER_TEMP/issue.json")"
-          branch="issue/$issue_number"
+          branch="issue/$ISSUE_NUMBER"
 
           git init --quiet "$RUNNER_TEMP/issue-context"
           cd "$RUNNER_TEMP/issue-context"
@@ -249,6 +247,7 @@ jobs:
             >> "$GITHUB_STEP_SUMMARY"
         env:
           GH_TOKEN: ${{ steps.token.outputs.token }}
+          ISSUE_NUMBER: ${{ fromJSON(needs.triage.outputs.issue-context).number }}
 
   reproduce-bug:
     needs: [triage, context]

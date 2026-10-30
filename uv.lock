@@ -161,6 +161,19 @@ wheels = [
 ]
 
 [[package]]
+name = "astral-dev-toolchain-jaq"
+version = "3.1.1"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/dc/c7/ca474bf0d9c04b92c5e4438309a29c801b5924095185a0fb2ec85ceab377/astral_dev_toolchain_jaq-3.1.1-py3-none-macosx_10_12_x86_64.whl", hash = "sha256:a4d330756f9a8775375712a05625fa5c346ffd71cd97f8efa21c0d036923505d", size = 1920036, upload-time = "2026-10-19T21:12:37.971Z" },
+    { url = "https://files.pythonhosted.org/packages/21/fc/325af79867bea71a5bf5a2a9bff40907889eb439437e88a26b86062cd4aa/astral_dev_toolchain_jaq-3.1.1-py3-none-macosx_11_0_arm64.whl", hash = "sha256:bb672c250fcec7b474543b6a6f6cb3a8d97aea6a83ac9b60007b33baf705ebab", size = 1817651, upload-time = "2026-10-19T21:12:39.756Z" },
+    { url = "https://files.pythonhosted.org/packages/52/af/ca085faab5f4e725673b128c99d81ca2173eda498d449e7402c3406fcbea/astral_dev_toolchain_jaq-3.1.1-py3-none-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:93521b9c26d236fd27336c65800d99c87153e3febf176e4bf607dad551d81a29", size = 1856606, upload-time = "2026-10-19T21:12:41.515Z" },
+    { url = "https://files.pythonhosted.org/packages/5d/96/10de5a69915bc1e4da8cbbfe2b67c3cddefc542b3fcfae956f0bb4df2d89/astral_dev_toolchain_jaq-3.1.1-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:60d334352cab2fb506dcbb67875d2e9c867d8056893b49811f713ba1544bba40", size = 1976787, upload-time = "2026-10-19T21:12:43.225Z" },
+    { url = "https://files.pythonhosted.org/packages/66/e0/e536c1169a3cfe19a0ff6ec13bd63b1e5ff458b4090e5ae2983002fd8481/astral_dev_toolchain_jaq-3.1.1-py3-none-win_amd64.whl", hash = "sha256:46b559fea76bad1b599ec5ff9aea012ed6e0e951fe23f822c5d2027b57a1dc6f", size = 1992370, upload-time = "2026-10-19T21:12:44.941Z" },
+    { url = "https://files.pythonhosted.org/packages/0d/49/4e1fcc9c97fbfffbadfdc35b13fc64ec19b562791513ef5777b746fba84c/astral_dev_toolchain_jaq-3.1.1-py3-none-win_arm64.whl", hash = "sha256:799d451a2c47af8573c62e8443fb7a442553211f25ef6600f6358c9524c60e58", size = 1879577, upload-time = "2026-10-19T21:12:47.133Z" },
+]
+
+[[package]]
 name = "babel"
 version = "2.18.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1830,6 +1843,7 @@ source = { editable = "." }
 [package.dev-dependencies]
 check = [
     { name = "astral-dev-toolchain-cargo-shear" },
+    { name = "astral-dev-toolchain-jaq" },
     { name = "ruff" },
     { name = "ty" },
     { name = "typos" },
@@ -1842,6 +1856,7 @@ dev = [
     { name = "astral-dev-toolchain-cargo-dist" },
     { name = "astral-dev-toolchain-cargo-nextest" },
     { name = "astral-dev-toolchain-cargo-xwin" },
+    { name = "astral-dev-toolchain-jaq" },
 ]
 docker = [
     { name = "cargo-zigbuild", marker = "python_full_version >= '3.12'" },
@@ -1856,6 +1871,9 @@ docs = [
     { name = "mkdocs-llmstxt", marker = "python_full_version >= '3.12'" },
     { name = "mkdocs-material", marker = "python_full_version >= '3.12'" },
     { name = "mkdocs-redirects", marker = "python_full_version >= '3.12'" },
+]
+jaq = [
+    { name = "astral-dev-toolchain-jaq" },
 ]
 release = [
     { name = "rooster", marker = "python_full_version >= '3.12'" },
@@ -1874,6 +1892,7 @@ release = ">=3.12"
 [package.metadata.requires-dev]
 check = [
     { name = "astral-dev-toolchain-cargo-shear", specifier = ">=1.13.4" },
+    { name = "astral-dev-toolchain-jaq", specifier = ">=3.1.1" },
     { name = "ruff", specifier = ">=0.16.2" },
     { name = "ty", specifier = ">=0.0.69" },
     { name = "typos", specifier = ">=1.49.0" },
@@ -1886,6 +1905,7 @@ dev = [
     { name = "astral-dev-toolchain-cargo-dist", specifier = ">=0.32.0" },
     { name = "astral-dev-toolchain-cargo-nextest", specifier = ">=0.9.143" },
     { name = "astral-dev-toolchain-cargo-xwin", specifier = ">=0.23.1" },
+    { name = "astral-dev-toolchain-jaq", specifier = ">=3.1.1" },
 ]
 docker = [{ name = "cargo-zigbuild", marker = "python_full_version >= '3.12'", specifier = ">=0.23.0" }]
 docs = [
@@ -1899,6 +1919,7 @@ docs = [
     { name = "mkdocs-material", marker = "python_full_version >= '3.12'", specifier = ">=9.1.18" },
     { name = "mkdocs-redirects", marker = "python_full_version >= '3.12'", specifier = ">=1.2.2" },
 ]
+jaq = [{ name = "astral-dev-toolchain-jaq", specifier = ">=3.1.1" }]
 release = [{ name = "rooster", marker = "python_full_version >= '3.12'", specifier = "==0.1.1" }]
 test = [{ name = "astral-dev-toolchain-cargo-nextest", specifier = ">=0.9.143" }]
 

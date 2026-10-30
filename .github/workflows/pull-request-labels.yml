@@ -48,8 +48,12 @@ jobs:
           path: pull-request
           persist-credentials: false
 
+      - uses: $/.github/actions/setup-uv-toolchain
+        id: toolchain
+
       - name: "Collect pull request context"
         working-directory: pull-request
+        shell: uv run --only-group=jaq --python 3 bash -e {0}
         run: |
           # Remove potential PR-controlled paths for label configuration.
           rm -f .pull-request-labels-event.json .pull-request-labels.json
@@ -61,10 +65,11 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --limit 1000 \
             --json name,description \
-            | jq --slurpfile allowed "$GITHUB_WORKSPACE/.github/allowed-pull-request-labels.json" \
+            | jaq --slurpfile allowed "$GITHUB_WORKSPACE/.github/allowed-pull-request-labels.json" \
               '[.[] | select(.name as $label | $allowed[0] | index($label))]' \
             > .pull-request-labels.json
         env:
+          UV_PROJECT: ${{ steps.toolchain.outputs.project }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PULL_REQUEST_NUMBER: ${{ inputs.pull_request }}
 
@@ -110,10 +115,14 @@ jobs:
           ref: main
           persist-credentials: false
 
+      - uses: $/.github/actions/setup-uv-toolchain
+        id: toolchain
+
       - name: "Validate recommended labels"
         id: validate
+        shell: uv run --only-group=jaq --python 3 bash -e {0}
         run: |
-          if ! labels=$(jq --exit-status --compact-output --slurp \
+          if ! labels=$(jaq --exit-status --compact-output --slurp \
             --slurpfile allowed .github/allowed-pull-request-labels.json '
               select(length == 1)
               | .[0]
@@ -131,6 +140,7 @@ jobs:
 
           echo "labels=$labels" >> "$GITHUB_OUTPUT"
         env:
+          UV_PROJECT: ${{ steps.toolchain.outputs.project }}
           LABEL_RESULT: ${{ needs.labels.outputs.result }}
 
   apply:
@@ -159,12 +169,9 @@ jobs:
       - name: "Apply recommended labels"
         run: |
           # POST adds labels without removing any labels already on the pull request.
-          jq --null-input --argjson labels "$LABELS" '{labels: $labels}' \
-            | gh api \
-                --method POST \
-                "repos/$GITHUB_REPOSITORY/issues/$PULL_REQUEST_NUMBER/labels" \
-                --input - \
-                --silent
+          gh api --method POST \
+            "repos/$GITHUB_REPOSITORY/issues/$PULL_REQUEST_NUMBER/labels" \
+            --input - --silent <<< "$LABELS"
         env:
           GH_TOKEN: ${{ steps.token.outputs.token }}
           LABELS: ${{ needs.validate.outputs.labels }}

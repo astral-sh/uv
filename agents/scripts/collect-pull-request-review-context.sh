@@ -19,31 +19,33 @@ gh pr view "$PULL_REQUEST_NUMBER" \
   --json number,title,body,author,baseRefName,baseRefOid,headRefName,headRefOid,isDraft,labels \
   > "$context/event.json"
 
-if ! jq --exit-status --arg head "$HEAD_SHA" \
+# shellcheck disable=SC2016 # Keep the jaq filter literal.
+if ! jaq --exit-status --arg head "$HEAD_SHA" \
   '.headRefOid == $head' "$context/event.json" > /dev/null; then
   echo "The pull request head changed during review setup." >&2
   exit 1
 fi
 
 merge_base="$(git merge-base "$BASE_SHA" "$HEAD_SHA")"
-jq --null-input --arg base "$merge_base" --arg base_tip "$BASE_SHA" --arg head "$HEAD_SHA" \
+# shellcheck disable=SC2016 # Keep the jaq filter literal.
+jaq --null-input --arg base "$merge_base" --arg base_tip "$BASE_SHA" --arg head "$HEAD_SHA" \
   '{base: $base, base_tip: $base_tip, head: $head}' > "$context/revisions.json"
 git diff --no-ext-diff --no-textconv --no-renames \
   "$merge_base..$HEAD_SHA" > "$context/diff.patch"
 git diff --no-ext-diff --no-textconv --no-renames --name-only -z \
   "$merge_base..$HEAD_SHA" \
-  | jq --raw-input --slurp 'split("\u0000")[:-1]' > "$context/paths.json"
+  | jaq --raw-input --slurp 'split("\u0000")[:-1]' > "$context/paths.json"
 
 gh api --paginate --slurp \
   "repos/$GITHUB_REPOSITORY/pulls/$PULL_REQUEST_NUMBER/comments?per_page=100" \
-  | jq '[.[][] | {author: .user.login, body, path, line, original_line, side, start_line,
+  | jaq '[.[][] | {author: .user.login, body, path, line, original_line, side, start_line,
       original_start_line, start_side, commit_id, original_commit_id, in_reply_to_id,
       created_at, html_url}]' > "$context/comments.json"
 gh api --paginate --slurp \
   "repos/$GITHUB_REPOSITORY/pulls/$PULL_REQUEST_NUMBER/reviews?per_page=100" \
-  | jq '[.[][] | {author: .user.login, body, state, commit_id, submitted_at, html_url}]' \
+  | jaq '[.[][] | {author: .user.login, body, state, commit_id, submitted_at, html_url}]' \
     > "$context/reviews.json"
 gh api --paginate --slurp \
   "repos/$GITHUB_REPOSITORY/issues/$PULL_REQUEST_NUMBER/comments?per_page=100" \
-  | jq '[.[][] | {author: .user.login, body, created_at, html_url}]' \
+  | jaq '[.[][] | {author: .user.login, body, created_at, html_url}]' \
     > "$context/conversation.json"

@@ -94,15 +94,16 @@ jobs:
       - name: "Collect built release wheels"
         shell: bash
         env:
-          TARGETS: ${{ steps.targets.outputs.targets }}
+          TARGETS: ${{ join(fromJSON(steps.targets.outputs.targets), ' ') }}
         run: |
           set -euo pipefail
           shopt -s failglob
-          while read -r target; do
+          read -r -a targets <<< "$TARGETS"
+          for target in "${targets[@]}"; do
             mkdir -p "wheels/$target"
             cp wheel-artifacts/"build-wheels-uv-$target"/*.whl "wheels/$target/"
             cp wheel-artifacts/"build-wheels-uv_build-$target"/*.whl "wheels/$target/"
-          done < <(jq -r '.[]' <<< "$TARGETS")
+          done
 
       - name: "Prepare release signing inputs"
         uses: astral-sh/github-actions/prepare-release-signing@0125bede5fad05fe257d1bbe205173b2fa0df28f # shared release signing actions
