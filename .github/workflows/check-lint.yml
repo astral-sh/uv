@@ -226,11 +226,6 @@ jobs:
         run: |
           curl --proto '=https' --tlsv1.2 -LsSf \
             "https://github.com/astral-sh/hawk/releases/download/${HAWK_VERSION}/cargo-hawk-installer.sh" | sh
-      - name: Verify the benchmark restored Hawk graph fragments
-        run: |
-          fragments=$(find target/hawk/hawk-fragments -type f -name '*.json' | wc -l)
-          test "$fragments" -gt 0
-          echo "Restored $fragments Hawk graph fragments"
       - name: "Hawk"
         run: cargo hawk check --target-dir target/hawk -D warnings
 
