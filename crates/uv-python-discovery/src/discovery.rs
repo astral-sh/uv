@@ -86,7 +86,14 @@ pub enum Error {
     Io(#[from] io::Error),
 
     /// An error was encountering when retrieving interpreter information.
-    #[error("Failed to inspect Python interpreter from {} at `{}` ", _2, _1.user_display())]
+    #[error(
+        "Failed to inspect Python interpreter from {}{}",
+        _2,
+        match _0.as_ref() {
+            InterpreterError::CpuDetection { .. } => String::new(),
+            _ => format!(" at `{}`", _1.user_display()),
+        }
+    )]
     Query(
         #[source] Box<uv_python_interpreter::InterpreterError>,
         PathBuf,

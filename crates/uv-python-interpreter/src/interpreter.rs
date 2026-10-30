@@ -17,6 +17,7 @@ use tracing::{debug, trace, warn};
 use uv_cache::{Cache, CacheBucket, CacheEntry, CachedByTimestamp, Freshness};
 use uv_cache_info::Timestamp;
 use uv_cache_key::cache_digest;
+use uv_errors::Hints;
 use uv_fs::{
     LockedFile, LockedFileError, LockedFileMode, PythonExt, Simplified, write_atomic_sync,
 };
@@ -28,7 +29,7 @@ use uv_platform_tags::{CpuInfo, Platform, Tags, TagsError, TagsOptions};
 use uv_preview::PreviewFeature;
 use uv_pypi_types::{ResolverMarkerEnvironment, Scheme};
 use uv_static::EnvVars;
-use uv_warnings::warn_user_once;
+use uv_warnings::warn_user_once_with_chain;
 
 use crate::PointerSize;
 use crate::PyVenvConfiguration;
@@ -1001,8 +1002,12 @@ impl Display for StatusCodeError {
 
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error("Failed to detect CPU capabilities for interpreter at `{path}`: {message}")]
-    CpuDetection { path: PathBuf, message: Box<str> },
+    #[error("Failed to detect CPU capabilities for interpreter at `{path}`")]
+    CpuDetection {
+        path: PathBuf,
+        #[source]
+        err: CpuDetectionError,
+    },
     #[error("Failed to query Python interpreter")]
     Io(#[from] io::Error),
     #[error(transparent)]
@@ -1115,8 +1120,13 @@ enum CpuProbe {
     UnsupportedArchitecture,
     Detected(CpuInfo),
     Unavailable(Box<str>),
-    Error(Box<str>),
+    Error(CpuDetectionError),
 }
+
+/// The failure reported by the interpreter's CPU probe.
+#[derive(Debug, Deserialize, Error)]
+#[error("{0}")]
+pub struct CpuDetectionError(Box<str>);
 
 #[derive(Debug, Error, Deserialize, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
@@ -1455,16 +1465,17 @@ impl InterpreterInfo {
                 );
                 None
             }
-            CpuProbe::Error(message) => {
+            CpuProbe::Error(err) => {
                 let error = Error::CpuDetection {
                     path: executable.to_path_buf(),
-                    message,
+                    err,
                 };
                 if uv_preview::is_enabled(PreviewFeature::WheelVariants) {
                     return Err(error);
                 }
-                warn_user_once!(
-                    "Failed to detect CPU information, this will become a hard error in the future: {error}"
+                warn_user_once_with_chain!(
+                    &error,
+                    Hints::from("CPU detection failures will become errors in a future release.")
                 );
                 None
             }
