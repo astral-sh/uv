@@ -616,15 +616,15 @@ def _get_cpu_info():
     Returns raw data to avoid bumping the cache when we want to do more detection in Rust.
     """
     if sys.platform == "linux":
-        return _linux_cpu_info()
+        return _linux_x86_64_cpu_info()
     if sys.platform == "darwin":
         return _macos_cpu_info()
     if os.name == "nt":
-        return _windows_cpu_info()
+        return _windows_x86_64_cpu_info()
     return {"unavailable": f"No CPU probe for {sys.platform}"}
 
 
-def _linux_cpu_info():
+def _linux_x86_64_cpu_info():
     """Read the first processor's raw flags, following archspec's Linux detection.
 
     https://github.com/archspec/archspec/blob/ebd3eb502d9205f1033ffc028d661f2fbece7dfc/archspec/cpu/detect.py#L78-L104
@@ -712,7 +712,7 @@ def _macos_cpu_info():
     return {"unavailable": "No x86 feature flags reported by sysctl"}
 
 
-def _windows_cpu_info():
+def _windows_x86_64_cpu_info():
     try:
         import ctypes
     except ImportError as error:
@@ -868,7 +868,7 @@ def main() -> None:
             # Rust applies the preview policy to unexpected failures.
             cpu_info = {"error": f"{type(error).__name__}: {error}"}
     else:
-        cpu_info = "unsupported_architecture"
+        cpu_info = {"unsupported_architecture": os_and_arch["arch"]}
 
     # By default, pip uses sysconfig on Python 3.10+.
     # But Python distributors can override this decision by setting:

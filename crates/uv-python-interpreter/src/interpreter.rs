@@ -1113,9 +1113,13 @@ struct InterpreterInfoWire {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
 enum CpuProbe {
-    UnsupportedArchitecture,
+    /// CPU capabilities were detected successfully.
     Detected(CpuInfo),
+    /// No probe supports this interpreter architecture. Continue without CPU data.
+    UnsupportedArchitecture(Box<str>),
+    /// An expected limitation prevented detection. Continue with the platform defaults.
     Unavailable(Box<str>),
+    /// An unexpected probe failure, fatal with wheel variants enabled and a warning otherwise.
     Error(CpuDetectionError),
 }
 
@@ -1452,8 +1456,11 @@ impl InterpreterInfo {
         );
         let wire = Self::query(executable, cache)?;
         let cpu_info = match wire.cpu_info {
-            CpuProbe::UnsupportedArchitecture => None,
             CpuProbe::Detected(info) => Some(info),
+            CpuProbe::UnsupportedArchitecture(architecture) => {
+                debug!("CPU detection is unsupported for architecture `{architecture}`");
+                None
+            }
             CpuProbe::Unavailable(reason) => {
                 debug!(
                     "CPU information unavailable for `{}`: {reason}",
