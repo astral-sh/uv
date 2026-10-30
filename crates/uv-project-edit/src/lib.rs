@@ -1841,43 +1841,6 @@ mod test {
     use uv_workspace::pyproject::DependencyType;
 
     #[test]
-    fn remove_dependency_with_inline_sources() -> Result<()> {
-        let mut doc = PyProjectTomlMut::from_toml(
-            r#"tool = { uv = { sources = { Demo_Pkg = { path = "demo" }, keep = { path = "keep" } } } }
-[project]
-dependencies = ["demo-pkg", "keep"]
-"#,
-            DependencyTarget::PyProjectToml,
-        )?;
-        doc.remove_dependency(&PackageName::from_str("demo-pkg")?)?;
-        let sources = &doc.doc["tool"]["uv"]["sources"];
-        assert!(sources.get("Demo_Pkg").is_none());
-        assert_eq!(sources["keep"]["path"].as_str(), Some("keep"));
-        doc.remove_dependency(&PackageName::from_str("keep")?)?;
-        assert!(doc.doc["tool"]["uv"].get("sources").is_none());
-        Ok(())
-    }
-
-    #[test]
-    fn remove_dependency_with_empty_inline_sources() -> Result<()> {
-        let mut doc = PyProjectTomlMut::from_toml(
-            r#"[project]
-dependencies = ["demo-pkg"]
-[tool.uv]
-sources = {}
-"#,
-            DependencyTarget::PyProjectToml,
-        )?;
-        assert_eq!(
-            doc.remove_dependency(&PackageName::from_str("demo-pkg")?)?
-                .len(),
-            1
-        );
-        assert!(doc.doc["tool"]["uv"]["sources"].as_inline_table().is_some());
-        Ok(())
-    }
-
-    #[test]
     fn split() {
         assert_eq!(split_specifiers("flask>=1.0"), ("flask", ">=1.0"));
         assert_eq!(split_specifiers("Flask>=1.0"), ("Flask", ">=1.0"));

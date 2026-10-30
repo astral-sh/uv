@@ -3983,6 +3983,94 @@ fn remove_non_normalized_source() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn remove_with_empty_inline_sources() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio"]
+
+        [tool.uv]
+        sources = {}
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.remove().arg("anyio"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Checked in [TIME]
+    ");
+
+    assert_snapshot!(context.read("pyproject.toml"), @r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    dependencies = []
+
+    [tool.uv]
+    sources = {}
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn remove_inline_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let links = context.workspace_root.join("test/links");
+    for wheel in [
+        "ok-1.0.0-py3-none-any.whl",
+        "tqdm-1000.0.0-py3-none-any.whl",
+    ] {
+        fs_err::copy(links.join(wheel), context.temp_dir.join(wheel))?;
+    }
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "tqdm",
+            "ok",
+        ]
+
+        [tool.uv]
+        sources = { tqdm = { path = "tqdm-1000.0.0-py3-none-any.whl" }, ok = { path = "ok-1.0.0-py3-none-any.whl" } }
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.remove().arg("tqdm"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0 (from file://[TEMP_DIR]/ok-1.0.0-py3-none-any.whl)
+    ");
+
+    assert_snapshot!(context.read("pyproject.toml"), @r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    dependencies = [
+        "ok",
+    ]
+
+    [tool.uv]
+    sources = { ok = { path = "ok-1.0.0-py3-none-any.whl" } }
+    "#);
+
+    Ok(())
+}
+
 /// Adding a dependency does not remove untracked dependencies from the environment.
 #[test]
 fn add_inexact() -> Result<()> {
