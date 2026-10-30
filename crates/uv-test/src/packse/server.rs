@@ -124,6 +124,11 @@ impl PackseServer {
         format!("{}/simple/", self.server.url())
     }
 
+    /// The Simple API index URL for testing relative distribution links.
+    pub fn relative_index_url(&self) -> String {
+        format!("{}/relative/simple/", self.server.url())
+    }
+
     /// Return the URL for a generated distribution file.
     pub fn file_url(&self, filename: &str) -> String {
         format!("{}/files/{filename}", self.server.url())
@@ -314,6 +319,12 @@ fn handle_request(
     hashes: bool,
 ) -> ResponseTemplate {
     let path = req.url.path();
+    // Resolve artifact links under `/relative/files/` from either spelling of the package URL.
+    let (path, artifact_root) = match path.strip_prefix("/relative") {
+        Some(path) if path.ends_with('/') => (path, "../.."),
+        Some(path) => (path, ".."),
+        None => (path, server_uri),
+    };
 
     if let Some(pkg) = extract_package_name(path) {
         let Ok(package_name) = PackageName::from_str(pkg) else {
@@ -321,7 +332,7 @@ fn handle_request(
         };
 
         if let Some(entry) = index.packages.get(&package_name) {
-            return build_simple_api_response(pkg, entry, server_uri, hashes);
+            return build_simple_api_response(pkg, entry, artifact_root, hashes);
         }
         return ResponseTemplate::new(404);
     }
@@ -439,13 +450,13 @@ fn parse_byte_range(range: &str, length: usize) -> Option<(usize, usize)> {
 fn build_simple_api_response(
     package_name: &str,
     entry: &[IndexFile],
-    server_uri: &str,
+    artifact_root: &str,
     hashes: bool,
 ) -> ResponseTemplate {
     let files: Vec<serde_json::Value> = entry
         .iter()
         .map(|file| {
-            let url = format!("{server_uri}/files/{}", file.filename);
+            let url = format!("{artifact_root}/files/{}", file.filename);
             let mut file_obj = json!({
                 "filename": file.filename,
                 "url": url,
@@ -519,6 +530,23 @@ mod tests {
         assert_eq!(extract_package_name("/simple/"), None);
         assert_eq!(extract_package_name("/simple"), None);
         assert_eq!(extract_package_name("/simple/foo/bar"), None);
+    }
+
+    #[tokio::test]
+    async fn relative_index_emits_relative_file_urls() -> Result<()> {
+        let server = PackseServer::new("simple/single-package.toml");
+        for (package_path, root) in [("a/", "../.."), ("a", "..")] {
+            let page: serde_json::Value =
+                reqwest::get(format!("{}{package_path}", server.relative_index_url()))
+                    .await?
+                    .json()
+                    .await?;
+            assert_eq!(
+                page["files"][0]["url"],
+                format!("{root}/files/a-1.0.0-py3-none-any.whl")
+            );
+        }
+        Ok(())
     }
 
     #[test]
