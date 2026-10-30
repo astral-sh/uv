@@ -243,10 +243,12 @@ impl TestContext {
         self
     }
 
-    /// Configure one HTTP retry with a one-second timeout for all commands in this context.
+    /// Configure one immediate HTTP retry with a one-second timeout per attempt.
     #[must_use]
     pub fn with_fast_http_retry(self) -> Self {
-        self.with_http_timeout("1").with_http_retries("1")
+        self.with_http_timeout("1")
+            .with_http_retries("1")
+            .with_env(EnvVars::UV_INTERNAL__TEST_NO_HTTP_RETRY_DELAY, "true")
     }
 
     /// Omit incidental HTTP retries from a snapshot that asserts the eventual error.
