@@ -122,7 +122,6 @@ pub async fn remove(
         ),
     };
     let mut toml = PyProjectTomlMut::from_toml(raw, kind)?;
-    let inline_sources = toml.has_inline_sources();
 
     for package in packages {
         match dependency_type {
@@ -189,11 +188,7 @@ pub async fn remove(
         }
     }
 
-    let content = if inline_sources {
-        toml.into_string_after_remove(raw)?
-    } else {
-        toml.to_string()
-    };
+    let content = toml.to_string();
 
     let (path, lock_target) = match &target {
         EditTarget::Script(script) => (script.path.clone(), LockTarget::from(script)),

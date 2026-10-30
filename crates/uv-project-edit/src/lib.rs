@@ -29,6 +29,7 @@ use uv_workspace::pyproject::{DependencyType, Source};
 pub struct PyProjectTomlMut {
     doc: DocumentMut,
     target: DependencyTarget,
+    inline_source_comments: Vec<(usize, InlineComments)>,
 }
 
 fn index_locations_equal(existing: &str, incoming: &IndexUrl, root_dir: &Path) -> bool {
@@ -108,40 +109,38 @@ pub enum DependencyTarget {
 impl PyProjectTomlMut {
     /// Initialize a [`PyProjectTomlMut`] from a [`str`].
     pub fn from_toml(raw: &str, target: DependencyTarget) -> Result<Self, Error> {
+        let parsed = toml_edit::Document::parse(raw).map_err(Box::new)?;
+        let mut inline_source_comments = Vec::new();
+        if has_inline_sources(parsed.as_item()) {
+            let mut item = parsed.as_item();
+            for (depth, key) in SOURCE_PATH.iter().enumerate() {
+                let Some(child) = item.get(key) else { break };
+                item = child;
+                if let Some(table) = item.as_inline_table()
+                    && !table.is_dotted()
+                {
+                    inline_source_comments.push((depth, InlineComments::read(table, raw)));
+                }
+            }
+        }
         Ok(Self {
-            doc: raw.parse().map_err(Box::new)?,
+            doc: parsed.into_mut(),
             target,
+            inline_source_comments,
         })
     }
 
-    /// Return whether the sources are declared in an inline table.
-    pub fn has_inline_sources(&self) -> bool {
-        self.doc
-            .get("tool")
-            .and_then(|tool| tool.get("uv"))
-            .and_then(|uv| uv.get("sources"))
-            .is_some_and(Item::is_inline_table)
-    }
-
-    /// Restore inline source comments and closing whitespace after all requested removals.
-    pub fn into_string_after_remove(mut self, original: &str) -> Result<String, Error> {
-        let parsed = toml_edit::Document::parse(original).map_err(Box::new)?;
-        let mut before = parsed.as_item();
-        let mut after = self.doc.as_item_mut();
-        for key in ["tool", "uv", "sources"] {
-            let Some((old, new)) = before.get(key).zip(after.get_mut(key)) else {
-                break;
-            };
-            before = old;
-            after = new;
-            if let Some(old) = before.as_inline_table()
-                && !old.is_dotted()
-                && let Some(new) = after.as_inline_table_mut()
+    /// Restore comments to the source fields still present after a removal.
+    fn restore_inline_source_comments(&mut self) {
+        for (depth, comments) in &self.inline_source_comments {
+            if let Some(table) = SOURCE_PATH[..=*depth]
+                .iter()
+                .try_fold(self.doc.as_item_mut(), |item, key| item.get_mut(key))
+                .and_then(Item::as_inline_table_mut)
             {
-                InlineComments::read(old, original).apply(new);
+                comments.apply(table);
             }
         }
-        Ok(self.to_string())
     }
 
     /// Adds a project to the workspace.
@@ -1110,8 +1109,15 @@ impl PyProjectTomlMut {
 
     /// Remove a matching source from `tool.uv.sources`, if it exists.
     fn remove_source(&mut self, name: &PackageName) -> Result<(), Error> {
+        self.remove_unused_source(name)?;
+        self.restore_inline_source_comments();
+        Ok(())
+    }
+
+    /// Remove the source if the dependency no longer occurs in the manifest.
+    fn remove_unused_source(&mut self, name: &PackageName) -> Result<(), Error> {
         // An inline source can be shared with a dependency declared in another inline table.
-        let remaining = if self.has_inline_sources() {
+        let remaining = if has_inline_sources(self.doc.as_item()) {
             self.find_dependency_with(name, None, Item::as_table_like)
         } else {
             self.find_dependency(name, None)
@@ -1688,25 +1694,32 @@ fn same_requirement_declaration(left: &Requirement, right: &Requirement) -> bool
         && left.marker == right.marker
 }
 
+const SOURCE_PATH: [&str; 3] = ["tool", "uv", "sources"];
+
+/// Return whether this document declares its sources in an inline table.
+fn has_inline_sources(doc: &Item) -> bool {
+    SOURCE_PATH
+        .iter()
+        .try_fold(doc, |item, key| item.get(key))
+        .is_some_and(Item::is_inline_table)
+}
+
 /// End-of-line comments and closing whitespace for one inline table on the source path.
-struct InlineComments<'a> {
+struct InlineComments {
     // End-of-line comments keyed by the field they describe. The empty path denotes the opening brace.
-    after: HashMap<Vec<String>, &'a str>,
-    closing: &'a str,
+    after: HashMap<Vec<String>, String>,
+    closing: String,
     final_value: Option<Vec<String>>,
 }
 
 /// Read the comment on the same line as an opening brace, comma, or final value.
-fn eol(s: &str) -> &str {
-    s.lines()
-        .next()
-        .filter(|s| s.trim_start().starts_with('#'))
-        .unwrap_or_default()
+fn eol(s: &str) -> Option<&str> {
+    s.lines().next().filter(|s| s.trim_start().starts_with('#'))
 }
 
 /// Replace only the first line of trivia, keeping comments on subsequent lines with the next field.
 fn prefix_with_comment(prefix: &str, comment: &str) -> String {
-    if eol(prefix) == comment {
+    if eol(prefix).unwrap_or_default() == comment {
         return prefix.to_owned();
     }
     match prefix.find('\n') {
@@ -1716,9 +1729,9 @@ fn prefix_with_comment(prefix: &str, comment: &str) -> String {
     }
 }
 
-impl<'a> InlineComments<'a> {
+impl InlineComments {
     /// Collect comment ownership in input order before dotted fields are grouped by the serializer.
-    fn read(table: &InlineTable, raw: &'a str) -> Self {
+    fn read(table: &InlineTable, raw: &str) -> Self {
         let trivia =
             |v: Option<&RawString>| v.and_then(RawString::span).map_or("", |span| &raw[span]);
         let mut previous = Vec::new();
@@ -1730,30 +1743,39 @@ impl<'a> InlineComments<'a> {
             .sorted_unstable_by_key(|(_, value)| value.span().map(|s| s.start))
         {
             let prefix = trivia(keys.last().and_then(|key| key.leaf_decor().prefix()));
-            after.insert(previous, eol(prefix));
+            if let Some(comment) = eol(prefix) {
+                after.insert(previous, comment.to_owned());
+            }
             previous = keys.iter().map(|k| k.get().to_owned()).collect();
             if !table.trailing_comma() {
                 closing = trivia(value.decor().suffix());
             }
         }
         let final_value = (!table.trailing_comma()).then(|| previous.clone());
-        after.insert(previous, eol(closing));
+        if let Some(comment) = eol(closing) {
+            after.insert(previous, comment.to_owned());
+        }
         Self {
             after,
-            closing,
+            closing: closing.to_owned(),
             final_value,
         }
     }
 
     /// Restore comments in serialization order, skipping fields removed from the source table.
     fn apply(&self, table: &mut InlineTable) {
-        let mut comment = self.after.get(&[][..]).copied().unwrap_or_default();
+        let mut comment = self.after.get(&[][..]).map_or("", String::as_str);
         self.apply_fields(table, &mut Vec::new(), &mut comment);
-        table.set_trailing(prefix_with_comment(self.closing, comment));
+        table.set_trailing(prefix_with_comment(&self.closing, comment));
     }
 
     /// Visit the remaining leaf keys in the same order as `InlineTable::get_values`.
-    fn apply_fields(&self, table: &mut InlineTable, path: &mut Vec<String>, comment: &mut &'a str) {
+    fn apply_fields<'a>(
+        &'a self,
+        table: &mut InlineTable,
+        path: &mut Vec<String>,
+        comment: &mut &'a str,
+    ) {
         for (mut key, value) in table.iter_mut() {
             path.push(key.get().to_owned());
             if let Value::InlineTable(child) = value
@@ -1770,7 +1792,7 @@ impl<'a> InlineComments<'a> {
                 if self.final_value.as_ref() == Some(path) {
                     value.decor_mut().set_suffix("");
                 }
-                *comment = self.after.get(path).copied().unwrap_or_default();
+                *comment = self.after.get(path).map_or("", String::as_str);
             }
             path.pop();
         }
