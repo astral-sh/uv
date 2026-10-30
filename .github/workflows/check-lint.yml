@@ -17,7 +17,7 @@ env:
   CARGO_NET_RETRY: 10
   CARGO_TERM_COLOR: always
   # renovate: datasource=github-releases depName=astral-sh/hawk
-  HAWK_VERSION: 0.1.15
+  HAWK_VERSION: 0.1.17
   RUSTUP_MAX_RETRIES: 10
   UV_LOCKED: 1
   UV_PYTHON_DOWNLOADS_JSON_URL: ${{ github.workspace }}/crates/uv-python-managed/download-metadata.json
@@ -198,23 +198,32 @@ jobs:
     timeout-minutes: 15
     if: ${{ inputs.code-changed == 'true' || github.ref == 'refs/heads/main' }}
     runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
+    env:
+      RUSTUP_TOOLCHAIN: "1.99.0"
+      RUSTC_BOOTSTRAP: "1"
+      CARGO_UNSTABLE_CHECKSUM_FRESHNESS: "true"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - name: Install Rust toolchain
+        run: rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal
+      - uses: astral-sh/github-actions/rust-workspace-cache@ecaa281a478297a7f6ad7ab58da2779de4771ca0
         with:
-          workspaces: ". -> target/hawk"
-          cache-workspace-crates: "false"
-          save-if: ${{ inputs.save-rust-cache == 'true' }}
-      - name: "Install Rust toolchain"
-        run: rustup toolchain install 1.99.0
+          target-directory: target/hawk
+          extra-target-directory: hawk-fragments
+          profile: |
+            debug
+            x86_64-unknown-linux-gnu/debug
+          prefix-key: hawk-workspace-${{ env.HAWK_VERSION }}
+          cache-bin: false
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: "Install Hawk"
         run: |
           curl --proto '=https' --tlsv1.2 -LsSf \
             "https://github.com/astral-sh/hawk/releases/download/${HAWK_VERSION}/cargo-hawk-installer.sh" | sh
       - name: "Hawk"
-        run: cargo +1.99.0 hawk check --target-dir target/hawk -D warnings
+        run: cargo hawk check -D warnings
 
   shear:
     name: "cargo shear"

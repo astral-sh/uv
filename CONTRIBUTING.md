@@ -180,7 +180,7 @@ against the checked-in uv schema also requires [jq](https://jqlang.org/).
 ```shell
 # Rust
 CARGO_BUILD_WARNINGS=deny cargo clippy --workspace --all-targets --all-features --locked
-cargo +1.99.0 hawk check --target-dir target/hawk -D warnings
+cargo +1.99.0 hawk check -D warnings
 
 # Python
 uv run --only-group=check ruff check .
