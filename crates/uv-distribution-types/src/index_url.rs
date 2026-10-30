@@ -97,6 +97,11 @@ impl IndexUrl {
         self.inner().raw().as_url()
     }
 
+    /// Serialize the index URL with sensitive userinfo removed and its complete query intact.
+    pub fn to_serialized_string(&self) -> Cow<'_, str> {
+        self.inner().to_serialized_string()
+    }
+
     /// Convert the index URL into a [`SafeUrl`].
     pub fn into_url(self) -> SafeUrl<Stripped> {
         match self {
