@@ -173,12 +173,10 @@ fn sync_keeps_installed_variant() -> Result<()> {
     let links = context.temp_dir.child("links");
     links.create_dir_all()?;
     let variant = gpu_variant().to_string();
-    let (_, wheel) = WheelBuilder::new(&"ok".parse()?, &"1.0.0".parse()?)
-        .files(&[("ok-1.0.0.dist-info/variant.json", &variant)])
+    let (filename, wheel) = WheelBuilder::new(&"ok".parse()?, &"1.0.0".parse()?)
+        .variant(&"gpu".parse()?, &variant)
         .build();
-    links
-        .child("ok-1.0.0-py3-none-any-gpu.whl")
-        .write_binary(&wheel)?;
+    links.child(filename).write_binary(&wheel)?;
     links.child("ok-1.0.0-variants.json").write_str(&variant)?;
 
     uv_snapshot!(context.filters(), context.pip_install()
