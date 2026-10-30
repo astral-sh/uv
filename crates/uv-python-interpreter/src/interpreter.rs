@@ -1112,7 +1112,7 @@ struct InterpreterInfoWire {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
 enum CpuProbe {
-    NonX86_64,
+    UnsupportedArchitecture,
     Detected(CpuInfo),
     Unavailable(Box<str>),
     Error(Box<str>),
@@ -1446,7 +1446,7 @@ impl InterpreterInfo {
         );
         let wire = Self::query(executable, cache)?;
         let cpu_info = match wire.cpu_info {
-            CpuProbe::NonX86_64 => None,
+            CpuProbe::UnsupportedArchitecture => None,
             CpuProbe::Detected(info) => Some(info),
             CpuProbe::Unavailable(reason) => {
                 debug!(

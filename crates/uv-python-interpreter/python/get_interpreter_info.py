@@ -852,7 +852,7 @@ def main() -> None:
             # Rust applies the preview policy to unexpected failures.
             cpu_info = {"error": f"{type(error).__name__}: {error}"}
     else:
-        cpu_info = "non_x86_64"
+        cpu_info = "unsupported_architecture"
 
     # By default, pip uses sysconfig on Python 3.10+.
     # But Python distributors can override this decision by setting:
