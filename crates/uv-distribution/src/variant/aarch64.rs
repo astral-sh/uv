@@ -54,9 +54,17 @@ static VERSION_PROPERTIES: LazyLock<[SupportedVariantFeature; 8]> = LazyLock::ne
 /// # Known limitations
 ///
 /// - On Linux, unrecognized core models use `8a`. Windows ARM64 also uses `8a`.
-/// - On macOS, an unrecognized Apple M-series chip is assumed to support `8.6a`.
+/// - On macOS, uv follows [archspec] and infers the version from the Apple chip name.
+///   An unrecognized M-series chip is assumed to support `8.6a`. A matching wheel can use
+///   instructions that macOS does not expose to the process.
+/// - The [WheelNext provider] caps newer Armv9 targets at `9.0a` and lists its ancestors.
+///   For example, the Armv9.2-A Neoverse V3AE supports `8.6a`, but the provider's list
+///   goes directly from `9.0a` to `8.5a`.
 /// - The cached CPU information belongs to the interpreter's machine. Sharing its cache or
 ///   deploying its environment to a machine with a different CPU can select an incompatible wheel.
+///
+/// [archspec]: https://github.com/archspec/archspec/blob/ebd3eb502d9205f1033ffc028d661f2fbece7dfc/archspec/cpu/detect.py#L314-L334
+/// [WheelNext provider]: https://github.com/wheelnext/aarch64-variant-provider/blob/v0.2.0/aarch64_variant_provider/plugin.py#L106-L115
 pub(super) struct Aarch64VariantProvider;
 
 impl VendoredVariantProvider for Aarch64VariantProvider {
@@ -168,12 +176,6 @@ impl Aarch64Version {
         // GCC's AArch64 options and LLVM's AArch64Features.td define the generic -march targets.
         // https://gcc.gnu.org/onlinedocs/gcc/AArch64-Options.html
         // https://github.com/llvm/llvm-project/tree/ab7245d75cc9/llvm/lib/Target/AArch64
-        // FP16, AdvSIMD HP, SVE, SVE2.
-        let sve2 = has_bits(hwcap, &[9, 10, 22]) && has_bits(hwcap2, &[1]);
-        if self == Self::V9_0 && !sve2 {
-            // A VM can expose a v9 core ID while masking its vector ISA.
-            return Self::V8;
-        }
         let mut level = Self::V8;
         for (next, available) in [
             // FP, AdvSIMD, CRC32, atomics, RDM.
@@ -198,7 +200,8 @@ impl Aarch64Version {
             }
             level = next;
         }
-        if self == Self::V9_0 {
+        if self == Self::V9_0 && has_bits(hwcap, &[9, 10, 22]) && has_bits(hwcap2, &[1]) {
+            // FP16, AdvSIMD HP, SVE, SVE2. A VM can mask SVE2 while still supporting Armv8.5-A.
             Self::V9_0
         } else if self == Self::V8_6 && has_bits(hwcap2, &[13, 14, 19]) {
             // I8MM, BF16, ECV.
@@ -282,7 +285,7 @@ mod tests {
 
         assert_eq!(Aarch64Version::detect(&full), Aarch64Version::V9_0);
         assert!(!Aarch64Version::V9_0.supports(Aarch64Version::V8_6));
-        assert_eq!(Aarch64Version::detect(&masked), Aarch64Version::V8);
+        assert_eq!(Aarch64Version::detect(&masked), Aarch64Version::V8_5);
         assert_eq!(Aarch64Version::detect(&mixed), Aarch64Version::V8_2);
     }
 }
