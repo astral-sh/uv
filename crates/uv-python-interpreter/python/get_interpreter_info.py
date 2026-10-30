@@ -629,8 +629,6 @@ def _get_cpu_info(architecture):
             return _linux_aarch64_cpu_info()
         elif sys.platform == "darwin":
             return _macos_cpu_info("aarch64")
-        elif os.name == "nt":
-            return _windows_aarch64_cpu_info()
     else:
         return {"unsupported_architecture": architecture}
     return {"unavailable": f"No CPU probe for {sys.platform}"}
@@ -772,23 +770,6 @@ def _linux_aarch64_cpu_info():
             "hwcaps": [getauxval(key) for key in (16, 26, 29, 30)],
         }
     }
-
-
-def _windows_aarch64_cpu_info():
-    try:
-        import ctypes
-    except ImportError as error:
-        # Python can be built without the optional _ctypes extension.
-        return {"unavailable": str(error)}
-
-    present = getattr(ctypes.WinDLL("kernel32"), "IsProcessorFeaturePresent", None)
-    if present is None:
-        return {"unavailable": "IsProcessorFeaturePresent is unavailable"}
-    present.argtypes = [ctypes.c_uint32]
-    present.restype = ctypes.c_int
-    # Windows allocates PROCESSOR_FEATURE_MAX (64) entries for processor feature IDs.
-    features = sum(1 << feature for feature in range(64) if present(feature))
-    return {"detected": {"kind": "windows_arm64", "features": features}}
 
 
 def _windows_x86_64_cpu_info():
@@ -942,6 +923,9 @@ def main() -> None:
 
     try:
         cpu_info = _get_cpu_info(architecture)
+    except PermissionError as error:
+        # An interpreter audit hook can deny ctypes access to the CPU probe.
+        cpu_info = {"unavailable": str(error)}
     except Exception as error:  # noqa: BLE001
         # Rust applies the preview policy to unexpected failures.
         cpu_info = {"error": f"{type(error).__name__}: {error}"}

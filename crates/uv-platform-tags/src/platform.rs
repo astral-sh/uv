@@ -45,8 +45,6 @@ pub enum CpuInfo {
         /// `AT_HWCAP` through `AT_HWCAP4`, in order.
         hwcaps: [u64; 4],
     },
-    /// Feature bits reported by Windows' `IsProcessorFeaturePresent`.
-    WindowsArm64 { features: u64 },
 }
 
 /// Raw CPUID output for an input leaf and subleaf.

@@ -54,9 +54,11 @@ static VERSION_PROPERTIES: LazyLock<[SupportedVariantFeature; 8]> = LazyLock::ne
 /// # Known limitations
 ///
 /// - On Linux, unrecognized core models use `8a`. Windows ARM64 also uses `8a`.
-/// - On macOS, uv follows [archspec] and infers the version from the Apple chip name.
-///   An unrecognized M-series chip is assumed to support `8.6a`. A matching wheel can use
-///   instructions that macOS does not expose to the process.
+/// - Linux does not expose [SPECRES] to user space. Even an `8.5a` or newer Linux wheel
+///   cannot rely on prediction-restriction instructions such as `CFP RCTX`.
+/// - On macOS, uv reads the Apple chip name like [archspec]. M-series chips use `8.4a` because
+///   macOS can omit instructions required by `8.5a`, including SPECRES and SSBS. Newer chips
+///   can use higher-level wheels once the interpreter probe checks those capabilities.
 /// - The [WheelNext provider] caps newer Armv9 targets at `9.0a` and lists its ancestors.
 ///   For example, the Armv9.2-A Neoverse V3AE supports `8.6a`, but the provider's list
 ///   goes directly from `9.0a` to `8.5a`.
@@ -64,6 +66,7 @@ static VERSION_PROPERTIES: LazyLock<[SupportedVariantFeature; 8]> = LazyLock::ne
 ///   deploying its environment to a machine with a different CPU can select an incompatible wheel.
 ///
 /// [archspec]: https://github.com/archspec/archspec/blob/ebd3eb502d9205f1033ffc028d661f2fbece7dfc/archspec/cpu/detect.py#L314-L334
+/// [SPECRES]: https://github.com/ARM-software/acle/pull/382
 /// [WheelNext provider]: https://github.com/wheelnext/aarch64-variant-provider/blob/v0.2.0/aarch64_variant_provider/plugin.py#L106-L115
 pub(super) struct Aarch64VariantProvider;
 
@@ -116,19 +119,16 @@ impl Aarch64Version {
                 let Some(model) = brand.strip_prefix("Apple ") else {
                     return PLATFORM_DEFAULT_VERSION;
                 };
-                // The provider caps the M2 at 8.5a. Early M1 systems use the generic brand.
+                // Early M1 systems report "Apple processor".
+                // TODO(konsti): Check the features macOS exposes before advertising 8.5a or newer.
                 match model.split_ascii_whitespace().next() {
-                    Some("processor" | "M1") => Self::V8_4,
-                    Some("M2") => Self::V8_5,
-                    // TODO(konsti): Revisit this mapping when archspec fixes its Apple Silicon
-                    // detection. It reports SSBS on M5 Max even when hw.optional.arm.FEAT_SSBS is 0.
-                    Some("M3" | "M4" | "M5") => Self::V8_6,
+                    Some("processor" | "M1" | "M2" | "M3" | "M4" | "M5") => Self::V8_4,
                     Some(model)
                         if model.starts_with('M')
                             && model.as_bytes().get(1).is_some_and(u8::is_ascii_digit) =>
                     {
-                        debug!("Unknown Apple chip `{brand}`, assuming Armv8.6-A");
-                        Self::V8_6
+                        debug!("Unknown Apple chip `{brand}`, assuming Armv8.4-A");
+                        Self::V8_4
                     }
                     _ => PLATFORM_DEFAULT_VERSION,
                 }
@@ -146,9 +146,7 @@ impl Aarch64Version {
                     .reduce(Self::common)
                     .unwrap_or(PLATFORM_DEFAULT_VERSION)
             }
-            CpuInfo::WindowsArm64 { .. } | CpuInfo::Flags { .. } | CpuInfo::Cpuid { .. } => {
-                PLATFORM_DEFAULT_VERSION
-            }
+            CpuInfo::Flags { .. } | CpuInfo::Cpuid { .. } => PLATFORM_DEFAULT_VERSION,
         }
     }
 
@@ -191,10 +189,10 @@ impl Aarch64Version {
                 Self::V8_4,
                 has_bits(hwcap, &[9, 10, 20, 23, 24, 25, 26, 27]),
             ),
-            // SSBS, SB, DC CVADP, FlagM2, FRINT, BTI.
+            // SSBS, SB, DC CVADP, FlagM2, FRINT. BTI instructions are NOPs without enforcement.
             (
                 Self::V8_5,
-                has_bits(hwcap, &[28, 29]) && has_bits(hwcap2, &[0, 7, 8, 17]),
+                has_bits(hwcap, &[28, 29]) && has_bits(hwcap2, &[0, 7, 8]),
             ),
         ] {
             if !self.supports(next) || !available {
@@ -227,7 +225,7 @@ fn has_bits(word: u64, bits: &[u8]) -> bool {
 /// Return the generic ISA ceiling for a Linux application processor with a known MIDR.
 ///
 /// Unrecognized core models use the Armv8-A baseline. The ceiling is capped at the highest wheel
-/// version (9.0a). M2 uses the provider's 8.5a ceiling on both macOS and Linux.
+/// version (9.0a). M2 uses the upstream provider's 8.5a ceiling on Linux.
 ///
 /// Linux and XNU publish the processor IDs. LLVM identifies their compiler targets.
 /// <https://github.com/torvalds/linux/blob/v6.16/arch/arm64/include/asm/cputype.h>
@@ -240,6 +238,7 @@ fn linux_core_ceiling(implementer: &str, part: &str) -> Option<Aarch64Version> {
         ("0x41", 0xd0c) => Aarch64Version::V8_2, // Neoverse N1
         ("0x41", 0xd40) => Aarch64Version::V8_4, // Neoverse V1
         ("0x41", 0xd49 | 0xd4f | 0xd83) => Aarch64Version::V9_0, // Neoverse N2, V2, V3AE
+        ("0x6d", 0xd49) => Aarch64Version::V9_0, // Azure Cobalt 100 (Neoverse N2)
         ("0x42", 0x516) | ("0x43", 0x0af) => Aarch64Version::V8_1, // ThunderX2
         ("0x46", 0x001) => Aarch64Version::V8_2, // A64FX
         ("0xc0", 0xac3 | 0xac4) => Aarch64Version::V8_6, // AmpereOne, AmpereOneA
@@ -265,16 +264,15 @@ mod tests {
 
     use super::Aarch64Version;
 
-    /// A Neoverse N2 can run Armv9.0-A wheels unless a VM masks SVE2 or an Armv8.2-A
-    /// Neoverse N1 shares the workload.
+    /// Disabling BTI enforcement still lets a Neoverse N2 run Armv9.0-A wheels. Masking SVE2
+    /// or sharing the workload with an Armv8.2-A Neoverse N1 limits the usable version.
     #[test]
     fn linux_version_requires_usable_features_on_every_core() {
         let n2 = ("0x41".into(), "0xd49".into());
         let n1 = ("0x41".into(), "0xd0c".into());
-        let hwcaps = [u64::MAX, u64::MAX, 0, 0];
-        let full = CpuInfo::LinuxAarch64 {
-            cores: vec![n2.clone()],
-            hwcaps,
+        let cobalt_without_bti = CpuInfo::LinuxAarch64 {
+            cores: vec![("0x6d".into(), "0xd49".into())],
+            hwcaps: [u64::MAX, u64::MAX ^ (1 << 17), 0, 0],
         };
         let masked = CpuInfo::LinuxAarch64 {
             cores: vec![n2.clone()],
@@ -282,10 +280,13 @@ mod tests {
         };
         let mixed = CpuInfo::LinuxAarch64 {
             cores: vec![n2, n1],
-            hwcaps,
+            hwcaps: [u64::MAX, u64::MAX, 0, 0],
         };
 
-        assert_eq!(Aarch64Version::detect(&full), Aarch64Version::V9_0);
+        assert_eq!(
+            Aarch64Version::detect(&cobalt_without_bti),
+            Aarch64Version::V9_0
+        );
         assert!(!Aarch64Version::V9_0.supports(Aarch64Version::V8_6));
         assert_eq!(Aarch64Version::detect(&masked), Aarch64Version::V8_5);
         assert_eq!(Aarch64Version::detect(&mixed), Aarch64Version::V8_2);
