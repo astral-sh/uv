@@ -44,9 +44,8 @@ static LEVEL_PROPERTIES: LazyLock<[SupportedVariantFeature; 4]> = LazyLock::new(
 ///
 /// * The cache is shared between machines with CPUs with different `x86_64` levels, but the same
 ///   Python interpreter.
-/// * When QEMU emulates an x86-64 CPU on an x86-64 Linux host in user mode, `/proc/cpuinfo`
-///   reports the host's flags. We can select a wheel that requires instructions the emulated CPU
-///   does not support.
+/// * We don't support x86-64 emulation on x86-64 in user mode, where `/proc/cpuinfo`
+///   reports the host's flags instead of the emulator's flags.
 /// * We are building the environment on one machine, and then deploying to another machine. This
 ///   case requires an override specifying the target machine. TODO(konsti): Add support for that as
 ///   part of the wheel variants stack.
