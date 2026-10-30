@@ -6332,6 +6332,7 @@ dependencies = [
  "uv-pypi-types",
  "uv-redacted",
  "uv-static",
+ "uv-unix",
  "uv-warnings",
 ]
 
@@ -7999,6 +8000,7 @@ dependencies = [
  "uv-python-types",
  "uv-redacted",
  "uv-static",
+ "uv-unix",
  "uv-version",
  "walkdir",
  "wiremock",
