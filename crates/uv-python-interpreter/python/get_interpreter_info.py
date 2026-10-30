@@ -669,6 +669,8 @@ def _macos_cpu_info():
         ctypes.c_void_p,
         ctypes.c_size_t,
     ]
+    missing_key = (errno.ENOENT, errno.ENOTSUP, errno.EOPNOTSUPP)
+    unavailable = (errno.EPERM, errno.EACCES, errno.ENOSYS)
     flags = []
     for key in (
         b"machdep.cpu.features",
@@ -681,16 +683,30 @@ def _macos_cpu_info():
             buffer = ctypes.create_string_buffer(size.value)
             result = sysctl(key, buffer, ctypes.byref(size), None, 0)
             if result == 0 and buffer.value:
-                flags.append(buffer.value.decode("ascii", errors="replace"))
+                flags.extend(buffer.value.decode("ascii", errors="replace").split())
         if result != 0:
             error = ctypes.get_errno()
             # An unsupported key must not hide features available through another key.
-            if error in (errno.ENOENT, errno.ENOTSUP, errno.EOPNOTSUPP):
+            if error in missing_key:
                 continue
             failure = OSError(error, os.strerror(error), key.decode("ascii"))
-            if error in (errno.EPERM, errno.EACCES, errno.ENOSYS):
+            if error in unavailable:
                 return {"unavailable": str(failure)}
             raise failure
+    if "AVX512F" in flags:
+        # machdep reports hardware flags even when the kernel disables AVX-512 register state.
+        # hw.optional.avx512f includes the kernel's check for usable AVX-512.
+        # https://github.com/apple-oss-distributions/xnu/blob/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/osfmk/i386/commpage/commpage.c#L362-L372
+        key = b"hw.optional.avx512f"
+        enabled = ctypes.c_int()
+        size = ctypes.c_size_t(ctypes.sizeof(enabled))
+        result = sysctl(key, ctypes.byref(enabled), ctypes.byref(size), None, 0)
+        if result != 0:
+            error = ctypes.get_errno()
+            if error not in missing_key + unavailable:
+                raise OSError(error, os.strerror(error), key.decode("ascii"))
+        if result != 0 or not enabled.value:
+            flags = [flag for flag in flags if not flag.startswith("AVX512")]
     if flags:
         return {"detected": {"kind": "flags", "flags": " ".join(flags)}}
     return {"unavailable": "No x86 feature flags reported by sysctl"}
