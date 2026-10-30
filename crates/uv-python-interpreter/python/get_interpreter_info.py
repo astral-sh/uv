@@ -12,6 +12,7 @@ import site
 import struct
 import sys
 import sysconfig
+from os import name as os_name
 
 
 def format_full_version(info):
@@ -836,7 +837,7 @@ def main() -> None:
     markers = {
         "implementation_name": implementation_name,
         "implementation_version": implementation_version,
-        "os_name": os.name,
+        "os_name": os_name,
         "platform_machine": platform.machine(),
         "platform_python_implementation": platform.python_implementation(),
         "platform_release": platform.release(),
@@ -847,18 +848,18 @@ def main() -> None:
         "sys_platform": sys.platform,
     }
 
-    operating_system, architecture = get_operating_system_and_architecture()
+    os, architecture = get_operating_system_and_architecture()
 
     manylinux_compatible = False
 
-    if operating_system["name"] == "manylinux":
+    if os["name"] == "manylinux":
         # noinspection PyProtectedMember
         from .packaging._manylinux import _get_glibc_version, _is_compatible
 
         manylinux_compatible = _is_compatible(
             arch=architecture, version=_get_glibc_version()
         )
-    elif operating_system["name"] == "musllinux":
+    elif os["name"] == "musllinux":
         manylinux_compatible = True
 
     if architecture.lower() in ("x86_64", "amd64"):
@@ -935,7 +936,7 @@ def main() -> None:
         ),
         "scheme": get_scheme(use_sysconfig_scheme),
         "virtualenv": get_virtualenv(),
-        "os": operating_system,
+        "os": os,
         "arch": architecture,
         "cpu_info": cpu_info,
         "manylinux_compatible": manylinux_compatible,
