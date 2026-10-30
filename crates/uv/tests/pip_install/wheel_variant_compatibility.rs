@@ -163,49 +163,38 @@ fn select_variant_by_static_provider_order() -> Result<()> {
     Ok(())
 }
 
-/// ARM64 interpreters built without libffi can install the baseline AArch64 variant.
-#[cfg(all(
-    target_arch = "aarch64",
-    any(target_os = "linux", target_os = "macos", windows)
-))]
+/// An explicit AArch64 target installs the baseline wheel even when an Armv8.6-A wheel exists.
 #[test]
-fn aarch64_without_ctypes() -> Result<()> {
+fn aarch64_target_uses_platform_defaults() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    fs_err::write(
-        context.site_packages().join("sitecustomize.py"),
-        indoc::indoc! {r"
-            import sys
-
-            sys.modules['_ctypes'] = None
-        "},
-    )?;
     let server = PackseServer::from_toml(indoc! {r#"
-        name = "aarch64-without-ctypes"
+        name = "aarch64-target-defaults"
         root = {}
         expected.satisfiable = true
 
         [packages.ok.versions."1.0.0"]
         wheel = false
         sdist = false
-        wheel_tags = [
-            "py3-none-linux_aarch64",
-            "py3-none-macosx_11_0_arm64",
-            "py3-none-win_arm64",
-        ]
+        wheel_tags = ["py3-none-linux_aarch64"]
 
         [packages.ok.versions."1.0.0".variants]
         namespaces = ["aarch64"]
-        providers.aarch64.requires = ["aarch64-variant-provider==0.2.0"]
-        wheels.arm8.properties = ["aarch64 :: version :: 8a"]
-        wheels.arm86.properties = ["aarch64 :: version :: 8.6a"]
+
+        [packages.ok.versions."1.0.0".variants.providers]
+        aarch64.requires = ["aarch64-variant-provider==0.2.0"]
+
+        [packages.ok.versions."1.0.0".variants.wheels]
+        arm8.properties = ["aarch64 :: version :: 8a"]
+        arm86.properties = ["aarch64 :: version :: 8.6a"]
     "#})?;
 
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg("--no-cache")
         .arg("--index-url")
         .arg(server.index_url())
         .arg("--preview-features")
         .arg("wheel-variants")
+        .arg("--python-platform")
+        .arg("aarch64-unknown-linux-gnu")
         .arg("ok==1.0.0"), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -219,10 +208,17 @@ fn aarch64_without_ctypes() -> Result<()> {
             .site_packages()
             .join("ok-1.0.0.dist-info/variant.json"),
     );
-    assert_eq!(
-        serde_json::from_str::<Value>(&installed)?["variants"],
-        json!({ "arm8": { "aarch64": { "version": ["8a"] } } })
-    );
+    assert_json_snapshot!(serde_json::from_str::<Value>(&installed)?["variants"], @r#"
+    {
+      "arm8": {
+        "aarch64": {
+          "version": [
+            "8a"
+          ]
+        }
+      }
+    }
+    "#);
     Ok(())
 }
 

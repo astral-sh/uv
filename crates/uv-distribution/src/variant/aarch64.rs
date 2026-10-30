@@ -1,5 +1,6 @@
 use std::sync::LazyLock;
 
+use tracing::debug;
 use uv_distribution_types::{
     SupportedVariantFeature, VariantFeature, VariantNamespace, VariantValue,
 };
@@ -10,25 +11,28 @@ use uv_platform_tags::{Arch, CpuInfo, Platform};
 use super::{PluginApi, VendoredVariantProvider};
 
 const NAMESPACE: &VariantNamespace = &VariantNamespace::from_static("aarch64");
-const VERSION_VALUES: [(Aarch64Version, &str); 8] = [
-    (Aarch64Version::V8, "8a"),
-    (Aarch64Version::V8_1, "8.1a"),
-    (Aarch64Version::V8_2, "8.2a"),
-    (Aarch64Version::V8_3, "8.3a"),
-    (Aarch64Version::V8_4, "8.4a"),
-    (Aarch64Version::V8_5, "8.5a"),
-    (Aarch64Version::V8_6, "8.6a"),
-    (Aarch64Version::V9_0, "9.0a"),
-];
 static PACKAGE_NAME: LazyLock<PackageName> = LazyLock::new(|| {
     "aarch64-variant-provider"
         .parse()
         .expect("valid provider name")
 });
+/// The Armv8-A baseline for cross-installs and interpreters without usable CPU information.
+const PLATFORM_DEFAULT_VERSION: Aarch64Version = Aarch64Version::V8;
+/// Cached properties indexed by the maximum supported [`Aarch64Version`].
 static VERSION_PROPERTIES: LazyLock<[SupportedVariantFeature; 8]> = LazyLock::new(|| {
-    VERSION_VALUES.map(|(version, _)| SupportedVariantFeature {
+    let versions = [
+        (Aarch64Version::V8, "8a"),
+        (Aarch64Version::V8_1, "8.1a"),
+        (Aarch64Version::V8_2, "8.2a"),
+        (Aarch64Version::V8_3, "8.3a"),
+        (Aarch64Version::V8_4, "8.4a"),
+        (Aarch64Version::V8_5, "8.5a"),
+        (Aarch64Version::V8_6, "8.6a"),
+        (Aarch64Version::V9_0, "9.0a"),
+    ];
+    versions.map(|(version, _)| SupportedVariantFeature {
         name: VariantFeature::from_static("version"),
-        values: VERSION_VALUES
+        values: versions
             .into_iter()
             .rev()
             .filter(|(candidate, _)| version.supports(*candidate))
@@ -37,9 +41,22 @@ static VERSION_PROPERTIES: LazyLock<[SupportedVariantFeature; 8]> = LazyLock::ne
     })
 });
 
-/// The `aarch64::version` property of `aarch64-variant-provider` 0.2.0.
+/// The vendored implementation of `aarch64-variant-provider` 0.2.0.
 ///
-/// An explicit AArch64 target or an unrecognized CPU supports the Armv8-A baseline.
+/// # Variant properties
+///
+/// - `aarch64::version` lists the Arm architecture versions supported by every core, newest
+///   first. For example, `9.0a` also supports `8.5a` and earlier versions, but not `8.6a`.
+///
+/// When CPU detection is unavailable, including for an explicit target (`--python-platform`),
+/// AArch64 targets use `8a` as the platform default. Other architectures emit no properties.
+///
+/// # Known limitations
+///
+/// * On Linux, unrecognized core models use `8a`. Windows ARM64 also uses `8a`.
+/// * On macOS, an unrecognized Apple M-series chip is assumed to support `8.6a`.
+/// * The cached CPU information belongs to the interpreter's machine. Sharing its cache or
+///   deploying its environment to a machine with a different CPU can select an incompatible wheel.
 pub(super) struct Aarch64VariantProvider;
 
 impl VendoredVariantProvider for Aarch64VariantProvider {
@@ -65,9 +82,9 @@ impl VendoredVariantProvider for Aarch64VariantProvider {
         }
         let version = target
             .cpu_info()
-            .and_then(Aarch64Version::detect)
-            .unwrap_or(Aarch64Version::V8);
-        Some(std::slice::from_ref(&VERSION_PROPERTIES[version as usize]))
+            .map_or(PLATFORM_DEFAULT_VERSION, Aarch64Version::detect);
+        let property = &VERSION_PROPERTIES[version as usize];
+        Some(std::slice::from_ref(property))
     }
 }
 
@@ -85,19 +102,22 @@ enum Aarch64Version {
 }
 
 impl Aarch64Version {
-    fn detect(cpu_info: &CpuInfo) -> Option<Self> {
+    fn detect(cpu_info: &CpuInfo) -> Self {
         match cpu_info {
             CpuInfo::AppleSilicon { brand } => {
-                let model = brand
-                    .strip_prefix("Apple ")?
-                    .split_ascii_whitespace()
-                    .next()?;
+                let Some(model) = brand.strip_prefix("Apple ") else {
+                    return PLATFORM_DEFAULT_VERSION;
+                };
                 // The provider caps the M2 at 8.5a. Early M1 systems use the generic brand.
-                match model {
-                    "processor" | "M1" => Some(Self::V8_4),
-                    "M2" => Some(Self::V8_5),
-                    "M3" | "M4" | "M5" => Some(Self::V8_6),
-                    _ => None,
+                match model.split_ascii_whitespace().next() {
+                    Some("processor" | "M1") => Self::V8_4,
+                    Some("M2") => Self::V8_5,
+                    Some("M3" | "M4" | "M5") => Self::V8_6,
+                    Some(model) if model.starts_with('M') => {
+                        debug!("Unknown Apple chip `{brand}`, assuming Armv8.6-A");
+                        Self::V8_6
+                    }
+                    _ => PLATFORM_DEFAULT_VERSION,
                 }
             }
             CpuInfo::LinuxAarch64 { cores, hwcaps } => {
@@ -107,13 +127,15 @@ impl Aarch64Version {
                     .iter()
                     .map(|(implementer, part)| {
                         linux_core_ceiling(implementer, part)
-                            .unwrap_or(Self::V8)
+                            .unwrap_or(PLATFORM_DEFAULT_VERSION)
                             .with_linux_hwcaps(hwcaps[0], hwcaps[1])
                     })
                     .reduce(Self::common)
+                    .unwrap_or(PLATFORM_DEFAULT_VERSION)
             }
-            CpuInfo::WindowsArm64 { .. } => Some(Self::V8),
-            CpuInfo::Flags { .. } | CpuInfo::Cpuid { .. } => None,
+            CpuInfo::WindowsArm64 { .. } | CpuInfo::Flags { .. } | CpuInfo::Cpuid { .. } => {
+                PLATFORM_DEFAULT_VERSION
+            }
         }
     }
 
@@ -122,6 +144,9 @@ impl Aarch64Version {
         version as usize <= self as usize && !(self == Self::V9_0 && version == Self::V8_6)
     }
 
+    /// Return the newest architecture version supported by both cores.
+    ///
+    /// Armv8.6-A and Armv9.0-A share Armv8.5-A as their newest common version.
     fn common(self, other: Self) -> Self {
         if self.supports(other) {
             other
@@ -140,8 +165,8 @@ impl Aarch64Version {
         // GCC's AArch64 options and LLVM's AArch64Features.td define the generic -march targets.
         // https://gcc.gnu.org/onlinedocs/gcc/AArch64-Options.html
         // https://github.com/llvm/llvm-project/tree/ab7245d75cc9/llvm/lib/Target/AArch64
-        let has = |word: u64, bits: &[u8]| bits.iter().all(|bit| word & (1 << bit) != 0);
-        let sve2 = has(hwcap, &[9, 10, 22]) && has(hwcap2, &[1]); // FP16, AdvSIMD HP, SVE, SVE2.
+        // FP16, AdvSIMD HP, SVE, SVE2.
+        let sve2 = has_bits(hwcap, &[9, 10, 22]) && has_bits(hwcap2, &[1]);
         if self == Self::V9_0 && !sve2 {
             // A VM can expose a v9 core ID while masking its vector ISA.
             return Self::V8;
@@ -149,17 +174,20 @@ impl Aarch64Version {
         let mut level = Self::V8;
         for (next, available) in [
             // FP, AdvSIMD, CRC32, atomics, RDM.
-            (Self::V8_1, has(hwcap, &[0, 1, 7, 8, 12])),
+            (Self::V8_1, has_bits(hwcap, &[0, 1, 7, 8, 12])),
             // DC CVAP.
-            (Self::V8_2, has(hwcap, &[16])),
+            (Self::V8_2, has_bits(hwcap, &[16])),
             // JSCVT, FCMA, LRCPC, address and generic pointer authentication.
-            (Self::V8_3, has(hwcap, &[13, 14, 15, 30, 31])),
+            (Self::V8_3, has_bits(hwcap, &[13, 14, 15, 30, 31])),
             // FP16, AdvSIMD HP, dot product, FHM, DIT, LSE2, LRCPC2, FlagM.
-            (Self::V8_4, has(hwcap, &[9, 10, 20, 23, 24, 25, 26, 27])),
+            (
+                Self::V8_4,
+                has_bits(hwcap, &[9, 10, 20, 23, 24, 25, 26, 27]),
+            ),
             // SSBS, SB, DC CVADP, FlagM2, FRINT, BTI.
             (
                 Self::V8_5,
-                has(hwcap, &[28, 29]) && has(hwcap2, &[0, 7, 8, 17]),
+                has_bits(hwcap, &[28, 29]) && has_bits(hwcap2, &[0, 7, 8, 17]),
             ),
         ] {
             if !self.supports(next) || !available {
@@ -169,13 +197,23 @@ impl Aarch64Version {
         }
         if self == Self::V9_0 {
             Self::V9_0
-        } else if self == Self::V8_6 && has(hwcap2, &[13, 14, 19]) {
+        } else if self == Self::V8_6 && has_bits(hwcap2, &[13, 14, 19]) {
             // I8MM, BF16, ECV.
             Self::V8_6
         } else {
             level
         }
     }
+}
+
+/// Whether a Linux hardware capability word contains every requested bit.
+fn has_bits(word: u64, bits: &[u8]) -> bool {
+    for bit in bits {
+        if word & (1 << bit) == 0 {
+            return false;
+        }
+    }
+    true
 }
 
 /// Return the generic ISA ceiling for a Linux application processor with a known MIDR.
@@ -219,27 +257,29 @@ mod tests {
 
     use super::Aarch64Version;
 
+    /// A Neoverse N2 can run Armv9.0-A wheels unless a VM masks SVE2 or an Armv8.2-A
+    /// Neoverse N1 shares the workload.
     #[test]
     fn linux_version_requires_usable_features_on_every_core() {
-        let detect = |cores, hwcap2| {
-            Aarch64Version::detect(&CpuInfo::LinuxAarch64 {
-                cores,
-                hwcaps: [u64::MAX, hwcap2, 0, 0],
-            })
-            .expect("known core")
-        };
-        // A Neoverse N2 is Armv9.0-A. Its CPU ID survives when a VM masks SVE2.
         let n2 = ("0x41".into(), "0xd49".into());
-        let version = detect(vec![n2.clone()], u64::MAX);
-        assert_eq!(version, Aarch64Version::V9_0);
-        assert!(!version.supports(Aarch64Version::V8_6));
-        assert_eq!(
-            detect(vec![n2.clone()], u64::MAX ^ (1 << 1)),
-            Aarch64Version::V8
-        );
-
-        // An N1 in the same system limits every wheel to Armv8.2-A.
         let n1 = ("0x41".into(), "0xd0c".into());
-        assert_eq!(detect(vec![n2, n1], u64::MAX), Aarch64Version::V8_2);
+        let hwcaps = [u64::MAX, u64::MAX, 0, 0];
+        let full = CpuInfo::LinuxAarch64 {
+            cores: vec![n2.clone()],
+            hwcaps,
+        };
+        let masked = CpuInfo::LinuxAarch64 {
+            cores: vec![n2.clone()],
+            hwcaps: [u64::MAX, u64::MAX ^ (1 << 1), 0, 0],
+        };
+        let mixed = CpuInfo::LinuxAarch64 {
+            cores: vec![n2, n1],
+            hwcaps,
+        };
+
+        assert_eq!(Aarch64Version::detect(&full), Aarch64Version::V9_0);
+        assert!(!Aarch64Version::V9_0.supports(Aarch64Version::V8_6));
+        assert_eq!(Aarch64Version::detect(&masked), Aarch64Version::V8);
+        assert_eq!(Aarch64Version::detect(&mixed), Aarch64Version::V8_2);
     }
 }
