@@ -1,0 +1,296 @@
+/* Shared Astral documentation branding. Keep this file in sync across uv, Ruff, and ty. */
+@font-face {
+  font-family: "Acid Grotesk";
+  src: url("../assets/fonts/FFF-AcidGrotesk-Book.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Acid Grotesk";
+  src: url("../assets/fonts/FFF-AcidGrotesk-Regular.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Acid Grotesk";
+  src: url("../assets/fonts/FFF-AcidGrotesk-Medium.woff2") format("woff2");
+  font-weight: 600 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Rooftop Mono";
+  src: url("../assets/fonts/RooftopMono-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+:root {
+  --md-text-font: "Acid Grotesk";
+  --md-code-font: "Rooftop Mono";
+}
+[data-md-color-scheme="astral-light"] {
+  color-scheme: light;
+  --md-default-bg-color: #ffffff;
+  --md-default-fg-color: #1a0821;
+  --md-default-fg-color--light: #6f5d6f;
+  --md-default-fg-color--lighter: #6f5d6f;
+  --md-default-fg-color--lightest: #d0d3c5;
+  --md-primary-fg-color: #f8faf5;
+  --md-primary-fg-color--dark: #edf1e4;
+  --md-primary-bg-color: #261230;
+  --md-primary-bg-color--light: #6f5d6f;
+  --md-typeset-color: #1a0821;
+  --md-typeset-a-color: #6340ac;
+  --md-accent-fg-color: #9237d7;
+  --md-accent-fg-color--transparent: #faf3fb;
+  --md-code-bg-color: #f8faf5;
+  --md-code-fg-color: #261230;
+  --md-footer-bg-color: #f8faf5;
+  --md-footer-bg-color--dark: #edf1e4;
+  --md-footer-fg-color: #261230;
+  --md-footer-fg-color--light: #6f5d6f;
+  --md-footer-fg-color--lighter: #6f5d6f;
+  --astral-border-color: #d0d3c5;
+  --astral-search-bg: #edf1e4;
+}
+[data-md-color-scheme="astral-dark"] {
+  color-scheme: dark;
+  --md-default-bg-color: #1a0821;
+  --md-default-fg-color: #f8faf5;
+  --md-default-fg-color--light: #d3c5d6;
+  --md-default-fg-color--lighter: #d3c5d6;
+  --md-default-fg-color--lightest: #514157;
+  --md-primary-fg-color: #261230;
+  --md-primary-fg-color--dark: #30173d;
+  --md-primary-bg-color: #f8faf5;
+  --md-primary-bg-color--light: #d3c5d6;
+  --md-typeset-color: #f8faf5;
+  --md-typeset-a-color: #d7ff64;
+  --md-accent-fg-color: #46ebe1;
+  --md-accent-fg-color--transparent: #30173d;
+  --md-code-bg-color: #261230;
+  --md-code-fg-color: #f8faf5;
+  --md-footer-bg-color: #261230;
+  --md-footer-bg-color--dark: #1a0821;
+  --md-footer-fg-color: #f8faf5;
+  --md-footer-fg-color--light: #d3c5d6;
+  --md-footer-fg-color--lighter: #d3c5d6;
+  --astral-border-color: #514157;
+  --astral-search-bg: #30173d;
+}
+body {
+  font-family: var(--md-text-font), Arial, sans-serif;
+}
+.md-typeset :is(h1, h2, h3, h4),
+.md-header__title {
+  font-weight: 500;
+  font-feature-settings:
+    "ss04" 1,
+    "ss10" 1;
+}
+.md-typeset h1 {
+  color: var(--md-default-fg-color);
+  letter-spacing: -0.03em;
+}
+.md-header {
+  box-shadow: none;
+  border-bottom: 1px solid var(--astral-border-color);
+}
+.md-search__form {
+  background-color: var(--astral-search-bg);
+  border-radius: 6px;
+}
+.md-typeset pre > code,
+.md-typeset .highlight {
+  border-radius: 6px;
+}
+.md-typeset a:focus-visible,
+.md-nav__link:focus-visible {
+  outline: 2px solid var(--md-accent-fg-color);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+/* Links inside colored summaries inherit their readable foreground. */
+[data-md-color-scheme="astral-dark"] details summary a {
+  color: inherit;
+  text-decoration: underline;
+}
+
+/* Content buttons need contrast against the page, independently of the header. */
+.md-typeset .md-button {
+  color: var(--md-typeset-a-color);
+}
+.md-typeset .md-button--primary {
+  background-color: var(--md-typeset-a-color);
+  border-color: var(--md-typeset-a-color);
+  color: var(--md-default-bg-color);
+}
+.md-typeset .md-button:is(:hover, :focus) {
+  color: var(--md-default-bg-color);
+}
+
+/* Shared sidebar typography and rhythm across product navigation trees. */
+@media screen and (min-width: 76.25em) {
+  .md-nav--primary,
+  .md-nav--primary .md-nav {
+    font-size: 0.7rem;
+    line-height: 1.3;
+  }
+  .md-nav--primary .md-nav__link {
+    font-size: 0.7rem;
+    line-height: 1.3;
+    margin-top: 0.35rem;
+  }
+  .md-nav--primary .md-nav__item--section {
+    margin-top: 1rem;
+  }
+  .md-nav--primary .md-nav__item--section > .md-nav__link {
+    font-weight: 500;
+  }
+}
+.md-nav--primary .md-nav__link--active {
+  font-weight: 600;
+}
+
+/* Section headings can be labels or containers with linked index pages. */
+.md-nav--primary .md-nav__link {
+  color: var(--md-default-fg-color);
+  font-weight: 400;
+}
+@media screen and (min-width: 76.25em) {
+  .md-nav--primary > .md-nav__title {
+    display: none;
+  }
+  .md-main {
+    min-height: 100vh;
+  }
+  .md-nav--primary .md-nav__container > .md-nav__link {
+    margin-top: 0;
+  }
+  .md-nav--primary .md-nav__item--section > .md-nav__link,
+  .md-nav--primary .md-nav__item--section > .md-nav__container > .md-nav__link {
+    color: var(--md-default-fg-color--light);
+    font-weight: 500;
+  }
+}
+.md-nav--primary .md-nav__title {
+  box-shadow: none;
+}
+.md-nav--primary .md-nav__item .md-nav__link--active {
+  color: var(--md-typeset-a-color);
+  font-weight: 600;
+}
+.md-nav--primary .md-nav__item .md-nav__link:is(:hover, :focus-visible) {
+  color: var(--md-accent-fg-color);
+}
+
+/* Inset the sidebar scrollbar track without changing the menu viewport. */
+@supports selector(::-webkit-scrollbar) {
+  .md-sidebar__scrollwrap {
+    scrollbar-width: auto;
+    scrollbar-color: auto;
+  }
+}
+@media screen and (min-width: 76.25em) {
+  .md-sidebar__scrollwrap::-webkit-scrollbar-track {
+    margin-top: 80px;
+    margin-bottom: 80px;
+  }
+}
+
+/* Shared Astral and product navigation in the documentation header. */
+.md-header__inner {
+  min-height: 72px;
+}
+.astral-header {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 28px;
+  margin-right: auto;
+  padding: 0 12px;
+}
+.astral-header a {
+  display: inline-flex;
+  align-items: center;
+  color: inherit;
+}
+.astral-header > a:not(.astral-header__product) {
+  transition: opacity 150ms ease;
+}
+.astral-header > a:not(.astral-header__product):is(:hover, :focus-visible) {
+  opacity: 0.65;
+}
+.astral-header a:focus-visible {
+  outline: 2px solid var(--md-accent-fg-color);
+  outline-offset: 6px;
+}
+.astral-header__wordmark {
+  width: 128px;
+  height: 20px;
+}
+.astral-header__docs {
+  font-size: 20px;
+  line-height: 1;
+}
+.astral-header__product {
+  border-left: 1px solid var(--astral-border-color);
+  padding-left: 20px;
+  margin-left: -8px;
+}
+.astral-header__product img {
+  width: 32px;
+  height: 32px;
+}
+.md-header__title {
+  display: none;
+}
+@media screen and (max-width: 76.234375em) {
+  .astral-header {
+    gap: 20px;
+    padding-left: 0;
+  }
+  .astral-header__wordmark {
+    width: 110px;
+    height: 18px;
+  }
+  .astral-header__docs {
+    font-size: 18px;
+  }
+  .astral-header__product {
+    padding-left: 16px;
+    margin-left: -8px;
+  }
+}
+@media screen and (max-width: 40em) {
+  .md-header__inner {
+    min-height: 60px;
+    padding: 0 4px;
+  }
+  .astral-header {
+    gap: 14px;
+    padding-right: 0;
+  }
+  .astral-header__wordmark {
+    width: 84px;
+    height: 14px;
+  }
+  .astral-header__docs {
+    font-size: 16px;
+  }
+  .astral-header__product {
+    padding-left: 12px;
+    margin-left: -2px;
+  }
+  .astral-header__product img {
+    width: 22px;
+    height: 22px;
+  }
+  .md-header__button {
+    margin: 0;
+    padding: 8px 5px;
+  }
+}
