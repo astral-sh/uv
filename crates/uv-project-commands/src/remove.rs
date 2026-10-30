@@ -114,15 +114,15 @@ pub async fn remove(
         EditTarget::Project(project)
     };
 
-    let mut toml = match &target {
-        EditTarget::Script(script) => {
-            PyProjectTomlMut::from_toml(&script.metadata.raw, DependencyTarget::Script)
-        }
-        EditTarget::Project(project) => PyProjectTomlMut::from_toml(
-            project.pyproject_toml().raw.as_ref(),
+    let (raw, kind) = match &target {
+        EditTarget::Script(script) => (script.metadata.raw.as_str(), DependencyTarget::Script),
+        EditTarget::Project(project) => (
+            project.pyproject_toml().raw.as_str(),
             DependencyTarget::PyProjectToml,
         ),
-    }?;
+    };
+    let mut toml = PyProjectTomlMut::from_toml(raw, kind)?;
+    let inline_sources = toml.has_inline_sources();
 
     for package in packages {
         match dependency_type {
@@ -189,7 +189,11 @@ pub async fn remove(
         }
     }
 
-    let content = toml.to_string();
+    let content = if inline_sources {
+        toml.into_string_after_remove(raw)?
+    } else {
+        toml.to_string()
+    };
 
     let (path, lock_target) = match &target {
         EditTarget::Script(script) => (script.path.clone(), LockTarget::from(script)),

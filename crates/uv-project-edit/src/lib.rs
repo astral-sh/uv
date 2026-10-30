@@ -1,5 +1,6 @@
 //! Edit project and script metadata while preserving TOML formatting.
 
+use std::collections::HashMap;
 use std::path::Path;
 use std::str::FromStr;
 use std::{fmt, mem};
@@ -8,8 +9,8 @@ use glob::Pattern;
 use itertools::Itertools;
 use thiserror::Error;
 use toml_edit::{
-    Array, ArrayOfTables, DocumentMut, Formatted, InlineTable, Item, Key, RawString, Table,
-    TableLike, TomlError, Value,
+    Array, ArrayOfTables, DocumentMut, Formatted, InlineTable, Item, RawString, Table, TableLike,
+    TomlError, Value,
 };
 
 use uv_cache_key::CanonicalUrl;
@@ -111,6 +112,36 @@ impl PyProjectTomlMut {
             doc: raw.parse().map_err(Box::new)?,
             target,
         })
+    }
+
+    /// Return whether the sources are declared in an inline table.
+    pub fn has_inline_sources(&self) -> bool {
+        self.doc
+            .get("tool")
+            .and_then(|tool| tool.get("uv"))
+            .and_then(|uv| uv.get("sources"))
+            .is_some_and(Item::is_inline_table)
+    }
+
+    /// Restore inline source comments and closing whitespace after all requested removals.
+    pub fn into_string_after_remove(mut self, original: &str) -> Result<String, Error> {
+        let parsed = toml_edit::Document::parse(original).map_err(Box::new)?;
+        let mut before = parsed.as_item();
+        let mut after = self.doc.as_item_mut();
+        for key in ["tool", "uv", "sources"] {
+            let Some((old, new)) = before.get(key).zip(after.get_mut(key)) else {
+                break;
+            };
+            before = old;
+            after = new;
+            if let Some(old) = before.as_inline_table()
+                && !old.is_dotted()
+                && let Some(new) = after.as_inline_table_mut()
+            {
+                InlineComments::read(old, original).apply(new);
+            }
+        }
+        Ok(self.to_string())
     }
 
     /// Adds a project to the workspace.
@@ -271,7 +302,23 @@ impl PyProjectTomlMut {
         source: Option<&Source>,
         raw: bool,
     ) -> Result<ArrayEdit, Error> {
-        let edit = add_dependency(req, self.dev_dependencies_array()?, source.is_some(), raw)?;
+        // Get or create `tool.uv.dev-dependencies`.
+        let dev_dependencies = self
+            .doc
+            .entry("tool")
+            .or_insert(implicit())
+            .as_table_mut()
+            .ok_or(Error::MalformedSources)?
+            .entry("uv")
+            .or_insert(Item::Table(Table::new()))
+            .as_table_mut()
+            .ok_or(Error::MalformedSources)?
+            .entry("dev-dependencies")
+            .or_insert(Item::Value(Value::Array(Array::new())))
+            .as_array_mut()
+            .ok_or(Error::MalformedDependencies)?;
+
+        let edit = add_dependency(req, dev_dependencies, source.is_some(), raw)?;
 
         if let Some(source) = source {
             self.add_source(&req.name, source)?;
@@ -748,11 +795,11 @@ impl PyProjectTomlMut {
             .doc
             .entry("tool")
             .or_insert(implicit())
-            .as_table_like_mut()
+            .as_table_mut()
             .ok_or(Error::MalformedSources)?
             .entry("uv")
             .or_insert(Item::Table(Table::new()))
-            .as_table_like_mut()
+            .as_table_mut()
             .ok_or(Error::MalformedSources)?
             .entry("dev-dependencies")
             .or_insert(Item::Value(Value::Array(Array::new())))
@@ -1063,46 +1110,39 @@ impl PyProjectTomlMut {
 
     /// Remove a matching source from `tool.uv.sources`, if it exists.
     fn remove_source(&mut self, name: &PackageName) -> Result<(), Error> {
-        // If the dependency is still in use, don't remove the source.
-        if !self.find_dependency(name, None).is_empty() {
+        // An inline source can be shared with a dependency declared in another inline table.
+        let remaining = if self.has_inline_sources() {
+            self.find_dependency_with(name, None, Item::as_table_like)
+        } else {
+            self.find_dependency(name, None)
+        };
+        if !remaining.is_empty() {
             return Ok(());
         }
 
-        let Some(sources) = self
+        let Some(uv) = self
             .doc
-            .get("tool")
-            .map(|tool| tool.as_table_like().ok_or(Error::MalformedSources))
+            .get_mut("tool")
+            .map(|tool| tool.as_table_like_mut().ok_or(Error::MalformedSources))
             .transpose()?
-            .and_then(|tool| tool.get("uv"))
-            .map(|uv| uv.as_table_like().ok_or(Error::MalformedSources))
-            .transpose()?
-            .and_then(|uv| uv.get("sources"))
-            .map(|sources| sources.as_table_like().ok_or(Error::MalformedSources))
+            .and_then(|tool| tool.get_mut("uv"))
+            .map(|uv| uv.as_table_like_mut().ok_or(Error::MalformedSources))
             .transpose()?
         else {
             return Ok(());
         };
+        let Some(sources) = uv
+            .get_mut("sources")
+            .map(|sources| sources.as_table_like_mut().ok_or(Error::MalformedSources))
+            .transpose()?
+        else {
+            return Ok(());
+        };
+
         if let Some(key) = find_source(name, sources) {
-            // Remove the whole sources table when the package is its last entry.
-            let path = ["tool", "uv", "sources", key.as_str()];
-            let path = if sources.len() == 1 {
-                &path[..3]
-            } else {
-                &path[..]
-            };
-            let mut item = self.doc.as_item_mut();
-            for (depth, key) in path.iter().enumerate() {
-                if let Some(inline) = item.as_inline_table_mut()
-                    && !inline.is_dotted()
-                {
-                    preserve_inline_comment(inline, &path[depth..]);
-                }
-                let table = item.as_table_like_mut().ok_or(Error::MalformedSources)?;
-                if depth + 1 == path.len() {
-                    table.remove(key);
-                    break;
-                }
-                item = table.get_mut(key).ok_or(Error::MalformedSources)?;
+            sources.remove(&key);
+            if sources.is_empty() {
+                uv.remove("sources");
             }
         }
 
@@ -1113,9 +1153,9 @@ impl PyProjectTomlMut {
     pub fn has_dev_dependencies(&self) -> bool {
         self.doc
             .get("tool")
-            .and_then(Item::as_table_like)
+            .and_then(Item::as_table)
             .and_then(|tool| tool.get("uv"))
-            .and_then(Item::as_table_like)
+            .and_then(Item::as_table)
             .and_then(|uv| uv.get("dev-dependencies"))
             .is_some()
     }
@@ -1124,7 +1164,7 @@ impl PyProjectTomlMut {
     pub fn has_dependency_group(&self, group: &GroupName) -> bool {
         self.doc
             .get("dependency-groups")
-            .and_then(Item::as_table_like)
+            .and_then(Item::as_table)
             .and_then(|groups| groups.get(group.as_ref()))
             .is_some()
     }
@@ -1139,9 +1179,19 @@ impl PyProjectTomlMut {
         name: &PackageName,
         marker: Option<&MarkerTree>,
     ) -> Vec<DependencyType> {
+        self.find_dependency_with(name, marker, |item| item.as_table().map(|table| table as _))
+    }
+
+    /// Find matching declarations using the table forms supported by the caller.
+    fn find_dependency_with(
+        &self,
+        name: &PackageName,
+        marker: Option<&MarkerTree>,
+        as_table: fn(&Item) -> Option<&dyn TableLike>,
+    ) -> Vec<DependencyType> {
         let mut types = Vec::new();
 
-        if let Some(project) = self.doc.get("project").and_then(Item::as_table_like) {
+        if let Some(project) = self.doc.get("project").and_then(as_table) {
             // Check `project.dependencies`.
             if let Some(dependencies) = project.get("dependencies").and_then(Item::as_array)
                 && !find_dependencies(name, marker, dependencies).is_empty()
@@ -1150,10 +1200,7 @@ impl PyProjectTomlMut {
             }
 
             // Check `project.optional-dependencies`.
-            if let Some(extras) = project
-                .get("optional-dependencies")
-                .and_then(Item::as_table_like)
-            {
+            if let Some(extras) = project.get("optional-dependencies").and_then(as_table) {
                 for (extra, dependencies) in extras.iter() {
                     let Some(dependencies) = dependencies.as_array() else {
                         continue;
@@ -1170,11 +1217,7 @@ impl PyProjectTomlMut {
         }
 
         // Check `dependency-groups`.
-        if let Some(groups) = self
-            .doc
-            .get("dependency-groups")
-            .and_then(Item::as_table_like)
-        {
+        if let Some(groups) = self.doc.get("dependency-groups").and_then(as_table) {
             for (group, dependencies) in groups.iter() {
                 let Some(dependencies) = dependencies.as_array() else {
                     continue;
@@ -1193,9 +1236,9 @@ impl PyProjectTomlMut {
         if let Some(dev_dependencies) = self
             .doc
             .get("tool")
-            .and_then(Item::as_table_like)
+            .and_then(as_table)
             .and_then(|tool| tool.get("uv"))
-            .and_then(Item::as_table_like)
+            .and_then(as_table)
             .and_then(|uv| uv.get("dev-dependencies"))
             .and_then(Item::as_array)
             && !find_dependencies(name, marker, dev_dependencies).is_empty()
@@ -1645,59 +1688,92 @@ fn same_requirement_declaration(left: &Requirement, right: &Requirement) -> bool
         && left.marker == right.marker
 }
 
-/// Keep the preceding entry's end-of-line comment when removing a key from an inline table.
-fn preserve_inline_comment(mut table: &mut InlineTable, path: &[&str]) {
-    // Inline tables store the text after a comma on the next key's final path component.
-    // A dotted declaration can have several such keys for one logical table.
-    let matches = |keys: &[&Key]| {
-        keys.iter()
-            .take(path.len())
-            .map(|key| key.get())
-            .eq(path.iter().copied())
-    };
-    let mut entries = table.get_values().into_iter();
-    let Some((removed, _)) = entries.find(|(keys, _)| matches(keys)) else {
-        return;
-    };
-    let Some(comment) = removed
-        .last()
-        .and_then(|key| key.leaf_decor().prefix())
-        .and_then(RawString::as_str)
-        .and_then(|prefix| prefix.lines().next())
-        .filter(|line| line.trim_start().starts_with('#'))
-        .map(str::to_owned)
-    else {
-        return;
-    };
-    let next = entries.find(|(keys, _)| !matches(keys)).map(|(keys, _)| {
-        keys.iter()
-            .map(|key| key.get().to_owned())
-            .collect::<Vec<_>>()
-    });
-    let join = |following: Option<&str>| {
-        // The first line after the removed value can contain its own trailing comment.
-        let following = following.unwrap_or_default();
-        match following.find('\n') {
-            Some(index) => format!("{comment}{}", &following[index..]),
-            None => format!("{comment}\n{following}"),
+/// End-of-line comments and closing whitespace for one inline table on the source path.
+struct InlineComments<'a> {
+    // End-of-line comments keyed by the field they describe. The empty path denotes the opening brace.
+    after: HashMap<Vec<String>, &'a str>,
+    closing: &'a str,
+    final_value: Option<Vec<String>>,
+}
+
+/// Read the comment on the same line as an opening brace, comma, or final value.
+fn eol(s: &str) -> &str {
+    s.lines()
+        .next()
+        .filter(|s| s.trim_start().starts_with('#'))
+        .unwrap_or_default()
+}
+
+/// Replace only the first line of trivia, keeping comments on subsequent lines with the next field.
+fn prefix_with_comment(prefix: &str, comment: &str) -> String {
+    if eol(prefix) == comment {
+        return prefix.to_owned();
+    }
+    match prefix.find('\n') {
+        Some(newline) => format!("{comment}{}", &prefix[newline..]),
+        None if !comment.is_empty() => format!("{comment}\n{prefix}"),
+        None => String::new(),
+    }
+}
+
+impl<'a> InlineComments<'a> {
+    /// Collect comment ownership in input order before dotted fields are grouped by the serializer.
+    fn read(table: &InlineTable, raw: &'a str) -> Self {
+        let trivia =
+            |v: Option<&RawString>| v.and_then(RawString::span).map_or("", |span| &raw[span]);
+        let mut previous = Vec::new();
+        let mut after = HashMap::new();
+        let mut closing = trivia(Some(table.trailing()));
+        for (keys, value) in table
+            .get_values()
+            .into_iter()
+            .sorted_unstable_by_key(|(_, value)| value.span().map(|s| s.start))
+        {
+            let prefix = trivia(keys.last().and_then(|key| key.leaf_decor().prefix()));
+            after.insert(previous, eol(prefix));
+            previous = keys.iter().map(|k| k.get().to_owned()).collect();
+            if !table.trailing_comma() {
+                closing = trivia(value.decor().suffix());
+            }
         }
-    };
-    if let Some(next) = next
-        && let Some((key, parents)) = next.split_last()
-    {
-        for parent in parents {
-            let Some(child) = table.get_mut(parent).and_then(Value::as_inline_table_mut) else {
-                return;
-            };
-            table = child;
+        let final_value = (!table.trailing_comma()).then(|| previous.clone());
+        after.insert(previous, eol(closing));
+        Self {
+            after,
+            closing,
+            final_value,
         }
-        if let Some(mut key) = table.key_mut(key) {
-            let decor = key.leaf_decor_mut();
-            decor.set_prefix(join(decor.prefix().and_then(RawString::as_str)));
+    }
+
+    /// Restore comments in serialization order, skipping fields removed from the source table.
+    fn apply(&self, table: &mut InlineTable) {
+        let mut comment = self.after.get(&[][..]).copied().unwrap_or_default();
+        self.apply_fields(table, &mut Vec::new(), &mut comment);
+        table.set_trailing(prefix_with_comment(self.closing, comment));
+    }
+
+    /// Visit the remaining leaf keys in the same order as `InlineTable::get_values`.
+    fn apply_fields(&self, table: &mut InlineTable, path: &mut Vec<String>, comment: &mut &'a str) {
+        for (mut key, value) in table.iter_mut() {
+            path.push(key.get().to_owned());
+            if let Value::InlineTable(child) = value
+                && child.is_dotted()
+            {
+                self.apply_fields(child, path, comment);
+            } else {
+                let decor = key.leaf_decor_mut();
+                let prefix = decor
+                    .prefix()
+                    .and_then(RawString::as_str)
+                    .unwrap_or_default();
+                decor.set_prefix(prefix_with_comment(prefix, comment));
+                if self.final_value.as_ref() == Some(path) {
+                    value.decor_mut().set_suffix("");
+                }
+                *comment = self.after.get(path).copied().unwrap_or_default();
+            }
+            path.pop();
         }
-    } else {
-        table.set_trailing_comma(true);
-        table.set_trailing(join(table.trailing().as_str()));
     }
 }
 

@@ -1413,14 +1413,14 @@ fn add_remove_dev() -> Result<()> {
 }
 
 #[test]
-fn add_inline_legacy_dev_dependencies() -> Result<()> {
+fn add_dev_to_mixed_case_inline_group() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-
     context
         .temp_dir
         .child("pyproject.toml")
         .write_str(indoc! {r#"
-        tool.uv = { dev-dependencies = ["ok"] }
+        dependency-groups = { Dev = [], ci = [{ include-group = "Dev" }] }
+        tool.uv = { dev-dependencies = [] }
 
         [project]
         name = "project"
@@ -1428,32 +1428,59 @@ fn add_inline_legacy_dev_dependencies() -> Result<()> {
         requires-python = ">=3.12"
     "#})?;
 
-    let links = context.workspace_root.join("test/links");
-    uv_snapshot!(context.filters(), context.add().args(["--dev", "tqdm", "--no-sync", "--no-index", "--find-links"]).arg(&links), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
-    Resolved 3 packages in [TIME]
-    ");
+    context
+        .add()
+        .args([
+            "--dev",
+            "ok==1.0.0",
+            "--no-sync",
+            "--no-index",
+            "--find-links",
+        ])
+        .arg(context.workspace_root.join("test/links"))
+        .assert()
+        .success();
 
-    uv_snapshot!(context.filters(), context.add().args(["--group", "dev", "ok==1.0.0", "--no-sync", "--no-index", "--find-links"]).arg(&links), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
-    Resolved 3 packages in [TIME]
-    ");
+    // The included group must receive the package so a CI-only install can use it.
+    context
+        .sync()
+        .args(["--only-group", "ci", "--frozen"])
+        .assert()
+        .success();
+    context.assert_installed("ok", "1.0.0");
+    Ok(())
+}
 
-    assert_snapshot!(context.read("pyproject.toml"), @r#"
-    tool.uv = { dev-dependencies = [
-        "ok==1.0.0",
-        "tqdm>=1000.0.0",
-    ] }
+#[test]
+fn add_dev_preserves_inline_group_comments() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        dependency-groups = {
+            dev = [],
+            # Release tests run separately.
+            release = [],
+        }
+        tool.uv.dev-dependencies = []
 
-    [project]
-    name = "project"
-    version = "0.1.0"
-    requires-python = ">=3.12"
-    "#);
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+    "#})?;
+
+    context
+        .add()
+        .args(["--dev", "ok", "--frozen"])
+        .assert()
+        .success();
+    assert!(
+        context
+            .read("pyproject.toml")
+            .contains("# Release tests run separately.")
+    );
 
     Ok(())
 }
@@ -4029,6 +4056,45 @@ fn remove_non_normalized_source() -> Result<()> {
     Ok(())
 }
 
+/// Removing a group requirement also removes its group-specific source when an inline extra remains.
+#[test]
+fn remove_group_source_with_inline_extra() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let links = context.workspace_root.join("test/links");
+    let wheel = "ok-1.0.0-py3-none-any.whl";
+    fs_err::copy(links.join(wheel), context.temp_dir.join(wheel))?;
+    context.temp_dir.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        optional-dependencies = { docs = ["ok; sys_platform != 'win32'"] }
+
+        [dependency-groups]
+        dev = ["ok; sys_platform == 'win32'"]
+
+        [tool.uv.sources]
+        ok = { path = "ok-1.0.0-py3-none-any.whl", group = "dev", marker = "sys_platform == 'win32'" }
+    "#})?;
+
+    context
+        .remove()
+        .args([
+            "--group",
+            "dev",
+            "ok",
+            "--no-sync",
+            "--no-index",
+            "--find-links",
+        ])
+        .arg(&links)
+        .assert()
+        .success();
+
+    assert!(!context.read("pyproject.toml").contains("tool.uv.sources"));
+    Ok(())
+}
+
 #[test]
 fn remove_with_empty_inline_sources() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -4095,8 +4161,8 @@ fn remove_inline_source() -> Result<()> {
             offline = true, # Use local wheels
             sources = {
                 ok.path = "ok-1.0.0-py3-none-any.whl", # Used by the test extra
-                tqdm.path = "tqdm-1000.0.0-py3-none-any.whl",
-            },
+                tqdm.path = "tqdm-1000.0.0-py3-none-any.whl" # Only used by tqdm
+            } # Dependency sources
         }
     "#})?;
 
@@ -4122,8 +4188,8 @@ fn remove_inline_source() -> Result<()> {
     uv = {
         offline = true, # Use local wheels
         sources = {
-            ok.path = "ok-1.0.0-py3-none-any.whl", # Used by the test extra
-        },
+            ok.path = "ok-1.0.0-py3-none-any.whl" # Used by the test extra
+        } # Dependency sources
     }
     "#);
 
@@ -4144,8 +4210,8 @@ fn remove_inline_source() -> Result<()> {
     uv = {
         offline = true, # Use local wheels
         sources = {
-            ok.path = "ok-1.0.0-py3-none-any.whl", # Used by the test extra
-        },
+            ok.path = "ok-1.0.0-py3-none-any.whl" # Used by the test extra
+        } # Dependency sources
     }
     "#);
 
@@ -4163,10 +4229,66 @@ fn remove_inline_source() -> Result<()> {
 
     [tool]
     uv = {
-        offline = true, # Use local wheels
+        offline = true # Use local wheels
     }
     "#);
 
+    Ok(())
+}
+
+/// Inline tables regroup dotted keys when serialized. Comments still belong to the original fields.
+#[test]
+fn remove_interleaved_inline_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    for wheel in [
+        "ok-1.0.0-py3-none-any.whl",
+        "tqdm-1000.0.0-py3-none-any.whl",
+    ] {
+        fs_err::copy(
+            context.workspace_root.join("test/links").join(wheel),
+            context.temp_dir.join(wheel),
+        )?;
+    }
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["ok", "tqdm"]
+
+        [tool]
+        uv = {
+            sources.ok.path = "ok-1.0.0-py3-none-any.whl", # Local ok wheel
+            sources.tqdm.path = "tqdm-1000.0.0-py3-none-any.whl", # Local tqdm wheel
+            offline = true, # Use local packages only
+            sources.ok.marker = "python_version >= '3.12'"
+        }
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.remove().args(["tqdm", "--no-sync", "--no-index"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    assert_snapshot!(context.read("pyproject.toml"), @r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    dependencies = [
+        "ok",
+    ]
+
+    [tool]
+    uv = {
+        sources.ok.path = "ok-1.0.0-py3-none-any.whl", # Local ok wheel
+        sources.ok.marker = "python_version >= '3.12'",
+        offline = true # Use local packages only
+    }
+    "#);
     Ok(())
 }
 
