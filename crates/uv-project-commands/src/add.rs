@@ -916,6 +916,7 @@ fn edits(
                     lfs,
                     script_dir,
                     existing_sources,
+                    dependency_type,
                 )?
             }
             EditTarget::Project(project) => {
@@ -941,6 +942,7 @@ fn edits(
                     lfs,
                     project.root(),
                     existing_sources,
+                    dependency_type,
                 )?
             }
         };
@@ -1336,10 +1338,10 @@ fn resolve_requirement(
     lfs: GitLfsSetting,
     root: &Path,
     existing_sources: Option<&BTreeMap<PackageName, Sources>>,
+    dependency_type: &DependencyType,
 ) -> Result<(uv_pep508::Requirement, Option<Source>), anyhow::Error> {
     let result = Source::from_requirement(
-        &requirement.name,
-        requirement.source.clone(),
+        &requirement,
         workspace,
         editable,
         index,
@@ -1349,6 +1351,7 @@ fn resolve_requirement(
         lfs,
         root,
         existing_sources,
+        dependency_type,
     );
 
     let source = match result {
