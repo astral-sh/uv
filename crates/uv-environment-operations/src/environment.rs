@@ -220,25 +220,18 @@ impl CachedEnvironment {
 
         // Construct a hash for the environment.
         //
-        // Use the canonicalized base interpreter path since that's the interpreter we performed the
-        // resolution with and the interpreter the environment will be created with.
+        // Include the base interpreter's version alongside its canonical path so that upgrading
+        // the interpreter in place creates a new environment.
         //
         // We cache environments independent of the environment they'd be layered on top of. The
         // assumption is such that the environment will _not_ be modified by the user or uv;
         // otherwise, we risk cache poisoning. For example, if we were to write a `.pth` file to
         // the cached environment, it would be shared across all projects that use the same
         // interpreter and the same cached dependencies.
-        //
-        // Include the local version to invalidate environments whose entry points contain the
-        // absolute path to the temporary environment they were installed in.
-        let executable = canonicalize_executable(interpreter.sys_executable())?;
-        let version = interpreter.python_version();
-        let interpreter_hash = if version.is_local() {
-            cache_digest(&(executable, version))
-        } else {
-            // TODO(zanieb): Include the base interpreter version when it changes at the same path.
-            cache_digest(&executable)
-        };
+        let interpreter_hash = cache_digest(&(
+            canonicalize_executable(interpreter.sys_executable())?,
+            interpreter.python_version(),
+        ));
 
         // Search in the content-addressed cache.
         let cache_entry = cache.entry(CacheBucket::Environments, interpreter_hash, resolution_hash);
