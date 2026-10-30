@@ -569,7 +569,14 @@ impl Pep508Url for VerbatimUrl {
     }
 
     fn displayable_with_credentials(&self) -> impl Display {
-        self.url.displayable_with_credentials()
+        // Keep environment variable references in network URLs. A local path needs its URL
+        // representation to be a portable PEP 508 reference.
+        if let Some(given) = self.given()
+            && self.scheme() != "file"
+        {
+            return given;
+        }
+        self.url.as_str()
     }
 }
 
