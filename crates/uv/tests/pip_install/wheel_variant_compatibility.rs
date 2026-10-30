@@ -180,7 +180,7 @@ fn x86_64_target_uses_platform_defaults() -> Result<()> {
         namespaces = ["x86_64"]
 
         [packages.ok.versions."1.0.0".variants.providers]
-        x86_64.requires = ["x86_64-variant-provider==0.2.0"]
+        x86_64.requires = ["x86_64-variant-provider==0.2.1"]
 
         [packages.ok.versions."1.0.0".variants.wheels]
         v1.properties = ["x86_64 :: level :: v1"]

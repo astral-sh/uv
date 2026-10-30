@@ -29,7 +29,7 @@ static LEVEL_PROPERTIES: LazyLock<[SupportedVariantFeature; 4]> = LazyLock::new(
     })
 });
 
-/// The vendored implementation of `x86_64-variant-provider` 0.2.0.
+/// The vendored implementation of `x86_64-variant-provider` 0.2.1.
 ///
 /// # Variant properties
 ///
@@ -40,9 +40,13 @@ static LEVEL_PROPERTIES: LazyLock<[SupportedVariantFeature; 4]> = LazyLock::new(
 /// When CPU detection is unavailable, including for an explicit target (`--python-platform`),
 /// x86-64 targets use `v2` as the platform default, while other architectures emit nothing.
 ///
-/// There are two cases we are not handling:
+/// # Known limitations
+///
 /// * The cache is shared between machines with CPUs with different `x86_64` levels, but the same
 ///   Python interpreter.
+/// * When QEMU emulates an x86-64 CPU on an x86-64 Linux host in user mode, `/proc/cpuinfo`
+///   reports the host's flags. We can select a wheel that requires instructions the emulated CPU
+///   does not support.
 /// * We are building the environment on one machine, and then deploying to another machine. This
 ///   case requires an override specifying the target machine. TODO(konsti): Add support for that as
 ///   part of the wheel variants stack.
@@ -62,7 +66,7 @@ impl VendoredVariantProvider for X86_64VariantProvider {
     }
 
     fn package_version(&self) -> Version {
-        Version::new([0, 2, 0])
+        Version::new([0, 2, 1])
     }
 
     fn properties(&self, target: &Platform) -> Option<&[SupportedVariantFeature]> {
