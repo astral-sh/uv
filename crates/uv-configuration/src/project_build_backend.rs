@@ -27,6 +27,13 @@ pub enum ProjectBuildBackend {
     Setuptools,
     /// Use [maturin](https://pypi.org/project/maturin) as the project build backend.
     Maturin,
+    /// Use [meson-python](https://pypi.org/project/meson-python) as the project build backend.
+    #[serde(alias = "meson-python")]
+    #[cfg_attr(
+        feature = "clap",
+        value(alias = "meson-python", alias = "meson_python")
+    )]
+    Meson,
     /// Use [scikit-build-core](https://pypi.org/project/scikit-build-core) as the project build backend.
     #[serde(alias = "scikit-build-core")]
     #[cfg_attr(feature = "clap", value(alias = "scikit-build-core"))]
