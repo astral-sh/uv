@@ -891,6 +891,7 @@ mod tests {
             "result": "success",
             "os": {"name": "manylinux", "major": 2, "minor": 38},
             "arch": "x86_64",
+            "cpu_info": {"unavailable": "Mock interpreter has no CPU data"},
             "manylinux_compatible": true,
             "standalone": false,
             "markers": {

@@ -1104,7 +1104,7 @@ enum InterpreterInfoResult {
 struct InterpreterInfoWire {
     os: uv_platform_tags::Os,
     arch: uv_platform_tags::Arch,
-    cpu_info: Option<CpuProbe>,
+    cpu_info: CpuProbe,
     #[serde(flatten)]
     metadata: InterpreterMetadata,
 }
@@ -1112,6 +1112,7 @@ struct InterpreterInfoWire {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
 enum CpuProbe {
+    NonX86_64,
     Detected(CpuInfo),
     Unavailable(Box<str>),
     Error(Box<str>),
@@ -1445,15 +1446,16 @@ impl InterpreterInfo {
         );
         let wire = Self::query(executable, cache)?;
         let cpu_info = match wire.cpu_info {
-            Some(CpuProbe::Detected(info)) => Some(info),
-            Some(CpuProbe::Unavailable(reason)) => {
+            CpuProbe::NonX86_64 => None,
+            CpuProbe::Detected(info) => Some(info),
+            CpuProbe::Unavailable(reason) => {
                 debug!(
                     "CPU information unavailable for `{}`: {reason}",
                     executable.display()
                 );
                 None
             }
-            Some(CpuProbe::Error(message)) => {
+            CpuProbe::Error(message) => {
                 let error = Error::CpuDetection {
                     path: executable.to_path_buf(),
                     message,
@@ -1466,7 +1468,6 @@ impl InterpreterInfo {
                 );
                 None
             }
-            None => None,
         };
         let info = Self {
             platform: Platform::from_interpreter(wire.os, wire.arch, cpu_info),

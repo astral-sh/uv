@@ -845,13 +845,14 @@ def main() -> None:
     elif os_and_arch["os"]["name"] == "musllinux":
         manylinux_compatible = True
 
-    cpu_info = None
     if os_and_arch["arch"].lower() in ("x86_64", "amd64"):
         try:
             cpu_info = _get_cpu_info()
         except Exception as error:  # noqa: BLE001
             # Rust applies the preview policy to unexpected failures.
             cpu_info = {"error": f"{type(error).__name__}: {error}"}
+    else:
+        cpu_info = "non_x86_64"
 
     # By default, pip uses sysconfig on Python 3.10+.
     # But Python distributors can override this decision by setting:

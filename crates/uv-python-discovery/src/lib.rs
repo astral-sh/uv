@@ -365,6 +365,7 @@ mod tests {
                         "minor": 38
                     },
                     "arch": "x86_64",
+                    "cpu_info": {"unavailable": "Mock interpreter has no CPU data"},
                     "manylinux_compatible": true,
                     "standalone": true,
                     "markers": {
@@ -456,6 +457,7 @@ mod tests {
                         "minor": 0
                     },
                     "arch": "wasm32",
+                    "cpu_info": "non_x86_64",
                     "manylinux_compatible": false,
                     "standalone": false,
                     "markers": {
