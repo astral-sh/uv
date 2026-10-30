@@ -21,9 +21,9 @@ use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
-    ConfigSettings, DependencyMetadata, ExtraBuildVariables, HashCollection, Index, IndexLocations,
-    MinimumLibcVersion, NameRequirementSpecification, Origin, PackageConfigSettings, Requirement,
-    RequiresPython, Verbatim,
+    ConfigSettings, DependencyMetadata, DistributionMetadata, ExtraBuildVariables, HashCollection,
+    Index, IndexLocations, MinimumLibcVersion, NameRequirementSpecification, Origin,
+    PackageConfigSettings, Requirement, RequiresPython, Verbatim, VersionOrUrlRef,
 };
 use uv_fs::{CWD, Simplified};
 use uv_git::ResolvedRepositoryReference;
@@ -613,6 +613,17 @@ pub async fn pip_compile(
         resolution.retain_allowed_distribution_hashes(&build_options);
     }
 
+    // Reconstructed URLs lose userinfo; verbatim URLs retain the spelling from the input.
+    if format == PipCompileFormat::RequirementsTxt {
+        for (_, dist) in resolution.base_dists() {
+            if !no_emit_packages.contains(&dist.name)
+                && let VersionOrUrlRef::Url(url) = dist.version_or_url()
+                && url.given().is_none()
+            {
+                crate::check_requirement_url(&dist.name, url)?;
+            }
+        }
+    }
     // Write the resolved dependencies to the output channel.
     let mut writer = OutputWriter::new(!quiet || output_file.is_none(), output_file);
 

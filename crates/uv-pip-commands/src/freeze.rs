@@ -83,7 +83,7 @@ pub fn pip_freeze(
         None => vec![SitePackages::from_environment(&environment)?],
     };
 
-    site_packages
+    let distributions = site_packages
         .iter()
         .flat_map(uv_installer::SitePackages::iter)
         .filter(|dist| {
@@ -95,7 +95,13 @@ pub fn pip_freeze(
             }
             true
         })
-        .sorted_unstable_by(|a, b| a.name().cmp(b.name()).then(a.version().cmp(b.version())))
+        .sorted_unstable_by(|a, b| a.name().cmp(b.name()).then(a.version().cmp(b.version())));
+    for dist in distributions.as_slice() {
+        if let InstalledDistKind::Url(dist) = &dist.kind {
+            crate::check_requirement_url(dist.name(), &dist.url)?;
+        }
+    }
+    distributions
         .map(|dist| match &dist.kind {
             InstalledDistKind::Registry(dist) => {
                 format!("{}=={}", dist.name().bold(), dist.version)

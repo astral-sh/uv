@@ -10793,6 +10793,34 @@ fn add_index_signed_query() -> Result<()> {
     Ok(())
 }
 
+/// An index URL must remain parseable when the project is opened again without its credentials.
+#[test]
+fn add_index_ambiguous_stripped_url() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject = indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#};
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(pyproject)?;
+    uv_snapshot!(context.filters(), context.add()
+        .arg("anyio")
+        .arg("--frozen")
+        .arg("--default-index")
+        .arg("https://user:password@example.com/build:channel@nightly/simple?sig=synthetic-signature"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Cannot write the index URL: its path or fragment is ambiguous after removing credentials
+    ");
+    assert_eq!(context.read("pyproject.toml"), pyproject);
+    Ok(())
+}
+
 /// Updating an existing raw dependency uses the same credential policy as adding a new one.
 #[test]
 fn add_raw_signed_url_update() -> Result<()> {
