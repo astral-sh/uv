@@ -239,7 +239,8 @@ jobs:
           [[ $publish_changed || $has_publish_label || $has_extended_label || $on_main_branch ]] && test_publish=1
           [[ ! $has_skip_label && ($trampoline_code_changed || $trampoline_scripts_changed || $trampoline_workflow_changed || $rust_deps_changed || $has_build_windows_trampoline_label || $on_main_branch) ]] && test_windows_trampoline=1
           [[ ! $has_skip_label && ($trampoline_repro_changed || $trampoline_build_scripts_changed || $has_build_windows_trampoline_label) ]] && test_windows_trampoline_check_binary=1
-          [[ $on_main_branch || $cache_relevant_changed ]] && save_rust_cache=1
+          # Public uv PRs restore the Rust caches shared by main.
+          [[ $on_main_branch || (! $is_uv && $cache_relevant_changed) ]] && save_rust_cache=1
           if [[ ! $has_skip_label && (
             ($is_uv_dev && $has_benchmarks_label) ||
             (! $is_uv_dev && (($any_rust_changed && $non_test_code_changed) || $bench_workflow_changed || $on_main_branch))
