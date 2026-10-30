@@ -17,7 +17,7 @@ env:
   CARGO_NET_RETRY: 10
   CARGO_TERM_COLOR: always
   # renovate: datasource=github-releases depName=astral-sh/hawk
-  HAWK_VERSION: 0.1.16
+  HAWK_VERSION: 0.1.17
   RUSTUP_MAX_RETRIES: 10
   UV_LOCKED: 1
   UV_PYTHON_DOWNLOADS_JSON_URL: ${{ github.workspace }}/crates/uv-python-managed/download-metadata.json
@@ -227,7 +227,7 @@ jobs:
           curl --proto '=https' --tlsv1.2 -LsSf \
             "https://github.com/astral-sh/hawk/releases/download/${HAWK_VERSION}/cargo-hawk-installer.sh" | sh
       - name: "Hawk"
-        run: cargo hawk check --target-dir target/hawk -D warnings
+        run: cargo hawk check -D warnings
 
   shear:
     name: "cargo shear"
