@@ -123,7 +123,6 @@ uv-trampoline-builder = { workspace = true }
 assert_cmd = { workspace = true }
 assert_fs = { workspace = true }
 async_zip = { workspace = true, features = ["zstd"] }
-backon = { workspace = true }
 byteorder = { workspace = true }
 bytes = { workspace = true }
 dunce = { workspace = true }
@@ -137,7 +136,6 @@ indoc = { workspace = true }
 insta = { workspace = true }
 predicates = { workspace = true }
 regex = { workspace = true, features = ["perf", "unicode"] }
-reqwest = { workspace = true, default-features = false }
 sha2 = { workspace = true }
 tar-codec = { workspace = true }
 tempfile = { workspace = true }

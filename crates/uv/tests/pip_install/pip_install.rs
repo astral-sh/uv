@@ -22,7 +22,7 @@ use sha2::{Digest, Sha256};
 use walkdir::WalkDir;
 use wiremock::{
     Mock, MockServer, ResponseTemplate,
-    matchers::{basic_auth, method, path},
+    matchers::{basic_auth, header, method, path},
 };
 
 use uv_extract::dirhash::{DirectoryDigest, dirhash_path};
@@ -17295,19 +17295,56 @@ fn reject_invalid_crc32_non_data_descriptor() {
     );
 }
 
-#[test]
-fn reject_invalid_duplicate_extra_field() {
-    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
+/// Serve the corrupt wheel through the same HTTP range path used for remote wheel metadata.
+async fn malformed_wheel_server(context: &TestContext, fixture: &str) -> Result<MockServer> {
+    let wheel = fs::read(
+        context
+            .workspace_root
+            .join("test/archives/malo/malicious")
+            .join(fixture),
+    )?;
+    let size = wheel.len();
+    let server = MockServer::start().await;
+    let wheel_path = "/attrs-25.3.0-py3-none-any.whl";
+    Mock::given(method("HEAD"))
+        .and(path(wheel_path))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("Accept-Ranges", "bytes")
+                .insert_header("Content-Length", size.to_string()),
+        )
+        .mount(&server)
+        .await;
+    // These archives fit in the first range requested by the metadata reader.
+    Mock::given(method("GET"))
+        .and(path(wheel_path))
+        .and(header("Range", format!("bytes=0-{}", size - 1)))
+        .respond_with(
+            ResponseTemplate::new(206)
+                .insert_header("Content-Range", format!("bytes 0-{}/{size}", size - 1))
+                .set_body_bytes(wheel),
+        )
+        .mount(&server)
+        .await;
+    Ok(server)
+}
+
+#[tokio::test]
+async fn reject_invalid_duplicate_extra_field() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = malformed_wheel_server(&context, "second_unicode_extra.zip").await?;
 
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg("attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip4/attrs-25.3.0-py3-none-any.whl"), @"
+        .arg(format!("attrs @ {}/attrs-25.3.0-py3-none-any.whl", server.uri())), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: Failed to download `attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip4/attrs-25.3.0-py3-none-any.whl`
+    error: Failed to download `attrs @ http://[LOCALHOST]/attrs-25.3.0-py3-none-any.whl`
       cause: Failed to unzip wheel: attrs-25.3.0-py3-none-any.whl
       cause: an extra field with id 0x7075 was duplicated in the header
     "
     );
+
+    Ok(())
 }
 
 #[test]
@@ -17326,34 +17363,40 @@ fn reject_invalid_short_usize() {
     );
 }
 
-#[test]
-fn reject_invalid_chained_extra_field() {
-    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
+#[tokio::test]
+async fn reject_invalid_chained_extra_field() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = malformed_wheel_server(&context, "unicode_extra_chain.zip").await?;
 
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg("attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip6/attrs-25.3.0-py3-none-any.whl"), @"
+        .arg(format!("attrs @ {}/attrs-25.3.0-py3-none-any.whl", server.uri())), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: Failed to download `attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip6/attrs-25.3.0-py3-none-any.whl`
+    error: Failed to download `attrs @ http://[LOCALHOST]/attrs-25.3.0-py3-none-any.whl`
       cause: Failed to unzip wheel: attrs-25.3.0-py3-none-any.whl
       cause: an extra field with id 0x7075 was duplicated in the header
     "
     );
+
+    Ok(())
 }
 
-#[test]
-fn reject_invalid_short_usize_zip64() {
-    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
+#[tokio::test]
+async fn reject_invalid_short_usize_zip64() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = malformed_wheel_server(&context, "short_usize_zip64.zip").await?;
 
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg("attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip7/attrs-25.3.0-py3-none-any.whl"), @"
+        .arg(format!("attrs @ {}/attrs-25.3.0-py3-none-any.whl", server.uri())), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: Failed to download `attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip7/attrs-25.3.0-py3-none-any.whl`
+    error: Failed to download `attrs @ http://[LOCALHOST]/attrs-25.3.0-py3-none-any.whl`
       cause: Failed to unzip wheel: attrs-25.3.0-py3-none-any.whl
       cause: zip64 extended information field was too long: expected 16 bytes, but 0 bytes were provided
     "
     );
+
+    Ok(())
 }
 
 /// Regression test for: <https://github.com/astral-sh/uv/issues/16068>
