@@ -7331,6 +7331,7 @@ name = "uv-project-edit"
 version = "0.0.98"
 dependencies = [
  "anyhow",
+ "glob",
  "insta",
  "itertools 0.14.0",
  "thiserror",

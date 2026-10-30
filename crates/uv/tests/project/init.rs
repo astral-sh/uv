@@ -2392,6 +2392,49 @@ fn init_nested_virtual_workspace() -> Result<()> {
     Ok(())
 }
 
+/// Initializing a member with literal brackets must not select a sibling that matches the glob.
+#[test]
+fn init_workspace_glob_metacharacters() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str("[tool.uv.workspace]\nmembers = []\n")?;
+    context
+        .init()
+        .args(["--bare", "--no-workspace", "--name", "decoy", "v/api"])
+        .assert()
+        .success();
+
+    context
+        .init()
+        .args(["--bare", "[v2]/api"])
+        .assert()
+        .success();
+    context.lock().assert().success();
+
+    assert_snapshot!(context.read("uv.lock"), @r#"
+    version = 1
+    revision = 5
+    requires-python = ">=3.12"
+
+    [options]
+    exclude-newer = "2024-03-25T00:00:00Z"
+
+    [manifest]
+    members = [
+        "api",
+    ]
+
+    [[package]]
+    name = "api"
+    version = "0.1.0"
+    source = { virtual = "[v2]/api" }
+    "#);
+
+    Ok(())
+}
+
 /// Run `uv init` from within a workspace. The path is already included via `members`.
 #[test]
 fn init_matches_members() -> Result<()> {

@@ -25,6 +25,7 @@ uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
 uv-workspace = { workspace = true }
 
+glob = { workspace = true }
 itertools = { workspace = true }
 thiserror = { workspace = true }
 toml = { workspace = true }
