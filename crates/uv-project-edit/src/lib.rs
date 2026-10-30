@@ -1163,7 +1163,7 @@ impl PyProjectTomlMut {
                 let source = &mut self.doc["tool"]["uv"]["sources"][&key];
                 for index in unused.into_iter().rev() {
                     if let Some(array) = source.as_array_mut() {
-                        array.remove(index);
+                        remove_array_item(index, array);
                     } else if let Some(array) = source.as_array_of_tables_mut() {
                         array.remove(index);
                     }
@@ -1664,34 +1664,40 @@ fn remove_dependency(name: &PackageName, deps: &mut Array) -> Vec<Requirement> {
 }
 
 fn remove_dependency_at(index: usize, deps: &mut Array) -> Option<Requirement> {
-    if let Some(prefix) = deps
-        .get(index)
-        .and_then(|item| item.decor().prefix().and_then(|s| s.as_str()))
-        .filter(|s| !s.is_empty())
-    {
-        let prefix = prefix.to_string();
-        if let Some(next) = deps.get(index + 1)
-            && let Some(existing) = next.decor().prefix().and_then(|s| s.as_str())
-        {
-            // Transfer removed item's prefix to the next item's prefix.
-            let existing = existing.to_string();
-            if let Some(next) = deps.get_mut(index + 1) {
-                next.decor_mut().set_prefix(format!("{prefix}{existing}"));
-            }
-        } else if let Some(next) = deps.get_mut(index + 1) {
-            // Next item exists but has no prefix; use ours directly.
-            next.decor_mut().set_prefix(&prefix);
-        } else if let Some(existing) = deps.trailing().as_str() {
-            // No next item; move comments to the array trailing.
-            deps.set_trailing(format!("{prefix}{existing}"));
-        } else {
-            deps.set_trailing(&prefix);
-        }
-    }
-
-    deps.remove(index)
+    remove_array_item(index, deps)
         .as_str()
         .and_then(|req| Requirement::from_str(req).ok())
+}
+
+/// Remove an array item, retaining comments that TOML stores between consecutive values.
+fn remove_array_item(index: usize, array: &mut Array) -> Value {
+    let removed = array.remove(index);
+    let Some(prefix) = removed.decor().prefix().and_then(RawString::as_str) else {
+        return removed;
+    };
+    let join = |following: Option<&str>| {
+        let following = following.unwrap_or_default();
+        let start = following.trim_start_matches([' ', '\t']);
+        if !prefix.contains('#') && !start.starts_with('#') {
+            return None;
+        }
+        // The next line already has its own indentation.
+        let prefix = if start.starts_with(['\r', '\n']) {
+            prefix.trim_end()
+        } else {
+            prefix
+        };
+        Some(format!("{prefix}{following}"))
+    };
+    if let Some(next) = array.get_mut(index) {
+        let decor = next.decor_mut();
+        if let Some(prefix) = join(decor.prefix().and_then(RawString::as_str)) {
+            decor.set_prefix(prefix);
+        }
+    } else if let Some(trailing) = join(array.trailing().as_str()) {
+        array.set_trailing(trailing);
+    }
+    removed
 }
 
 /// Returns a `Vec` containing the all dependencies with the given name, along with their positions
@@ -2088,16 +2094,27 @@ ci = [{ include-group = "lint" }]
 
 [tool.uv.sources]
 demo = [
+    { path = "wheel", group = "ci" }, # CI includes lint
     { path = "wheel", group = "docs" },
-    { path = "wheel", group = "ci" },
 ]
 "#,
             DependencyTarget::PyProjectToml,
         )?;
         manifest.remove_dependency_group_requirement(&"demo".parse()?, &"docs".parse()?)?;
-        let sources = &manifest.doc["tool"]["uv"]["sources"]["demo"];
-        assert_eq!(sources.as_array().unwrap().len(), 1);
-        assert_eq!(sources[0]["group"].as_str(), Some("ci"));
+        assert_snapshot!(
+            manifest.to_string(),
+            @r#"
+        [dependency-groups]
+        docs = []
+        lint = ["demo"]
+        ci = [{ include-group = "lint" }]
+
+        [tool.uv.sources]
+        demo = [
+            { path = "wheel", group = "ci" }, # CI includes lint
+        ]
+        "#,
+        );
         Ok(())
     }
 
