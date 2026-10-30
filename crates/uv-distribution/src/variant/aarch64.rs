@@ -53,9 +53,9 @@ static VERSION_PROPERTIES: LazyLock<[SupportedVariantFeature; 8]> = LazyLock::ne
 ///
 /// # Known limitations
 ///
-/// * On Linux, unrecognized core models use `8a`. Windows ARM64 also uses `8a`.
-/// * On macOS, an unrecognized Apple M-series chip is assumed to support `8.6a`.
-/// * The cached CPU information belongs to the interpreter's machine. Sharing its cache or
+/// - On Linux, unrecognized core models use `8a`. Windows ARM64 also uses `8a`.
+/// - On macOS, an unrecognized Apple M-series chip is assumed to support `8.6a`.
+/// - The cached CPU information belongs to the interpreter's machine. Sharing its cache or
 ///   deploying its environment to a machine with a different CPU can select an incompatible wheel.
 pub(super) struct Aarch64VariantProvider;
 
