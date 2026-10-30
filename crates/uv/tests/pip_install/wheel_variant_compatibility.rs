@@ -166,7 +166,9 @@ fn select_variant_by_static_provider_order() -> Result<()> {
 const X86_64_VARIANTS: &str = indoc! {r#"
     name = "x86-64-target-defaults"
     root = {}
-    expected.satisfiable = true
+
+    [expected]
+    satisfiable = true
 
     [packages.ok.versions."1.0.0"]
     wheel = false
