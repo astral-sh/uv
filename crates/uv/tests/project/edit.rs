@@ -3473,6 +3473,52 @@ fn update() -> Result<()> {
     Ok(())
 }
 
+/// Adding a second wheel for a disjoint marker must preserve the first wheel in the lockfile.
+#[test]
+fn add_wheels_with_disjoint_markers() {
+    let context = uv_test::test_context!("3.12");
+    let links = context.workspace_root.join("test/links");
+    context
+        .init()
+        .args(["--bare", "--name", "project"])
+        .assert()
+        .success();
+
+    context
+        .add()
+        .arg(links.join("ok-1.0.0-py3-none-any.whl"))
+        .args(["--marker", "sys_platform == 'win32'", "--no-sync"])
+        .assert()
+        .success();
+    context
+        .add()
+        .arg(links.join("ok-2.0.0-py3-none-any.whl"))
+        .args(["--marker", "sys_platform == 'linux'", "--no-sync"])
+        .assert()
+        .success();
+
+    let installed_version = "from importlib.metadata import version; print(version('ok'), end='')";
+    context
+        .sync()
+        .args(["--frozen", "--python-platform", "windows"])
+        .assert()
+        .success();
+    context
+        .assert_command(installed_version)
+        .success()
+        .stdout("1.0.0");
+
+    context
+        .sync()
+        .args(["--frozen", "--python-platform", "linux"])
+        .assert()
+        .success();
+    context
+        .assert_command(installed_version)
+        .success()
+        .stdout("2.0.0");
+}
+
 /// Add and update a requirement, with different markers
 #[test]
 fn add_update_marker() -> Result<()> {

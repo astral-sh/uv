@@ -21,7 +21,8 @@ use tracing::instrument;
 use uv_build_backend::BuildBackendSettings;
 use uv_configuration::{ExcludeDependency, GitLfsSetting, Override};
 use uv_distribution_types::{
-    Index, IndexName, MinimumLibcVersion, NameRequirementSpecification, RequirementSource,
+    Index, IndexName, MinimumLibcVersion, NameRequirementSpecification, Requirement,
+    RequirementSource,
 };
 use uv_fs::{PortablePathBuf, try_relative_to_if};
 use uv_macros::{DeserializeUntagged, OptionsMetadata};
@@ -1684,6 +1685,8 @@ impl<'de> Deserialize<'de> for Source {
 pub enum SourceError {
     #[error("Failed to resolve Git reference: `{0}`")]
     UnresolvedReference(String),
+    #[error("Multiple Git sources match `{0}`; specify the source URL or a more specific marker")]
+    AmbiguousGitSource(PackageName),
     #[error("Workspace dependency `{0}` must refer to local directory, not a Git repository")]
     WorkspacePackageGit(String),
     #[error("Workspace dependency `{0}` must refer to local directory, not a URL")]
@@ -1737,8 +1740,7 @@ impl uv_errors::Hinted for SourceError {
 
 impl Source {
     pub fn from_requirement(
-        name: &PackageName,
-        source: RequirementSource,
+        requirement: &Requirement,
         workspace: bool,
         editable: Option<bool>,
         index: Option<IndexName>,
@@ -1748,7 +1750,29 @@ impl Source {
         lfs: GitLfsSetting,
         root: &Path,
         existing_sources: Option<&BTreeMap<PackageName, Sources>>,
+        dependency_type: &DependencyType,
     ) -> Result<Option<Self>, SourceError> {
+        let name = &requirement.name;
+        let marker = requirement.marker;
+        let source = requirement.source.clone();
+        let existing_sources = existing_sources.and_then(|sources| sources.get(name));
+        // Ordinary adds use a package-wide source. For conditional sources, keep the
+        // optional dependency or group selection alongside the environment marker.
+        let scoped = !marker.is_true()
+            || existing_sources.is_some_and(|sources| {
+                sources.iter().any(|source| {
+                    !source.marker().is_true()
+                        || source.extra().is_some()
+                        || source.group().is_some()
+                })
+            });
+        let (extra, group) = match dependency_type {
+            DependencyType::Optional(extra) if scoped => (Some(extra.clone()), None),
+            DependencyType::Group(group) if scoped => (None, Some(group.clone())),
+            DependencyType::Dev if scoped => (None, Some(DEV_DEPENDENCIES.clone())),
+            _ => (None, None),
+        };
+
         // If the user specified a Git reference for a non-Git source, try existing Git sources before erroring.
         if !matches!(
             source,
@@ -1758,33 +1782,40 @@ impl Source {
             || rev.is_some()
             || matches!(lfs, GitLfsSetting::Enabled { .. }))
         {
-            if let Some(sources) = existing_sources
-                && let Some(package_sources) = sources.get(name)
-            {
-                for existing_source in package_sources.iter() {
-                    if let Self::Git {
-                        git,
-                        subdirectory,
-                        path,
-                        marker,
+            if let Some(sources) = existing_sources {
+                let mut candidates = sources.iter().filter(|source| {
+                    matches!(source, Self::Git { .. })
+                        && source
+                            .extra()
+                            .is_none_or(|target| Some(target) == extra.as_ref())
+                        && source
+                            .group()
+                            .is_none_or(|target| Some(target) == group.as_ref())
+                        && !source.marker().is_disjoint(marker)
+                });
+                if let Some(Self::Git {
+                    git,
+                    subdirectory,
+                    path,
+                    marker: existing_marker,
+                    ..
+                }) = candidates.next()
+                {
+                    if candidates.next().is_some() {
+                        return Err(SourceError::AmbiguousGitSource(name.clone()));
+                    }
+                    return Ok(Some(Self::Git {
+                        git: git.clone(),
+                        subdirectory: subdirectory.clone(),
+                        path: path.clone(),
+                        rev,
+                        tag,
+                        branch,
+                        lfs: lfs.into(),
+                        marker: existing_marker.and(marker),
                         extra,
                         group,
-                        ..
-                    } = existing_source
-                    {
-                        return Ok(Some(Self::Git {
-                            git: git.clone(),
-                            subdirectory: subdirectory.clone(),
-                            rev,
-                            tag,
-                            branch,
-                            lfs: lfs.into(),
-                            marker: *marker,
-                            path: path.clone(),
-                            extra: extra.clone(),
-                            group: group.clone(),
-                        }));
-                    }
+                    }));
                 }
             }
             if let Some(rev) = rev {
@@ -1817,9 +1848,9 @@ impl Source {
                     Ok(Some(Self::Workspace {
                         workspace: WorkspaceReference::Bool(true),
                         editable,
-                        marker: MarkerTree::TRUE,
-                        extra: None,
-                        group: None,
+                        marker,
+                        extra,
+                        group,
                     }))
                 }
                 RequirementSource::Url { .. } => {
@@ -1844,9 +1875,9 @@ impl Source {
             RequirementSource::Registry { index: None, .. } if let Some(index) = index => {
                 Self::Registry {
                     index,
-                    marker: MarkerTree::TRUE,
-                    extra: None,
-                    group: None,
+                    marker,
+                    extra,
+                    group,
                 }
             }
             RequirementSource::Registry { index: None, .. } => return Ok(None),
@@ -1860,9 +1891,9 @@ impl Source {
                         .map_err(SourceError::Absolute)?
                         .into_boxed_path(),
                 ),
-                marker: MarkerTree::TRUE,
-                extra: None,
-                group: None,
+                marker,
+                extra,
+                group,
             },
             RequirementSource::Directory {
                 install_path,
@@ -1877,9 +1908,9 @@ impl Source {
                         .map_err(SourceError::Absolute)?
                         .into_boxed_path(),
                 ),
-                marker: MarkerTree::TRUE,
-                extra: None,
-                group: None,
+                marker,
+                extra,
+                group,
             },
             RequirementSource::Url {
                 location,
@@ -1888,9 +1919,9 @@ impl Source {
             } => Self::Url {
                 url: location,
                 subdirectory: subdirectory.map(PortablePathBuf::from),
-                marker: MarkerTree::TRUE,
-                extra: None,
-                group: None,
+                marker,
+                extra,
+                group,
             },
             RequirementSource::GitDirectory {
                 git, subdirectory, ..
@@ -1905,9 +1936,9 @@ impl Source {
                         git: git.url().clone().with_policy(Raw),
                         subdirectory: subdirectory.map(PortablePathBuf::from),
                         path: None,
-                        marker: MarkerTree::TRUE,
-                        extra: None,
-                        group: None,
+                        marker,
+                        extra,
+                        group,
                     }
                 } else {
                     Self::Git {
@@ -1918,9 +1949,9 @@ impl Source {
                         git: git.url().clone().with_policy(Raw),
                         subdirectory: subdirectory.map(PortablePathBuf::from),
                         path: None,
-                        marker: MarkerTree::TRUE,
-                        extra: None,
-                        group: None,
+                        marker,
+                        extra,
+                        group,
                     }
                 }
             }
@@ -1937,9 +1968,9 @@ impl Source {
                         git: git.url().clone().with_policy(Raw),
                         subdirectory: None,
                         path: Some(PortablePathBuf::from(install_path.as_path())),
-                        marker: MarkerTree::TRUE,
-                        extra: None,
-                        group: None,
+                        marker,
+                        extra,
+                        group,
                     }
                 } else {
                     Self::Git {
@@ -1950,9 +1981,9 @@ impl Source {
                         git: git.url().clone().with_policy(Raw),
                         subdirectory: None,
                         path: Some(PortablePathBuf::from(install_path.as_path())),
-                        marker: MarkerTree::TRUE,
-                        extra: None,
-                        group: None,
+                        marker,
+                        extra,
+                        group,
                     }
                 }
             }
@@ -1970,6 +2001,51 @@ impl Source {
             Self::Registry { marker, .. } => *marker,
             Self::Workspace { marker, .. } => *marker,
         }
+    }
+
+    /// Return this source with the given marker and extra or dependency group.
+    #[must_use]
+    pub fn with_selectors(
+        mut self,
+        new_marker: MarkerTree,
+        new_extra: Option<ExtraName>,
+        new_group: Option<GroupName>,
+    ) -> Self {
+        match &mut self {
+            Self::Git {
+                marker,
+                extra,
+                group,
+                ..
+            }
+            | Self::Url {
+                marker,
+                extra,
+                group,
+                ..
+            }
+            | Self::Path {
+                marker,
+                extra,
+                group,
+                ..
+            }
+            | Self::Registry {
+                marker,
+                extra,
+                group,
+                ..
+            }
+            | Self::Workspace {
+                marker,
+                extra,
+                group,
+                ..
+            } => {
+                (*marker, *extra, *group) = (new_marker, new_extra, new_group);
+            }
+        }
+        self
     }
 
     /// Return the extra name for the source.

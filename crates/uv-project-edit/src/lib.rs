@@ -1,8 +1,8 @@
 //! Edit project and script metadata while preserving TOML formatting.
 
+use std::fmt;
 use std::path::Path;
 use std::str::FromStr;
-use std::{fmt, mem};
 
 use itertools::Itertools;
 use thiserror::Error;
@@ -17,7 +17,8 @@ use uv_fs::{PortablePath, is_same_file_allow_missing, try_relative_to_if};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionParseError};
 use uv_pep508::{MarkerTree, Requirement, VersionOrUrl};
-use uv_workspace::pyproject::{DependencyType, Source};
+use uv_workspace::dependency_groups::FlatDependencyGroups;
+use uv_workspace::pyproject::{DependencyType, PyProjectToml, Source};
 
 /// Raw and mutable representation of a `pyproject.toml`.
 ///
@@ -48,13 +49,17 @@ pub enum Error {
     #[error("Failed to parse `pyproject.toml`")]
     Parse(#[from] Box<TomlError>),
     #[error("Failed to serialize `pyproject.toml`")]
-    Serialize(#[from] Box<toml::ser::Error>),
+    Serialize(#[from] Box<toml_edit::ser::Error>),
     #[error("Failed to deserialize `pyproject.toml`")]
     Deserialize(#[from] Box<toml::de::Error>),
     #[error("Dependencies in `pyproject.toml` are malformed")]
     MalformedDependencies,
     #[error("Sources in `pyproject.toml` are malformed")]
     MalformedSources,
+    #[error(
+        "Cannot update the source for `{0}` because it overlaps another source in `tool.uv.sources`. Use disjoint markers or edit the sources manually."
+    )]
+    OverlappingSource(PackageName),
     #[error("Workspace in `pyproject.toml` is malformed")]
     MalformedWorkspace,
     #[error("Expected a dependency at index {0}")]
@@ -934,10 +939,16 @@ impl PyProjectTomlMut {
             .as_table_mut()
             .ok_or(Error::MalformedSources)?;
 
-        if let Some(key) = find_source(name, sources) {
-            sources.remove(&key);
-        }
-        add_source(name, source, sources)?;
+        let value = if let Some(key) = find_source(name, sources) {
+            let merged = merge_source(name, source, &sources[&key])?;
+            if key != name.as_ref() {
+                sources.remove(&key);
+            }
+            merged
+        } else {
+            Item::Value(source_value(source)?)
+        };
+        sources[name.as_ref()] = value;
 
         Ok(())
     }
@@ -1074,44 +1085,103 @@ impl PyProjectTomlMut {
         Ok(requirements)
     }
 
-    /// Remove a matching source from `tool.uv.sources`, if it exists.
+    /// Remove sources whose dependencies are no longer declared in the project.
     fn remove_source(&mut self, name: &PackageName) -> Result<(), Error> {
-        // If the dependency is still in use, don't remove the source.
-        if !self.find_dependency(name, None).is_empty() {
-            return Ok(());
-        }
-
-        if let Some(sources) = self
+        let Some(sources) = self
             .doc
-            .get_mut("tool")
-            .map(|tool| tool.as_table_mut().ok_or(Error::MalformedSources))
+            .get("tool")
+            .map(|tool| tool.as_table().ok_or(Error::MalformedSources))
             .transpose()?
-            .and_then(|tool| tool.get_mut("uv"))
-            .map(|tool_uv| tool_uv.as_table_mut().ok_or(Error::MalformedSources))
+            .and_then(|tool| tool.get("uv"))
+            .map(|uv| uv.as_table().ok_or(Error::MalformedSources))
             .transpose()?
-            .and_then(|tool_uv| tool_uv.get_mut("sources"))
-            .map(|sources| sources.as_table_mut().ok_or(Error::MalformedSources))
+            .and_then(|uv| uv.get("sources"))
+            .map(|sources| sources.as_table().ok_or(Error::MalformedSources))
             .transpose()?
-        {
-            if let Some(key) = find_source(name, sources) {
-                sources.remove(&key);
-
-                // Remove the `tool.uv.sources` table if it is empty.
-                if sources.is_empty() {
+        else {
+            return Ok(());
+        };
+        let Some(key) = find_source(name, sources) else {
+            return Ok(());
+        };
+        let declarations = self.find_dependency(name, None);
+        if !declarations.is_empty() {
+            let source = &sources[&key];
+            let count = source
+                .as_array()
+                .map(Array::len)
+                .or_else(|| source.as_array_of_tables().map(ArrayOfTables::len));
+            let mut groups = None;
+            let mut unused = Vec::new();
+            for index in 0..count.unwrap_or(1) {
+                let entry = if count.is_some() {
+                    &source[index]
+                } else {
+                    source
+                };
+                let used = if let Some(raw) = entry.get("extra").and_then(Item::as_str) {
+                    let extra = ExtraName::from_str(raw).map_err(|_| Error::MalformedSources)?;
                     self.doc
-                        .entry("tool")
-                        .or_insert(implicit())
-                        .as_table_mut()
-                        .ok_or(Error::MalformedSources)?
-                        .entry("uv")
-                        .or_insert(implicit())
-                        .as_table_mut()
-                        .ok_or(Error::MalformedSources)?
-                        .remove("sources");
+                        .get("project")
+                        .and_then(|project| project.get("dependencies"))
+                        .and_then(Item::as_array)
+                        .is_some_and(|deps| {
+                            find_dependencies(name, None, deps).iter().any(|(_, req)| {
+                                req.marker.top_level_extra_name().as_deref() == Some(&extra)
+                            })
+                        })
+                        || declarations.contains(&DependencyType::Optional(extra))
+                } else if let Some(raw) = entry.get("group").and_then(Item::as_str) {
+                    let group = GroupName::from_str(raw).map_err(|_| Error::MalformedSources)?;
+                    // A group can still depend on this package through an include-group.
+                    if groups.is_none() {
+                        let project: PyProjectToml = toml_edit::de::from_document(self.doc.clone())
+                            .map_err(|_| Error::MalformedDependencies)?;
+                        groups = Some(
+                            FlatDependencyGroups::from_pyproject_toml(
+                                Path::new("pyproject.toml"),
+                                &project,
+                            )
+                            .map_err(|_| Error::MalformedDependencies)?,
+                        );
+                    }
+                    groups
+                        .as_ref()
+                        .and_then(|groups| groups.get(&group))
+                        .is_some_and(|group| group.requirements.iter().any(|req| req.name == *name))
+                } else {
+                    true
+                };
+                if !used {
+                    unused.push(index);
                 }
+            }
+            if unused.is_empty() {
+                return Ok(());
+            }
+            if count.is_some_and(|count| unused.len() < count) {
+                let source = &mut self.doc["tool"]["uv"]["sources"][&key];
+                for index in unused.into_iter().rev() {
+                    if let Some(array) = source.as_array_mut() {
+                        array.remove(index);
+                    } else if let Some(array) = source.as_array_of_tables_mut() {
+                        array.remove(index);
+                    }
+                }
+                return Ok(());
             }
         }
 
+        let uv = self.doc["tool"]["uv"]
+            .as_table_mut()
+            .ok_or(Error::MalformedSources)?;
+        let sources = uv["sources"]
+            .as_table_mut()
+            .ok_or(Error::MalformedSources)?;
+        sources.remove(&key);
+        if sources.is_empty() {
+            uv.remove("sources");
+        }
         Ok(())
     }
 
@@ -1147,7 +1217,7 @@ impl PyProjectTomlMut {
     ) -> Vec<DependencyType> {
         let mut types = Vec::new();
 
-        if let Some(project) = self.doc.get("project").and_then(Item::as_table) {
+        if let Some(project) = self.doc.get("project").and_then(Item::as_table_like) {
             // Check `project.dependencies`.
             if let Some(dependencies) = project.get("dependencies").and_then(Item::as_array)
                 && !find_dependencies(name, marker, dependencies).is_empty()
@@ -1158,9 +1228,9 @@ impl PyProjectTomlMut {
             // Check `project.optional-dependencies`.
             if let Some(extras) = project
                 .get("optional-dependencies")
-                .and_then(Item::as_table)
+                .and_then(Item::as_table_like)
             {
-                for (extra, dependencies) in extras {
+                for (extra, dependencies) in extras.iter() {
                     let Some(dependencies) = dependencies.as_array() else {
                         continue;
                     };
@@ -1176,8 +1246,12 @@ impl PyProjectTomlMut {
         }
 
         // Check `dependency-groups`.
-        if let Some(groups) = self.doc.get("dependency-groups").and_then(Item::as_table) {
-            for (group, dependencies) in groups {
+        if let Some(groups) = self
+            .doc
+            .get("dependency-groups")
+            .and_then(Item::as_table_like)
+        {
+            for (group, dependencies) in groups.iter() {
                 let Some(dependencies) = dependencies.as_array() else {
                     continue;
                 };
@@ -1195,9 +1269,9 @@ impl PyProjectTomlMut {
         if let Some(dev_dependencies) = self
             .doc
             .get("tool")
-            .and_then(Item::as_table)
+            .and_then(Item::as_table_like)
             .and_then(|tool| tool.get("uv"))
-            .and_then(Item::as_table)
+            .and_then(Item::as_table_like)
             .and_then(|uv| uv.get("dev-dependencies"))
             .and_then(Item::as_array)
             && !find_dependencies(name, marker, dev_dependencies).is_empty()
@@ -1657,18 +1731,112 @@ fn find_source(name: &PackageName, sources: &Table) -> Option<String> {
     None
 }
 
-// Add a source to `tool.uv.sources`.
-fn add_source(req: &PackageName, source: &Source, sources: &mut Table) -> Result<(), Error> {
-    // Serialize as an inline table.
-    let mut doc = toml::to_string(&source)
-        .map_err(Box::new)?
-        .parse::<DocumentMut>()
-        .unwrap();
-    let table = mem::take(doc.as_table_mut()).into_inline_table();
+/// Serialize a source as an inline table for `tool.uv.sources`.
+fn source_value(source: &Source) -> Result<Value, Error> {
+    let doc = toml_edit::ser::to_document(source).map_err(Box::new)?;
+    Ok(Value::InlineTable(doc.into_table().into_inline_table()))
+}
 
-    sources.insert(req.as_ref(), Item::Value(Value::InlineTable(table)));
+/// Update a single source while preserving selections for other markers and dependency groups.
+fn merge_source(name: &PackageName, source: &Source, original: &Item) -> Result<Item, Error> {
+    let value = original
+        .clone()
+        .into_value()
+        .map_err(|_| Error::MalformedSources)?;
+    let decor = value.decor().clone();
+    let mut entries = match value {
+        Value::Array(entries) => entries,
+        mut value => {
+            value.decor_mut().clear();
+            Array::from_iter([value])
+        }
+    };
 
-    Ok(())
+    let mut marker = source.marker();
+    let mut replacement = None;
+    let mut already_covered = false;
+    for index in (0..entries.len()).rev() {
+        let table = entries
+            .get_mut(index)
+            .and_then(Value::as_inline_table_mut)
+            .ok_or(Error::MalformedSources)?;
+        let existing: Source =
+            toml_edit::de::from_document(DocumentMut::from(table.clone().into_table()))
+                .map_err(|_| Error::MalformedSources)?;
+        if source.marker() != existing.marker() && source.marker().is_disjoint(existing.marker()) {
+            continue;
+        }
+
+        let same_origin = (source.extra(), source.group()) == (existing.extra(), existing.group());
+        let existing_global = existing.extra().is_none() && existing.group().is_none();
+        let incoming_global = source.extra().is_none() && source.group().is_none();
+        if !same_origin && !existing_global && !incoming_global {
+            continue;
+        }
+        let same_payload = source.clone().with_selectors(
+            existing.marker(),
+            existing.extra().cloned(),
+            existing.group().cloned(),
+        ) == existing;
+        if same_payload
+            && (same_origin || existing_global)
+            && source.marker().is_disjoint(existing.marker().negate())
+        {
+            // The requested source already applies everywhere it is needed.
+            already_covered = true;
+            continue;
+        }
+        if !same_origin {
+            // An unqualified source applies within named extras and groups as well.
+            // Narrowing it here would also change those other declarations.
+            if !same_payload || !incoming_global {
+                return Err(Error::OverlappingSource(name.clone()));
+            }
+            let remaining = existing.marker().and(source.marker().negate());
+            if !remaining.is_false()
+                && let Some(remaining) = remaining.contents()
+            {
+                table.insert("marker", Value::from(remaining.to_string()));
+                continue;
+            }
+        } else if same_payload {
+            marker = marker.or(existing.marker());
+        } else if source.marker() != existing.marker() {
+            if !existing.marker().is_true() {
+                return Err(Error::OverlappingSource(name.clone()));
+            }
+            // An existing unmarked source still applies outside the new marker.
+            if let Some(remaining) = source.marker().negate().contents() {
+                table.insert("marker", Value::from(remaining.to_string()));
+            }
+            continue;
+        }
+        replacement = Some((index, entries.remove(index).decor().clone()));
+    }
+
+    if already_covered {
+        return Ok(original.clone());
+    }
+
+    let mut value = source_value(&source.clone().with_selectors(
+        marker,
+        source.extra().cloned(),
+        source.group().cloned(),
+    ))?;
+    if let Some((index, decor)) = replacement {
+        *value.decor_mut() = decor;
+        entries.insert_formatted(index, value);
+    } else {
+        entries.push(value);
+    }
+    let mut value = if entries.len() == 1 {
+        entries.remove(0)
+    } else {
+        reformat_array_multiline(&mut entries);
+        Value::Array(entries)
+    };
+    *value.decor_mut() = decor;
+    Ok(Item::Value(value))
 }
 
 impl fmt::Display for PyProjectTomlMut {
@@ -1844,6 +2012,51 @@ mod test {
     use uv_workspace::pyproject::DependencyType;
 
     #[test]
+    fn add_marked_source_preserves_default() -> Result<()> {
+        let name = PackageName::from_str("demo")?;
+        let mut doc = PyProjectTomlMut::from_toml(
+            r#"[tool.uv.sources]
+demo = { path = "original" }
+"#,
+            DependencyTarget::PyProjectToml,
+        )?;
+        let windows = toml::from_str(
+            r#"path = "windows"
+marker = "sys_platform == 'win32'""#,
+        )?;
+        doc.add_source(&name, &windows)?;
+
+        let saved = doc.to_string();
+        let expected = r#"
+            [tool.uv.sources]
+            demo = [
+                { path = "original", marker = "sys_platform != 'win32'" },
+                { path = "windows", marker = "sys_platform == 'win32'" },
+            ]
+        "#;
+        assert_eq!(
+            saved.parse::<toml::Table>()?,
+            expected.parse::<toml::Table>()?
+        );
+
+        let overlapping = toml::from_str(
+            r#"path = "arm"
+marker = "platform_machine == 'aarch64'""#,
+        )?;
+        assert!(matches!(
+            doc.add_source(&name, &overlapping),
+            Err(super::Error::OverlappingSource(..))
+        ));
+        let unmarked = toml::from_str(r#"path = "replacement""#)?;
+        assert!(matches!(
+            doc.add_source(&name, &unmarked),
+            Err(super::Error::OverlappingSource(..))
+        ));
+        assert_eq!(doc.to_string(), saved);
+        Ok(())
+    }
+
+    #[test]
     fn split() {
         assert_eq!(split_specifiers("flask>=1.0"), ("flask", ">=1.0"));
         assert_eq!(split_specifiers("Flask>=1.0"), ("Flask", ">=1.0"));
@@ -1861,6 +2074,31 @@ mod test {
                 "@ https://files.pythonhosted.org/packages/af/47/93213ee66ef8fae3b93b3e29206f6b251e65c97bd91d8e1c5596ef15af0a/flask-3.1.0-py3-none-any.whl"
             )
         );
+    }
+
+    /// Removing a scoped dependency must keep sources for groups that still include it indirectly.
+    #[test]
+    fn remove_source_preserves_included_group() -> Result<()> {
+        let mut manifest = PyProjectTomlMut::from_toml(
+            r#"
+[dependency-groups]
+docs = ["demo"]
+lint = ["demo"]
+ci = [{ include-group = "lint" }]
+
+[tool.uv.sources]
+demo = [
+    { path = "wheel", group = "docs" },
+    { path = "wheel", group = "ci" },
+]
+"#,
+            DependencyTarget::PyProjectToml,
+        )?;
+        manifest.remove_dependency_group_requirement(&"demo".parse()?, &"docs".parse()?)?;
+        let sources = &manifest.doc["tool"]["uv"]["sources"]["demo"];
+        assert_eq!(sources.as_array().unwrap().len(), 1);
+        assert_eq!(sources[0]["group"].as_str(), Some("ci"));
+        Ok(())
     }
 
     #[test]
