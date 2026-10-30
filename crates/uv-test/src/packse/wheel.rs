@@ -87,7 +87,7 @@ impl<'a> WheelBuilder<'a> {
     }
 
     /// Include variant metadata and append its label to the wheel filename.
-    pub(super) fn variant(mut self, label: &'a VariantLabel, metadata: &'a str) -> Self {
+    pub fn variant(mut self, label: &'a VariantLabel, metadata: &'a str) -> Self {
         self.variant = Some((label, metadata));
         self
     }
