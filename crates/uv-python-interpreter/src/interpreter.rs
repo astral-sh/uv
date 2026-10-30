@@ -1002,12 +1002,8 @@ impl Display for StatusCodeError {
 
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error("Failed to detect CPU capabilities for interpreter at `{path}`")]
-    CpuDetection {
-        path: PathBuf,
-        #[source]
-        err: CpuDetectionError,
-    },
+    #[error("Failed to detect CPU capabilities")]
+    CpuDetection(#[source] CpuDetectionError),
     #[error("Failed to query Python interpreter")]
     Io(#[from] io::Error),
     #[error(transparent)]
@@ -1466,15 +1462,16 @@ impl InterpreterInfo {
                 None
             }
             CpuProbe::Error(err) => {
-                let error = Error::CpuDetection {
-                    path: executable.to_path_buf(),
-                    err,
-                };
                 if uv_preview::is_enabled(PreviewFeature::WheelVariants) {
-                    return Err(error);
+                    return Err(Error::CpuDetection(err));
                 }
                 warn_user_once_with_chain!(
-                    &error,
+                    anyhow::Error::from(err)
+                        .context(format!(
+                            "Failed to detect CPU capabilities for interpreter at `{}`",
+                            executable.display()
+                        ))
+                        .as_ref(),
                     Hints::from("CPU detection failures will become errors in a future release.")
                 );
                 // Cache the interpreter so ordinary commands don't retry the failed probe on every
