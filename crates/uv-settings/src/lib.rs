@@ -166,6 +166,9 @@ impl FilesystemOptions {
                 return Ok(Some(Self(options.with_origin(Origin::Project))));
             }
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+            Err(err) if err.kind() == std::io::ErrorKind::PermissionDenied => {
+                tracing::debug!("Skipping unreadable `{}`", path.display());
+            }
             Err(err) => return Err(err.into()),
         }
 
@@ -201,6 +204,9 @@ impl FilesystemOptions {
                 return Ok(Some(Self(options)));
             }
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+            Err(err) if err.kind() == std::io::ErrorKind::PermissionDenied => {
+                tracing::debug!("Skipping unreadable `{}`", path.display());
+            }
             Err(err) => return Err(err.into()),
         }
 
