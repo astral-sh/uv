@@ -170,7 +170,9 @@ fn aarch64_target_uses_platform_defaults() -> Result<()> {
     let server = PackseServer::from_toml(indoc! {r#"
         name = "aarch64-target-defaults"
         root = {}
-        expected.satisfiable = true
+
+        [expected]
+        satisfiable = true
 
         [packages.ok.versions."1.0.0"]
         wheel = false
