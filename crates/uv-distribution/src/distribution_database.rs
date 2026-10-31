@@ -25,8 +25,8 @@ use uv_client::{
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
     ArchiveHashPolicy, BuildInfo, BuildableSource, BuiltDist, Dist, DistRef, HashCollection,
-    HashValidation, Hashed, IndexUrl, InstalledDist, MetadataHashPolicy, Name, ResolutionRecorder,
-    SourceDist, SourceUrl, parse_url_hashes,
+    HashValidation, Hashed, IndexUrl, InstalledDist, MetadataHashPolicy, Name, Resolution,
+    ResolutionRecorder, SourceDist, SourceUrl, parse_url_hashes,
 };
 use uv_extract::dirhash::{DirectoryDigest, HashedFile};
 use uv_extract::hash::Hasher;
@@ -222,12 +222,13 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         dist: &Dist,
         tags: &Tags,
         hashes: ArchiveHashPolicy<'_>,
+        resolution: &Resolution,
     ) -> Result<LocalWheel, Error> {
         match dist {
             Dist::Built(built) => {
                 check_supported_wheel_variant(built)?;
                 let wheel = self.get_wheel(built, hashes).await?;
-                check_wheel_variant_compatibility(&wheel.filename, &wheel.archive)?;
+                check_wheel_variant_compatibility(&wheel.filename, &wheel.archive, resolution)?;
                 Ok(wheel)
             }
             // TODO(konsti): Support source distributions that build variant wheels.

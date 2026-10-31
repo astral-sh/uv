@@ -2,7 +2,8 @@ use std::collections::hash_map::Entry;
 
 use rustc_hash::FxHashMap;
 
-use uv_distribution_types::{DistributionId, Identifier, ResolvedDist};
+use uv_distribution_filename::{VariantLabel, WheelFilename};
+use uv_distribution_types::{Dist, DistributionId, Identifier, Name, ResolvedDist};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 
@@ -47,6 +48,16 @@ impl<'index> FilePins<'index> {
         variants_json: Option<RegisteredVariantsJson<'index>>,
         request: Option<impl FnOnce() -> Result<RegisteredMetadata<'index>, ResolveError>>,
     ) -> Result<(), ResolveError> {
+        // The installation artifact must match the requested package even if its metadata
+        // was already requested or dependency resolution skips the metadata request.
+        let installation = dist.for_installation();
+        if installation.name() != candidate.name() {
+            return Err(ResolveError::MismatchedPackageName {
+                request: "distribution",
+                expected: candidate.name().clone(),
+                actual: installation.name().clone(),
+            });
+        }
         match self
             .0
             .entry((candidate.name().clone(), candidate.version().clone()))
@@ -76,7 +87,7 @@ impl<'index> FilePins<'index> {
                     PinMetadata::Unrequested(dist.for_resolution().distribution_id())
                 };
                 entry.insert(FilePin::Registry {
-                    dist: dist.for_installation().to_owned(),
+                    dist: installation.to_owned(),
                     metadata,
                     variants_json,
                 });
@@ -95,6 +106,33 @@ impl<'index> FilePins<'index> {
         self.0
             .entry((name.clone(), version.clone()))
             .or_insert(FilePin::Url(metadata));
+    }
+
+    /// Selected variant wheels and their index metadata, for reporting ABI requirements.
+    pub(crate) fn variant_wheels(
+        &self,
+    ) -> impl Iterator<
+        Item = (
+            &WheelFilename,
+            &VariantLabel,
+            &RegisteredVariantsJson<'index>,
+        ),
+    > {
+        self.0.values().filter_map(|pin| {
+            let FilePin::Registry {
+                dist: ResolvedDist::Installable { dist, .. },
+                variants_json: Some(metadata),
+                ..
+            } = pin
+            else {
+                return None;
+            };
+            let Dist::Built(wheel) = dist.as_ref() else {
+                return None;
+            };
+            let filename = wheel.wheel_filename();
+            Some((filename, filename.variant()?, metadata))
+        })
     }
 
     /// Return the pinned registry artifact, if one exists.

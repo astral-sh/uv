@@ -165,6 +165,114 @@ fn select_variant_by_static_provider_order() -> Result<()> {
     Ok(())
 }
 
+/// Installing the extension prefers a wheel compatible with the installed PyTorch.
+#[test]
+fn select_wheel_by_abi_dependency() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::from_toml(indoc! {r#"
+        name = "abi-dependency"
+        root = {}
+        expected.satisfiable = true
+
+        [packages.extension.versions."1.0.0"]
+        wheel = false
+        sdist = false
+        requires = ["torch"]
+
+        [packages.extension.versions."1.0.0".variants]
+        namespaces = ["abi_dependency"]
+        providers.abi_dependency.builtin = "abi_dependency"
+
+        [packages.extension.versions."1.0.0".variants.wheels]
+        torch28.properties = ["abi_dependency :: torch :: 2.8"]
+        torch29.properties = ["abi_dependency :: torch :: 2.9"]
+
+        [packages.torch.versions."2.8.1"]
+        [packages.torch.versions."2.9.1"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--index-url")
+        .arg(server.index_url())
+        .arg("torch==2.9.1"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + torch==2.9.1
+    ");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--index-url")
+        .arg(server.index_url())
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("extension"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + extension==1.0.0
+    ");
+    context.assert_installed("torch", "2.9.1");
+    let installed = context.read(
+        context
+            .site_packages()
+            .join("extension-1.0.0.dist-info/variant.json"),
+    );
+    assert_eq!(
+        serde_json::from_str::<Value>(&installed)?["variants"],
+        json!({ "torch29": { "abi_dependency": { "torch": ["2.9"] } } }),
+    );
+    Ok(())
+}
+
+/// A runtime dependency declared only through the ABI provider honors a URL constraint.
+#[test]
+fn abi_dependency_url_constraint() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::from_toml(indoc! {r#"
+        name = "abi-dependency-url"
+        root = {}
+        expected.satisfiable = true
+
+        [packages.extension.versions."1.0.0"]
+        wheel = false
+        sdist = false
+
+        [packages.extension.versions."1.0.0".variants]
+        namespaces = ["abi_dependency"]
+        providers.abi_dependency.builtin = "abi_dependency"
+        wheels.torch29.properties = ["abi_dependency :: torch :: 2.9"]
+
+        [packages.torch.versions."2.9.1"]
+        [packages.torch.versions."2.9.2"]
+    "#})?;
+    let wheel = server.file_url("torch-2.9.1-py3-none-any.whl");
+    let constraints = context.temp_dir.child("constraints.txt");
+    constraints.write_str(&format!("torch @ {wheel}\n"))?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--index-url")
+        .arg(server.index_url())
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("--constraint")
+        .arg(constraints.path())
+        .arg("extension"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + extension==1.0.0
+     + torch==2.9.1 (from http://[LOCALHOST]/files/torch-2.9.1-py3-none-any.whl)
+    ");
+    Ok(())
+}
+
 /// Fall back to an older release and reject its otherwise preferred incompatible NVIDIA variant.
 #[test]
 fn backtrack_to_compatible_nvidia_variant() -> Result<()> {

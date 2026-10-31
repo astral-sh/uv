@@ -306,6 +306,7 @@ impl<'a> Planner<'a> {
     ) -> Result<Plan, PlanError> {
         // Index all the already-downloaded wheels in the cache.
         let mut registry_index = RegistryWheelIndex::new(
+            self.resolution,
             cache,
             tags,
             index_locations,

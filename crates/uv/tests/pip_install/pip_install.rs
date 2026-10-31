@@ -11355,6 +11355,28 @@ fn local_index_absolute() -> Result<()> {
     Ok(())
 }
 
+/// A selected wheel must match the requested name even when no metadata is requested.
+#[test]
+fn local_index_wrong_wheel_name_without_dependencies() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let root = context.temp_dir.child("simple-html");
+    create_local_index_with_tqdm(&context, root.path())?;
+    fs::rename(root.child("tqdm"), root.child("example"))?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--no-deps")
+        .arg("--dry-run")
+        .arg("--index-url")
+        .arg(root.path())
+        .arg("example"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: The index returned metadata for the wrong package: expected distribution for example, got distribution for tqdm
+    ");
+    Ok(())
+}
+
 /// Resolve against a local directory laid out as a PEP 503-compatible index, provided via a
 /// relative path on the CLI.
 #[test]

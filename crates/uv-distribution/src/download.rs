@@ -2,7 +2,7 @@ use std::path::Path;
 
 use uv_cache_info::CacheInfo;
 use uv_distribution_filename::WheelFilename;
-use uv_distribution_types::{BuildInfo, BuiltDist, CachedDist, Dist, Hashed};
+use uv_distribution_types::{BuildInfo, BuiltDist, CachedDist, Dist, Hashed, Name, Resolution};
 use uv_metadata::{find_flat_dist_info, read_flat_wheel_metadata, read_wheel_variant};
 use uv_preview::PreviewFeature;
 use uv_pypi_types::{HashDigest, HashDigests, ResolutionMetadata};
@@ -21,9 +21,10 @@ pub fn check_supported_wheel_variant(dist: &BuiltDist) -> Result<(), Error> {
 }
 
 /// Check that an extracted wheel's variant properties are supported by the target system.
-pub(crate) fn check_wheel_variant_compatibility(
+pub fn check_wheel_variant_compatibility(
     filename: &WheelFilename,
     archive: &Path,
+    resolution: &Resolution,
 ) -> Result<(), Error> {
     let Some(label) = filename.variant() else {
         return Ok(());
@@ -37,9 +38,16 @@ pub(crate) fn check_wheel_variant_compatibility(
     let path = archive.join(format!("{dist_info}.dist-info/variant.json"));
     let metadata = read_wheel_variant(&path, label)
         .map_err(|err| Error::WheelMetadata(path, Box::new(err)))?;
-    if let Some(properties) =
-        metadata.unsupported_variant_properties(label, &supported_variant_properties(&metadata))
-    {
+    if let Some(properties) = metadata.unsupported_variant_properties(
+        label,
+        &supported_variant_properties(&metadata),
+        |name| {
+            resolution
+                .distributions()
+                .find(|dist| dist.name() == name)?
+                .version()
+        },
+    ) {
         return Err(Error::IncompatibleWheelVariant {
             label: label.clone(),
             properties,

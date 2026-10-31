@@ -4,6 +4,7 @@ use arcstr::ArcStr;
 use owo_colors::OwoColorize;
 use tracing::debug;
 
+use pubgrub::Ranges;
 use uv_distribution::supported_variant_properties;
 use uv_distribution_filename::{BuildTag, WheelFilename};
 use uv_distribution_types::{
@@ -438,6 +439,7 @@ impl PrioritizedDist {
     pub(crate) fn prioritize_variants(
         &self,
         metadata: &[(&IndexUrl, &VariantsJsonContent)],
+        abi_preference: impl Fn(&PackageName, &Ranges<Version>) -> Option<bool>,
     ) -> Option<Self> {
         if metadata.is_empty() {
             return None;
@@ -464,7 +466,7 @@ impl PrioritizedDist {
                     .iter()
                     .filter(|(source, _, _)| *source == &wheel.index)
                     .filter_map(|(_, metadata, supported_properties)| {
-                        metadata.score_variant(label, supported_properties)
+                        metadata.score_variant(label, supported_properties, &abi_preference)
                     })
                     .max()?;
                 Some((index, (*hash, score, *priority, build_tag)))

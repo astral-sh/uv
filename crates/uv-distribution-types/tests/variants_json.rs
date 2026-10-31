@@ -25,7 +25,7 @@ fn rank_variants() -> Result<(), Box<dyn std::error::Error>> {
                 "static-properties": {"debug": ["on"]}
             },
             "plugin": {"requires": ["some-plugin"]},
-            "builtin": {"builtin": "abi_dependency"}
+            "builtin": {"builtin": "unknown_provider"}
         },
         "variants": {
             "gpu": {"nvidia": {"cuda": ["13.0"]}},
@@ -56,7 +56,7 @@ fn rank_variants() -> Result<(), Box<dyn std::error::Error>> {
         "null",
     ] {
         let score = metadata
-            .score_variant(&label.parse()?, &supported_properties)
+            .score_variant(&label.parse()?, &supported_properties, |_, _| None)
             .ok_or_else(|| format!("variant `{label}` should be compatible"))?;
         ranked.push((label, score));
     }
@@ -86,11 +86,15 @@ fn rank_variants() -> Result<(), Box<dyn std::error::Error>> {
         "unsupported_builtin",
         "missing",
     ] {
-        let score = metadata.score_variant(&label.parse()?, &supported_properties);
+        let score = metadata.score_variant(&label.parse()?, &supported_properties, |_, _| None);
         assert_eq!(score, None, "{label} should be incompatible");
     }
     let unsupported = metadata
-        .unsupported_variant_properties(&"unsupported_value".parse()?, &supported_properties)
+        .unsupported_variant_properties(
+            &"unsupported_value".parse()?,
+            &supported_properties,
+            |_| None,
+        )
         .ok_or("variant should be incompatible")?;
     assert_snapshot!(
         unsupported,

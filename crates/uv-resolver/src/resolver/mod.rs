@@ -25,8 +25,9 @@ use uv_configuration::{Constraints, DependencyModifiers, IndexStrategy};
 use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_distribution_types::{
     BuiltDist, DerivationChain, Dist, DistErrorKind, Identifier, IndexCapabilities, IndexLocations,
-    IndexMetadata, IndexUrl, InstalledDist, Name, RemoteSource, Requirement, RequiresPython,
-    ResolutionRecorder, ResolvedDist, SourceDist, VariantsJsonContent, VersionOrUrlRef,
+    IndexMetadata, IndexUrl, InstalledDist, Name, RemoteSource, Requirement, RequirementScope,
+    RequirementSource, RequiresPython, ResolutionRecorder, ResolvedDist, SourceDist,
+    VariantsJsonContent, VersionOrUrlRef,
 };
 use uv_git::GitResolver;
 use uv_normalize::PackageName;
@@ -427,6 +428,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                     state.fork_urls,
                                     state.fork_indexes,
                                     &state.known_versions.0,
+                                    &state.pins,
                                     state.env,
                                     self.current_environment.clone(),
                                     &visited,
@@ -1397,7 +1399,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             && uv_preview::is_enabled(PreviewFeature::WheelVariants)
             && let Some(prioritized) = candidate.prioritized()
         {
-            self.select_wheel_variant(candidate.version(), prioritized, version_maps, requests)?
+            self.select_wheel_variant(
+                candidate.version(),
+                prioritized,
+                version_maps,
+                pubgrub,
+                requests,
+            )?
         } else {
             WheelVariantSelection::default()
         };
@@ -1535,6 +1543,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         version: &Version,
         prioritized: &'a PrioritizedDist,
         version_maps: &'a [VersionMap],
+        pubgrub: &State<UvDependencyProvider>,
         requests: &MetadataRequests,
     ) -> Result<WheelVariantSelection<'a>, ResolveError> {
         // With unsafe-best-match we know the version, but not necessarily the index: a wheel
@@ -1574,7 +1583,42 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             }
             // Prefer a compatible variant from this index, then its ordinary wheel or sdist,
             // before considering a distribution from the next index.
-            if let Some(variant) = dist.prioritize_variants(&metadata) {
+            //
+            // Wheels of the same release share a solver version. We pick one using the ABI
+            // constraints known so far and add its requirements to the dependency graph.
+            // A later conflict can fail resolution without trying another wheel of that release.
+            if let Some(variant) = dist.prioritize_variants(&metadata, |name, versions| {
+                if self.dependency_mode.is_direct() {
+                    return None;
+                }
+                let package = PubGrubPackage::base(name.clone());
+                let solution = &pubgrub.partial_solution;
+                let id = solution
+                    .undecided_packages()
+                    .map(|(id, _)| *id)
+                    .chain(solution.extract_solution().map(|(id, _)| id))
+                    .find(|id| pubgrub.package_store[*id] == package);
+                let abi = Range::from_versions(versions.clone());
+                let allowed = match id.and_then(|id| solution.term_intersection_for_package(id)) {
+                    Some(Term::Positive(range)) => abi.intersection(range),
+                    Some(Term::Negative(range)) => abi.difference(range),
+                    None => abi,
+                };
+                if allowed.is_empty() {
+                    return None;
+                }
+                Some(
+                    !self.exclusions.upgrade(name)
+                        && !self.exclusions.reinstall(name)
+                        && CandidateSelector::get_installed(
+                            name,
+                            &allowed,
+                            &self.installed_packages,
+                            self.tags.as_ref(),
+                        )
+                        .is_some(),
+                )
+            }) {
                 selection.distribution = Some(Cow::Owned(variant));
                 break;
             }
@@ -1960,13 +2004,29 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 kind,
                 marker: _,
             } => {
-                if uv_preview::is_enabled(PreviewFeature::WheelVariants)
-                    && let Some(variants_json) = pins.variants_json(name, version)
-                    && let Err(reason) = &*variants_json.wait()
-                {
-                    return Ok(Dependencies::Unavailable(
-                        self.record_unavailable_metadata(name, version, reason),
-                    ));
+                let mut abi_dependencies = Vec::new();
+                if let Some(variants_json) = pins.variants_json(name, version) {
+                    match &*variants_json.wait() {
+                        Err(reason) => {
+                            return Ok(Dependencies::Unavailable(
+                                self.record_unavailable_metadata(name, version, reason),
+                            ));
+                        }
+                        Ok(metadata) => {
+                            if let Some(ResolvedDist::Installable { dist, .. }) =
+                                pins.get(name, version)
+                                && let Dist::Built(wheel) = dist.as_ref()
+                                && let Some(label) = wheel.wheel_filename().variant()
+                            {
+                                for (dependency, versions) in metadata.abi_dependencies(label) {
+                                    abi_dependencies.push((
+                                        dependency.clone(),
+                                        Range::from_versions(versions.clone()),
+                                    ));
+                                }
+                            }
+                        }
+                    }
                 }
 
                 // If we're excluding transitive dependencies, short-circuit.
@@ -2060,7 +2120,25 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         RequirementContext::Package { name, version },
                     ),
                 };
-                let requirements = expander.expand(requirements, context);
+                let mut requirements = Cow::Borrowed(requirements);
+                // An ABI-only dependency needs the same source and constraint expansion as
+                // a Requires-Dist entry. Its release prefixes narrow the resulting edges.
+                for (dependency, _) in &abi_dependencies {
+                    requirements.to_mut().push(Requirement {
+                        name: dependency.clone(),
+                        extras: Box::new([]),
+                        groups: Box::new([]),
+                        marker: MarkerTree::TRUE,
+                        source: RequirementSource::Registry {
+                            specifier: VersionSpecifiers::empty(),
+                            index: None,
+                            conflict: None,
+                        },
+                        scope: RequirementScope::Global,
+                        origin: None,
+                    });
+                }
+                let requirements = expander.expand(&requirements, context);
 
                 PubGrubDependency::from_requirements(
                     &self.conflicts,
@@ -2069,6 +2147,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     Some(package),
                 )
                 .map(|mut dependencies| {
+                    for (name, versions) in &abi_dependencies {
+                        for dependency in &mut dependencies {
+                            if dependency.package.name_no_root() == Some(name) {
+                                dependency.version = dependency.version.intersection(versions);
+                            }
+                        }
+                    }
                     dependencies.extend(system_dependencies);
                     dependencies
                 })
@@ -2556,6 +2641,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         fork_urls: ForkUrls,
         fork_indexes: ForkIndexes,
         known_versions: &FxHashMap<PackageName, Arc<[Version]>>,
+        pins: &FilePins,
         env: ResolverEnvironment,
         current_environment: MarkerEnvironment,
         visited: &FxHashSet<PackageName>,
@@ -2690,6 +2776,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
         ResolveError::NoSolution(Box::new(NoSolutionError::new(
             err,
+            pins,
             self.index.clone(),
             included_versions,
             available_versions,
