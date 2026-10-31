@@ -163,7 +163,7 @@ fn select_variant_by_static_provider_order() -> Result<()> {
     Ok(())
 }
 
-/// Select the extension wheel built for the requested PyTorch minor release.
+/// Installing the extension prefers a wheel compatible with the installed PyTorch.
 #[test]
 fn select_wheel_by_abi_dependency() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -192,17 +192,27 @@ fn select_wheel_by_abi_dependency() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--index-url")
         .arg(server.index_url())
+        .arg("torch==2.9.1"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + torch==2.9.1
+    ");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--index-url")
+        .arg(server.index_url())
         .arg("--preview-features")
         .arg("wheel-variants")
-        .arg("extension")
-        .arg("torch==2.8.1"), @"
+        .arg("extension"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
      + extension==1.0.0
-     + torch==2.8.1
     ");
     let installed = context.read(
         context
@@ -211,7 +221,7 @@ fn select_wheel_by_abi_dependency() -> Result<()> {
     );
     assert_eq!(
         serde_json::from_str::<Value>(&installed)?["variants"],
-        json!({ "torch28": { "abi_dependency": { "torch": ["2.8"] } } }),
+        json!({ "torch29": { "abi_dependency": { "torch": ["2.9"] } } }),
     );
     Ok(())
 }

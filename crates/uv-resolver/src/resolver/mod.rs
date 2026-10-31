@@ -427,6 +427,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                     state.fork_urls,
                                     state.fork_indexes,
                                     &state.known_versions.0,
+                                    &state.pins,
                                     state.env,
                                     self.current_environment.clone(),
                                     &visited,
@@ -1587,24 +1588,35 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             // A later conflict can fail resolution without trying another wheel of that release.
             if let Some(variant) = dist.prioritize_variants(&metadata, |name, versions| {
                 if self.dependency_mode.is_direct() {
-                    return false;
+                    return None;
                 }
                 let package = PubGrubPackage::base(name.clone());
                 let solution = &pubgrub.partial_solution;
-                if let Some((_, version)) = solution
-                    .extract_solution()
-                    .find(|(id, _)| pubgrub.package_store[*id] == package)
-                {
-                    return versions.contains(&version);
-                }
-                solution
+                let id = solution
                     .undecided_packages()
-                    .find(|(id, _)| pubgrub.package_store[**id] == package)
-                    .and_then(|(id, _)| solution.term_intersection_for_package(*id))
-                    .is_none_or(|term| match term {
-                        Term::Positive(range) => !versions.is_disjoint(range),
-                        Term::Negative(range) => !versions.subset_of(range),
-                    })
+                    .map(|(id, _)| *id)
+                    .chain(solution.extract_solution().map(|(id, _)| id))
+                    .find(|id| pubgrub.package_store[*id] == package);
+                let abi = Range::from_versions(versions.clone());
+                let allowed = match id.and_then(|id| solution.term_intersection_for_package(id)) {
+                    Some(Term::Positive(range)) => abi.intersection(range),
+                    Some(Term::Negative(range)) => abi.difference(range),
+                    None => abi,
+                };
+                if allowed.is_empty() {
+                    return None;
+                }
+                Some(
+                    !self.exclusions.upgrade(name)
+                        && !self.exclusions.reinstall(name)
+                        && CandidateSelector::get_installed(
+                            name,
+                            &allowed,
+                            &self.installed_packages,
+                            self.tags.as_ref(),
+                        )
+                        .is_some(),
+                )
             }) {
                 selection.distribution = Some(Cow::Owned(variant));
                 break;
@@ -2606,6 +2618,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         fork_urls: ForkUrls,
         fork_indexes: ForkIndexes,
         known_versions: &FxHashMap<PackageName, Arc<[Version]>>,
+        pins: &FilePins,
         env: ResolverEnvironment,
         current_environment: MarkerEnvironment,
         visited: &FxHashSet<PackageName>,
@@ -2740,6 +2753,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
         ResolveError::NoSolution(Box::new(NoSolutionError::new(
             err,
+            pins,
             self.index.clone(),
             included_versions,
             available_versions,

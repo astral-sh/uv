@@ -439,7 +439,7 @@ impl PrioritizedDist {
     pub(crate) fn prioritize_variants(
         &self,
         metadata: &[(&IndexUrl, &VariantsJsonContent)],
-        abi_compatible: impl Fn(&PackageName, &Ranges<Version>) -> bool,
+        abi_preference: impl Fn(&PackageName, &Ranges<Version>) -> Option<bool>,
     ) -> Option<Self> {
         if metadata.is_empty() {
             return None;
@@ -465,13 +465,8 @@ impl PrioritizedDist {
                 let score = metadata
                     .iter()
                     .filter(|(source, _, _)| *source == &wheel.index)
-                    .filter(|(_, metadata, _)| {
-                        metadata
-                            .abi_dependencies(label)
-                            .all(|(name, versions)| abi_compatible(name, versions))
-                    })
                     .filter_map(|(_, metadata, supported_properties)| {
-                        metadata.score_variant(label, supported_properties)
+                        metadata.score_variant(label, supported_properties, &abi_preference)
                     })
                     .max()?;
                 Some((index, (*hash, score, *priority, build_tag)))

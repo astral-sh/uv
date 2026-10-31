@@ -26,6 +26,7 @@ use crate::candidate_selector::CandidateSelector;
 use crate::dependency_provider::UvDependencyProvider;
 use crate::fork_indexes::ForkIndexes;
 use crate::fork_urls::ForkUrls;
+use crate::pins::FilePins;
 use crate::prerelease::PrereleaseSelection;
 use crate::pubgrub::{
     PubGrubHint, PubGrubPackage, PubGrubPackageInner, PubGrubReportFormatter, Range,
@@ -190,6 +191,54 @@ type ErrorExternal = External<PubGrubPackage, Range<Version>, UnavailableReason>
 type ErrorDerived = Derived<PubGrubPackage, Range<Version>, UnavailableReason>;
 type ErrorTerms = Map<PubGrubPackage, Term<Range<Version>>>;
 
+/// Walk the derivation without recursing on long dependency chains.
+fn derivation_tree_nodes(tree: &ErrorTree) -> impl Iterator<Item = &ErrorTree> {
+    let mut pending = vec![tree];
+    std::iter::from_fn(move || {
+        let tree = pending.pop()?;
+        if let DerivationTree::Derived(derived) = tree {
+            pending.push(&derived.cause1);
+            pending.push(&derived.cause2);
+        }
+        Some(tree)
+    })
+}
+
+/// Identify the selected wheel before the report simplifies a dependency across releases.
+fn abi_dependency_hints(tree: &ErrorTree, pins: &FilePins) -> BTreeSet<String> {
+    let mut abi_hints = BTreeSet::new();
+    for (wheel, label, metadata) in pins.variant_wheels() {
+        let response = metadata.wait();
+        let Ok(metadata) = response.as_ref() else {
+            continue;
+        };
+        for (name, versions) in metadata.abi_dependencies(label) {
+            let relevant = derivation_tree_nodes(tree).any(|node| {
+                let DerivationTree::External(External::FromDependencyOf(
+                    parent,
+                    releases,
+                    child,
+                    required,
+                )) = node
+                else {
+                    return false;
+                };
+                parent.name_no_root() == Some(&wheel.name)
+                    && releases.contains(&wheel.version)
+                    && child.name_no_root() == Some(name)
+                    && required.subset_of(versions)
+            });
+            if relevant {
+                let range = Range::from_versions(versions.clone());
+                abi_hints.insert(format!(
+                    "The selected wheel `{wheel}` requires `{name}{range}` for ABI compatibility."
+                ));
+            }
+        }
+    }
+    abi_hints
+}
+
 /// Visit each distinct package in a derivation tree without recursive calls.
 ///
 /// The iteration order is unspecified, matching the set semantics of
@@ -198,9 +247,7 @@ pub(crate) fn derivation_tree_packages(
     derivation_tree: &ErrorTree,
 ) -> impl Iterator<Item = &PubGrubPackage> {
     let mut packages = FxHashSet::default();
-    let mut trees = vec![derivation_tree];
-
-    while let Some(tree) = trees.pop() {
+    for tree in derivation_tree_nodes(derivation_tree) {
         match tree {
             DerivationTree::External(external) => match external {
                 External::FromDependencyOf(package, _, dependency, _) => {
@@ -215,8 +262,6 @@ pub(crate) fn derivation_tree_packages(
             },
             DerivationTree::Derived(derived) => {
                 packages.extend(derived.terms.keys());
-                trees.push(&derived.cause1);
-                trees.push(&derived.cause2);
             }
         }
     }
@@ -453,6 +498,8 @@ pub struct NoSolutionError {
     tags: Option<Tags>,
     workspace_members: BTreeSet<PackageName>,
     options: Options,
+    /// Selected wheels with ABI requirements involved in the conflict.
+    abi_hints: BTreeSet<String>,
     /// Cached report and hints, computed once on first access.
     cached: OnceLock<(String, IndexSet<PubGrubHint>)>,
 }
@@ -461,6 +508,7 @@ impl NoSolutionError {
     /// Create a new [`NoSolutionError`] from a [`pubgrub::NoSolutionError`].
     pub(crate) fn new(
         error: pubgrub::NoSolutionError<UvDependencyProvider>,
+        pins: &FilePins,
         index: InMemoryIndex,
         included_versions: FxHashMap<PackageName, BTreeSet<Version>>,
         available_versions: FxHashMap<PackageName, BTreeSet<Version>>,
@@ -480,6 +528,7 @@ impl NoSolutionError {
         options: Options,
     ) -> Self {
         Self {
+            abi_hints: abi_dependency_hints(&error, pins),
             error: StackSafeErrorTree::new(error),
             index,
             included_versions,
@@ -876,6 +925,7 @@ impl std::fmt::Debug for NoSolutionError {
             tags,
             workspace_members,
             options,
+            abi_hints: _,
             cached: _,
         } = self;
         f.debug_struct("NoSolutionError")
@@ -907,6 +957,7 @@ impl uv_errors::Hinted for NoSolutionError {
         self.pubgrub_hints()
             .iter()
             .map(ToString::to_string)
+            .chain(self.abi_hints.iter().cloned())
             .collect()
     }
 }
