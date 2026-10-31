@@ -177,6 +177,20 @@ impl GitRepository {
         Ok(result.parse()?)
     }
 
+    /// Checks if `oid` identifies an annotated tag object in this repository.
+    fn is_tag(&self, oid: GitOid) -> Result<bool> {
+        let output = GIT
+            .as_ref()
+            .cloned()?
+            .arg("cat-file")
+            .arg("-t")
+            .arg(oid.as_str())
+            .cwd(&self.path)
+            .exec_with_output()?;
+        let kind = str::from_utf8(&output.stdout)?.trim();
+        Ok(kind == "tag")
+    }
+
     /// Verifies LFS artifacts have been initialized for a given `refname`.
     #[instrument(skip_all, fields(path = %self.path.user_display(), refname = %refname))]
     fn lfs_fsck_objects(&self, refname: &str) -> bool {
@@ -340,11 +354,31 @@ impl GitDatabase {
         Ok(result)
     }
 
-    /// Checks if `oid` identifies a commit object in this database.
+    /// Checks if `oid` identifies a commit or an annotated tag pointing to a commit in this database,
+    /// and returns the resolved commit if present.
+    pub(crate) fn resolve_commit(&self, oid: GitOid) -> Option<GitOid> {
+        let commit = self.repo.rev_parse(&format!("{oid}^0")).ok()?;
+        if commit == oid || self.repo.is_tag(oid).unwrap_or(false) {
+            Some(commit)
+        } else {
+            None
+        }
+    }
+
+    /// Checks if `oid` is an annotated tag in this database that peels to `commit`.
+    pub(crate) fn peels_to_commit(&self, oid: GitOid, commit: GitOid) -> Result<bool> {
+        if self.repo.is_tag(oid)?
+            && let Ok(peeled) = self.repo.rev_parse(&format!("{oid}^0"))
+        {
+            return Ok(peeled == commit);
+        }
+        Ok(false)
+    }
+
+    /// Checks if `oid` identifies a commit or an annotated tag pointing to a commit in this
+    /// database.
     pub(crate) fn contains(&self, oid: GitOid) -> bool {
-        self.repo
-            .rev_parse(&format!("{oid}^0"))
-            .is_ok_and(|commit| commit == oid)
+        self.resolve_commit(oid).is_some()
     }
 
     /// Checks if `oid` contains necessary LFS artifacts in this database.
@@ -618,9 +652,9 @@ fn fetch(
     offline: bool,
 ) -> Result<()> {
     if let GitReference::Commit(commit) = reference
-        && repo
-            .resolve(reference)
-            .is_ok_and(|local_commit| *commit == local_commit)
+        && repo.resolve(reference).is_ok_and(|local_commit| {
+            *commit == local_commit || repo.is_tag(*commit).unwrap_or(false)
+        })
     {
         return Ok(());
     }

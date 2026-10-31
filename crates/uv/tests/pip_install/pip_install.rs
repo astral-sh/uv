@@ -3378,15 +3378,34 @@ fn install_git_full_commit_ignores_same_named_branch() -> Result<()> {
     Ok(())
 }
 
-/// A full commit revision must not identify an annotated tag object, even in the Git cache.
+/// A full commit revision corresponding to an annotated tag object is peeled to its commit.
 #[test]
 #[cfg(feature = "test-git")]
-fn install_git_full_commit_rejects_tag_object() -> Result<()> {
+fn install_git_full_commit_peels_tag_object() -> Result<()> {
     let context = uv_test::test_context!(DEFAULT_PYTHON_VERSION);
     let repository = context.temp_dir.child("repository");
+    repository.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "example"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    repository
+        .child("src/example/__init__.py")
+        .write_str(r#"__version__ = "0.1.0""#)?;
     Command::new("git")
         .arg("init")
         .arg(repository.path())
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("-C")
+        .arg(repository.path())
+        .args(["add", "."])
         .assert()
         .success();
     Command::new("git")
@@ -3398,7 +3417,6 @@ fn install_git_full_commit_rejects_tag_object() -> Result<()> {
             "-c",
             "user.email=ferris@example.com",
             "commit",
-            "--allow-empty",
             "-m",
             "Commit",
         ])
@@ -3447,21 +3465,22 @@ fn install_git_full_commit_rejects_tag_object() -> Result<()> {
 
     uv_snapshot!(filters, context.pip_install()
         .arg(format!("example @ git+{repository_url}@{tag}")), @"
-    exit_code: 1 (failure)
+    exit_code: 0 (success)
     ----- stderr -----
-    error: Failed to download and build `example @ git+file://[TEMP_DIR]/repository@[TAG]`
-      cause: Git operation failed
-      cause: Exact Git revision `[TAG]` does not match precise commit `[COMMIT]` for `file://[TEMP_DIR]/repository`
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + example==0.1.0 (from git+file://[TEMP_DIR]/repository@[TAG])
     ");
 
-    // The fetched tag object must not become an accepted commit on a subsequent run.
+    context.assert_installed("example", "0.1.0");
+
+    // The peeled commit must also be reused from the Git cache on a subsequent run.
     uv_snapshot!(filters, context.pip_install()
         .arg(format!("example @ git+{repository_url}@{tag}")), @"
-    exit_code: 1 (failure)
+    exit_code: 0 (success)
     ----- stderr -----
-    error: Failed to download and build `example @ git+file://[TEMP_DIR]/repository@[TAG]`
-      cause: Git operation failed
-      cause: Exact Git revision `[TAG]` does not match precise commit `[COMMIT]` for `file://[TEMP_DIR]/repository`
+    Checked 1 package in [TIME]
     ");
 
     Ok(())

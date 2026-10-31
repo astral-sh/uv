@@ -10,7 +10,7 @@ use anyhow::Result;
 use tracing::{debug, instrument};
 
 use uv_cache_key::cache_digest;
-use uv_git_types::{GitOid, GitUrl};
+use uv_git_types::{GitOid, GitReference, GitUrl};
 use uv_redacted::SafeUrl;
 
 use crate::credentials::GIT_STORE;
@@ -85,14 +85,16 @@ impl GitSource {
             // If we have a locked revision, and we have a pre-existing database which has that
             // revision, then no update needs to happen.
             // When requested, we also check if LFS artifacts have been fetched and validated.
-            if let (Some(rev), Some(db)) = (self.git.precise(), &maybe_db) {
-                if db.contains(rev) && (!lfs_requested || db.contains_lfs_artifacts(rev)) {
+            if let (Some(rev), Some(db)) = (self.git.precise(), &maybe_db)
+                && let Some(actual_rev) = db.resolve_commit(rev)
+            {
+                if !lfs_requested || db.contains_lfs_artifacts(actual_rev) {
                     debug!("Using existing Git source `{}`", self.git.url());
                     return Ok((
                         maybe_db
                             .unwrap()
                             .with_lfs_ready(lfs_requested.then_some(true)),
-                        rev,
+                        actual_rev,
                         None,
                     ));
                 }
@@ -121,8 +123,18 @@ impl GitSource {
             Ok((db, actual_rev, task))
         }()?;
 
+        // If the requested revision was an annotated tag, peel it to its underlying commit
+        // before validating the revision match.
+        let mut git = self.git.clone();
+        if let Some(requested) = git.reference().as_commit()
+            && requested != actual_rev
+            && db.peels_to_commit(requested, actual_rev)?
+        {
+            git = git.with_reference(GitReference::Commit(actual_rev));
+        }
+
         // Validate the resolved commit before checking out its contents.
-        let git = self.git.clone().with_precise(actual_rev)?;
+        let git = git.with_precise(actual_rev)?;
 
         // Don’t use the full hash, in order to contribute less to reaching the
         // path length limit on Windows.
