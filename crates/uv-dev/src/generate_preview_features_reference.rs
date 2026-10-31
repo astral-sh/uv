@@ -339,6 +339,10 @@ mod tests {
         to a `pyproject.toml` file. This feature takes effect before configuration is loaded, so it
         must be enabled on the command line or through an environment variable.
 
+        ### `proxy-index` {#proxy-index}
+
+        Allows using [proxy indexes](./indexes.md#proxy-indexes).
+
         ### `publish-require-normalized` {#publish-require-normalized}
 
         The `uv publish` command requires distribution filenames to be normalized. Files with

@@ -11,8 +11,8 @@ use uv_client::{FlatIndexEntry, OwnedArchive, SimpleDetailMetadata, VersionFiles
 use uv_configuration::BuildOptions;
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
-    File, IndexEntryFilename, IndexUrl, MinimumLibcVersion, RegistryBuiltWheel, RegistrySourceDist,
-    RequiresPython,
+    IndexEntryFilename, IndexRoute, IndexUrl, MinimumLibcVersion, ProxyIndexError,
+    RegistryBuiltWheel, RegistrySourceDist, RequiresPython,
 };
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -50,7 +50,7 @@ impl VersionMap {
     pub(crate) fn from_simple_metadata(
         simple_metadata: OwnedArchive<SimpleDetailMetadata>,
         package_name: &PackageName,
-        index: IndexUrl,
+        index_route: IndexRoute,
         tags: Option<Tags>,
         requires_python: RequiresPython,
         allowed_yanks: AllowedYanks,
@@ -106,7 +106,8 @@ impl VersionMap {
                 simple_metadata,
                 no_binary: build_options.no_binary_package(package_name),
                 no_build: build_options.no_build_package(package_name),
-                index,
+                index_route,
+                proxy_mapping_error: OnceLock::new(),
                 tags,
                 allowed_yanks,
                 hasher,
@@ -178,8 +179,25 @@ impl VersionMap {
     pub(crate) fn index(&self) -> Option<&IndexUrl> {
         match &self.inner {
             VersionMapInner::Eager(_) => None,
-            VersionMapInner::Lazy(lazy) => Some(&lazy.index),
+            VersionMapInner::Lazy(lazy) => Some(&lazy.index_route.canonical),
         }
+    }
+
+    /// Return any proxy artifact mapping error encountered during lazy materialization.
+    fn proxy_mapping_error(&self) -> Option<ProxyIndexError> {
+        match &self.inner {
+            VersionMapInner::Eager(_) => None,
+            VersionMapInner::Lazy(lazy) => lazy.proxy_mapping_error.get().cloned(),
+        }
+    }
+
+    /// Propagate proxy mapping errors through the existing typed client error chain.
+    pub(crate) fn check_proxy_mapping_errors(maps: &[Self]) -> Result<(), uv_client::Error> {
+        if let Some(error) = maps.iter().find_map(Self::proxy_mapping_error) {
+            return Err(uv_client::ErrorKind::ProxyIndex(error).into());
+        }
+
+        Ok(())
     }
 
     /// Return the included-version cutoff for this version map, if any.
@@ -493,8 +511,10 @@ struct VersionMapLazy {
     no_binary: bool,
     /// When true, source dists aren't allowed.
     no_build: bool,
-    /// The URL of the index where this package came from.
-    index: IndexUrl,
+    /// The validated route from the canonical index to its physical endpoint.
+    index_route: IndexRoute,
+    /// The first invalid proxy artifact encountered during lazy materialization.
+    proxy_mapping_error: OnceLock<ProxyIndexError>,
     /// The set of compatibility tags that determines whether a wheel is usable
     /// in the current environment.
     tags: Option<Tags>,
@@ -511,6 +531,25 @@ struct VersionMapLazy {
     requires_python: RequiresPython,
     /// The libc baselines required during universal resolution.
     minimum_libc_version: Option<MinimumLibcVersion>,
+}
+
+/// A registry artifact paired with its already-evaluated selection compatibility.
+enum RegistryFileCandidate {
+    Wheel(WheelFilename, WheelCompatibility),
+    Source(SourceDistFilename, SourceDistCompatibility),
+}
+
+impl RegistryFileCandidate {
+    fn is_compatible(&self) -> bool {
+        match self {
+            Self::Wheel(_, compatibility) => {
+                matches!(compatibility, WheelCompatibility::Compatible(..))
+            }
+            Self::Source(_, compatibility) => {
+                matches!(compatibility, SourceDistCompatibility::Compatible(..))
+            }
+        }
+    }
 }
 
 impl VersionMapLazy {
@@ -636,23 +675,22 @@ impl VersionMapLazy {
             .expect("archived version files always deserializes");
             let mut priority_dist = init.cloned().unwrap_or_default();
             for (filename, file) in files.all_entries(&self.package_name) {
-                let filename = match filename {
-                    IndexEntryFilename::DistFilename(filename) => filename,
-                    IndexEntryFilename::VariantJson(filename) => {
-                        if !priority_dist
-                            .variants_json()
-                            .iter()
-                            .any(|variants_json| variants_json.index == self.index)
-                        {
-                            priority_dist.insert_variants_json(RegistryVariantsJson {
-                                filename,
-                                file,
-                                index: self.index.clone(),
-                            });
+                let filename =
+                    match filename {
+                        IndexEntryFilename::DistFilename(filename) => filename,
+                        IndexEntryFilename::VariantJson(filename) => {
+                            if !priority_dist.variants_json().iter().any(|variants_json| {
+                                variants_json.index == self.index_route.canonical
+                            }) {
+                                priority_dist.insert_variants_json(RegistryVariantsJson {
+                                    filename,
+                                    file,
+                                    index: self.index_route.canonical.clone(),
+                                });
+                            }
+                            continue;
                         }
-                        continue;
-                    }
-                };
+                    };
                 // Support resolving as if it were an earlier timestamp, at least as long files have
                 // upload time information.
                 let (excluded, upload_time) = if let Some(included_version_cutoff) =
@@ -694,12 +732,10 @@ impl VersionMapLazy {
                     (false, None)
                 };
 
-                let file = File::from_direct_index(file);
-
                 // Prioritize amongst all available files.
                 let yanked = file.yanked.as_deref();
                 let hashes = file.hashes.clone();
-                match filename {
+                let candidate = match filename {
                     DistFilename::WheelFilename(filename) => {
                         let compatibility = self.wheel_compatibility(
                             &filename,
@@ -710,18 +746,7 @@ impl VersionMapLazy {
                             excluded,
                             upload_time,
                         );
-                        let dist = RegistryBuiltWheel {
-                            filename,
-                            file: Box::new(file),
-                            index: self.index.clone(),
-                            size_is_authoritative: false,
-                        };
-                        priority_dist.insert_built(
-                            dist,
-                            hashes,
-                            compatibility,
-                            self.minimum_libc_version,
-                        );
+                        RegistryFileCandidate::Wheel(filename, compatibility)
                     }
                     DistFilename::SourceDistFilename(filename) => {
                         let compatibility = self.source_dist_compatibility(
@@ -731,12 +756,49 @@ impl VersionMapLazy {
                             excluded,
                             upload_time,
                         );
+                        RegistryFileCandidate::Source(filename, compatibility)
+                    }
+                };
+
+                let file = match self.index_route.canonicalize_file(file) {
+                    Ok(file) => file,
+                    Err(error) => {
+                        // Files that cannot be selected do not need a valid proxy artifact URL.
+                        if !candidate.is_compatible() {
+                            continue;
+                        }
+
+                        if let Some(flat) = init {
+                            return Some(flat.clone());
+                        }
+
+                        let _ = self.proxy_mapping_error.set(error);
+                        return None;
+                    }
+                };
+
+                match candidate {
+                    RegistryFileCandidate::Wheel(filename, compatibility) => {
+                        let dist = RegistryBuiltWheel {
+                            filename,
+                            file: Box::new(file),
+                            index: self.index_route.canonical.clone(),
+                            size_is_authoritative: false,
+                        };
+                        priority_dist.insert_built(
+                            dist,
+                            hashes,
+                            compatibility,
+                            self.minimum_libc_version,
+                        );
+                    }
+                    RegistryFileCandidate::Source(filename, compatibility) => {
                         let dist = RegistrySourceDist {
                             name: filename.name.clone(),
                             version: filename.version.clone(),
                             ext: filename.extension,
                             file: Box::new(file),
-                            index: self.index.clone(),
+                            index: self.index_route.canonical.clone(),
                             wheels: vec![],
                             size_is_authoritative: false,
                         };

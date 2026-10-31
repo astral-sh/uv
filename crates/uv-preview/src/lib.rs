@@ -462,6 +462,8 @@ pub enum PreviewFeature {
     BuildDependencyHashes,
     /// Enables experimental support for [wheel variants](https://peps.python.org/pep-0825/).
     WheelVariants,
+    /// Allows using [proxy indexes](./indexes.md#proxy-indexes).
+    ProxyIndex,
 }
 
 impl Display for PreviewFeature {
