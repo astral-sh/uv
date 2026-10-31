@@ -756,7 +756,11 @@ fn fetch_with_cli(
     // are still usable.
     cmd.env(EnvVars::GIT_TERMINAL_PROMPT, "0");
 
-    cmd.arg("fetch");
+    // A detached repack can remove packfiles while `git clone --local` copies the database.
+    // Keep maintenance in the foreground, including `git gc --auto` on older Git versions.
+    cmd.args(&["-c", "maintenance.autoDetach=false"])
+        .args(&["-c", "gc.autoDetach=false"])
+        .arg("fetch");
     if tags {
         cmd.arg("--tags");
     }
