@@ -9,19 +9,35 @@ use uv_pypi_types::{HashDigest, HashDigests, ResolutionMetadata};
 
 use crate::{Error, supported_variant_properties};
 
-/// Allow variant wheels from an index when the wheel variants preview is enabled.
+/// Allow variant wheels from an index or local path when the wheel variants preview is enabled.
+///
+/// Variant compatibility is checked separately during resolution and installation.
+///
+/// TODO: Support variant wheels from direct URLs and Git paths.
 pub fn check_supported_wheel_variant(dist: &BuiltDist) -> Result<(), Error> {
     let filename = dist.wheel_filename();
-    if filename.variant().is_some()
-        && (dist.index().is_none() || !uv_preview::is_enabled(PreviewFeature::WheelVariants))
-    {
-        return Err(Error::UnsupportedWheelVariant(Box::new(filename.clone())));
+    if filename.variant().is_none() {
+        return Ok(());
+    }
+    let unsupported_source = match dist {
+        BuiltDist::Registry(_) | BuiltDist::Path(_) => None,
+        BuiltDist::DirectUrl(_) => Some("direct URLs"),
+        BuiltDist::GitPath(_) => Some("Git paths"),
+    };
+    if let Some(source_kind) = unsupported_source {
+        return Err(Error::UnsupportedWheelVariantSource {
+            filename: Box::new(filename.clone()),
+            source_kind,
+        });
+    }
+    if !uv_preview::is_enabled(PreviewFeature::WheelVariants) {
+        return Err(Error::WheelVariantsDisabled(Box::new(filename.clone())));
     }
     Ok(())
 }
 
 /// Check that an extracted wheel's variant properties are supported by the target system.
-pub(crate) fn check_wheel_variant_compatibility(
+pub fn check_wheel_variant_compatibility(
     filename: &WheelFilename,
     archive: &Path,
 ) -> Result<(), Error> {
@@ -29,7 +45,7 @@ pub(crate) fn check_wheel_variant_compatibility(
         return Ok(());
     };
     if !uv_preview::is_enabled(PreviewFeature::WheelVariants) {
-        return Err(Error::UnsupportedWheelVariant(Box::new(filename.clone())));
+        return Err(Error::WheelVariantsDisabled(Box::new(filename.clone())));
     }
 
     let dist_info = find_flat_dist_info(filename, archive)
