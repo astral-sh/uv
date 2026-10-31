@@ -7585,6 +7585,7 @@ dependencies = [
  "anyhow",
  "astral-reqwest-middleware",
  "astral-reqwest-retry",
+ "cap-primitives",
  "dunce",
  "fs-err",
  "futures",

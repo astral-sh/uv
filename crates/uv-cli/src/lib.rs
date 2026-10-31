@@ -690,6 +690,10 @@ pub struct CacheNamespace {
 #[derive(Subcommand)]
 pub enum CacheCommand {
     /// Clear the cache, removing all entries or those linked to specific packages.
+    ///
+    /// When no packages are specified, also remove temporary files left by interrupted Python
+    /// installations. These files are stored outside the cache, in the Python installation
+    /// directory.
     #[command(alias = "clear")]
     Clean(CleanArgs),
     /// Prune dangling cache entries and cached environments.
@@ -725,7 +729,8 @@ pub struct CleanArgs {
     /// Force removal of the cache, ignoring in-use checks.
     ///
     /// By default, `uv cache clean` will block until no process is reading the cache. When
-    /// `--force` is used, `uv cache clean` will proceed without taking a lock.
+    /// `--force` is used, `uv cache clean` will proceed without taking the cache lock. Temporary
+    /// Python installation files are only removed after any active installation finishes.
     #[arg(long)]
     pub force: bool,
 }
