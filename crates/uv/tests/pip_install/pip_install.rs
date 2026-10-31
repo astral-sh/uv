@@ -1635,6 +1635,33 @@ fn install_require_hashes_in_nested_constraints_txt() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn install_option_with_marker() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(indoc! {r#"
+        --index-url="https://pypi.org/simple" ; python_version >= "3.9"
+        iniconfig
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--strict"), @r#"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: Ignoring environment marker on `--index-url` in `requirements.txt` at line 1: `; python_version >= "3.9"`
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "#
+    );
+
+    Ok(())
+}
+
 /// Install a requirements file with pins that conflict
 ///
 /// This is likely to occur in the real world when compiled on one platform then installed on another.
