@@ -129,6 +129,9 @@ jobs:
     name: "windows x86_64"
     timeout-minutes: 10
     runs-on: windows-latest
+    env:
+      # Windows runners have unreliable connectivity to the Astral release mirror.
+      UV_PYTHON_INSTALL_MIRROR: https://github.com/astral-sh/python-build-standalone/releases/download
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -158,6 +161,9 @@ jobs:
     name: "windows aarch64"
     timeout-minutes: 10
     runs-on: windows-11-arm
+    env:
+      # Windows runners have unreliable connectivity to the Astral release mirror.
+      UV_PYTHON_INSTALL_MIRROR: https://github.com/astral-sh/python-build-standalone/releases/download
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

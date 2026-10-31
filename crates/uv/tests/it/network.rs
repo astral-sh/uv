@@ -574,6 +574,7 @@ async fn python_install_http_500() {
         .arg("cpython-3.10.0-darwin-aarch64-none")
         .arg("--python-downloads-json-url")
         .arg(python_downloads_json.path())
+        .env_remove(EnvVars::UV_PYTHON_INSTALL_MIRROR)
         .env(EnvVars::UV_INTERNAL__TEST_NO_HTTP_RETRY_DELAY, "true"), @"
     exit_code: 1 (failure)
     ----- stderr -----
@@ -602,6 +603,7 @@ async fn python_install_io_error() {
         .arg("cpython-3.10.0-darwin-aarch64-none")
         .arg("--python-downloads-json-url")
         .arg(python_downloads_json.path())
+        .env_remove(EnvVars::UV_PYTHON_INSTALL_MIRROR)
         .env(EnvVars::UV_INTERNAL__TEST_NO_HTTP_RETRY_DELAY, "true"), @"
     exit_code: 1 (failure)
     ----- stderr -----

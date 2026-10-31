@@ -8987,7 +8987,7 @@ fn sync_active_project_environment() -> Result<()> {
 #[test]
 #[cfg(feature = "test-python-managed")]
 fn sync_active_project_environment_with_relative_managed_python_dir() -> Result<()> {
-    let context = uv_test::test_context_with_versions!(&[]).with_empty_python_install_mirror();
+    let context = uv_test::test_context_with_versions!(&[]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(

@@ -66,6 +66,9 @@ jobs:
     timeout-minutes: 15
     runs-on: windows-latest
     name: "check on ${{ matrix.target-arch }}"
+    env:
+      # Windows runners have unreliable connectivity to the Astral release mirror.
+      UV_PYTHON_INSTALL_MIRROR: https://github.com/astral-sh/python-build-standalone/releases/download
     strategy:
       fail-fast: false
       matrix:
@@ -99,6 +102,8 @@ jobs:
           # renovate: datasource=github-release-attachments depName=astral-sh/uv
           version: "0.13.5"
           checksum: "a38b8d1902b7cfbc76b423ba1bb456f623f42064cdc72628b6075b89afd1019a"
+          # Windows runners have unreliable connectivity to the Astral release mirror.
+          download-from-astral-mirror: false
 
       - name: "rustfmt"
         working-directory: ${{ env.UV_WORKSPACE }}/crates/uv-trampoline

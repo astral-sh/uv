@@ -359,6 +359,8 @@ jobs:
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.cmd
           AWS_LC_SYS_PREBUILT_NASM: "0"
+          # Windows runners have unreliable connectivity to the Astral release mirror.
+          UV_PYTHON_INSTALL_MIRROR: https://github.com/astral-sh/python-build-standalone/releases/download
       # uv
       - name: "Build wheels"
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0

@@ -32,8 +32,7 @@ fn python_install() {
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_filtered_latest_python_versions()
-        .with_managed_python_dirs()
-        .with_empty_python_install_mirror();
+        .with_managed_python_dirs();
 
     // Install the latest version
     uv_snapshot!(context.filters(), context.python_install(), @"
@@ -2683,10 +2682,11 @@ fn python_install_cached() {
      - cpython-3.15.[LATEST]-[PLATFORM] (python3.15)
     ");
 
-    // The cached archive can be installed offline
+    // An empty mirror uses the default URL and can install the cached archive offline.
     uv_snapshot!(context.filters(), context
         .python_install()
         .arg("--offline")
+        .env(EnvVars::UV_PYTHON_INSTALL_MIRROR, "")
         .env(EnvVars::UV_PYTHON_CACHE_DIR, python_cache.as_ref()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -4017,7 +4017,6 @@ fn python_install_compile_bytecode() -> anyhow::Result<()> {
         .with_filtered_exe_suffix()
         .with_filtered_compiled_file_count()
         .with_managed_python_dirs()
-        .with_empty_python_install_mirror()
         .with_filtered_latest_python_versions();
 
     // Install 3.14 and compile its bytecode
@@ -4081,7 +4080,6 @@ fn python_install_compile_bytecode_existing() {
         .with_filtered_exe_suffix()
         .with_filtered_compiled_file_count()
         .with_managed_python_dirs()
-        .with_empty_python_install_mirror()
         .with_filtered_latest_python_versions();
 
     // A fresh install should be able to be compiled later
@@ -4107,7 +4105,6 @@ fn python_install_compile_bytecode_upgrade() {
         .with_filtered_exe_suffix()
         .with_filtered_compiled_file_count()
         .with_managed_python_dirs()
-        .with_empty_python_install_mirror()
         .with_filtered_latest_python_versions();
 
     // An upgrade should also compile bytecode
@@ -4204,7 +4201,6 @@ fn python_install_compile_bytecode_multiple() {
         .with_filtered_exe_suffix()
         .with_filtered_compiled_file_count()
         .with_managed_python_dirs()
-        .with_empty_python_install_mirror()
         .with_filtered_latest_python_versions();
 
     // Should handle installing and compiling multiple versions correctly
@@ -4221,9 +4217,7 @@ fn python_install_compile_bytecode_multiple() {
 #[cfg(unix)] // Pyodide cannot be used on Windows
 #[test]
 fn python_install_compile_bytecode_pyodide() {
-    let context = uv_test::test_context_with_versions!(&[])
-        .with_managed_python_dirs()
-        .with_empty_python_install_mirror();
+    let context = uv_test::test_context_with_versions!(&[]).with_managed_python_dirs();
 
     // Should warn on explicit pyodide installation
     uv_snapshot!(context.filters(), context.python_install().arg("--compile-bytecode").arg("cpython-3.13.2-emscripten-wasm32-musl"), @"
@@ -4246,8 +4240,7 @@ fn python_install_compile_bytecode_graalpy() {
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_filtered_compiled_file_count()
-        .with_managed_python_dirs()
-        .with_empty_python_install_mirror();
+        .with_managed_python_dirs();
 
     // Should work for graalpy
     uv_snapshot!(context.filters(), context.python_install().arg("--compile-bytecode").arg("graalpy-3.12"), @"
@@ -4265,8 +4258,7 @@ fn python_install_compile_bytecode_pypy() {
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_filtered_compiled_file_count()
-        .with_managed_python_dirs()
-        .with_empty_python_install_mirror();
+        .with_managed_python_dirs();
 
     // Should work for pypy
     uv_snapshot!(context.filters(), context.python_install().arg("--compile-bytecode").arg("pypy-3.11"), @"
