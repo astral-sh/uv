@@ -1042,6 +1042,11 @@ impl EnvVars {
     #[attr_added_in("0.0.5")]
     pub const GIT_DIR: &'static str = "GIT_DIR";
 
+    /// Sets the object format when initializing a Git repository.
+    #[attr_hidden]
+    #[attr_added_in("next release")]
+    pub const GIT_DEFAULT_HASH: &'static str = "GIT_DEFAULT_HASH";
+
     /// Path to the git working tree. Ignored by `uv` when performing fetch.
     #[attr_hidden]
     #[attr_added_in("0.0.5")]
