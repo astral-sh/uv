@@ -34,6 +34,12 @@ pub enum LinkMode {
     Hardlink,
     /// Symbolically link packages from the source into the destination.
     Symlink,
+    /// Clone packages from the source into the destination, falling back to symbolic links if
+    /// cloning is not supported, e.g., if the source and destination are on different filesystems.
+    ///
+    /// Unlike `clone`, this skips hard linking, which fails in the same situations as cloning when
+    /// the filesystems differ.
+    CloneOrSymlink,
 }
 
 impl Default for LinkMode {
@@ -51,9 +57,13 @@ impl Default for LinkMode {
 }
 
 impl LinkMode {
-    /// Returns `true` if the link mode is [`LinkMode::Symlink`].
+    /// Returns `true` if the link mode may create symbolic links into the source directory, i.e.,
+    /// [`LinkMode::Symlink`] or [`LinkMode::CloneOrSymlink`].
     pub fn is_symlink(&self) -> bool {
-        matches!(self, Self::Symlink)
+        match self {
+            Self::Symlink | Self::CloneOrSymlink => true,
+            Self::Clone | Self::Copy | Self::Hardlink => false,
+        }
     }
 }
 
@@ -81,8 +91,8 @@ where
     F: Fn(&Path) -> bool,
 {
     match options.mode {
-        LinkMode::Clone => clone_dir(src, dst, options),
-        mode => walk_and_link(src, dst, mode, options),
+        LinkMode::Clone | LinkMode::CloneOrSymlink => clone_dir(src, dst, options),
+        mode => walk_and_link(src, dst, LinkState::new(mode), options),
     }
 }
 
@@ -244,14 +254,25 @@ struct LinkState {
     mode: LinkMode,
     /// Whether the strategy has been confirmed to work.
     attempt: LinkAttempt,
+    /// The strategy to use if [`LinkMode::Clone`] fails.
+    clone_fallback: LinkMode,
 }
 
 impl LinkState {
     /// Create a new state with the given mode, not yet confirmed to work.
+    ///
+    /// [`LinkMode::CloneOrSymlink`] starts as [`LinkMode::Clone`], with a symlink fallback.
     fn new(mode: LinkMode) -> Self {
+        let (mode, clone_fallback) = match mode {
+            LinkMode::CloneOrSymlink => (LinkMode::Clone, LinkMode::Symlink),
+            LinkMode::Clone | LinkMode::Hardlink | LinkMode::Symlink | LinkMode::Copy => {
+                (mode, LinkMode::Hardlink)
+            }
+        };
         Self {
             mode,
             attempt: LinkAttempt::Initial,
+            clone_fallback,
         }
     }
 
@@ -265,7 +286,8 @@ impl LinkState {
 
     /// Transition to the next fallback strategy in the chain.
     ///
-    /// - [`LinkMode::Clone`] → [`LinkMode::Hardlink`]
+    /// - [`LinkMode::Clone`] → [`LinkMode::Hardlink`], or [`LinkMode::Symlink`] when started as
+    ///   [`LinkMode::CloneOrSymlink`]
     /// - [`LinkMode::Hardlink`] → [`LinkMode::Copy`]
     /// - [`LinkMode::Symlink`] → [`LinkMode::Copy`]
     /// - [`LinkMode::Copy`] → Failure
@@ -275,8 +297,10 @@ impl LinkState {
             "Copy is the terminal fallback strategy and has no next mode"
         );
         Self::new(match self.mode {
-            LinkMode::Clone => LinkMode::Hardlink,
-            LinkMode::Hardlink | LinkMode::Symlink | LinkMode::Copy => LinkMode::Copy,
+            LinkMode::Clone => self.clone_fallback,
+            LinkMode::Hardlink | LinkMode::Symlink | LinkMode::CloneOrSymlink | LinkMode::Copy => {
+                LinkMode::Copy
+            }
         })
     }
 }
@@ -345,24 +369,22 @@ where
         }
     }
 
-    walk_and_link(src, dst, LinkMode::Clone, options)
+    walk_and_link(src, dst, LinkState::new(options.mode), options)
 }
 
-/// Walk a directory tree and link each file using the given starting [`LinkMode`].
+/// Walk a directory tree and link each file starting from the given [`LinkState`].
 ///
 /// The [`LinkState`] tracks the active strategy and automatically falls back via
 /// [`LinkState::next_mode`] as needed.
 fn walk_and_link<F>(
     src: &Path,
     dst: &Path,
-    mode: LinkMode,
+    mut state: LinkState,
     options: &LinkOptions<'_, F>,
 ) -> Result<LinkMode, LinkError>
 where
     F: Fn(&Path) -> bool,
 {
-    let mut state = LinkState::new(mode);
-
     for entry in WalkDir::new(src) {
         let entry = entry.map_err(|err| LinkError::WalkDir {
             path: src.to_path_buf(),
@@ -405,6 +427,8 @@ where
         LinkMode::Clone => reflink_file_with_fallback(path, target, state, options),
         LinkMode::Hardlink => hardlink_file_with_fallback(path, target, state, options),
         LinkMode::Symlink => symlink_file_with_fallback(path, target, state, options),
+        // `LinkState::new` resolves this mode to `Clone` with a symlink fallback.
+        LinkMode::CloneOrSymlink => reflink_file_with_fallback(path, target, state, options),
         LinkMode::Copy => {
             if options.on_existing_directory == OnExistingDirectory::Merge {
                 atomic_copy_overwrite(path, target)?;
@@ -1287,6 +1311,48 @@ mod tests {
         // Symlinks work across devices
         assert_eq!(result, LinkMode::Symlink);
         verify_test_tree(dst_dir.path());
+    }
+
+    /// Clone-or-symlink across filesystems skips hardlinking, which cannot span devices either,
+    /// and falls back to symlinks.
+    #[test]
+    #[cfg(unix)]
+    fn test_clone_or_symlink_cross_device() {
+        let Some(src_dir) = alt_tempdir() else {
+            eprintln!("Skipping: UV_INTERNAL__TEST_ALT_FS not set");
+            return;
+        };
+        let dst_dir = test_tempdir();
+
+        create_test_tree(src_dir.path());
+
+        let options = LinkOptions::new(LinkMode::CloneOrSymlink);
+        let result = link_dir(src_dir.path(), dst_dir.path(), &options).unwrap();
+
+        assert_eq!(result, LinkMode::Symlink);
+        verify_test_tree(dst_dir.path());
+        assert!(dst_dir.path().join("file1.txt").is_symlink());
+    }
+
+    /// Clone-or-symlink on a copy-on-write filesystem clones and does not create symlinks.
+    #[test]
+    fn test_clone_or_symlink_on_reflink_fs() {
+        let Some(src_dir) = cow_tempdir() else {
+            eprintln!("Skipping: UV_INTERNAL__TEST_COW_FS not set");
+            return;
+        };
+        let Some(dst_dir) = cow_tempdir() else {
+            return;
+        };
+
+        create_test_tree(src_dir.path());
+
+        let options = LinkOptions::new(LinkMode::CloneOrSymlink);
+        let result = link_dir(src_dir.path(), dst_dir.path(), &options).unwrap();
+
+        assert_eq!(result, LinkMode::Clone);
+        verify_test_tree(dst_dir.path());
+        assert!(!dst_dir.path().join("file1.txt").is_symlink());
     }
 
     #[test]

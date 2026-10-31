@@ -18942,6 +18942,35 @@ fn install_cross_device_symlink() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Install a package across filesystems with `--link-mode clone-or-symlink`.
+/// Cloning fails across devices, so the install falls back to symlinks without the hardlink
+/// fallback warning.
+///
+/// Requires `UV_INTERNAL__TEST_ALT_FS`.
+#[test]
+#[cfg(unix)]
+fn install_cross_device_clone_or_symlink() -> anyhow::Result<()> {
+    let Some(context) = uv_test::test_context!("3.12").with_cache_on_alt_fs()? else {
+        return Ok(());
+    };
+
+    uv_snapshot!(context.filters(), context
+        .pip_install()
+        .arg("--link-mode")
+        .arg("clone-or-symlink")
+        .arg("iniconfig"), @r"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "
+    );
+
+    Ok(())
+}
+
 /// Install a package with both cache and venv on a copy-on-write filesystem.
 ///
 /// Requires `UV_INTERNAL__TEST_COW_FS`.

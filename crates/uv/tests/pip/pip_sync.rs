@@ -371,6 +371,32 @@ fn install_symlink_no_cache() -> Result<()> {
     Ok(())
 }
 
+/// Reject attempts to use `--link-mode clone-or-symlink` with `--no-cache`, since the fallback
+/// could symlink into the temporary cache.
+#[test]
+fn install_clone_or_symlink_no_cache() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("MarkupSafe==2.1.3")?;
+
+    uv_snapshot!(context.pip_sync()
+        .arg("requirements.txt")
+        .arg("--link-mode")
+        .arg("clone-or-symlink")
+        .arg("--no-cache")
+        .arg("--strict"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    error: Symlink-based installation is not supported with `--no-cache`. The created environment will be rendered unusable by the removal of the cache.
+    "
+    );
+
+    Ok(())
+}
+
 /// Install multiple packages into a virtual environment.
 #[test]
 fn install_many() -> Result<()> {

@@ -1250,6 +1250,11 @@
           "description": "Symbolically link packages from the source into the destination.",
           "type": "string",
           "const": "symlink"
+        },
+        {
+          "description": "Clone packages from the source into the destination, falling back to symbolic links if\ncloning is not supported, e.g., if the source and destination are on different filesystems.\n\nUnlike `clone`, this skips hard linking, which fails in the same situations as cloning when\nthe filesystems differ.",
+          "type": "string",
+          "const": "clone-or-symlink"
         }
       ]
     },
