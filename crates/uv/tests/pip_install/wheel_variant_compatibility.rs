@@ -19,11 +19,8 @@ fn null_variant() -> Value {
     })
 }
 
-/// Recheck a local wheel's hardware requirements when compiling after a driver change.
-#[test]
-fn install_local_variant_wheel() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-    let variant = json!({
+fn gpu_variant() -> Value {
+    json!({
         "$schema": PEP_850_SCHEMA,
         "default-priorities": { "namespace": ["nvidia"] },
         "providers": {
@@ -41,7 +38,13 @@ fn install_local_variant_wheel() -> Result<()> {
             }
         }
     })
-    .to_string();
+}
+
+/// Recheck a local wheel's hardware requirements when compiling after a driver change.
+#[test]
+fn install_local_variant_wheel() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let variant = gpu_variant().to_string();
     let (filename, wheel) = WheelBuilder::new(&"ok".parse()?, &"1.0.0".parse()?)
         .variant(&"gpu".parse()?, &variant)
         .build();
@@ -105,6 +108,49 @@ fn refresh_incompatible_variant_wheel() -> Result<()> {
     error: No solution found when resolving dependencies
       cause: Because only ok==1.0.0 is available and ok==1.0.0 has no wheels with a matching platform tag (e.g., `manylinux_2_28_x86_64`), we can conclude that all versions of ok cannot be used.
              And because you require ok, we can conclude that your requirements are unsatisfiable.
+    ");
+    Ok(())
+}
+
+/// Recheck a cached URL wheel against the current driver before installing it offline.
+#[test]
+fn install_direct_url_variant_wheel() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let variant = gpu_variant().to_string();
+    let (filename, wheel) = WheelBuilder::new(&"ok".parse()?, &"1.0.0".parse()?)
+        .variant(&"gpu".parse()?, &variant)
+        .build();
+    context.temp_dir.child(&filename).write_binary(&wheel)?;
+    let server = FindLinksServer::new(context.temp_dir.path());
+    let url = format!("{}/{filename}", server.url());
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .env(EnvVars::NV_VARIANT_PROVIDER_FORCE_CUDA_DRIVER_VERSION, "12")
+        .env(EnvVars::NV_VARIANT_PROVIDER_FORCE_SM_ARCH, "8.9")
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg(&url), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0 (from http://[LOCALHOST]/ok-1.0.0-py3-none-any-gpu.whl)
+    ");
+
+    context.reset_venv();
+    uv_snapshot!(context.filters(), context.pip_install()
+        .env(EnvVars::NV_VARIANT_PROVIDER_FORCE_CUDA_DRIVER_VERSION, "11")
+        .env(EnvVars::NV_VARIANT_PROVIDER_FORCE_SM_ARCH, "8.8")
+        .arg("--offline")
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg(&url), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Failed to determine installation plan
+      cause: Wheel variant `gpu` requires unsupported properties: `nvidia :: cuda_version_lower_bound :: 12` and `nvidia :: sm_arch :: 89_real`
     ");
     Ok(())
 }

@@ -449,7 +449,7 @@ impl<'a> Planner<'a> {
                     }
                 }
                 Dist::Built(BuiltDist::DirectUrl(wheel)) => {
-                    if !wheel.filename.is_compatible(tags) {
+                    if !wheel.filename.tag_compatibility(tags).is_compatible() {
                         return Err(PlanError::IncompatibleWheel(Box::new(
                             IncompatibleWheelError {
                                 kind: IncompatibleWheelKind::Url(wheel.url.to_url()),
@@ -496,7 +496,10 @@ impl<'a> Planner<'a> {
                                     build_info,
                                     path: cache.archive(&archive.id).into_boxed_path(),
                                 };
-
+                                check_wheel_variant_compatibility(
+                                    &cached_dist.filename,
+                                    &cached_dist.path,
+                                )?;
                                 debug!("URL wheel requirement already cached: {cached_dist}");
                                 cached.push(CachedDist::Url(cached_dist));
                                 continue;
