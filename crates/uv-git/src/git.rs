@@ -375,12 +375,6 @@ impl GitDatabase {
         Ok(false)
     }
 
-    /// Checks if `oid` identifies a commit or an annotated tag pointing to a commit in this
-    /// database.
-    pub(crate) fn contains(&self, oid: GitOid) -> bool {
-        self.resolve_commit(oid).is_some()
-    }
-
     /// Checks if `oid` contains necessary LFS artifacts in this database.
     pub(crate) fn contains_lfs_artifacts(&self, oid: GitOid) -> bool {
         self.repo.lfs_fsck_objects(&format!("{oid}^0"))
