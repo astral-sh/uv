@@ -574,6 +574,33 @@ fn python_pin_compatible_with_requires_python() -> Result<()> {
     Ok(())
 }
 
+/// A concrete incompatible version is rejected before downloading a Python.
+#[test]
+fn python_pin_incompatible_with_requires_python_not_downloaded() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]).with_managed_python_dirs();
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.python_pin().args(["3.8", "--offline", "--python-preference", "only-managed"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: The requested Python version `3.8` is incompatible with the project `requires-python` value of `>=3.12`.
+    ");
+
+    assert!(!context.temp_dir.child("managed").path().exists());
+
+    Ok(())
+}
+
 #[test]
 fn warning_pinned_python_version_not_installed() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&["3.10", "3.11"]);

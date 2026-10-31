@@ -3325,7 +3325,7 @@ fn check_isolated_incompatible_python() -> Result<()> {
         .arg("--python").arg("3.12"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: The requested interpreter resolved to Python 3.12.[X], which is incompatible with the project's Python requirement: `>=3.13` (from `tool.uv.dependency-groups.dev.requires-python`).
+    error: The requested Python version `3.12` is incompatible with the project's Python requirement: `>=3.13` (from `tool.uv.dependency-groups.dev.requires-python`).
     ");
 
     Ok(())
