@@ -2,7 +2,7 @@ use std::borrow::Cow;
 
 use uv_normalize::PackageName;
 use uv_pep508::VerbatimUrl;
-use uv_redacted::policy::SerializationPolicy;
+use uv_redacted::policy::{SerializationPolicy, Stripped};
 
 use crate::error::Error;
 use crate::{
@@ -95,6 +95,8 @@ pub trait Identifier {
 
 pub trait Verbatim {
     /// Return the verbatim representation of the distribution.
+    ///
+    /// This representation can contain credentials. Use [`std::fmt::Display`] for diagnostics.
     fn verbatim(&self) -> Cow<'_, str>;
 }
 
@@ -103,7 +105,7 @@ impl<P: SerializationPolicy> Verbatim for VerbatimUrl<P> {
         if let Some(given) = self.given() {
             Cow::Borrowed(given)
         } else {
-            Cow::Owned(self.to_string())
+            self.with_policy_ref(Stripped).to_serialized_string()
         }
     }
 }

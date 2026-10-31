@@ -7190,6 +7190,7 @@ dependencies = [
  "uv-python-interpreter",
  "uv-python-managed",
  "uv-python-types",
+ "uv-redacted",
  "uv-requirements",
  "uv-resolve-operations",
  "uv-resolver",
