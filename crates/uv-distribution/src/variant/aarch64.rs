@@ -56,9 +56,13 @@ static VERSION_PROPERTIES: LazyLock<[SupportedVariantFeature; 8]> = LazyLock::ne
 /// - On Linux, unrecognized core models use `8a`. Windows ARM64 also uses `8a`.
 /// - Linux does not expose [SPECRES] to user space. Even an `8.5a` or newer Linux wheel
 ///   cannot rely on prediction-restriction instructions such as `CFP RCTX`.
-/// - On macOS, uv reads the Apple chip name like [archspec]. M-series chips use `8.4a` because
-///   macOS can omit instructions required by `8.5a`, including SPECRES and SSBS. Newer chips
-///   can use higher-level wheels once the interpreter probe checks those capabilities.
+/// - On macOS, uv reads the Apple chip name like [archspec] and advertises up to `8.4a` for
+///   M1 through M5. The [generic Armv8.5-A target] enables SSBS and prediction-restriction
+///   instructions such as `CFP RCTX`. For example, [macOS on M4 Max] reports neither feature.
+///   [XNU] checks both hardware support and user-space access before reporting SPECRES.
+///   Even a chip with BF16 and I8MM needs the `8.5a` instructions to run generic `8.6a` wheels.
+/// - Unrecognized Apple chips use `8a`. The brand `Apple processor` was reported by both early
+///   M1 systems and the [A12Z Developer Transition Kit], so it cannot identify an M1.
 /// - The [WheelNext provider] caps newer Armv9 targets at `9.0a` and lists its ancestors.
 ///   For example, the Armv9.2-A Neoverse V3AE supports `8.6a`, but the provider's list
 ///   goes directly from `9.0a` to `8.5a`.
@@ -66,6 +70,12 @@ static VERSION_PROPERTIES: LazyLock<[SupportedVariantFeature; 8]> = LazyLock::ne
 ///   deploying its environment to a machine with a different CPU can select an incompatible wheel.
 ///
 /// [archspec]: https://github.com/archspec/archspec/blob/ebd3eb502d9205f1033ffc028d661f2fbece7dfc/archspec/cpu/detect.py#L314-L334
+/// [generic Armv8.5-A target]: https://gcc.gnu.org/onlinedocs/gcc/AArch64-Options.html
+/// [macOS on M4 Max]:
+///   https://github.com/archspec/archspec-json/blob/90b453f/tests/targets/darwin-sequoia-m4#L36-L68
+/// [XNU]:
+///   https://github.com/apple-oss-distributions/xnu/blob/f6217f8/osfmk/arm/commpage/commpage.c#L463-L475
+/// [A12Z Developer Transition Kit]: https://stackoverflow.com/q/63214720
 /// [SPECRES]: https://github.com/ARM-software/acle/pull/382
 /// [WheelNext provider]: https://github.com/wheelnext/aarch64-variant-provider/blob/v0.2.0/aarch64_variant_provider/plugin.py#L106-L115
 pub(super) struct Aarch64VariantProvider;
@@ -119,18 +129,12 @@ impl Aarch64Version {
                 let Some(model) = brand.strip_prefix("Apple ") else {
                     return PLATFORM_DEFAULT_VERSION;
                 };
-                // Early M1 systems report "Apple processor".
-                // TODO(konsti): Check the features macOS exposes before advertising 8.5a or newer.
                 match model.split_ascii_whitespace().next() {
-                    Some("processor" | "M1" | "M2" | "M3" | "M4" | "M5") => Self::V8_4,
-                    Some(model)
-                        if model.starts_with('M')
-                            && model.as_bytes().get(1).is_some_and(u8::is_ascii_digit) =>
-                    {
-                        debug!("Unknown Apple chip `{brand}`, assuming Armv8.4-A");
-                        Self::V8_4
+                    Some("M1" | "M2" | "M3" | "M4" | "M5") => Self::V8_4,
+                    _ => {
+                        debug!("Unrecognized Apple chip `{brand}`, using the Armv8-A baseline");
+                        PLATFORM_DEFAULT_VERSION
                     }
-                    _ => PLATFORM_DEFAULT_VERSION,
                 }
             }
             CpuInfo::LinuxAarch64 { cores, hwcaps } => {
@@ -263,6 +267,23 @@ mod tests {
     use uv_platform_tags::CpuInfo;
 
     use super::Aarch64Version;
+
+    #[test]
+    fn macos_version_requires_a_known_apple_chip() {
+        let m5 = CpuInfo::AppleSilicon {
+            brand: "Apple M5 Max".into(),
+        };
+        let unknown = CpuInfo::AppleSilicon {
+            brand: "Apple M99".into(),
+        };
+        let ambiguous = CpuInfo::AppleSilicon {
+            brand: "Apple processor".into(),
+        };
+
+        assert_eq!(Aarch64Version::detect(&m5), Aarch64Version::V8_4);
+        assert_eq!(Aarch64Version::detect(&unknown), Aarch64Version::V8);
+        assert_eq!(Aarch64Version::detect(&ambiguous), Aarch64Version::V8);
+    }
 
     /// Disabling BTI enforcement still lets a Neoverse N2 run Armv9.0-A wheels. Masking SVE2
     /// or sharing the workload with an Armv8.2-A Neoverse N1 limits the usable version.
