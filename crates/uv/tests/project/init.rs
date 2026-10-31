@@ -3805,6 +3805,63 @@ fn init_app_build_backend_scikit() -> Result<()> {
     Ok(())
 }
 
+/// Scikit must install the native extension into the package imported by the launcher.
+#[test]
+fn init_app_build_backend_scikit_leading_digit() {
+    let context = uv_test::test_context!("3.12");
+
+    uv_snapshot!(context.filters(), context.init().args(["--package", "--build-backend", "scikit", "3d-print"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Initialized project `3d-print` at `[TEMP_DIR]/3d-print`
+    ");
+
+    assert_snapshot!(context.read("3d-print/pyproject.toml"), @r#"
+    [project]
+    name = "3d-print"
+    version = "0.1.0"
+    description = "Add your description here"
+    readme = "README.md"
+    requires-python = ">=3.12"
+    dependencies = []
+
+    [project.scripts]
+    3d-print = "_3d_print:main"
+
+    [tool.scikit-build.wheel]
+    packages = ["src/_3d_print"]
+
+    [tool.scikit-build]
+    minimum-version = "build-system.requires"
+    build-dir = "build/{wheel_tag}"
+
+    [tool.uv]
+    cache-keys = [{ file = "pyproject.toml" }, { file = "src/**/*.{h,c,hpp,cpp}" }, { file = "CMakeLists.txt" }]
+
+    [build-system]
+    requires = ["scikit-build-core>=0.12", "pybind11>=3"]
+    build-backend = "scikit_build_core.build"
+    "#);
+
+    assert_snapshot!(context.read("3d-print/src/_3d_print/__init__.py"), @"
+    from _3d_print._core import hello_from_bin
+
+
+    def main() -> None:
+        print(hello_from_bin())
+    ");
+
+    assert_snapshot!(context.read("3d-print/CMakeLists.txt"), @"
+    cmake_minimum_required(VERSION 3.15...4.0)
+    project(${SKBUILD_PROJECT_NAME} LANGUAGES CXX)
+
+    find_package(pybind11 CONFIG REQUIRED)
+
+    pybind11_add_module(_core MODULE src/main.cpp)
+    install(TARGETS _core DESTINATION _3d_print)
+    ");
+}
+
 /// Run `uv init --lib --build-backend maturin` to create a packaged application project
 #[test]
 #[cfg(feature = "test-crates-io")]
