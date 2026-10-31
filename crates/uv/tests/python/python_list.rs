@@ -166,6 +166,59 @@ fn python_list_unknown_managed_implementation() -> Result<()> {
     Ok(())
 }
 
+/// A managed installation on a foreign platform can be listed without executing its interpreter.
+#[cfg(not(target_arch = "s390x"))]
+#[test]
+fn python_list_foreign_managed_installation() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]).with_managed_python_dirs();
+    context
+        .temp_dir
+        .child("managed/cpython-3.13.2-linux-s390x-gnu/bin/python3.13")
+        .touch()?;
+    context
+        .temp_dir
+        .child("managed/cpython-3.13.2-linux-riscv64gc-gnu/bin/python3.13")
+        .touch()?;
+
+    uv_snapshot!(context.filters(), context.python_list()
+        .arg("cpython-3.13.2-linux-s390x-gnu")
+        .arg("--all-arches"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    cpython-3.13.2-linux-s390x-gnu    managed/cpython-3.13.2-linux-s390x-gnu/bin/python3.13
+    ");
+
+    Ok(())
+}
+
+#[cfg(not(target_arch = "s390x"))]
+#[test]
+fn python_list_foreign_managed_build_constraint() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]).with_managed_python_dirs();
+    let matching = context
+        .temp_dir
+        .child("managed/cpython-3.13.2-linux-s390x-gnu");
+    matching.child("bin/python3.13").touch()?;
+    matching.child("BUILD").write_str("20240101")?;
+    let other = context
+        .temp_dir
+        .child("managed/cpython-3.12.2-linux-s390x-gnu");
+    other.child("bin/python3.12").touch()?;
+    other.child("BUILD").write_str("20240202")?;
+
+    uv_snapshot!(context.filters(), context.python_list()
+        .arg("--only-installed")
+        .arg("--all-platforms")
+        .arg("--managed-python")
+        .env(EnvVars::UV_PYTHON_CPYTHON_BUILD, "20240101"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    cpython-3.13.2-linux-s390x-gnu    managed/cpython-3.13.2-linux-s390x-gnu/bin/python3.13
+    ");
+
+    Ok(())
+}
+
 #[cfg(unix)]
 #[test]
 fn python_list_warns_on_noncritical_explicit_path_errors() -> Result<()> {
