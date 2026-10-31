@@ -115,7 +115,9 @@ fn select_variant_by_static_provider_order() -> Result<()> {
     let server = PackseServer::from_toml(indoc! {r#"
         name = "static-provider-order"
         root = {}
-        expected.satisfiable = true
+
+        [expected]
+        satisfiable = true
 
         [packages.ok.versions."1.0.0"]
         wheel = false
