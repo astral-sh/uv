@@ -57,6 +57,10 @@ pub enum Error {
     MalformedDependencies,
     #[error("Sources in `pyproject.toml` are malformed")]
     MalformedSources,
+    #[error(
+        "Cannot write the index URL: its path or fragment is ambiguous after removing credentials"
+    )]
+    AmbiguousIndexUrl,
     #[error("Workspace in `pyproject.toml` is malformed")]
     MalformedWorkspace,
     #[error("Expected a dependency at index {0}")]
@@ -374,6 +378,9 @@ impl PyProjectTomlMut {
         {
             PortablePath::from(&path).to_string()
         } else {
+            if index.url.url().is_ambiguous_without_credentials() {
+                return Err(Error::AmbiguousIndexUrl);
+            }
             index.url.to_serialized_string().into_owned()
         };
         let existing_url = table.get("url").and_then(|item| item.as_str());

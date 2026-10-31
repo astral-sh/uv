@@ -15223,6 +15223,59 @@ async fn tool_uv_sources_signed_url() -> Result<()> {
     Ok(())
 }
 
+/// Stripping userinfo can make a source URL ambiguous when the generated file is read back.
+#[tokio::test]
+async fn tool_uv_sources_ambiguous_stripped_url() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = MockServer::start().await;
+    let filename = "ok-1.0.0-py3-none-any.whl";
+    Mock::given(path(format!("/build:channel@nightly/{filename}")))
+        .and(query_param("sig", "synthetic-signature"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(read(
+            context.workspace_root.join("test/links").join(filename),
+        )?))
+        .mount(&server)
+        .await;
+    context.temp_dir.child("pyproject.toml").write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        dependencies = ["ok"]
+
+        [tool.uv.sources]
+        ok = {{ url = "http://user:password@{}/build:channel@nightly/{filename}?sig=synthetic-signature" }}
+    "#, server.address()})?;
+
+    context
+        .temp_dir
+        .child("requirements.txt")
+        .write_str("# original\n")?;
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("pyproject.toml")
+        .arg("--no-index")
+        .arg("--output-file")
+        .arg("requirements.txt"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Cannot write a requirement for `ok`: its URL path or fragment is ambiguous after removing credentials
+    ");
+    assert_eq!(context.read("requirements.txt"), "# original\n");
+
+    // A distribution omitted from the output does not need a representable requirement.
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("pyproject.toml")
+        .arg("--no-index")
+        .arg("--no-emit-package").arg("ok")
+        .arg("--no-header")
+        .arg("--no-annotate"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    Ok(())
+}
+
 /// A wheel name mismatch reports a redacted URL from `tool.uv.sources`.
 #[test]
 fn tool_uv_sources_signed_url_name_mismatch() -> Result<()> {
