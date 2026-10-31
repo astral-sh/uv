@@ -135,7 +135,7 @@ pub trait Installable<'lock> {
     ) -> Result<Resolution, LockError> {
         let resolve_root = |root_name: &PackageName| {
             self.lock()
-                .find_by_name(root_name)
+                .find_by_markers(root_name, marker_env)
                 .map_err(|_| LockErrorKind::MultipleRootPackages {
                     name: root_name.clone(),
                 })?

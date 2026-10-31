@@ -2286,6 +2286,18 @@ impl VirtualProject {
         }
     }
 
+    /// Select a workspace member, retaining the current project for a transitive package.
+    #[must_use]
+    pub fn with_package_if_member(self, package: &PackageName) -> Self {
+        let workspace = match &self {
+            Self::Project(project) => &project.workspace,
+            Self::NonProject(workspace) => workspace,
+        };
+        Workspace::with_current_project(workspace.clone(), package.clone())
+            .map(Self::Project)
+            .unwrap_or(self)
+    }
+
     /// Discover a project workspace with the member package.
     pub async fn discover_with_package(
         path: &Path,
