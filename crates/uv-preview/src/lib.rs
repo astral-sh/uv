@@ -513,6 +513,8 @@ pub enum PreviewFeature {
     BuildDependencyHashes,
     /// Enables experimental support for [wheel variants](https://peps.python.org/pep-0825/).
     WheelVariants,
+    /// Allows [PEP 780](https://peps.python.org/pep-0780/) ABI feature environment markers.
+    SysAbiFeatures,
 }
 
 impl Display for PreviewFeature {

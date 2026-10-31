@@ -393,6 +393,10 @@ mod tests {
         environments. The name alone does not cause uv to treat a user-created environment as the
         base Conda installation.
 
+        ### `sys-abi-features` {#sys-abi-features}
+
+        Allows [PEP 780](https://peps.python.org/pep-0780/) ABI feature environment markers.
+
         ### `target-workspace-discovery` {#target-workspace-discovery}
 
         For a local `uv run` target, uv starts project and workspace discovery from the directory

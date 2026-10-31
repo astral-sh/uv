@@ -1,6 +1,6 @@
 use tracing::debug;
 
-use uv_pep508::MarkerEnvironment;
+use uv_pep508::{AbiFeature, MarkerEnvironment};
 use uv_platform_tags::{Arch, Os, Platform};
 use uv_static::EnvVars;
 
@@ -1870,7 +1870,20 @@ impl TargetTriple {
     /// The returned [`MarkerEnvironment`] will preserve the base environment's Python version
     /// markers, but override its platform markers.
     pub fn markers(self, base: MarkerEnvironment) -> MarkerEnvironment {
-        base.with_os_name(self.os_name())
+        let mut features = base.sys_abi_features().clone();
+        features.remove(&AbiFeature::Bits32);
+        features.remove(&AbiFeature::Bits64);
+        match self.platform().arch().pointer_width() {
+            32 => {
+                features.insert(AbiFeature::Bits32);
+            }
+            64 => {
+                features.insert(AbiFeature::Bits64);
+            }
+            _ => {}
+        }
+        base.with_sys_abi_features(features)
+            .with_os_name(self.os_name())
             .with_platform_machine(self.platform_machine())
             .with_platform_system(self.platform_system())
             .with_sys_platform(self.sys_platform())
