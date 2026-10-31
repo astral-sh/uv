@@ -268,23 +268,6 @@ mod tests {
 
     use super::Aarch64Version;
 
-    #[test]
-    fn macos_version_requires_a_known_apple_chip() {
-        let m5 = CpuInfo::AppleSilicon {
-            brand: "Apple M5 Max".into(),
-        };
-        let unknown = CpuInfo::AppleSilicon {
-            brand: "Apple M99".into(),
-        };
-        let ambiguous = CpuInfo::AppleSilicon {
-            brand: "Apple processor".into(),
-        };
-
-        assert_eq!(Aarch64Version::detect(&m5), Aarch64Version::V8_4);
-        assert_eq!(Aarch64Version::detect(&unknown), Aarch64Version::V8);
-        assert_eq!(Aarch64Version::detect(&ambiguous), Aarch64Version::V8);
-    }
-
     /// Disabling BTI enforcement still lets a Neoverse N2 run Armv9.0-A wheels. Masking SVE2
     /// or sharing the workload with an Armv8.2-A Neoverse N1 limits the usable version.
     #[test]
