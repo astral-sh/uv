@@ -424,6 +424,18 @@ pub enum PreviewFeature {
     /// can share a cache entry, reducing duplication when the same wheel contents are encountered
     /// more than once.
     ContentAddressedCache,
+    /// uv fetches a Git dependency’s commit history and the files needed for the requested revision.
+    /// This can save bandwidth when older revisions contain large files the checkout no longer
+    /// needs. On small repositories, the extra requests can slow down a checkout. Git LFS downloads
+    /// the files referenced by its pointers separately.
+    ///
+    /// Build tools that read files from other revisions may need another download. With `--offline`,
+    /// a build can fail if those files are missing from the cache.
+    ///
+    /// Partial fetches use a separate cache, so switching modes can require a fresh download.
+    /// uv uses full fetches for source URLs with credentials or query parameters and whenever
+    /// `--allow-insecure-host` is set.
+    GitPartialFetches,
     /// uv omits `exclude-newer-package` entries from the lockfile when the corresponding packages
     /// are absent from the resolved dependencies. This keeps cutoffs for unrelated packages out of
     /// `uv.lock`.

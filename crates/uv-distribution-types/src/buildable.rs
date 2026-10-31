@@ -101,6 +101,26 @@ impl BuildableSource<'_> {
         }
     }
 
+    /// Return whether the source builds directly from a Git checkout.
+    pub fn is_git_checkout(&self) -> bool {
+        match self {
+            Self::Dist(SourceDist::GitDirectory(_)) | Self::Url(SourceUrl::GitDirectory(_)) => true,
+            Self::Dist(
+                SourceDist::Registry(_)
+                | SourceDist::DirectUrl(_)
+                | SourceDist::GitPath(_)
+                | SourceDist::Path(_)
+                | SourceDist::Directory(_),
+            )
+            | Self::Url(
+                SourceUrl::Direct(_)
+                | SourceUrl::GitPath(_)
+                | SourceUrl::Path(_)
+                | SourceUrl::Directory(_),
+            ) => false,
+        }
+    }
+
     /// Return the Python version specifier required by the source, if available.
     pub fn requires_python(&self) -> Option<&VersionSpecifiers> {
         let Self::Dist(SourceDist::Registry(dist)) = self else {

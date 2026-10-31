@@ -11,8 +11,10 @@ use tracing::{debug, instrument};
 
 use uv_cache_key::cache_digest;
 use uv_git_types::{GitOid, GitUrl};
+use uv_preview::PreviewFeature;
 use uv_redacted::SafeUrl;
 
+use crate::GitHttpSettings;
 use crate::credentials::GIT_STORE;
 use crate::git::{GitDatabase, GitRemote};
 
@@ -20,10 +22,8 @@ use crate::git::{GitDatabase, GitRemote};
 pub(crate) struct GitSource {
     /// The Git reference from the manifest file.
     git: GitUrl,
-    /// Whether to disable SSL verification.
-    disable_ssl: bool,
-    /// Whether to operate without network connectivity.
-    offline: bool,
+    /// Settings for fetching and checking out the repository.
+    settings: GitHttpSettings,
     /// The path to the Git source database.
     cache: PathBuf,
     /// The reporter to use for this source.
@@ -31,23 +31,13 @@ pub(crate) struct GitSource {
 }
 
 impl GitSource {
-    /// Initialize a [`GitSource`] with the given Git URL, HTTP client, and cache path.
-    pub(crate) fn new(git: GitUrl, cache: impl Into<PathBuf>, offline: bool) -> Self {
+    /// Initialize a [`GitSource`] with the given Git URL, cache path, and fetch settings.
+    pub(crate) fn new(git: GitUrl, cache: impl Into<PathBuf>, settings: GitHttpSettings) -> Self {
         Self {
             git,
-            disable_ssl: false,
-            offline,
+            settings,
             cache: cache.into(),
             reporter: None,
-        }
-    }
-
-    /// Disable SSL verification for this [`GitSource`].
-    #[must_use]
-    pub(crate) fn dangerous(self) -> Self {
-        Self {
-            disable_ssl: true,
-            ..self
         }
     }
 
@@ -67,7 +57,6 @@ impl GitSource {
 
         // The path to the repo, within the Git database.
         let ident = cache_digest(self.git.repository());
-        let db_path = self.cache.join("db").join(&ident);
 
         // Authenticate the URL, if necessary.
         let remote = if let Some(credentials) = GIT_STORE.get(self.git.repository()) {
@@ -76,11 +65,26 @@ impl GitSource {
             Cow::Borrowed(self.git.url())
         };
 
+        // A lazy fetch cannot use uv's transient credentials or TLS exceptions. Older
+        // versions of uv require the full repository at the original cache path.
+        let partial = self.settings.partial_fetches
+            && !self.settings.disable_ssl
+            && uv_preview::is_enabled(PreviewFeature::GitPartialFetches)
+            && remote.without_credentials().as_str() == remote.as_str()
+            && remote.query_pairs().next().is_none();
+        let settings = self.settings.with_partial_fetches(partial);
+        let cache = if partial {
+            self.cache.join("partial")
+        } else {
+            self.cache
+        };
+        let db_path = cache.join("db").join(&ident);
+
         // Fetch the commit, if we don't already have it. Wrapping this section in a closure makes
         // it easier to short-circuit this in the cases where we do have the commit.
         let (db, actual_rev, maybe_task) = || -> Result<(GitDatabase, GitOid, Option<usize>)> {
             let git_remote = GitRemote::new(remote.clone().into_owned());
-            let maybe_db = git_remote.db_at(&db_path).ok();
+            let maybe_db = git_remote.db_at(&db_path, settings).ok();
 
             // If we have a locked revision, and we have a pre-existing database which has that
             // revision, then no update needs to happen.
@@ -113,8 +117,7 @@ impl GitSource {
                 maybe_db,
                 self.git.reference(),
                 self.git.precise(),
-                self.disable_ssl,
-                self.offline,
+                settings,
                 lfs_requested,
             )?;
 
@@ -137,11 +140,7 @@ impl GitSource {
         } else {
             ident
         };
-        let checkout_path = self
-            .cache
-            .join("checkouts")
-            .join(&ident)
-            .join(short_id.as_str());
+        let checkout_path = cache.join("checkouts").join(&ident).join(short_id.as_str());
 
         // Check out `actual_rev` from the database to a scoped location on the
         // filesystem. This will use hard links and such to ideally make the
