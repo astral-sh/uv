@@ -1159,6 +1159,15 @@ jobs:
           args: --release --locked --out dist --features self-update --compatibility pypi
           before-script-linux: |
             scripts/install-cargo-extensions.sh
+
+            if [[ "${{ matrix.target }}" == "x86_64-unknown-linux-musl" ]]; then
+                # Fold functions whose addresses can be shared. The bundled musl startup code
+                # also supports packed relative relocations in the static PIE.
+                bundled_lld_dir="$(rustc --print sysroot)/lib/rustlib/$(rustc --print host-tuple)/bin/gcc-ld"
+                test -x "${bundled_lld_dir}/ld.lld"
+                RUSTFLAGS="${RUSTFLAGS:+${RUSTFLAGS} }-C link-arg=-B${bundled_lld_dir} -C link-arg=-fuse-ld=lld"
+                export RUSTFLAGS="${RUSTFLAGS} -C llvm-args=--addrsig -C link-arg=-Wl,--icf=safe,-z,pack-relative-relocs"
+            fi
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
       - name: "Test wheel"
