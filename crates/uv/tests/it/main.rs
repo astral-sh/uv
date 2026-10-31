@@ -16,6 +16,8 @@ mod ecosystem;
 
 mod help;
 
+mod in_process;
+
 mod network;
 
 #[cfg(feature = "test-pypi")]

@@ -16,6 +16,9 @@ test = false
 [lints]
 workspace = true
 
+[features]
+test-output = []
+
 [dependencies]
 uv-console = { workspace = true }
 uv-fs = { workspace = true }
