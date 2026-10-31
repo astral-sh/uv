@@ -163,6 +163,67 @@ fn select_variant_by_static_provider_order() -> Result<()> {
     Ok(())
 }
 
+/// An explicit AArch64 target installs the baseline wheel even when an Armv8.6-A wheel exists.
+#[test]
+fn aarch64_target_uses_platform_defaults() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::from_toml(indoc! {r#"
+        name = "aarch64-target-defaults"
+        root = {}
+
+        [expected]
+        satisfiable = true
+
+        [packages.ok.versions."1.0.0"]
+        wheel = false
+        sdist = false
+        wheel_tags = ["py3-none-linux_aarch64"]
+
+        [packages.ok.versions."1.0.0".variants]
+        namespaces = ["aarch64"]
+
+        [packages.ok.versions."1.0.0".variants.providers]
+        aarch64.requires = ["aarch64-variant-provider==0.2.0"]
+
+        [packages.ok.versions."1.0.0".variants.wheels]
+        arm8.properties = ["aarch64 :: version :: 8a"]
+        arm86.properties = ["aarch64 :: version :: 8.6a"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--index-url")
+        .arg(server.index_url())
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("--python-platform")
+        .arg("aarch64-unknown-linux-gnu")
+        .arg("ok==1.0.0"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0
+    ");
+    let installed = context.read(
+        context
+            .site_packages()
+            .join("ok-1.0.0.dist-info/variant.json"),
+    );
+    assert_json_snapshot!(serde_json::from_str::<Value>(&installed)?["variants"], @r#"
+    {
+      "arm8": {
+        "aarch64": {
+          "version": [
+            "8a"
+          ]
+        }
+      }
+    }
+    "#);
+    Ok(())
+}
+
 const X86_64_VARIANTS: &str = indoc! {r#"
     name = "x86-64-target-defaults"
     root = {}

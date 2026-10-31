@@ -190,6 +190,7 @@ impl Level {
                 }
                 detected
             }
+            CpuInfo::AppleSilicon { .. } | CpuInfo::LinuxAarch64 { .. } => PLATFORM_DEFAULT_LEVEL,
         }
     }
 }

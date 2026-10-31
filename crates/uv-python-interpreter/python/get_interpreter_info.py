@@ -611,17 +611,26 @@ def get_operating_system_and_architecture():
     return operating_system, architecture
 
 
-def _get_cpu_info():
-    """Detect CPU features, following archspec's detection method.
+def _get_cpu_info(architecture):
+    """Detect CPU features, following archspec's detection method on x86-64.
 
     Returns raw data to avoid bumping the cache when we want to do more detection in Rust.
     """
-    if sys.platform == "linux":
-        return _linux_x86_64_cpu_info()
-    if sys.platform == "darwin":
-        return _macos_cpu_info()
-    if os.name == "nt":
-        return _windows_x86_64_cpu_info()
+    architecture = architecture.lower()
+    if architecture in ("x86_64", "amd64"):
+        if sys.platform == "linux":
+            return _linux_x86_64_cpu_info()
+        elif sys.platform == "darwin":
+            return _macos_cpu_info("x86_64")
+        elif os.name == "nt":
+            return _windows_x86_64_cpu_info()
+    elif architecture in ("aarch64", "arm64"):
+        if sys.platform == "linux":
+            return _linux_aarch64_cpu_info()
+        elif sys.platform == "darwin":
+            return _macos_cpu_info("aarch64")
+    else:
+        return {"unsupported_architecture": architecture}
     return {"unavailable": f"No CPU probe for {sys.platform}"}
 
 
@@ -648,7 +657,7 @@ def _linux_x86_64_cpu_info():
     return {"unavailable": "No x86 flags in `/proc/cpuinfo`"}
 
 
-def _macos_cpu_info():
+def _macos_cpu_info(architecture):
     import errno
 
     try:
@@ -657,8 +666,8 @@ def _macos_cpu_info():
         # Python can be built without the optional _ctypes extension.
         return {"unavailable": str(error)}
 
-    # archspec reads these x86 feature keys using the sysctl command. Query them from this
-    # process instead: a separate executable could run under a different architecture.
+    # Read sysctl inside the interpreter. A subprocess may run under a different architecture,
+    # for example when Python runs under Rosetta. The x86 feature keys follow archspec.
     # https://github.com/archspec/archspec/blob/ebd3eb502d9205f1033ffc028d661f2fbece7dfc/archspec/cpu/detect.py#L290-L300
     sysctl = getattr(ctypes.CDLL(None, use_errno=True), "sysctlbyname", None)
     if sysctl is None:
@@ -672,19 +681,23 @@ def _macos_cpu_info():
     ]
     missing_key = (errno.ENOENT, errno.ENOTSUP, errno.EOPNOTSUPP)
     unavailable = (errno.EPERM, errno.EACCES, errno.ENOSYS)
-    flags = []
-    for key in (
-        b"machdep.cpu.features",
-        b"machdep.cpu.leaf7_features",
-        b"machdep.cpu.extfeatures",
-    ):
+    if architecture == "aarch64":
+        keys = (b"machdep.cpu.brand_string",)
+    else:
+        keys = (
+            b"machdep.cpu.features",
+            b"machdep.cpu.leaf7_features",
+            b"machdep.cpu.extfeatures",
+        )
+    values = []
+    for key in keys:
         size = ctypes.c_size_t()
         result = sysctl(key, None, ctypes.byref(size), None, 0)
         if result == 0 and size.value:
             buffer = ctypes.create_string_buffer(size.value)
             result = sysctl(key, buffer, ctypes.byref(size), None, 0)
             if result == 0 and buffer.value:
-                flags.extend(buffer.value.decode("ascii", errors="replace").split())
+                values.append(buffer.value.decode("ascii", errors="replace"))
         if result != 0:
             error = ctypes.get_errno()
             # An unsupported key must not hide features available through another key.
@@ -694,6 +707,11 @@ def _macos_cpu_info():
             if error in unavailable:
                 return {"unavailable": str(failure)}
             raise failure
+    if architecture == "aarch64":
+        if values:
+            return {"detected": {"kind": "apple_silicon", "brand": values[0]}}
+        return {"unavailable": "No Apple Silicon CPU brand reported by sysctl"}
+    flags = " ".join(values).split()
     if "AVX512F" in flags:
         # machdep reports hardware flags even when the kernel disables AVX-512 register state.
         # hw.optional.avx512f includes the kernel's check for usable AVX-512.
@@ -711,6 +729,47 @@ def _macos_cpu_info():
     if flags:
         return {"detected": {"kind": "flags", "flags": " ".join(flags)}}
     return {"unavailable": "No x86 feature flags reported by sysctl"}
+
+
+def _linux_aarch64_cpu_info():
+    try:
+        import ctypes
+    except ImportError as error:
+        # Python can be built without the optional _ctypes extension.
+        return {"unavailable": str(error)}
+
+    # The auxiliary vector describes instructions available to this process, even under
+    # emulation. /proc/cpuinfo can reflect the host and is only used to identify core models.
+    getauxval = getattr(ctypes.CDLL(None), "getauxval", None)
+    if getauxval is None:
+        return {"unavailable": "getauxval is unavailable"}
+    getauxval.argtypes = [ctypes.c_ulong]
+    getauxval.restype = ctypes.c_ulong
+    cores = set()
+    try:
+        with open("/proc/cpuinfo", encoding="ascii", errors="replace") as cpuinfo:
+            entries = cpuinfo.read().split("\n\n")
+    except (FileNotFoundError, NotADirectoryError, PermissionError) as error:
+        return {"unavailable": str(error)}
+    for entry in entries:
+        fields = {}
+        for line in entry.splitlines():
+            key, _, value = line.partition(":")
+            key = key.strip()
+            if key in ("processor", "CPU implementer", "CPU part"):
+                fields[key] = value.strip()
+        if "processor" in fields:
+            cores.add((fields.get("CPU implementer", ""), fields.get("CPU part", "")))
+    if not cores:
+        return {"unavailable": "No CPU cores in `/proc/cpuinfo`"}
+    return {
+        "detected": {
+            "kind": "linux_aarch64",
+            "cores": sorted(cores),
+            # AT_HWCAP through AT_HWCAP4. Missing entries read as zero on older kernels.
+            "hwcaps": [getauxval(key) for key in (16, 26, 29, 30)],
+        }
+    }
 
 
 def _windows_x86_64_cpu_info():
@@ -862,14 +921,14 @@ def main() -> None:
     elif os["name"] == "musllinux":
         manylinux_compatible = True
 
-    if architecture.lower() in ("x86_64", "amd64"):
-        try:
-            cpu_info = _get_cpu_info()
-        except Exception as error:  # noqa: BLE001
-            # Rust applies the preview policy to unexpected failures.
-            cpu_info = {"error": f"{type(error).__name__}: {error}"}
-    else:
-        cpu_info = {"unsupported_architecture": architecture}
+    try:
+        cpu_info = _get_cpu_info(architecture)
+    except PermissionError as error:
+        # An interpreter audit hook can deny ctypes access to the CPU probe.
+        cpu_info = {"unavailable": str(error)}
+    except Exception as error:  # noqa: BLE001
+        # Rust applies the preview policy to unexpected failures.
+        cpu_info = {"error": f"{type(error).__name__}: {error}"}
 
     # By default, pip uses sysconfig on Python 3.10+.
     # But Python distributors can override this decision by setting:
