@@ -531,6 +531,41 @@ fn run_pep723_script_empty_dependency() -> Result<()> {
     Ok(())
 }
 
+/// A `# /// script` line that is not a valid opening tag (here, indented inside a docstring) should
+/// not hide a valid metadata block later in the file.
+#[test]
+fn run_pep723_script_after_invalid_opening_tag() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r#"
+        """Usage:
+
+            # /// script
+        """
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "iniconfig",
+        # ]
+        # ///
+
+        import iniconfig
+       "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("main.py"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+
+    Ok(())
+}
+
 /// A PEP 723 script with a long file name should still succeed at creating a script environment on
 /// Windows.
 #[test]

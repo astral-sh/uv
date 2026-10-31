@@ -501,15 +501,18 @@ impl ScriptTag {
     ///
     /// See: <https://peps.python.org/pep-0723/>
     pub fn parse(contents: &[u8]) -> Result<Option<Self>, Pep723Error> {
-        // Identify the opening pragma.
-        let Some(index) = FINDER.find(contents) else {
+        // Identify the opening pragma, which must span an entire line. Skip any earlier occurrences
+        // that don't, e.g., an indented `# /// script` in a docstring.
+        let Some(index) = FINDER.find_iter(contents).find(|&index| {
+            // The opening pragma must be the first line, or immediately preceded by a newline.
+            let is_line_start = index == 0 || matches!(contents[index - 1], b'\r' | b'\n');
+            let rest = &contents[index + FINDER.needle().len()..];
+            let is_line_end =
+                rest.is_empty() || rest.starts_with(b"\n") || rest.starts_with(b"\r\n");
+            is_line_start && is_line_end
+        }) else {
             return Ok(None);
         };
-
-        // The opening pragma must be the first line, or immediately preceded by a newline.
-        if !(index == 0 || matches!(contents[index - 1], b'\r' | b'\n')) {
-            return Ok(None);
-        }
 
         // Extract the preceding content.
         let prelude = std::str::from_utf8(&contents[..index])?;
