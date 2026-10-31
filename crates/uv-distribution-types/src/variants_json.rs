@@ -194,11 +194,6 @@ impl VariantsJsonContent {
             .map(|dependency| (&dependency.name, &dependency.versions))
     }
 
-    /// The label described by an individual wheel's metadata.
-    pub fn wheel_label(&self) -> Option<&VariantLabel> {
-        self.variants.keys().exactly_one().ok()
-    }
-
     /// Score a variant using the target's ordered compatible features and values.
     ///
     /// Returns `None` if the label is missing or any platform feature is unsupported.

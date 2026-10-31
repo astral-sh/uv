@@ -163,10 +163,9 @@ fn select_variant_by_static_provider_order() -> Result<()> {
     Ok(())
 }
 
-/// Reject the first wheel when only one of its ABI dependencies matches. The other wheel
-/// accepts either Torch prefix, including a local version with an implicit trailing zero.
+/// Select the extension wheel built for the requested PyTorch minor release.
 #[test]
-fn select_wheel_by_abi_dependencies() -> Result<()> {
+fn select_wheel_by_abi_dependency() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let server = PackseServer::from_toml(indoc! {r#"
         name = "abi-dependency"
@@ -176,23 +175,18 @@ fn select_wheel_by_abi_dependencies() -> Result<()> {
         [packages.extension.versions."1.0.0"]
         wheel = false
         sdist = false
-        requires = ["torch", "abi-lib"]
+        requires = ["torch"]
 
         [packages.extension.versions."1.0.0".variants]
-        namespaces = ["runtime"]
-        providers.runtime.builtin = "abi_dependency"
+        namespaces = ["abi_dependency"]
+        providers.abi_dependency.builtin = "abi_dependency"
 
         [packages.extension.versions."1.0.0".variants.wheels]
-        first.properties = ["runtime :: torch :: 2", "runtime :: abi_lib :: 1"]
-        second.properties = [
-            "runtime :: torch :: 2.8",
-            "runtime :: torch :: 2.9.0",
-            "runtime :: abi_lib :: 2",
-        ]
+        torch28.properties = ["abi_dependency :: torch :: 2.8"]
+        torch29.properties = ["abi_dependency :: torch :: 2.9"]
 
-        [packages.torch.versions."2.9+cpu"]
-        [packages.abi-lib.versions."1"]
-        [packages.abi-lib.versions."2"]
+        [packages.torch.versions."2.8.1"]
+        [packages.torch.versions."2.9.1"]
     "#})?;
 
     uv_snapshot!(context.filters(), context.pip_install()
@@ -201,44 +195,14 @@ fn select_wheel_by_abi_dependencies() -> Result<()> {
         .arg("--preview-features")
         .arg("wheel-variants")
         .arg("extension")
-        .arg("abi-lib==2"), @"
+        .arg("torch==2.8.1"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved 3 packages in [TIME]
-    Prepared 3 packages in [TIME]
-    Installed 3 packages in [TIME]
-     + abi-lib==2
-     + extension==1.0.0
-     + torch==2.9+cpu
-    ");
-    let installed = context.read(
-        context
-            .site_packages()
-            .join("extension-1.0.0.dist-info/variant.json"),
-    );
-    assert_eq!(
-        serde_json::from_str::<Value>(&installed)?["variants"],
-        json!({
-            "second": { "runtime": { "abi_lib": ["2"], "torch": ["2.8", "2.9.0"] } }
-        })
-    );
-    // Changing the runtime dependency selects a different wheel of the same extension release.
-    uv_snapshot!(context.filters(), context.pip_install()
-        .arg("--index-url")
-        .arg(server.index_url())
-        .arg("--preview-features")
-        .arg("wheel-variants")
-        .arg("extension")
-        .arg("abi-lib==1"), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Resolved 3 packages in [TIME]
+    Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
-    Uninstalled 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     - abi-lib==2
-     + abi-lib==1
-     ~ extension==1.0.0
+     + extension==1.0.0
+     + torch==2.8.1
     ");
     let installed = context.read(
         context
@@ -247,9 +211,7 @@ fn select_wheel_by_abi_dependencies() -> Result<()> {
     );
     assert_eq!(
         serde_json::from_str::<Value>(&installed)?["variants"],
-        json!({
-            "first": { "runtime": { "abi_lib": ["1"], "torch": ["2"] } }
-        })
+        json!({ "torch28": { "abi_dependency": { "torch": ["2.8"] } } }),
     );
     Ok(())
 }

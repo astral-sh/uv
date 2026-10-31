@@ -2,7 +2,6 @@ use std::ops::Deref;
 use std::sync::Arc;
 
 use uv_normalize::{ExtraName, GroupName, PackageName};
-use uv_pep440::Version;
 use uv_pep508::MarkerTree;
 use uv_pypi_types::ConflictItemRef;
 use uv_resolver_types::PackageNodeKind;
@@ -48,15 +47,6 @@ pub enum PubGrubPackageInner {
     Python(PubGrubPython),
     /// A system package, which is used to represent a non-Python package.
     System(PackageName),
-    /// An artifact of a release with ABI-dependent wheels. Its solver versions index the
-    /// ranked artifacts, so rejecting a wheel does not reject the package version.
-    Wheel {
-        name: PackageName,
-        release: Version,
-        /// Each base, extra, or group reads its own dependencies from the selected artifact.
-        /// They pin the same rank on the shared node (`None`) to agree on a single file.
-        kind: Option<PackageNodeKind>,
-    },
     /// A Python package.
     Package {
         name: PackageName,
@@ -145,7 +135,6 @@ impl PubGrubPackage {
         match &**self {
             PubGrubPackageInner::Root(_)
             | PubGrubPackageInner::Python(_)
-            | PubGrubPackageInner::Wheel { .. }
             | PubGrubPackageInner::System(_)
             | PubGrubPackageInner::Package { .. } => None,
             PubGrubPackageInner::Group { .. } => {
@@ -168,9 +157,7 @@ impl PubGrubPackage {
         match &**self {
             // A root can never be a dependency of another package, and a `Python` pubgrub
             // package is never returned by `get_dependencies`. So these cases never occur.
-            PubGrubPackageInner::Root(None)
-            | PubGrubPackageInner::Python(_)
-            | PubGrubPackageInner::Wheel { .. } => None,
+            PubGrubPackageInner::Root(None) | PubGrubPackageInner::Python(_) => None,
             PubGrubPackageInner::Root(Some(name))
             | PubGrubPackageInner::System(name)
             | PubGrubPackageInner::Package { name, .. }
@@ -186,7 +173,6 @@ impl PubGrubPackage {
         match &**self {
             PubGrubPackageInner::Root(_)
             | PubGrubPackageInner::Python(_)
-            | PubGrubPackageInner::Wheel { .. }
             | PubGrubPackageInner::System(_) => None,
             PubGrubPackageInner::Package { name, .. }
             | PubGrubPackageInner::Extra { name, .. }
@@ -203,7 +189,6 @@ impl PubGrubPackage {
             // package is never returned by `get_dependencies`. So these cases never occur.
             PubGrubPackageInner::Root(_)
             | PubGrubPackageInner::Python(_)
-            | PubGrubPackageInner::Wheel { .. }
             | PubGrubPackageInner::System(_) => MarkerTree::TRUE,
             PubGrubPackageInner::Package { marker, .. }
             | PubGrubPackageInner::Extra { marker, .. }
@@ -222,7 +207,6 @@ impl PubGrubPackage {
             // package is never returned by `get_dependencies`. So these cases never occur.
             PubGrubPackageInner::Root(_)
             | PubGrubPackageInner::Python(_)
-            | PubGrubPackageInner::Wheel { .. }
             | PubGrubPackageInner::System(_)
             | PubGrubPackageInner::Package {
                 kind: PackageNodeKind::Base | PackageNodeKind::Group(_),
@@ -248,7 +232,6 @@ impl PubGrubPackage {
             // package is never returned by `get_dependencies`. So these cases never occur.
             PubGrubPackageInner::Root(_)
             | PubGrubPackageInner::Python(_)
-            | PubGrubPackageInner::Wheel { .. }
             | PubGrubPackageInner::System(_)
             | PubGrubPackageInner::Package {
                 kind: PackageNodeKind::Base | PackageNodeKind::Extra(_),
@@ -272,7 +255,6 @@ impl PubGrubPackage {
         match &**self {
             PubGrubPackageInner::Root(_)
             | PubGrubPackageInner::Python(_)
-            | PubGrubPackageInner::Wheel { .. }
             | PubGrubPackageInner::System(_) => None,
             PubGrubPackageInner::Package {
                 name,
@@ -329,7 +311,6 @@ impl PubGrubPackage {
         match *Arc::make_mut(&mut self.0) {
             PubGrubPackageInner::Root(_)
             | PubGrubPackageInner::Python(_)
-            | PubGrubPackageInner::Wheel { .. }
             | PubGrubPackageInner::System(_) => {}
             PubGrubPackageInner::Package { ref mut marker, .. }
             | PubGrubPackageInner::Extra { ref mut marker, .. }
@@ -346,7 +327,6 @@ impl PubGrubPackage {
         match &**self {
             PubGrubPackageInner::Root(_) => "root",
             PubGrubPackageInner::Python(_) => "python",
-            PubGrubPackageInner::Wheel { .. } => "wheel",
             PubGrubPackageInner::System(_) => "system",
             PubGrubPackageInner::Package { .. } => "package",
             PubGrubPackageInner::Extra { .. } => "extra",
@@ -380,7 +360,6 @@ impl std::fmt::Display for PubGrubPackageInner {
                 }
             }
             Self::Python(_) => write!(f, "Python"),
-            Self::Wheel { name, release, .. } => write!(f, "wheel for {name}=={release}"),
             Self::System(name) => write!(f, "system:{name}"),
             Self::Package {
                 name,

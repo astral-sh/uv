@@ -103,26 +103,6 @@ pub(crate) struct PubGrubDependency {
 }
 
 impl PubGrubDependency {
-    /// Depend on an artifact of this release, independently of its PyPI version.
-    pub(crate) fn wheel(
-        name: &PackageName,
-        release: &Version,
-        kind: Option<PackageNodeKind>,
-        version: Range<Version>,
-    ) -> Self {
-        Self {
-            package: PubGrubPackageInner::Wheel {
-                name: name.clone(),
-                release: release.clone(),
-                kind,
-            }
-            .into(),
-            version,
-            parent: None,
-            source: DependencySource::Unspecified,
-        }
-    }
-
     /// Convert flattened requirements into PubGrub dependency edges.
     ///
     /// An empty range cannot retain the specifiers that produced it, so return the source
@@ -266,9 +246,7 @@ impl PubGrubDependency {
                 PubGrubPackageInner::Python(_) => {
                     unreachable!("Python package in dependencies")
                 }
-                PubGrubPackageInner::Wheel { .. } | PubGrubPackageInner::System(_) => {
-                    unreachable!("System package in dependencies")
-                }
+                PubGrubPackageInner::System(_) => unreachable!("System package in dependencies"),
             }
         }))
     }

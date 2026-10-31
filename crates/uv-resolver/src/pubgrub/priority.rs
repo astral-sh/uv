@@ -124,10 +124,6 @@ impl PubGrubPriorities {
             PubGrubPackageInner::Python(PubGrubPython::Target) => {
                 (PubGrubPriority::Fixed, PubGrubTiebreaker::from(2))
             }
-            PubGrubPackageInner::Wheel { .. } => (
-                PubGrubPriority::Unspecified(Reverse(usize::MAX)),
-                self.virtual_package_tiebreaker[package],
-            ),
             PubGrubPackageInner::System(_) => (PubGrubPriority::Fixed, PubGrubTiebreaker::from(3)),
             PubGrubPackageInner::Marker { name, .. }
             | PubGrubPackageInner::Extra { name, .. }

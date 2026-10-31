@@ -7,13 +7,10 @@ use smallvec::SmallVec;
 use tracing::{debug, trace};
 
 use uv_configuration::IndexStrategy;
-use uv_distribution_types::{
-    DistributionMetadata, IndexUrl, InstalledDist, Name, ResolutionRecorder,
-};
+use uv_distribution_types::{DistributionMetadata, IndexUrl, Name, ResolutionRecorder};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_platform_tags::Tags;
-use uv_preview::PreviewFeature;
 use uv_types::InstalledPackagesProvider;
 
 use crate::preferences::{Entry, PreferenceSource, Preferences};
@@ -280,7 +277,7 @@ impl CandidateSelector {
                 match installed_dists.as_slice() {
                     [] => {}
                     [dist] => {
-                        if dist.version() == version && !needs_abi_resolution(dist) {
+                        if dist.version() == version {
                             debug!(
                                 "Found installed version of `{dist}` that satisfies preference in {range}"
                             );
@@ -393,7 +390,7 @@ impl CandidateSelector {
                 let version = dist.version();
 
                 // Respect the version range for this requirement.
-                if !range.contains(version) || needs_abi_resolution(dist) {
+                if !range.contains(version) {
                     return None;
                 }
 
@@ -743,18 +740,6 @@ impl CandidateSelector {
         );
         None
     }
-}
-
-/// An installed ABI-dependent wheel can be reused once we know the resolved runtime versions.
-fn needs_abi_resolution(dist: &InstalledDist) -> bool {
-    uv_preview::is_enabled(PreviewFeature::WheelVariants)
-        && match dist.read_variant() {
-            Ok(Some(metadata)) => metadata
-                .wheel_label()
-                .is_none_or(|label| metadata.abi_dependencies(label).next().is_some()),
-            Ok(None) => false,
-            Err(_) => true,
-        }
 }
 
 /// Tracks membership in a range while visiting versions monotonically.

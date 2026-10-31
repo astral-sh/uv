@@ -22,7 +22,6 @@ use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_pep508::VerbatimUrl;
 use uv_platform_tags::{AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagCompatibility, Tags};
-use uv_preview::PreviewFeature;
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_python_interpreter::PythonEnvironment;
 use uv_redacted::SafeUrl;
@@ -278,33 +277,6 @@ impl<'a> Planner<'a> {
         Self { resolution }
     }
 
-    fn matches_selected_variant(&self, installed: &InstalledDist, dist: &ResolvedDist) -> bool {
-        if !uv_preview::is_enabled(PreviewFeature::WheelVariants) {
-            return true;
-        }
-        let ResolvedDist::Installable { dist, .. } = dist else {
-            return true;
-        };
-        let selected = match dist.as_ref() {
-            Dist::Built(wheel) => wheel.wheel_filename().variant(),
-            Dist::Source(_) => None,
-        };
-        match installed.read_variant() {
-            Ok(None) => selected.is_none(),
-            Ok(Some(metadata)) => selected.is_some_and(|label| {
-                metadata.wheel_label() == Some(label)
-                    && metadata.abi_dependencies(label).all(|(name, versions)| {
-                        self.resolution
-                            .distributions()
-                            .find(|dist| dist.name() == name)
-                            .and_then(ResolvedDist::version)
-                            .is_some_and(|version| versions.contains(version))
-                    })
-            }),
-            Err(_) => false,
-        }
-    }
-
     /// Partition a set of requirements into those that should be linked from the cache, those that
     /// need to be downloaded, and those that should be removed.
     ///
@@ -415,13 +387,10 @@ impl<'a> Planner<'a> {
                                 );
                             }
                             RequirementSatisfaction::Satisfied => {
-                                if self.matches_selected_variant(installed, dist) {
-                                    debug!("Requirement already installed: {installed}");
-                                    continue;
-                                }
-                                debug!(
-                                    "Reinstalling {installed} to use the selected wheel variant"
-                                );
+                                // TODO(konsti): Reinstall if the resolver selected a different
+                                // wheel variant, even when the installed variant is compatible.
+                                debug!("Requirement already installed: {installed}");
+                                continue;
                             }
                             RequirementSatisfaction::OutOfDate => {
                                 debug!("Requirement installed, but not fresh: {installed}");
