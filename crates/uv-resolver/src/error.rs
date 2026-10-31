@@ -121,6 +121,9 @@ pub enum ResolveError {
     #[error("Hash-checking is required, but no trusted hash was provided for: `{0}`")]
     UnhashedPackage(PackageName),
 
+    #[error("All pinned hashes for `{0}=={1}` belong to wheels excluded by `tool.uv.environments`")]
+    ExcludedPinnedHashes(PackageName, Version),
+
     #[error("found conflicting distribution in resolution: {0}")]
     ConflictingDistribution(ConflictingDistributionError),
 
@@ -152,6 +155,7 @@ impl ResolveError {
             | Self::DistributionType(_)
             | Self::NoSolution(_)
             | Self::UnhashedPackage(_)
+            | Self::ExcludedPinnedHashes(..)
             | Self::PackageUnavailable(_)
             | Self::ConflictMarker(_)
             | Self::MismatchedPackageName { .. } => true,
@@ -172,6 +176,10 @@ impl uv_errors::Hinted for ResolveError {
             Self::Client(error) => uv_errors::Hinted::hints(error),
             Self::Distribution(error) => uv_errors::Hinted::hints(error),
             Self::Dependencies(error, ..) => uv_errors::Hinted::hints(error.as_ref()),
+            Self::ExcludedPinnedHashes(name, _) => format!(
+                "Use `--upgrade-package {name}` to generate hashes for the supported environments."
+            )
+            .into(),
             _ => uv_errors::Hints::none(),
         }
     }

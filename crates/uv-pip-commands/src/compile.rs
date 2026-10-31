@@ -22,8 +22,8 @@ use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExtraBuildVariables, HashCollection, Index, IndexLocations,
-    MinimumLibcVersion, NameRequirementSpecification, Origin, PackageConfigSettings, Requirement,
-    RequiresPython, Verbatim,
+    MinimumLibcVersion, NameRequirementSpecification, Origin, PackageConfigSettings,
+    ProjectEnvironments, Requirement, RequiresPython, Verbatim,
 };
 use uv_fs::{CWD, Simplified};
 use uv_git::ResolvedRepositoryReference;
@@ -76,7 +76,7 @@ pub async fn pip_compile(
     overrides_from_workspace: Vec<Override<Requirement>>,
     excludes_from_workspace: Vec<ExcludeDependency>,
     build_constraints_from_workspace: Vec<NameRequirementSpecification>,
-    environments: SupportedEnvironments,
+    environments: ProjectEnvironments,
     required_environments: SupportedEnvironments,
     minimum_libc_version: Option<MinimumLibcVersion>,
     extras: ExtrasSpecification,
@@ -382,6 +382,10 @@ pub async fn pip_compile(
         PythonRequirement::from_interpreter(&interpreter)
     };
 
+    let libc_environments = universal
+        .then(|| environments.libc_environments())
+        .flatten();
+    let environments = environments.markers();
     let artifact_environments = if universal {
         SupportedEnvironments::from_markers(
             environments
@@ -562,6 +566,7 @@ pub async fn pip_compile(
         .torch_backend(torch_backend)
         .build_options(build_options.clone())
         .artifact_environments(artifact_environments)
+        .libc_environments(libc_environments)
         .minimum_libc_version(if universal {
             minimum_libc_version
         } else {
@@ -608,6 +613,24 @@ pub async fn pip_compile(
             return Err(UvError::from(err).into());
         }
     };
+
+    // pylock.toml can hash each eligible file during serialization. A requirements file must
+    // already have a digest before it can emit a hash-checked registry requirement.
+    if generate_hashes
+        && libc_environments.is_some()
+        && matches!(format, PipCompileFormat::RequirementsTxt)
+        && let Some((_, dist)) = resolution.base_dists().find(|(_, dist)| {
+            dist.dist.index().is_some()
+                && dist.hashes.is_empty()
+                && !no_emit_packages.contains(&dist.name)
+        })
+    {
+        return Err(anyhow!(
+            "No hashes are available for `{name}=={version}` in the configured Linux libc environments",
+            name = dist.name,
+            version = dist.version
+        ));
+    }
 
     if generate_hashes && preview.is_enabled(PreviewFeature::ArtifactHashFiltering) {
         resolution.retain_allowed_distribution_hashes(&build_options);

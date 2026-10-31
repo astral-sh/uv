@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use uv_audit::osv;
 use uv_auth::CredentialsFromUrlError;
 use uv_command_support::UvError;
-use uv_distribution_types::{IndexCredentialsError, IndexUrlError, RequiresPython};
+use uv_distribution_types::{IndexCredentialsError, IndexUrlError, LinuxLibc, RequiresPython};
 use uv_macros::DebugNoInline;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
@@ -56,6 +56,9 @@ pub enum EnvironmentError {
         "The current Python platform is not compatible with the lockfile's supported environments: {0}"
     )]
     LockedPlatformIncompatibility(String),
+
+    #[error("The lockfile does not support {0} on the requested Linux platform")]
+    LockedLibcIncompatibility(LinuxLibc),
 
     #[error("Project virtual environment directory `{0}` cannot be used because {1}")]
     InvalidProjectEnvironmentDir(PathBuf, String),
@@ -224,6 +227,7 @@ impl From<EnvironmentError> for UvError {
             | EnvironmentError::DisjointLockedRequiresPython { .. }
             | EnvironmentError::LockedPythonIncompatibility(..)
             | EnvironmentError::LockedPlatformIncompatibility(..)
+            | EnvironmentError::LockedLibcIncompatibility(..)
             | EnvironmentError::InvalidProjectEnvironmentDir(..)
             | EnvironmentError::InvalidScriptEnvironmentDir(..)
             | EnvironmentError::MalwareFound
@@ -278,6 +282,7 @@ impl uv_errors::Hinted for EnvironmentError {
             | Self::DisjointLockedRequiresPython { .. }
             | Self::LockedPythonIncompatibility(..)
             | Self::LockedPlatformIncompatibility(..)
+            | Self::LockedLibcIncompatibility(..)
             | Self::InvalidProjectEnvironmentDir(..)
             | Self::InvalidScriptEnvironmentDir(..)
             | Self::MalwareFound

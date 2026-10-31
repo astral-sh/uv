@@ -172,10 +172,14 @@
     },
     "environments": {
       "description": "A list of environment markers, e.g., `python_version >= '3.6'`.",
-      "type": ["array", "null"],
-      "items": {
-        "type": "string"
-      }
+      "anyOf": [
+        {
+          "$ref": "#/definitions/ProjectEnvironments"
+        },
+        {
+          "type": "null"
+        }
+      ]
     },
     "exclude-dependencies": {
       "description": "Dependencies to exclude when resolving the project's dependencies.\n\nExcludes are used to prevent a package from being selected during resolution,\nregardless of whether it's requested by any other package. When a package is excluded,\nit will be omitted from the dependency list entirely.\n\nIncluding a package as an exclusion will prevent it from being installed, even if\nit's requested by transitive dependencies. This can be useful for removing optional\ndependencies or working around packages with broken dependencies.\n\nExclusions can be limited to the dependencies declared by a specific package version by\nusing a table with `package` and `dependencies`. The `package` table identifies the package\nwhose dependencies will be excluded by `name` and, optionally, `version`. If `version` is\nomitted, the exclusions apply to all versions of that package. A version-specific entry\ntakes precedence over an all-versions entry.\n\n!!! note\n    In `uv lock`, `uv sync`, and `uv run`, uv will only read `exclude-dependencies` from\n    the `pyproject.toml` at the workspace root, and will ignore any declarations in other\n    workspace members or `uv.toml` files.",
@@ -1253,6 +1257,25 @@
         }
       ]
     },
+    "LinuxEnvironment": {
+      "description": "A marker whose Linux targets are restricted to one libc family.",
+      "type": "object",
+      "properties": {
+        "libc": {
+          "$ref": "#/definitions/LinuxLibc"
+        },
+        "marker": {
+          "$ref": "#/definitions/MarkerTree"
+        }
+      },
+      "additionalProperties": false,
+      "required": ["marker", "libc"]
+    },
+    "LinuxLibc": {
+      "description": "The Linux libc family selected by a supported environment.",
+      "type": "string",
+      "enum": ["glibc", "musl"]
+    },
     "MarkerTree": {
       "description": "A PEP 508-compliant marker expression, e.g., `sys_platform == 'Darwin'`",
       "type": "string"
@@ -1918,6 +1941,30 @@
           "type": "array",
           "items": {
             "$ref": "#/definitions/PreviewFeature"
+          }
+        }
+      ]
+    },
+    "ProjectEnvironment": {
+      "description": "One entry in `tool.uv.environments`.",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/MarkerTree"
+        },
+        {
+          "$ref": "#/definitions/LinuxEnvironment"
+        }
+      ]
+    },
+    "ProjectEnvironments": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ProjectEnvironment"
           }
         }
       ]

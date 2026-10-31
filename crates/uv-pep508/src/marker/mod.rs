@@ -38,6 +38,23 @@ pub mod ser {
         marker.contents().is_none()
     }
 
+    /// Skip an empty marker domain when the field defaults to false.
+    pub fn is_false(marker: &MarkerTree) -> bool {
+        marker.is_false()
+    }
+
+    /// Serialize a marker in a position where even an unconditional marker needs a string.
+    pub fn serialize_explicit<S: serde::Serializer>(
+        marker: &MarkerTree,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error> {
+        if let Some(contents) = marker.contents() {
+            contents.serialize(serializer)
+        } else {
+            serializer.serialize_str("python_version >= '0'")
+        }
+    }
+
     /// A helper for `serde(serialize_with)`.
     ///
     /// Note this will panic if `marker.contents()` is `None`, and so should be paired with `is_empty`.

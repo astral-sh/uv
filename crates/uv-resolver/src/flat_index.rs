@@ -10,14 +10,15 @@ use uv_client::{
 use uv_configuration::BuildOptions;
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
-    File, Index, IndexEntryFilename, IndexLocations, IndexUrl, MinimumLibcVersion,
-    RegistryBuiltWheel, RegistrySourceDist,
+    File, Index, IndexEntryFilename, IndexLocations, IndexUrl, RegistryBuiltWheel,
+    RegistrySourceDist,
 };
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_platform_tags::{IncompatibleTag, TagCompatibility, Tags};
 use uv_preview::PreviewFeature;
 use uv_pypi_types::HashDigest;
+use uv_resolver_types::LibcPolicy;
 use uv_types::HashStrategy;
 
 use crate::prioritized_distribution::{
@@ -90,21 +91,23 @@ impl FlatDistributions {
         tags: Option<&Tags>,
         hasher: &HashStrategy,
         build_options: &BuildOptions,
-        minimum_libc_version: Option<MinimumLibcVersion>,
+        libc: LibcPolicy,
     ) -> Self {
         let mut distributions = Self::default();
         for entry in entries {
             let (filename, file, index) = entry.into_parts();
             match filename {
-                IndexEntryFilename::DistFilename(filename) => distributions.add_file(
-                    file,
-                    filename,
-                    tags,
-                    hasher,
-                    build_options,
-                    index,
-                    minimum_libc_version,
-                ),
+                IndexEntryFilename::DistFilename(filename) => {
+                    distributions.add_file(
+                        file,
+                        filename,
+                        tags,
+                        hasher,
+                        build_options,
+                        index,
+                        libc,
+                    );
+                }
                 IndexEntryFilename::VariantJson(filename) => {
                     distributions
                         .0
@@ -137,7 +140,7 @@ impl FlatDistributions {
         hasher: &HashStrategy,
         build_options: &BuildOptions,
         index: IndexUrl,
-        minimum_libc_version: Option<MinimumLibcVersion>,
+        libc: LibcPolicy,
     ) {
         // No `requires-python` here: for source distributions, we don't have that information;
         // for wheels, we read it lazily only when selected.
@@ -158,12 +161,10 @@ impl FlatDistributions {
                     index,
                     size_is_authoritative: false,
                 };
-                self.0.entry(version).or_default().insert_built(
-                    dist,
-                    vec![],
-                    compatibility,
-                    minimum_libc_version,
-                );
+                self.0
+                    .entry(version)
+                    .or_default()
+                    .insert_built(dist, vec![], compatibility, libc);
             }
             DistFilename::SourceDistFilename(filename) => {
                 let compatibility = Self::source_dist_compatibility(

@@ -9,7 +9,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 
 use uv_configuration::{Constraints, DependencyModifierScope, DependencyModifiers};
 use uv_distribution_types::{
-    DistributionId, HashCollection, IndexUrl, Name, Requirement, RequiresPython,
+    DistributionId, HashCollection, IndexUrl, LibcEnvironments, Name, Requirement, RequiresPython,
     ResolutionDiagnostic, parse_url_hashes,
 };
 use uv_git::GitResolver;
@@ -27,7 +27,9 @@ use crate::resolver::{
     Resolution, ResolutionDependencyEdge, ResolutionNode, ResolutionPackage, SelectedDistribution,
 };
 use crate::universal_marker::{ConflictMarker, UniversalMarker};
-use crate::{InMemoryIndex, MetadataResponse, Options, ResolveError, VersionsResponse};
+use crate::{
+    InMemoryIndex, MetadataResponse, Options, PrioritizedDist, ResolveError, VersionsResponse,
+};
 
 /// Merge completed forks without retaining their duplicate graphs or unused artifact pins.
 pub(crate) struct ResolutionGraphBuilder<'a> {
@@ -196,7 +198,7 @@ impl<'a> ResolutionGraphBuilder<'a> {
             report_missing_lower_bounds(&graph, &mut diagnostics, &constraints, &modifiers);
         }
 
-        let output = ResolverOutput {
+        let mut output = ResolverOutput {
             graph,
             requires_python,
             fork_markers,
@@ -206,6 +208,12 @@ impl<'a> ResolutionGraphBuilder<'a> {
             modifiers,
             options,
         };
+
+        if let Some(environments) = output.options.libc.environments
+            && self.hasher.collection() != HashCollection::None
+        {
+            filter_package_hashes(&mut output, self.index, self.preferences, environments)?;
+        }
 
         // We only do conflicting distribution detection when no
         // conflicting groups have been specified. The reason here
@@ -366,10 +374,10 @@ fn get_hashes(
     in_memory: &InMemoryIndex,
 ) -> HashDigests {
     // 1. Look for hashes from the lockfile.
-    if let Some(digests) = preferences.match_hashes(name, version) {
-        if !digests.is_empty() {
-            return HashDigests::from(digests);
-        }
+    if let Some(digests) = preferences.match_hashes(name, version)
+        && !digests.is_empty()
+    {
+        return HashDigests::from(digests);
     }
 
     // 2. Preserve trusted hashes for this URL or path. Wheel metadata lookup does not always
@@ -405,54 +413,109 @@ fn get_hashes(
     }
 
     // 5. Look for hashes from the registry, which are served at the package level.
-    if url.is_none() {
-        // Query the implicit and explicit indexes (lazily) for the hashes.
-        let implicit_response = in_memory.implicit().get(name);
-        let mut explicit_response = None;
-
-        // Search in the implicit indexes.
-        let hashes = implicit_response
-            .as_ref()
-            .and_then(|response| {
-                if let VersionsResponse::Found(version_maps) = &**response {
-                    Some(version_maps)
-                } else {
-                    None
-                }
+    if url.is_none()
+        && let Some(mut hashes) =
+            with_registry_version(in_memory, name, index, version, |registry| {
+                HashDigests::from(registry.hashes())
             })
-            .into_iter()
-            .flatten()
-            .filter(|version_map| version_map.index() == index)
-            .find_map(|version_map| version_map.hashes(version))
-            .or_else(|| {
-                // Search in the explicit indexes.
-                explicit_response = index
-                    .and_then(|index| in_memory.explicit().get(&(name.clone(), index.clone())));
-                explicit_response
-                    .as_ref()
-                    .and_then(|response| {
-                        if let VersionsResponse::Found(version_maps) = &**response {
-                            Some(version_maps)
-                        } else {
-                            None
-                        }
-                    })
-                    .into_iter()
-                    .flatten()
-                    .filter(|version_map| version_map.index() == index)
-                    .find_map(|version_map| version_map.hashes(version))
-            });
-
-        if let Some(hashes) = hashes {
-            let mut digests = HashDigests::from(hashes);
-            digests.sort_unstable();
-            if !digests.is_empty() {
-                return digests;
-            }
-        }
+    {
+        hashes.sort_unstable();
+        return hashes;
     }
 
     HashDigests::empty()
+}
+
+/// Read a registry version from the implicit or explicit index where it was selected.
+fn with_registry_version<T>(
+    in_memory: &InMemoryIndex,
+    name: &PackageName,
+    index: Option<&IndexUrl>,
+    version: &Version,
+    f: impl Fn(&PrioritizedDist) -> T,
+) -> Option<T> {
+    let lookup = |response: &VersionsResponse| {
+        let VersionsResponse::Found(versions) = response else {
+            return None;
+        };
+        versions
+            .iter()
+            .find_map(|map| {
+                if map.index() == index {
+                    return map.get(version);
+                }
+                // A find-links file can be selected from a flat index or alongside files from a
+                // Simple API index. In both cases the selected file records its own source.
+                let dist = map.get(version)?;
+                (dist.get()?.for_installation().index() == index).then_some(dist)
+            })
+            .map(&f)
+    };
+    in_memory
+        .implicit()
+        .get(name)
+        .as_deref()
+        .and_then(lookup)
+        .or_else(|| {
+            in_memory
+                .explicit()
+                .get(&(name.clone(), index?.clone()))
+                .as_deref()
+                .and_then(lookup)
+        })
+}
+
+/// Apply a registry package's reachable libc environments to the hashes shared by all its extras.
+fn filter_package_hashes(
+    output: &mut ResolverOutput,
+    index: &InMemoryIndex,
+    preferences: &Preferences,
+    environments: LibcEnvironments,
+) -> Result<(), ResolveError> {
+    let mut packages = FxHashMap::default();
+    for (_, dist) in output.base_dists() {
+        let Some(source) = dist.dist.index() else {
+            continue;
+        };
+        let pinned = preferences
+            .match_hashes(&dist.name, &dist.version)
+            .is_some_and(|hashes| !hashes.is_empty());
+        let Some(hashes) =
+            with_registry_version(index, &dist.name, Some(source), &dist.version, |registry| {
+                registry.filter_libc_hashes(
+                    &dist.hashes,
+                    environments,
+                    dist.marker.pep508(),
+                    index.distributions(),
+                    pinned,
+                )
+            })
+            .flatten()
+        else {
+            continue;
+        };
+        if hashes.is_empty() && pinned {
+            return Err(ResolveError::ExcludedPinnedHashes(
+                dist.name.clone(),
+                dist.version.clone(),
+            ));
+        }
+        packages.insert(
+            (dist.name.clone(), dist.version.clone(), source.clone()),
+            hashes,
+        );
+    }
+    // An extra can have a narrower marker than the base, but it installs the same distribution.
+    for node in output.graph.node_weights_mut() {
+        if let ResolutionGraphNode::Dist(dist) = node
+            && let Some(source) = dist.dist.index()
+            && let Some(hashes) =
+                packages.get(&(dist.name.clone(), dist.version.clone(), source.clone()))
+        {
+            dist.hashes.clone_from(hashes);
+        }
+    }
+    Ok(())
 }
 
 /// Find any packages that don't have any lower bound on them when in resolution-lowest mode.

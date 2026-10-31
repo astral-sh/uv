@@ -10,6 +10,7 @@ use uv_configuration::{
 use uv_distribution_types::{
     ConfigSettings, ExcludeNewerOverride, ExcludeNewerValue, ExtraBuildVariables, Index, IndexUrl,
     MinimumLibcVersion, PackageConfigSettings, PipExtraIndex, PipFindLinks, PipIndex,
+    ProjectEnvironments,
 };
 use uv_install_wheel::LinkMode;
 use uv_pypi_types::{SchemaConflicts, SupportedEnvironments};
@@ -116,6 +117,7 @@ impl_combine_or!(ResolutionMode);
 impl_combine_or!(SchemaConflicts);
 impl_combine_or!(String);
 impl_combine_or!(SupportedEnvironments);
+impl_combine_or!(ProjectEnvironments);
 impl_combine_or!(TargetTriple);
 impl_combine_or!(TorchMode);
 impl_combine_or!(TrustedPublishing);

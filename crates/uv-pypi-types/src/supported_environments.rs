@@ -1,3 +1,4 @@
+use std::marker::PhantomData;
 use std::str::FromStr;
 
 use serde::ser::SerializeSeq;
@@ -65,38 +66,43 @@ impl<'de> serde::Deserialize<'de> for SupportedEnvironments {
     where
         D: serde::Deserializer<'de>,
     {
-        struct StringOrVecVisitor;
+        deserialize_marker_entries(deserializer).map(Self)
+    }
+}
 
-        impl<'de> serde::de::Visitor<'de> for StringOrVecVisitor {
-            type Value = SupportedEnvironments;
+/// Deserialize a single marker string or a list of environment entries.
+pub fn deserialize_marker_entries<'de, D, T>(deserializer: D) -> Result<Vec<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: serde::Deserialize<'de> + From<MarkerTree>,
+{
+    struct MarkerEntries<T>(PhantomData<T>);
 
-            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-                formatter.write_str("a string or a list of strings")
-            }
+    impl<'de, T: serde::Deserialize<'de> + From<MarkerTree>> serde::de::Visitor<'de>
+        for MarkerEntries<T>
+    {
+        type Value = Vec<T>;
 
-            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
-            where
-                E: serde::de::Error,
-            {
-                let marker = MarkerTree::from_str(value).map_err(serde::de::Error::custom)?;
-                Ok(SupportedEnvironments(vec![marker]))
-            }
-
-            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
-            where
-                A: serde::de::SeqAccess<'de>,
-            {
-                let mut markers = Vec::new();
-
-                while let Some(elem) = seq.next_element::<String>()? {
-                    let marker = MarkerTree::from_str(&elem).map_err(serde::de::Error::custom)?;
-                    markers.push(marker);
-                }
-
-                Ok(SupportedEnvironments(markers))
-            }
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("a marker string or a list of environments")
         }
 
-        deserializer.deserialize_any(StringOrVecVisitor)
+        fn visit_str<E: serde::de::Error>(self, value: &str) -> Result<Self::Value, E> {
+            let marker = MarkerTree::from_str(value).map_err(E::custom)?;
+            Ok(vec![T::from(marker)])
+        }
+
+        fn visit_seq<A: serde::de::SeqAccess<'de>>(
+            self,
+            mut seq: A,
+        ) -> Result<Self::Value, A::Error> {
+            let mut entries = Vec::new();
+            while let Some(entry) = seq.next_element()? {
+                entries.push(entry);
+            }
+            Ok(entries)
+        }
     }
+
+    deserializer.deserialize_any(MarkerEntries(PhantomData))
 }

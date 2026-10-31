@@ -15,7 +15,7 @@ use uv_configuration::{
 };
 use uv_dispatch::UniversalState;
 use uv_distribution::{ArchiveMetadata, Metadata};
-use uv_distribution_types::{Identifier, RequiresPython};
+use uv_distribution_types::{Identifier, ProjectEnvironments, RequiresPython};
 use uv_environment_operations::{
     ProjectEnvironmentPolicy, ProjectEnvironmentTarget, ProjectInterpreter,
 };
@@ -26,7 +26,7 @@ use uv_pep440::{Operator, Version, VersionSpecifier, VersionSpecifiers};
 use uv_pep508::{MarkerTree, Pep508ErrorSource, Requirement, VerbatimUrl, VersionOrUrl};
 use uv_preview::Preview;
 use uv_project_edit::{DependencyTarget, PyProjectTomlMut};
-use uv_pypi_types::{PyProjectToml, ResolutionMetadata, SupportedEnvironments, VerbatimParsedUrl};
+use uv_pypi_types::{PyProjectToml, ResolutionMetadata, VerbatimParsedUrl};
 use uv_python_discovery::ConfigDiscovery;
 use uv_python_discovery::ProjectPythonRequest;
 use uv_python_interpreter::Interpreter;
@@ -858,9 +858,12 @@ fn project_resolution_marker(
     };
     let environments = target
         .environments()
-        .map(SupportedEnvironments::as_markers)
+        .map(ProjectEnvironments::markers)
         .unwrap_or_default();
-    Ok(implicit_constraints_marker(requires_python, environments))
+    Ok(implicit_constraints_marker(
+        requires_python,
+        environments.as_markers(),
+    ))
 }
 
 /// Apply exact requirement replacements, coalescing repeated identical declarations.

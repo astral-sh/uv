@@ -42,7 +42,7 @@ fn assert_reachability(
     });
 
     assert_eq!(
-        is_wheel_unreachable_for_marker(&filename, &requires_python, &marker, tags.as_ref()),
+        is_wheel_unreachable_for_marker(&filename, &requires_python, &marker, None, tags.as_ref()),
         expected_unreachable,
         "{case}: {filename}",
     );

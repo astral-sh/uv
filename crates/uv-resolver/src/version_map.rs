@@ -11,14 +11,14 @@ use uv_client::{FlatIndexEntry, OwnedArchive, SimpleDetailMetadata, VersionFiles
 use uv_configuration::BuildOptions;
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
-    IndexEntryFilename, IndexUrl, MinimumLibcVersion, RegistryBuiltWheel, RegistrySourceDist,
-    RequiresPython,
+    IndexEntryFilename, IndexUrl, RegistryBuiltWheel, RegistrySourceDist, RequiresPython,
 };
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_platform_tags::{IncompatibleTag, TagCompatibility, Tags};
 use uv_preview::PreviewFeature;
 use uv_pypi_types::{HashDigest, ResolutionMetadata, Yanked};
+use uv_resolver_types::LibcPolicy;
 use uv_types::HashStrategy;
 use uv_warnings::warn_user_once;
 
@@ -59,7 +59,7 @@ impl VersionMap {
         available_version_cutoff: Option<Timestamp>,
         flat_index: Option<FlatDistributions>,
         build_options: &BuildOptions,
-        minimum_libc_version: Option<MinimumLibcVersion>,
+        libc: LibcPolicy,
     ) -> Self {
         let mut local = false;
         let mut entries = Vec::with_capacity(simple_metadata.iter().size_hint().0);
@@ -113,7 +113,7 @@ impl VersionMap {
                 requires_python,
                 included_version_cutoff,
                 available_version_cutoff,
-                minimum_libc_version,
+                libc,
             }),
         }
     }
@@ -124,16 +124,9 @@ impl VersionMap {
         tags: Option<&Tags>,
         hasher: &HashStrategy,
         build_options: &BuildOptions,
-        minimum_libc_version: Option<MinimumLibcVersion>,
+        libc: LibcPolicy,
     ) -> Self {
-        FlatDistributions::from_entries(
-            flat_metadata,
-            tags,
-            hasher,
-            build_options,
-            minimum_libc_version,
-        )
-        .into()
+        FlatDistributions::from_entries(flat_metadata, tags, hasher, build_options, libc).into()
     }
 
     /// Return the [`ResolutionMetadata`] for the given version, if any.
@@ -264,16 +257,6 @@ impl VersionMap {
         range: &Ranges<Version>,
     ) -> impl DoubleEndedIterator<Item = (&Version, VersionMapDistHandle<'_>)> {
         self.iter(range).filter(|(_, dist)| dist.is_included())
-    }
-
-    /// Return the [`Hashes`] for the given version, if any.
-    pub(crate) fn hashes(&self, version: &Version) -> Option<&[HashDigest]> {
-        match self.inner {
-            VersionMapInner::Eager(ref eager) => {
-                eager.map.get(version).map(PrioritizedDist::hashes)
-            }
-            VersionMapInner::Lazy(ref lazy) => lazy.get(version).map(PrioritizedDist::hashes),
-        }
     }
 
     /// Returns the total number of distinct versions in this map.
@@ -510,7 +493,7 @@ struct VersionMapLazy {
     /// The `requires-python` constraint for the resolution.
     requires_python: RequiresPython,
     /// The libc baselines required during universal resolution.
-    minimum_libc_version: Option<MinimumLibcVersion>,
+    libc: LibcPolicy,
 }
 
 impl VersionMapLazy {
@@ -714,12 +697,7 @@ impl VersionMapLazy {
                             index: self.index.clone(),
                             size_is_authoritative: false,
                         };
-                        priority_dist.insert_built(
-                            dist,
-                            hashes,
-                            compatibility,
-                            self.minimum_libc_version,
-                        );
+                        priority_dist.insert_built(dist, hashes, compatibility, self.libc);
                     }
                     DistFilename::SourceDistFilename(filename) => {
                         let compatibility = self.source_dist_compatibility(
