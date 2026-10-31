@@ -625,6 +625,55 @@ fn init_package() -> Result<()> {
     Ok(())
 }
 
+/// A launcher for a digit-prefixed distribution must use a valid module name in its import.
+#[test]
+fn init_package_leading_digit() {
+    let context = uv_test::test_context!("3.12");
+
+    uv_snapshot!(context.filters(), context.init().arg("--package").arg("3d-print"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Initialized project `3d-print` at `[TEMP_DIR]/3d-print`
+    ");
+
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(context.read("3d-print/pyproject.toml"), @r#"
+        [project]
+        name = "3d-print"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.scripts]
+        3d-print = "_3d_print:main"
+
+        [tool.uv.build-backend]
+        module-name = "_3d_print"
+
+        [build-system]
+        requires = ["uv_build>=[CURRENT_VERSION],<[NEXT_BREAKING]"]
+        build-backend = "uv_build"
+        "#);
+    });
+
+    let child = context.temp_dir.child("3d-print");
+    uv_snapshot!(context.filters(), context.run().current_dir(&child).env_remove(EnvVars::VIRTUAL_ENV).arg("3d-print"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    Hello from 3d-print!
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + 3d-print==0.1.0 (from file://[TEMP_DIR]/3d-print)
+    ");
+}
+
 #[test]
 fn init_bare_lib() {
     let context = uv_test::test_context!("3.12");
@@ -3754,6 +3803,63 @@ fn init_app_build_backend_scikit() -> Result<()> {
     // We do not test with uv run since it would otherwise require specific CXX build tooling
 
     Ok(())
+}
+
+/// Scikit must install the native extension into the package imported by the launcher.
+#[test]
+fn init_app_build_backend_scikit_leading_digit() {
+    let context = uv_test::test_context!("3.12");
+
+    uv_snapshot!(context.filters(), context.init().args(["--package", "--build-backend", "scikit", "3d-print"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Initialized project `3d-print` at `[TEMP_DIR]/3d-print`
+    ");
+
+    assert_snapshot!(context.read("3d-print/pyproject.toml"), @r#"
+    [project]
+    name = "3d-print"
+    version = "0.1.0"
+    description = "Add your description here"
+    readme = "README.md"
+    requires-python = ">=3.12"
+    dependencies = []
+
+    [project.scripts]
+    3d-print = "_3d_print:main"
+
+    [tool.scikit-build.wheel]
+    packages = ["src/_3d_print"]
+
+    [tool.scikit-build]
+    minimum-version = "build-system.requires"
+    build-dir = "build/{wheel_tag}"
+
+    [tool.uv]
+    cache-keys = [{ file = "pyproject.toml" }, { file = "src/**/*.{h,c,hpp,cpp}" }, { file = "CMakeLists.txt" }]
+
+    [build-system]
+    requires = ["scikit-build-core>=0.12", "pybind11>=3"]
+    build-backend = "scikit_build_core.build"
+    "#);
+
+    assert_snapshot!(context.read("3d-print/src/_3d_print/__init__.py"), @"
+    from _3d_print._core import hello_from_bin
+
+
+    def main() -> None:
+        print(hello_from_bin())
+    ");
+
+    assert_snapshot!(context.read("3d-print/CMakeLists.txt"), @"
+    cmake_minimum_required(VERSION 3.15...4.0)
+    project(${SKBUILD_PROJECT_NAME} LANGUAGES CXX)
+
+    find_package(pybind11 CONFIG REQUIRED)
+
+    pybind11_add_module(_core MODULE src/main.cpp)
+    install(TARGETS _core DESTINATION _3d_print)
+    ");
 }
 
 /// Run `uv init --lib --build-backend maturin` to create a packaged application project
