@@ -829,21 +829,40 @@ fn init_project_kind(
             // Add a build system
             let build_backend = build_backend.unwrap_or(ProjectBuildBackend::Uv);
             pyproject.push('\n');
-            pyproject.push_str(&pyproject_build_system(name, build_backend));
+            pyproject.push_str(&pyproject_build_system(
+                &name.as_dist_info_name(),
+                build_backend,
+            ));
         }
-        InitProjectKind::ApplicationWithLibrary => {
-            // Since it'll be packaged, we can add a `[project.scripts]` entry
-            pyproject.push('\n');
-            pyproject.push_str(&pyproject_project_scripts(name, name.as_str(), "main"));
-
-            // Add a build system
+        InitProjectKind::ApplicationWithLibrary | InitProjectKind::Library => {
             let build_backend = build_backend.unwrap_or(ProjectBuildBackend::Uv);
-            pyproject.push('\n');
-            pyproject.push_str(&pyproject_build_system(name, build_backend));
-            pyproject_build_backend_prerequisites(name, path, build_backend)?;
+            let default_module_name = name.as_dist_info_name();
+            // Distribution names can start with a digit, but Python identifiers cannot.
+            let module_override = default_module_name
+                .starts_with(|c: char| c.is_ascii_digit())
+                .then(|| format!("_{default_module_name}"));
+            let module_name = module_override.as_deref().unwrap_or(&default_module_name);
+            let is_lib = matches!(project_kind, InitProjectKind::Library);
 
-            // Generate `src` files with app-style `main()` in `__init__.py`
-            generate_package_scripts(name, path, build_backend, false)?;
+            if !is_lib {
+                pyproject.push_str(&indoc::formatdoc! {r#"
+
+                    [project.scripts]
+                    {name} = "{module_name}:main"
+                "#});
+            }
+            if let Some(module_name) = module_override.as_deref() {
+                pyproject.push_str(&pyproject_module_override(module_name, build_backend));
+            }
+            pyproject.push('\n');
+            pyproject.push_str(&pyproject_build_system(module_name, build_backend));
+            pyproject_build_backend_prerequisites(
+                module_name,
+                path,
+                build_backend,
+                module_override.as_deref(),
+            )?;
+            generate_package_scripts(name, module_name, path, build_backend, is_lib)?;
         }
         InitProjectKind::Application => {
             let main_contents = indoc::formatdoc! {r#"
@@ -862,15 +881,6 @@ fn init_project_kind(
             if !main_py.try_exists()? && !bare {
                 fs_err::write(path.join("main.py"), main_contents)?;
             }
-        }
-        InitProjectKind::Library => {
-            let build_backend = build_backend.unwrap_or(ProjectBuildBackend::Uv);
-            pyproject.push('\n');
-            pyproject.push_str(&pyproject_build_system(name, build_backend));
-            pyproject_build_backend_prerequisites(name, path, build_backend)?;
-
-            // Generate `src` files
-            generate_package_scripts(name, path, build_backend, true)?;
         }
     }
     fs_err::write(path.join("pyproject.toml"), pyproject)?;
@@ -934,8 +944,7 @@ fn pyproject_project(
 
 /// Generate the `[build-system]` section of a `pyproject.toml`.
 /// Generate the `[tool.]` section of a `pyproject.toml` where applicable.
-fn pyproject_build_system(package: &PackageName, build_backend: ProjectBuildBackend) -> String {
-    let module_name = package.as_dist_info_name();
+fn pyproject_build_system(module_name: &str, build_backend: ProjectBuildBackend) -> String {
     match build_backend {
         ProjectBuildBackend::Uv => {
             // Limit to the stable version range.
@@ -1018,22 +1027,47 @@ fn pyproject_build_system(package: &PackageName, build_backend: ProjectBuildBack
     }
 }
 
-/// Generate the `[project.scripts]` section of a `pyproject.toml`.
-fn pyproject_project_scripts(package: &PackageName, executable_name: &str, target: &str) -> String {
-    let module_name = package.as_dist_info_name();
-    indoc::formatdoc! {r#"
-        [project.scripts]
-        {executable_name} = "{module_name}:{target}"
-    "#}
+/// Configure build backends that discover packages by their distribution name.
+fn pyproject_module_override(module_name: &str, build_backend: ProjectBuildBackend) -> String {
+    match build_backend {
+        ProjectBuildBackend::Uv => indoc::formatdoc! {r#"
+
+            [tool.uv.build-backend]
+            module-name = "{module_name}"
+        "#},
+        ProjectBuildBackend::Hatch => indoc::formatdoc! {r#"
+
+            [tool.hatch.build.targets.wheel]
+            packages = ["src/{module_name}"]
+        "#},
+        ProjectBuildBackend::Flit => indoc::formatdoc! {r#"
+
+            [tool.flit.module]
+            name = "{module_name}"
+        "#},
+        ProjectBuildBackend::Poetry => indoc::formatdoc! {r#"
+
+            [tool.poetry]
+            packages = [{{ include = "{module_name}", from = "src" }}]
+        "#},
+        ProjectBuildBackend::Scikit => indoc::formatdoc! {r#"
+
+            [tool.scikit-build.wheel]
+            packages = ["src/{module_name}"]
+        "#},
+        ProjectBuildBackend::Maturin
+        | ProjectBuildBackend::Setuptools
+        | ProjectBuildBackend::PDM => String::new(),
+    }
 }
 
 /// Generate additional files as needed for specific build backends.
 fn pyproject_build_backend_prerequisites(
-    package: &PackageName,
+    module_name: &str,
     path: &Path,
     build_backend: ProjectBuildBackend,
+    module_override: Option<&str>,
 ) -> Result<()> {
-    let module_name = package.as_dist_info_name();
     match build_backend {
         ProjectBuildBackend::Maturin => {
             // Generate Cargo.toml
@@ -1061,6 +1095,7 @@ fn pyproject_build_backend_prerequisites(
             }
         }
         ProjectBuildBackend::Scikit => {
+            let install_dir = module_override.unwrap_or("${SKBUILD_PROJECT_NAME}");
             // Generate CMakeLists.txt
             let build_file = path.join("CMakeLists.txt");
             if !build_file.try_exists()? {
@@ -1073,7 +1108,7 @@ fn pyproject_build_backend_prerequisites(
                     find_package(pybind11 CONFIG REQUIRED)
 
                     pybind11_add_module(_core MODULE src/main.cpp)
-                    install(TARGETS _core DESTINATION ${{SKBUILD_PROJECT_NAME}})
+                    install(TARGETS _core DESTINATION {install_dir})
                 "},
                 )?;
             }
@@ -1086,14 +1121,13 @@ fn pyproject_build_backend_prerequisites(
 /// Generate startup scripts for a package-based application or library.
 fn generate_package_scripts(
     package: &PackageName,
+    module_name: &str,
     path: &Path,
     build_backend: ProjectBuildBackend,
     is_lib: bool,
 ) -> Result<()> {
-    let module_name = package.as_dist_info_name();
-
     let src_dir = path.join("src");
-    let pkg_dir = src_dir.join(&*module_name);
+    let pkg_dir = src_dir.join(module_name);
     fs_err::create_dir_all(&pkg_dir)?;
 
     let pure_python_script = if is_lib {

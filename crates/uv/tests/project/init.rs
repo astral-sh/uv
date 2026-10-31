@@ -625,6 +625,55 @@ fn init_package() -> Result<()> {
     Ok(())
 }
 
+/// A launcher for a digit-prefixed distribution must use a valid module name in its import.
+#[test]
+fn init_package_leading_digit() {
+    let context = uv_test::test_context!("3.12");
+
+    uv_snapshot!(context.filters(), context.init().arg("--package").arg("3d-print"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Initialized project `3d-print` at `[TEMP_DIR]/3d-print`
+    ");
+
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(context.read("3d-print/pyproject.toml"), @r#"
+        [project]
+        name = "3d-print"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.scripts]
+        3d-print = "_3d_print:main"
+
+        [tool.uv.build-backend]
+        module-name = "_3d_print"
+
+        [build-system]
+        requires = ["uv_build>=[CURRENT_VERSION],<[NEXT_BREAKING]"]
+        build-backend = "uv_build"
+        "#);
+    });
+
+    let child = context.temp_dir.child("3d-print");
+    uv_snapshot!(context.filters(), context.run().current_dir(&child).env_remove(EnvVars::VIRTUAL_ENV).arg("3d-print"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    Hello from 3d-print!
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + 3d-print==0.1.0 (from file://[TEMP_DIR]/3d-print)
+    ");
+}
+
 #[test]
 fn init_bare_lib() {
     let context = uv_test::test_context!("3.12");
