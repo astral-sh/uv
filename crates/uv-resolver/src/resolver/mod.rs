@@ -25,8 +25,9 @@ use uv_configuration::{Constraints, DependencyModifiers, IndexStrategy};
 use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_distribution_types::{
     BuiltDist, DerivationChain, Dist, DistErrorKind, Identifier, IndexCapabilities, IndexLocations,
-    IndexMetadata, IndexUrl, InstalledDist, Name, RemoteSource, Requirement, RequiresPython,
-    ResolutionRecorder, ResolvedDist, SourceDist, VariantsJsonContent, VersionOrUrlRef,
+    IndexMetadata, IndexUrl, InstalledDist, Name, RemoteSource, Requirement, RequirementScope,
+    RequirementSource, RequiresPython, ResolutionRecorder, ResolvedDist, SourceDist,
+    VariantsJsonContent, VersionOrUrlRef,
 };
 use uv_git::GitResolver;
 use uv_normalize::PackageName;
@@ -2017,14 +2018,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 && let Dist::Built(wheel) = dist.as_ref()
                                 && let Some(label) = wheel.wheel_filename().variant()
                             {
-                                abi_dependencies.extend(metadata.abi_dependencies(label).map(
-                                    |(dependency, versions)| PubGrubDependency {
-                                        package: PubGrubPackage::base(dependency.clone()),
-                                        version: Range::from_versions(versions.clone()),
-                                        parent: Some(name.clone()),
-                                        source: DependencySource::Unspecified,
-                                    },
-                                ));
+                                for (dependency, versions) in metadata.abi_dependencies(label) {
+                                    abi_dependencies.push((
+                                        dependency.clone(),
+                                        Range::from_versions(versions.clone()),
+                                    ));
+                                }
                             }
                         }
                     }
@@ -2121,7 +2120,25 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         RequirementContext::Package { name, version },
                     ),
                 };
-                let requirements = expander.expand(requirements, context);
+                let mut requirements = Cow::Borrowed(requirements);
+                // An ABI-only dependency needs the same source and constraint expansion as
+                // a Requires-Dist entry. Its release prefixes narrow the resulting edges.
+                for (dependency, _) in &abi_dependencies {
+                    requirements.to_mut().push(Requirement {
+                        name: dependency.clone(),
+                        extras: Box::new([]),
+                        groups: Box::new([]),
+                        marker: MarkerTree::TRUE,
+                        source: RequirementSource::Registry {
+                            specifier: VersionSpecifiers::empty(),
+                            index: None,
+                            conflict: None,
+                        },
+                        scope: RequirementScope::Global,
+                        origin: None,
+                    });
+                }
+                let requirements = expander.expand(&requirements, context);
 
                 PubGrubDependency::from_requirements(
                     &self.conflicts,
@@ -2130,8 +2147,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     Some(package),
                 )
                 .map(|mut dependencies| {
+                    for (name, versions) in &abi_dependencies {
+                        for dependency in &mut dependencies {
+                            if dependency.package.name_no_root() == Some(name) {
+                                dependency.version = dependency.version.intersection(versions);
+                            }
+                        }
+                    }
                     dependencies.extend(system_dependencies);
-                    dependencies.extend(abi_dependencies);
                     dependencies
                 })
             }
