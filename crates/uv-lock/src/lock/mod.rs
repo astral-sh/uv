@@ -6633,9 +6633,14 @@ pub struct Package {
     group_requires_python: BTreeMap<GroupName, GroupMetadata>,
     /// The exact requirements from the package metadata.
     metadata: PackageMetadata,
+    license: Option<String>,
 }
 
 impl Package {
+    pub fn license(&self) -> Option<&str> {
+        self.license.as_deref()
+    }
+
     pub fn is_from_pypi_registry(&self) -> bool {
         self.id.source.is_pypi_registry()
     }
@@ -6666,6 +6671,7 @@ impl Package {
             default_groups: None,
             group_requires_python: BTreeMap::new(),
             metadata,
+            license: None,
         })
     }
 
@@ -7427,6 +7433,8 @@ struct PackageWire {
     dependency_groups: BTreeMap<GroupName, Vec<DependencyWire>>,
     #[serde(default)]
     group_requires_python: BTreeMap<GroupName, GroupMetadata>,
+    #[serde(default)]
+    license: Option<String>,
 }
 
 #[derive(Clone, Default, Debug, Eq, PartialEq, serde::Deserialize)]
@@ -7587,6 +7595,7 @@ impl PackageWire {
             metadata: self.metadata,
             default_groups: self.default_groups,
             group_requires_python: self.group_requires_python,
+            license: self.license,
             sdist: self.sdist,
             wheels: self.wheels,
             fork_markers: self

@@ -88,9 +88,17 @@ struct Component {
     #[serde(skip_serializing_if = "Option::is_none")]
     purl: Option<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
+    licenses: Vec<LicenseChoice>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     external_references: Vec<ExternalReference>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     properties: Vec<Property>,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LicenseChoice {
+    expression: String,
 }
 
 #[derive(Clone, Serialize)]
@@ -247,6 +255,10 @@ impl<'a> ComponentBuilder<'a> {
             name: name.to_string(),
             version: None,
             purl: None,
+            licenses: root
+                .and_then(|r| r.license())
+                .map(|license| vec![LicenseChoice { expression: license.to_string() }])
+                .unwrap_or_default(),
             external_references: Vec::new(),
             properties,
         }
@@ -324,6 +336,10 @@ impl<'a> ComponentBuilder<'a> {
             name: name.to_string(),
             version,
             purl,
+            licenses: package
+                .license()
+                .map(|license| vec![LicenseChoice { expression: license.to_string() }])
+                .unwrap_or_default(),
             external_references,
             properties,
         }
