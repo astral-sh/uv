@@ -1889,6 +1889,7 @@
             "lockfile-format-check",
             "lockfile-normalization",
             "lock-without-metadata",
+            "lock-dependency-shorthand",
             "index-by-name",
             "artifact-hash-filtering",
             "content-addressed-cache",

@@ -412,6 +412,8 @@ pub enum PreviewFeature {
     /// dependencies. Their metadata is retained so uv can check whether those sources are requested
     /// or stale without network access.
     LockWithoutMetadata,
+    /// Writes name-only dependencies in `uv.lock` as strings. Older uv versions cannot read this syntax.
+    LockDependencyShorthand,
     /// The `--index` and `--default-index` options accept the names of configured package indexes
     /// as well as URLs. For example, `--index internal` selects the configured index named
     /// `internal`, so its URL does not need to be repeated on the command line.

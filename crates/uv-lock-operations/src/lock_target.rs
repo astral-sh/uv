@@ -17,7 +17,7 @@ use uv_distribution_types::{
     Index, IndexLocations, MinimumLibcVersion, NameRequirementSpecification, Requirement,
     RequiresPython,
 };
-use uv_lock::Lock;
+use uv_lock::{Lock, LockFeatures};
 use uv_normalize::{GroupName, PackageName};
 use uv_pep508::RequirementOrigin;
 use uv_pypi_types::{Conflicts, SupportedEnvironments, VerbatimParsedUrl};
@@ -400,8 +400,8 @@ impl<'lock> LockTarget<'lock> {
     }
 
     /// Atomically write the lockfile so readers cannot observe a partial lock.
-    pub(crate) async fn commit(self, lock: &Lock) -> Result<(), LockError> {
-        let encoded = lock.to_toml()?;
+    pub(crate) async fn commit(self, lock: &Lock, features: LockFeatures) -> Result<(), LockError> {
+        let encoded = lock.to_toml(features)?;
         uv_fs::write_atomic_preserve(self.lock_path(), encoded).await?;
         Ok(())
     }

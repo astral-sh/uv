@@ -5,7 +5,7 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use indoc::indoc;
 use insta::assert_snapshot;
-use uv_lock::Lock;
+use uv_lock::{Lock, LockFeatures};
 use uv_normalize::DefaultGroups;
 use uv_test::uv_snapshot;
 
@@ -172,7 +172,7 @@ fn member_default_groups_in_lockfile() -> Result<()> {
     let lock = Lock::from_canonical_toml(&contents)?;
     assert_eq!(Lock::from_toml(&contents)?, lock);
     assert_eq!(toml::from_str::<Lock>(&contents)?, lock);
-    assert_eq!(lock.to_toml()?, contents);
+    assert_eq!(lock.to_toml(LockFeatures::empty())?, contents);
     assert_eq!(
         lock.member_default_groups(&"plain".parse()?),
         Some(DefaultGroups::List(vec!["dev".parse()?]))
@@ -359,7 +359,7 @@ fn member_group_python_requirements_in_lockfile() -> Result<()> {
     let lock = Lock::from_canonical_toml(&contents)?;
     assert_eq!(Lock::from_toml(&contents)?, lock);
     assert_eq!(toml::from_str::<Lock>(&contents)?, lock);
-    assert_eq!(lock.to_toml()?, contents);
+    assert_eq!(lock.to_toml(LockFeatures::empty())?, contents);
     uv_snapshot!(context.filters(), context.lock().args(["--offline", "--locked"]), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -486,7 +486,7 @@ fn non_project_group_python_requirements_in_lockfile() -> Result<()> {
     let lock = Lock::from_canonical_toml(&contents)?;
     assert_eq!(Lock::from_toml(&contents)?, lock);
     assert_eq!(toml::from_str::<Lock>(&contents)?, lock);
-    assert_eq!(lock.to_toml()?, contents);
+    assert_eq!(lock.to_toml(LockFeatures::empty())?, contents);
 
     uv_snapshot!(context.filters(), context.lock().args(["--offline", "--locked"]), @"
     exit_code: 0 (success)
@@ -908,7 +908,7 @@ fn metadata_free_group_python_requirements_in_lockfile() -> Result<()> {
     // Both parsers retain group requirements when package declaration metadata is omitted.
     let lock = Lock::from_canonical_toml(&contents)?;
     assert_eq!(toml::from_str::<Lock>(&contents)?, lock);
-    assert_eq!(lock.to_toml()?, contents);
+    assert_eq!(lock.to_toml(LockFeatures::empty())?, contents);
     assert_eq!(
         lock.member_default_groups(&"project".parse()?),
         Some(DefaultGroups::List(vec!["dev".parse()?]))
@@ -1029,7 +1029,7 @@ fn legacy_metadata_free_lockfile() -> Result<()> {
         docs = []
     "#};
     let lock = Lock::from_canonical_toml(legacy)?;
-    assert_eq!(lock.to_toml()?, legacy);
+    assert_eq!(lock.to_toml(LockFeatures::empty())?, legacy);
     context.temp_dir.child("uv.lock").write_str(legacy)?;
     context
         .lock()
@@ -1382,7 +1382,7 @@ fn non_project_workspace_default_groups_in_lockfile() -> Result<()> {
     context.lock().arg("--offline").assert().success();
     let contents = context.read("uv.lock");
     let lock = Lock::from_canonical_toml(&contents)?;
-    assert_eq!(lock.to_toml()?, contents);
+    assert_eq!(lock.to_toml(LockFeatures::empty())?, contents);
     let lockfile = toml::from_str::<toml::Value>(&contents)?;
     assert!(
         lockfile["manifest"]["dependency-groups"]
