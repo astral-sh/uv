@@ -13,7 +13,8 @@ use uv_redacted::SafeUrl;
 use uv_static::EnvVars;
 
 use crate::providers::{
-    AzureEndpointProvider, GcsEndpointProvider, HuggingFaceProvider, S3EndpointProvider,
+    AzureEndpointProvider, CloudEndpoints, GcsEndpointProvider, HuggingFaceProvider,
+    S3EndpointProvider,
 };
 use crate::{
     CredentialsCache, CredentialsPrompt, KeyringProvider,
@@ -191,6 +192,7 @@ pub struct AuthMiddleware {
     gcs_credential_state: Mutex<GcsCredentialState>,
     /// Cached Azure credentials to avoid running the credential helper multiple times.
     azure_credential_state: Mutex<AzureCredentialState>,
+    endpoints: CloudEndpoints,
     preview: Preview,
 }
 
@@ -214,6 +216,7 @@ impl AuthMiddleware {
             s3_credential_state: Mutex::new(S3CredentialState::Uninitialized),
             gcs_credential_state: Mutex::new(GcsCredentialState::Uninitialized),
             azure_credential_state: Mutex::new(AzureCredentialState::Uninitialized),
+            endpoints: CloudEndpoints::default(),
             preview: Preview::default(),
         }
     }
@@ -250,6 +253,12 @@ impl AuthMiddleware {
     #[must_use]
     pub fn with_keyring(mut self, keyring: Option<KeyringProvider>) -> Self {
         self.keyring = keyring;
+        self
+    }
+
+    #[must_use]
+    pub fn with_cloud_endpoints(mut self, endpoints: CloudEndpoints) -> Self {
+        self.endpoints = endpoints;
         self
     }
 
@@ -673,11 +682,14 @@ impl AuthMiddleware {
         auth_policy: AuthPolicy,
     ) -> reqwest_middleware::Result<Option<Arc<Authentication>>> {
         let is_s3_endpoint =
-            S3EndpointProvider::is_s3_endpoint(url, self.preview).map_err(Error::Middleware)?;
+            S3EndpointProvider::is_s3_endpoint(url, self.endpoints.s3.as_ref(), self.preview);
         let is_gcs_endpoint =
-            GcsEndpointProvider::is_gcs_endpoint(url, self.preview).map_err(Error::Middleware)?;
-        let is_azure_endpoint = AzureEndpointProvider::is_azure_endpoint(url, self.preview)
-            .map_err(Error::Middleware)?;
+            GcsEndpointProvider::is_gcs_endpoint(url, self.endpoints.gcs.as_ref(), self.preview);
+        let is_azure_endpoint = AzureEndpointProvider::is_azure_endpoint(
+            url,
+            self.endpoints.azure.as_ref(),
+            self.preview,
+        );
         let username = Username::from(
             credentials.map(|credentials| credentials.username().unwrap_or_default().to_string()),
         );

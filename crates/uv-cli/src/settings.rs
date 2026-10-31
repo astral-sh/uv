@@ -13,7 +13,7 @@ use anyhow::{Result, bail};
 use rustc_hash::FxHashSet;
 
 use uv_audit::{VulnerabilityID, VulnerabilityServiceFormat};
-use uv_auth::Service;
+use uv_auth::{CloudEndpoints, Service};
 use uv_cache::{CacheArgs, Refresh};
 use uv_client::{Certificates, Connectivity, MetadataRangeRequest};
 use uv_configuration::{
@@ -284,6 +284,7 @@ pub struct NetworkSettings {
     pub custom_certificates: Option<Certificates>,
     pub http_proxy: Option<ProxyUrl>,
     pub https_proxy: Option<ProxyUrl>,
+    pub cloud_endpoints: CloudEndpoints,
     pub no_proxy: Option<Vec<String>>,
     pub allow_insecure_host: Vec<TrustedHost>,
     pub read_timeout: Duration,
@@ -411,6 +412,17 @@ impl NetworkSettings {
             custom_certificates,
             http_proxy,
             https_proxy,
+            cloud_endpoints: CloudEndpoints {
+                s3: environment.s3_endpoint_url.clone().or_else(|| {
+                    workspace.and_then(|workspace| workspace.globals.s3_endpoint_url.clone())
+                }),
+                gcs: environment.gcs_endpoint_url.clone().or_else(|| {
+                    workspace.and_then(|workspace| workspace.globals.gcs_endpoint_url.clone())
+                }),
+                azure: environment.azure_endpoint_url.clone().or_else(|| {
+                    workspace.and_then(|workspace| workspace.globals.azure_endpoint_url.clone())
+                }),
+            },
             no_proxy,
             allow_insecure_host,
             read_timeout: environment.http_read_timeout,

@@ -412,6 +412,39 @@ pub struct GlobalOptions {
         "#
     )]
     pub https_proxy: Option<ProxyUrl>,
+    /// The Amazon S3 endpoint to authenticate requests to.
+    ///
+    /// `UV_S3_ENDPOINT_URL` takes precedence.
+    #[option(
+        default = "None",
+        value_type = "str",
+        example = r#"
+            s3-endpoint-url = "https://storage.example.com/packages"
+        "#
+    )]
+    pub s3_endpoint_url: Option<SafeUrl>,
+    /// The Google Cloud Storage endpoint to authenticate requests to.
+    ///
+    /// `UV_GCS_ENDPOINT_URL` takes precedence.
+    #[option(
+        default = "None",
+        value_type = "str",
+        example = r#"
+            gcs-endpoint-url = "https://storage.example.com/packages"
+        "#
+    )]
+    pub gcs_endpoint_url: Option<SafeUrl>,
+    /// The Azure Storage endpoint to authenticate requests to.
+    ///
+    /// `UV_AZURE_ENDPOINT_URL` takes precedence.
+    #[option(
+        default = "None",
+        value_type = "str",
+        example = r#"
+            azure-endpoint-url = "https://storage.example.com/packages"
+        "#
+    )]
+    pub azure_endpoint_url: Option<SafeUrl>,
     /// A list of hosts to exclude from proxying.
     #[option(
         default = "None",
@@ -462,6 +495,9 @@ struct GlobalOptionsWire {
     concurrent_installs: Option<NonZeroUsize>,
     http_proxy: Option<ProxyUrl>,
     https_proxy: Option<ProxyUrl>,
+    s3_endpoint_url: Option<SafeUrl>,
+    gcs_endpoint_url: Option<SafeUrl>,
+    azure_endpoint_url: Option<SafeUrl>,
     no_proxy: Option<Vec<String>>,
     allow_insecure_host: Option<Vec<TrustedHost>>,
 }
@@ -487,6 +523,9 @@ impl TryFrom<GlobalOptionsWire> for GlobalOptions {
             concurrent_installs,
             http_proxy,
             https_proxy,
+            s3_endpoint_url,
+            gcs_endpoint_url,
+            azure_endpoint_url,
             no_proxy,
             allow_insecure_host,
         } = value;
@@ -506,6 +545,9 @@ impl TryFrom<GlobalOptionsWire> for GlobalOptions {
             concurrent_installs,
             http_proxy,
             https_proxy,
+            s3_endpoint_url,
+            gcs_endpoint_url,
+            azure_endpoint_url,
             no_proxy,
             allow_insecure_host,
         })
@@ -2669,6 +2711,9 @@ struct OptionsWire {
     keyring_provider: Option<KeyringProviderType>,
     http_proxy: Option<ProxyUrl>,
     https_proxy: Option<ProxyUrl>,
+    s3_endpoint_url: Option<SafeUrl>,
+    gcs_endpoint_url: Option<SafeUrl>,
+    azure_endpoint_url: Option<SafeUrl>,
     no_proxy: Option<Vec<String>>,
     allow_insecure_host: Option<Vec<TrustedHost>>,
     resolution: Option<ResolutionMode>,
@@ -2781,6 +2826,9 @@ impl TryFrom<OptionsWire> for Options {
             keyring_provider,
             http_proxy,
             https_proxy,
+            s3_endpoint_url,
+            gcs_endpoint_url,
+            azure_endpoint_url,
             no_proxy,
             allow_insecure_host,
             resolution,
@@ -2852,6 +2900,9 @@ impl TryFrom<OptionsWire> for Options {
                 concurrent_installs,
                 http_proxy,
                 https_proxy,
+                s3_endpoint_url,
+                gcs_endpoint_url,
+                azure_endpoint_url,
                 no_proxy,
                 // Used twice for backwards compatibility
                 allow_insecure_host: allow_insecure_host.clone(),

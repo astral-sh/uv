@@ -52,6 +52,11 @@ fn show_settings_returns_before_running_commands() {
             custom_certificates: [CERTIFICATES],
             http_proxy: None,
             https_proxy: None,
+            cloud_endpoints: CloudEndpoints {
+                s3: None,
+                gcs: None,
+                azure: None,
+            },
             no_proxy: None,
             allow_insecure_host: [],
             read_timeout: [TIME],
@@ -189,6 +194,11 @@ fn pip_compile_baseline() {
             custom_certificates: [CERTIFICATES],
             http_proxy: None,
             https_proxy: None,
+            cloud_endpoints: CloudEndpoints {
+                s3: None,
+                gcs: None,
+                azure: None,
+            },
             no_proxy: None,
             allow_insecure_host: [],
             read_timeout: [TIME],
@@ -401,6 +411,11 @@ fn publish_resolved_settings() -> anyhow::Result<()> {
             custom_certificates: [CERTIFICATES],
             http_proxy: None,
             https_proxy: None,
+            cloud_endpoints: CloudEndpoints {
+                s3: None,
+                gcs: None,
+                azure: None,
+            },
             no_proxy: None,
             allow_insecure_host: [],
             read_timeout: [TIME],
@@ -588,6 +603,11 @@ fn pip_install_baseline() {
             custom_certificates: [CERTIFICATES],
             http_proxy: None,
             https_proxy: None,
+            cloud_endpoints: CloudEndpoints {
+                s3: None,
+                gcs: None,
+                azure: None,
+            },
             no_proxy: None,
             allow_insecure_host: [],
             read_timeout: [TIME],
@@ -783,6 +803,11 @@ fn lock_baseline() {
             custom_certificates: [CERTIFICATES],
             http_proxy: None,
             https_proxy: None,
+            cloud_endpoints: CloudEndpoints {
+                s3: None,
+                gcs: None,
+                azure: None,
+            },
             no_proxy: None,
             allow_insecure_host: [],
             read_timeout: [TIME],
@@ -914,6 +939,11 @@ fn version_baseline() {
             custom_certificates: [CERTIFICATES],
             http_proxy: None,
             https_proxy: None,
+            cloud_endpoints: CloudEndpoints {
+                s3: None,
+                gcs: None,
+                azure: None,
+            },
             no_proxy: None,
             allow_insecure_host: [],
             read_timeout: [TIME],
@@ -1060,6 +1090,11 @@ fn tool_install_baseline() {
             custom_certificates: [CERTIFICATES],
             http_proxy: None,
             https_proxy: None,
+            cloud_endpoints: CloudEndpoints {
+                s3: None,
+                gcs: None,
+                azure: None,
+            },
             no_proxy: None,
             allow_insecure_host: [],
             read_timeout: [TIME],
@@ -2897,7 +2932,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
                |
              1 | [project]
                |  ^^^^^^^
-             unknown field `project`, expected one of `required-version`, `system-certs`, `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `preview-features`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `http-proxy`, `https-proxy`, `no-proxy`, `allow-insecure-host`, `resolution`, `prerelease`, `prerelease-package`, `fork-strategy`, `dependency-metadata`, `config-settings`, `config-settings-package`, `no-build-isolation`, `require-build-hashes`, `no-build-isolation-package`, `extra-build-dependencies`, `extra-build-variables`, `exclude-newer`, `exclude-newer-package`, `link-mode`, `compile-bytecode`, `no-sources`, `no-sources-package`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `torch-backend`, `python-install-mirror`, `pypy-install-mirror`, `graalpy-install-mirror`, `pyodide-install-mirror`, `python-downloads-json-url`, `publish-url`, `trusted-publishing`, `check-url`, `add-bounds`, `audit`, `pip`, `cache-keys`, `override-dependencies`, `exclude-dependencies`, `constraint-dependencies`, `build-constraint-dependencies`, `environments`, `required-environments`, `minimum-libc-version`, `conflicts`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dependency-groups`, `dev-dependencies`, `build-backend`
+             unknown field `project`, expected one of `required-version`, `system-certs`, `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `preview-features`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `http-proxy`, `https-proxy`, `s3-endpoint-url`, `gcs-endpoint-url`, `azure-endpoint-url`, `no-proxy`, `allow-insecure-host`, `resolution`, `prerelease`, `prerelease-package`, `fork-strategy`, `dependency-metadata`, `config-settings`, `config-settings-package`, `no-build-isolation`, `require-build-hashes`, `no-build-isolation-package`, `extra-build-dependencies`, `extra-build-variables`, `exclude-newer`, `exclude-newer-package`, `link-mode`, `compile-bytecode`, `no-sources`, `no-sources-package`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `torch-backend`, `python-install-mirror`, `pypy-install-mirror`, `graalpy-install-mirror`, `pyodide-install-mirror`, `python-downloads-json-url`, `publish-url`, `trusted-publishing`, `check-url`, `add-bounds`, `audit`, `pip`, `cache-keys`, `override-dependencies`, `exclude-dependencies`, `constraint-dependencies`, `build-constraint-dependencies`, `environments`, `required-environments`, `minimum-libc-version`, `conflicts`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dependency-groups`, `dev-dependencies`, `build-backend`
     "
     );
 
@@ -3011,6 +3046,40 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Each environment variable overrides only its own provider's endpoint.
+#[test]
+fn cloud_endpoint_env_override() -> anyhow::Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]);
+    context
+        .temp_dir
+        .child("uv.toml")
+        .write_str(indoc::indoc! {r#"
+        s3-endpoint-url = "https://storage.example.com/s3"
+        gcs-endpoint-url = "https://storage.example.com/gcs"
+        azure-endpoint-url = "https://storage.example.com/azure"
+    "#})?;
+
+    let configured = capture_uv_snapshot!(
+        context.filters(),
+        context.command().args(["cache", "dir", "--show-settings"])
+    );
+    diff_uv_snapshot!(context.filters(), &configured, context.command()
+        .args(["cache", "dir", "--show-settings"])
+        .env(EnvVars::UV_GCS_ENDPOINT_URL, "https://storage.example.com/override"), @r#"
+    ...
+                             ),
+                         ),
+                         port: None,
+    -                    path: "/gcs",
+    +                    path: "/override",
+                         query: None,
+                         fragment: None,
+                     },
+    ...
+    "#);
+    Ok(())
+}
+
 /// Deserialize an insecure host.
 #[test]
 #[cfg_attr(
@@ -3041,6 +3110,11 @@ fn allow_insecure_host() -> anyhow::Result<()> {
     ...
              http_proxy: None,
              https_proxy: None,
+             cloud_endpoints: CloudEndpoints {
+                 s3: None,
+                 gcs: None,
+                 azure: None,
+             },
              no_proxy: None,
     -        allow_insecure_host: [],
     +        allow_insecure_host: [
