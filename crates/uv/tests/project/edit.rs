@@ -10791,6 +10791,110 @@ fn add_default_index_url() -> Result<()> {
     Ok(())
 }
 
+/// Project indexes retain signed queries but omit HTTP userinfo.
+#[test]
+fn add_index_signed_query() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    context
+        .add()
+        .arg("anyio==4.0.0")
+        .arg("--frozen")
+        .arg("--default-index")
+        .arg("https://user:password@example.com/simple?sig=abc%2Bdef%3D")
+        .assert()
+        .success();
+    assert_snapshot!(context.read("pyproject.toml"), @r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    dependencies = [
+        "anyio==4.0.0",
+    ]
+
+    [[tool.uv.index]]
+    url = "https://example.com/simple?sig=abc%2Bdef%3D"
+    default = true
+    "#);
+    Ok(())
+}
+
+/// Updating an existing raw dependency uses the same credential policy as adding a new one.
+#[test]
+fn add_raw_signed_url_update() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==4.0.0"]
+    "#})?;
+
+    context.add()
+        .arg("--frozen")
+        .arg("--raw")
+        .arg("anyio @ https://user:password@example.com/anyio-4.0.0-py3-none-any.whl?sig=abc%2Bdef%3D")
+        .assert()
+        .success();
+    assert_snapshot!(context.read("pyproject.toml"), @r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    dependencies = [
+        "anyio @ https://user:password@example.com/anyio-4.0.0-py3-none-any.whl?sig=abc%2Bdef%3D",
+    ]
+    "#);
+    Ok(())
+}
+
+/// Editing extras must not replace an inline URL's environment variables with their values.
+#[test]
+fn add_extra_existing_signed_url() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio @ https://user:${WHEEL_PASSWORD}@example.com/anyio-4.0.0-py3-none-any.whl?sig=${WHEEL_SIGNATURE}"]
+    "#})?;
+
+    context
+        .add()
+        .arg("--frozen")
+        .arg("anyio[trio]")
+        .env("WHEEL_PASSWORD", "synthetic-password")
+        .env("WHEEL_SIGNATURE", "synthetic-signature")
+        .assert()
+        .success();
+    assert_snapshot!(context.read("pyproject.toml"), @r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    dependencies = [
+        "anyio[trio] @ https://user:${WHEEL_PASSWORD}@example.com/anyio-4.0.0-py3-none-any.whl?sig=${WHEEL_SIGNATURE}",
+    ]
+    "#);
+    Ok(())
+}
+
 #[tokio::test]
 async fn add_index_credentials() -> Result<()> {
     let context = uv_test::test_context!("3.12");

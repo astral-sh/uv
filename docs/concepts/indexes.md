@@ -183,8 +183,8 @@ name = "internal"
 url = "https://public:koala@pypi-proxy.corp.dev/simple"
 ```
 
-For security purposes, credentials are _never_ stored in the `uv.lock` file; as such, uv _must_ have
-access to the authenticated URL at installation time.
+Index usernames and passwords are not stored in `uv.lock`, so uv needs access to them at
+installation time. An index URL's query string is stored as provided.
 
 ### Using credential providers
 

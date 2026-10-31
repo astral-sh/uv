@@ -184,7 +184,6 @@ impl PyProjectTomlMut {
         &mut self,
         req: &Requirement,
         source: Option<&Source>,
-        raw: bool,
     ) -> Result<ArrayEdit, Error> {
         // Get or create `project.dependencies`.
         let dependencies = self
@@ -194,7 +193,7 @@ impl PyProjectTomlMut {
             .as_array_mut()
             .ok_or(Error::MalformedDependencies)?;
 
-        let edit = add_dependency(req, dependencies, source.is_some(), raw)?;
+        let edit = add_dependency(req, dependencies, source.is_some())?;
 
         if let Some(source) = source {
             self.add_source(&req.name, source)?;
@@ -269,7 +268,6 @@ impl PyProjectTomlMut {
         &mut self,
         req: &Requirement,
         source: Option<&Source>,
-        raw: bool,
     ) -> Result<ArrayEdit, Error> {
         // Get or create `tool.uv.dev-dependencies`.
         let dev_dependencies = self
@@ -287,7 +285,7 @@ impl PyProjectTomlMut {
             .as_array_mut()
             .ok_or(Error::MalformedDependencies)?;
 
-        let edit = add_dependency(req, dev_dependencies, source.is_some(), raw)?;
+        let edit = add_dependency(req, dev_dependencies, source.is_some())?;
 
         if let Some(source) = source {
             self.add_source(&req.name, source)?;
@@ -376,7 +374,7 @@ impl PyProjectTomlMut {
         {
             PortablePath::from(&path).to_string()
         } else {
-            index.url.without_credentials().to_string()
+            index.url.to_serialized_string().into_owned()
         };
         let existing_url = table.get("url").and_then(|item| item.as_str());
 
@@ -509,7 +507,6 @@ impl PyProjectTomlMut {
         group: &ExtraName,
         req: &Requirement,
         source: Option<&Source>,
-        raw: bool,
     ) -> Result<ArrayEdit, Error> {
         // Get or create `project.optional-dependencies`.
         let optional_dependencies = self
@@ -538,7 +535,7 @@ impl PyProjectTomlMut {
         .as_array_mut()
         .ok_or(Error::MalformedDependencies)?;
 
-        let added = add_dependency(req, group, source.is_some(), raw)?;
+        let added = add_dependency(req, group, source.is_some())?;
 
         // If `project.optional-dependencies` is an inline table, reformat it.
         //
@@ -602,7 +599,6 @@ impl PyProjectTomlMut {
         group: &GroupName,
         req: &Requirement,
         source: Option<&Source>,
-        raw: bool,
     ) -> Result<ArrayEdit, Error> {
         // Get or create `dependency-groups`.
         let dependency_groups = self
@@ -640,7 +636,7 @@ impl PyProjectTomlMut {
         .as_array_mut()
         .ok_or(Error::MalformedDependencies)?;
 
-        let added = add_dependency(req, group, source.is_some(), raw)?;
+        let added = add_dependency(req, group, source.is_some())?;
 
         // Only inserting a key changes the table layout. Formatting after an array edit
         // would clear the comments between inline groups.
@@ -1267,8 +1263,8 @@ fn add_dependency(
     req: &Requirement,
     deps: &mut Array,
     has_source: bool,
-    raw: bool,
 ) -> Result<ArrayEdit, Error> {
+    // Inline URLs were either supplied with `--raw` or read from the existing declaration.
     let mut to_replace = find_dependencies(&req.name, Some(&req.marker), deps);
 
     match to_replace.as_slice() {
@@ -1326,11 +1322,7 @@ fn add_dependency(
                 Sort::Unsorted
             };
 
-            let req_string = if raw {
-                req.displayable_with_credentials().to_string()
-            } else {
-                req.to_string()
-            };
+            let req_string = req.displayable_with_credentials().to_string();
             let index = match sort {
                 Sort::CaseInsensitive => deps.iter().position(|dep| {
                     dep.as_str().is_some_and(|dep| {
@@ -1513,7 +1505,7 @@ fn add_dependency(
         [_] => {
             let (i, mut old_req) = to_replace.remove(0);
             update_requirement(&mut old_req, req, has_source);
-            deps.replace(i, old_req.to_string());
+            deps.replace(i, old_req.displayable_with_credentials().to_string());
             reformat_array_multiline(deps);
             Ok(ArrayEdit::Update(i))
         }
