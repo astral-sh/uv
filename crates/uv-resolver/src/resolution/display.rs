@@ -173,7 +173,9 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
         // looking at which packages depend on it.
         let graph = self.resolution.graph.map(
             |_index, node| match node {
-                ResolutionGraphNode::Root => DisplayResolutionGraphNode::Root,
+                ResolutionGraphNode::Root | ResolutionGraphNode::Manifest(_) => {
+                    DisplayResolutionGraphNode::Root
+                }
                 ResolutionGraphNode::Dist(dist) => {
                     let dist = RequirementsTxtDist::from_annotated_dist(dist);
                     DisplayResolutionGraphNode::Dist(dist)

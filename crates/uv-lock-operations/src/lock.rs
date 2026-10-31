@@ -913,8 +913,14 @@ async fn do_lock(
                     }),
             );
 
+            let workspace_manifests = target
+                .workspace_manifests(&database, &overrides, &excludes, dependency_metadata)
+                .await
+                .map_err(ResolveError::from)?;
+            let index = state.index().with_workspace_manifests(workspace_manifests);
+
             // Expand the available extras for each workspace member.
-            let member_requirements = ExtrasResolver::new(&hasher, state.index(), database)
+            let member_requirements = ExtrasResolver::new(&hasher, &index, database)
                 .with_reporter(Arc::new(ResolverReporter::from(printer)))
                 .resolve(target.members_requirements())
                 .await
@@ -964,7 +970,7 @@ async fn do_lock(
                 conflicts.clone(),
                 &client,
                 &flat_index,
-                state.index(),
+                &index,
                 &build_dispatch,
                 concurrency,
                 options,

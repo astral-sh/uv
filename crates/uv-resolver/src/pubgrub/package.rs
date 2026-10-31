@@ -2,6 +2,7 @@ use std::ops::Deref;
 use std::sync::Arc;
 
 use uv_normalize::{ExtraName, GroupName, PackageName};
+use uv_pep440::Version;
 use uv_pep508::MarkerTree;
 use uv_pypi_types::ConflictItemRef;
 use uv_resolver_types::PackageNodeKind;
@@ -10,25 +11,45 @@ use crate::python_requirement::PythonRequirement;
 
 /// [`Arc`] wrapper around [`PubGrubPackageInner`] to make cloning (inside PubGrub) cheap.
 #[derive(Debug, Clone, Eq, Hash, PartialEq, PartialOrd, Ord)]
-pub struct PubGrubPackage(Arc<PubGrubPackageInner>);
+pub struct PubGrubPackage(Arc<PackageKey>);
+
+#[derive(Debug, Clone, Eq, Hash, PartialEq, PartialOrd, Ord)]
+struct PackageKey {
+    package: PubGrubPackageInner,
+    subject: PackageSubject,
+}
+
+/// A distribution version, a set of workspace requirements, or a constraint on a member's version.
+#[derive(Debug, Copy, Clone, Eq, Hash, PartialEq, PartialOrd, Ord)]
+pub(crate) enum PackageSubject {
+    Distribution,
+    Manifest,
+    VersionCheck,
+}
 
 impl Deref for PubGrubPackage {
     type Target = PubGrubPackageInner;
 
     fn deref(&self) -> &Self::Target {
-        &self.0
+        &self.0.package
     }
 }
 
 impl std::fmt::Display for PubGrubPackage {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Display::fmt(&self.0, f)
+        match self.subject() {
+            PackageSubject::Distribution | PackageSubject::VersionCheck => self.0.package.fmt(f),
+            PackageSubject::Manifest => write!(f, "the requirements of {}", self.0.package),
+        }
     }
 }
 
 impl From<PubGrubPackageInner> for PubGrubPackage {
     fn from(package: PubGrubPackageInner) -> Self {
-        Self(Arc::new(package))
+        Self(Arc::new(PackageKey {
+            package,
+            subject: PackageSubject::Distribution,
+        }))
     }
 }
 
@@ -93,6 +114,39 @@ pub enum PubGrubPackageInner {
 }
 
 impl PubGrubPackage {
+    pub(crate) fn subject(&self) -> PackageSubject {
+        self.0.subject
+    }
+
+    /// Display the selected version when the package has one.
+    pub(crate) fn at_version(&self, version: Option<&Version>) -> impl std::fmt::Display {
+        std::fmt::from_fn(move |f| {
+            write!(f, "{self}")?;
+            if let Some(version) = version {
+                write!(f, "=={version}")?;
+            }
+            Ok(())
+        })
+    }
+
+    /// Format a requested range in resolver traces.
+    pub(crate) fn display_range(&self, range: impl std::fmt::Display) -> impl std::fmt::Display {
+        std::fmt::from_fn(move |f| {
+            write!(f, "{self}")?;
+            if self.subject() != PackageSubject::Manifest {
+                write!(f, "{range}")?;
+            }
+            Ok(())
+        })
+    }
+
+    pub(crate) fn with_subject(mut self, subject: PackageSubject) -> Self {
+        if self.subject() != subject {
+            Arc::make_mut(&mut self.0).subject = subject;
+        }
+        self
+    }
+
     /// Create a [`PubGrubPackage`] from a package name and [`PackageNodeKind`].
     pub(crate) fn from_package(
         name: PackageName,
@@ -106,24 +160,22 @@ impl PubGrubPackage {
         // unable to unify version constraints across such packages.
         let marker = marker.simplify_extras_with(|_| true);
         match kind {
-            PackageNodeKind::Extra(extra) => Self(Arc::new(PubGrubPackageInner::Extra {
+            PackageNodeKind::Extra(extra) => Self::from(PubGrubPackageInner::Extra {
                 name,
                 extra,
                 marker,
-            })),
-            PackageNodeKind::Group(group) => Self(Arc::new(PubGrubPackageInner::Group {
+            }),
+            PackageNodeKind::Group(group) => Self::from(PubGrubPackageInner::Group {
                 name,
                 group,
                 marker,
-            })),
+            }),
             PackageNodeKind::Base if !marker.is_true() => {
-                Self(Arc::new(PubGrubPackageInner::Marker { name, marker }))
+                Self::from(PubGrubPackageInner::Marker { name, marker })
             }
-            PackageNodeKind::Base => Self(Arc::new(PubGrubPackageInner::Package {
-                name,
-                kind,
-                marker,
-            })),
+            PackageNodeKind::Base => {
+                Self::from(PubGrubPackageInner::Package { name, kind, marker })
+            }
         }
     }
 
@@ -132,6 +184,9 @@ impl PubGrubPackage {
     /// While dependency groups may be attached to a package, we don't consider them here as
     /// there is no (mandatory) dependency from a dependency group to the package.
     pub(crate) fn base_package(&self) -> Option<Self> {
+        if self.subject() == PackageSubject::VersionCheck {
+            return None;
+        }
         match &**self {
             PubGrubPackageInner::Root(_)
             | PubGrubPackageInner::Python(_)
@@ -143,11 +198,10 @@ impl PubGrubPackage {
                 None
             }
             PubGrubPackageInner::Extra { name, .. } | PubGrubPackageInner::Marker { name, .. } => {
-                Some(Self::from_package(
-                    name.clone(),
-                    PackageNodeKind::Base,
-                    MarkerTree::TRUE,
-                ))
+                Some(
+                    Self::from_package(name.clone(), PackageNodeKind::Base, MarkerTree::TRUE)
+                        .with_subject(self.subject()),
+                )
             }
         }
     }
@@ -308,7 +362,7 @@ impl PubGrubPackage {
     /// time of writing, this was a larger refactor, particularly in the error
     /// reporting where this routine is used.
     pub(crate) fn simplify_markers(&mut self, python_requirement: &PythonRequirement) {
-        match *Arc::make_mut(&mut self.0) {
+        match Arc::make_mut(&mut self.0).package {
             PubGrubPackageInner::Root(_)
             | PubGrubPackageInner::Python(_)
             | PubGrubPackageInner::System(_) => {}

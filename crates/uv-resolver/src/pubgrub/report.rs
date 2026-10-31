@@ -29,7 +29,7 @@ use crate::fork_indexes::ForkIndexes;
 use crate::fork_urls::ForkUrls;
 use crate::prerelease::PrereleaseSelection;
 use crate::prioritized_distribution::{IncompatibleDist, IncompatibleSource, IncompatibleWheel};
-use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner, PubGrubPython, Range};
+use crate::pubgrub::{PackageSubject, PubGrubPackage, PubGrubPackageInner, PubGrubPython, Range};
 use crate::python_requirement::{PythonRequirement, PythonRequirementSource};
 use crate::resolver::{
     MetadataUnavailable, UnavailablePackage, UnavailableReason, UnavailableVersion,
@@ -612,6 +612,10 @@ impl PubGrubReportFormatter<'_> {
 
     /// Return a display name for the package if it is a workspace member.
     fn format_workspace_member(&self, package: &PubGrubPackage) -> Option<Cow<'static, str>> {
+        // A bound on a member's distribution must display the required version.
+        if package.subject() == PackageSubject::VersionCheck {
+            return None;
+        }
         match &**package {
             // TODO(zanieb): Improve handling of dev and extra for single-project workspaces
             PubGrubPackageInner::Package { name, kind, .. }
@@ -620,14 +624,14 @@ impl PubGrubReportFormatter<'_> {
                 if self.is_single_project_workspace() && kind.is_base() {
                     Some(Cow::Borrowed("your project"))
                 } else {
-                    Some(Cow::Owned(format!("{package}")))
+                    Some(Cow::Owned((**package).to_string()))
                 }
             }
             PubGrubPackageInner::Extra { name, .. } if self.workspace_members.contains(name) => {
-                Some(Cow::Owned(format!("{package}")))
+                Some(Cow::Owned((**package).to_string()))
             }
             PubGrubPackageInner::Group { name, .. } if self.workspace_members.contains(name) => {
-                Some(Cow::Owned(format!("{package}")))
+                Some(Cow::Owned((**package).to_string()))
             }
             _ => None,
         }
@@ -771,11 +775,20 @@ impl PubGrubReportFormatter<'_> {
         }
 
         let requested_ranges = requested_ranges(derivation_tree);
+        let mut blocked_workspace_versions = BTreeSet::new();
 
         let mut pending = vec![(derivation_tree, inherited_exclude_newer_ranges.clone())];
         while let Some((derivation_tree, inherited_exclude_newer_ranges)) = pending.pop() {
             match derivation_tree {
                 DerivationTree::External(External::Custom(package, set, reason)) => {
+                    if matches!(
+                        reason,
+                        UnavailableReason::Package(UnavailablePackage::DynamicVersionBuildDisabled)
+                    ) && let Some(name) = package.name_no_root()
+                    {
+                        blocked_workspace_versions.insert(name);
+                        continue;
+                    }
                     if matches!(
                         reason,
                         UnavailableReason::Version(UnavailableVersion::UnsatisfiableDependency(_))
@@ -1016,6 +1029,12 @@ impl PubGrubReportFormatter<'_> {
                 }
             }
         }
+
+        // A blocked version check cannot tell us that the workspace member has the wrong version.
+        output_hints.retain(|hint| {
+            !matches!(hint, PubGrubHint::DependsOnWorkspacePackage { dependency, .. }
+                if blocked_workspace_versions.contains(dependency))
+        });
     }
 
     /// Collect the version ranges in `derivation_tree` that were excluded solely by
@@ -1248,7 +1267,9 @@ impl PubGrubReportFormatter<'_> {
                     status: *status,
                 });
             }
-            Some(UnavailablePackage::NotFound) => {}
+            Some(
+                UnavailablePackage::NotFound | UnavailablePackage::DynamicVersionBuildDisabled,
+            ) => {}
             None => {}
         }
 

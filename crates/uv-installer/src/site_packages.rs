@@ -588,7 +588,7 @@ impl SitePackages {
                         .map(Requirement::from)
                         .collect::<Vec<_>>();
                     for dependency in modifiers.apply(
-                        DependencyModifierScope::Package(name, distribution.version()),
+                        DependencyModifierScope::Package(name, Some(distribution.version())),
                         &dependencies,
                     ) {
                         if dependency.evaluate_markers(Some(markers), &requirement.extras) {

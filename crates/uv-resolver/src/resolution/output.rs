@@ -1,5 +1,6 @@
 use std::borrow::Cow;
-use std::collections::{BTreeSet, hash_map::Entry};
+use std::collections::{BTreeMap, BTreeSet, hash_map::Entry};
+use std::sync::Arc;
 
 use petgraph::{
     Directed, Direction,
@@ -9,14 +10,14 @@ use rustc_hash::{FxHashMap, FxHashSet};
 
 use uv_configuration::{Constraints, DependencyModifierScope, DependencyModifiers};
 use uv_distribution_types::{
-    DistributionId, HashCollection, IndexUrl, Name, Requirement, RequiresPython,
-    ResolutionDiagnostic, parse_url_hashes,
+    Dist, DistributionId, HashCollection, IndexUrl, Name, Requirement, RequiresPython,
+    ResolutionDiagnostic, ResolvedDist, parse_url_hashes,
 };
 use uv_git::GitResolver;
-use uv_normalize::PackageName;
+use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifier};
 use uv_pypi_types::{Conflicts, HashDigests, ParsedUrl, VerbatimParsedUrl, Yanked};
-use uv_resolver_types::PackageRole;
+use uv_resolver_types::{ManifestNode, PackageNodeKind, PackageRole};
 use uv_types::HashStrategy;
 
 use crate::graph_ops::{marker_reachability, simplify_conflict_markers};
@@ -97,30 +98,60 @@ impl<'a> ResolutionGraphBuilder<'a> {
                 Entry::Vacant(entry) => entry,
             };
             let package = &entry.key().package;
-            let selected = SelectedDistribution::new(
-                package,
-                entry.key().version.clone(),
-                &resolution.pins,
-                self.index,
-                self.git,
-            )?;
-            let package_role = if self.project == Some(&package.name) {
-                PackageRole::Project
-            } else if self.workspace_members.contains(&package.name) {
-                PackageRole::WorkspaceMember
+            let node = if let Some(version) = &entry.key().version {
+                let selected = SelectedDistribution::new(
+                    package,
+                    version.clone(),
+                    &resolution.pins,
+                    self.index,
+                    self.git,
+                )?;
+                let package_role = if self.project == Some(&package.name) {
+                    PackageRole::Project
+                } else if self.workspace_members.contains(&package.name) {
+                    PackageRole::WorkspaceMember
+                } else {
+                    PackageRole::Dependency
+                };
+                add_version(
+                    &mut self.graph,
+                    &mut self.diagnostics,
+                    self.preferences,
+                    self.hasher,
+                    self.index,
+                    package,
+                    selected,
+                    package_role,
+                )
             } else {
-                PackageRole::Dependency
+                let url = package
+                    .url
+                    .as_deref()
+                    .expect("workspace member has a directory URL");
+                let dist = Arc::new(Dist::from_url(package.name.clone(), url.clone())?);
+                let metadata = self
+                    .index
+                    .workspace_manifest(&package.name)
+                    .expect("workspace scope has a manifest")
+                    .clone();
+                let requirements = &metadata.requirements;
+                self.diagnostics.extend(missing_scope(
+                    &package.kind,
+                    &requirements.provides_extra,
+                    &requirements.dependency_groups,
+                    || ResolvedDist::Installable {
+                        dist: dist.clone(),
+                        version: None,
+                    },
+                ));
+                self.graph
+                    .add_node(ResolutionGraphNode::Manifest(ManifestNode {
+                        dist,
+                        metadata,
+                        kind: package.kind.clone(),
+                        marker: UniversalMarker::TRUE,
+                    }))
             };
-            let node = add_version(
-                &mut self.graph,
-                &mut self.diagnostics,
-                self.preferences,
-                self.hasher,
-                self.index,
-                package,
-                selected,
-                package_role,
-            );
             entry.insert(node);
             node_indices.push(node);
         }
@@ -178,10 +209,13 @@ impl<'a> ResolutionGraphBuilder<'a> {
         // knowledge about conflicts.
         let conflict_marker = ConflictMarker::from_conflicts(conflicts);
         for index in graph.node_indices() {
-            if let ResolutionGraphNode::Dist(dist) = &mut graph[index] {
-                dist.marker = reachability.remove(&index).unwrap_or_default();
-                dist.marker.imbibe(conflict_marker);
-            }
+            let marker = match &mut graph[index] {
+                ResolutionGraphNode::Root => continue,
+                ResolutionGraphNode::Manifest(member) => &mut member.marker,
+                ResolutionGraphNode::Dist(dist) => &mut dist.marker,
+            };
+            *marker = reachability.remove(&index).unwrap_or_default();
+            marker.imbibe(conflict_marker);
         }
         for weight in graph.edge_weights_mut() {
             weight.imbibe(conflict_marker);
@@ -319,25 +353,12 @@ fn add_version(
         && let MetadataResponse::Found(archive) = response.as_ref()
     {
         let metadata = &archive.metadata;
-        // Validate the extra.
-        if let Some(extra) = kind.extra() {
-            if !metadata.provides_extra.contains(extra) {
-                diagnostics.push(ResolutionDiagnostic::MissingExtra {
-                    dist: dist.clone(),
-                    extra: extra.clone(),
-                });
-            }
-        }
-
-        // Validate the development dependency group.
-        if let Some(dev) = kind.group() {
-            if !metadata.dependency_groups.contains_key(dev) {
-                diagnostics.push(ResolutionDiagnostic::MissingGroup {
-                    dist: dist.clone(),
-                    group: dev.clone(),
-                });
-            }
-        }
+        diagnostics.extend(missing_scope(
+            kind,
+            &metadata.provides_extra,
+            &metadata.dependency_groups,
+            || dist.clone(),
+        ));
     }
 
     // Add the distribution to the graph.
@@ -351,6 +372,30 @@ fn add_version(
         role: package_role,
         marker: UniversalMarker::TRUE,
     }))
+}
+
+/// Report a requested extra or group missing from the member's static or the distribution's built metadata.
+fn missing_scope(
+    kind: &PackageNodeKind,
+    extras: &[ExtraName],
+    groups: &BTreeMap<GroupName, Box<[Requirement]>>,
+    dist: impl FnOnce() -> ResolvedDist,
+) -> Option<ResolutionDiagnostic> {
+    match kind {
+        PackageNodeKind::Extra(extra) if !extras.contains(extra) => {
+            Some(ResolutionDiagnostic::MissingExtra {
+                dist: dist(),
+                extra: extra.clone(),
+            })
+        }
+        PackageNodeKind::Group(group) if !groups.contains_key(group) => {
+            Some(ResolutionDiagnostic::MissingGroup {
+                dist: dist(),
+                group: group.clone(),
+            })
+        }
+        PackageNodeKind::Base | PackageNodeKind::Extra(_) | PackageNodeKind::Group(_) => None,
+    }
 }
 
 /// Identify the hashes for a concrete distribution, preserving any hashes that were provided
@@ -489,35 +534,44 @@ fn has_lower_bound(
     modifiers: &DependencyModifiers,
 ) -> bool {
     for neighbor_index in graph.neighbors_directed(node_index, Direction::Incoming) {
-        let neighbor_dist = match graph.node_weight(neighbor_index).unwrap() {
-            ResolutionGraphNode::Root => {
-                // We already handled direct dependencies with a missing constraint
-                // separately.
-                return true;
+        let (name, version, requires_dist, dependency_groups) = match &graph[neighbor_index] {
+            // Direct dependencies are checked separately.
+            ResolutionGraphNode::Root => return true,
+            ResolutionGraphNode::Manifest(member) => {
+                let requirements = &member.metadata.requirements;
+                (
+                    &requirements.name,
+                    None,
+                    &requirements.requires_dist,
+                    &requirements.dependency_groups,
+                )
             }
-            ResolutionGraphNode::Dist(neighbor_dist) => neighbor_dist,
+            ResolutionGraphNode::Dist(dist) => {
+                let Some(metadata) = dist.metadata() else {
+                    return true;
+                };
+                (
+                    &dist.name,
+                    Some(&dist.version),
+                    &metadata.requires_dist,
+                    &metadata.dependency_groups,
+                )
+            }
         };
-
-        if neighbor_dist.name() == package_name {
-            // Only warn for real packages, not for virtual packages such as dev nodes.
+        if name == package_name {
             return true;
         }
-
-        let Some(metadata) = neighbor_dist.metadata() else {
-            // We can't check for lower bounds if we lack metadata.
-            return true;
-        };
 
         // Get all individual specifier for the current package and check if any has a lower
         // bound.
         for requirement in modifiers
             .apply(
-                DependencyModifierScope::Package(neighbor_dist.name(), &neighbor_dist.version),
-                metadata.requires_dist.iter(),
+                DependencyModifierScope::Package(name, version),
+                requires_dist.iter(),
             )
             .chain(modifiers.apply(
                 DependencyModifierScope::Global,
-                metadata.dependency_groups.values().flatten(),
+                dependency_groups.values().flatten(),
             ))
             // Constraints are missing from the graph.
             .chain(constraints.requirements().map(Cow::Borrowed))

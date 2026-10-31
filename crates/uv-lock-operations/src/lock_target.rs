@@ -10,19 +10,21 @@ use tracing::info_span;
 use uv_auth::CredentialsCache;
 use uv_cache::Cache;
 use uv_configuration::{
-    Constraints, DependencyGroupsWithDefaults, ExcludeDependency, NoSources, Upgrade,
+    Constraints, DependencyGroupsWithDefaults, ExcludeDependency, NoSources, Override, Upgrade,
 };
-use uv_distribution::LoweredRequirement;
+use uv_distribution::{DistributionDatabase, LoweredRequirement, UnversionedMetadata};
 use uv_distribution_types::{
-    Index, IndexLocations, MinimumLibcVersion, NameRequirementSpecification, Requirement,
-    RequiresPython,
+    DependencyMetadata, Dist, DistErrorKind, Index, IndexLocations, MinimumLibcVersion,
+    NameRequirementSpecification, Requirement, RequirementSource, RequiresPython,
 };
 use uv_lock::Lock;
 use uv_normalize::{GroupName, PackageName};
 use uv_pep508::RequirementOrigin;
 use uv_pypi_types::{Conflicts, SupportedEnvironments, VerbatimParsedUrl};
 use uv_python_discovery::find_requires_python;
+use uv_requirements::Error as RequirementsError;
 use uv_scripts::Pep723Script;
+use uv_types::BuildContext;
 use uv_workspace::dependency_groups::{
     DependencyGroupError, FlatDependencyGroup, FlatDependencyGroups,
 };
@@ -178,6 +180,74 @@ impl<'lock> LockTarget<'lock> {
         }
 
         Ok(())
+    }
+
+    /// Read the static dependency declarations of virtual members with dynamic versions.
+    pub(crate) async fn workspace_manifests(
+        self,
+        database: &DistributionDatabase<'_, impl BuildContext>,
+        overrides: &[Override<Requirement>],
+        excludes: &[ExcludeDependency],
+        dependency_metadata: &DependencyMetadata,
+    ) -> Result<Vec<(Box<Path>, UnversionedMetadata)>, RequirementsError> {
+        let packages = self.packages();
+        if !packages
+            .values()
+            .any(|member| member.project().has_dynamic_version())
+        {
+            return Ok(Vec::new());
+        }
+        let versioned_packages = overrides
+            .iter()
+            .filter_map(Override::versioned_package)
+            .chain(
+                excludes
+                    .iter()
+                    .filter_map(ExcludeDependency::versioned_package),
+            )
+            .collect::<FxHashSet<_>>();
+        let mut projects = Vec::new();
+        for requirement in self.members_requirements() {
+            let RequirementSource::Directory {
+                install_path,
+                editable,
+                r#virtual: Some(true),
+                url,
+            } = requirement.source
+            else {
+                continue;
+            };
+            let name = &requirement.name;
+            let member = &packages[name];
+            if !member.project().has_dynamic_version()
+                || versioned_packages.contains(name)
+                || dependency_metadata.contains(name)
+            {
+                continue;
+            }
+            match database
+                .virtual_project_metadata(&install_path, &member.pyproject_toml().raw)
+                .await
+            {
+                Ok(Some(metadata)) => projects.push((install_path, metadata)),
+                Ok(None) => {}
+                Err(err) => {
+                    let dist = Dist::from_directory_url(
+                        requirement.name,
+                        url,
+                        &install_path,
+                        editable,
+                        Some(true),
+                    )?;
+                    return Err(RequirementsError::Dist(
+                        DistErrorKind::Read,
+                        Box::new(dist),
+                        Box::new(err),
+                    ));
+                }
+            }
+        }
+        Ok(projects)
     }
 
     /// Returns the set of all members within the target.

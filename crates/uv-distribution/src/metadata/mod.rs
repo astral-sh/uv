@@ -76,6 +76,13 @@ pub struct Metadata {
     pub dynamic: bool,
 }
 
+/// The requirements and Python compatibility of a project without evaluating its version.
+#[derive(Debug, Clone)]
+pub struct UnversionedMetadata {
+    pub requirements: RequiresDist,
+    pub requires_python: Option<VersionSpecifiers>,
+}
+
 impl Metadata {
     /// Lower without considering `tool.uv` in `pyproject.toml`, used for index and other archive
     /// dependencies.

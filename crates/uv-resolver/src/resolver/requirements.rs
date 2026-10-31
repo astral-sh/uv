@@ -24,17 +24,17 @@ pub(super) enum RequirementContext<'a> {
     Root,
     Package {
         name: &'a PackageName,
-        version: &'a Version,
+        version: Option<&'a Version>,
     },
     Extra {
         name: &'a PackageName,
-        version: &'a Version,
+        version: Option<&'a Version>,
         extra: &'a ExtraName,
     },
     /// Groups use global overrides and package-scoped exclusions, and may depend on the project.
     Group {
         name: &'a PackageName,
-        version: &'a Version,
+        version: Option<&'a Version>,
     },
 }
 

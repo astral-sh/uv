@@ -1,5 +1,7 @@
 pub(crate) use crate::pubgrub::dependencies::{DependencySource, PubGrubDependency};
-pub(crate) use crate::pubgrub::package::{PubGrubPackage, PubGrubPackageInner, PubGrubPython};
+pub(crate) use crate::pubgrub::package::{
+    PackageSubject, PubGrubPackage, PubGrubPackageInner, PubGrubPython,
+};
 pub(crate) use crate::pubgrub::priority::{PubGrubPriorities, PubGrubPriority, PubGrubTiebreaker};
 pub(crate) use crate::pubgrub::range::Range;
 pub use crate::pubgrub::report::PubGrubHint;
