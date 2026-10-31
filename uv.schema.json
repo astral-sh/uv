@@ -1398,6 +1398,10 @@
           "description": "Include all optional dependencies.\n\nOnly applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.",
           "type": ["boolean", "null"]
         },
+        "all-groups": {
+          "description": "Include dependencies from all dependency groups.\n\nOnly applies to `pylock.toml` sources and the `pyproject.toml` in the working directory.",
+          "type": ["boolean", "null"]
+        },
         "allow-empty-requirements": {
           "description": "Allow `uv pip sync` with empty requirements, which will clear the environment of all\npackages.",
           "type": ["boolean", "null"]
