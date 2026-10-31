@@ -44,6 +44,7 @@ use uv_pep440::{Version, release_specifiers_to_ranges};
 use uv_platform_tags::Tags;
 use uv_pypi_types::{HashAlgorithm, HashDigest, HashDigests, PyProjectToml, ResolutionMetadata};
 use uv_redacted::SafeUrl;
+use uv_static::EnvVars;
 use uv_types::{BuildContext, BuildKey, BuildStack, SourceBuildTrait};
 use uv_workspace::pyproject::ToolUvSources;
 
@@ -2282,68 +2283,51 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .as_ref()
             .is_some_and(|cache_shard| cache_shard.is_dir())
         {
-            debug!("Skipping GitHub fast path for: {source} (shard exists)");
+            debug!("Skipping GitHub `pyproject.toml` fast path for: {source} (shard exists)");
         } else {
-            debug!("Attempting GitHub fast path for: {source}");
+            debug!("Attempting GitHub `pyproject.toml` fast path: {source}");
 
-            // If this is GitHub URL, attempt to resolve to a precise commit using the GitHub API.
-            match self
-                .build_context
-                .git()
-                .github_fast_path(
-                    resource.git,
-                    client
-                        .unmanaged
-                        .uncached_client(resource.git.url())
-                        .raw_client(),
-                )
-                .await
-            {
-                Ok(Some(precise)) => {
-                    // There's no need to check the cache, since we can't use cached metadata if there are
-                    // sources, and we can't know if there are sources without fetching the
-                    // `pyproject.toml`.
-                    //
-                    // For the same reason, there's no need to write to the cache, since we won't be able to
-                    // use it on subsequent runs.
-                    match self
-                        .github_metadata(precise, source, resource, client)
-                        .await
-                    {
-                        Ok(Some(metadata)) => {
-                            // Validate the metadata, but ignore it if the metadata doesn't match.
-                            match validate_metadata(source, &metadata) {
-                                Ok(()) => {
-                                    debug!(
-                                        "Found static metadata via GitHub fast path for: {source}"
-                                    );
-                                    return Ok(ArchiveMetadata {
-                                        metadata: Metadata::from_metadata23(metadata),
-                                        hashes: HashDigests::empty(),
-                                    });
-                                }
-                                Err(err) => {
-                                    debug!(
-                                        "Ignoring `pyproject.toml` from GitHub for `{source}`: {err}"
-                                    );
-                                }
+            if let Some(precise) = self.build_context.git().get_precise(resource.git) {
+                // If this is GitHub URL, attempt to fetch the `pyproject.toml` directly.
+                //
+                // There's no need to check the cache, since we can't use cached metadata if there
+                // are sources, and we can't know if there are sources without fetching the
+                // `pyproject.toml`.
+                //
+                // For the same reason, there's no need to write to the cache, since we won't be
+                // able to use it on subsequent runs.
+                //
+                // TODO(charlie): Skip this fetch if the GitHub commit resolution fast path failed
+                // with a 404 or similar.
+                match self
+                    .github_metadata(precise, source, resource, client)
+                    .await
+                {
+                    Ok(Some(metadata)) => {
+                        // Validate the metadata, but ignore it if the metadata doesn't match.
+                        match validate_metadata(source, &metadata) {
+                            Ok(()) => {
+                                debug!("Found static metadata via GitHub fast path for: {source}");
+                                return Ok(ArchiveMetadata {
+                                    metadata: Metadata::from_metadata23(metadata),
+                                    hashes: HashDigests::empty(),
+                                });
+                            }
+                            Err(err) => {
+                                debug!(
+                                    "Ignoring `pyproject.toml` from GitHub for `{source}`: {err}"
+                                );
                             }
                         }
-                        Ok(None) => {
-                            // Nothing to do.
-                        }
-                        Err(err) => {
-                            debug!(
-                                "Failed to fetch `pyproject.toml` via GitHub fast path for: {source} ({err})"
-                            );
-                        }
                     }
-                }
-                Ok(None) => {
-                    // Nothing to do.
-                }
-                Err(err) => {
-                    debug!("Failed to resolve commit via GitHub fast path for: {source} ({err})");
+                    Ok(None) => {
+                        // Nothing to do.
+                    }
+                    Err(err) => {
+                        debug!(
+                            "Failed to fetch `pyproject.toml` via GitHub fast path for: {source} ({err})"
+                        );
+                    }
                 }
             }
         }
@@ -2590,18 +2574,37 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             return Ok(Some(precise));
         }
 
-        // If this is GitHub URL, attempt to resolve to a precise commit using the GitHub API.
-        if let Some(precise) = self
-            .build_context
-            .git()
-            .github_fast_path(
-                git,
-                client.unmanaged.uncached_client(git.url()).raw_client(),
-            )
-            .await?
-        {
-            debug!("Resolved to precise commit via GitHub fast path: {source}");
-            return Ok(Some(precise));
+        let http_settings = client.unmanaged.git_http_settings(git.url());
+        let cache = self.build_context.cache().bucket(CacheBucket::Git);
+        if !client.unmanaged.connectivity().is_offline() {
+            // A failed probe can still fall back to a cached checkout or a full fetch.
+            match self
+                .build_context
+                .git()
+                .github_fast_path(
+                    git,
+                    client.unmanaged.uncached_client(git.url()).raw_client(),
+                )
+                .await
+            {
+                Ok(Some(precise)) => return Ok(Some(precise)),
+                Ok(None) => {}
+                Err(err) => {
+                    debug!("Failed to resolve commit via GitHub fast path: {source} ({err})");
+                }
+            }
+            match self
+                .build_context
+                .git()
+                .ls_remote(git, http_settings, cache.clone())
+                .await
+            {
+                Ok(Some(precise)) => return Ok(Some(precise)),
+                Ok(None) => {}
+                Err(err) => {
+                    debug!("Failed to resolve commit via `git ls-remote`: {source} ({err})");
+                }
+            }
         }
 
         // Otherwise, fetch the Git repository.
@@ -2610,8 +2613,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .git()
             .fetch(
                 git,
-                client.unmanaged.git_http_settings(git.url()),
-                self.build_context.cache().bucket(CacheBucket::Git),
+                http_settings,
+                cache,
                 self.reporter
                     .clone()
                     .map(|reporter| reporter.into_git_reporter()),
@@ -2631,6 +2634,12 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         resource: &GitDirectorySourceUrl<'_>,
         client: &ManagedClient<'_>,
     ) -> Result<Option<ResolutionMetadata>, Error> {
+        if std::env::var_os(EnvVars::UV_NO_GITHUB_FAST_PATH).is_some()
+            || client.unmanaged.connectivity().is_offline()
+        {
+            return Ok(None);
+        }
+
         let GitDirectorySourceUrl {
             git, subdirectory, ..
         } = resource;

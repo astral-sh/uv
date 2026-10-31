@@ -6731,6 +6731,7 @@ dependencies = [
  "owo-colors",
  "papaya",
  "reqwest",
+ "tempfile",
  "thiserror",
  "tokio",
  "tracing",
