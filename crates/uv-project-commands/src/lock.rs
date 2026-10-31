@@ -31,7 +31,7 @@ use uv_resolve_operations::loggers::DefaultResolveLogger;
 use uv_scripts::Pep723Script;
 use uv_settings::{FrozenSource, LockCheck, PythonInstallMirrors, ResolverSettings};
 use uv_warnings::warn_user;
-use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache};
+use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, WorkspaceCache};
 
 use crate::ScriptPath;
 
@@ -88,7 +88,10 @@ pub async fn lock(
     } else {
         workspace = VirtualProject::discover(
             project_dir,
-            &DiscoveryOptions::default(),
+            &DiscoveryOptions {
+                members: MemberDiscovery::for_sources(&settings.sources, false),
+                ..DiscoveryOptions::default()
+            },
             cache,
             workspace_cache,
         )

@@ -1,5 +1,5 @@
 pub use workspace::{
-    DefaultGroupsError, DiscoveryOptions, Editability, MemberDiscovery,
+    DefaultGroupsError, DiscoveryOptions, Editability, MemberDiscovery, MemberExclusions,
     ProjectEnvironmentSelection, ProjectWorkspace, RequiresPythonDeclaration,
     RequiresPythonSources, VirtualProject, Workspace, WorkspaceCache, WorkspaceError,
     WorkspaceErrorKind, WorkspaceMember,
