@@ -3153,6 +3153,32 @@ mod tests {
     }
 
     #[test]
+    fn find_python_imre() -> Result<()> {
+        let mut context = TestContext::new()?;
+        context.add_python_interpreters(&[
+            (true, ImplementationName::CPython, "imre", "3.12.1"),
+            (true, ImplementationName::Imre, "imre3.12", "3.12.0"),
+        ])?;
+
+        let python = context.run(|| {
+            find_python_installation(
+                &parse_request("imre"),
+                EnvironmentPreference::Any,
+                PythonPreference::OnlySystem,
+                None,
+                &context.cache,
+            )
+        })??;
+        assert_eq!(python.interpreter().implementation_name(), "imre");
+        assert_eq!(
+            python.interpreter().python_full_version().to_string(),
+            "3.12.0"
+        );
+
+        Ok(())
+    }
+
+    #[test]
     fn find_python_graalpy_request_ignores_cpython() -> Result<()> {
         let mut context = TestContext::new()?;
         context.add_python_interpreters(&[

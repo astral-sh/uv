@@ -16723,6 +16723,22 @@ fn reject_windows_rewritten_free_threaded_python_wheel_entrypoint_name() -> Resu
 }
 
 #[test]
+fn reject_imre_wheel_entrypoint_name() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let wheel = repacked_wheel_with_entrypoint(&context, "console_scripts", "imre")?;
+
+    uv_snapshot!(context.filters(), context.pip_install().arg(&wheel), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    error: Failed to install: foo-0.1.0-py3-none-any.whl (foo==0.1.0 (from file://[TEMP_DIR]/foo-0.1.0-py3-none-any.whl))
+      cause: Scripts must not use the reserved name `imre`, got: `imre`
+    ");
+    Ok(())
+}
+
+#[test]
 fn reject_pypy_major_wheel_entrypoint_name() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let repacked_wheel = repacked_wheel_with_entrypoint(&context, "console_scripts", "pypy3")?;

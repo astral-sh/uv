@@ -194,8 +194,8 @@ fn get_script_executable(python_executable: &Path, is_gui: bool) -> PathBuf {
     }
 }
 
-const RESERVED_SCRIPT_NAMES_ERROR: &[&str; 7] = &[
-    "python", "pythonw", "python3", "graalpy", "pypy", "pypy2", "pypy3",
+const RESERVED_SCRIPT_NAMES_ERROR: &[&str; 8] = &[
+    "python", "pythonw", "python3", "graalpy", "imre", "pypy", "pypy2", "pypy3",
 ];
 const RESERVED_VERSIONED_SCRIPT_NAME_PREFIX_ERROR: &str = "python3.";
 const RESERVED_FREE_THREADED_SCRIPT_NAME_PREFIXES_ERROR: &[&str; 2] = &["python3.", "pythonw3."];

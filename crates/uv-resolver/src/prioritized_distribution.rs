@@ -253,7 +253,10 @@ impl IncompatibleDist {
                 }
                 IncompatibleWheel::Tag(IncompatibleTag::FreethreadedAbi) => None,
                 IncompatibleWheel::Tag(IncompatibleTag::AbiPythonVersion) => {
-                    let tag = requires_python?;
+                    let tag = tags
+                        .and_then(Tags::python_tag)
+                        .map(|tag| tag.to_string())
+                        .or_else(|| requires_python.map(|tag| tag.to_string()))?;
                     Some(format!("(e.g., `{tag}`)", tag = tag.cyan()))
                 }
                 IncompatibleWheel::Tag(IncompatibleTag::Platform) => {
@@ -1237,6 +1240,9 @@ fn implied_python_markers(filename: &WheelFilename) -> MarkerTree {
             }
             | LanguageTag::Pyston {
                 python_version: (major, minor),
+            }
+            | LanguageTag::Imre {
+                python_version: (major, minor),
             } => {
                 if is_abi3 {
                     MarkerTree::expression(MarkerExpression::Version {
@@ -1289,6 +1295,13 @@ fn implied_python_markers(filename: &WheelFilename) -> MarkerTree {
                     key: MarkerValueString::PlatformPythonImplementation,
                     operator: MarkerOperator::Equal,
                     value: arcstr::literal!("Pyston"),
+                }));
+            }
+            LanguageTag::Imre { .. } => {
+                tree = tree.and(MarkerTree::expression(MarkerExpression::String {
+                    key: MarkerValueString::PlatformPythonImplementation,
+                    operator: MarkerOperator::Equal,
+                    value: arcstr::literal!("Imre"),
                 }));
             }
         }
@@ -1422,6 +1435,10 @@ mod tests {
         assert_python_markers(
             "example-1.0-pp310-pypy310_pp73-any.whl",
             "python_full_version == '3.10.*' and platform_python_implementation == 'PyPy'",
+        );
+        assert_python_markers(
+            "example-1.0-imre312-imre1-linux_x86_64.whl",
+            "python_full_version == '3.12.*' and platform_python_implementation == 'Imre'",
         );
         assert_python_markers(
             "example-1.0-py310-none-any.whl",

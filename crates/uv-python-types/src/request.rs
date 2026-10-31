@@ -2004,6 +2004,17 @@ mod tests {
             PythonRequest::Implementation(ImplementationName::GraalPy)
         );
         assert_eq!(
+            PythonRequest::parse("imre"),
+            PythonRequest::Implementation(ImplementationName::Imre)
+        );
+        assert_eq!(
+            PythonRequest::parse("imre@3.12"),
+            PythonRequest::ImplementationVersion(
+                ImplementationName::Imre,
+                VersionRequest::from_str("3.12").unwrap(),
+            )
+        );
+        assert_eq!(
             PythonRequest::parse("gp"),
             PythonRequest::Implementation(ImplementationName::GraalPy)
         );
@@ -2506,7 +2517,7 @@ mod tests {
             "any",
             &[
                 "python", "python3", "cpython", "cpython3", "pypy", "pypy3", "graalpy", "graalpy3",
-                "pyodide", "pyodide3",
+                "pyodide", "pyodide3", "imre", "imre3",
             ],
         );
 
@@ -2519,6 +2530,18 @@ mod tests {
         case("3.13", &["python3.13", "python3", "python"]);
 
         case("pypy", &["pypy", "pypy3", "python", "python3"]);
+
+        case(
+            "imre@3.12",
+            &[
+                "imre3.12",
+                "imre3",
+                "imre",
+                "python3.12",
+                "python3",
+                "python",
+            ],
+        );
 
         case(
             "pypy@3.10",
