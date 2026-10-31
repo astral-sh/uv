@@ -13,6 +13,7 @@ use uv_distribution_types::PEP_850_SCHEMA;
 #[cfg(feature = "test-git")]
 use uv_redacted::SafeUrl;
 use uv_static::EnvVars;
+use uv_test::archive::generate_source_archive;
 use uv_test::find_links::FindLinksServer;
 use uv_test::packse::{PackseServer, WheelBuilder};
 use uv_test::uv_snapshot;
@@ -46,7 +47,7 @@ fn gpu_variant() -> Value {
     })
 }
 
-/// Recheck a local wheel's hardware requirements when compiling after a driver change.
+/// Recheck a local wheel's hardware requirements on install and compile after a driver change.
 #[test]
 fn install_local_variant_wheel() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -69,6 +70,19 @@ fn install_local_variant_wheel() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + ok==1.0.0 (from file://[TEMP_DIR]/ok-1.0.0-py3-none-any-gpu.whl)
+    ");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .env(EnvVars::NV_VARIANT_PROVIDER_FORCE_CUDA_DRIVER_VERSION, "11")
+        .env(EnvVars::NV_VARIANT_PROVIDER_FORCE_SM_ARCH, "8.8")
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg(wheel_path.path()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies
+      cause: Because only ok==1.0.0 is available and ok==1.0.0 has only unsupported wheel variants, we can conclude that all versions of ok cannot be used.
+             And because you require ok, we can conclude that your requirements are unsatisfiable.
     ");
 
     context
@@ -236,25 +250,41 @@ fn install_git_path_variant_wheel() -> Result<()> {
     Ok(())
 }
 
-/// Sync keeps an installed variant even when wheel variants are no longer enabled.
+/// Install and sync replace an installed wheel at the same version as system properties change.
 #[test]
-fn sync_keeps_installed_variant() -> Result<()> {
+fn replace_incompatible_installed_variant() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let links = context.temp_dir.child("links");
-    links.create_dir_all()?;
-    let variant = null_variant().to_string();
-    let (_, wheel) = WheelBuilder::new(&"ok".parse()?, &"1.0.0".parse()?)
-        .files(&[("ok-1.0.0.dist-info/variant.json", &variant)])
-        .build();
-    links
-        .child("ok-1.0.0-py3-none-any-null.whl")
-        .write_binary(&wheel)?;
-    links.child("ok-1.0.0-variants.json").write_str(&variant)?;
+    let server = PackseServer::from_toml(indoc! {r#"
+        name = "installed-variant-compatibility"
+        root = {}
+        expected.satisfiable = true
+
+        [packages.ok.versions."1.0.0"]
+        sdist = false
+
+        [packages.ok.versions."1.0.0".variants]
+        namespaces = ["nvidia"]
+
+        [packages.ok.versions."1.0.0".variants.providers.nvidia]
+        requires = ["nvidia-variant-provider==0.0.1"]
+        plugin-api = "nvidia_variant_provider.plugin:NvidiaVariantPlugin"
+
+        [packages.ok.versions."1.0.0".variants.wheels]
+        gpu12.properties = ["nvidia :: cuda_version_lower_bound :: 12"]
+        gpu11.properties = ["nvidia :: cuda_version_lower_bound :: 11"]
+    "#})?;
+    let installed_variant = context
+        .site_packages()
+        .join("ok-1.0.0.dist-info/variant.json");
+    context
+        .temp_dir
+        .child("requirements.txt")
+        .write_str("ok==1.0.0")?;
 
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg("--no-index")
-        .arg("--find-links")
-        .arg(links.path())
+        .env(EnvVars::NV_VARIANT_PROVIDER_FORCE_CUDA_DRIVER_VERSION, "12")
+        .arg("--index-url")
+        .arg(server.index_url())
         .arg("--preview-features")
         .arg("wheel-variants")
         .arg("ok==1.0.0"), @"
@@ -266,20 +296,232 @@ fn sync_keeps_installed_variant() -> Result<()> {
      + ok==1.0.0
     ");
 
-    context
-        .temp_dir
-        .child("requirements.txt")
-        .write_str("ok==1.0.0")?;
-    uv_snapshot!(context.filters(), context.pip_sync()
-        .arg("requirements.txt")
-        .arg("--no-index")
-        .arg("--find-links")
-        .arg(links.path()), @"
+    assert_eq!(
+        serde_json::from_str::<Value>(&context.read(&installed_variant))?["variants"],
+        json!({"gpu12": {"nvidia": {"cuda_version_lower_bound": ["12"]}}})
+    );
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .env(EnvVars::NV_VARIANT_PROVIDER_FORCE_CUDA_DRIVER_VERSION, "11")
+        .arg("--index-url")
+        .arg(server.index_url())
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("ok==1.0.0"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ ok==1.0.0
+    ");
+
+    assert_eq!(
+        serde_json::from_str::<Value>(&context.read(&installed_variant))?["variants"],
+        json!({"gpu11": {"nvidia": {"cuda_version_lower_bound": ["11"]}}})
+    );
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .env(EnvVars::NV_VARIANT_PROVIDER_FORCE_CUDA_DRIVER_VERSION, "10")
+        .arg("requirements.txt")
+        .arg("--index-url")
+        .arg(server.index_url())
+        .arg("--preview-features")
+        .arg("wheel-variants"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ ok==1.0.0
+    ");
+    assert!(!installed_variant.exists());
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--offline")
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("ok==1.0.0"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
     Checked 1 package in [TIME]
     ");
+    Ok(())
+}
+
+/// Project sync installs the wheel selected by the lockfile even if another compatible variant
+/// is already installed.
+#[test]
+fn sync_replaces_compatible_variant_with_selected_wheel() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::from_toml(indoc! {r#"
+        name = "installed-variant-lockfile-selection"
+        root = {}
+        expected.satisfiable = true
+
+        [packages.ok.versions."1.0.0"]
+        sdist = false
+        variants.namespaces = ["x86_64"]
+        variants.wheels.null.properties = []
+    "#})?;
+    let installed_variant = context
+        .site_packages()
+        .join("ok-1.0.0.dist-info/variant.json");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "example"
+            version = "1.0.0"
+            requires-python = ">=3.12"
+            dependencies = ["ok==1.0.0"]
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--index-url")
+        .arg(server.index_url())
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("ok==1.0.0"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0
+    ");
+    assert!(installed_variant.is_file());
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--index-url")
+        .arg(server.index_url())
+        .arg("--preview-features")
+        .arg("wheel-variants"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ ok==1.0.0
+    ");
+    assert!(!installed_variant.exists());
+    Ok(())
+}
+
+/// A lock that selects an sdist must replace a compatible variant of the same version.
+#[test]
+fn sync_replaces_compatible_variant_with_selected_sdist() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let links = context.temp_dir.child("links");
+    links.create_dir_all()?;
+    let name = "ok".parse()?;
+    let version = "1.0.0".parse()?;
+    let variant = null_variant().to_string();
+    let (_, wheel) = WheelBuilder::new(&name, &version)
+        .files(&[("ok-1.0.0.dist-info/variant.json", &variant)])
+        .build();
+    links
+        .child("ok-1.0.0-py3-none-any-null.whl")
+        .write_binary(&wheel)?;
+    links.child("ok-1.0.0-variants.json").write_str(&variant)?;
+    links
+        .child("ok-1.0.0.tar.gz")
+        .write_binary(&generate_source_archive(&name, &version, "", None)?)?;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "example"
+            version = "1.0.0"
+            requires-python = ">=3.12"
+            dependencies = ["ok==1.0.0"]
+
+            [tool.uv]
+            no-index = true
+            find-links = ["links"]
+            preview-features = ["wheel-variants"]
+        "#})?;
+
+    let installed_variant = context
+        .site_packages()
+        .join("ok-1.0.0.dist-info/variant.json");
+
+    uv_snapshot!(context.filters(), context.pip_install().arg("ok==1.0.0"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0
+    ");
+    assert!(installed_variant.is_file());
+
+    uv_snapshot!(context.filters(), context.sync(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ ok==1.0.0
+    ");
+    assert!(!installed_variant.exists());
+    Ok(())
+}
+
+/// Disabling wheel variants fails if the installed variant has no compatible replacement.
+#[test]
+fn incompatible_installed_variant_without_replacement() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::from_toml(indoc! {r#"
+        name = "variant-only"
+        root = {}
+        expected.satisfiable = true
+
+        [packages.ok.versions."1.0.0"]
+        wheel = false
+        sdist = false
+        variants.namespaces = ["x86_64"]
+        variants.wheels.null.properties = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--index-url")
+        .arg(server.index_url())
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("ok==1.0.0"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0
+    ");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--no-index")
+        .arg("ok==1.0.0"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies
+      cause: Because ok was not found in the provided package locations and ok==1.0.0 has only unsupported wheel variants, we can conclude that ok==1.0.0 cannot be used.
+             And because you require ok==1.0.0, we can conclude that your requirements are unsatisfiable.
+
+    hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
+    ");
+    assert!(
+        context
+            .site_packages()
+            .join("ok-1.0.0.dist-info/variant.json")
+            .is_file()
+    );
     Ok(())
 }
 

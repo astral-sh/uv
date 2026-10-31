@@ -385,11 +385,20 @@ impl<'a> Planner<'a> {
                                     "Requirement installed, but mismatched:\n  Installed: {installed:?}\n  Requested: {source:?}"
                                 );
                             }
-                            RequirementSatisfaction::Satisfied => {
-                                // TODO(konsti): Reinstall if the resolver selected a different
-                                // wheel variant, even when the installed variant is compatible.
-                                debug!("Requirement already installed: {installed}");
-                                continue;
+                            RequirementSatisfaction::Satisfied(variant) => {
+                                if let ResolvedDist::Installable { dist, .. } = dist
+                                    && !variant.matches(match dist.as_ref() {
+                                        Dist::Built(wheel) => wheel.wheel_filename().variant(),
+                                        Dist::Source(_) => None,
+                                    })
+                                {
+                                    debug!(
+                                        "Installed wheel variant differs from the resolved distribution: {installed}"
+                                    );
+                                } else {
+                                    debug!("Requirement already installed: {installed}");
+                                    continue;
+                                }
                             }
                             RequirementSatisfaction::OutOfDate => {
                                 debug!("Requirement installed, but not fresh: {installed}");
@@ -566,9 +575,6 @@ impl<'a> Planner<'a> {
                                             build_info,
                                             path: cache.archive(&archive.id).into_boxed_path(),
                                         };
-                                        // TODO(konsti): Recheck installed variants too. A driver
-                                        // change can make a wheel already in the environment
-                                        // incompatible even when its platform tags still match.
                                         check_wheel_variant_compatibility(
                                             &cached_dist.filename,
                                             &cached_dist.path,
