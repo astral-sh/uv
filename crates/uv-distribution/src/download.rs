@@ -9,7 +9,7 @@ use uv_pypi_types::{HashDigest, HashDigests, ResolutionMetadata};
 
 use crate::{Error, supported_variant_properties};
 
-/// Allow variant wheels from supported sources when the wheel variants preview is enabled.
+/// Allow variant wheels from indexes, local paths, and direct URLs with the wheel variants preview.
 ///
 /// Variant compatibility is checked separately during resolution and installation.
 ///
