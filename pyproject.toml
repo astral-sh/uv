@@ -119,7 +119,11 @@ docker = [
 release = [
   "rooster==0.1.1",
 ]
+jaq = [
+    "astral-dev-toolchain-jaq>=3.1.1",
+]
 check = [
+    { include-group = "jaq" },
     "astral-dev-toolchain-cargo-shear>=1.13.4",
     "ruff>=0.16.2",
     "ty>=0.0.69",
@@ -130,6 +134,7 @@ test = [
     "astral-dev-toolchain-cargo-nextest>=0.9.143",
 ]
 dev = [
+    { include-group = "jaq" },
     { include-group = "test" },
     "astral-dev-toolchain-cargo-bloat>=0.12.1",
     "astral-dev-toolchain-cargo-codspeed>=5.0.1",

@@ -59,9 +59,14 @@ jobs:
       rejection_reason: ${{ steps.plan.outputs.rejection_reason }}
       changed_head: ${{ steps.plan.outputs.changed_head }}
     steps:
+      - uses: $/.github/actions/setup-uv-toolchain
+        id: toolchain
+
       - name: Verify pull request
         id: verify
+        shell: uv run --only-group=jaq --python 3 bash -e {0}
         env:
+          UV_PROJECT: ${{ steps.toolchain.outputs.project }}
           EXPECTED_HEAD_SHA: ${{ inputs.head_sha }}
           GH_TOKEN: ${{ github.token }}
           PULL_REQUEST_NUMBER: ${{ inputs.pull_request }}
@@ -84,7 +89,7 @@ jobs:
             --json number,title,body,state,isDraft,labels,baseRefName,headRefName,isCrossRepository \
             > "$RUNNER_TEMP/pull-request.json"
 
-          if ! jq --exit-status \
+          if ! jaq --exit-status \
             --arg label "$PROMOTION_LABEL" \
             '.state == "OPEN" and ((.isDraft | not) or any(.labels[]; .name == $label)) and (.isCrossRepository | not)' \
             "$RUNNER_TEMP/pull-request.json" > /dev/null; then
@@ -92,8 +97,8 @@ jobs:
             exit 1
           fi
 
-          head_ref=$(jq --raw-output '.headRefName' "$RUNNER_TEMP/pull-request.json")
-          base_ref=$(jq --raw-output '.baseRefName' "$RUNNER_TEMP/pull-request.json")
+          head_ref=$(jaq --raw-output '.headRefName' "$RUNNER_TEMP/pull-request.json")
+          base_ref=$(jaq --raw-output '.baseRefName' "$RUNNER_TEMP/pull-request.json")
           git check-ref-format "refs/heads/$head_ref"
           git check-ref-format "refs/heads/$base_ref"
 
@@ -119,7 +124,9 @@ jobs:
 
       - name: Plan promotion
         id: plan
+        shell: uv run --only-group=jaq --python 3 bash -e {0}
         env:
+          UV_PROJECT: ${{ steps.toolchain.outputs.project }}
           BASE_REF: ${{ steps.verify.outputs.base_ref }}
           EXPECTED_HEAD_SHA: ${{ inputs.head_sha }}
           GH_TOKEN: ${{ steps.token.outputs.token }}
@@ -140,26 +147,26 @@ jobs:
               "repos/$GITHUB_REPOSITORY/issues/$PULL_REQUEST_NUMBER/events" \
               --paginate \
               --slurp |
-              jq --compact-output --arg repository "$GITHUB_REPOSITORY" --arg label "$PROMOTION_LABEL" '
+              jaq --compact-output --arg repository "$GITHUB_REPOSITORY" --arg label "$PROMOTION_LABEL" '
                 [.[][]] as $events |
                 ($events | map(select((.event == "labeled" or .event == "unlabeled") and .label.name == $label)) | last | .id // 0) as $label_id |
                 [$events[] | select(.actor.type == "User" and
                   ((.event == "ready_for_review" and $repository == "astral-sh/uv-dev" and $label == "bot:promote") or
                    (.event == "labeled" and .label.name == $label and .id == $label_id)))] | last // null'
           )
-          promoter=$(jq --raw-output '.actor.login // empty' <<< "$approval")
+          promoter=$(jaq --raw-output '.actor.login // empty' <<< "$approval")
           if [ -z "$promoter" ]; then
             echo "The pull request has no current human promotion event; refusing to promote it." >&2
             exit 1
           fi
           echo "promoter=$promoter" >> "$GITHUB_OUTPUT"
-          echo "approval_id=$(jq --raw-output '.id' <<< "$approval")" >> "$GITHUB_OUTPUT"
-          approval_event=$(jq --raw-output '.event' <<< "$approval")
+          echo "approval_id=$(jaq --raw-output '.id' <<< "$approval")" >> "$GITHUB_OUTPUT"
+          approval_event=$(jaq --raw-output '.event' <<< "$approval")
           echo "approval_event=$approval_event" >> "$GITHUB_OUTPUT"
 
           if [ "$PROMOTION_LABEL" = "bot:automerge" ]; then
             promoter_permission=$(gh api --method GET "repos/astral-sh/uv/collaborators/$promoter/permission")
-            if ! jq --exit-status \
+            if ! jaq --exit-status \
               '.permission == "admin" or .permission == "maintain" or .permission == "write"' \
               <<< "$promoter_permission" > /dev/null; then
               reject "Auto-merge requires approval from an upstream repository writer."
@@ -167,19 +174,19 @@ jobs:
           fi
 
           if [ "$GITHUB_REPOSITORY" = "astral-sh/uv-security" ]; then
-            if ! jq --exit-status --arg label "$PROMOTION_LABEL" \
+            if ! jaq --exit-status --arg label "$PROMOTION_LABEL" \
               '.labels | any(.name == $label)' <<< "$source_pull_request" > /dev/null; then
               reject "The private pull request requires the $PROMOTION_LABEL label."
             fi
             promoter_permission=$(gh api --method GET "repos/$GITHUB_REPOSITORY/collaborators/$promoter/permission")
-            if ! jq --exit-status \
+            if ! jaq --exit-status \
               '.permission == "admin" or .permission == "maintain" or .permission == "write"' \
               <<< "$promoter_permission" > /dev/null; then
               reject "The private pull request was not approved by a repository writer."
             fi
           fi
 
-          if ! jq --exit-status \
+          if ! jaq --exit-status \
             --arg approval_event "$approval_event" --arg label "$PROMOTION_LABEL" \
             --arg base_ref "$BASE_REF" \
             --arg head_ref "$HEAD_REF" \
@@ -189,18 +196,18 @@ jobs:
             reject "The source pull request is no longer eligible for promotion on the expected branch."
           fi
 
-          source_head=$(jq --raw-output '.head.sha' <<< "$source_pull_request")
+          source_head=$(jaq --raw-output '.head.sha' <<< "$source_pull_request")
           if [ "$source_head" != "$EXPECTED_HEAD_SHA" ]; then
             echo "changed_head=$source_head" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          base_head=$(jq --raw-output '.base.sha' <<< "$source_pull_request")
+          base_head=$(jaq --raw-output '.base.sha' <<< "$source_pull_request")
           echo "source_base_sha=$base_head" >> "$GITHUB_OUTPUT"
           echo "base_ref=$BASE_REF" >> "$GITHUB_OUTPUT"
 
           upstream_base_refs=$(gh api --method GET "repos/astral-sh/uv/git/matching-refs/heads/$BASE_REF")
-          if ! jq --exit-status --arg ref "refs/heads/$BASE_REF" 'any(.[]; .ref == $ref)' <<< "$upstream_base_refs" > /dev/null; then
+          if ! jaq --exit-status --arg ref "refs/heads/$BASE_REF" 'any(.[]; .ref == $ref)' <<< "$upstream_base_refs" > /dev/null; then
             parent_pull_requests=$(
               gh pr list \
                 --repo astral-sh/uv \
@@ -210,7 +217,7 @@ jobs:
               --json headRefName,headRefOid,headRepository
             )
 
-            if [ "$(jq 'length' <<< "$parent_pull_requests")" = "0" ]; then
+            if [ "$(jaq 'length' <<< "$parent_pull_requests")" = "0" ]; then
               source_parent_pull_requests=$(
                 gh pr list \
                   --repo "$GITHUB_REPOSITORY" \
@@ -219,8 +226,8 @@ jobs:
                   --limit 2 \
                   --json number,headRefName,headRefOid,headRepository
               )
-              if [ "$(jq 'length' <<< "$source_parent_pull_requests")" != "0" ]; then
-                if ! jq --exit-status \
+              if [ "$(jaq 'length' <<< "$source_parent_pull_requests")" != "0" ]; then
+                if ! jaq --exit-status \
                   --arg base_ref "$BASE_REF" \
                   --arg base_head "$base_head" \
                   --arg source_repository "$GITHUB_REPOSITORY" \
@@ -229,7 +236,7 @@ jobs:
                   reject "The upstream base branch $BASE_REF does not have a matching open parent pull request."
                 fi
 
-                parent_number=$(jq --raw-output '.[0].number' <<< "$source_parent_pull_requests")
+                parent_number=$(jaq --raw-output '.[0].number' <<< "$source_parent_pull_requests")
                 gh pr comment "$PULL_REQUEST_NUMBER" \
                   --repo "$GITHUB_REPOSITORY" \
                   --body "Waiting for promotion of parent #$parent_number"
@@ -245,16 +252,16 @@ jobs:
                   --limit 2 \
                   --json number,baseRefName,headRefName,headRefOid,headRepository
               )
-              if ! jq --exit-status \
+              if ! jaq --exit-status \
                 --arg base_ref "$BASE_REF" \
                 'length == 1 and .[0].headRefName == $base_ref and .[0].headRepository.nameWithOwner == "astral-sh/uv"' \
                 <<< "$merged_parent_pull_requests" > /dev/null; then
                 reject "The upstream base branch $BASE_REF does not have a matching open or merged parent pull request."
               fi
 
-              parent_number=$(jq --raw-output '.[0].number' <<< "$merged_parent_pull_requests")
+              parent_number=$(jaq --raw-output '.[0].number' <<< "$merged_parent_pull_requests")
               merged_parent=$(gh api --method GET "repos/astral-sh/uv/pulls/$parent_number")
-              if ! jq --exit-status \
+              if ! jaq --exit-status \
                 --arg base_ref "$BASE_REF" \
                 --argjson repository_id "$UV_REPOSITORY_ID" \
                 '.merged_at != null and .head.ref == $base_ref and .base.repo.id == $repository_id and .head.repo.id == $repository_id' \
@@ -262,7 +269,7 @@ jobs:
                 reject "The merged upstream parent for $BASE_REF changed before it could be verified."
               fi
 
-              parent_head=$(jq --raw-output '.head.sha' <<< "$merged_parent")
+              parent_head=$(jaq --raw-output '.head.sha' <<< "$merged_parent")
               if [ "$parent_head" != "$base_head" ]; then
                 # The copied upstream branch may have been rebased after promotion. Only
                 # accept that history when our bot recorded the exact source promotion.
@@ -270,16 +277,16 @@ jobs:
                   gh pr list --repo "$GITHUB_REPOSITORY" --state closed --head "$BASE_REF" \
                     --limit 2 --json number,headRefName,headRefOid,headRepository
                 )
-                if ! jq --exit-status \
+                if ! jaq --exit-status \
                   --arg base_ref "$BASE_REF" --arg base_head "$base_head" \
                   --arg source_repository "$GITHUB_REPOSITORY" \
                   'length == 1 and .[0].headRefName == $base_ref and .[0].headRefOid == $base_head and .[0].headRepository.nameWithOwner == $source_repository' \
                   <<< "$closed_source_parents" > /dev/null; then
                   reject "The merged parent of $BASE_REF is at $parent_head, but the original source parent at $base_head could not be verified."
                 fi
-                source_parent_number=$(jq --raw-output '.[0].number' <<< "$closed_source_parents")
+                source_parent_number=$(jaq --raw-output '.[0].number' <<< "$closed_source_parents")
                 source_parent=$(gh api --method GET "repos/$GITHUB_REPOSITORY/pulls/$source_parent_number")
-                if ! jq --exit-status \
+                if ! jaq --exit-status \
                   --arg base_ref "$BASE_REF" --arg base_head "$base_head" \
                   --argjson repository_id "$GITHUB_REPOSITORY_ID" \
                   '.state == "closed" and .head.ref == $base_ref and .head.sha == $base_head and .base.repo.id == $repository_id and .head.repo.id == $repository_id' \
@@ -288,11 +295,11 @@ jobs:
                 fi
                 promotion_comment="Promoted to [#$parent_number](https://github.com/astral-sh/uv/pull/$parent_number)."
                 parent_comments=$(gh api --method GET "repos/$GITHUB_REPOSITORY/issues/$source_parent_number/comments" --paginate --slurp)
-                if ! jq --exit-status \
+                if ! jaq --exit-status \
                   --arg body "$promotion_comment" --argjson bot_id "$AUTOMATIONS_BOT_ID" \
                   'any(.[][]; .user.id == $bot_id and .performed_via_github_app.slug == "astral-automations-bot" and .body == $body)' \
                   <<< "$parent_comments" > /dev/null \
-                  || ! jq --exit-status --argjson bot_id "$AUTOMATIONS_BOT_ID" '.user.id == $bot_id' <<< "$merged_parent" > /dev/null; then
+                  || ! jaq --exit-status --argjson bot_id "$AUTOMATIONS_BOT_ID" '.user.id == $bot_id' <<< "$merged_parent" > /dev/null; then
                   reject "The merged parent of $BASE_REF is at $parent_head, but its promotion from $base_head could not be verified."
                 fi
 
@@ -317,26 +324,26 @@ jobs:
                 parent_history=$(
                   gh api graphql --paginate --slurp --field number="$parent_number" --raw-field query="$parent_history_query"
                 )
-                if ! jq --exit-status --arg base_head "$base_head" \
+                if ! jaq --exit-status --arg base_head "$base_head" \
                   'any(.[].data.repository.pullRequest.timelineItems.nodes[]; .beforeCommit.oid == $base_head or .afterCommit.oid == $base_head)' \
                   <<< "$parent_history" > /dev/null; then
                   reject "The original parent revision $base_head is not recorded in the upstream history of astral-sh/uv#$parent_number."
                 fi
               fi
 
-              parent_base_ref=$(jq --raw-output '.base.ref' <<< "$merged_parent")
-              parent_merge_sha=$(jq --raw-output '.merge_commit_sha' <<< "$merged_parent")
+              parent_base_ref=$(jaq --raw-output '.base.ref' <<< "$merged_parent")
+              parent_merge_sha=$(jaq --raw-output '.merge_commit_sha' <<< "$merged_parent")
               git check-ref-format "refs/heads/$parent_base_ref"
               parent_base_sha=$(gh api --method GET "repos/$GITHUB_REPOSITORY/git/ref/heads/$parent_base_ref" --jq .object.sha)
               comparison=$(gh api --method GET "repos/$GITHUB_REPOSITORY/compare/$parent_merge_sha...$parent_base_sha")
-              if ! jq --exit-status '.status | IN("ahead", "identical")' <<< "$comparison" > /dev/null; then
+              if ! jaq --exit-status '.status | . == "ahead" or . == "identical"' <<< "$comparison" > /dev/null; then
                 gh pr comment "$PULL_REQUEST_NUMBER" --repo "$GITHUB_REPOSITORY" \
                   --body "Waiting for astral-sh/uv#$parent_number to sync to $parent_base_ref."
                 echo "queued=true" >> "$GITHUB_OUTPUT"
                 exit 0
               fi
               current_pull_request=$(gh api --method GET "repos/$GITHUB_REPOSITORY/pulls/$PULL_REQUEST_NUMBER")
-              if ! jq --exit-status \
+              if ! jaq --exit-status \
                 --arg approval_event "$approval_event" --arg label "$PROMOTION_LABEL" \
                 --arg base_ref "$BASE_REF" \
                 --arg base_head "$base_head" \
@@ -358,7 +365,7 @@ jobs:
               exit 0
             fi
 
-            if ! jq --exit-status \
+            if ! jaq --exit-status \
               --arg base_ref "$BASE_REF" \
               --arg base_head "$base_head" \
               --arg source_repository "$GITHUB_REPOSITORY" \
@@ -471,9 +478,12 @@ jobs:
             pull_requests: write
             workflows: write
 
+      - uses: $/.github/actions/setup-uv-toolchain
+
       - name: Promote pull request
         id: promote
         if: steps.verify.outputs.head_sha != ''
+        shell: uv run --only-group=jaq --python 3 bash -eo pipefail {0}
         env:
           ACTION: ${{ needs.prepare.outputs.action }}
           APPROVAL_ID: ${{ needs.prepare.outputs.approval_id }}
@@ -500,14 +510,14 @@ jobs:
           source_pull_request=$(gh api --method GET "repos/$GITHUB_REPOSITORY/pulls/$PULL_REQUEST_NUMBER")
           current_approval=$(
             gh api --method GET "repos/$GITHUB_REPOSITORY/issues/$PULL_REQUEST_NUMBER/events" --paginate --slurp |
-              jq --raw-output --arg repository "$GITHUB_REPOSITORY" --arg label "$PROMOTION_LABEL" '
+              jaq --raw-output --arg repository "$GITHUB_REPOSITORY" --arg label "$PROMOTION_LABEL" '
                 [.[][]] as $events |
                 ($events | map(select((.event == "labeled" or .event == "unlabeled") and .label.name == $label)) | last | .id // 0) as $label_id |
                 [$events[] | select(.actor.type == "User" and
                   ((.event == "ready_for_review" and $repository == "astral-sh/uv-dev" and $label == "bot:promote") or
                    (.event == "labeled" and .label.name == $label and .id == $label_id))) | .id] | last // empty'
           )
-          if [ "$current_approval" != "$APPROVAL_ID" ] || ! jq --exit-status \
+          if [ "$current_approval" != "$APPROVAL_ID" ] || ! jaq --exit-status \
             --arg action "$ACTION" \
             --arg approval_event "$APPROVAL_EVENT" --arg label "$PROMOTION_LABEL" \
             --arg source_base_ref "$SOURCE_BASE_REF" --arg source_base_sha "$SOURCE_BASE_SHA" \
@@ -519,17 +529,17 @@ jobs:
           fi
 
           if [ "$GITHUB_REPOSITORY" = "astral-sh/uv-security" ]; then
-            if ! jq --exit-status --arg label "$PROMOTION_LABEL" \
+            if ! jaq --exit-status --arg label "$PROMOTION_LABEL" \
               '.labels | any(.name == $label)' <<< "$source_pull_request" > /dev/null; then
               reject "The private pull request requires the $PROMOTION_LABEL label."
             fi
             promoter_permission=$(gh api --method GET "repos/$GITHUB_REPOSITORY/collaborators/$PROMOTER/permission")
-            if ! jq --exit-status \
+            if ! jaq --exit-status \
               '.permission == "admin" or .permission == "maintain" or .permission == "write"' \
               <<< "$promoter_permission" > /dev/null; then
               reject "The private pull request is no longer approved by a repository writer."
             fi
-            if [ "$(jq --raw-output '.base.sha' <<< "$source_pull_request")" != "$SOURCE_BASE_SHA" ]; then
+            if [ "$(jaq --raw-output '.base.sha' <<< "$source_pull_request")" != "$SOURCE_BASE_SHA" ]; then
               reject "The private pull request base changed before publication."
             fi
           fi
@@ -540,17 +550,17 @@ jobs:
               repos/astral-sh/uv/pulls \
               --raw-field state=all \
               --raw-field head="astral-sh:$HEAD_REF" |
-              jq --compact-output \
+              jaq --compact-output \
                 --argjson repository_id "$UV_REPOSITORY_ID" \
                 '[.[] | select(.head.repo.id == $repository_id)]'
           )
-          existing_count=$(jq 'length' <<< "$existing_pull_requests")
+          existing_count=$(jaq 'length' <<< "$existing_pull_requests")
           if (( existing_count > 1 )); then
             reject "Found multiple upstream pull requests for $HEAD_REF."
           fi
 
           if (( existing_count == 1 )); then
-            if ! jq --exit-status \
+            if ! jaq --exit-status \
               --arg base_ref "$BASE_REF" \
               --arg head_ref "$HEAD_REF" \
               --arg head_sha "$PROMOTED_HEAD" \
@@ -560,11 +570,11 @@ jobs:
               reject "An upstream pull request already exists with a different state, base, or head."
             fi
 
-            upstream_pull_request=$(jq --compact-output '.[0]' <<< "$existing_pull_requests")
+            upstream_pull_request=$(jaq --compact-output '.[0]' <<< "$existing_pull_requests")
           else
             upstream_refs=$(gh api --method GET "repos/astral-sh/uv/git/matching-refs/heads/$HEAD_REF")
             upstream_head=$(
-              jq --raw-output \
+              jaq --raw-output \
                 --arg head_ref "refs/heads/$HEAD_REF" \
                 '.[] | select(.ref == $head_ref) | .object.sha' \
                 <<< "$upstream_refs"
@@ -610,21 +620,21 @@ jobs:
                 promotion_git merge-base refs/heads/upstream-base refs/heads/approved > /dev/null
 
                 current_pull_request=$(gh api --method GET "repos/$GITHUB_REPOSITORY/pulls/$PULL_REQUEST_NUMBER")
-                current_head=$(jq --raw-output '.head.sha' <<< "$current_pull_request")
+                current_head=$(jaq --raw-output '.head.sha' <<< "$current_pull_request")
                 if [ "$current_head" != "$EXPECTED_HEAD_SHA" ]; then
                   echo "changed_head=$current_head" >> "$GITHUB_OUTPUT"
                   exit 0
                 fi
                 current_approval=$(
                   gh api --method GET "repos/$GITHUB_REPOSITORY/issues/$PULL_REQUEST_NUMBER/events" --paginate --slurp |
-                    jq --raw-output --arg repository "$GITHUB_REPOSITORY" --arg label "$PROMOTION_LABEL" '
+                    jaq --raw-output --arg repository "$GITHUB_REPOSITORY" --arg label "$PROMOTION_LABEL" '
                       [.[][]] as $events |
                       ($events | map(select((.event == "labeled" or .event == "unlabeled") and .label.name == $label)) | last | .id // 0) as $label_id |
                       [$events[] | select(.actor.type == "User" and
                         ((.event == "ready_for_review" and $repository == "astral-sh/uv-dev" and $label == "bot:promote") or
                          (.event == "labeled" and .label.name == $label and .id == $label_id))) | .id] | last // empty'
                 )
-                if [ "$current_approval" != "$APPROVAL_ID" ] || ! jq --exit-status \
+                if [ "$current_approval" != "$APPROVAL_ID" ] || ! jaq --exit-status \
                   --arg approval_event "$APPROVAL_EVENT" --arg label "$PROMOTION_LABEL" \
                   --arg base_ref "$SOURCE_BASE_REF" --arg base_head "$SOURCE_BASE_SHA" \
                   --arg head_ref "$HEAD_REF" --argjson repository_id "$GITHUB_REPOSITORY_ID" \
@@ -632,7 +642,7 @@ jobs:
                   <<< "$current_pull_request" > /dev/null; then
                   reject "The private pull request or its approval changed before publication."
                 fi
-                if ! jq --exit-status --arg label "$PROMOTION_LABEL" \
+                if ! jaq --exit-status --arg label "$PROMOTION_LABEL" \
                   '.labels | any(.name == $label)' <<< "$current_pull_request" > /dev/null; then
                   reject "The private pull request requires the $PROMOTION_LABEL label."
                 fi
@@ -653,36 +663,27 @@ jobs:
               fi
             fi
 
+            # Qualify bare issue references. The lookarounds leave adjacent text intact.
+            jaq -jr '.body // ""' <<< "$source_pull_request" |
+              perl -CSD -pe 's{(?<![[:alnum:]_/])(#[0-9]+)(?![[:alnum:]_])}{$ENV{GITHUB_REPOSITORY}$1}g' \
+                > "$RUNNER_TEMP/promoted-body.md"
             upstream_pull_request=$(
-              jq \
-                --arg base_ref "$BASE_REF" \
-                --arg head_ref "$HEAD_REF" \
-                --arg source_repository "$GITHUB_REPOSITORY" \
-                '{
-                  title: .title,
-                  body: (
-                    (.body // "")
-                    | gsub(
-                      "(?<![[:alnum:]_/])#(?<number>[0-9]+)(?![[:alnum:]_])";
-                      "\($source_repository)#\(.number)"
-                    )
-                  ),
-                  base: $base_ref,
-                  head: $head_ref
-                }' \
+              jaq --arg base_ref "$BASE_REF" --arg head_ref "$HEAD_REF" \
+                --rawfile body "$RUNNER_TEMP/promoted-body.md" \
+                '{title: .title, body: $body, base: $base_ref, head: $head_ref}' \
                 <<< "$source_pull_request" |
-                gh api \
+              gh api \
                   --method POST \
                   repos/astral-sh/uv/pulls \
                   --input -
             )
           fi
 
-          upstream_number=$(jq --exit-status --raw-output '.number | select(type == "number")' <<< "$upstream_pull_request")
+          upstream_number=$(jaq --exit-status --raw-output '.number | select(type == "number")' <<< "$upstream_pull_request")
 
           # Automation controls and triage labels belong to the source repository.
-          upstream_labels=$(jq '{labels: [.labels[].name | select(test("^(bot|priority|size|risk|severity):") | not)]}' <<< "$source_pull_request")
-          if jq --exit-status '.labels | length > 0' <<< "$upstream_labels" > /dev/null; then
+          upstream_labels=$(jaq '{labels: [.labels[].name | select(test("^(bot|priority|size|risk|severity):") | not)]}' <<< "$source_pull_request")
+          if jaq --exit-status '.labels | length > 0' <<< "$upstream_labels" > /dev/null; then
             gh api \
               --method POST \
               "repos/astral-sh/uv/issues/$upstream_number/labels" \
@@ -701,6 +702,7 @@ jobs:
       - name: Enable auto-merge and close source pull request
         id: close
         if: steps.promote.outputs.number != ''
+        shell: uv run --only-group=jaq --python 3 bash -e {0}
         env:
           APPROVAL_ID: ${{ needs.prepare.outputs.approval_id }}
           APPROVAL_EVENT: ${{ needs.prepare.outputs.approval_event }}
@@ -712,7 +714,7 @@ jobs:
           UPSTREAM_NUMBER: ${{ steps.promote.outputs.number }}
         run: |
           pull_request=$(gh pr view "$PULL_REQUEST_NUMBER" --repo "$GITHUB_REPOSITORY" --json state,isDraft,labels,headRefOid)
-          if ! jq --exit-status \
+          if ! jaq --exit-status \
             --arg approval_event "$APPROVAL_EVENT" --arg label "$PROMOTION_LABEL" \
             '.state == "OPEN" and ((.isDraft | not) or $approval_event == "labeled") and ($approval_event != "labeled" or any(.labels[]; .name == $label))' \
             <<< "$pull_request" > /dev/null; then
@@ -721,7 +723,7 @@ jobs:
           fi
 
           upstream_url="https://github.com/astral-sh/uv/pull/$UPSTREAM_NUMBER"
-          source_head=$(jq --raw-output '.headRefOid' <<< "$pull_request")
+          source_head=$(jaq --raw-output '.headRefOid' <<< "$pull_request")
           promoted_head=$(gh pr view "$UPSTREAM_NUMBER" --repo astral-sh/uv --json headRefOid --jq .headRefOid)
           if [ "$source_head" != "$EXPECTED_HEAD_SHA" ]; then
             echo "changed_head=$source_head" >> "$GITHUB_OUTPUT"
@@ -735,7 +737,7 @@ jobs:
           if [ "$PROMOTION_LABEL" = "bot:automerge" ]; then
             current_approval=$(
               gh api --method GET "repos/$GITHUB_REPOSITORY/issues/$PULL_REQUEST_NUMBER/events" --paginate --slurp |
-                jq --raw-output --arg label "$PROMOTION_LABEL" '
+                jaq --raw-output --arg label "$PROMOTION_LABEL" '
                   [.[][] | select((.event == "labeled" or .event == "unlabeled") and .label.name == $label)] |
                   last | select(.event == "labeled" and .actor.type == "User") | .id // empty'
             )
@@ -744,7 +746,7 @@ jobs:
               exit 1
             fi
             promoter_permission=$(gh api --method GET "repos/astral-sh/uv/collaborators/$PROMOTER/permission")
-            if ! jq --exit-status \
+            if ! jaq --exit-status \
               '.permission == "admin" or .permission == "maintain" or .permission == "write"' \
               <<< "$promoter_permission" > /dev/null; then
               echo "Auto-merge is no longer approved by an upstream repository writer." >&2
@@ -791,9 +793,14 @@ jobs:
             pull_requests: write
             workflows: write
 
+      - uses: $/.github/actions/setup-uv-toolchain
+        id: toolchain
+
       - name: Recover rejected promotion
         id: recover
+        shell: uv run --only-group=jaq --python 3 bash -e {0}
         env:
+          UV_PROJECT: ${{ steps.toolchain.outputs.project }}
           APPROVAL_ID: ${{ needs.prepare.outputs.approval_id }}
           BASE_REF: ${{ needs.prepare.outputs.source_base_ref }}
           BASE_PREVIOUS_SHA: ${{ needs.prepare.outputs.base_previous_sha }}
@@ -809,7 +816,7 @@ jobs:
         run: |
           get_current_approval() {
             gh api --method GET "repos/$GITHUB_REPOSITORY/issues/$PULL_REQUEST_NUMBER/events" --paginate --slurp |
-              jq --raw-output --arg repository "$GITHUB_REPOSITORY" --arg label "$PROMOTION_LABEL" '
+              jaq --raw-output --arg repository "$GITHUB_REPOSITORY" --arg label "$PROMOTION_LABEL" '
                 [.[][]] as $events |
                 ($events | map(select((.event == "labeled" or .event == "unlabeled") and .label.name == $label)) | last | .id // 0) as $label_id |
                 [$events[] | select(.actor.type == "User" and
@@ -818,7 +825,7 @@ jobs:
           }
           current_approval=$(get_current_approval)
           pull_request=$(gh api --method GET "repos/$GITHUB_REPOSITORY/pulls/$PULL_REQUEST_NUMBER")
-          if [ -z "$APPROVAL_ID" ] || [ "$current_approval" != "$APPROVAL_ID" ] || ! jq --exit-status \
+          if [ -z "$APPROVAL_ID" ] || [ "$current_approval" != "$APPROVAL_ID" ] || ! jaq --exit-status \
             --argjson repository_id "$GITHUB_REPOSITORY_ID" \
             '.state == "open" and .base.repo.id == $repository_id and .head.repo.id == $repository_id' \
             <<< "$pull_request" > /dev/null; then
@@ -826,7 +833,7 @@ jobs:
             exit 0
           fi
 
-          if [ -n "$REBASE_REF" ] && ! jq --exit-status \
+          if [ -n "$REBASE_REF" ] && ! jaq --exit-status \
             --arg base_ref "$BASE_REF" --arg base_sha "$BASE_PREVIOUS_SHA" \
             --arg head_ref "$HEAD_REF" --arg head_sha "$EXPECTED_HEAD_SHA" \
             '.base.ref == $base_ref and .base.sha == $base_sha and .head.ref == $head_ref and .head.sha == $head_sha' \
@@ -836,7 +843,7 @@ jobs:
           fi
 
           if [ "$GITHUB_REPOSITORY" != "astral-sh/uv-security" ] && \
-            jq --exit-status '.draft | not' <<< "$pull_request" > /dev/null; then
+            jaq --exit-status '.draft | not' <<< "$pull_request" > /dev/null; then
             gh pr ready "$PULL_REQUEST_NUMBER" --repo "$GITHUB_REPOSITORY" --undo
           fi
           gh api \
@@ -855,7 +862,7 @@ jobs:
           fi
           if [ -n "$REBASE_REF" ]; then
             pull_request=$(gh api --method GET "repos/$GITHUB_REPOSITORY/pulls/$PULL_REQUEST_NUMBER")
-            if ! jq --exit-status \
+            if ! jaq --exit-status \
               --arg repository "$GITHUB_REPOSITORY" \
               --arg base_ref "$BASE_REF" --arg base_sha "$BASE_PREVIOUS_SHA" \
               --arg head_ref "$HEAD_REF" --arg head_sha "$EXPECTED_HEAD_SHA" \
@@ -883,7 +890,7 @@ jobs:
           marker="<!-- uv-promotion-rejection:$APPROVAL_ID:$EXPECTED_HEAD_SHA -->"
           comment="$comment [Promotion run](https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID). $marker"
           comments=$(gh api --method GET "repos/$GITHUB_REPOSITORY/issues/$PULL_REQUEST_NUMBER/comments" --paginate --slurp)
-          comment_id=$(jq --raw-output --arg marker "$marker" --argjson bot_id "$AUTOMATIONS_BOT_ID" \
+          comment_id=$(jaq --raw-output --arg marker "$marker" --argjson bot_id "$AUTOMATIONS_BOT_ID" \
             '[.[][] | select(.user.id == $bot_id and (.body | contains($marker))) | .id] | last // empty' <<< "$comments")
           if [ -n "$comment_id" ]; then
             gh api --method PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$comment_id" \
@@ -895,19 +902,19 @@ jobs:
           # Removing the promotion label invalidates its approval, so finish recovery first.
           current_approval=$(get_current_approval)
           pull_request=$(gh api --method GET "repos/$GITHUB_REPOSITORY/pulls/$PULL_REQUEST_NUMBER")
-          if [ "$current_approval" != "$APPROVAL_ID" ] || ! jq --exit-status \
+          if [ "$current_approval" != "$APPROVAL_ID" ] || ! jaq --exit-status \
             --argjson repository_id "$GITHUB_REPOSITORY_ID" \
             '.state == "open" and .base.repo.id == $repository_id and .head.repo.id == $repository_id' \
             <<< "$pull_request" > /dev/null; then
             echo "The rejected promotion was superseded during recovery; leaving its label unchanged."
             exit 0
           fi
-          if jq --exit-status --arg label "$PROMOTION_LABEL" \
+          if jaq --exit-status --arg label "$PROMOTION_LABEL" \
             '.labels | any(.name == $label)' <<< "$pull_request" > /dev/null; then
             if ! gh api --method DELETE \
               "repos/$GITHUB_REPOSITORY/issues/$PULL_REQUEST_NUMBER/labels/$PROMOTION_LABEL" --silent; then
               pull_request=$(gh api --method GET "repos/$GITHUB_REPOSITORY/pulls/$PULL_REQUEST_NUMBER")
-              if jq --exit-status --arg label "$PROMOTION_LABEL" \
+              if jaq --exit-status --arg label "$PROMOTION_LABEL" \
                 '.labels | any(.name == $label)' <<< "$pull_request" > /dev/null; then
                 echo "Failed to remove the $PROMOTION_LABEL label." >&2
                 exit 1

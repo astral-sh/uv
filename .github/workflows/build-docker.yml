@@ -105,9 +105,14 @@ jobs:
             fi
           } >> "$GITHUB_OUTPUT"
 
+      - uses: $/.github/actions/setup-uv-toolchain
+        id: toolchain
+
       - name: Generate extra image matrix
         id: extra-images
+        shell: uv run --only-group=jaq --python 3 bash -e {0}
         env:
+          UV_PROJECT: ${{ steps.toolchain.outputs.project }}
           LOGIN: ${{ steps.plan.outputs.login }}
         run: |
           # Each entry is: base-image,tag1,tag2,...
@@ -147,7 +152,7 @@ jobs:
             )
           fi
 
-          json=$(printf '%s\n' "${images[@]}" | jq -R . | jq -sc '{"image-mapping": .}')
+          json=$(printf '%s\n' "${images[@]}" | jaq -Rnc '{"image-mapping": [inputs]}')
           echo "matrix=${json}" >> "$GITHUB_OUTPUT"
 
   docker-build-base:
@@ -221,6 +226,9 @@ jobs:
           provenance: mode=max
           sbom: true
 
+      - uses: $/.github/actions/setup-uv-toolchain
+        if: ${{ needs.docker-plan.outputs.save == 'true' }}
+
       - name: Record image
         if: ${{ needs.docker-plan.outputs.save == 'true' }}
         env:
@@ -229,7 +237,8 @@ jobs:
           TAGS: ${{ steps.meta.outputs.tags }}
           ANNOTATIONS: ${{ steps.meta.outputs.annotations }}
         run: |
-          jq -en \
+          # shellcheck disable=SC2016 # Keep the jaq filter literal.
+          uv run --only-group=jaq --python 3 jaq -en \
             --arg name uv \
             --arg build_id "$BUILD_ID" \
             --arg digest "$DIGEST" \
@@ -364,16 +373,22 @@ jobs:
           provenance: mode=max
           sbom: true
 
+      - uses: $/.github/actions/setup-uv-toolchain
+        if: ${{ needs.docker-plan.outputs.save == 'true' }}
+        id: toolchain
+
       - name: Record image
         if: ${{ needs.docker-plan.outputs.save == 'true' }}
         env:
+          UV_PROJECT: ${{ steps.toolchain.outputs.project }}
           NAME: ${{ steps.dockerfile.outputs.name }}
           BUILD_ID: ${{ steps.build.outputs.build-id }}
           DIGEST: ${{ steps.build.outputs.digest }}
           TAGS: ${{ steps.meta.outputs.tags }}
           ANNOTATIONS: ${{ steps.meta.outputs.annotations }}
         run: |
-          jq -en \
+          # shellcheck disable=SC2016 # Keep the jaq filter literal.
+          uv run --only-group=jaq --python 3 jaq -en \
             --arg name "$NAME" \
             --arg build_id "$BUILD_ID" \
             --arg digest "$DIGEST" \
@@ -408,14 +423,19 @@ jobs:
           path: images
           merge-multiple: true
 
+      - uses: $/.github/actions/setup-uv-toolchain
+        id: toolchain
+
       - name: Assemble image manifest
+        shell: uv run --only-group=jaq --python 3 bash -eo pipefail {0}
         env:
+          UV_PROJECT: ${{ steps.toolchain.outputs.project }}
           EXTRA_IMAGES: ${{ needs.docker-plan.outputs.extra-images }}
         run: |
           # Load the per-image records and require one base image plus the
           # expected number of distinct variants. Split the result into
           # base and extra images so the publisher can publish the base last.
-          jq -se --argjson expected "$EXTRA_IMAGES" '
+          jaq -c . images/*.json | jaq -se --argjson expected "$EXTRA_IMAGES" '
             if length != (1 + ($expected["image-mapping"] | length))
               or (map(.name) | unique | length) != length
               or (map(select(.name == "uv")) | length) != 1
@@ -423,7 +443,7 @@ jobs:
             else {base: map(select(.name == "uv"))[0],
                   extra: map(select(.name != "uv"))}
             end
-          ' images/*.json > docker-manifest.json
+          ' > docker-manifest.json
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         id: upload
