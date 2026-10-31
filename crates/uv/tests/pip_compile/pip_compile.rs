@@ -12855,14 +12855,14 @@ fn requirement_wheel_name_mismatch() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let requirements_in = context.temp_dir.child("requirements.in");
-    requirements_in.write_str("wrong @ https://example.com/ok-1.0.0-py3-none-any.whl?X-Amz-Credential=synthetic-credential&X-Amz-Signature=synthetic-signature")?;
+    requirements_in.write_str("wrong @ https://example.com/ok-1.0.0-py3-none-any.whl?X-Amz-Credential=synthetic-credential&X-Amz-Signature=synthetic-signature&X-Goog-Credential=google-credential&X-Goog-Signature=google-signature")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.in")
         .arg("--no-index"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: Requested package name `wrong` does not match `ok` in the distribution filename: https://example.com/ok-1.0.0-py3-none-any.whl?X-Amz-Credential=****&X-Amz-Signature=****
+    error: Requested package name `wrong` does not match `ok` in the distribution filename: https://example.com/ok-1.0.0-py3-none-any.whl?X-Amz-Credential=****&X-Amz-Signature=****&X-Goog-Credential=****&X-Goog-Signature=****
     "
     );
 
@@ -15173,13 +15173,14 @@ async fn tool_uv_sources_signed_url() -> Result<()> {
     let filename = "ok-1.0.0-py3-none-any.whl";
     Mock::given(path(format!("/{filename}")))
         .and(query_param("X-Amz-Signature", "synthetic-signature"))
+        .and(query_param("X-Goog-Signature", "google-signature"))
         .respond_with(ResponseTemplate::new(200).set_body_bytes(read(
             context.workspace_root.join("test/links").join(filename),
         )?))
         .mount(&server)
         .await;
     let url = format!(
-        "http://user:password@{}/{filename}?X-Amz-Credential=synthetic-credential&X-Amz-Signature=synthetic-signature",
+        "http://user:password@{}/{filename}?X-Amz-Credential=synthetic-credential&X-Amz-Signature=synthetic-signature&X-Goog-Credential=google-credential&X-Goog-Signature=google-signature",
         server.address()
     );
     let pyproject = context.temp_dir.child("pyproject.toml");
@@ -15199,7 +15200,7 @@ async fn tool_uv_sources_signed_url() -> Result<()> {
         .arg("--no-annotate"), @"
     exit_code: 0 (success)
     ----- stdout -----
-    ok @ http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl?X-Amz-Credential=synthetic-credential&X-Amz-Signature=synthetic-signature
+    ok @ http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl?X-Amz-Credential=synthetic-credential&X-Amz-Signature=synthetic-signature&X-Goog-Credential=google-credential&X-Goog-Signature=google-signature
 
     ----- stderr -----
     Resolved 1 package in [TIME]
@@ -15217,7 +15218,7 @@ async fn tool_uv_sources_signed_url() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + ok==1.0.0 (from http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl?X-Amz-Credential=****&X-Amz-Signature=****)
+     + ok==1.0.0 (from http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl?X-Amz-Credential=****&X-Amz-Signature=****&X-Goog-Credential=****&X-Goog-Signature=****)
     ");
 
     Ok(())
@@ -15287,14 +15288,14 @@ fn tool_uv_sources_signed_url_name_mismatch() -> Result<()> {
         dependencies = ["wrong"]
 
         [tool.uv.sources]
-        wrong = { url = "https://example.com/ok-1.0.0-py3-none-any.whl?X-Amz-Credential=synthetic-credential&X-Amz-Signature=synthetic-signature" }
+        wrong = { url = "https://example.com/ok-1.0.0-py3-none-any.whl?X-Amz-Credential=synthetic-credential&X-Amz-Signature=synthetic-signature&X-Goog-Credential=google-credential&X-Goog-Signature=google-signature" }
     "#})?;
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("pyproject.toml")
         .arg("--no-index"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: Requested package name `wrong` does not match `ok` in the distribution filename: https://example.com/ok-1.0.0-py3-none-any.whl?X-Amz-Credential=****&X-Amz-Signature=****
+    error: Requested package name `wrong` does not match `ok` in the distribution filename: https://example.com/ok-1.0.0-py3-none-any.whl?X-Amz-Credential=****&X-Amz-Signature=****&X-Goog-Credential=****&X-Goog-Signature=****
     ");
     Ok(())
 }

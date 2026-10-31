@@ -22,6 +22,10 @@ const SENSITIVE_QUERY_PARAMETERS: &[&str] = &[
     "X-Amz-Credential",
     "X-Amz-Security-Token",
     "X-Amz-Signature",
+    "X-Goog-Credential",
+    "X-Goog-Signature",
+    // Google Cloud V2 signed URLs use an unprefixed signature parameter.
+    "Signature",
     "sig",
 ];
 
@@ -964,6 +968,46 @@ mod tests {
             "https://account.blob.core.windows.net/container/dist.whl?SIG=****&safe=value",
         ]
         "#);
+    }
+
+    #[test]
+    fn redact_google_signed_query_values() -> Result<(), SafeUrlError> {
+        let input = "https://storage.googleapis.com/bucket/dist.whl?X-Goog-Credential=credential&X-Goog%2DSignature=first&x-goog-signature=second&X-Goog-Expires=300&safe=value";
+        let url = SafeUrl::parse(input)?;
+        assert_eq!(
+            url.to_string(),
+            "https://storage.googleapis.com/bucket/dist.whl?X-Goog-Credential=****&X-Goog-Signature=****&x-goog-signature=****&X-Goog-Expires=300&safe=value"
+        );
+        assert_eq!(
+            url.redact_in(&format!("failed to fetch '{input}'")),
+            "failed to fetch 'https://storage.googleapis.com/bucket/dist.whl?X-Goog-Credential=****&X-Goog-Signature=****&x-goog-signature=****&X-Goog-Expires=300&safe=value'"
+        );
+        assert_eq!(url.as_str(), input);
+        Ok(())
+    }
+
+    #[test]
+    fn redact_google_v2_signature() -> Result<(), SafeUrlError> {
+        let input = "https://storage.googleapis.com/bucket/dist.whl?GoogleAccessId=service&Signature=signature&Expires=1700000000";
+        let url = SafeUrl::parse(input)?;
+        assert_eq!(
+            url.to_string(),
+            "https://storage.googleapis.com/bucket/dist.whl?GoogleAccessId=service&Signature=****&Expires=1700000000"
+        );
+        assert_eq!(url.as_str(), input);
+        Ok(())
+    }
+
+    #[test]
+    fn redact_google_signed_query_values_in_debug() -> Result<(), SafeUrlError> {
+        let url = SafeUrl::parse(
+            "https://example.com/file?X-Goog-Credential=credential&X-Goog-Signature=signature&Signature=signature",
+        )?;
+        assert_eq!(
+            format!("{url:?}"),
+            r#"SafeUrl { scheme: "https", cannot_be_a_base: false, username: "", password: None, host: Some(Domain("example.com")), port: None, path: "/file", query: Some("X-Goog-Credential=****&X-Goog-Signature=****&Signature=****"), fragment: None }"#
+        );
+        Ok(())
     }
 
     #[test]
