@@ -15668,8 +15668,8 @@ fn read_only() -> Result<()> {
 
     assert!(context.temp_dir.child("uv.lock").exists());
 
-    // Remove the flock.
-    fs_err::remove_file(context.venv.child(".lock"))?;
+    assert!(!context.venv.child(".lock").exists());
+    assert!(context.root.child("locks").is_dir());
 
     // Make the virtual environment read and execute (but not write).
     fs_err::set_permissions(&context.venv, std::fs::Permissions::from_mode(0o555))?;
