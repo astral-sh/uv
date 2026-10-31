@@ -4,8 +4,6 @@ use std::process::Command;
 
 use anyhow::Result;
 #[cfg(feature = "test-git")]
-use anyhow::anyhow;
-#[cfg(feature = "test-git")]
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use indoc::indoc;
@@ -205,8 +203,7 @@ fn install_git_path_variant_wheel() -> Result<()> {
     assert!(output.status.success());
     let commit = String::from_utf8(output.stdout)?;
     let commit = commit.trim();
-    let repository_url = SafeUrl::from_directory_path(repository.path())
-        .map_err(|()| anyhow!("failed to convert repository path to file URL"))?;
+    let repository_url = SafeUrl::from_directory_path(repository.path()).unwrap();
     let requirement = format!("ok @ git+{repository_url}@{commit}#path={filename}");
 
     uv_snapshot!(context.filters(), context.pip_install()
