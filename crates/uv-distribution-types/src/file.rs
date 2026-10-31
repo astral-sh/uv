@@ -1,9 +1,11 @@
 use std::borrow::Cow;
 use std::fmt::{self, Display, Formatter};
+use std::marker::PhantomData;
 use std::str::FromStr;
 use std::sync::Arc;
 
 use jiff::Timestamp;
+use rkyv::Archived;
 use serde::{Deserialize, Serialize};
 
 use uv_pep440::{VersionSpecifiers, VersionSpecifiersParseError};
@@ -12,17 +14,19 @@ use uv_pypi_types::{CoreMetadata, HashDigests, Yanked};
 use uv_redacted::{SafeUrl, SafeUrlError};
 use uv_small_str::SmallString;
 
-/// Error converting [`uv_pypi_types::PypiFile`] to [`File`].
+/// Error converting [`uv_pypi_types::PypiFile`] to [`VerbatimFile`].
 #[derive(Debug, thiserror::Error)]
 pub enum FileConversionError {
     #[error("Failed to parse `requires-python`: `{0}`")]
     RequiresPython(String, #[source] VersionSpecifiersParseError),
 }
 
-/// Internal analog to [`uv_pypi_types::PypiFile`].
+/// Internal analog to [`uv_pypi_types::PypiFile`], with a canonical location by default.
+///
+/// Use [`VerbatimFile`] for locations as supplied by an index.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
-#[rkyv(derive(Debug))]
-pub struct File {
+#[rkyv(archive_bounds(Url::Archived: core::fmt::Debug), derive(Debug))]
+pub struct File<Url = CanonicalFileLocation> {
     /// Hashes for separately available metadata, or an empty list when no hashes were provided.
     pub dist_info_metadata: Option<HashDigests>,
     pub filename: SmallString,
@@ -34,11 +38,11 @@ pub struct File {
     // comparisons in testing, we just store it as a UTC timestamp in
     // milliseconds.
     pub upload_time_utc_ms: Option<i64>,
-    pub url: FileLocation,
+    pub url: Url,
     pub yanked: Option<Box<Yanked>>,
 }
 
-impl File {
+impl File<FileLocation> {
     /// `TryFrom` instead of `From` to filter out files with invalid requires python version specifiers
     pub fn try_from_pypi(
         file: uv_pypi_types::PypiFile,
@@ -68,14 +72,91 @@ impl File {
     }
 }
 
-/// While a registry file is generally a remote URL, it can also be a file if it comes from a directory flat indexes.
+impl<Url> File<Url> {
+    /// Replace the file URL while preserving the artifact metadata.
+    fn map_url<Mapped>(self, map: impl FnOnce(Url) -> Mapped) -> File<Mapped> {
+        File {
+            dist_info_metadata: self.dist_info_metadata,
+            filename: self.filename,
+            hashes: self.hashes,
+            requires_python: self.requires_python,
+            size: self.size,
+            upload_time_utc_ms: self.upload_time_utc_ms,
+            url: map(self.url),
+            yanked: self.yanked,
+        }
+    }
+}
+
+impl File {
+    /// Take the artifact location advertised by an index that was queried directly.
+    ///
+    /// The index supplies the original location, so relative URLs can stay relative.
+    pub fn from_direct_index(file: VerbatimFile) -> Self {
+        file.map_url(|location| match location {
+            FileLocation::RelativeUrl(base, path, _) => CanonicalFileLocation::relative(base, path),
+            FileLocation::AbsoluteUrl(url, _) => {
+                CanonicalFileLocation::AbsoluteUrl(url, PhantomData)
+            }
+        })
+    }
+}
+
+/// Provenance markers for [`FileLocation`].
+pub mod provenance {
+    /// A location for fetching an artifact, as supplied by an index.
+    ///
+    /// It may have been rewritten by a proxy and must not be used for artifact identity.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    pub struct Verbatim;
+
+    /// An artifact's original location, suitable for artifact identity and lockfiles.
+    ///
+    /// This location is independent of any proxy URL rewriting used for downloads.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    pub struct Canonical;
+}
+
+/// An artifact location suitable for identity and lockfiles.
+///
+/// This is the artifact's original location, independent of any proxy URL rewriting used to fetch it.
+/// Marking a [`FileLocation`] as canonical does not parse, normalize, or rewrite its URL.
+pub type CanonicalFileLocation = FileLocation<provenance::Canonical>;
+
+impl FileLocation<provenance::Canonical> {
+    /// Use the canonical artifact URL recorded in a lockfile.
+    pub fn from_lockfile(url: UrlString) -> Self {
+        Self::AbsoluteUrl(url, PhantomData)
+    }
+
+    /// Borrow the absolute URL if the location does not need to be joined to an index page.
+    pub fn as_absolute(&self) -> Option<&UrlString> {
+        match self {
+            Self::AbsoluteUrl(url, _) => Some(url),
+            Self::RelativeUrl(..) => None,
+        }
+    }
+}
+
+/// A file with its fetch location as supplied by an index, including any proxy URL rewriting.
+///
+/// Used when parsing and caching index responses. Its location must be mapped to the canonical
+/// location before using it for artifact identity.
+pub type VerbatimFile = File<FileLocation>;
+
+/// An artifact location, either an absolute URL or a URL relative to an index page.
+///
+/// The provenance marker distinguishes [`provenance::Verbatim`] and [`provenance::Canonical`]
+/// locations without adding bytes to the cached archive.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
-#[rkyv(derive(Debug))]
-pub enum FileLocation {
+#[rkyv(archive_bounds(Archived<PhantomData<Provenance>>: fmt::Debug), derive(Debug))]
+pub enum FileLocation<Provenance = provenance::Verbatim> {
     /// URL relative to the base URL.
-    RelativeUrl(SmallString, SmallString),
+    #[non_exhaustive]
+    RelativeUrl(SmallString, SmallString, PhantomData<Provenance>),
     /// Absolute URL.
-    AbsoluteUrl(UrlString),
+    #[non_exhaustive]
+    AbsoluteUrl(UrlString, PhantomData<Provenance>),
 }
 
 impl FileLocation {
@@ -85,9 +166,21 @@ impl FileLocation {
     /// that page.
     pub fn new(url: SmallString, base: &SmallString) -> Self {
         match split_scheme(&url) {
-            Some(..) => Self::AbsoluteUrl(UrlString::new(url)),
-            None => Self::RelativeUrl(base.clone(), url),
+            Some(..) => Self::absolute(UrlString::new(url)),
+            None => Self::relative(base.clone(), url),
         }
+    }
+
+    /// Store an absolute URL as supplied by an index without parsing it.
+    pub fn absolute(url: UrlString) -> Self {
+        Self::AbsoluteUrl(url, PhantomData)
+    }
+}
+
+impl<Provenance> FileLocation<Provenance> {
+    /// Store a relative URL and its base without parsing them.
+    fn relative(base: SmallString, url: SmallString) -> Self {
+        Self::RelativeUrl(base, url, PhantomData)
     }
 
     /// Returns the final raw URL path component after removing any query or fragment.
@@ -95,8 +188,8 @@ impl FileLocation {
     /// The filename is not percent-decoded.
     pub fn raw_filename(&self) -> &str {
         let path = match self {
-            Self::RelativeUrl(_, path) => path.as_ref(),
-            Self::AbsoluteUrl(url) => url.as_ref(),
+            Self::RelativeUrl(_, path, _) => path.as_ref(),
+            Self::AbsoluteUrl(url, _) => url.as_ref(),
         };
         let path = path.split_once(['?', '#']).map_or(path, |(path, _)| path);
         path.rsplit_once('/').map_or(path, |(_, filename)| filename)
@@ -112,7 +205,7 @@ impl FileLocation {
     /// cannot be joined to the base URL.
     pub fn to_url(&self) -> Result<SafeUrl, ToUrlError> {
         match self {
-            Self::RelativeUrl(base, path) => {
+            Self::RelativeUrl(base, path, _) => {
                 let base_url = SafeUrl::parse(base).map_err(|err| ToUrlError::InvalidBase {
                     base: base.to_string(),
                     err,
@@ -124,16 +217,16 @@ impl FileLocation {
                 })?;
                 Ok(joined)
             }
-            Self::AbsoluteUrl(absolute) => absolute.to_url(),
+            Self::AbsoluteUrl(absolute, _) => absolute.to_url(),
         }
     }
 }
 
-impl Display for FileLocation {
+impl<Provenance> Display for FileLocation<Provenance> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            Self::RelativeUrl(_base, url) => Display::fmt(&url, f),
-            Self::AbsoluteUrl(url) => Display::fmt(&url.0, f),
+            Self::RelativeUrl(_base, url, _) => Display::fmt(&url, f),
+            Self::AbsoluteUrl(url, _) => Display::fmt(&url.0, f),
         }
     }
 }
