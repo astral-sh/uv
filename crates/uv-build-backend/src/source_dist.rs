@@ -1,4 +1,5 @@
 use crate::metadata::DEFAULT_EXCLUDES;
+use crate::vcs_ignore::VcsIgnore;
 use crate::wheel::build_exclude_matcher;
 use crate::{
     BuildBackendSettings, DirectoryWriter, Error, FileList, ListWriter, PyProjectToml,
@@ -94,9 +95,10 @@ fn source_dist_matcher(
     settings: &BuildBackendSettings,
     license_files: &[String],
     show_warnings: bool,
-) -> Result<(GlobDirFilter, GlobSet), Error> {
+) -> Result<(GlobDirFilter, GlobSet, Vec<PathBuf>), Error> {
     // File and directories to include in the source directory
     let mut include_globs = Vec::new();
+    let mut required_directories = Vec::new();
 
     // Check that the source tree contains a module.
     let (src_root, modules_relative) = find_roots(
@@ -117,6 +119,9 @@ fn source_dist_matcher(
             .expect("module root is inside source tree");
         let import_path = normalize_path(path).portable_display().to_string();
         includes.push(format!("{}/**", globset::escape(&import_path)));
+        if settings.respect_ignore && settings.namespace {
+            required_directories.push(normalize_path(path).into_owned());
+        }
     }
     for include in settings.source_include.iter().chain(&includes) {
         let glob = PortableGlobParser::Uv
@@ -171,6 +176,9 @@ fn source_dist_matcher(
                 path: directory.to_path_buf(),
             });
         }
+        if settings.respect_ignore {
+            required_directories.push(directory.to_path_buf());
+        }
         let directory = directory.portable_display().to_string();
         let glob = PortableGlobParser::Uv
             .parse(&format!("{}/**", globset::escape(&directory)))
@@ -211,7 +219,7 @@ fn source_dist_matcher(
     if exclude_matcher.is_match("pyproject.toml") {
         return Err(Error::PyprojectTomlExcluded);
     }
-    Ok((include_matcher, exclude_matcher))
+    Ok((include_matcher, exclude_matcher, required_directories))
 }
 
 /// Shared implementation for building and listing a source distribution.
@@ -224,6 +232,7 @@ fn write_source_dist(
     let pyproject_toml = PyProjectToml::parse(&source_tree.join("pyproject.toml"))?;
     pyproject_toml.warn_build_system(uv_version, BuildKind::Sdist);
     let settings = pyproject_toml.settings();
+    let mut vcs_ignore = VcsIgnore::new(source_tree, settings.respect_ignore)?;
 
     let filename = SourceDistFilename {
         name: pyproject_toml.name().clone(),
@@ -281,7 +290,7 @@ fn write_source_dist(
         &pyproject_path,
     )?;
 
-    let (include_matcher, exclude_matcher) = source_dist_matcher(
+    let (include_matcher, exclude_matcher, required_directories) = source_dist_matcher(
         source_tree,
         &pyproject_toml,
         &settings,
@@ -293,29 +302,30 @@ fn write_source_dist(
     let mut written_directories = FxHashSet::<PathBuf>::default();
     let top_level_directory = PathBuf::from(&top_level).join("");
     write_directory_once(&mut writer, &mut written_directories, &top_level_directory)?;
-    for entry in WalkDir::new(source_tree)
+    let mut entries = WalkDir::new(source_tree)
         .sort_by(compare_build_entries)
-        .into_iter()
-        .filter_entry(|entry| {
-            // TODO(konsti): This should be prettier.
-            let relative = entry
-                .path()
-                .strip_prefix(source_tree)
-                .expect("walkdir starts with root");
-
-            // Fast path: Don't descend into a directory that can't be included. This is the most
-            // important performance optimization, it avoids descending into directories such as
-            // `.venv`. While walkdir is generally cheap, we still avoid traversing large data
-            // directories that often exist on the top level of a project. This is especially noticeable
-            // on network file systems with high latencies per operation (while contiguous reading may
-            // still be fast).
-            include_matcher.match_directory(relative) && !exclude_matcher.is_match(relative)
-        })
-    {
+        .into_iter();
+    while let Some(entry) = entries.next() {
         let entry = entry.map_err(|err| Error::WalkDir {
             root: source_tree.to_path_buf(),
             err,
         })?;
+
+        let relative = entry
+            .path()
+            .strip_prefix(source_tree)
+            .expect("walkdir starts with root");
+        // Avoid descending into directories that cannot be included, such as `.venv` or large
+        // data directories. Load ignore rules only after applying these inexpensive glob checks.
+        if !include_matcher.match_directory(relative)
+            || exclude_matcher.is_match(relative)
+            || vcs_ignore.is_ignored(entry.path(), entry.file_type().is_dir())?
+        {
+            if entry.file_type().is_dir() {
+                entries.skip_current_dir();
+            }
+            continue;
+        }
 
         files_visited += 1;
         if files_visited > 10000 {
@@ -324,13 +334,7 @@ fn write_source_dist(
                 Consider using more constrained includes or more excludes."
             );
         }
-        // TODO(konsti): This should be prettier.
-        let relative = entry
-            .path()
-            .strip_prefix(source_tree)
-            .expect("walkdir starts with root");
-
-        if !include_matcher.match_path(relative, &entry) || exclude_matcher.is_match(relative) {
+        if !include_matcher.match_path(relative, &entry) {
             trace!("Excluding from sdist: {}", relative.user_display());
             continue;
         }
@@ -360,6 +364,16 @@ fn write_source_dist(
         )?;
     }
     debug!("Visited {files_visited} files for source dist build");
+
+    // Configured data and namespace roots must exist when rebuilding a wheel, even if all their
+    // files were ignored. Keep their directory structure without retaining any excluded files.
+    for directory in required_directories {
+        let mut parent = PathBuf::from(&top_level);
+        for component in directory.components() {
+            parent.push(component);
+            write_directory_once(&mut writer, &mut written_directories, &parent)?;
+        }
+    }
 
     writer.close(&top_level)?;
 

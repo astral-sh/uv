@@ -69,6 +69,26 @@ pub struct BuildBackendSettings {
     )]
     pub(crate) default_excludes: bool,
 
+    /// Exclude files matching `.gitignore` rules when building source distributions and wheels.
+    ///
+    /// Rules are read from `.gitignore` files in the project directory and its subdirectories.
+    /// In a Git repository, ancestor `.gitignore` files up to the repository root are also used.
+    /// Global Git configuration and `.git/info/exclude` are not used, and neither Git nor a Git
+    /// repository is required. Explicit includes do not override these rules.
+    ///
+    /// Ignoring required package files, such as `pyproject.toml`, the README, license files, or
+    /// a module's `__init__.py` or `__init__.pyi`, is an error. Editable installs apply these rules
+    /// to copied data files, but the linked Python source tree remains unfiltered.
+    ///
+    /// Ignore rules are reapplied when building from a source distribution. If ignore files are
+    /// omitted from the source distribution, its wheel may differ from a directly built wheel.
+    #[option(
+        default = r#"false"#,
+        value_type = "bool",
+        example = r#"respect-ignore = true"#
+    )]
+    pub(crate) respect_ignore: bool,
+
     /// Glob expressions which files and directories to exclude from the source distribution.
     ///
     /// These exclusions are also applied to wheels to ensure that a wheel built from a source tree
@@ -180,6 +200,7 @@ impl Default for BuildBackendSettings {
             module_name: None,
             source_include: Vec::new(),
             default_excludes: true,
+            respect_ignore: false,
             source_exclude: Vec::new(),
             wheel_exclude: Vec::new(),
             namespace: false,
