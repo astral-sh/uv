@@ -75,12 +75,17 @@ impl WheelExtractor {
     pub(crate) fn extract_seekable(
         self,
         reader: fs_err::File,
+        require_unique_paths: bool,
     ) -> Result<ExtractedWheel, uv_extract::Error> {
         let files = if self.content_addressed {
             let (files, tree) = uv_extract::unzip_and_hash(reader, self.temp_dir.path())?;
             ExtractedFiles::Hashed(HashedWheel { files, tree })
         } else {
-            let files = uv_extract::unzip(reader, self.temp_dir.path())?;
+            let files = if require_unique_paths {
+                uv_extract::unzip_with_unique_paths(reader, self.temp_dir.path())?
+            } else {
+                uv_extract::unzip(reader, self.temp_dir.path())?
+            };
             ExtractedFiles::Unhashed(files)
         };
         Ok(ExtractedWheel {

@@ -1,21 +1,41 @@
+#[cfg(all(target_arch = "aarch64", target_os = "macos"))]
+mod aarch64;
 mod nvidia;
+#[cfg(target_arch = "x86_64")]
+mod x86_64;
 
 use tracing::debug;
 use uv_distribution_filename::VariantLabel;
 use uv_distribution_types::{
-    InstalledDist, SupportedVariantFeature, SupportedVariantProperties, VariantNamespace,
-    VariantProviderRequest, VariantsJsonContent,
+    InstalledDist, SelectedVariant, SupportedVariantFeature, SupportedVariantProperties,
+    VariantNamespace, VariantProvider, VariantProviderKind, VariantsJsonContent,
 };
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pep508::{Requirement, VersionOrUrl};
 use uv_preview::PreviewFeature;
 use uv_pypi_types::{Identifier, ModuleName};
+use uv_types::BuildContext;
 
+use crate::Error;
+#[cfg(all(target_arch = "aarch64", target_os = "macos"))]
+use crate::variant::aarch64::Aarch64VariantProvider;
 use crate::variant::nvidia::NvidiaVariantProvider;
+#[cfg(target_arch = "x86_64")]
+use crate::variant::x86_64::X86_64VariantProvider;
 
+#[cfg(all(target_arch = "aarch64", target_os = "macos"))]
+static AARCH64_PROVIDER: Aarch64VariantProvider = Aarch64VariantProvider;
 static NVIDIA_PROVIDER: NvidiaVariantProvider = NvidiaVariantProvider::new();
-static VENDORED_PROVIDERS: &[&dyn VendoredVariantProvider] = &[&NVIDIA_PROVIDER];
+#[cfg(target_arch = "x86_64")]
+static X86_64_PROVIDER: X86_64VariantProvider = X86_64VariantProvider;
+static VENDORED_PROVIDERS: &[&dyn VendoredVariantProvider] = &[
+    #[cfg(all(target_arch = "aarch64", target_os = "macos"))]
+    &AARCH64_PROVIDER,
+    &NVIDIA_PROVIDER,
+    #[cfg(target_arch = "x86_64")]
+    &X86_64_PROVIDER,
+];
 
 /// A Python module and optional path to an object within it, identifying a provider plugin.
 struct PluginApi {
@@ -49,6 +69,32 @@ pub enum InstalledWheelVariant {
 
 impl InstalledWheelVariant {
     pub fn check(installed: &InstalledDist) -> Self {
+        Self::check_with_target(installed, None)
+    }
+
+    /// Check the installed properties against an explicit target or the current system.
+    pub fn check_with_target(
+        installed: &InstalledDist,
+        target: Option<&SupportedVariantProperties>,
+    ) -> Self {
+        Self::check_using(installed, |metadata, recorded| match target {
+            Some(target) => metadata.select_variant(&recorded.label, target),
+            None => metadata.select_variant(
+                &recorded.label,
+                &recheckable_installed_properties(metadata, recorded),
+            ),
+        })
+    }
+
+    /// Check an installed wheel against properties already selected during resolution.
+    pub fn check_with_selected(installed: &InstalledDist, selected: &SelectedVariant) -> Self {
+        Self::check_using(installed, |_, _| Some(selected.clone()))
+    }
+
+    fn check_using(
+        installed: &InstalledDist,
+        select: impl FnOnce(&VariantsJsonContent, &SelectedVariant) -> Option<SelectedVariant>,
+    ) -> Self {
         let metadata = match installed.read_variant() {
             Ok(None) => return Self::NonVariant,
             Ok(Some(metadata)) => metadata,
@@ -58,10 +104,11 @@ impl InstalledWheelVariant {
             }
         };
         if uv_preview::is_enabled(PreviewFeature::WheelVariants)
-            && let Some(label) =
-                metadata.compatible_wheel_label(&supported_variant_properties(&metadata))
+            && let Ok(recorded) = installed.read_variant_context_for_metadata(&metadata)
+            && let Some(selected) = select(&metadata, &recorded)
+            && recorded == selected
         {
-            return Self::Compatible(label.clone());
+            return Self::Compatible(selected.label);
         }
         Self::Incompatible
     }
@@ -85,10 +132,25 @@ impl InstalledWheelVariant {
     }
 }
 
+/// Check properties uv can detect directly. A required external provider leaves a namespace
+/// missing, forcing policy-aware resolution before the installed wheel can be reused.
+fn recheckable_installed_properties(
+    metadata: &VariantsJsonContent,
+    recorded: &SelectedVariant,
+) -> SupportedVariantProperties {
+    trusted_variant_properties(
+        metadata
+            .providers()
+            .filter(|(namespace, _)| recorded.properties.contains_key(*namespace)),
+    )
+}
+
 /// A vendored wheel variant provider.
 trait VendoredVariantProvider: Sync {
     /// The API endpoint, or `None` to use the default derived from the package name.
-    fn plugin_api(&self) -> Option<&PluginApi>;
+    fn plugin_api(&self) -> Option<&PluginApi> {
+        None
+    }
     /// The name of the vendored provider package.
     fn package_name(&self) -> &PackageName;
     /// The version of the provider package that was vendored.
@@ -101,43 +163,110 @@ trait VendoredVariantProvider: Sync {
 
 /// Collect the variant properties supported by enabled static and vendored providers.
 pub fn supported_variant_properties(metadata: &VariantsJsonContent) -> SupportedVariantProperties {
-    let detected = metadata
-        .provider_requests()
-        .filter_map(|(namespace, request)| {
-            let Some(provider) = find_vendored_provider(namespace, request) else {
-                // TODO(konsti): Support installing and running variant provider plugins.
-                let provider_name = match request {
-                    VariantProviderRequest::Plugin { plugin_api, .. } => plugin_api,
-                    VariantProviderRequest::Builtin(name) => Some(name),
-                };
-                if let Some(provider_name) = provider_name {
-                    debug!(
-                        "Skipping unsupported wheel variant provider `{provider_name}` for \
-                         namespace `{namespace}`"
-                    );
-                } else {
-                    debug!(
-                        "Skipping unsupported wheel variant provider for namespace `{namespace}`"
-                    );
-                }
-                return None;
-            };
-            Some((namespace, provider.properties()?))
+    trusted_variant_properties(
+        metadata
+            .providers()
+            .filter(|(_, provider)| !provider.optional()),
+    )
+}
+
+fn trusted_variant_properties<'a>(
+    providers: impl Iterator<Item = (&'a VariantNamespace, &'a VariantProvider)>,
+) -> SupportedVariantProperties {
+    let mut supported = SupportedVariantProperties::default();
+    for (namespace, provider) in providers {
+        let features = provider.static_properties().or_else(|| {
+            find_vendored_provider(namespace, provider.kind())
+                .and_then(|provider| provider.properties())
+                .map(<[_]>::to_vec)
         });
-    metadata.supported_properties(detected)
+        if let Some(features) = features {
+            supported.insert(namespace.clone(), features);
+        }
+    }
+    supported
+}
+
+/// Collect compatible properties according to the PEP 850 provider selection algorithm.
+pub(crate) async fn query_supported_variant_properties(
+    metadata: &VariantsJsonContent,
+    context: &impl BuildContext,
+    require_hashes: bool,
+) -> Result<SupportedVariantProperties, Error> {
+    let policy = context.variant_policy();
+    if let Some(target) = policy.and_then(|policy| policy.target()) {
+        return Ok(target.clone());
+    }
+
+    let mut supported = SupportedVariantProperties::default();
+    for (namespace, provider) in metadata.providers() {
+        let enabled = policy.is_some_and(|policy| policy.enables(namespace));
+        if provider.optional() && !enabled {
+            continue;
+        }
+        if let Some(features) = provider.static_properties() {
+            supported.insert(namespace.clone(), features);
+            continue;
+        }
+        if let Some(provider) = find_vendored_provider(namespace, provider.kind()) {
+            if let Some(features) = provider.properties() {
+                supported.insert(namespace.clone(), features.to_vec());
+            }
+            continue;
+        }
+        let VariantProviderKind::Plugin {
+            requires,
+            plugin_api,
+        } = provider.kind()
+        else {
+            continue;
+        };
+        let Some(opt_in) = policy.and_then(|policy| policy.opt_in(namespace)) else {
+            debug!("Skipping wheel variant provider for namespace `{namespace}` without opt-in");
+            continue;
+        };
+        if !opt_in.permits_plugin() {
+            continue;
+        }
+        let Some(features) = context
+            .query_variant_provider(requires, plugin_api.as_deref(), opt_in, require_hashes)
+            .await
+            .map_err(|source| Error::VariantProvider {
+                namespace: namespace.clone(),
+                source,
+            })?
+        else {
+            debug!(
+                "Skipping wheel variant provider for namespace `{namespace}` because its identity was not authorized"
+            );
+            continue;
+        };
+        metadata
+            .validate_plugin_features(namespace, &features)
+            .map_err(|source| Error::VariantProvider {
+                namespace: namespace.clone(),
+                source: source.into(),
+            })?;
+        let features = features
+            .into_iter()
+            .map(|feature| (feature.name, feature.values))
+            .collect::<Vec<_>>();
+        supported.insert(namespace.clone(), features);
+    }
+    Ok(supported)
 }
 
 /// Find a vendored provider that satisfies a plugin request without installing other packages.
 fn find_vendored_provider(
     namespace: &VariantNamespace,
-    request: VariantProviderRequest<'_>,
+    kind: &VariantProviderKind,
 ) -> Option<&'static dyn VendoredVariantProvider> {
-    let (requires, plugin_api) = match request {
-        VariantProviderRequest::Plugin {
+    let (requires, plugin_api) = match kind {
+        VariantProviderKind::Plugin {
             requires,
             plugin_api,
-        } => (requires, plugin_api),
-        VariantProviderRequest::Builtin(_) => return None,
+        } => (requires.as_slice(), plugin_api.as_deref()),
+        VariantProviderKind::Static { .. } | VariantProviderKind::Builtin { .. } => return None,
     };
     let [requirement] = requires else {
         return None;
@@ -154,18 +283,27 @@ fn find_vendored_provider(
     };
     let default_plugin_api = requirement.name.as_dist_info_name();
     let plugin_api = plugin_api.unwrap_or(default_plugin_api.as_ref());
-    VENDORED_PROVIDERS.iter().copied().find(|provider| {
-        if provider.namespace() != namespace || provider.package_name() != &requirement.name {
-            return false;
-        }
-        let matches_plugin_api = if let Some(provider_plugin_api) = provider.plugin_api() {
-            provider_plugin_api.matches(plugin_api)
-        } else {
-            default_plugin_api.as_ref() == plugin_api
-        };
-        matches_plugin_api
-            && specifiers
-                .as_ref()
-                .is_none_or(|specifiers| specifiers.contains(&provider.package_version()))
-    })
+    VENDORED_PROVIDERS
+        .iter()
+        .copied()
+        .find(|provider| {
+            if provider.namespace() != namespace || provider.package_name() != &requirement.name {
+                return false;
+            }
+            let matches_plugin_api = if let Some(provider_plugin_api) = provider.plugin_api() {
+                provider_plugin_api.matches(plugin_api)
+            } else {
+                default_plugin_api.as_ref() == plugin_api
+            };
+            matches_plugin_api
+                && specifiers
+                    .as_ref()
+                    .is_none_or(|specifiers| specifiers.contains(&provider.package_version()))
+        })
+        .inspect(|provider| {
+            debug!(
+                "Using trusted `{}` provider for variant namespace `{namespace}`",
+                provider.namespace()
+            );
+        })
 }

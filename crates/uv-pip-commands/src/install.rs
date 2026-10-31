@@ -16,10 +16,11 @@ use uv_configuration::{
     Modifications, NoSources, Override, PipInstallFormat, Reinstall, TargetTriple, Upgrade,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
-use uv_distribution::LoweredExtraBuildDependencies;
+use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations, Name,
     NameRequirementSpecification, Origin, PackageConfigSettings, Requirement, Resolution,
+    VariantPolicy,
 };
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
@@ -103,6 +104,7 @@ pub async fn pip_install(
     torch_backend: Option<TorchMode>,
     cuda_driver_version: Option<Version>,
     amd_gpu_architecture: Option<AmdGpuArchitecture>,
+    variant_policy: VariantPolicy,
     dependency_metadata: DependencyMetadata,
     keyring_provider: KeyringProviderType,
     client_builder: &BaseClientBuilder<'_>,
@@ -305,6 +307,7 @@ pub async fn pip_install(
         .ok();
 
     // Determine the markers and tags to use for the resolution.
+    let variant_policy = variant_policy.with_explicit_platform(python_platform.is_some());
     let interpreter = environment.interpreter();
     let marker_env = resolution_markers(
         python_version.as_ref(),
@@ -328,7 +331,10 @@ pub async fn pip_install(
     let site_packages = if defer_site_packages {
         None
     } else {
-        Some(SitePackages::from_environment(&environment)?)
+        Some(
+            SitePackages::from_environment(&environment)?
+                .with_variant_target(variant_policy.target().cloned()),
+        )
     };
 
     // Check if the current environment satisfies the requirements.
@@ -508,7 +514,8 @@ pub async fn pip_install(
         workspace_cache.clone(),
         concurrency.clone(),
         preview,
-    );
+    )
+    .with_variant_policy(&variant_policy);
 
     let (resolution, hasher) = if let Some(pylock) = pylock {
         let (install_path, lock) = read_pylock_toml(&pylock, &client_builder).await?;
@@ -544,7 +551,13 @@ pub async fn pip_install(
             &groups,
             &build_options,
             hash_checking,
-        )?
+            &DistributionDatabase::new(
+                &client,
+                &build_dispatch,
+                concurrency.downloads_semaphore.clone(),
+            ),
+        )
+        .await?
     } else {
         // When resolving, don't take any external preferences into account.
         let preferences = Vec::default();
@@ -610,7 +623,8 @@ pub async fn pip_install(
         None => SitePackages::from_environment_for_packages(
             &environment,
             resolution.distributions().map(Name::name),
-        )?,
+        )?
+        .with_variant_target(variant_policy.target().cloned()),
         Some(site_packages) => site_packages,
     };
 
@@ -642,7 +656,8 @@ pub async fn pip_install(
         workspace_cache,
         concurrency.clone(),
         preview,
-    );
+    )
+    .with_variant_policy(&variant_policy);
 
     // Sync the environment.
     let changelog = match uv_install_operations::install(

@@ -14,11 +14,12 @@ use uv_fs::Simplified;
 use uv_install_wheel::WheelFile;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
+use uv_pep508::MarkerTree;
 use uv_pypi_types::{DirectUrl, DirectUrlError, MetadataError, read_direct_url_json};
 use uv_redacted::SafeUrl;
 
 use crate::{
-    BuildInfo, DistributionMetadata, InstalledMetadata, InstalledVersion, Name,
+    BuildInfo, DistributionMetadata, InstalledMetadata, InstalledVersion, Name, SelectedVariant,
     VariantsJsonContent, VariantsJsonParseError, VersionOrUrlRef,
 };
 
@@ -50,6 +51,12 @@ pub enum InstalledDistError {
 
     #[error(transparent)]
     VariantParse(#[from] VariantsJsonParseError),
+
+    #[error("Installed variant properties are unavailable for `{0}`; reinstall the package")]
+    VariantContextUnavailable(PackageName),
+
+    #[error("Installed variant properties for `{0}` do not match the wheel metadata")]
+    VariantContextMismatch(PackageName),
 
     #[error("Invalid `.egg-link` path: {}", _0.user_display())]
     InvalidEggLinkPath(PathBuf),
@@ -361,6 +368,57 @@ impl InstalledDist {
             Err(err) => return Err(err.into()),
         };
         Ok(Some(VariantsJsonContent::from_slice(&contents)?))
+    }
+
+    /// Read the properties used to resolve this wheel's dependencies during installation.
+    ///
+    /// A wheel may declare alternatives that the installation target did not support. The
+    /// recorded properties contain only the selected subset, so inspecting an environment does
+    /// not need to query providers. Static properties can recover this subset for installations
+    /// that predate the recorded metadata.
+    pub fn read_variant_context(&self) -> Result<Option<SelectedVariant>, InstalledDistError> {
+        let Some(metadata) = self.read_variant()? else {
+            return Ok(None);
+        };
+        self.read_variant_context_for_metadata(&metadata).map(Some)
+    }
+
+    /// Read selected properties only when the dependency markers need a variant context.
+    pub fn read_variant_context_for_markers<'a>(
+        &self,
+        markers: impl IntoIterator<Item = &'a MarkerTree>,
+    ) -> Result<Option<SelectedVariant>, InstalledDistError> {
+        if markers.into_iter().any(MarkerTree::has_variant_expression) {
+            self.read_variant_context()
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Read the selected properties for an installed wheel with known variant metadata.
+    pub fn read_variant_context_for_metadata(
+        &self,
+        metadata: &VariantsJsonContent,
+    ) -> Result<SelectedVariant, InstalledDistError> {
+        match fs::read(self.install_path().join("uv_variant.json")) {
+            Ok(contents) => {
+                let selected = serde_json::from_slice(&contents)?;
+                if metadata.validates_selected_variant(&selected) {
+                    Ok(selected)
+                } else {
+                    Err(InstalledDistError::VariantContextMismatch(
+                        self.name().clone(),
+                    ))
+                }
+            }
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => metadata
+                .wheel_label()
+                .and_then(|label| {
+                    metadata.select_variant(label, &metadata.static_supported_properties())
+                })
+                .ok_or_else(|| InstalledDistError::VariantContextUnavailable(self.name().clone())),
+            Err(err) => Err(err.into()),
+        }
     }
 
     /// Return the [`Version`] of the distribution.

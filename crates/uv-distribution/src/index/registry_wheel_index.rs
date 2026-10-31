@@ -17,7 +17,6 @@ use uv_normalize::PackageName;
 use uv_platform_tags::Tags;
 use uv_types::HashStrategy;
 
-use crate::download::check_wheel_variant_compatibility;
 use crate::index::cached_wheel::{CachedWheel, ResolvedWheel};
 use crate::source::{HTTP_REVISION, HttpRevisionPointer, LOCAL_REVISION, LocalRevisionPointer};
 
@@ -172,13 +171,7 @@ impl<'a> RegistryWheelIndex<'a> {
     ///
     /// If the package is not yet indexed, this will index the package by reading from the cache.
     pub fn get(&mut self, name: &'a PackageName) -> impl Iterator<Item = &IndexEntry<'_>> {
-        self.get_impl(name)
-            .iter()
-            .rev()
-            // A cached wheel with invalid variant metadata cannot satisfy the resolution.
-            .filter(|entry| {
-                check_wheel_variant_compatibility(&entry.dist.filename, &entry.dist.path).is_ok()
-            })
+        self.get_impl(name).iter().rev()
     }
 
     /// Get an entry in the index.

@@ -7,7 +7,15 @@ use crate::dirhash::{DirhashTree, HashedFile, UnhashedFile};
 ///
 /// Returns the list of unpacked files and their sizes.
 pub fn unzip(reader: fs_err::File, target: &Path) -> Result<Vec<UnhashedFile>, Error> {
-    crate::dirhash::unzip(reader, target)
+    crate::dirhash::unzip(reader, target, false)
+}
+
+/// Unzip a `.zip` archive, rejecting entries that extract to the same output path.
+pub fn unzip_with_unique_paths(
+    reader: fs_err::File,
+    target: &Path,
+) -> Result<Vec<UnhashedFile>, Error> {
+    crate::dirhash::unzip(reader, target, true)
 }
 
 /// Unzip a `.zip` archive into the target directory while computing a hash tree of the extracted

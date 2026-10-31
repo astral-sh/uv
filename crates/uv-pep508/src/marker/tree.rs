@@ -22,7 +22,7 @@ use crate::cursor::Cursor;
 use crate::marker::lowering::{
     CanonicalMarkerListPair, CanonicalMarkerValueString, CanonicalMarkerValueVersion,
 };
-use crate::marker::parse;
+use crate::marker::{VariantProperties, parse};
 use crate::{CanonicalMarkerValueExtra, MarkerEnvironment, Pep508Error, Reporter, TracingReporter};
 
 /// Ways in which marker evaluation can fail
@@ -34,12 +34,9 @@ pub enum MarkerWarningKind {
     /// Doing an operation other than `==` and `!=` on a quoted string with `extra`, such as
     /// `extra > "perf"` or `extra == os_name`
     ExtraInvalidComparison,
-    /// Doing an operation other than `in` and `not in` on a quoted string with `extra`, such as
-    /// `extras > "perf"` or `extras == os_name`
-    ExtrasInvalidComparison,
-    /// Doing an operation other than `in` and `not in` on a quoted string with `dependency_groups`,
-    /// such as `dependency_groups > "perf"` or `dependency_groups == os_name`
-    DependencyGroupsInvalidComparison,
+    /// Doing an operation other than `in` and `not in` on a list marker, such as
+    /// `extras > "perf"` or `dependency_groups == os_name`
+    ListInvalidComparison,
     /// Comparing a string valued marker and a string lexicographically, such as `"3.9" > "3.10"`
     LexicographicComparison,
     /// Comparing two markers, such as `os_name != sys_implementation`
@@ -72,7 +69,7 @@ impl Display for MarkerValueVersion {
 }
 
 /// Those environment markers with an arbitrary string as value such as `sys_platform`
-#[derive(Copy, Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub enum MarkerValueString {
     /// `implementation_name`
     ImplementationName,
@@ -102,6 +99,10 @@ pub enum MarkerValueString {
     SysPlatform,
     /// Deprecated `sys.platform` from <https://peps.python.org/pep-0345/#environment-markers>
     SysPlatformDeprecated,
+    /// `variant_label`, the label of the selected variant wheel
+    VariantLabel,
+    /// A variant label scoped to the package whose dependencies contain it.
+    VariantLabelBase(ArcStr),
 }
 
 impl Display for MarkerValueString {
@@ -122,19 +123,36 @@ impl Display for MarkerValueString {
                 f.write_str("platform_version")
             }
             Self::SysPlatform | Self::SysPlatformDeprecated => f.write_str("sys_platform"),
+            Self::VariantLabel => f.write_str("variant_label"),
+            Self::VariantLabelBase(base) => write!(f, "variant_label[\"{base}\"]"),
         }
     }
 }
 
 /// Those markers with exclusively `in` and `not in` operators.
 ///
-/// Contains PEP 751 lockfile markers.
+/// Contains the PEP 751 lockfile marker and the variant markers.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub enum MarkerValueList {
+    /// `variant_namespaces`
+    VariantNamespaces,
+    /// `variant_features`
+    VariantFeatures,
+    /// `variant_properties`
+    VariantProperties,
     /// `extras`. This one is special because it's a list, and user-provided
     Extras,
     /// `dependency_groups`. This one is special because it's a list, and user-provided
     DependencyGroups,
+}
+
+impl MarkerValueList {
+    fn is_variant(self) -> bool {
+        match self {
+            Self::VariantNamespaces | Self::VariantFeatures | Self::VariantProperties => true,
+            Self::Extras | Self::DependencyGroups => false,
+        }
+    }
 }
 
 impl Display for MarkerValueList {
@@ -142,6 +160,9 @@ impl Display for MarkerValueList {
         match self {
             Self::Extras => f.write_str("extras"),
             Self::DependencyGroups => f.write_str("dependency_groups"),
+            Self::VariantNamespaces => f.write_str("variant_namespaces"),
+            Self::VariantFeatures => f.write_str("variant_features"),
+            Self::VariantProperties => f.write_str("variant_properties"),
         }
     }
 }
@@ -200,6 +221,10 @@ impl FromStr for MarkerValue {
             "sys.platform" => Self::MarkerEnvString(MarkerValueString::SysPlatformDeprecated),
             "extras" => Self::MarkerEnvList(MarkerValueList::Extras),
             "dependency_groups" => Self::MarkerEnvList(MarkerValueList::DependencyGroups),
+            "variant_namespaces" => Self::MarkerEnvList(MarkerValueList::VariantNamespaces),
+            "variant_features" => Self::MarkerEnvList(MarkerValueList::VariantFeatures),
+            "variant_properties" => Self::MarkerEnvList(MarkerValueList::VariantProperties),
+            "variant_label" => Self::MarkerEnvString(MarkerValueString::VariantLabel),
             "extra" => Self::Extra,
             _ => return Err(format!("Invalid key: {s}")),
         };
@@ -503,7 +528,7 @@ pub enum MarkerExpression {
         operator: MarkerOperator,
         value: ArcStr,
     },
-    /// `'...' in <key>`, a PEP 751 expression.
+    /// `'...' in <key>`, either PEP 751 or a variant expression.
     List {
         pair: CanonicalMarkerListPair,
         operator: ContainerOperator,
@@ -516,7 +541,7 @@ pub enum MarkerExpression {
 }
 
 /// The kind of a [`MarkerExpression`].
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub(crate) enum MarkerExpressionKind {
     /// A version expression, e.g. `<version key> <version op> <quoted PEP 440 version>`.
     Version(MarkerValueVersion),
@@ -524,7 +549,8 @@ pub(crate) enum MarkerExpressionKind {
     VersionIn(MarkerValueVersion),
     /// A string marker comparison, e.g. `sys_platform == '...'`.
     String(MarkerValueString),
-    /// A list `in` or `not in` expression, e.g. `'...' in dependency_groups`.
+    /// A list `in` or `not in` expression, e.g. `'...' in dependency_groups` or
+    /// `'gpu :: cuda :: cu128' in variant_properties`.
     List(MarkerValueList),
     /// An extra expression, e.g. `extra == '...'`.
     Extra,
@@ -628,7 +654,7 @@ impl MarkerExpression {
         match self {
             Self::Version { key, .. } => MarkerExpressionKind::Version(*key),
             Self::VersionIn { key, .. } => MarkerExpressionKind::VersionIn(*key),
-            Self::String { key, .. } => MarkerExpressionKind::String(*key),
+            Self::String { key, .. } => MarkerExpressionKind::String(key.clone()),
             Self::List { pair, .. } => MarkerExpressionKind::List(pair.key()),
             Self::Extra { .. } => MarkerExpressionKind::Extra,
         }
@@ -717,6 +743,70 @@ impl<'a> ExtrasEnvironment<'a> {
             Self::Extras(..) => &[],
             Self::Pep751(.., groups) => groups,
         }
+    }
+}
+
+/// The selected wheel used when evaluating a dependency marker.
+#[derive(Clone, Copy, Debug)]
+pub enum MarkerVariant<'a> {
+    /// The selected wheel depends on the target environment.
+    Universal,
+    /// An ordinary wheel or source distribution.
+    Ordinary,
+    /// A selected wheel variant.
+    Selected {
+        /// The selected wheel's filename label.
+        label: &'a str,
+        /// Selected properties of the wheel.
+        properties: &'a VariantProperties,
+    },
+}
+
+impl<'a> MarkerVariant<'a> {
+    fn label(self) -> Option<&'a str> {
+        match self {
+            Self::Universal => None,
+            Self::Ordinary => Some(""),
+            Self::Selected { label, .. } => Some(label),
+        }
+    }
+
+    fn contains(self, predicate: impl FnOnce(&VariantProperties) -> bool) -> Option<bool> {
+        match self {
+            Self::Universal => None,
+            Self::Ordinary => Some(false),
+            Self::Selected { properties, .. } => Some(predicate(properties)),
+        }
+    }
+}
+
+/// Look up the selected wheel for a dependency marker.
+pub trait MarkerVariantsEnvironment {
+    /// Return the selected wheel, optionally scoped to its owning package.
+    fn get(&self, base: Option<&str>) -> MarkerVariant<'_>;
+}
+
+impl MarkerVariantsEnvironment for MarkerVariant<'_> {
+    fn get(&self, base: Option<&str>) -> MarkerVariant<'_> {
+        match base {
+            None => *self,
+            Some(_) => match self {
+                Self::Universal => Self::Universal,
+                Self::Ordinary | Self::Selected { .. } => Self::Ordinary,
+            },
+        }
+    }
+}
+
+fn marker_string<'a>(
+    env: Option<&'a MarkerEnvironment>,
+    variants: &'a impl MarkerVariantsEnvironment,
+    key: &CanonicalMarkerValueString,
+) -> Option<&'a str> {
+    if key.is_variant_label() {
+        variants.get(key.variant_base()).label()
+    } else {
+        env.and_then(|env| env.get_string(key))
     }
 }
 
@@ -910,7 +1000,7 @@ impl MarkerTree {
                 };
                 MarkerTreeKind::String(StringMarkerTree {
                     id: self.0,
-                    key: *key,
+                    key: key.clone(),
                     map,
                 })
             }
@@ -920,7 +1010,7 @@ impl MarkerTree {
                 };
                 MarkerTreeKind::VersionString(VersionMarkerTree {
                     id: self.0,
-                    key: *key,
+                    key: key.clone(),
                     map,
                 })
             }
@@ -929,7 +1019,7 @@ impl MarkerTree {
                     unreachable!()
                 };
                 MarkerTreeKind::In(InMarkerTree {
-                    key: *key,
+                    key: key.clone(),
                     value,
                     high: high.negate(self.0),
                     low: low.negate(self.0),
@@ -940,7 +1030,7 @@ impl MarkerTree {
                     unreachable!()
                 };
                 MarkerTreeKind::Contains(ContainsMarkerTree {
-                    key: *key,
+                    key: key.clone(),
                     value,
                     high: high.negate(self.0),
                     low: low.negate(self.0),
@@ -976,9 +1066,20 @@ impl MarkerTree {
 
     /// Does this marker apply in the given environment?
     pub fn evaluate(self, env: &MarkerEnvironment, extras: &[ExtraName]) -> bool {
+        self.evaluate_with_variants(env, &MarkerVariant::Universal, extras)
+    }
+
+    /// Evaluate a dependency marker for a selected wheel.
+    pub fn evaluate_with_variants(
+        self,
+        env: &MarkerEnvironment,
+        variants: &impl MarkerVariantsEnvironment,
+        extras: &[ExtraName],
+    ) -> bool {
         self.evaluate_reporter_impl(
-            env,
+            Some(env),
             ExtrasEnvironment::from_extras(extras),
+            variants,
             &mut TracingReporter,
         )
     }
@@ -993,8 +1094,9 @@ impl MarkerTree {
         groups: &[GroupName],
     ) -> bool {
         self.evaluate_reporter_impl(
-            env,
+            Some(env),
             ExtrasEnvironment::from_pep751(extras, groups),
+            &MarkerVariant::Universal,
             &mut TracingReporter,
         )
     }
@@ -1011,36 +1113,47 @@ impl MarkerTree {
         env: Option<&MarkerEnvironment>,
         extras: &[ExtraName],
     ) -> bool {
-        match env {
-            None => self.evaluate_extras(extras),
-            Some(env) => self.evaluate_reporter_impl(
-                env,
-                ExtrasEnvironment::from_extras(extras),
-                &mut TracingReporter,
-            ),
-        }
+        self.evaluate_optional_environment_with_variants(env, &MarkerVariant::Universal, extras)
+    }
+
+    /// Evaluate a dependency marker for a selected wheel and an optional environment.
+    pub fn evaluate_optional_environment_with_variants(
+        self,
+        env: Option<&MarkerEnvironment>,
+        variants: &impl MarkerVariantsEnvironment,
+        extras: &[ExtraName],
+    ) -> bool {
+        self.evaluate_reporter_impl(
+            env,
+            ExtrasEnvironment::from_extras(extras),
+            variants,
+            &mut TracingReporter,
+        )
     }
 
     fn evaluate_reporter_impl(
         self,
-        env: &MarkerEnvironment,
+        env: Option<&MarkerEnvironment>,
         extras: ExtrasEnvironment,
+        variants: &impl MarkerVariantsEnvironment,
         reporter: &mut impl Reporter,
     ) -> bool {
         match self.kind() {
             MarkerTreeKind::True => return true,
             MarkerTreeKind::False => return false,
             MarkerTreeKind::Version(marker) => {
-                for (range, tree) in marker.edges() {
-                    if range.contains(env.get_version(marker.key())) {
-                        return tree.evaluate_reporter_impl(env, extras, reporter);
-                    }
-                }
+                return marker.edges().any(|(range, tree)| {
+                    env.is_none_or(|env| range.contains(env.get_version(marker.key())))
+                        && tree.evaluate_reporter_impl(env, extras, variants, reporter)
+                });
             }
             MarkerTreeKind::String(marker) => {
+                let Some(l_string) = marker_string(env, variants, &marker.key()) else {
+                    return marker.children().any(|(_, tree)| {
+                        tree.evaluate_reporter_impl(env, extras, variants, reporter)
+                    });
+                };
                 for (range, tree) in marker.children() {
-                    let l_string = env.get_string(marker.key());
-
                     if matches!(
                         marker.key(),
                         CanonicalMarkerValueString::PlatformRelease
@@ -1062,85 +1175,105 @@ impl MarkerTree {
                             );
                         }
                     }
-
                     if range.contains(l_string) {
-                        return tree.evaluate_reporter_impl(env, extras, reporter);
+                        return tree.evaluate_reporter_impl(env, extras, variants, reporter);
                     }
                 }
             }
             MarkerTreeKind::VersionString(marker) => {
-                let Ok(version) = env.get_string(marker.key()).parse::<Version>() else {
+                let Some(value) = env.and_then(|env| env.get_string(&marker.key())) else {
+                    return marker.edges().any(|(_, tree)| {
+                        tree.evaluate_reporter_impl(env, extras, variants, reporter)
+                    });
+                };
+                let Ok(version) = value.parse::<Version>() else {
                     return false;
                 };
                 for (range, tree) in marker.edges() {
                     if range.contains(&version) {
-                        return tree.evaluate_reporter_impl(env, extras, reporter);
+                        return tree.evaluate_reporter_impl(env, extras, variants, reporter);
                     }
                 }
             }
             MarkerTreeKind::In(marker) => {
+                let Some(value) = marker_string(env, variants, &marker.key()) else {
+                    return marker.children().any(|(_, tree)| {
+                        tree.evaluate_reporter_impl(env, extras, variants, reporter)
+                    });
+                };
                 return marker
-                    .edge(marker.value().contains(env.get_string(marker.key())))
-                    .evaluate_reporter_impl(env, extras, reporter);
+                    .edge(marker.value().contains(value))
+                    .evaluate_reporter_impl(env, extras, variants, reporter);
             }
             MarkerTreeKind::Contains(marker) => {
+                let Some(value) = marker_string(env, variants, &marker.key()) else {
+                    return marker.children().any(|(_, tree)| {
+                        tree.evaluate_reporter_impl(env, extras, variants, reporter)
+                    });
+                };
                 return marker
-                    .edge(env.get_string(marker.key()).contains(marker.value()))
-                    .evaluate_reporter_impl(env, extras, reporter);
+                    .edge(value.contains(marker.value()))
+                    .evaluate_reporter_impl(env, extras, variants, reporter);
+            }
+            MarkerTreeKind::List(marker) => {
+                if env.is_none() && !marker.pair().key().is_variant() {
+                    return marker.children().any(|(_, tree)| {
+                        tree.evaluate_reporter_impl(env, extras, variants, reporter)
+                    });
+                }
+                let edge = match marker.pair() {
+                    CanonicalMarkerListPair::VariantNamespaces { base, namespace } => variants
+                        .get(base.as_deref())
+                        .contains(|properties| properties.contains_key(namespace)),
+                    CanonicalMarkerListPair::VariantFeatures {
+                        base,
+                        namespace,
+                        feature,
+                    } => variants.get(base.as_deref()).contains(|properties| {
+                        properties
+                            .get(namespace)
+                            .is_some_and(|features| features.contains_key(feature))
+                    }),
+                    CanonicalMarkerListPair::VariantProperties {
+                        base,
+                        namespace,
+                        feature,
+                        value,
+                    } => variants.get(base.as_deref()).contains(|properties| {
+                        properties
+                            .get(namespace)
+                            .and_then(|features| features.get(feature))
+                            .is_some_and(|values| values.contains(value))
+                    }),
+                    CanonicalMarkerListPair::Extras(extra) => Some(extras.extras().contains(extra)),
+                    CanonicalMarkerListPair::DependencyGroup(group) => {
+                        Some(extras.dependency_groups().contains(group))
+                    }
+                    CanonicalMarkerListPair::Arbitrary { key, .. } => {
+                        if !key.is_variant() {
+                            return false;
+                        }
+                        Some(false)
+                    }
+                };
+                return if let Some(edge) = edge {
+                    marker
+                        .edge(edge)
+                        .evaluate_reporter_impl(env, extras, variants, reporter)
+                } else {
+                    marker.children().any(|(_, tree)| {
+                        tree.evaluate_reporter_impl(env, extras, variants, reporter)
+                    })
+                };
             }
             MarkerTreeKind::Extra(marker) => {
                 return marker
                     .edge(extras.extra().contains(marker.name().extra()))
-                    .evaluate_reporter_impl(env, extras, reporter);
-            }
-            MarkerTreeKind::List(marker) => {
-                let edge = match marker.pair() {
-                    CanonicalMarkerListPair::Extras(extra) => extras.extras().contains(extra),
-                    CanonicalMarkerListPair::DependencyGroup(dependency_group) => {
-                        extras.dependency_groups().contains(dependency_group)
-                    }
-                    // Invalid marker expression
-                    CanonicalMarkerListPair::Arbitrary { .. } => return false,
-                };
-
-                return marker
-                    .edge(edge)
-                    .evaluate_reporter_impl(env, extras, reporter);
+                    .evaluate_reporter_impl(env, extras, variants, reporter);
             }
         }
 
         false
-    }
-
-    /// Checks if the requirement should be activated with the given set of active extras without evaluating
-    /// the remaining environment markers, i.e. if there is potentially an environment that could activate this
-    /// requirement.
-    fn evaluate_extras(self, extras: &[ExtraName]) -> bool {
-        match self.kind() {
-            MarkerTreeKind::True => true,
-            MarkerTreeKind::False => false,
-            MarkerTreeKind::Version(marker) => {
-                marker.edges().any(|(_, tree)| tree.evaluate_extras(extras))
-            }
-            MarkerTreeKind::VersionString(marker) => {
-                marker.edges().any(|(_, tree)| tree.evaluate_extras(extras))
-            }
-            MarkerTreeKind::String(marker) => marker
-                .children()
-                .any(|(_, tree)| tree.evaluate_extras(extras)),
-            MarkerTreeKind::In(marker) => marker
-                .children()
-                .any(|(_, tree)| tree.evaluate_extras(extras)),
-            MarkerTreeKind::Contains(marker) => marker
-                .children()
-                .any(|(_, tree)| tree.evaluate_extras(extras)),
-            MarkerTreeKind::List(marker) => marker
-                .children()
-                .any(|(_, tree)| tree.evaluate_extras(extras)),
-            MarkerTreeKind::Extra(marker) => marker
-                .edge(extras.contains(marker.name().extra()))
-                .evaluate_extras(extras),
-        }
     }
 
     /// Returns true if this marker simplifies to true if the given set of extras is activated.
@@ -1170,6 +1303,31 @@ impl MarkerTree {
                 .edge(extras.contains(marker.name().extra()))
                 .evaluate_only_extras(extras),
         }
+    }
+
+    /// Whether the marker contains a wheel variant expression.
+    pub fn has_variant_expression(&self) -> bool {
+        let mut pending = vec![self.0];
+        let mut visited = FxHashSet::default();
+        while let Some(id) = pending.pop() {
+            if id.is_true() || id.is_false() || !visited.insert(id) {
+                continue;
+            }
+            let node = INTERNER.shared.node(id);
+            let is_variant = match &node.var {
+                Variable::String(key)
+                | Variable::VersionString(key)
+                | Variable::In { key, .. }
+                | Variable::Contains { key, .. } => key.is_variant_label(),
+                Variable::List(pair) => pair.key().is_variant(),
+                Variable::Version(_) | Variable::Extra(_) => false,
+            };
+            if is_variant {
+                return true;
+            }
+            pending.extend(node.children.nodes());
+        }
+        false
     }
 
     /// Find a top level `extra == "..."` expression.
@@ -1291,6 +1449,42 @@ impl MarkerTree {
     #[must_use]
     pub fn restrict(self, assumption: Self) -> Self {
         Self(INTERNER.lock().restrict(self.0, assumption.0))
+    }
+
+    /// Simplify markers for a wheel with a fixed filename label.
+    ///
+    /// Supported properties remain target-dependent except for ordinary and null wheels,
+    /// whose property sets are always empty. Scoped markers belong to other packages.
+    #[must_use]
+    pub fn simplify_variant_label(self, label: &str) -> Self {
+        if !self.has_variant_expression() {
+            return self;
+        }
+        let marker = self.restrict(Self::expression(MarkerExpression::String {
+            key: MarkerValueString::VariantLabel,
+            operator: MarkerOperator::Equal,
+            value: label.into(),
+        }));
+        Self(
+            INTERNER
+                .lock()
+                .restrict_by(marker.0, &|variable| match variable {
+                    Variable::In {
+                        key: CanonicalMarkerValueString::VariantLabel,
+                        value,
+                    } => Some(value.contains(label)),
+                    Variable::Contains {
+                        key: CanonicalMarkerValueString::VariantLabel,
+                        value,
+                    } => Some(label.contains(value.as_str())),
+                    Variable::List(
+                        CanonicalMarkerListPair::VariantNamespaces { base: None, .. }
+                        | CanonicalMarkerListPair::VariantFeatures { base: None, .. }
+                        | CanonicalMarkerListPair::VariantProperties { base: None, .. },
+                    ) if label.is_empty() || label == "null" => Some(false),
+                    _ => None,
+                }),
+        )
     }
 
     /// Remove the extras from a marker, returning `None` if the marker tree evaluates to `true`.
@@ -1473,6 +1667,15 @@ impl MarkerTree {
         imp(self, &mut f, &mut None);
     }
 
+    /// Scope variant expressions to the package whose selected wheel determines their values.
+    #[must_use]
+    pub fn with_variant_base(self, base: &str) -> Self {
+        if !self.has_variant_expression() {
+            return self;
+        }
+        Self(INTERNER.lock().scope_variants(self.0, base))
+    }
+
     fn simplify_extras_with_impl(self, is_extra: &impl Fn(&ExtraName) -> bool) -> Self {
         Self(INTERNER.lock().restrict_by(self.0, &|var| match var {
             Variable::Extra(name) => is_extra(name.extra()).then_some(true),
@@ -1547,10 +1750,10 @@ pub struct VersionMarkerTree<'a, K = CanonicalMarkerValueVersion> {
     map: &'a [(Ranges<Version>, NodeId)],
 }
 
-impl<K: Copy> VersionMarkerTree<'_, K> {
+impl<K: Clone> VersionMarkerTree<'_, K> {
     /// The key for this node.
     pub fn key(&self) -> K {
-        self.key
+        self.key.clone()
     }
 
     /// The edges of this node, corresponding to possible output ranges of the given variable.
@@ -1561,13 +1764,13 @@ impl<K: Copy> VersionMarkerTree<'_, K> {
     }
 }
 
-impl<K: Copy + Ord> PartialOrd for VersionMarkerTree<'_, K> {
+impl<K: Clone + Ord> PartialOrd for VersionMarkerTree<'_, K> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl<K: Copy + Ord> Ord for VersionMarkerTree<'_, K> {
+impl<K: Clone + Ord> Ord for VersionMarkerTree<'_, K> {
     fn cmp(&self, other: &Self) -> Ordering {
         self.key()
             .cmp(&other.key())
@@ -1586,7 +1789,7 @@ pub struct StringMarkerTree<'a> {
 impl StringMarkerTree<'_> {
     /// The key for this node.
     pub fn key(&self) -> CanonicalMarkerValueString {
-        self.key
+        self.key.clone()
     }
 
     /// The edges of this node, corresponding to possible output ranges of the given variable.
@@ -1623,7 +1826,7 @@ pub struct InMarkerTree<'a> {
 impl InMarkerTree<'_> {
     /// The key (LHS) for this expression.
     pub fn key(&self) -> CanonicalMarkerValueString {
-        self.key
+        self.key.clone()
     }
 
     /// The value (RHS) for this expression.
@@ -1673,7 +1876,7 @@ pub struct ContainsMarkerTree<'a> {
 impl ContainsMarkerTree<'_> {
     /// The key (LHS) for this expression.
     pub fn key(&self) -> CanonicalMarkerValueString {
-        self.key
+        self.key.clone()
     }
 
     /// The value (RHS) for this expression.
@@ -1894,7 +2097,10 @@ mod test {
     use uv_pep440::Version;
 
     use crate::marker::{MarkerEnvironment, MarkerEnvironmentBuilder};
-    use crate::{MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString};
+    use crate::{
+        MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString, MarkerVariant,
+        VariantProperties,
+    };
 
     fn parse_err(input: &str) -> String {
         MarkerTree::from_str(input).unwrap_err().to_string()
@@ -1902,6 +2108,59 @@ mod test {
 
     fn m(s: &str) -> MarkerTree {
         s.parse().unwrap()
+    }
+
+    #[test]
+    fn pep825_selected_wheel_markers() {
+        let properties = VariantProperties::from([(
+            "nvidia".parse().expect("valid namespace"),
+            [(
+                "sm_arch".parse().expect("valid feature"),
+                vec!["120_real".parse().expect("valid value")],
+            )]
+            .into(),
+        )]);
+        let selected = MarkerVariant::Selected {
+            label: "cuda13",
+            properties: &properties,
+        };
+        let marker = m(
+            "variant_label == 'cuda13' and 'nvidia' in variant_namespaces and \
+             'nvidia:: sm_arch' in variant_features and \
+             'nvidia ::sm_arch:: 120_real' in variant_properties",
+        );
+        assert!(marker.has_variant_expression());
+        assert!(marker.evaluate_with_variants(&env37(), &selected, &[]));
+        assert!(!marker.evaluate_with_variants(&env37(), &MarkerVariant::Ordinary, &[]));
+        assert!(
+            !m("'nvidia::sm_arch::110_real' in variant_properties")
+                .evaluate_optional_environment_with_variants(None, &selected, &[])
+        );
+        assert!(
+            m("' nvidia' not in variant_namespaces").evaluate_with_variants(
+                &env37(),
+                &selected,
+                &[]
+            )
+        );
+        assert!(
+            m("variant_label == '' and 'nvidia' not in variant_namespaces").evaluate_with_variants(
+                &env37(),
+                &MarkerVariant::Ordinary,
+                &[]
+            )
+        );
+    }
+
+    #[test]
+    fn pep825_package_scopes() {
+        let parent = m("variant_label == 'null'").with_variant_base("parent==1");
+        let child = m("variant_label == '' and 'nvidia::sm_arch' in variant_features");
+        let scoped = parent.and(child).with_variant_base("child==1");
+        assert!(!scoped.is_false());
+        assert_eq!(scoped, parent.and(child.with_variant_base("child==1")));
+        assert_eq!(scoped, scoped.with_variant_base("successor==1"));
+        assert_eq!(scoped, m(&scoped.try_to_string().expect("scoped marker")));
     }
 
     /// Every Boolean function of three extras must roundtrip to the same diagram. The cover

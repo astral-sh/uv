@@ -2,6 +2,8 @@
 //! [installer][`uv_installer`] and [build frontend][`uv_build_frontend`] through [`BuildDispatch`]
 //! implementing [`BuildContext`].
 
+mod variant;
+
 use std::ffi::{OsStr, OsString};
 use std::future::{self, Future};
 use std::path::Path;
@@ -27,7 +29,8 @@ use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
     CachedDist, ConfigSettings, DependencyMetadata, ExtraBuildRequires, ExtraBuildVariables,
     Identifier, IndexCapabilities, IndexLocations, IsBuildBackendError, Name,
-    PackageConfigSettings, Requirement, Resolution, SourceDist, VersionOrUrlRef,
+    PackageConfigSettings, PluginVariantFeature, Requirement, Resolution, SourceDist,
+    VariantPolicy, VariantProviderOptIn, VersionOrUrlRef,
 };
 use uv_git::GitResolver;
 use uv_installer::{InstallationStrategy, Installer, Plan, Planner, Preparer, SitePackages};
@@ -178,6 +181,7 @@ pub struct BuildDispatch<'a> {
     concurrency: Concurrency,
     preview: Preview,
     tar_backend: TarBackend,
+    variant_policy: Option<&'a VariantPolicy>,
 }
 
 impl<'a> BuildDispatch<'a> {
@@ -241,6 +245,7 @@ impl<'a> BuildDispatch<'a> {
             concurrency,
             preview,
             tar_backend: TarBackend::from_env(),
+            variant_policy: None,
         }
     }
 
@@ -287,6 +292,13 @@ impl<'a> BuildDispatch<'a> {
         self
     }
 
+    /// Set the user policy for wheel variant providers.
+    #[must_use]
+    pub fn with_variant_policy(mut self, policy: &'a VariantPolicy) -> Self {
+        self.variant_policy = Some(policy);
+        self
+    }
+
     fn require_build_hashes(&self) -> bool {
         self.build_hash_checking.is_require()
     }
@@ -306,6 +318,22 @@ impl BuildContext for BuildDispatch<'_> {
 
     fn cache(&self) -> &Cache {
         self.cache
+    }
+
+    fn variant_policy(&self) -> Option<&VariantPolicy> {
+        self.variant_policy
+    }
+
+    async fn query_variant_provider<'data>(
+        &'data self,
+        requires: &'data [String],
+        plugin_api: Option<&'data str>,
+        opt_in: &'data VariantProviderOptIn,
+        require_hashes: bool,
+    ) -> Result<Option<Vec<PluginVariantFeature>>> {
+        variant::query(self, requires, plugin_api, opt_in, require_hashes)
+            .boxed_local()
+            .await
     }
 
     fn git(&self) -> &GitResolver {
@@ -409,7 +437,7 @@ impl BuildContext for BuildDispatch<'_> {
             )
             .with_build_stack(build_stack),
         )
-        .resolve(&resolver_env)
+        .resolve(&resolver_env, Some(tags), python_requirement.target())
         .await?;
 
         let manifest = Manifest::simple(requirements.to_vec())
@@ -480,7 +508,8 @@ impl BuildContext for BuildDispatch<'_> {
         let tags = self.interpreter.tags()?;
 
         // Determine the set of installed packages.
-        let site_packages = SitePackages::from_environment(venv)?;
+        let site_packages = SitePackages::from_environment(venv)?
+            .with_variant_target(self.variant_policy.and_then(VariantPolicy::target).cloned());
 
         let Plan {
             cached,
@@ -547,6 +576,24 @@ impl BuildContext for BuildDispatch<'_> {
                 .await?
         };
 
+        let mut wheels = wheels.into_iter().chain(cached).collect::<Vec<_>>();
+        let installer = Installer::new(venv, self.preview)
+            .with_link_mode(self.link_mode)
+            .with_cache(self.cache)
+            .with_variant_contexts(
+                &wheels,
+                resolution,
+                &DistributionDatabase::new(
+                    self.client,
+                    self,
+                    self.concurrency.downloads_semaphore.clone(),
+                )
+                .with_build_stack(build_stack),
+                hasher,
+            )
+            .await
+            .map_err(BuildDispatchError::InstallBuildDependencies)?;
+
         // Remove any unnecessary packages.
         if !reinstalls.is_empty() {
             let layout = venv.interpreter().layout();
@@ -566,16 +613,13 @@ impl BuildContext for BuildDispatch<'_> {
         }
 
         // Install the resolved distributions.
-        let mut wheels = wheels.into_iter().chain(cached).collect::<Vec<_>>();
         if !wheels.is_empty() {
             debug!(
                 "Installing build requirement{}: {}",
                 if wheels.len() == 1 { "" } else { "s" },
                 wheels.iter().map(ToString::to_string).join(", ")
             );
-            wheels = Installer::new(venv, self.preview)
-                .with_link_mode(self.link_mode)
-                .with_cache(self.cache)
+            wheels = installer
                 .install(wheels)
                 .await
                 .map_err(BuildDispatchError::InstallBuildDependencies)?;
@@ -750,6 +794,7 @@ pub struct SharedState {
     in_flight: InFlight,
     /// Build directories for any PEP 517 builds executed during resolution or installation.
     build_arena: BuildArena<SourceBuild>,
+    variant_providers: variant::ProviderCache,
 }
 
 impl SharedState {
@@ -763,6 +808,7 @@ impl SharedState {
             git: self.git.clone(),
             capabilities: self.capabilities.clone(),
             build_arena: self.build_arena.clone(),
+            variant_providers: self.variant_providers.clone(),
             ..Default::default()
         }
     }

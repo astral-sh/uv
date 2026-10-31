@@ -11,7 +11,8 @@ use uv_distribution_filename::{DistExtension, ExpandedTags, WheelFilename};
 use uv_distribution_types::{
     BuildInfo, BuildVariables, ConfigSettings, ExtraBuildRequirement, ExtraBuildRequires,
     ExtraBuildVariables, InstalledDirectUrlDist, InstalledDist, InstalledDistKind,
-    PackageConfigSettings, RemoteSource, RequirementSource,
+    PackageConfigSettings, RemoteSource, RequirementSource, SelectedVariant,
+    SupportedVariantProperties,
 };
 use uv_git_types::GitLfs;
 use uv_normalize::PackageName;
@@ -50,6 +51,8 @@ impl RequirementSatisfaction {
         installation: InstallationStrategy,
         tags: &Tags,
         build_settings: Option<BuildSettings<'_>>,
+        variant_target: Option<&SupportedVariantProperties>,
+        selected_variant: Option<&SelectedVariant>,
     ) -> Self {
         trace!(
             "Comparing installed with source: {:?} {:?}",
@@ -470,7 +473,10 @@ impl RequirementSatisfaction {
             }
         }
 
-        let variant = InstalledWheelVariant::check(distribution);
+        let variant = match selected_variant {
+            Some(selected) => InstalledWheelVariant::check_with_selected(distribution, selected),
+            None => InstalledWheelVariant::check_with_target(distribution, variant_target),
+        };
         if !variant.is_compatible()
             || source_wheel_filename(source)
                 .is_some_and(|filename| !variant.matches(filename.variant()))
