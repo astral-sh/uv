@@ -192,16 +192,16 @@ however no requirement in the Python packaging standards that metadata must be c
 requests to enforce this in the standards have been rejected
 (https://discuss.python.org/t/enforcing-consistent-metadata-for-packages/50008).
 
-There are packages that have native code that links against the native code in another package, such
-as torch. These package may support building against a range of torch versions, but once built, they
-are constrained to a specific torch version, and the runtime torch version must match the build-time
-version. These are currently a pain point across all package managers, as all major package managers
-from pip to uv cache source distribution builds. uv supports multiple builds depending on the
-version of the already installed package using
-[ `tool.uv.extra-build-dependencies`](../../concepts/projects/config.md#augmenting-build-dependencies)
-with `match-runtime = true`. This is a workaround that needs to be made on the user side for each
-affected package, instead of library developers declaring this requirement, which would be possible
-with native standards support.
+Some packages build native extensions against another package, such as PyTorch. When building from
+source, a project can use `match-runtime = true` in its
+[`tool.uv.extra-build-dependencies`](../../concepts/projects/config.md#augmenting-build-dependencies)
+to build against the same version of PyTorch that uv selects for the project environment.
+
+For prebuilt wheels, publishers can declare ABI compatibility with the
+[PEP 850 ABI dependency provider](https://peps.python.org/pep-0850/#abi-dependency-variant-provider).
+For example, a wheel declaring `abi_dependency :: torch :: 2.9` supports `torch==2.9.*`.
+With the `wheel-variants` preview enabled, uv can choose among these wheels when resolving packages
+from an index for a specific environment.
 
 ## Requires-python
 

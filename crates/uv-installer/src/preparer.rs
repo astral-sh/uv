@@ -6,7 +6,7 @@ use tracing::{debug, instrument};
 
 use uv_cache::Cache;
 use uv_configuration::BuildOptions;
-use uv_distribution::{DistributionDatabase, LocalWheel};
+use uv_distribution::{DistributionDatabase, LocalWheel, check_wheel_variant_compatibility};
 use uv_distribution_types::{
     BuildableSource, CachedDist, DerivationChain, Dist, DistErrorKind, Hashed, Identifier, Name,
     RemoteSource, Resolution,
@@ -166,6 +166,8 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
                             return Err(Error::from_dist(dist, err, resolution));
                         }
                     }
+                    check_wheel_variant_compatibility(cached.filename(), cached.path(), resolution)
+                        .map_err(|err| Error::from_dist(dist, err, resolution))?;
                     Ok(cached.clone())
                 }
                 Err(err) => Err(Error::Thread(err.to_owned())),
@@ -175,7 +177,7 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
 
             let result = self
                 .database
-                .get_or_build_wheel(&dist, self.tags, policy)
+                .get_or_build_wheel(&dist, self.tags, policy, resolution)
                 .boxed_local()
                 .map_err(|err| Error::from_dist(dist.clone(), err, resolution))
                 .await

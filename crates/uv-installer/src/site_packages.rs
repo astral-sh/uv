@@ -22,6 +22,7 @@ use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::VersionOrUrl;
 use uv_platform_tags::Tags;
+use uv_preview::PreviewFeature;
 use uv_pypi_types::{ResolverMarkerEnvironment, VerbatimParsedUrl};
 use uv_python_interpreter::{Interpreter, PythonEnvironment};
 use uv_redacted::SafeUrl;
@@ -522,6 +523,16 @@ impl SitePackages {
                     return Ok(SatisfiesResult::Unsatisfied(requirement));
                 }
                 [distribution] => {
+                    if uv_preview::is_enabled(PreviewFeature::WheelVariants)
+                        && let Some(metadata) = distribution.read_variant()?
+                        && let Some(label) = metadata.wheel_label()
+                        && !metadata.abi_dependencies(label).all(|(name, versions)| {
+                            let installed = self.get_packages(name);
+                            matches!(installed.as_slice(), [dist] if versions.contains(dist.version()))
+                        })
+                    {
+                        return Ok(SatisfiesResult::Unsatisfied(requirement));
+                    }
                     // Requirements were filtered with the parent extras before entering the stack.
                     match RequirementSatisfaction::check(
                         name,
