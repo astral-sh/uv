@@ -2302,6 +2302,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             } => {
                 let result =
                     read_archive_wheel_variant(&wheel.filename, &wheel.install_path, &label)
+                        .boxed_local()
                         .await
                         .map_err(|err| MetadataUnavailable::InvalidStructure(Arc::new(err)));
                 let _ = response.send(result);
