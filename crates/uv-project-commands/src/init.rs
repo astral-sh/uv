@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::fmt::Write;
 use std::iter;
 use std::path::{Path, PathBuf};
@@ -836,12 +837,8 @@ fn init_project_kind(
         }
         InitProjectKind::ApplicationWithLibrary | InitProjectKind::Library => {
             let build_backend = build_backend.unwrap_or(ProjectBuildBackend::Uv);
-            let default_module_name = name.as_dist_info_name();
-            // Distribution names can start with a digit, but Python identifiers cannot.
-            let module_override = default_module_name
-                .starts_with(|c: char| c.is_ascii_digit())
-                .then(|| format!("_{default_module_name}"));
-            let module_name = module_override.as_deref().unwrap_or(&default_module_name);
+            let module = InitModuleName::from_package(name);
+            let module_name = module.as_str();
             let is_lib = matches!(project_kind, InitProjectKind::Library);
 
             if !is_lib {
@@ -851,17 +848,12 @@ fn init_project_kind(
                     {name} = "{module_name}:main"
                 "#});
             }
-            if let Some(module_name) = module_override.as_deref() {
-                pyproject.push_str(&pyproject_module_override(module_name, build_backend));
+            if let Some(explicit) = module.explicit.as_deref() {
+                pyproject.push_str(&pyproject_module_override(explicit, build_backend));
             }
             pyproject.push('\n');
             pyproject.push_str(&pyproject_build_system(module_name, build_backend));
-            pyproject_build_backend_prerequisites(
-                module_name,
-                path,
-                build_backend,
-                module_override.as_deref(),
-            )?;
+            pyproject_build_backend_prerequisites(&module, path, build_backend)?;
             generate_package_scripts(name, module_name, path, build_backend, is_lib)?;
         }
         InitProjectKind::Application => {
@@ -1027,6 +1019,27 @@ fn pyproject_build_system(module_name: &str, build_backend: ProjectBuildBackend)
     }
 }
 
+/// The module name inferred from a distribution and any override needed by the scaffold.
+struct InitModuleName<'a> {
+    inferred: Cow<'a, str>,
+    explicit: Option<String>,
+}
+
+impl<'a> InitModuleName<'a> {
+    fn from_package(package: &'a PackageName) -> Self {
+        let inferred = package.as_dist_info_name();
+        // Distribution names can start with a digit, but Python identifiers cannot.
+        let explicit = inferred
+            .starts_with(|c: char| c.is_ascii_digit())
+            .then(|| format!("_{inferred}"));
+        Self { inferred, explicit }
+    }
+
+    fn as_str(&self) -> &str {
+        self.explicit.as_deref().unwrap_or(&self.inferred)
+    }
+}
+
 /// Configure build backends that discover packages by their distribution name.
 fn pyproject_module_override(module_name: &str, build_backend: ProjectBuildBackend) -> String {
     match build_backend {
@@ -1063,13 +1076,13 @@ fn pyproject_module_override(module_name: &str, build_backend: ProjectBuildBacke
 
 /// Generate additional files as needed for specific build backends.
 fn pyproject_build_backend_prerequisites(
-    module_name: &str,
+    module: &InitModuleName<'_>,
     path: &Path,
     build_backend: ProjectBuildBackend,
-    module_override: Option<&str>,
 ) -> Result<()> {
     match build_backend {
         ProjectBuildBackend::Maturin => {
+            let module_name = module.as_str();
             // Generate Cargo.toml
             let build_file = path.join("Cargo.toml");
             if !build_file.try_exists()? {
@@ -1095,7 +1108,10 @@ fn pyproject_build_backend_prerequisites(
             }
         }
         ProjectBuildBackend::Scikit => {
-            let install_dir = module_override.unwrap_or("${SKBUILD_PROJECT_NAME}");
+            let install_dir = module
+                .explicit
+                .as_deref()
+                .unwrap_or("${SKBUILD_PROJECT_NAME}");
             // Generate CMakeLists.txt
             let build_file = path.join("CMakeLists.txt");
             if !build_file.try_exists()? {
