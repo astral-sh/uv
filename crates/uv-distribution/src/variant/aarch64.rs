@@ -129,12 +129,13 @@ impl Aarch64Version {
                 let Some(model) = brand.strip_prefix("Apple ") else {
                     return PLATFORM_DEFAULT_VERSION;
                 };
-                match model.split_ascii_whitespace().next() {
-                    Some("M1" | "M2" | "M3" | "M4" | "M5") => Self::V8_4,
-                    _ => {
-                        debug!("Unrecognized Apple chip `{brand}`, using the Armv8-A baseline");
-                        PLATFORM_DEFAULT_VERSION
-                    }
+                if let Some("M1" | "M2" | "M3" | "M4" | "M5") =
+                    model.split_ascii_whitespace().next()
+                {
+                    Self::V8_4
+                } else {
+                    debug!("Unrecognized Apple chip `{brand}`, using the Armv8-A baseline");
+                    PLATFORM_DEFAULT_VERSION
                 }
             }
             CpuInfo::LinuxAarch64 { cores, hwcaps } => {
