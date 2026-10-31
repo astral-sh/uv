@@ -654,7 +654,29 @@ fn variant_wheels_without_preview_or_index_metadata_are_rejected() -> Result<()>
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to read `ok @ file://[TEMP_DIR]/links/ok-1.0.0-9-py3-none-any-null.whl`
-      cause: Wheel variants are not supported yet: `ok-1.0.0-9-py3-none-any-null.whl`
+      cause: Wheel variant `ok-1.0.0-9-py3-none-any-null.whl` requires `--preview-features wheel-variants`
+    ");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg(wheel.path()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to read `ok @ file://[TEMP_DIR]/links/ok-1.0.0-9-py3-none-any-null.whl`
+      cause: Failed to read metadata: [TEMP_DIR]/links/ok-1.0.0-9-py3-none-any-null.whl
+      cause: Missing `variant.json` in the wheel's .dist-info directory
+    ");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("ok @ https://example.com/ok-1.0.0-9-py3-none-any-null.whl")
+        .arg("--offline"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to download `ok @ https://example.com/ok-1.0.0-9-py3-none-any-null.whl`
+      cause: Installing wheel variants from direct URLs is not supported: `ok-1.0.0-9-py3-none-any-null.whl`
     ");
 
     Ok(())

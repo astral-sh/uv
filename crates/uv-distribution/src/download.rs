@@ -11,19 +11,27 @@ use crate::{Error, supported_variant_properties};
 
 /// Allow variant wheels from an index or local path when the wheel variants preview is enabled.
 ///
-/// Variant compatibility is checked separately by [`check_wheel_variant_compatibility`].
+/// Variant compatibility is checked separately during resolution and installation.
 ///
 /// TODO: Support variant wheels from direct URLs and Git paths.
 pub fn check_supported_wheel_variant(dist: &BuiltDist) -> Result<(), Error> {
     let filename = dist.wheel_filename();
-    if filename.variant().is_some() {
-        let supported_source = match dist {
-            BuiltDist::Registry(_) | BuiltDist::Path(_) => true,
-            BuiltDist::DirectUrl(_) | BuiltDist::GitPath(_) => false,
-        };
-        if !supported_source || !uv_preview::is_enabled(PreviewFeature::WheelVariants) {
-            return Err(Error::UnsupportedWheelVariant(Box::new(filename.clone())));
-        }
+    if filename.variant().is_none() {
+        return Ok(());
+    }
+    let unsupported_source = match dist {
+        BuiltDist::Registry(_) | BuiltDist::Path(_) => None,
+        BuiltDist::DirectUrl(_) => Some("direct URLs"),
+        BuiltDist::GitPath(_) => Some("Git paths"),
+    };
+    if let Some(source_kind) = unsupported_source {
+        return Err(Error::UnsupportedWheelVariantSource {
+            filename: Box::new(filename.clone()),
+            source_kind,
+        });
+    }
+    if !uv_preview::is_enabled(PreviewFeature::WheelVariants) {
+        return Err(Error::WheelVariantsDisabled(Box::new(filename.clone())));
     }
     Ok(())
 }
@@ -37,7 +45,7 @@ pub fn check_wheel_variant_compatibility(
         return Ok(());
     };
     if !uv_preview::is_enabled(PreviewFeature::WheelVariants) {
-        return Err(Error::UnsupportedWheelVariant(Box::new(filename.clone())));
+        return Err(Error::WheelVariantsDisabled(Box::new(filename.clone())));
     }
 
     let dist_info = find_flat_dist_info(filename, archive)

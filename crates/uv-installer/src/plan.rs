@@ -563,6 +563,9 @@ impl<'a> Planner<'a> {
                                             build_info,
                                             path: cache.archive(&archive.id).into_boxed_path(),
                                         };
+                                        // TODO(konsti): Recheck installed variants too. A driver
+                                        // change can make a wheel already in the environment
+                                        // incompatible even when its platform tags still match.
                                         check_wheel_variant_compatibility(
                                             &cached_dist.filename,
                                             &cached_dist.path,
