@@ -206,6 +206,7 @@ pub async fn audit(
             &root,
             &extras,
             &groups,
+            None,
             &settings.resolver.index_locations,
             settings.resolver.keyring_provider,
             client_builder.clone(),

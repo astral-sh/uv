@@ -2989,6 +2989,7 @@ async fn run_project(
                 args.lock_check,
                 args.frozen,
                 script,
+                args.python,
                 args.python_version,
                 args.python_platform,
                 args.install_mirrors,

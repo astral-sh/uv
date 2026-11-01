@@ -22,6 +22,7 @@ use uv_configuration::{
 use uv_distribution_types::{IndexCapabilities, IndexLocations, IndexUrl};
 use uv_fs::{CWD, find_git_repository_root, relative_to};
 use uv_lock::Lock;
+use uv_pep508::MarkerEnvironment;
 use uv_redacted::SafeUrl;
 use uv_warnings::warn_user;
 
@@ -43,6 +44,7 @@ pub async fn audit_lock(
     root: &Path,
     extras: &ExtrasSpecificationWithDefaults,
     groups: &DependencyGroupsWithDefaults,
+    markers: Option<&MarkerEnvironment>,
     index_locations: &IndexLocations,
     keyring_provider: KeyringProviderType,
     client_builder: BaseClientBuilder<'_>,
@@ -54,7 +56,7 @@ pub async fn audit_lock(
     ignore: &[VulnerabilityID],
     ignore_until_fixed: &[VulnerabilityID],
 ) -> Result<AuditOutcome> {
-    let auditable = lock.auditable(extras, groups, |_| true);
+    let auditable = lock.auditable(extras, groups, markers, |_| true);
     let mut projects = auditable.projects(root)?;
 
     // Flat indexes cannot provide PEP 792 project-status metadata.

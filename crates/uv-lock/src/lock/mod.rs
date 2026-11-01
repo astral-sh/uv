@@ -3498,7 +3498,7 @@ impl Lock {
     }
 
     /// Return the set of packages that should be audited, respecting the
-    /// given extras and dependency group filters.
+    /// given extras, dependency groups, and optional marker environment.
     ///
     /// Workspace members and packages without version information are
     /// excluded unconditionally, since neither can be meaningfully looked up
@@ -3507,6 +3507,7 @@ impl Lock {
         &'lock self,
         extras: &'lock ExtrasSpecificationWithDefaults,
         groups: &'lock DependencyGroupsWithDefaults,
+        markers: Option<&MarkerEnvironment>,
         collect_filter: impl Fn(&Package) -> bool,
     ) -> Auditable<'lock> {
         // Dedupe and sort by `(name, version)` during the walk itself. Keep
@@ -3514,11 +3515,17 @@ impl Lock {
         // downstream views (e.g. index lookup) have access to the lockfile
         // package.
         let mut by_name_version: BTreeMap<(&PackageName, &Version), &Package> = BTreeMap::default();
-        self.walk_auditable(extras, groups, collect_filter, |package, version| {
-            by_name_version
-                .entry((package.name(), version))
-                .or_insert(package);
-        });
+        self.walk_auditable(
+            extras,
+            groups,
+            markers,
+            collect_filter,
+            |package, version| {
+                by_name_version
+                    .entry((package.name(), version))
+                    .or_insert(package);
+            },
+        );
         let packages = by_name_version
             .into_iter()
             .map(|((_, version), package)| (package, version))
@@ -3539,6 +3546,7 @@ impl Lock {
         &'lock self,
         extras: &'lock ExtrasSpecificationWithDefaults,
         groups: &'lock DependencyGroupsWithDefaults,
+        markers: Option<&MarkerEnvironment>,
         collect_filter: impl Fn(&Package) -> bool,
         mut visit: F,
     ) where
@@ -3549,7 +3557,12 @@ impl Lock {
             seen: &mut FxHashSet<(PackageIndex, Option<&'lock ExtraName>)>,
             queue: &mut VecDeque<(PackageIndex, Option<&'lock ExtraName>)>,
             dep: &'lock Dependency,
+            markers: Option<&MarkerEnvironment>,
         ) {
+            // Audit all selected extras and groups, including mutually exclusive alternatives.
+            if markers.is_some_and(|env| !dep.complexified_marker.pep508().evaluate(env, &[])) {
+                return;
+            }
             for maybe_extra in std::iter::once(None).chain(dep.extra.iter().map(Some)) {
                 if seen.insert((dep.index, maybe_extra)) {
                     queue.push_back((dep.index, maybe_extra));
@@ -3577,14 +3590,31 @@ impl Lock {
             }
         }
 
-        // Seed from requirements attached directly to the lock (e.g., PEP 723 scripts).
-        for requirement in self.requirements() {
-            for (index, _) in self
+        // Scripts and project-less workspace roots attach requirements directly to the lock.
+        let group_requirements = self
+            .dependency_groups()
+            .iter()
+            .filter(|(group, _)| groups.contains(group))
+            .flat_map(|(_, requirements)| requirements);
+        for requirement in self.requirements().iter().chain(group_requirements) {
+            if markers.is_some_and(|env| !requirement.marker.evaluate(env, &[])) {
+                continue;
+            }
+            for (index, package) in self
                 .packages
                 .iter()
                 .enumerate()
-                .filter(|(_, package)| package.id.name == requirement.name)
+                .filter(|(_, package)| package.name() == &requirement.name)
             {
+                if markers.is_some_and(|env| {
+                    !package.fork_markers.is_empty()
+                        && !package
+                            .fork_markers
+                            .iter()
+                            .any(|fork| fork.pep508().evaluate(env, &[]))
+                }) {
+                    continue;
+                }
                 let index = PackageIndex(index);
                 if seen.insert((index, None)) {
                     queue.push_back((index, None));
@@ -3592,32 +3622,6 @@ impl Lock {
                 for extra in &*requirement.extras {
                     if seen.insert((index, Some(extra))) {
                         queue.push_back((index, Some(extra)));
-                    }
-                }
-            }
-        }
-
-        // Seed from dependency groups attached directly to the lock (e.g., project-less
-        // workspace roots).
-        for (group, requirements) in self.dependency_groups() {
-            if !groups.contains(group) {
-                continue;
-            }
-            for requirement in requirements {
-                for (index, _) in self
-                    .packages
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, package)| package.id.name == requirement.name)
-                {
-                    let index = PackageIndex(index);
-                    if seen.insert((index, None)) {
-                        queue.push_back((index, None));
-                    }
-                    for extra in &*requirement.extras {
-                        if seen.insert((index, Some(extra))) {
-                            queue.push_back((index, Some(extra)));
-                        }
                     }
                 }
             }
@@ -3648,7 +3652,7 @@ impl Lock {
                     .filter(|(group, _)| groups.contains(group))
                     .flat_map(|(_, deps)| deps)
                 {
-                    enqueue_dep(&mut seen, &mut queue, dep);
+                    enqueue_dep(&mut seen, &mut queue, dep, markers);
                 }
             }
 
@@ -3665,7 +3669,7 @@ impl Lock {
             };
 
             for dep in dependencies {
-                enqueue_dep(&mut seen, &mut queue, dep);
+                enqueue_dep(&mut seen, &mut queue, dep, markers);
             }
         }
     }

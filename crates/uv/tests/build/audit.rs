@@ -3,7 +3,7 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use indoc::{formatdoc, indoc};
 use serde_json::json;
-use wiremock::matchers::{method, path};
+use wiremock::matchers::{body_json, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use uv_static::EnvVars;
@@ -427,6 +427,106 @@ async fn audit_malformed_vulnerability_record() {
       cause: error decoding response body for url (http://[LOCALHOST]/v1/vulns/PYSEC-2023-0001)
       cause: expected value at line 1 column 56
     ");
+}
+
+/// The project interpreter can differ from both the version file and the audit target.
+#[tokio::test]
+async fn audit_python_version() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let index = PackseServer::new("simple/single-package.toml");
+    context
+        .temp_dir
+        .child(".python-version")
+        .write_str("3.11")?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a; python_version >= '3.13'"]
+    "#})?;
+
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"results": [{}]})))
+        .mount(&server)
+        .await;
+
+    // Selecting the interpreter for locking still audits every environment.
+    uv_snapshot!(context.filters(), context.audit()
+        .env(EnvVars::UV_PYTHON, "3.12")
+        .args(["--preview-features", "audit-command", "--default-index"])
+        .arg(index.index_url())
+        .arg("--service-url").arg(server.uri()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Found no known vulnerabilities and no adverse project statuses in 1 package
+    ");
+
+    uv_snapshot!(context.filters(), context.audit()
+        .args(["--preview-features", "audit-command", "--frozen", "--python", "3.12", "--python-version", "3.12"])
+        .arg("--service-url").arg(server.uri()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Found no known vulnerabilities and no adverse project statuses in 0 packages
+    ");
+
+    uv_snapshot!(context.filters(), context.audit()
+        .args(["--preview-features", "audit-command", "--frozen", "--python", "3.12", "--python-version", "3.13"])
+        .arg("--service-url").arg(server.uri()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Found no known vulnerabilities and no adverse project statuses in 1 package
+    ");
+    Ok(())
+}
+
+/// A script audit follows only the locked package versions reachable on the target platform.
+#[tokio::test]
+async fn audit_script_python_platform() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let index = PackseServer::new("fork/marker-inherit-transitive.toml");
+    context.temp_dir.child("script.py").write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = [
+        #     "a==1.0.0; sys_platform == 'darwin'",
+        #     "a==2.0.0; sys_platform == 'linux'",
+        #     "d; sys_platform == 'win32'",
+        # ]
+        # ///
+    "#})?;
+    context
+        .lock()
+        .args(["--script", "script.py", "--default-index"])
+        .arg(index.index_url())
+        .assert()
+        .success();
+
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .and(body_json(json!({"queries": [{
+            "package": {"ecosystem": "PyPI", "name": "a"}, "version": "2.0.0"
+        }]})))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"results": [{}]})))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.audit()
+        .args(["--preview-features", "audit-command", "--frozen", "--script", "script.py", "--python-platform", "linux"])
+        .arg("--service-url").arg(server.uri()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Found no known vulnerabilities and no adverse project statuses in 1 package
+    ");
+    Ok(())
 }
 
 /// Audit a project with no dependencies.
