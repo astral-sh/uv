@@ -3596,16 +3596,27 @@ impl Lock {
             .iter()
             .filter(|(group, _)| groups.contains(group))
             .flat_map(|(_, requirements)| requirements);
-        for requirement in self.requirements().iter().chain(group_requirements) {
+        // The manifest stores root declarations before dependency overrides and exclusions.
+        let global_overrides = self
+            .manifest
+            .overrides
+            .iter()
+            .filter_map(|entry| match entry {
+                Override::Requirement(requirement) => Some(requirement.clone()),
+                Override::Package(_) => None,
+            });
+        let modifiers = DependencyModifiers::new(
+            Overrides::from_requirements(global_overrides.collect()),
+            Excludes::from_entries(self.manifest.excludes.iter().cloned()),
+        );
+        for requirement in modifiers.apply(
+            DependencyModifierScope::Global,
+            self.requirements().iter().chain(group_requirements),
+        ) {
             if markers.is_some_and(|env| !requirement.marker.evaluate(env, &[])) {
                 continue;
             }
-            for (index, package) in self
-                .packages
-                .iter()
-                .enumerate()
-                .filter(|(_, package)| package.name() == &requirement.name)
-            {
+            for package in self.packages_for_name(&requirement.name) {
                 if markers.is_some_and(|env| {
                     !package.fork_markers.is_empty()
                         && !package
@@ -3615,12 +3626,14 @@ impl Lock {
                 }) {
                     continue;
                 }
-                let index = PackageIndex(index);
+                let index = self.by_id[&package.id];
                 if seen.insert((index, None)) {
                     queue.push_back((index, None));
                 }
-                for extra in &*requirement.extras {
-                    if seen.insert((index, Some(extra))) {
+                for extra in &requirement.extras {
+                    if let Some((extra, _)) = package.optional_dependencies.get_key_value(extra)
+                        && seen.insert((index, Some(extra)))
+                    {
                         queue.push_back((index, Some(extra)));
                     }
                 }

@@ -529,6 +529,40 @@ async fn audit_script_python_platform() -> Result<()> {
     Ok(())
 }
 
+/// Global overrides can replace the Python marker on a script's root requirement.
+#[tokio::test]
+async fn audit_script_override_markers() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let index = PackseServer::new("simple/single-package.toml");
+    context.temp_dir.child("script.py").write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = ["a; python_version < '3.13'"]
+        # [tool.uv]
+        # override-dependencies = ["a==1.0.0"]
+        # ///
+    "#})?;
+
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"results": [{}]})))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.audit()
+        .args(["--preview-features", "audit-command", "--script", "script.py", "--python-version", "3.13"])
+        .arg("--default-index").arg(index.index_url())
+        .arg("--service-url").arg(server.uri()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Found no known vulnerabilities and no adverse project statuses in 1 package
+    ");
+    Ok(())
+}
+
 /// Audit a project with no dependencies.
 #[tokio::test]
 async fn audit_no_dependencies() {
