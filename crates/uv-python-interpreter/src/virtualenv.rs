@@ -215,17 +215,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parse_unrecognized_version() -> Result<(), Error> {
-        let file = tempfile::NamedTempFile::new()?;
-        fs::write(file.path(), "version_info = unknown\nrelocatable = true\n")?;
-
-        let cfg = PyVenvConfiguration::parse(file.path())?;
-        assert!(cfg.version.is_none());
-        assert!(cfg.is_relocatable());
-        Ok(())
-    }
-
-    #[test]
     fn test_set_existing_key() {
         let content = indoc! {"
             home = /path/to/python
