@@ -529,6 +529,52 @@ async fn audit_script_python_platform() -> Result<()> {
     Ok(())
 }
 
+/// Conflicting extras can select different versions of the same package on each platform.
+#[tokio::test]
+async fn audit_python_platform_conflicting_extras() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let index = PackseServer::new("fork/upgrade-outcomes.toml");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "pkg"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        x = ["bar==1; sys_platform != 'linux'", "bar==2; sys_platform == 'linux'"]
+        y = ["baz==1; sys_platform != 'linux'", "baz==2; sys_platform == 'linux'"]
+
+        [tool.uv]
+        conflicts = [[{extra = "x"}, {extra = "y"}]]
+    "#})?;
+
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .and(body_json(json!({"queries": [
+            {"package": {"ecosystem": "PyPI", "name": "bar"}, "version": "2.0.0"},
+            {"package": {"ecosystem": "PyPI", "name": "baz"}, "version": "2.0.0"}
+        ]})))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"results": [{}, {}]})))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.audit()
+        .args(["--preview-features", "audit-command", "--python-platform", "linux"])
+        .arg("--default-index").arg(index.index_url())
+        .arg("--service-url").arg(server.uri()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    Found no known vulnerabilities and no adverse project statuses in 2 packages
+    ");
+    Ok(())
+}
+
 /// Global overrides can replace the Python marker on a script's root requirement.
 #[tokio::test]
 async fn audit_script_override_markers() -> Result<()> {

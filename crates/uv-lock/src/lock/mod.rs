@@ -3552,23 +3552,19 @@ impl Lock {
     ) where
         F: FnMut(&'lock Package, &'lock Version),
     {
-        // Enqueue a dependency for auditability checks: base package (no extra) first, then each activated extra.
-        fn enqueue_dep<'lock>(
-            seen: &mut FxHashSet<(PackageIndex, Option<&'lock ExtraName>)>,
-            queue: &mut VecDeque<(PackageIndex, Option<&'lock ExtraName>)>,
-            dep: &'lock Dependency,
-            markers: Option<&MarkerEnvironment>,
-        ) {
-            // Audit all selected extras and groups, including mutually exclusive alternatives.
-            if markers.is_some_and(|env| !dep.complexified_marker.pep508().evaluate(env, &[])) {
-                return;
-            }
-            for maybe_extra in std::iter::once(None).chain(dep.extra.iter().map(Some)) {
-                if seen.insert((dep.index, maybe_extra)) {
-                    queue.push_back((dep.index, maybe_extra));
-                }
-            }
-        }
+        let target = markers.map(|env| (env, ConflictMarker::from_conflicts(self.conflicts())));
+        let matches_target = |marker: &UniversalMarker| {
+            target.is_none_or(|(env, conflicts)| {
+                // Locked edges can include branches for invalid combinations of extras. Remove
+                // those branches before asking whether any valid selection reaches this target.
+                let environment = if !conflicts.is_true() && marker.has_conflict_marker() {
+                    UniversalMarker::new(marker.combined(), conflicts).pep508()
+                } else {
+                    marker.pep508()
+                };
+                environment.evaluate(env, &[])
+            })
+        };
 
         // Lockfile traversal state: (package, optional extra to activate on that package).
         let mut queue: VecDeque<(PackageIndex, Option<&ExtraName>)> = VecDeque::new();
@@ -3617,13 +3613,9 @@ impl Lock {
                 continue;
             }
             for package in self.packages_for_name(&requirement.name) {
-                if markers.is_some_and(|env| {
-                    !package.fork_markers.is_empty()
-                        && !package
-                            .fork_markers
-                            .iter()
-                            .any(|fork| fork.pep508().evaluate(env, &[]))
-                }) {
+                if !package.fork_markers.is_empty()
+                    && !package.fork_markers.iter().any(matches_target)
+                {
                     continue;
                 }
                 let index = self.by_id[&package.id];
@@ -3657,6 +3649,17 @@ impl Lock {
                 }
             }
 
+            let mut enqueue_dep = |dep: &'lock Dependency| {
+                if !matches_target(&dep.complexified_marker) {
+                    return;
+                }
+                for maybe_extra in std::iter::once(None).chain(dep.extra.iter().map(Some)) {
+                    if seen.insert((dep.index, maybe_extra)) {
+                        queue.push_back((dep.index, maybe_extra));
+                    }
+                }
+            };
+
             // Follow allowed dependency groups.
             if is_member && extra.is_none() {
                 for dep in package
@@ -3665,7 +3668,7 @@ impl Lock {
                     .filter(|(group, _)| groups.contains(group))
                     .flat_map(|(_, deps)| deps)
                 {
-                    enqueue_dep(&mut seen, &mut queue, dep, markers);
+                    enqueue_dep(dep);
                 }
             }
 
@@ -3682,7 +3685,7 @@ impl Lock {
             };
 
             for dep in dependencies {
-                enqueue_dep(&mut seen, &mut queue, dep, markers);
+                enqueue_dep(dep);
             }
         }
     }
