@@ -22,7 +22,9 @@ use tokio_stream::wrappers::ReceiverStream;
 use tracing::{Level, debug, info, instrument, trace, warn};
 
 use uv_configuration::{Constraints, DependencyModifiers, IndexStrategy};
-use uv_distribution::{ArchiveMetadata, DistributionDatabase, supported_variant_properties};
+use uv_distribution::{
+    ArchiveMetadata, DistributionDatabase, Metadata, supported_variant_properties,
+};
 use uv_distribution_types::{
     BuiltDist, DerivationChain, Dist, DistErrorKind, Identifier, IndexCapabilities, IndexLocations,
     IndexMetadata, IndexUrl, InstalledDist, Name, RemoteSource, RequestedDist, Requirement,
@@ -1984,10 +1986,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         python_requirement: &PythonRequirement,
         pubgrub: &State<UvDependencyProvider>,
     ) -> Result<Dependencies, ResolveError> {
-        let expander =
-            RequirementExpander::new(&self.constraints, &self.modifiers, env, python_requirement);
         let dependencies = match &**package {
             PubGrubPackageInner::Root(_) => {
+                let expander = RequirementExpander::new(
+                    &self.constraints,
+                    &self.modifiers,
+                    env,
+                    python_requirement,
+                );
                 let requirements = expander.expand(&self.requirements, RequirementContext::Root);
 
                 PubGrubDependency::from_requirements(
@@ -2017,7 +2023,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     return Ok(Dependencies::Unforkable(Vec::default()));
                 }
 
-                let registered = pins
+                let (registered, index) = pins
                     .metadata(name, version)
                     .ok_or_else(|| ResolveError::UnregisteredTask(format!("{name}=={version}")))?;
 
@@ -2055,66 +2061,16 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     }
                 };
 
-                // If there was no requires-python on the index page, we may have an incompatible
-                // distribution or need to fork.
-                if let Some(requires_python) = &metadata.requires_python {
-                    if !python_requirement.target().is_contained_by(requires_python) {
-                        return Ok(Dependencies::RequiresPython(requires_python.clone()));
-                    }
-                }
-
-                // Identify any system dependencies based on the index URL.
-                let system_dependencies = self
-                    .options
-                    .torch_backend
-                    .as_ref()
-                    .filter(|torch_backend| matches!(torch_backend, TorchStrategy::Cuda { .. }))
-                    .filter(|torch_backend| torch_backend.has_system_dependency(name))
-                    .and_then(|_| pins.get(name, version).and_then(ResolvedDist::index))
-                    .map(IndexUrl::url)
-                    .and_then(SystemDependency::from_index)
-                    .into_iter()
-                    .inspect(|system_dependency| {
-                        debug!(
-                            "Adding system dependency `{}` for `{package}@{version}`",
-                            system_dependency
-                        );
-                    })
-                    .map(PubGrubDependency::from);
-
-                let (requirements, context) = match kind {
-                    PackageNodeKind::Group(group) => (
-                        metadata
-                            .dependency_groups
-                            .get(group)
-                            .map_or(&[][..], AsRef::as_ref),
-                        RequirementContext::Group { name, version },
-                    ),
-                    PackageNodeKind::Extra(extra) => (
-                        metadata.requires_dist.as_ref(),
-                        RequirementContext::Extra {
-                            name,
-                            version,
-                            extra,
-                        },
-                    ),
-                    PackageNodeKind::Base => (
-                        metadata.requires_dist.as_ref(),
-                        RequirementContext::Package { name, version },
-                    ),
-                };
-                let requirements = expander.expand(requirements, context);
-
-                PubGrubDependency::from_requirements(
-                    &self.conflicts,
-                    requirements,
-                    kind.group(),
-                    Some(package),
-                )
-                .map(|mut dependencies| {
-                    dependencies.extend(system_dependencies);
-                    dependencies
-                })
+                return Ok(self.dependencies_from_metadata(
+                    package,
+                    name,
+                    version,
+                    kind,
+                    metadata,
+                    index,
+                    env,
+                    python_requirement,
+                ));
             }
 
             PubGrubPackageInner::Python(_) => return Ok(Dependencies::Unforkable(Vec::default())),
@@ -2194,12 +2150,84 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 ));
             }
         };
-        Ok(match dependencies {
-            Ok(dependencies) => Dependencies::Available(dependencies),
-            Err(requirement) => {
-                Dependencies::Unavailable(UnavailableVersion::UnsatisfiableDependency(requirement))
-            }
-        })
+        Ok(Dependencies::from_requirements(dependencies))
+    }
+
+    /// Expand the selected distribution's metadata for the requested package, extra, or group.
+    fn dependencies_from_metadata(
+        &self,
+        package: &PubGrubPackage,
+        name: &PackageName,
+        version: &Version,
+        kind: &PackageNodeKind,
+        metadata: &Metadata,
+        index: Option<&IndexUrl>,
+        env: &ResolverEnvironment,
+        python_requirement: &PythonRequirement,
+    ) -> Dependencies {
+        // If there was no requires-python on the index page, we may have an incompatible
+        // distribution or need to fork.
+        if let Some(requires_python) = &metadata.requires_python
+            && !python_requirement.target().is_contained_by(requires_python)
+        {
+            return Dependencies::RequiresPython(requires_python.clone());
+        }
+
+        // Identify any system dependencies based on the index URL.
+        let system_dependencies = self
+            .options
+            .torch_backend
+            .as_ref()
+            .filter(|torch_backend| matches!(torch_backend, TorchStrategy::Cuda { .. }))
+            .filter(|torch_backend| torch_backend.has_system_dependency(name))
+            .and(index)
+            .map(IndexUrl::url)
+            .and_then(SystemDependency::from_index)
+            .into_iter()
+            .inspect(|system_dependency| {
+                debug!(
+                    "Adding system dependency `{}` for `{package}@{version}`",
+                    system_dependency
+                );
+            })
+            .map(PubGrubDependency::from);
+
+        let (requirements, context) = match kind {
+            PackageNodeKind::Group(group) => (
+                metadata
+                    .dependency_groups
+                    .get(group)
+                    .map_or(&[][..], AsRef::as_ref),
+                RequirementContext::Group { name, version },
+            ),
+            PackageNodeKind::Extra(extra) => (
+                metadata.requires_dist.as_ref(),
+                RequirementContext::Extra {
+                    name,
+                    version,
+                    extra,
+                },
+            ),
+            PackageNodeKind::Base => (
+                metadata.requires_dist.as_ref(),
+                RequirementContext::Package { name, version },
+            ),
+        };
+        let expander =
+            RequirementExpander::new(&self.constraints, &self.modifiers, env, python_requirement);
+        let requirements = expander.expand(requirements, context);
+
+        let dependencies = PubGrubDependency::from_requirements(
+            &self.conflicts,
+            requirements,
+            kind.group(),
+            Some(package),
+        )
+        .map(|mut dependencies| {
+            dependencies.extend(system_dependencies);
+            dependencies
+        });
+        Dependencies::from_requirements(dependencies)
     }
 
     fn record_unavailable_metadata(
@@ -3712,6 +3740,19 @@ enum Dependencies {
     /// same name and version, but differ according to marker expressions.
     /// But we never want this to result in a fork.
     Unforkable(Vec<PubGrubDependency>),
+}
+
+impl Dependencies {
+    fn from_requirements(
+        dependencies: Result<Vec<PubGrubDependency>, UnsatisfiableRequirement>,
+    ) -> Self {
+        match dependencies {
+            Ok(dependencies) => Self::Available(dependencies),
+            Err(requirement) => {
+                Self::Unavailable(UnavailableVersion::UnsatisfiableDependency(requirement))
+            }
+        }
+    }
 }
 
 /// Information about the (possibly forked) dependencies for a particular
