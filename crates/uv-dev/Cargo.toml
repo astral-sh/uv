@@ -63,7 +63,7 @@ textwrap = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 tracing = { workspace = true }
-tracing-durations-export = { workspace = true, features = ["plot"] }
+tracing-durations-export = { workspace = true, features = ["plot"], optional = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 uv-performance-memory-allocator = { workspace = true, optional = true }
 walkdir = { workspace = true }
@@ -85,7 +85,7 @@ required-features = ["dev"]
 [features]
 default = ["performance"]
 # Actually build the dev CLI.
-dev = []
+dev = ["dep:tracing-durations-export"]
 performance = ["performance-memory-allocator"]
 performance-memory-allocator = ["dep:uv-performance-memory-allocator"]
 render = ["poloto", "resvg", "tagu"]
