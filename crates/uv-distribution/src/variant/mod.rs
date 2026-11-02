@@ -1,4 +1,5 @@
 mod nvidia;
+mod tpu;
 
 use tracing::debug;
 use uv_distribution_types::{
@@ -11,9 +12,11 @@ use uv_pep508::{Requirement, VersionOrUrl};
 use uv_pypi_types::{Identifier, ModuleName};
 
 use crate::variant::nvidia::NvidiaVariantProvider;
+use crate::variant::tpu::TpuVariantProvider;
 
 static NVIDIA_PROVIDER: NvidiaVariantProvider = NvidiaVariantProvider::new();
-static VENDORED_PROVIDERS: &[&dyn VendoredVariantProvider] = &[&NVIDIA_PROVIDER];
+static VENDORED_PROVIDERS: &[&dyn VendoredVariantProvider] =
+    &[&NVIDIA_PROVIDER, &TpuVariantProvider];
 
 /// A Python module and optional path to an object within it, identifying a provider plugin.
 struct PluginApi {

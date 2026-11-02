@@ -1457,6 +1457,15 @@ impl EnvVars {
     #[attr_added_in("0.13.6")]
     pub const NV_VARIANT_PROVIDER_FORCE_SM_ARCH: &'static str = "NV_VARIANT_PROVIDER_FORCE_SM_ARCH";
 
+    // TODO(konsti): Unhide this override once wheel variants leave preview and the upstream TPU
+    // provider settles on its final name.
+    /// Override TPU presence for the TPU wheel variant provider. The upstream provider treats
+    /// `true`, `1`, and `yes` (case-insensitive) as present and any other value as absent.
+    #[attr_hidden]
+    #[attr_added_in("next release")]
+    pub const TPU_VARIANT_PROVIDER_FORCE_PRESENT: &'static str =
+        "TPU_VARIANT_PROVIDER_FORCE_PRESENT";
+
     /// The AMD GPU architecture to assume when inferring the PyTorch backend (e.g., `gfx1100`).
     #[attr_hidden]
     #[attr_added_in("0.7.14")]
