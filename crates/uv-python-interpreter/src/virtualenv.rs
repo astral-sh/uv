@@ -8,9 +8,8 @@ use std::{
 use fs_err as fs;
 use thiserror::Error;
 
+use uv_pep440::Version;
 use uv_pypi_types::Scheme;
-
-use uv_python_types::PythonVersion;
 
 /// The layout of a virtual environment.
 #[derive(Debug)]
@@ -45,7 +44,7 @@ pub struct PyVenvConfiguration {
     /// Should the virtual environment include system site packages?
     pub(super) include_system_site_packages: bool,
     /// The Python version the virtual environment was created with
-    pub(super) version: Option<PythonVersion>,
+    pub(super) version: Option<Version>,
 }
 
 #[derive(Debug, Error)]
@@ -141,10 +140,8 @@ impl PyVenvConfiguration {
                     include_system_site_packages = value.trim().to_lowercase() == "true";
                 }
                 "version" | "version_info" => {
-                    version = Some(
-                        PythonVersion::from_str(value.trim())
-                            .map_err(|e| io::Error::new(std::io::ErrorKind::InvalidData, e))?,
-                    );
+                    // An unrecognized version only prevents checking the interpreter version.
+                    version = Version::from_str(value.trim()).ok();
                 }
                 _ => {}
             }

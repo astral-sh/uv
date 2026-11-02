@@ -349,16 +349,15 @@ impl PythonEnvironment {
     /// versions do not match, returns a tuple of the `pyvenv.cfg` and interpreter's Python versions
     /// for display.
     pub fn get_pyvenv_version_conflict(&self) -> Option<(Version, Version)> {
-        let cfg = self.cfg().ok()?;
-        let cfg_version = cfg.version?.into_version();
+        let cfg_version = self.cfg().ok()?.version?;
 
-        // Determine if we should be checking for patch or pre-release equality
-        let exe_version = if cfg_version.release().get(2).is_none() {
-            self.interpreter().python_minor_version()
-        } else if cfg_version.pre().is_none() {
-            self.interpreter().python_patch_version()
-        } else {
+        // Compare at the precision recorded in pyvenv.cfg, including any version suffix.
+        let exe_version = if cfg_version != cfg_version.only_release() {
             self.interpreter().python_version().clone()
+        } else if cfg_version.release().get(2).is_none() {
+            self.interpreter().python_minor_version()
+        } else {
+            self.interpreter().python_patch_version()
         };
 
         (cfg_version != exe_version).then_some((cfg_version, exe_version))
