@@ -2,11 +2,13 @@ use std::hash::BuildHasherDefault;
 use std::sync::Arc;
 
 use rustc_hash::FxHasher;
-use uv_distribution_types::{DistributionId, IndexUrl};
+use uv_distribution_types::{IndexUrl, VariantsJsonContent};
 use uv_normalize::PackageName;
-use uv_once_map::OnceMap;
+use uv_once_map::{RegisteredEntry, RegisteredOnceMap};
+use uv_resolver_types::DistributionMetadataIndex;
 
-use crate::resolver::provider::{MetadataResponse, VersionsResponse};
+use crate::prioritized_distribution::RegistryVariantsJson;
+use crate::resolver::provider::{MetadataUnavailable, VersionsResponse};
 
 /// In-memory index of package metadata.
 #[derive(Default, Clone)]
@@ -21,10 +23,16 @@ struct SharedInMemoryIndex {
     explicit: FxOnceMap<(PackageName, IndexUrl), Arc<VersionsResponse>>,
 
     /// A map from a concrete distribution to its metadata.
-    distributions: FxOnceMap<DistributionId, Arc<MetadataResponse>>,
+    distributions: DistributionMetadataIndex,
+
+    /// A map from an index variant metadata file to its parsed contents.
+    variants_json: FxOnceMap<RegistryVariantsJson, Arc<ParsedVariantsJsonResponse>>,
 }
 
-pub(crate) type FxOnceMap<K, V> = OnceMap<K, V, BuildHasherDefault<FxHasher>>;
+pub(crate) type ParsedVariantsJsonResponse = Result<VariantsJsonContent, MetadataUnavailable>;
+pub(crate) type FxOnceMap<K, V> = RegisteredOnceMap<K, V, BuildHasherDefault<FxHasher>>;
+pub(crate) type FxRegisteredEntry<'a, K, V> =
+    RegisteredEntry<'a, K, V, BuildHasherDefault<FxHasher>>;
 
 impl InMemoryIndex {
     /// Returns a reference to the package metadata map.
@@ -38,7 +46,18 @@ impl InMemoryIndex {
     }
 
     /// Returns a reference to the distribution metadata map.
-    pub fn distributions(&self) -> &FxOnceMap<DistributionId, Arc<MetadataResponse>> {
+    pub fn distributions(&self) -> &DistributionMetadataIndex {
         &self.0.distributions
+    }
+
+    pub(crate) fn variants_json(
+        &self,
+    ) -> &FxOnceMap<RegistryVariantsJson, Arc<ParsedVariantsJsonResponse>> {
+        &self.0.variants_json
+    }
+
+    /// Return exclusive access to distribution metadata when no cloned index can use it.
+    pub fn distributions_mut(&mut self) -> Option<&mut DistributionMetadataIndex> {
+        Arc::get_mut(&mut self.0).map(|index| &mut index.distributions)
     }
 }

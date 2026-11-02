@@ -19,11 +19,11 @@ Authentication may be used for hosts specified in the following contexts:
 
 ## netrc files
 
-[`.netrc`](https://everything.curl.dev/usingcurl/netrc) files are a long-standing plain text format
-for storing credentials on a system.
+[`.netrc`](https://everything.curl.dev/usingcurl/netrc.html) files are a long-standing plain text
+format for storing credentials on a system.
 
-Reading credentials from `.netrc` files is always enabled. The target file path will be loaded from
-the `NETRC` environment variable if defined, falling back to `~/.netrc` if not.
+Reading credentials from `.netrc` files is always enabled. uv uses the file path in the `NETRC`
+environment variable if it is defined, or `~/.netrc` otherwise.
 
 ## The uv credentials store
 

@@ -6,12 +6,162 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use indoc::{formatdoc, indoc};
 use insta::{assert_json_snapshot, assert_snapshot};
-use url::Url;
 
+use uv_redacted::SafeUrl;
 use uv_static::EnvVars;
 #[cfg(feature = "test-universal")]
 use uv_test::TestContext;
 use uv_test::uv_snapshot;
+
+/// Trees require a lockfile with revision 5 or later.
+#[test]
+fn tree_lockfile_requires_revision() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("uv.lock").write_str(indoc! {r#"
+        version = 1
+        revision = 4
+        requires-python = ">=3.12"
+
+        [[package]]
+        name = "root"
+        version = "1.0.0"
+        source = { virtual = "." }
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.tree()
+        .args(["--frozen", "--universal", "--preview-features", "frozen-lockfile", "--all-groups"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Frozen lockfile discovery requires a lockfile with revision 5 or later; run `uv lock` to update it
+    ");
+    Ok(())
+}
+
+/// A filtered lockfile tree uses the project Python version file.
+#[test]
+fn tree_lockfile_python_version() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.13", "3.12"]);
+    context
+        .temp_dir
+        .child(".python-version")
+        .write_str("3.12")?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "older; python_version < '3.13'",
+            "newer; python_version >= '3.13'",
+        ]
+
+        [tool.uv]
+        package = false
+
+        [tool.uv.workspace]
+        members = ["older", "newer"]
+
+        [tool.uv.sources]
+        older = { workspace = true }
+        newer = { workspace = true }
+    "#})?;
+    context
+        .temp_dir
+        .child("older/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "older"
+        version = "1.0.0"
+
+        [build-system]
+        requires = []
+        build-backend = "example"
+    "#})?;
+    context
+        .temp_dir
+        .child("newer/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "newer"
+        version = "1.0.0"
+
+        [build-system]
+        requires = []
+        build-backend = "example"
+    "#})?;
+    context.lock().arg("--offline").assert().success();
+
+    uv_snapshot!(context.filters(), context.tree().args(["--frozen", "--package", "root"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    root v1.0.0
+    └── older v1.0.0
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    ");
+    // Remove the manifests so Python selection must use the version file and lockfile.
+    fs_err::remove_file(context.temp_dir.join("pyproject.toml"))?;
+    fs_err::remove_file(context.temp_dir.join("older/pyproject.toml"))?;
+    fs_err::remove_file(context.temp_dir.join("newer/pyproject.toml"))?;
+
+    uv_snapshot!(context.filters(), context.tree()
+        .args(["--frozen", "--package", "root"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    root v1.0.0
+    └── older v1.0.0
+
+    ----- stderr -----
+    warning: Using `uv.lock` without a `pyproject.toml` is experimental and may change without warning. Pass `--preview-features frozen-lockfile` to disable this warning.
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    ");
+    uv_snapshot!(context.filters(), context.tree()
+        .args(["--frozen", "--preview-features", "frozen-lockfile", "--outdated"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: `--outdated` is not supported without a `pyproject.toml`
+    ");
+    Ok(())
+}
+
+/// The interpreter for a filtered lockfile tree must satisfy the lock's Python requirement.
+#[test]
+fn tree_lockfile_incompatible_python() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12", "3.13"]);
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "1.0.0"
+        requires-python = ">=3.12,<3.13"
+
+        [tool.uv]
+        package = false
+    "#})?;
+    context
+        .lock()
+        .args(["--offline", "--python", "3.12"])
+        .assert()
+        .success();
+
+    // Remove the manifest to validate Python against the lockfile requirement.
+    fs_err::remove_file(context.temp_dir.join("pyproject.toml"))?;
+
+    uv_snapshot!(context.filters(), context.tree()
+        .args(["--frozen", "--preview-features", "frozen-lockfile", "--python", "3.13"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Using CPython 3.13.[X] interpreter at: [PYTHON-3.13]
+    error: The requested interpreter resolved to Python 3.13.[X], which is incompatible with the project's Python requirement: `==3.12.*` (from `requires-python` in `uv.lock`).
+    ");
+    Ok(())
+}
 
 /// The workspace discovered while resolving settings is reused by `uv tree`.
 #[test]
@@ -31,9 +181,11 @@ fn tree_reuses_settings_workspace_discovery() -> Result<()> {
         "#})?;
     let member = context.temp_dir.child("member");
     member.create_dir_all()?;
-    member
-        .child("pyproject.toml")
-        .write_str("[project]\nname = \"member\"\nversion = \"0.1.0\"\n")?;
+    member.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "member"
+        version = "0.1.0"
+    "#})?;
 
     context.lock().assert().success();
 
@@ -47,12 +199,12 @@ fn tree_reuses_settings_workspace_discovery() -> Result<()> {
     member v0.1.0
 
     ----- stderr -----
-    DEBUG Found workspace root: `[TEMP_DIR]/`
-    TRACE Discovering workspace members for: `[TEMP_DIR]/`
-    DEBUG Adding root workspace member: `[TEMP_DIR]/`
-    TRACE Processing workspace member: `member`
-    DEBUG Adding discovered workspace member: `[TEMP_DIR]/member`
-    DEBUG Found project root: `[TEMP_DIR]/`
+    DEBUG Found workspace root: [TEMP_DIR]/
+    TRACE Discovering workspace members for: [TEMP_DIR]/
+    DEBUG Adding root workspace member: [TEMP_DIR]/
+    TRACE Processing workspace member: member
+    DEBUG Adding discovered workspace member: [TEMP_DIR]/member
+    DEBUG Found project root: [TEMP_DIR]/
     ");
 
     Ok(())
@@ -1655,7 +1807,7 @@ fn outdated_exclude_newer_relative() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, "2024-05-01T00:00:00Z")
+        .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, "2024-05-01T00:00:00Z")
         .arg("--exclude-newer")
         .arg("3 weeks"), @"
     exit_code: 0 (success)
@@ -1671,7 +1823,7 @@ fn outdated_exclude_newer_relative() -> Result<()> {
         .arg("--outdated")
         .arg("--universal")
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, "2024-06-01T00:00:00Z")
+        .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, "2024-06-01T00:00:00Z")
         .arg("--exclude-newer")
         .arg("3 weeks"), @"
     exit_code: 0 (success)
@@ -1922,96 +2074,380 @@ fn repeated_dependencies() -> Result<()> {
     "
     );
 
-    let mut projected_edges = Vec::new();
-    for invert in [false, true] {
-        let mut command = context.tree();
-        command
-            .arg("--preview-features")
-            .arg("json-output")
-            .arg("--format")
-            .arg("json")
-            .arg("--universal");
-        if invert {
-            command.arg("--invert");
-        }
-        let output = command.output()?;
-        output.clone().assert().success();
-        let report: serde_json::Value = serde_json::from_slice(&output.stdout)?;
-        let resolution = report["resolution"]
-            .as_object()
-            .context("dependency graph resolution should be an object")?;
-        let project_edges = if invert {
-            resolution
-                .iter()
-                .filter(|(_, node)| node["name"] == "anyio" && node["kind"] == "package")
-                .flat_map(|(package, node)| {
-                    node["dependencies"]
-                        .as_array()
-                        .into_iter()
-                        .flatten()
-                        .filter(|dependency| {
-                            dependency["id"]
-                                .as_str()
-                                .is_some_and(|id| id.starts_with("project=="))
-                        })
-                        .map(move |dependency| {
-                            serde_json::json!({
-                                "package": package,
-                                "marker": dependency["marker"],
-                            })
-                        })
-                })
-                .collect::<Vec<_>>()
-        } else {
-            resolution
-                .values()
-                .find(|node| node["name"] == "project" && node["kind"] == "package")
-                .and_then(|node| node["dependencies"].as_array())
-                .context("project should have dependency graph edges")?
-                .iter()
-                .map(|dependency| {
-                    serde_json::json!({
-                        "package": dependency["id"],
-                        "marker": dependency["marker"],
-                    })
-                })
-                .collect::<Vec<_>>()
-        };
-
-        projected_edges.push(serde_json::json!({
-            "inverted": invert,
-            "edges": project_edges,
-        }));
-    }
-    assert_json_snapshot!(projected_edges, @r#"
-    [
-      {
-        "edges": [
-          {
-            "marker": "sys_platform == 'win32'",
-            "package": "anyio==1.4.0@registry+https://pypi.org/simple"
-          },
-          {
-            "marker": "sys_platform == 'linux'",
-            "package": "anyio==4.3.0@registry+https://pypi.org/simple"
-          }
-        ],
-        "inverted": false
+    uv_snapshot!(context.filters(), context.tree()
+        .args(["--preview-features", "json-output", "--format", "json", "--universal"]), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
       },
-      {
-        "edges": [
-          {
-            "marker": "sys_platform == 'win32'",
-            "package": "anyio==1.4.0@registry+https://pypi.org/simple"
+      "workspace_root": "[TEMP_DIR]/",
+      "workspace": {
+        "path": "[TEMP_DIR]/",
+        "id": "workspace+[TEMP_DIR]/"
+      },
+      "roots": [
+        {
+          "id": "project==0.1.0@virtual+[TEMP_DIR]/"
+        }
+      ],
+      "inverted": false,
+      "members": [
+        {
+          "name": "project",
+          "path": "[TEMP_DIR]/",
+          "id": "project==0.1.0@virtual+[TEMP_DIR]/"
+        }
+      ],
+      "resolution": {
+        "anyio==1.4.0@registry+https://pypi.org/simple": {
+          "name": "anyio",
+          "version": "1.4.0",
+          "source": {
+            "registry": {
+              "url": "https://pypi.org/simple"
+            }
           },
-          {
-            "marker": "sys_platform == 'linux'",
-            "package": "anyio==4.3.0@registry+https://pypi.org/simple"
-          }
-        ],
-        "inverted": true
+          "kind": "package",
+          "dependencies": [
+            {
+              "id": "async-generator==1.10@registry+https://pypi.org/simple"
+            },
+            {
+              "id": "idna==3.6@registry+https://pypi.org/simple"
+            },
+            {
+              "id": "sniffio==1.3.1@registry+https://pypi.org/simple"
+            }
+          ],
+          "wheels": [
+            {
+              "url": "https://files.pythonhosted.org/packages/c3/5f/ad80678e9ed82f8c4236a108b203b1aeb05f8d5de66b9b7bbed8e3255eaf/anyio-1.4.0-py3-none-any.whl",
+              "hashes": {
+                "sha256": "9ee67e8131853f42957e214d4531cee6f2b66dda164a298d9686a768b7161a4f"
+              },
+              "size": 36800,
+              "upload_time": "2020-07-06T09:49:50.807Z",
+              "filename": "anyio-1.4.0-py3-none-any.whl"
+            }
+          ]
+        },
+        "anyio==4.3.0@registry+https://pypi.org/simple": {
+          "name": "anyio",
+          "version": "4.3.0",
+          "source": {
+            "registry": {
+              "url": "https://pypi.org/simple"
+            }
+          },
+          "kind": "package",
+          "dependencies": [
+            {
+              "id": "idna==3.6@registry+https://pypi.org/simple"
+            },
+            {
+              "id": "sniffio==1.3.1@registry+https://pypi.org/simple"
+            }
+          ],
+          "wheels": [
+            {
+              "url": "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl",
+              "hashes": {
+                "sha256": "048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8"
+              },
+              "size": 85584,
+              "upload_time": "2024-02-19T08:36:26.842Z",
+              "filename": "anyio-4.3.0-py3-none-any.whl"
+            }
+          ]
+        },
+        "async-generator==1.10@registry+https://pypi.org/simple": {
+          "name": "async-generator",
+          "version": "1.10",
+          "source": {
+            "registry": {
+              "url": "https://pypi.org/simple"
+            }
+          },
+          "kind": "package",
+          "dependencies": [],
+          "wheels": [
+            {
+              "url": "https://files.pythonhosted.org/packages/71/52/39d20e03abd0ac9159c162ec24b93fbcaa111e8400308f2465432495ca2b/async_generator-1.10-py3-none-any.whl",
+              "hashes": {
+                "sha256": "01c7bf666359b4967d2cda0000cc2e4af16a0ae098cbffcb8472fb9e8ad6585b"
+              },
+              "size": 18857,
+              "upload_time": "2018-08-01T03:36:20.029Z",
+              "filename": "async_generator-1.10-py3-none-any.whl"
+            }
+          ]
+        },
+        "idna==3.6@registry+https://pypi.org/simple": {
+          "name": "idna",
+          "version": "3.6",
+          "source": {
+            "registry": {
+              "url": "https://pypi.org/simple"
+            }
+          },
+          "kind": "package",
+          "dependencies": [],
+          "wheels": [
+            {
+              "url": "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl",
+              "hashes": {
+                "sha256": "c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f"
+              },
+              "size": 61567,
+              "upload_time": "2023-11-25T15:40:52.604Z",
+              "filename": "idna-3.6-py3-none-any.whl"
+            }
+          ]
+        },
+        "project==0.1.0@virtual+[TEMP_DIR]/": {
+          "name": "project",
+          "version": "0.1.0",
+          "source": {
+            "virtual": "[TEMP_DIR]/"
+          },
+          "kind": "package",
+          "dependencies": [
+            {
+              "id": "anyio==1.4.0@registry+https://pypi.org/simple",
+              "marker": "sys_platform == 'win32'"
+            },
+            {
+              "id": "anyio==4.3.0@registry+https://pypi.org/simple",
+              "marker": "sys_platform == 'linux'"
+            }
+          ]
+        },
+        "sniffio==1.3.1@registry+https://pypi.org/simple": {
+          "name": "sniffio",
+          "version": "1.3.1",
+          "source": {
+            "registry": {
+              "url": "https://pypi.org/simple"
+            }
+          },
+          "kind": "package",
+          "dependencies": [],
+          "wheels": [
+            {
+              "url": "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl",
+              "hashes": {
+                "sha256": "2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2"
+              },
+              "size": 10235,
+              "upload_time": "2024-02-25T23:20:01.196Z",
+              "filename": "sniffio-1.3.1-py3-none-any.whl"
+            }
+          ]
+        },
+        "workspace+[TEMP_DIR]/": {
+          "kind": "workspace",
+          "path": "[TEMP_DIR]/",
+          "dependencies": []
+        }
       }
-    ]
+    }
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    "#);
+
+    uv_snapshot!(context.filters(), context.tree()
+        .args(["--preview-features", "json-output", "--format", "json", "--universal", "--invert"]), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "workspace_root": "[TEMP_DIR]/",
+      "workspace": {
+        "path": "[TEMP_DIR]/",
+        "id": "workspace+[TEMP_DIR]/"
+      },
+      "roots": [
+        {
+          "id": "async-generator==1.10@registry+https://pypi.org/simple"
+        },
+        {
+          "id": "idna==3.6@registry+https://pypi.org/simple"
+        },
+        {
+          "id": "sniffio==1.3.1@registry+https://pypi.org/simple"
+        }
+      ],
+      "inverted": true,
+      "members": [
+        {
+          "name": "project",
+          "path": "[TEMP_DIR]/",
+          "id": "project==0.1.0@virtual+[TEMP_DIR]/"
+        }
+      ],
+      "resolution": {
+        "anyio==1.4.0@registry+https://pypi.org/simple": {
+          "name": "anyio",
+          "version": "1.4.0",
+          "source": {
+            "registry": {
+              "url": "https://pypi.org/simple"
+            }
+          },
+          "kind": "package",
+          "dependencies": [
+            {
+              "id": "project==0.1.0@virtual+[TEMP_DIR]/",
+              "marker": "sys_platform == 'win32'"
+            }
+          ],
+          "wheels": [
+            {
+              "url": "https://files.pythonhosted.org/packages/c3/5f/ad80678e9ed82f8c4236a108b203b1aeb05f8d5de66b9b7bbed8e3255eaf/anyio-1.4.0-py3-none-any.whl",
+              "hashes": {
+                "sha256": "9ee67e8131853f42957e214d4531cee6f2b66dda164a298d9686a768b7161a4f"
+              },
+              "size": 36800,
+              "upload_time": "2020-07-06T09:49:50.807Z",
+              "filename": "anyio-1.4.0-py3-none-any.whl"
+            }
+          ]
+        },
+        "anyio==4.3.0@registry+https://pypi.org/simple": {
+          "name": "anyio",
+          "version": "4.3.0",
+          "source": {
+            "registry": {
+              "url": "https://pypi.org/simple"
+            }
+          },
+          "kind": "package",
+          "dependencies": [
+            {
+              "id": "project==0.1.0@virtual+[TEMP_DIR]/",
+              "marker": "sys_platform == 'linux'"
+            }
+          ],
+          "wheels": [
+            {
+              "url": "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl",
+              "hashes": {
+                "sha256": "048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8"
+              },
+              "size": 85584,
+              "upload_time": "2024-02-19T08:36:26.842Z",
+              "filename": "anyio-4.3.0-py3-none-any.whl"
+            }
+          ]
+        },
+        "async-generator==1.10@registry+https://pypi.org/simple": {
+          "name": "async-generator",
+          "version": "1.10",
+          "source": {
+            "registry": {
+              "url": "https://pypi.org/simple"
+            }
+          },
+          "kind": "package",
+          "dependencies": [
+            {
+              "id": "anyio==1.4.0@registry+https://pypi.org/simple"
+            }
+          ],
+          "wheels": [
+            {
+              "url": "https://files.pythonhosted.org/packages/71/52/39d20e03abd0ac9159c162ec24b93fbcaa111e8400308f2465432495ca2b/async_generator-1.10-py3-none-any.whl",
+              "hashes": {
+                "sha256": "01c7bf666359b4967d2cda0000cc2e4af16a0ae098cbffcb8472fb9e8ad6585b"
+              },
+              "size": 18857,
+              "upload_time": "2018-08-01T03:36:20.029Z",
+              "filename": "async_generator-1.10-py3-none-any.whl"
+            }
+          ]
+        },
+        "idna==3.6@registry+https://pypi.org/simple": {
+          "name": "idna",
+          "version": "3.6",
+          "source": {
+            "registry": {
+              "url": "https://pypi.org/simple"
+            }
+          },
+          "kind": "package",
+          "dependencies": [
+            {
+              "id": "anyio==1.4.0@registry+https://pypi.org/simple"
+            },
+            {
+              "id": "anyio==4.3.0@registry+https://pypi.org/simple"
+            }
+          ],
+          "wheels": [
+            {
+              "url": "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl",
+              "hashes": {
+                "sha256": "c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f"
+              },
+              "size": 61567,
+              "upload_time": "2023-11-25T15:40:52.604Z",
+              "filename": "idna-3.6-py3-none-any.whl"
+            }
+          ]
+        },
+        "project==0.1.0@virtual+[TEMP_DIR]/": {
+          "name": "project",
+          "version": "0.1.0",
+          "source": {
+            "virtual": "[TEMP_DIR]/"
+          },
+          "kind": "package",
+          "dependencies": []
+        },
+        "sniffio==1.3.1@registry+https://pypi.org/simple": {
+          "name": "sniffio",
+          "version": "1.3.1",
+          "source": {
+            "registry": {
+              "url": "https://pypi.org/simple"
+            }
+          },
+          "kind": "package",
+          "dependencies": [
+            {
+              "id": "anyio==1.4.0@registry+https://pypi.org/simple"
+            },
+            {
+              "id": "anyio==4.3.0@registry+https://pypi.org/simple"
+            }
+          ],
+          "wheels": [
+            {
+              "url": "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl",
+              "hashes": {
+                "sha256": "2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2"
+              },
+              "size": 10235,
+              "upload_time": "2024-02-25T23:20:01.196Z",
+              "filename": "sniffio-1.3.1-py3-none-any.whl"
+            }
+          ]
+        },
+        "workspace+[TEMP_DIR]/": {
+          "kind": "workspace",
+          "path": "[TEMP_DIR]/",
+          "dependencies": []
+        }
+      }
+    }
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
     "#);
 
     // `uv tree` should update the lockfile
@@ -2066,8 +2502,8 @@ fn repeated_version() -> Result<()> {
           "dependency @ {} ; sys_platform != 'darwin'",
         ]
         "#,
-        Url::from_file_path(context.temp_dir.join("v1")).unwrap(),
-        Url::from_file_path(context.temp_dir.join("v2")).unwrap(),
+        SafeUrl::from_file_path(context.temp_dir.join("v1")).unwrap(),
+        SafeUrl::from_file_path(context.temp_dir.join("v2")).unwrap(),
     })?;
 
     uv_snapshot!(context.filters(), context.tree().arg("--universal"), @"
@@ -2414,7 +2850,7 @@ fn dep_and_group_extras_with_extra_only_dependency() -> Result<()> {
         requires-python = ">=3.12"
         "#,
     )?;
-    let leaf_url = Url::from_file_path(leaf.path())
+    let leaf_url = SafeUrl::from_file_path(leaf.path())
         .map_err(|()| anyhow::anyhow!("failed to convert leaf path to URL"))?;
 
     let child = context.temp_dir.child("child");
@@ -2431,7 +2867,7 @@ fn dep_and_group_extras_with_extra_only_dependency() -> Result<()> {
         "#,
         leaf_url,
     })?;
-    let child_url = Url::from_file_path(child.path())
+    let child_url = SafeUrl::from_file_path(child.path())
         .map_err(|()| anyhow::anyhow!("failed to convert child path to URL"))?;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -2479,14 +2915,14 @@ fn dep_and_group_extras_with_different_extras_in_path() -> Result<()> {
         requires-python = ">=3.12"
         "#,
     )?;
-    let leaf_url = Url::from_file_path(leaf.path())
+    let leaf_url = SafeUrl::from_file_path(leaf.path())
         .map_err(|()| anyhow::anyhow!("failed to convert leaf path to URL"))?;
 
     let a = context.temp_dir.child("a");
     fs_err::create_dir_all(a.path())?;
     let b = context.temp_dir.child("b");
     fs_err::create_dir_all(b.path())?;
-    let b_url = Url::from_file_path(b.path())
+    let b_url = SafeUrl::from_file_path(b.path())
         .map_err(|()| anyhow::anyhow!("failed to convert b path to URL"))?;
     a.child("pyproject.toml").write_str(&formatdoc! {
         r#"
@@ -2498,7 +2934,7 @@ fn dep_and_group_extras_with_different_extras_in_path() -> Result<()> {
         "#,
         b_url,
     })?;
-    let a_url = Url::from_file_path(a.path())
+    let a_url = SafeUrl::from_file_path(a.path())
         .map_err(|()| anyhow::anyhow!("failed to convert a path to URL"))?;
 
     b.child("pyproject.toml").write_str(&formatdoc! {
@@ -3783,7 +4219,7 @@ fn non_project_group_selection_with_extras() -> Result<()> {
         requires-python = ">=3.12"
         "#,
     )?;
-    let leaf_url = Url::from_file_path(leaf.path())
+    let leaf_url = SafeUrl::from_file_path(leaf.path())
         .map_err(|()| anyhow::anyhow!("failed to convert leaf path to URL"))?;
 
     let child = context.temp_dir.child("child");
@@ -3799,7 +4235,7 @@ fn non_project_group_selection_with_extras() -> Result<()> {
         feature = ["leaf @ {leaf_url}"]
         "#,
     })?;
-    let child_url = Url::from_file_path(child.path())
+    let child_url = SafeUrl::from_file_path(child.path())
         .map_err(|()| anyhow::anyhow!("failed to convert child path to URL"))?;
 
     let test_dependency = context.temp_dir.child("test-dependency");
@@ -3812,7 +4248,7 @@ fn non_project_group_selection_with_extras() -> Result<()> {
         requires-python = ">=3.12"
         "#,
     )?;
-    let test_dependency_url = Url::from_file_path(test_dependency.path())
+    let test_dependency_url = SafeUrl::from_file_path(test_dependency.path())
         .map_err(|()| anyhow::anyhow!("failed to convert test dependency path to URL"))?;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -4064,7 +4500,7 @@ fn script() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.11"
 
         [options]
@@ -4249,7 +4685,7 @@ fn script() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.11"
 
         [options]

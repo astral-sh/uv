@@ -64,7 +64,7 @@ a private repository.
 
 Editable packages do not need to be reinstalled for changes to their source code to be active.
 
-To install the current project as an editable package
+To install the current project as an editable package:
 
 ```console
 $ uv pip install -e .

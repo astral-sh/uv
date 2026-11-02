@@ -3,7 +3,7 @@ source: crates/uv/tests/it/ecosystem.rs
 expression: lock
 ---
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.10"
 resolution-markers = [
     "python_full_version >= '3.15'",
@@ -443,6 +443,7 @@ wheels = [
 name = "flask"
 version = "3.2.0.dev0"
 source = { editable = "." }
+default-groups = ["dev", "pre-commit", "tests", "typing"]
 dependencies = [
     { name = "blinker" },
     { name = "click" },

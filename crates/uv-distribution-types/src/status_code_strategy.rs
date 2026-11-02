@@ -5,7 +5,7 @@ use std::ops::Deref;
 use http::StatusCode;
 use rustc_hash::FxHashSet;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use url::Url;
+use uv_redacted::SafeUrl;
 
 use crate::{IndexCapabilities, IndexUrl};
 
@@ -21,7 +21,7 @@ pub enum IndexStatusCodeStrategy {
 impl IndexStatusCodeStrategy {
     /// Derive a strategy from an index URL. We special-case PyTorch. Otherwise,
     /// we follow the default strategy.
-    pub(crate) fn from_index_url(url: &Url) -> Self {
+    pub(crate) fn from_index_url(url: &SafeUrl) -> Self {
         if url
             .host_str()
             .is_some_and(|host| host.eq_ignore_ascii_case("download.pytorch.org"))
@@ -152,13 +152,13 @@ impl schemars::JsonSchema for SerializableStatusCode {
 mod tests {
     use std::str::FromStr;
 
-    use url::Url;
+    use uv_redacted::SafeUrl;
 
     use super::*;
 
     #[test]
     fn test_strategy_normal_registry() {
-        let url = Url::from_str("https://internal-registry.com/simple").unwrap();
+        let url = SafeUrl::from_str("https://internal-registry.com/simple").unwrap();
         assert_eq!(
             IndexStatusCodeStrategy::from_index_url(&url),
             IndexStatusCodeStrategy::Default
@@ -168,7 +168,7 @@ mod tests {
     #[test]
     fn test_strategy_pytorch_registry() {
         let status_codes = std::iter::once(StatusCode::FORBIDDEN).collect::<FxHashSet<_>>();
-        let url = Url::from_str("https://download.pytorch.org/whl/cu118").unwrap();
+        let url = SafeUrl::from_str("https://download.pytorch.org/whl/cu118").unwrap();
         assert_eq!(
             IndexStatusCodeStrategy::from_index_url(&url),
             IndexStatusCodeStrategy::IgnoreErrorCodes { status_codes }

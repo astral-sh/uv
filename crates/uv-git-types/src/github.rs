@@ -1,5 +1,5 @@
 use tracing::debug;
-use url::Url;
+use uv_redacted::SafeUrl;
 
 /// A reference to a repository on GitHub.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -16,7 +16,7 @@ impl<'a> GitHubRepository<'a> {
     ///
     /// Expects to receive a URL of the form: `https://github.com/{user}/{repo}[.git]`, e.g.,
     /// `https://github.com/astral-sh/uv`. Otherwise, returns `None`.
-    pub fn parse(url: &'a Url) -> Option<Self> {
+    pub fn parse(url: &'a SafeUrl) -> Option<Self> {
         // The fast path is only available for GitHub repositories.
         if url.host_str() != Some("github.com") {
             return None;
@@ -54,7 +54,7 @@ mod tests {
 
     #[test]
     fn test_parse_valid_url() {
-        let url = Url::parse("https://github.com/astral-sh/uv").unwrap();
+        let url = SafeUrl::parse("https://github.com/astral-sh/uv").unwrap();
         let repo = GitHubRepository::parse(&url).unwrap();
         assert_eq!(repo.owner, "astral-sh");
         assert_eq!(repo.repo, "uv");
@@ -62,7 +62,7 @@ mod tests {
 
     #[test]
     fn test_parse_with_git_suffix() {
-        let url = Url::parse("https://github.com/astral-sh/uv.git").unwrap();
+        let url = SafeUrl::parse("https://github.com/astral-sh/uv.git").unwrap();
         let repo = GitHubRepository::parse(&url).unwrap();
         assert_eq!(repo.owner, "astral-sh");
         assert_eq!(repo.repo, "uv");
@@ -70,16 +70,16 @@ mod tests {
 
     #[test]
     fn test_parse_invalid_host() {
-        let url = Url::parse("https://gitlab.com/astral-sh/uv").unwrap();
+        let url = SafeUrl::parse("https://gitlab.com/astral-sh/uv").unwrap();
         assert!(GitHubRepository::parse(&url).is_none());
     }
 
     #[test]
     fn test_parse_invalid_path() {
-        let url = Url::parse("https://github.com/astral-sh").unwrap();
+        let url = SafeUrl::parse("https://github.com/astral-sh").unwrap();
         assert!(GitHubRepository::parse(&url).is_none());
 
-        let url = Url::parse("https://github.com/astral-sh/uv/extra").unwrap();
+        let url = SafeUrl::parse("https://github.com/astral-sh/uv/extra").unwrap();
         assert!(GitHubRepository::parse(&url).is_none());
     }
 }

@@ -1,28 +1,40 @@
 use std::future::Future;
 use std::sync::Arc;
-
-use reqwest::StatusCode;
+pub use uv_resolver_types::MetadataResponse;
+pub(crate) use uv_resolver_types::MetadataUnavailable;
 
 use uv_client::MetadataFormat;
 use uv_configuration::BuildOptions;
-use uv_distribution::{ArchiveMetadata, DistributionDatabase, Reporter};
+use uv_distribution::{DistributionDatabase, Reporter};
 use uv_distribution_types::{
-    Dist, IndexCapabilities, IndexLocations, IndexMetadata, IndexMetadataRef, InstalledDist,
-    RequestedDist, RequiresPython,
+    Dist, File, IndexCapabilities, IndexLocations, IndexMetadata, IndexMetadataRef, IndexUrl,
+    InstalledDist, MinimumLibcVersion, RequestedDist, RequiresPython,
 };
 use uv_normalize::PackageName;
-use uv_pep440::{Version, VersionSpecifiers};
 use uv_platform_tags::Tags;
 use uv_static::EnvVars;
 use uv_types::{BuildContext, HashStrategy};
 
 use crate::ExcludeNewer;
-use crate::flat_index::FlatIndex;
+use crate::flat_index::{FlatDistributions, FlatIndex};
 use crate::version_map::VersionMap;
 use crate::yanks::AllowedYanks;
 
 pub type PackageVersionsResult = Result<VersionsResponse, uv_client::Error>;
 pub type WheelMetadataResult = Result<MetadataResponse, uv_distribution::Error>;
+
+/// The outcome of an index-level variant metadata lookup.
+///
+/// A recoverable failure belongs in [`Self::Unavailable`] so the resolver can store it and replay
+/// it when it revisits the package version. Fatal client errors are returned separately and abort
+/// resolution.
+#[derive(Debug)]
+pub enum VariantsJsonResponse {
+    /// The variant metadata was fetched successfully.
+    Found(Vec<u8>),
+    /// The package version cannot be used.
+    Unavailable(MetadataUnavailable),
+}
 
 /// The response when requesting versions for a package
 #[derive(Debug)]
@@ -35,51 +47,6 @@ pub enum VersionsResponse {
     NoIndex,
     /// The package was not found in the cache and the network is not available.
     Offline,
-}
-
-#[derive(Debug)]
-pub enum MetadataResponse {
-    /// The wheel metadata was found and parsed successfully.
-    Found(ArchiveMetadata),
-    /// A non-fatal error.
-    Unavailable(MetadataUnavailable),
-    /// The distribution could not be built or downloaded, a fatal error.
-    Error(Box<RequestedDist>, Arc<uv_distribution::Error>),
-}
-
-/// Non-fatal metadata fetching error.
-///
-/// This is also the unavailability reasons for a package, while version unavailability is separate
-/// in [`UnavailableVersion`].
-#[derive(Debug, Clone)]
-pub enum MetadataUnavailable {
-    /// The wheel metadata was not found in the cache and the network is not available.
-    Offline,
-    /// The wheel metadata was found, but could not be parsed.
-    InvalidMetadata(Arc<uv_pypi_types::MetadataError>),
-    /// The wheel metadata was found, but the metadata was inconsistent.
-    InconsistentMetadata(Arc<uv_distribution::Error>),
-    /// The wheel has an invalid structure.
-    InvalidStructure(Arc<uv_metadata::Error>),
-    /// The source distribution has a `requires-python` requirement that is not met by the installed
-    /// Python version (and static metadata is not available).
-    RequiresPython(VersionSpecifiers, Version),
-    /// The wheel metadata could not be fetched due to a network error.
-    Network(StatusCode),
-}
-
-impl MetadataUnavailable {
-    /// Like [`std::error::Error::source`], but we don't want to derive the std error since our
-    /// formatting system is more custom.
-    pub(crate) fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            Self::Offline => None,
-            Self::InvalidMetadata(err) => Some(err),
-            Self::InconsistentMetadata(err) => Some(err),
-            Self::InvalidStructure(err) => Some(err),
-            Self::RequiresPython(..) | Self::Network(..) => None,
-        }
-    }
 }
 
 pub trait ResolverProvider {
@@ -106,6 +73,14 @@ pub trait ResolverProvider {
         dist: &'io InstalledDist,
     ) -> impl Future<Output = WheelMetadataResult> + 'io;
 
+    /// Fetch the index-level variant metadata for a package version.
+    fn fetch_variants_json<'io>(
+        &'io self,
+        package_name: &'io PackageName,
+        file: &'io File,
+        index: &'io IndexUrl,
+    ) -> impl Future<Output = Result<VariantsJsonResponse, uv_client::Error>> + 'io;
+
     /// Set the [`Reporter`] to use for this installer.
     #[must_use]
     fn with_reporter(self, reporter: Arc<dyn Reporter>) -> Self;
@@ -117,16 +92,17 @@ pub struct DefaultResolverProvider<'a, Context: BuildContext> {
     /// The [`DistributionDatabase`] used to build source distributions.
     fetcher: DistributionDatabase<'a, Context>,
     /// These are the entries from `--find-links` that act as overrides for index responses.
-    flat_index: FlatIndex,
+    flat_index: &'a FlatIndex,
     tags: Option<Tags>,
     requires_python: RequiresPython,
     allowed_yanks: AllowedYanks,
-    hasher: HashStrategy,
+    hasher: &'a HashStrategy,
     exclude_newer: ExcludeNewer,
     available_version_cutoff: Option<jiff::Timestamp>,
     index_locations: &'a IndexLocations,
     build_options: &'a BuildOptions,
     capabilities: &'a IndexCapabilities,
+    minimum_libc_version: Option<MinimumLibcVersion>,
 }
 
 impl<'a, Context: BuildContext> DefaultResolverProvider<'a, Context> {
@@ -142,21 +118,25 @@ impl<'a, Context: BuildContext> DefaultResolverProvider<'a, Context> {
         index_locations: &'a IndexLocations,
         build_options: &'a BuildOptions,
         capabilities: &'a IndexCapabilities,
+        minimum_libc_version: Option<MinimumLibcVersion>,
     ) -> Self {
         Self {
             fetcher,
-            flat_index: flat_index.clone(),
+            flat_index,
             tags: tags.cloned(),
             requires_python: requires_python.clone(),
             allowed_yanks,
-            hasher: hasher.clone(),
+            hasher,
             exclude_newer,
-            available_version_cutoff: std::env::var(EnvVars::UV_TEST_AVAILABLE_VERSION_CUTOFF)
-                .ok()
-                .and_then(|value| value.parse().ok()),
+            available_version_cutoff: std::env::var(
+                EnvVars::UV_INTERNAL__TEST_AVAILABLE_VERSION_CUTOFF,
+            )
+            .ok()
+            .and_then(|value| value.parse().ok()),
             index_locations,
             build_options,
             capabilities,
+            minimum_libc_version,
         }
     }
 
@@ -169,6 +149,37 @@ impl<'a, Context: BuildContext> DefaultResolverProvider<'a, Context> {
             package_name,
             self.index_locations.exclude_newer_for(index),
         )
+    }
+
+    /// Classify a client error as recoverable metadata unavailability or a fatal client error.
+    fn classify_metadata_error(
+        &self,
+        error: uv_client::Error,
+        index: Option<&IndexUrl>,
+    ) -> Result<MetadataUnavailable, uv_client::Error> {
+        let retries = error.retries();
+        let duration = error.duration();
+        match error.into_kind() {
+            uv_client::ErrorKind::Offline(_) => Ok(MetadataUnavailable::Offline),
+            uv_client::ErrorKind::MetadataParseError(_, _, error) => {
+                Ok(MetadataUnavailable::InvalidMetadata(Arc::new(*error)))
+            }
+            uv_client::ErrorKind::Metadata(_, error) => {
+                Ok(MetadataUnavailable::InvalidStructure(Arc::new(error)))
+            }
+            kind => {
+                if let uv_client::ErrorKind::WrappedReqwestError(_, error) = &kind
+                    && let Some(status) = error.status()
+                    && index.is_some_and(|index| {
+                        self.index_locations.ignores_error_code_for(index, status)
+                    })
+                {
+                    Ok(MetadataUnavailable::Network(status))
+                } else {
+                    Err(uv_client::Error::new(kind, retries, duration))
+                }
+            }
+        }
     }
 }
 
@@ -193,7 +204,18 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
             .await;
 
         // If a package is pinned to an explicit index, ignore any `--find-links` entries.
-        let flat_index = index.is_none().then_some(&self.flat_index);
+        let flat_index = index.is_none().then_some(self.flat_index);
+        let flat_distributions = flat_index
+            .and_then(|flat_index| flat_index.get(package_name))
+            .map(|entries| {
+                FlatDistributions::from_entries(
+                    entries.iter().cloned(),
+                    self.tags.as_ref(),
+                    self.hasher,
+                    self.build_options,
+                    self.minimum_libc_version,
+                )
+            });
 
         match result {
             Ok(results) => Ok(VersionsResponse::Found(
@@ -218,16 +240,16 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
                                 self.hasher.clone(),
                                 included_version_cutoff,
                                 available_version_cutoff,
-                                flat_index
-                                    .and_then(|flat_index| flat_index.get(package_name))
-                                    .cloned(),
+                                flat_distributions.clone(),
                                 self.build_options,
+                                self.minimum_libc_version,
                             ),
                             MetadataFormat::Flat(metadata) => VersionMap::from_flat_metadata(
                                 metadata,
                                 self.tags.as_ref(),
-                                &self.hasher,
+                                self.hasher,
                                 self.build_options,
+                                self.minimum_libc_version,
                             ),
                         }
                     })
@@ -235,20 +257,14 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
             )),
             Err(err) => match err.kind() {
                 uv_client::ErrorKind::RemotePackageNotFound(_) => {
-                    if let Some(flat_index) = flat_index
-                        .and_then(|flat_index| flat_index.get(package_name))
-                        .cloned()
-                    {
+                    if let Some(flat_index) = flat_distributions {
                         Ok(VersionsResponse::Found(vec![VersionMap::from(flat_index)]))
                     } else {
                         Ok(VersionsResponse::NotFound)
                     }
                 }
                 uv_client::ErrorKind::NoIndex(_) => {
-                    if let Some(flat_index) = flat_index
-                        .and_then(|flat_index| flat_index.get(package_name))
-                        .cloned()
-                    {
+                    if let Some(flat_index) = flat_distributions {
                         Ok(VersionsResponse::Found(vec![VersionMap::from(flat_index)]))
                     } else if flat_index.is_some_and(FlatIndex::offline) {
                         Ok(VersionsResponse::Offline)
@@ -257,10 +273,7 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
                     }
                 }
                 uv_client::ErrorKind::Offline(_) => {
-                    if let Some(flat_index) = flat_index
-                        .and_then(|flat_index| flat_index.get(package_name))
-                        .cloned()
-                    {
+                    if let Some(flat_index) = flat_distributions {
                         Ok(VersionsResponse::Found(vec![VersionMap::from(flat_index)]))
                     } else {
                         Ok(VersionsResponse::Offline)
@@ -275,46 +288,17 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
     async fn get_or_build_wheel_metadata<'io>(&'io self, dist: &'io Dist) -> WheelMetadataResult {
         match self
             .fetcher
-            .get_or_build_wheel_metadata(dist, self.hasher.get(dist))
+            .get_or_build_wheel_metadata(dist, self.hasher.metadata_policy(dist))
             .await
         {
             Ok(metadata) => Ok(MetadataResponse::Found(metadata)),
             Err(err) => match err {
                 uv_distribution::Error::Client(client) => {
-                    let retries = client.retries();
-                    let duration = client.duration();
-                    match client.into_kind() {
-                        uv_client::ErrorKind::Offline(_) => {
-                            Ok(MetadataResponse::Unavailable(MetadataUnavailable::Offline))
-                        }
-                        uv_client::ErrorKind::MetadataParseError(_, _, err) => {
-                            Ok(MetadataResponse::Unavailable(
-                                MetadataUnavailable::InvalidMetadata(Arc::new(*err)),
-                            ))
-                        }
-                        uv_client::ErrorKind::Metadata(_, err) => {
-                            Ok(MetadataResponse::Unavailable(
-                                MetadataUnavailable::InvalidStructure(Arc::new(err)),
-                            ))
-                        }
-                        uv_client::ErrorKind::WrappedReqwestError(url, err) => {
-                            let Some(status) = err.status().filter(|status| {
-                                dist.index().is_some_and(|index| {
-                                    self.index_locations.ignores_error_code_for(index, *status)
-                                })
-                            }) else {
-                                return Err(uv_client::Error::new(
-                                    uv_client::ErrorKind::WrappedReqwestError(url, err),
-                                    retries,
-                                    duration,
-                                )
-                                .into());
-                            };
-                            Ok(MetadataResponse::Unavailable(MetadataUnavailable::Network(
-                                status,
-                            )))
-                        }
-                        kind => Err(uv_client::Error::new(kind, retries, duration).into()),
+                    // Both outcomes describe a failed request. A recoverable failure lets the
+                    // resolver reject the candidate and backtrack; other client errors abort resolution.
+                    match self.classify_metadata_error(client, dist.index()) {
+                        Ok(reason) => Ok(MetadataResponse::Unavailable(reason)),
+                        Err(error) => Err(error.into()),
                     }
                 }
                 uv_distribution::Error::WheelMetadataVersionMismatch { .. } => {
@@ -357,6 +341,26 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
                 Box::new(RequestedDist::Installed(dist.clone())),
                 Arc::new(err),
             )),
+        }
+    }
+
+    async fn fetch_variants_json<'io>(
+        &'io self,
+        package_name: &'io PackageName,
+        file: &'io File,
+        index: &'io IndexUrl,
+    ) -> Result<VariantsJsonResponse, uv_client::Error> {
+        match self
+            .fetcher
+            .client()
+            .managed(|client| client.fetch_variants_json(package_name, file, index))
+            .await
+        {
+            Ok(contents) => Ok(VariantsJsonResponse::Found(contents)),
+            Err(error) => match self.classify_metadata_error(error, Some(index)) {
+                Ok(reason) => Ok(VariantsJsonResponse::Unavailable(reason)),
+                Err(error) => Err(error),
+            },
         }
     }
 

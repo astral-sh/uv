@@ -10,6 +10,7 @@ use std::process::Command;
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::{FileWriteStr, PathChild};
+use indoc::indoc;
 use predicates::prelude::predicate;
 
 use uv_static::EnvVars;
@@ -75,7 +76,10 @@ fn lowest_direct_fork_max_python() -> Result<()> {
     let server = PackseServer::new("fork/lowest-direct-fork-max-python.toml");
 
     let requirements_in = context.temp_dir.child("requirements.in");
-    requirements_in.write_str("forkroot==3.0.0\nforkdep>=2.8 ; python_full_version < '3.12'")?;
+    requirements_in.write_str(indoc! {"
+        forkroot==3.0.0
+        forkdep>=2.8 ; python_full_version < '3.12'
+    "})?;
 
     let output = uv_snapshot!(context.filters(), command(&context, python_versions, &server)
         .arg("--resolution=lowest-direct")
@@ -148,7 +152,10 @@ fn lowest_direct_fork_min_python() -> Result<()> {
     let server = PackseServer::new("fork/lowest-direct-fork-min-python.toml");
 
     let requirements_in = context.temp_dir.child("requirements.in");
-    requirements_in.write_str("forkroot==3.0.0\nforkdep>=3 ; python_full_version >= '3.12'")?;
+    requirements_in.write_str(indoc! {"
+        forkroot==3.0.0
+        forkdep>=3 ; python_full_version >= '3.12'
+    "})?;
 
     let output = uv_snapshot!(context.filters(), command(&context, python_versions, &server)
         .arg("--resolution=lowest-direct")
@@ -226,7 +233,10 @@ fn lowest_fork_max_python() -> Result<()> {
     let server = PackseServer::new("fork/lowest-fork-max-python.toml");
 
     let requirements_in = context.temp_dir.child("requirements.in");
-    requirements_in.write_str("forkroot==3.0.0\nforkdep>=2.8 ; python_full_version < '3.12'")?;
+    requirements_in.write_str(indoc! {"
+        forkroot==3.0.0
+        forkdep>=2.8 ; python_full_version < '3.12'
+    "})?;
 
     let output = uv_snapshot!(context.filters(), command(&context, python_versions, &server)
         .arg("--resolution=lowest")
@@ -299,7 +309,10 @@ fn lowest_fork_min_python() -> Result<()> {
     let server = PackseServer::new("fork/lowest-fork-min-python.toml");
 
     let requirements_in = context.temp_dir.child("requirements.in");
-    requirements_in.write_str("forkroot==3.0.0\nforkdep>=3 ; python_full_version >= '3.12'")?;
+    requirements_in.write_str(indoc! {"
+        forkroot==3.0.0
+        forkdep>=3 ; python_full_version >= '3.12'
+    "})?;
 
     let output = uv_snapshot!(context.filters(), command(&context, python_versions, &server)
         .arg("--resolution=lowest")
@@ -365,9 +378,9 @@ fn compatible_python_incompatible_override() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     warning: The requested Python version 3.9 is not available; 3.11.[X] will be used to build dependencies instead.
-      × No solution found when resolving dependencies:
-      ╰─▶ Because the requested Python version (>=3.9) does not satisfy Python>=3.10 and a==1.0.0 depends on Python>=3.10, we can conclude that a==1.0.0 cannot be used.
-          And because you require a==1.0.0, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      cause: Because the requested Python version (>=3.9) does not satisfy Python>=3.10 and a==1.0.0 depends on Python>=3.10, we can conclude that a==1.0.0 cannot be used.
+             And because you require a==1.0.0, we can conclude that your requirements are unsatisfiable.
 
     hint: The `--python-version` value (>=3.9) includes Python versions that are not supported by your dependencies (e.g., a==1.0.0 only supports >=3.10). Consider using a higher `--python-version` value.
     "
@@ -619,7 +632,7 @@ fn incompatible_python_compatible_override() -> Result<()> {
 /// ```text
 /// python-patch-override-no-patch
 /// ├── environment
-/// │   └── python3.9.21
+/// │   └── python3.9.25
 /// ├── root
 /// │   └── requires a==1.0.0
 /// │       └── satisfied by a-1.0.0
@@ -630,7 +643,7 @@ fn incompatible_python_compatible_override() -> Result<()> {
 #[cfg(feature = "test-python-patch")]
 #[test]
 fn python_patch_override_no_patch() -> Result<()> {
-    let context = uv_test::test_context!("3.9.21");
+    let context = uv_test::test_context!("3.9.25");
     let python_versions = &[];
     let server = PackseServer::new("requires_python/python-patch-override-no-patch.toml");
 
@@ -643,9 +656,9 @@ fn python_patch_override_no_patch() -> Result<()> {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because the requested Python version (>=3.9) does not satisfy Python>=3.9.4 and a==1.0.0 depends on Python>=3.9.4, we can conclude that a==1.0.0 cannot be used.
-          And because you require a==1.0.0, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      cause: Because the requested Python version (>=3.9) does not satisfy Python>=3.9.4 and a==1.0.0 depends on Python>=3.9.4, we can conclude that a==1.0.0 cannot be used.
+             And because you require a==1.0.0, we can conclude that your requirements are unsatisfiable.
 
     hint: The `--python-version` value (>=3.9) includes Python versions that are not supported by your dependencies (e.g., a==1.0.0 only supports >=3.9.4). Consider using a higher `--python-version` value.
     "
@@ -661,7 +674,7 @@ fn python_patch_override_no_patch() -> Result<()> {
 /// ```text
 /// python-patch-override-patch-compatible
 /// ├── environment
-/// │   └── python3.9.21
+/// │   └── python3.9.25
 /// ├── root
 /// │   └── requires a==1.0.0
 /// │       └── satisfied by a-1.0.0
@@ -671,7 +684,7 @@ fn python_patch_override_no_patch() -> Result<()> {
 #[cfg(feature = "test-python-patch")]
 #[test]
 fn python_patch_override_patch_compatible() -> Result<()> {
-    let context = uv_test::test_context!("3.9.21");
+    let context = uv_test::test_context!("3.9.25");
     let python_versions = &[];
     let server = PackseServer::new("requires_python/python-patch-override-patch-compatible.toml");
 
@@ -689,7 +702,7 @@ fn python_patch_override_patch_compatible() -> Result<()> {
         # via -r requirements.in
 
     ----- stderr -----
-    warning: The requested Python version 3.9.0 is not available; 3.9.21 will be used to build dependencies instead.
+    warning: The requested Python version 3.9.0 is not available; 3.9.25 will be used to build dependencies instead.
     Resolved 1 package in [TIME]
     "
     );

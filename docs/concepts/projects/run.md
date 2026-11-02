@@ -72,7 +72,7 @@ These types of scripts are additional files installed by setuptools in `.venv\Sc
 
 Currently only legacy scripts with the `.ps1`, `.cmd`, and `.bat` extensions are supported.
 
-For example, below is an example running a Command Prompt script.
+For example, to run a Command Prompt script:
 
 ```console
 $ uv run --with nuitka==2.6.7 -- nuitka.cmd --version

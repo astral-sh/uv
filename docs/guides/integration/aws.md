@@ -23,8 +23,8 @@ url = "https://<DOMAIN>-<ACCOUNT_ID>.d.codeartifact.<REGION>.amazonaws.com/pypi/
 
 ## Authenticate with an AWS access token
 
-Credentials can be provided via "Basic" HTTP authentication scheme. Include access token in the
-password field of the URL. Username must be `aws`, otherwise authentication will fail.
+Credentials can be provided via the "Basic" HTTP authentication scheme. Include the access token in
+the password field of the URL. The username must be `aws`, otherwise authentication will fail.
 
 Generate a token with `awscli`:
 
@@ -40,8 +40,8 @@ export AWS_CODEARTIFACT_TOKEN="$(
 
 !!! note
 
-    You might need to pass extra parameters to properly generate the token (like `--region`), this
-    is a basic example.
+    This is a basic example; you might need to pass extra parameters to generate the token, such as
+    `--region`.
 
 Then set credentials for the index with:
 
@@ -56,10 +56,10 @@ export UV_INDEX_PRIVATE_REGISTRY_PASSWORD="$AWS_CODEARTIFACT_TOKEN"
 
 ## Authenticate with `keyring` and `keyrings.codeartifact`
 
-You can also authenticate to Artifact Registry using [`keyring`](https://github.com/jaraco/keyring)
+You can also authenticate to CodeArtifact using the [`keyring`](https://github.com/jaraco/keyring)
 package with the [`keyrings.codeartifact` plugin](https://github.com/jmkeyes/keyrings.codeartifact).
-Because these two packages are required to authenticate to Artifact Registry, they must be
-pre-installed from a source other than Artifact Registry.
+Because these two packages are required to authenticate to CodeArtifact, they must be pre-installed
+from a source other than CodeArtifact.
 
 The `keyrings.codeartifact` plugin wraps [boto3](https://pypi.org/project/boto3/) to generate
 short-lived access tokens, securely store them in system keyring, and refresh them when they are

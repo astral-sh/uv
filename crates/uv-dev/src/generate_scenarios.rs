@@ -96,7 +96,7 @@ pub(crate) fn main(args: &Args) -> Result<()> {
             Mode::Write => {
                 println!("Updating: {}", template.test_file());
                 fs_err::write(&path, output.as_bytes())
-                    .with_context(|| format!("failed to write {}", path.display()))?;
+                    .with_context(|| format!("failed to write `{}`", path.display()))?;
 
                 if args.no_snapshot_update {
                     println!("Skipping snapshots for {}", template.test_name());
@@ -140,7 +140,7 @@ fn load_scenarios_from(scenarios_dir: &Path) -> Result<Vec<ScenarioCase>> {
         .map(|path| {
             let scenario = Scenario::from_path(&path)?;
             let relative = path.strip_prefix(scenarios_dir).with_context(|| {
-                format!("scenario path was outside {}", scenarios_dir.display())
+                format!("scenario path was outside `{}`", scenarios_dir.display())
             })?;
             Ok(ScenarioCase {
                 scenario,
@@ -193,7 +193,7 @@ fn format_rust_file(path: &Path) -> Result<()> {
         .status()
         .context("failed to run rustfmt")?;
     if !status.success() {
-        bail!("rustfmt failed for {}", path.display());
+        bail!("rustfmt failed for `{}`", path.display());
     }
     Ok(())
 }
@@ -205,9 +205,9 @@ fn format_rust_source(output: &str) -> Result<String> {
         .context("failed to create temporary directory for rustfmt")?;
     let path = temporary_directory.path().join("scenarios.rs");
     fs_err::write(&path, output.as_bytes())
-        .with_context(|| format!("failed to write {}", path.display()))?;
+        .with_context(|| format!("failed to write `{}`", path.display()))?;
     format_rust_file(&path)?;
-    fs_err::read_to_string(&path).with_context(|| format!("failed to read {}", path.display()))
+    fs_err::read_to_string(&path).with_context(|| format!("failed to read `{}`", path.display()))
 }
 
 fn check_generated_file(path: &Path, output: &str) -> Result<()> {
@@ -224,14 +224,14 @@ fn check_generated_file(path: &Path, output: &str) -> Result<()> {
                 Ok(())
             } else {
                 let comparison = StrComparison::new(&current, &output);
-                bail!("{filename} changed, please run `{GENERATED_WITH}`:\n{comparison}");
+                bail!("`{filename}` changed, please run `{GENERATED_WITH}`:\n{comparison}");
             }
         }
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            bail!("{filename} not found, please run `{GENERATED_WITH}`");
+            bail!("`{filename}` not found, please run `{GENERATED_WITH}`");
         }
         Err(error) => {
-            bail!("{filename} changed, please run `{GENERATED_WITH}`:\n{error}");
+            bail!("`{filename}` changed, please run `{GENERATED_WITH}`:\n{error}");
         }
     }
 }
@@ -384,6 +384,12 @@ fn render_compile(output: &mut String, cases: &[&ScenarioCase]) -> Result<()> {
     output.push_str("use anyhow::Result;\n");
     output.push_str("use assert_cmd::assert::OutputAssertExt;\n");
     output.push_str("use assert_fs::fixture::{FileWriteStr, PathChild};\n");
+    if cases
+        .iter()
+        .any(|case| case.scenario.root.requires.len() > 1)
+    {
+        output.push_str("use indoc::indoc;\n");
+    }
     output.push_str("use predicates::prelude::predicate;\n\n");
     output.push_str("use uv_static::EnvVars;\n");
     output.push_str("use uv_test::packse::PackseServer;\n");
@@ -451,7 +457,21 @@ fn render_compile_case(output: &mut String, case: &ScenarioCase) -> Result<()> {
     output.push('\n');
     output.push_str("    let requirements_in = context.temp_dir.child(\"requirements.in\");\n");
     let requirements = compile_requirements(&case.scenario.root.requires);
-    writeln!(output, "    requirements_in.write_str({requirements:?})?;").unwrap();
+    if case.scenario.root.requires.len() > 1 {
+        let requirements = requirements
+            .lines()
+            .map(|line| {
+                let quoted = format!("{line:?}");
+                format!("        {}", &quoted[1..quoted.len() - 1])
+            })
+            .join("\n");
+        writeln!(
+            output,
+            "    requirements_in.write_str(indoc! {{\"\n{requirements}\n    \"}})?;"
+        )?;
+    } else {
+        writeln!(output, "    requirements_in.write_str({requirements:?})?;")?;
+    }
     output.push('\n');
     render_expected_explanation(output, &case.scenario, "    // ");
     output.push_str(
@@ -929,6 +949,8 @@ fn requirement_specifiers(requirement: &Requirement) -> Option<&uv_pep440::Versi
 
 #[cfg(test)]
 mod tests {
+    use indoc::{formatdoc, indoc};
+
     use super::{
         TemplateKind, check_generated_file, compile_requirements, load_scenarios,
         load_scenarios_from, module_name, render, scenarios_for_template,
@@ -941,7 +963,13 @@ mod tests {
             "b>=2.0.0".parse().expect("valid requirement"),
         ];
 
-        assert_eq!(compile_requirements(&requirements), "a==1.0.0\nb>=2.0.0");
+        assert_eq!(
+            compile_requirements(&requirements),
+            indoc! {"
+                a==1.0.0
+                b>=2.0.0"
+            }
+        );
     }
 
     #[test]
@@ -982,10 +1010,12 @@ mod tests {
 
         assert!(universal_cases.peek().is_some());
         for case in universal_cases {
-            assert!(output.contains(&format!(
-                "#[cfg(feature = \"test-universal\")]\n#[test]\nfn {}()",
+            assert!(output.contains(&formatdoc! {r#"
+                #[cfg(feature = "test-universal")]
+                #[test]
+                fn {}()"#,
                 module_name(&case.scenario.name)
-            )));
+            }));
         }
     }
 
@@ -1059,7 +1089,7 @@ kind = "compile"
                 .lines()
                 .next()
                 .expect("error should include a summary"),
-            "[TEMP_DIR]/scenario.rs changed, please run `cargo dev generate-scenario-tests`:"
+            "`[TEMP_DIR]/scenario.rs` changed, please run `cargo dev generate-scenario-tests`:"
         );
     }
 
@@ -1070,13 +1100,26 @@ kind = "compile"
         let path = temporary_directory.path().join("scenario.rs");
         fs_err::write(
             &path,
-            "/// Literal @\"accepted\" remains significant.\nfn scenario() {\n    uv_snapshot!(filters, cmd, @\"\naccepted output\n\");\n}\n",
+            indoc! {r#"
+                /// Literal @"accepted" remains significant.
+                fn scenario() {
+                    uv_snapshot!(filters, cmd, @"
+                accepted output
+                ");
+                }
+            "#},
         )
         .expect("temporary file should be written");
 
         check_generated_file(
             &path,
-            "/// Literal @\"accepted\" remains significant.\nfn scenario() {\n    uv_snapshot!(filters, cmd, @r#\"<snapshot>\n\"#);\n}\n",
+            indoc! {r##"
+                /// Literal @"accepted" remains significant.
+                fn scenario() {
+                    uv_snapshot!(filters, cmd, @r#"<snapshot>
+                "#);
+                }
+            "##},
         )
         .expect("accepted snapshot should not make generated file stale");
     }
@@ -1088,13 +1131,26 @@ kind = "compile"
         let path = temporary_directory.path().join("scenario.rs");
         fs_err::write(
             &path,
-            "/// Literal @\"current\" remains significant.\nfn scenario() {\n    uv_snapshot!(filters, cmd, @\"\naccepted output\n\");\n}\n",
+            indoc! {r#"
+                /// Literal @"current" remains significant.
+                fn scenario() {
+                    uv_snapshot!(filters, cmd, @"
+                accepted output
+                ");
+                }
+            "#},
         )
         .expect("temporary file should be written");
 
         check_generated_file(
             &path,
-            "/// Literal @\"generated\" remains significant.\nfn scenario() {\n    uv_snapshot!(filters, cmd, @r#\"<snapshot>\n\"#);\n}\n",
+            indoc! {r##"
+                /// Literal @"generated" remains significant.
+                fn scenario() {
+                    uv_snapshot!(filters, cmd, @r#"<snapshot>
+                "#);
+                }
+            "##},
         )
         .expect_err("documentation changes should make generated output stale");
     }

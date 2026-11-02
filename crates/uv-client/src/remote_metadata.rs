@@ -2,12 +2,11 @@ use crate::{Error, ErrorKind};
 use async_http_range_reader::AsyncHttpRangeReader;
 use futures::io::BufReader;
 use tokio_util::compat::TokioAsyncReadCompatExt;
-use url::Url;
 use uv_distribution_filename::WheelFilename;
-use uv_metadata::find_archive_dist_info;
+use uv_metadata::{find_archive_dist_info, validate_archive_variant};
+use uv_redacted::SafeUrl;
 
-/// Read the `.dist-info/METADATA` file from a async remote zip reader, so we avoid downloading the
-/// entire wheel just for the one file.
+/// Read `METADATA` and, for a variant wheel, validate `variant.json` using HTTP range requests.
 ///
 /// This method is derived from `prefix-dev/rip`, which is available under the following BSD-3
 /// Clause license:
@@ -49,7 +48,7 @@ use uv_metadata::find_archive_dist_info;
 /// rest of the crate.
 pub(crate) async fn wheel_metadata_from_remote_zip(
     filename: &WheelFilename,
-    debug_name: &Url,
+    debug_name: &SafeUrl,
     reader: &mut AsyncHttpRangeReader,
 ) -> Result<String, Error> {
     // Make sure we have the back part of the stream.
@@ -66,7 +65,7 @@ pub(crate) async fn wheel_metadata_from_remote_zip(
         .await
         .map_err(|err| ErrorKind::Zip(filename.clone(), err))?;
 
-    let ((metadata_idx, metadata_entry), _dist_info_prefix) = find_archive_dist_info(
+    let ((metadata_idx, metadata_entry), dist_info_stem) = find_archive_dist_info(
         filename,
         reader
             .file()
@@ -76,24 +75,31 @@ pub(crate) async fn wheel_metadata_from_remote_zip(
             .filter_map(|(idx, e)| Some(((idx, e), e.filename().as_str().ok()?))),
     )
     .map_err(|err| ErrorKind::Metadata(debug_name.to_string(), err))?;
+    let variant = filename
+        .variant()
+        .map(|label| (label, format!("{dist_info_stem}.dist-info/variant.json")));
 
     let offset = metadata_entry.header_offset();
-    let size = metadata_entry.compressed_size()
-        + 30 // Header size in bytes
-        + metadata_entry.filename().as_bytes().len() as u64;
 
-    // The zip archive uses as BufReader which reads in chunks of 8192. To ensure we prefetch
-    // enough data we round the size up to the nearest multiple of the buffer size.
+    // The ZIP reader uses a `BufReader`, which reads in chunks of 8192. Round the
+    // prefetch size up to the nearest multiple of the buffer size.
     let buffer_size = 8192;
-    let size = size.div_ceil(buffer_size) * buffer_size;
+    let end = metadata_entry
+        .compressed_size()
+        .checked_add(30) // Header size in bytes
+        .and_then(|size| size.checked_add(metadata_entry.filename().as_bytes().len() as u64))
+        .and_then(|size| size.checked_next_multiple_of(buffer_size))
+        .and_then(|size| offset.checked_add(size));
 
-    // Fetch the bytes from the zip archive that contain the requested file.
-    reader
-        .inner_mut()
-        .get_mut()
-        .get_mut()
-        .prefetch(offset..offset + size)
-        .await;
+    // Prefetching is optional. The ZIP reader validates the entry range when it is opened.
+    if let Some(end) = end {
+        reader
+            .inner_mut()
+            .get_mut()
+            .get_mut()
+            .prefetch(offset..end)
+            .await;
+    }
 
     // Read the contents of the METADATA file
     let mut contents = String::new();
@@ -105,5 +111,12 @@ pub(crate) async fn wheel_metadata_from_remote_zip(
         .await
         .map_err(|err| ErrorKind::Zip(filename.clone(), err))?;
 
+    // Check that `variant.json` describes the variant named in the filename, so the resolver
+    // can mark the version unavailable if the wheel is malformed.
+    if let Some((label, path)) = variant {
+        validate_archive_variant(&mut reader, &path, label)
+            .await
+            .map_err(|err| ErrorKind::Metadata(debug_name.to_string(), err))?;
+    }
     Ok(contents)
 }

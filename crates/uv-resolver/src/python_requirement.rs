@@ -3,7 +3,8 @@ use std::collections::Bound;
 use uv_distribution_types::{RequiresPython, RequiresPythonRange};
 use uv_pep440::Version;
 use uv_pep508::{MarkerEnvironment, MarkerTree};
-use uv_python::{Interpreter, PythonVersion};
+use uv_python_interpreter::Interpreter;
+use uv_python_types::PythonVersion;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct PythonRequirement {

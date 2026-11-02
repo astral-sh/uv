@@ -50,34 +50,6 @@ pub enum Operator {
 }
 
 impl Operator {
-    /// Negates this operator, if a negation exists, so that it has the
-    /// opposite meaning.
-    ///
-    /// This returns a negated operator in every case except for the `~=`
-    /// operator. In that case, `None` is returned and callers may need to
-    /// handle its negation at a higher level. (For example, if it's negated
-    /// in the context of a marker expression, then the "compatible" version
-    /// constraint can be split into its component parts and turned into a
-    /// disjunction of the negation of each of those parts.)
-    ///
-    /// Note that this routine is not reversible in all cases. For example
-    /// `Operator::ExactEqual` negates to `Operator::NotEqual`, and
-    /// `Operator::NotEqual` in turn negates to `Operator::Equal`.
-    pub fn negate(self) -> Option<Self> {
-        Some(match self {
-            Self::Equal => Self::NotEqual,
-            Self::EqualStar => Self::NotEqualStar,
-            Self::ExactEqual => Self::NotEqual,
-            Self::NotEqual => Self::Equal,
-            Self::NotEqualStar => Self::EqualStar,
-            Self::TildeEqual => return None,
-            Self::LessThan => Self::GreaterThanEqual,
-            Self::LessThanEqual => Self::GreaterThan,
-            Self::GreaterThan => Self::LessThanEqual,
-            Self::GreaterThanEqual => Self::LessThan,
-        })
-    }
-
     /// Returns true if and only if this operator can be used in a version
     /// specifier with a version containing a non-empty local segment.
     ///
@@ -844,6 +816,32 @@ impl Version {
             VersionInner::Full { full } => Arc::make_mut(full),
             VersionInner::Small { .. } => unreachable!(),
         }
+    }
+
+    /// Compare this version, without its post and dev components, to another version.
+    #[inline]
+    pub(crate) fn without_post_and_dev_eq(&self, other: &Self) -> bool {
+        match (&self.inner, &other.inner) {
+            (VersionInner::Small { small }, VersionInner::Small { small: other }) => {
+                // Copy the inline representation without allocating.
+                let mut base = small.clone();
+                let _ = base.set_post(None);
+                let _ = base.set_dev(None);
+                base.repr == other.repr
+            }
+            (VersionInner::Small { .. }, VersionInner::Full { .. })
+            | (VersionInner::Full { .. }, VersionInner::Small { .. } | VersionInner::Full { .. }) => {
+                self.without_post_and_dev_eq_slow(other)
+            }
+        }
+    }
+
+    #[cold]
+    #[inline(never)]
+    fn without_post_and_dev_eq_slow(&self, other: &Self) -> bool {
+        self.epoch() == other.epoch()
+            && compare_release(&self.release(), &other.release()) == Ordering::Equal
+            && sortable_tuple_with(self, None, None) == sortable_tuple(other)
     }
 
     /// Performs a "slow" but complete comparison between two versions.
@@ -2760,7 +2758,7 @@ impl From<VersionParseError> for VersionPatternParseError {
 
 /// Compare the release parts of two versions, e.g. `4.3.1` > `4.2`, `1.1.0` ==
 /// `1.1` and `1.16` < `1.19`
-pub(crate) fn compare_release(this: &[u64], other: &[u64]) -> Ordering {
+fn compare_release(this: &[u64], other: &[u64]) -> Ordering {
     if this.len() == other.len() {
         return this.cmp(other);
     }
@@ -2801,13 +2799,21 @@ pub(crate) fn compare_release(this: &[u64], other: &[u64]) -> Ordering {
 ///
 /// [pep440-suffix-ordering]: https://peps.python.org/pep-0440/#summary-of-permitted-suffixes-and-relative-ordering
 fn sortable_tuple(version: &Version) -> (u64, u64, Option<u64>, u64, LocalVersionSlice<'_>) {
+    sortable_tuple_with(version, version.post(), version.dev())
+}
+
+fn sortable_tuple_with(
+    version: &Version,
+    post: Option<u64>,
+    dev: Option<u64>,
+) -> (u64, u64, Option<u64>, u64, LocalVersionSlice<'_>) {
     // If the version is a "max" version, use a post version larger than any possible post version.
     let post = if version.max().is_some() {
         Some(u64::MAX)
     } else {
-        version.post()
+        post
     };
-    match (version.pre(), post, version.dev(), version.min()) {
+    match (version.pre(), post, dev, version.min()) {
         // min release
         (_pre, post, _dev, Some(n)) => (0, 0, post, n, version.local()),
         // dev release

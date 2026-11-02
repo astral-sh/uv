@@ -1,7 +1,9 @@
 use std::collections::BTreeMap;
 use std::fmt::{self, Debug, Formatter};
-use std::path::PathBuf;
+use std::io::BufReader;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::thread;
 use std::time::Duration;
 
 use async_http_range_reader::AsyncHttpRangeReader;
@@ -11,28 +13,29 @@ use itertools::Either;
 use reqwest::{Proxy, Response};
 use rustc_hash::FxHashMap;
 use tokio::sync::{Mutex, Semaphore};
-use tracing::{Instrument, debug, info_span, instrument, trace, warn};
-use url::Url;
+use tracing::{Instrument, Span, debug, info_span, instrument, trace, warn};
 
 use uv_auth::{CredentialsCache, Indexes};
 use uv_cache::{Cache, CacheBucket, CacheEntry, WheelCache};
+use uv_cache_key::cache_digest;
 use uv_configuration::IndexStrategy;
 use uv_configuration::KeyringProviderType;
 use uv_distribution_filename::{DistFilename, WheelFilename};
 use uv_distribution_types::{
-    BuiltDist, File, FileLocation, IndexCapabilities, IndexFormat, IndexLocations,
-    IndexMetadataRef, IndexStatusCodeDecision, IndexStatusCodeStrategy, IndexUrl, Name,
-    RegistryBuiltWheel, Zstd,
+    BuiltDist, File, FileLocation, IndexCapabilities, IndexEntryFilename, IndexFormat,
+    IndexLocations, IndexMetadataRef, IndexStatusCodeDecision, IndexStatusCodeStrategy, IndexUrl,
+    Name, RegistryBuiltWheel,
 };
+use uv_extract::hash::Hasher;
 use uv_git::{GIT_LFS, GitError, GitHttpSettings, GitResolver, Reporter};
-use uv_metadata::{read_metadata_async_seek, read_metadata_async_stream};
+use uv_metadata::{read_archive_metadata, read_metadata_async_stream};
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::MarkerEnvironment;
 use uv_platform_tags::Platform;
-use uv_pypi_types::{HashAlgorithm, HashDigest, HashDigests, ProjectStatus, Yanked};
+use uv_pypi_types::{Digest, HashDigest, HashDigests, ProjectStatus, Yanked};
 use uv_pypi_types::{PypiSimpleDetail, PypiSimpleIndex, ResolutionMetadata};
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 use uv_small_str::SmallString;
 use uv_torch::TorchStrategy;
 
@@ -44,6 +47,7 @@ use crate::remote_metadata::wheel_metadata_from_remote_zip;
 use crate::rkyvutil::OwnedArchive;
 use crate::{
     BaseClient, CachedClient, Error, ErrorKind, FlatIndexClient, RedirectClientWithMiddleware,
+    RetryState,
 };
 
 /// A builder for an [`RegistryClient`].
@@ -147,7 +151,7 @@ impl<'a> RegistryClientBuilder<'a> {
         for index in self.index_locations.known_indexes() {
             if let Some(credentials) = index.credentials()? {
                 trace!(
-                    "Read credentials for index {}",
+                    "Read credentials for index `{}`",
                     index
                         .name
                         .as_ref()
@@ -205,6 +209,10 @@ impl<'a> RegistryClientBuilder<'a> {
             client,
             read_timeout,
             flat_indexes: Arc::default(),
+            parse_concurrency: Arc::new(Semaphore::new(
+                thread::available_parallelism().map_or(1, |parallelism| parallelism.get().min(4)),
+            )),
+            parse_memory: Arc::new(Semaphore::new(8 * 1024 * 1024)),
             metadata_range_request: self.metadata_range_request,
         })
     }
@@ -229,6 +237,10 @@ pub struct RegistryClient {
     read_timeout: Duration,
     /// The flat index entries for each `--find-links`-style index URL, with one slot per index.
     flat_indexes: Arc<Mutex<FlatIndexCache>>,
+    /// Bound CPU work for large remote index responses independently of network requests.
+    parse_concurrency: Arc<Semaphore>,
+    /// Limit decoded input bytes held by offloaded parsers, independently of parsed output size.
+    parse_memory: Arc<Semaphore>,
     /// The behavior when metadata range requests are unsupported.
     metadata_range_request: MetadataRangeRequest,
 }
@@ -269,12 +281,12 @@ impl RegistryClient {
     }
 
     /// Return the [`BaseClient`] used by this client.
-    pub fn uncached_client(&self, url: &DisplaySafeUrl) -> &RedirectClientWithMiddleware {
+    pub fn uncached_client(&self, url: &SafeUrl) -> &RedirectClientWithMiddleware {
         self.client.uncached().for_host(url)
     }
 
     /// Return the [`GitHttpSettings`] for fetching from the given URL.
-    pub fn git_http_settings(&self, url: &DisplaySafeUrl) -> GitHttpSettings {
+    pub fn git_http_settings(&self, url: &SafeUrl) -> GitHttpSettings {
         self.client.uncached().git_http_settings(url)
     }
 
@@ -388,7 +400,10 @@ impl RegistryClient {
                         }
                         IndexFormat::Flat => {
                             let entries = self.flat_single_index(package_name, index.url).await?;
-                            if !entries.is_empty() {
+                            if entries
+                                .iter()
+                                .any(|entry| entry.filename().is_distribution())
+                            {
                                 results.push((index.url, MetadataFormat::Flat(entries)));
                                 break;
                             }
@@ -539,7 +554,7 @@ impl RegistryClient {
             // ref https://github.com/servo/rust-url/issues/333
             .push("");
 
-        trace!("Fetching metadata for {package_name} from {url}");
+        trace!("Fetching metadata for `{package_name}` from `{url}`");
 
         let cache_entry = self.cache.entry(
             CacheBucket::Simple,
@@ -610,24 +625,24 @@ impl RegistryClient {
     async fn fetch_remote_simple_detail(
         &self,
         package_name: &PackageName,
-        url: &DisplaySafeUrl,
+        url: &SafeUrl,
         cache_entry: &CacheEntry,
         cache_control: CacheControl,
     ) -> Result<OwnedArchive<SimpleDetailMetadata>, Error> {
         let simple_request = self
             .uncached_client(url)
-            .get(Url::from(url.clone()))
+            .get(url.clone())
             .header("Accept-Encoding", "gzip, deflate, zstd")
             .header("Accept", MediaType::pypi())
             .build()
             .map_err(|err| {
                 ErrorKind::from_reqwest(url.clone(), err, self.client.certificate_source())
             })?;
-        let parse_simple_response = |response: Response| {
+        let parse_simple_response = |response: Response, _: &mut RetryState| {
             async {
                 // Use the response URL, rather than the request URL, as the base for relative URLs.
                 // This ensures that we handle redirects and other URL transformations correctly.
-                let url = DisplaySafeUrl::from_url(response.url().clone());
+                let url = SafeUrl::from_url(response.url().clone());
 
                 let content_type = response
                     .headers()
@@ -644,7 +659,8 @@ impl RegistryClient {
                     ))
                 })?;
 
-                let unarchived = match media_type {
+                let package_name = package_name.clone();
+                match media_type {
                     MediaType::PypiV1Json => {
                         let bytes = response.bytes().await.map_err(|err| {
                             ErrorKind::from_reqwest(
@@ -654,15 +670,18 @@ impl RegistryClient {
                             )
                         })?;
 
-                        let data: PypiSimpleDetail = serde_json::from_slice(bytes.as_ref())
-                            .map_err(|err| Error::from_json_err(err, url.clone()))?;
-
-                        SimpleDetailMetadata::from_pypi_files(
-                            data.files,
-                            package_name,
-                            data.project_status,
-                            &url,
-                        )
+                        self.parse_simple_body(bytes.len(), move || {
+                            let data: PypiSimpleDetail = serde_json::from_slice(bytes.as_ref())
+                                .map_err(|err| Error::from_json_err(err, url.clone()))?;
+                            let unarchived = SimpleDetailMetadata::from_pypi_files(
+                                data.files,
+                                &package_name,
+                                data.project_status,
+                                &url,
+                            );
+                            OwnedArchive::from_unarchived(&unarchived)
+                        })
+                        .await
                     }
                     MediaType::PypiV1Html | MediaType::TextHtml => {
                         let text = response.text().await.map_err(|err| {
@@ -672,10 +691,14 @@ impl RegistryClient {
                                 self.client.certificate_source(),
                             )
                         })?;
-                        SimpleDetailMetadata::from_html(&text, package_name, &url)?
+                        self.parse_simple_body(text.len(), move || {
+                            let unarchived =
+                                SimpleDetailMetadata::from_html(&text, &package_name, &url)?;
+                            OwnedArchive::from_unarchived(&unarchived)
+                        })
+                        .await
                     }
-                };
-                OwnedArchive::from_unarchived(&unarchived)
+                }
             }
             .boxed_local()
             .instrument(info_span!("parse_simple_api", package = %package_name))
@@ -692,12 +715,50 @@ impl RegistryClient {
         Ok(simple)
     }
 
+    /// Offload large remote index parsing so sibling HTTP futures can make progress.
+    ///
+    /// `body_size` counts decoded input bytes, excluding allocations produced by parsing. Small
+    /// bodies or bodies that cannot fit the shared worker and byte budgets are parsed inline
+    /// without waiting. Offloaded work retains both permits until its result is collected or
+    /// dropped, even if the caller is cancelled.
+    async fn parse_simple_body(
+        &self,
+        body_size: usize,
+        parse: impl FnOnce() -> Result<OwnedArchive<SimpleDetailMetadata>, Error> + Send + 'static,
+    ) -> Result<OwnedArchive<SimpleDetailMetadata>, Error> {
+        // Small responses are cheaper to parse inline than to dispatch to another thread.
+        if body_size < 512 * 1024 {
+            return parse();
+        }
+        // Oversized permit requests are invalid on 32-bit platforms.
+        if body_size > Semaphore::MAX_PERMITS {
+            return parse();
+        }
+        let Ok(body_size) = u32::try_from(body_size) else {
+            return parse();
+        };
+        // Fall back to inline parsing instead of retaining completed response bodies in a queue.
+        let Ok(permit) = self.parse_concurrency.clone().try_acquire_owned() else {
+            return parse();
+        };
+        let Ok(memory) = self.parse_memory.clone().try_acquire_many_owned(body_size) else {
+            drop(permit);
+            return parse();
+        };
+        let span = Span::current();
+        let (result, _permits) =
+            tokio::task::spawn_blocking(move || (span.in_scope(parse), (permit, memory)))
+                .await
+                .expect("The task executor is broken, did some other task panic?");
+        result
+    }
+
     /// Fetch the [`SimpleDetailMetadata`] from a local file, using a PEP 503-compatible directory
     /// structure.
     async fn fetch_local_simple_detail(
         &self,
         package_name: &PackageName,
-        url: &DisplaySafeUrl,
+        url: &SafeUrl,
     ) -> Result<OwnedArchive<SimpleDetailMetadata>, Error> {
         let path = url
             .to_file_path()
@@ -747,7 +808,7 @@ impl RegistryClient {
     /// Fetch the list of projects from a remote Simple API index.
     async fn fetch_remote_simple_index(
         &self,
-        url: &DisplaySafeUrl,
+        url: &SafeUrl,
         index: &IndexUrl,
     ) -> Result<OwnedArchive<SimpleIndexMetadata>, Error> {
         let cache_entry = self.cache.entry(
@@ -769,11 +830,11 @@ impl RegistryClient {
             Connectivity::Offline => CacheControl::AllowStale,
         };
 
-        let parse_simple_response = |response: Response| {
+        let parse_simple_response = |response: Response, _: &mut RetryState| {
             async {
                 // Use the response URL, rather than the request URL, as the base for relative URLs.
                 // This ensures that we handle redirects and other URL transformations correctly.
-                let url = DisplaySafeUrl::from_url(response.url().clone());
+                let url = SafeUrl::from_url(response.url().clone());
 
                 let content_type = response
                     .headers()
@@ -821,7 +882,7 @@ impl RegistryClient {
 
         let simple_request = self
             .uncached_client(url)
-            .get(Url::from(url.clone()))
+            .get(url.clone())
             .header("Accept-Encoding", "gzip, deflate, zstd")
             .header("Accept", MediaType::pypi())
             .build()
@@ -845,7 +906,7 @@ impl RegistryClient {
     /// Fetch the list of projects from a local Simple API index.
     async fn fetch_local_simple_index(
         &self,
-        url: &DisplaySafeUrl,
+        url: &SafeUrl,
     ) -> Result<OwnedArchive<SimpleIndexMetadata>, Error> {
         let path = url
             .to_file_path()
@@ -862,6 +923,81 @@ impl RegistryClient {
         };
         let metadata = SimpleIndexMetadata::from_html(&text, url)?;
         OwnedArchive::from_unarchived(&metadata)
+    }
+
+    /// Fetch an index-level variant metadata file from the cache, a URL, or a local path.
+    pub async fn fetch_variants_json(
+        &self,
+        package_name: &PackageName,
+        file: &File,
+        index: &IndexUrl,
+    ) -> Result<Vec<u8>, Error> {
+        let url = file.url.to_url().map_err(ErrorKind::InvalidUrl)?;
+
+        if url.scheme() == "file" {
+            let path = url
+                .to_file_path()
+                .map_err(|()| ErrorKind::NonFileUrl(url.clone()))?;
+            let bytes = fs_err::tokio::read(path).await.map_err(ErrorKind::Io)?;
+            verify_metadata_hashes(&url, &bytes, &file.hashes)?;
+            return Ok(bytes);
+        }
+
+        let cache_key = format!(
+            "variants-json-{}",
+            cache_digest(&(
+                url.as_str(),
+                file.hashes
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+            ))
+        );
+        let cache_entry = self.cache.entry(
+            CacheBucket::Wheels,
+            WheelCache::Index(index).wheel_dir(package_name.as_ref()),
+            format!("{cache_key}.msgpack"),
+        );
+        // TODO(konsti): Revisit cache freshness once variant metadata mutability is specified.
+        let cache_control = match self.connectivity {
+            Connectivity::Online
+                if let Some(header) = self.indexes.configured_files_cache_control_for(index) =>
+            {
+                CacheControl::Override(header)
+            }
+            Connectivity::Online => CacheControl::from(
+                self.cache
+                    .freshness(&cache_entry, Some(package_name), None)
+                    .map_err(ErrorKind::Io)?,
+            ),
+            Connectivity::Offline => CacheControl::AllowStale,
+        };
+
+        // Acquire an advisory lock, to guard against concurrent writes.
+        #[cfg(windows)]
+        let _lock = {
+            let lock_entry = cache_entry.with_file(format!("{cache_key}.lock"));
+            lock_entry.lock().await.map_err(ErrorKind::CacheLock)?
+        };
+
+        let response_callback = async |response: Response, _: &mut RetryState| {
+            let bytes = response.bytes().await.map_err(|err| {
+                ErrorKind::from_reqwest(url.clone(), err, self.client.certificate_source())
+            })?;
+            verify_metadata_hashes(&url, &bytes, &file.hashes)?;
+            Ok::<Vec<u8>, Error>(bytes.to_vec())
+        };
+        let request = self
+            .uncached_client(&url)
+            .get(url.clone())
+            .build()
+            .map_err(|err| {
+                ErrorKind::from_reqwest(url.clone(), err, self.client.certificate_source())
+            })?;
+        Ok(self
+            .cached_client()
+            .get_serde_with_retry(request, &cache_entry, cache_control, response_callback)
+            .await?)
     }
 
     /// Fetch the metadata for a remote wheel file.
@@ -885,7 +1021,7 @@ impl RegistryClient {
                     /// A local file path.
                     Path(PathBuf),
                     /// A remote URL.
-                    Url(DisplaySafeUrl),
+                    Url(SafeUrl),
                 }
 
                 let wheel = wheels.best_wheel();
@@ -902,22 +1038,8 @@ impl RegistryClient {
 
                 match location {
                     WheelLocation::Path(path) => {
-                        let file = fs_err::tokio::File::open(&path)
-                            .await
-                            .map_err(ErrorKind::Io)?;
-                        let reader = tokio::io::BufReader::new(file);
-                        let contents = read_metadata_async_seek(&wheel.filename, reader)
-                            .await
-                            .map_err(|err| {
-                                ErrorKind::Metadata(path.to_string_lossy().to_string(), err)
-                            })?;
-                        ResolutionMetadata::parse_metadata(&contents).map_err(|err| {
-                            ErrorKind::MetadataParseError(
-                                wheel.filename.clone(),
-                                built_dist.to_string(),
-                                Box::new(err),
-                            )
-                        })?
+                        Self::wheel_metadata_local(&path, &path, &wheel.filename, built_dist)
+                            .await?
                     }
                     WheelLocation::Url(url) => {
                         self.wheel_metadata_registry(wheel, &url, capabilities)
@@ -936,22 +1058,13 @@ impl RegistryClient {
                 .await?
             }
             BuiltDist::Path(wheel) => {
-                let file = fs_err::tokio::File::open(wheel.install_path.as_ref())
-                    .await
-                    .map_err(ErrorKind::Io)?;
-                let reader = tokio::io::BufReader::new(file);
-                let contents = read_metadata_async_seek(&wheel.filename, reader)
-                    .await
-                    .map_err(|err| {
-                        ErrorKind::Metadata(wheel.install_path.to_string_lossy().to_string(), err)
-                    })?;
-                ResolutionMetadata::parse_metadata(&contents).map_err(|err| {
-                    ErrorKind::MetadataParseError(
-                        wheel.filename.clone(),
-                        built_dist.to_string(),
-                        Box::new(err),
-                    )
-                })?
+                Self::wheel_metadata_local(
+                    &wheel.install_path,
+                    &wheel.install_path,
+                    &wheel.filename,
+                    built_dist,
+                )
+                .await?
             }
             BuiltDist::GitPath(wheel) => {
                 // Fetch the Git repository.
@@ -981,22 +1094,13 @@ impl RegistryClient {
                 }
 
                 // Read the metadata.
-                let file = fs_err::tokio::File::open(fetch.path().join(&wheel.install_path))
-                    .await
-                    .map_err(ErrorKind::Io)?;
-                let reader = tokio::io::BufReader::new(file);
-                let contents = read_metadata_async_seek(&wheel.filename, reader)
-                    .await
-                    .map_err(|err| {
-                        ErrorKind::Metadata(wheel.install_path.to_string_lossy().to_string(), err)
-                    })?;
-                ResolutionMetadata::parse_metadata(&contents).map_err(|err| {
-                    ErrorKind::MetadataParseError(
-                        wheel.filename.clone(),
-                        built_dist.to_string(),
-                        Box::new(err),
-                    )
-                })?
+                Self::wheel_metadata_local(
+                    &fetch.path().join(&wheel.install_path),
+                    &wheel.install_path,
+                    &wheel.filename,
+                    built_dist,
+                )
+                .await?
             }
         };
 
@@ -1010,11 +1114,36 @@ impl RegistryClient {
         Ok(metadata)
     }
 
+    /// Read and parse local wheel metadata in one blocking task.
+    ///
+    /// `metadata_path` identifies the wheel in diagnostics and may be relative to a Git checkout.
+    async fn wheel_metadata_local(
+        path: &Path,
+        metadata_path: &Path,
+        filename: &WheelFilename,
+        built_dist: &BuiltDist,
+    ) -> Result<ResolutionMetadata, Error> {
+        let path = path.to_path_buf();
+        let metadata_path = metadata_path.to_string_lossy().into_owned();
+        let filename = filename.clone();
+        let built_dist = built_dist.to_string();
+        tokio::task::spawn_blocking(move || {
+            let file = fs_err::File::open(path).map_err(ErrorKind::Io)?;
+            let contents = read_archive_metadata(&filename, BufReader::new(file))
+                .map_err(|err| ErrorKind::Metadata(metadata_path, err))?;
+            ResolutionMetadata::parse_metadata(&contents).map_err(|err| {
+                ErrorKind::MetadataParseError(filename, built_dist, Box::new(err)).into()
+            })
+        })
+        .await
+        .map_err(|err| ErrorKind::Io(err.into()))?
+    }
+
     /// Fetch the metadata from a wheel file.
     async fn wheel_metadata_registry(
         &self,
         wheel: &RegistryBuiltWheel,
-        url: &DisplaySafeUrl,
+        url: &SafeUrl,
         capabilities: &IndexCapabilities,
     ) -> Result<ResolutionMetadata, Error> {
         let RegistryBuiltWheel {
@@ -1025,7 +1154,7 @@ impl RegistryClient {
         } = wheel;
 
         // If the metadata file is available at its own url (PEP 658), download it from there.
-        if file.dist_info_metadata {
+        if let Some(hashes) = &file.dist_info_metadata {
             let mut url = url.clone();
             let path = format!("{}.metadata", url.path());
             url.set_path(&path);
@@ -1052,14 +1181,17 @@ impl RegistryClient {
             // Acquire an advisory lock, to guard against concurrent writes.
             #[cfg(windows)]
             let _lock = {
-                let lock_entry = cache_entry.with_file(format!("{}.lock", filename.stem()));
+                let lock_entry = cache_entry.with_file(format!("{}.lock", filename.cache_key()));
                 lock_entry.lock().await.map_err(ErrorKind::CacheLock)?
             };
 
-            let response_callback = async |response: Response| {
+            let response_callback = async |response: Response, _: &mut RetryState| {
                 let bytes = response.bytes().await.map_err(|err| {
                     ErrorKind::from_reqwest(url.clone(), err, self.client.certificate_source())
                 })?;
+
+                // Verify the downloaded bytes before parsing or caching the metadata.
+                verify_metadata_hashes(&url, &bytes, hashes)?;
 
                 info_span!("parse_metadata21")
                     .in_scope(|| ResolutionMetadata::parse_metadata(bytes.as_ref()))
@@ -1073,7 +1205,7 @@ impl RegistryClient {
             };
             let req = self
                 .uncached_client(&url)
-                .get(Url::from(url.clone()))
+                .get(url.clone())
                 .build()
                 .map_err(|err| {
                     ErrorKind::from_reqwest(url.clone(), err, self.client.certificate_source())
@@ -1083,9 +1215,8 @@ impl RegistryClient {
                 .get_serde_with_retry(req, &cache_entry, cache_control, response_callback)
                 .await?)
         } else {
-            // If we lack PEP 658 support, try using HTTP range requests to read only the
-            // `.dist-info/METADATA` file from the zip, and if that also fails, download the whole wheel
-            // into the cache and read from there
+            // Without PEP 658, read the metadata from the wheel using HTTP range requests.
+            // If the server doesn't support range requests, fall back to streaming the wheel.
             self.wheel_metadata_no_pep658(
                 filename,
                 url,
@@ -1101,7 +1232,7 @@ impl RegistryClient {
     async fn wheel_metadata_no_pep658<'data>(
         &self,
         filename: &'data WheelFilename,
-        url: &'data DisplaySafeUrl,
+        url: &'data SafeUrl,
         index: Option<&'data IndexUrl>,
         cache_shard: WheelCache<'data>,
         capabilities: &'data IndexCapabilities,
@@ -1129,7 +1260,7 @@ impl RegistryClient {
         // Acquire an advisory lock, to guard against concurrent writes.
         #[cfg(windows)]
         let _lock = {
-            let lock_entry = cache_entry.with_file(format!("{}.lock", filename.stem()));
+            let lock_entry = cache_entry.with_file(format!("{}.lock", filename.cache_key()));
             lock_entry.lock().await.map_err(ErrorKind::CacheLock)?
         };
 
@@ -1137,7 +1268,7 @@ impl RegistryClient {
         if index.is_none_or(|index| capabilities.supports_range_requests(index)) {
             let req = self
                 .uncached_client(url)
-                .head(Url::from(url.clone()))
+                .head(url.clone())
                 .header(
                     "accept-encoding",
                     http::HeaderValue::from_static("identity"),
@@ -1166,17 +1297,17 @@ impl RegistryClient {
             );
             // This response callback is special, we actually make a number of subsequent requests to
             // fetch the file from the remote zip.
-            let read_metadata_range_request = |response: Response| {
+            let read_metadata_range_request = |response: Response, _: &mut RetryState| {
                 async {
                     let mut reader = AsyncHttpRangeReader::from_head_response(
                         self.uncached_client(url).clone(),
                         response,
-                        Url::from(url.clone()),
+                        url.clone().into_unsafe_url(),
                         headers.clone(),
                     )
                     .await
                     .map_err(|err| ErrorKind::AsyncHttpRangeReader(url.clone(), err))?;
-                    trace!("Getting metadata for {filename} by range request");
+                    trace!("Getting metadata for `{filename}` by range request");
                     let text = wheel_metadata_from_remote_zip(filename, url, &mut reader).await?;
                     ResolutionMetadata::parse_metadata(text.as_bytes()).map_err(|err| {
                         Error::from(ErrorKind::MetadataParseError(
@@ -1215,7 +1346,7 @@ impl RegistryClient {
 
                         // The range request version failed. Fall back to streaming the file to search
                         // for the METADATA file.
-                        warn!("Range requests not supported for {filename}; streaming wheel");
+                        warn!("Range requests not supported for `{filename}`; streaming wheel");
 
                         // Mark the index as not supporting range requests.
                         if let Some(index) = index {
@@ -1231,7 +1362,7 @@ impl RegistryClient {
         // Create a request to stream the file.
         let req = self
             .uncached_client(url)
-            .get(Url::from(url.clone()))
+            .get(url.clone())
             .header(
                 // `reqwest` defaults to accepting compressed responses.
                 // Specify identity encoding to get consistent .whl downloading
@@ -1245,14 +1376,14 @@ impl RegistryClient {
             })?;
 
         // Stream the file, searching for the METADATA.
-        let read_metadata_stream = |response: Response| {
+        let read_metadata_stream = |response: Response, _: &mut RetryState| {
             async {
                 let reader = response
                     .bytes_stream()
                     .map_err(|err| self.handle_response_errors(err))
                     .into_async_read();
 
-                read_metadata_async_stream(filename, url.as_ref(), reader)
+                read_metadata_async_stream(filename, url.as_str(), reader)
                     .await
                     .map_err(|err| ErrorKind::Metadata(url.to_string(), err))
             }
@@ -1317,6 +1448,23 @@ impl FlatIndexCache {
     }
 }
 
+/// Verify all hashes advertised for a metadata file.
+fn verify_metadata_hashes(url: &SafeUrl, bytes: &[u8], hashes: &HashDigests) -> Result<(), Error> {
+    for expected in hashes.iter() {
+        let mut hasher = Hasher::from(expected.algorithm());
+        hasher.update(bytes);
+        let actual = HashDigest::from(hasher);
+        if &actual != expected {
+            return Err(Error::from(ErrorKind::MetadataHashMismatch {
+                url: url.clone(),
+                expected: expected.clone(),
+                actual,
+            }));
+        }
+    }
+    Ok(())
+}
+
 type FlatIndexEntriesByPackage = FxHashMap<PackageName, Vec<FlatIndexEntry>>;
 type FlatIndexSlot = Arc<Mutex<Option<FlatIndexEntriesByPackage>>>;
 
@@ -1325,14 +1473,20 @@ type FlatIndexSlot = Arc<Mutex<Option<FlatIndexEntriesByPackage>>>;
 pub struct VersionFiles {
     pub wheels: Vec<CachedFile>,
     pub source_dists: Vec<CachedFile>,
+    pub variant_jsons: Vec<CachedFile>,
 }
 
 impl VersionFiles {
-    fn push(&mut self, filename: &DistFilename, file: File) {
+    fn push(&mut self, filename: &IndexEntryFilename, file: File) {
         let file = CachedFile::from(file);
         match filename {
-            DistFilename::WheelFilename(_) => self.wheels.push(file),
-            DistFilename::SourceDistFilename(_) => self.source_dists.push(file),
+            IndexEntryFilename::DistFilename(DistFilename::WheelFilename(_)) => {
+                self.wheels.push(file);
+            }
+            IndexEntryFilename::DistFilename(DistFilename::SourceDistFilename(_)) => {
+                self.source_dists.push(file);
+            }
+            IndexEntryFilename::VariantJson(_) => self.variant_jsons.push(file),
         }
     }
 
@@ -1343,6 +1497,21 @@ impl VersionFiles {
             .filter_map(|file| {
                 let file = File::from(file);
                 let filename = DistFilename::try_from_filename(&file.filename, package_name)?;
+                Some((filename, file))
+            })
+    }
+
+    pub fn all_entries(
+        self,
+        package_name: &PackageName,
+    ) -> impl Iterator<Item = (IndexEntryFilename, File)> {
+        self.source_dists
+            .into_iter()
+            .chain(self.wheels)
+            .chain(self.variant_jsons)
+            .filter_map(|file| {
+                let file = File::from(file);
+                let filename = IndexEntryFilename::try_from_filename(&file.filename, package_name)?;
                 Some((filename, file))
             })
     }
@@ -1365,11 +1534,8 @@ pub struct CachedFile {
     filename: Option<Box<SmallString>>,
     #[rkyv(with = rkyv::with::Niche)]
     yanked: Option<Box<Yanked>>,
-    /// Deprecated pyx-specific zstd wheel metadata, retained only for compatibility with the
-    /// Simple API cache layout.
-    // TODO: Remove this field when the Simple API cache format is next bumped.
     #[rkyv(with = rkyv::with::Niche)]
-    zstd: Option<Box<Zstd>>,
+    metadata_hashes: Option<Box<CachedHashDigests>>,
     dist_info_metadata: bool,
     has_size: bool,
     has_upload_time: bool,
@@ -1403,8 +1569,15 @@ impl From<File> for CachedFile {
             (file.url.raw_filename() != file.filename.as_ref()).then(|| Box::new(file.filename));
         let has_size = file.size.is_some();
         let has_upload_time = file.upload_time_utc_ms.is_some();
+        let dist_info_metadata = file.dist_info_metadata.is_some();
+        let metadata_hashes = file
+            .dist_info_metadata
+            .filter(|hashes| !hashes.is_empty())
+            .map(CachedHashDigests::from)
+            .map(Box::new);
         Self {
-            dist_info_metadata: file.dist_info_metadata,
+            dist_info_metadata,
+            metadata_hashes,
             filename,
             hashes: CachedHashDigests::from(file.hashes),
             requires_python: file.requires_python,
@@ -1414,7 +1587,6 @@ impl From<File> for CachedFile {
             has_upload_time,
             url: file.url,
             yanked: file.yanked.filter(|yanked| yanked.is_yanked()),
-            zstd: None,
         }
     }
 }
@@ -1422,8 +1594,12 @@ impl From<File> for CachedFile {
 impl From<CachedFile> for File {
     fn from(file: CachedFile) -> Self {
         let filename = SmallString::from(file.filename());
+        let dist_info_metadata = file.dist_info_metadata.then(|| {
+            file.metadata_hashes
+                .map_or_else(HashDigests::empty, |hashes| HashDigests::from(*hashes))
+        });
         Self {
-            dist_info_metadata: file.dist_info_metadata,
+            dist_info_metadata,
             filename,
             hashes: HashDigests::from(file.hashes),
             requires_python: file.requires_python,
@@ -1431,17 +1607,14 @@ impl From<CachedFile> for File {
             upload_time_utc_ms: file.has_upload_time.then_some(file.upload_time_utc_ms),
             url: file.url,
             yanked: file.yanked,
-            zstd: None,
         }
     }
 }
 
 /// A compact representation of a single, canonical hash digest.
 ///
-/// Only lowercase hexadecimal digests of the expected length use the packed variants. Multiple
-/// hashes and non-canonical spellings remain in [`Self::Other`] so conversion back to
-/// [`HashDigests`] is lossless. The larger digests are boxed to keep the common archived layout
-/// small.
+/// Single validated digests use the packed variants; empty and multiple-hash collections remain
+/// in [`Self::Other`]. The larger digests are boxed to keep the common archived layout small.
 #[derive(rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
 #[rkyv(derive(Debug))]
 enum CachedHashDigests {
@@ -1472,21 +1645,13 @@ impl From<HashDigests> for CachedHashDigests {
         let [hash] = hashes.as_slice() else {
             return Self::Other(hashes);
         };
-        let cached = match hash.algorithm {
-            HashAlgorithm::Md5 => decode_digest(hash).map(Self::Md5),
-            HashAlgorithm::Sha256 => decode_digest(hash).map(Self::Sha256),
-            HashAlgorithm::Blake2b => decode_digest(hash).map(Self::Blake2b),
-            HashAlgorithm::Sha384 => {
-                decode_digest(hash).map(|digest| Self::Sha384(Box::new(digest)))
-            }
-            HashAlgorithm::Sha512 => {
-                decode_digest(hash).map(|digest| Self::Sha512(Box::new(digest)))
-            }
-        };
-        let Some(cached) = cached else {
-            return Self::Other(hashes);
-        };
-        cached
+        match hash {
+            HashDigest::Md5(digest) => Self::Md5(digest.decode()),
+            HashDigest::Sha256(digest) => Self::Sha256(digest.decode()),
+            HashDigest::Blake2b256(digest) => Self::Blake2b(digest.decode()),
+            HashDigest::Sha384(digest) => Self::Sha384(Box::new(digest.decode())),
+            HashDigest::Sha512(digest) => Self::Sha512(Box::new(digest.decode())),
+        }
     }
 }
 
@@ -1502,55 +1667,24 @@ impl From<CachedHashDigests> for HashDigests {
 impl From<&CachedHashDigests> for HashDigests {
     fn from(hashes: &CachedHashDigests) -> Self {
         match hashes {
-            CachedHashDigests::Md5(digest) => Self::from(hash_digest(HashAlgorithm::Md5, digest)),
+            CachedHashDigests::Md5(digest) => {
+                Self::from(HashDigest::Md5(Digest::from_bytes(*digest)))
+            }
             CachedHashDigests::Sha256(digest) => {
-                Self::from(hash_digest(HashAlgorithm::Sha256, digest))
+                Self::from(HashDigest::Sha256(Digest::from_bytes(*digest)))
             }
             CachedHashDigests::Blake2b(digest) => {
-                Self::from(hash_digest(HashAlgorithm::Blake2b, digest))
+                Self::from(HashDigest::Blake2b256(Digest::from_bytes(*digest)))
             }
             CachedHashDigests::Sha384(digest) => {
-                Self::from(hash_digest(HashAlgorithm::Sha384, digest.as_slice()))
+                Self::from(HashDigest::Sha384(Digest::from_bytes(**digest)))
             }
             CachedHashDigests::Sha512(digest) => {
-                Self::from(hash_digest(HashAlgorithm::Sha512, digest.as_slice()))
+                Self::from(HashDigest::Sha512(Digest::from_bytes(**digest)))
             }
             CachedHashDigests::Other(hashes) => hashes.clone(),
         }
     }
-}
-
-/// Decodes a lowercase hexadecimal digest of exactly `N` bytes.
-///
-/// Rejecting non-canonical spellings lets [`CachedHashDigests::Other`] preserve their original
-/// text.
-fn decode_digest<const N: usize>(hash: &HashDigest) -> Option<[u8; N]> {
-    if hash.digest.len() != N * 2
-        || !hash
-            .digest
-            .as_bytes()
-            .iter()
-            .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'))
-    {
-        return None;
-    }
-    let mut digest = [0; N];
-    hex::decode_to_slice(hash.digest.as_bytes(), &mut digest).ok()?;
-    Some(digest)
-}
-
-/// Reconstructs the canonical lowercase spelling of a packed digest.
-fn hash_digest(algorithm: HashAlgorithm, digest: &[u8]) -> HashDigest {
-    let mut encoded = [0; 128];
-    let length = digest.len() * 2;
-    let digest = if let Some(encoded) = encoded.get_mut(..length)
-        && hex::encode_to_slice(digest, &mut *encoded).is_ok()
-    {
-        SmallString::from(String::from_utf8_lossy(encoded))
-    } else {
-        SmallString::from(hex::encode(digest))
-    };
-    HashDigest { algorithm, digest }
 }
 
 /// The list of projects available in a Simple API index.
@@ -1575,7 +1709,7 @@ impl SimpleIndexMetadata {
     }
 
     /// Create a [`SimpleIndexMetadata`] from HTML content.
-    fn from_html(text: &str, url: &DisplaySafeUrl) -> Result<Self, Error> {
+    fn from_html(text: &str, url: &SafeUrl) -> Result<Self, Error> {
         let html = crate::html::SimpleIndexHtml::parse(text).map_err(|err| {
             Error::from(ErrorKind::BadHtml {
                 source: err,
@@ -1616,7 +1750,7 @@ impl SimpleDetailMetadata {
         files: Vec<uv_pypi_types::PypiFile>,
         package_name: &PackageName,
         project_status: ProjectStatus,
-        base: &Url,
+        base: &SafeUrl,
     ) -> Self {
         let mut version_map: BTreeMap<Version, VersionFiles> = BTreeMap::default();
 
@@ -1625,17 +1759,19 @@ impl SimpleDetailMetadata {
 
         // Group the distributions by version and kind
         for file in files {
-            let filename =
-                match DistFilename::try_from_filename_with_reason(&file.filename, package_name) {
-                    Ok(filename) => filename,
-                    Err(err) => {
-                        debug!(
-                            "Skipping file for {package_name}: {:?} ({err})",
-                            file.filename
-                        );
-                        continue;
-                    }
-                };
+            let filename = match IndexEntryFilename::try_from_filename_with_reason(
+                &file.filename,
+                package_name,
+            ) {
+                Ok(filename) => filename,
+                Err(err) => {
+                    debug!(
+                        "Skipping file for {package_name}: {:?} ({err})",
+                        file.filename
+                    );
+                    continue;
+                }
+            };
             let file = match File::try_from_pypi(file, &base) {
                 Ok(file) => file,
                 Err(err) => {
@@ -1664,6 +1800,9 @@ impl SimpleDetailMetadata {
             files
                 .source_dists
                 .sort_unstable_by(|left, right| left.filename().cmp(right.filename()));
+            files
+                .variant_jsons
+                .sort_unstable_by(|left, right| left.filename().cmp(right.filename()));
         }
 
         Self {
@@ -1680,11 +1819,7 @@ impl SimpleDetailMetadata {
     }
 
     /// Read the [`SimpleDetailMetadata`] from an HTML index.
-    fn from_html(
-        text: &str,
-        package_name: &PackageName,
-        url: &DisplaySafeUrl,
-    ) -> Result<Self, Error> {
+    fn from_html(text: &str, package_name: &PackageName, url: &SafeUrl) -> Result<Self, Error> {
         let SimpleDetailHTML {
             project_status,
             base,
@@ -1774,10 +1909,6 @@ pub enum Connectivity {
 }
 
 impl Connectivity {
-    pub fn is_online(&self) -> bool {
-        matches!(self, Self::Online)
-    }
-
     pub fn is_offline(&self) -> bool {
         matches!(self, Self::Offline)
     }
@@ -1788,21 +1919,21 @@ mod tests {
     use std::assert_matches;
     use std::str::FromStr;
 
+    use insta::{assert_debug_snapshot, assert_snapshot};
     use tokio::sync::Semaphore;
-    use url::Url;
     use uv_normalize::PackageName;
-    use uv_pypi_types::{HashDigests, PypiSimpleDetail};
-    use uv_redacted::DisplaySafeUrl;
+    use uv_pypi_types::{HashDigest, HashDigests, PypiSimpleDetail};
+    use uv_redacted::SafeUrl;
     use uv_torch::{TorchBackend, TorchStrategy};
 
     use crate::{
-        BaseClientBuilder, Connectivity, RegistryClient, RegistryClientBuilder,
+        BaseClientBuilder, Connectivity, OwnedArchive, RegistryClient, RegistryClientBuilder,
         SimpleDetailMetadata, SimpleDetailMetadatum, html::SimpleDetailHTML,
     };
     use uv_cache::Cache;
     use uv_distribution_types::{
-        File, FileLocation, Index, IndexCapabilities, IndexFormat, IndexLocations,
-        IndexMetadataRef, IndexUrl, ToUrlError, Zstd,
+        FileLocation, Index, IndexCapabilities, IndexFormat, IndexLocations, IndexMetadataRef,
+        IndexUrl, ToUrlError, VariantsJsonFilename,
     };
     use uv_small_str::SmallString;
     use wiremock::matchers::{basic_auth, method, path_regex};
@@ -1944,7 +2075,7 @@ mod tests {
         let password = "password";
 
         let auth_server = start_test_server(username, password).await;
-        let auth_base_url = DisplaySafeUrl::parse(&auth_server.uri())?;
+        let auth_base_url = SafeUrl::parse(&auth_server.uri())?;
 
         let redirect_server = MockServer::start().await;
 
@@ -1956,7 +2087,7 @@ mod tests {
             .mount(&redirect_server)
             .await;
 
-        let redirect_server_url = DisplaySafeUrl::parse(&redirect_server.uri())?;
+        let redirect_server_url = SafeUrl::parse(&redirect_server.uri())?;
 
         let cache = Cache::temp()?;
         let registry_client = RegistryClientBuilder::new(BaseClientBuilder::default(), cache)
@@ -1968,7 +2099,7 @@ mod tests {
         assert_eq!(
             client
                 .for_host(&redirect_server_url)
-                .get(redirect_server.uri())
+                .get(redirect_server_url.clone())
                 .send()
                 .await?
                 .status(),
@@ -1983,7 +2114,7 @@ mod tests {
         assert_eq!(
             client
                 .for_host(&redirect_server_url)
-                .get(Url::from(url))
+                .get(url)
                 .send()
                 .await?
                 .status(),
@@ -2017,7 +2148,7 @@ mod tests {
             .mount(&redirect_server)
             .await;
 
-        let redirect_server_url = DisplaySafeUrl::parse(&redirect_server.uri())?.join("foo/")?;
+        let redirect_server_url = SafeUrl::parse(&redirect_server.uri())?.join("foo/")?;
 
         let cache = Cache::temp()?;
         let registry_client = RegistryClientBuilder::new(BaseClientBuilder::default(), cache)
@@ -2031,12 +2162,7 @@ mod tests {
         let _ = url.set_password(Some(password));
 
         assert_eq!(
-            client
-                .for_host(&url)
-                .get(Url::from(url))
-                .send()
-                .await?
-                .status(),
+            client.for_host(&url).get(url).send().await?.status(),
             200,
             "Requests should succeed for relative URL"
         );
@@ -2075,18 +2201,13 @@ mod tests {
             .expect("failed to build registry client");
         let client = registry_client.cached_client().uncached();
 
-        let redirect_server_url = DisplaySafeUrl::parse(&redirect_server.uri())?.join("foo/")?;
+        let redirect_server_url = SafeUrl::parse(&redirect_server.uri())?.join("foo/")?;
         let mut url = redirect_server_url.clone();
         let _ = url.set_username(username);
         let _ = url.set_password(Some(password));
 
         assert_eq!(
-            client
-                .for_host(&url)
-                .get(Url::from(url))
-                .send()
-                .await?
-                .status(),
+            client.for_host(&url).get(url).send().await?.status(),
             200,
             "Requests should succeed for relative URL"
         );
@@ -2096,7 +2217,7 @@ mod tests {
 
     #[test]
     fn ignore_failing_files() {
-        // 1.7.7 has an invalid requires-python field (double comma), 1.7.8 is valid
+        // 1.7.7 has an invalid requires-python field (double comma), 1.7.8 is valid.
         let response = r#"
     {
         "files": [
@@ -2130,7 +2251,7 @@ mod tests {
     }
     "#;
         let data: PypiSimpleDetail = serde_json::from_str(response).unwrap();
-        let base = DisplaySafeUrl::parse("https://pypi.org/simple/pyflyby/").unwrap();
+        let base = SafeUrl::parse("https://pypi.org/simple/pyflyby/").unwrap();
         let simple_metadata = SimpleDetailMetadata::from_pypi_files(
             data.files,
             &PackageName::from_str("pyflyby").unwrap(),
@@ -2151,6 +2272,9 @@ mod tests {
             "files": [
                 {
                     "filename": "example_1-1.0.0-py3-none-any.whl",
+                    "core-metadata": {
+                        "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+                    },
                     "hashes": {},
                     "url": "https://files.pythonhosted.org/example_1-1.0.0-py3-none-any.whl"
                 },
@@ -2164,45 +2288,144 @@ mod tests {
         "#;
         let package_name = PackageName::from_str("example-1")?;
         let data: PypiSimpleDetail = serde_json::from_str(response)?;
-        let base = DisplaySafeUrl::parse("https://pypi.org/simple/example-1/")?;
-        let mut simple_metadata = SimpleDetailMetadata::from_pypi_files(
+        let base = SafeUrl::parse("https://pypi.org/simple/example-1/")?;
+        let simple_metadata = SimpleDetailMetadata::from_pypi_files(
             data.files,
             &package_name,
             data.project_status,
             &base,
         );
-        let cached_wheel = &mut simple_metadata.versions[0].files.wheels[0];
-        assert!(cached_wheel.zstd.is_none());
-        // An entry written by an older uv may still contain pyx-specific zstd wheel metadata.
-        cached_wheel.zstd = Some(Box::new(Zstd {
-            hashes: HashDigests::empty(),
-            size: Some(42),
-        }));
-        let archived = super::OwnedArchive::from_unarchived(&simple_metadata)?;
-        let simple_metadata = super::OwnedArchive::deserialize(&archived);
+        let archived = OwnedArchive::from_unarchived(&simple_metadata)?;
+        let simple_metadata = OwnedArchive::deserialize(&archived);
 
-        let filenames: Vec<_> = simple_metadata
+        let files: Vec<_> = simple_metadata
             .versions
             .into_iter()
             .flat_map(|datum| datum.files.all(&package_name))
-            .map(|(filename, mut file)| {
-                assert!(file.zstd.is_none());
-                // New cache entries must not preserve pyx-specific zstd wheel metadata either.
-                file.zstd = Some(Box::new(Zstd {
-                    hashes: HashDigests::empty(),
-                    size: Some(42),
-                }));
-                let cached = super::CachedFile::from(file);
-                assert!(cached.zstd.is_none());
-                assert!(File::from(cached).zstd.is_none());
-                filename.to_string()
-            })
+            .collect();
+        let filenames: Vec<_> = files
+            .iter()
+            .map(|(filename, _)| filename.to_string())
             .collect();
         assert_eq!(
             filenames,
             ["example_1-1.0.0.tar.gz", "example_1-1.0.0-py3-none-any.whl"]
         );
+        assert!(files[0].1.dist_info_metadata.is_none());
+        let metadata_hashes = HashDigests::from(HashDigest::from_str(
+            "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        )?);
+        assert_eq!(
+            files[1].1.dist_info_metadata.as_ref(),
+            Some(&metadata_hashes)
+        );
 
+        Ok(())
+    }
+
+    #[test]
+    fn variants_json_filename() -> Result<(), Error> {
+        let filename = VariantsJsonFilename::from_str("some_package-1.21.0-variants.json")?;
+        assert_debug_snapshot!(filename, @r#"
+        VariantsJsonFilename {
+            name: PackageName(
+                "some-package",
+            ),
+            version: "1.21.0",
+        }
+        "#);
+        assert_snapshot!(filename, @"some_package-1.21.0-variants.json");
+        let error = VariantsJsonFilename::from_str("some_package-invalid-variants.json")
+            .expect_err("invalid version");
+        assert_snapshot!(
+            error,
+            @"Invalid `variants.json` version `invalid`: expected version to start with a number, but no leading ASCII digits were found"
+        );
+        let error =
+            VariantsJsonFilename::from_str("some_package-1.21.0.json").expect_err("invalid suffix");
+        assert_snapshot!(error, @"Invalid `variants.json` filename: `some_package-1.21.0.json`");
+        let error = VariantsJsonFilename::from_str("some_package-variants.json")
+            .expect_err("missing version");
+        assert_snapshot!(error, @"Invalid `variants.json` filename: `some_package-variants.json`");
+        Ok(())
+    }
+
+    #[test]
+    fn variant_json_simple_api() -> Result<(), Error> {
+        let response = r#"{
+            "files": [
+                {"filename": "example-1.0-py3-none-any.whl", "hashes": {}, "url": "example-1.0-py3-none-any.whl"},
+                {"filename": "example-1.0-variants.json", "hashes": {}, "url": "metadata/1.0"},
+                {"filename": "other-2.0-variants.json", "hashes": {}, "url": "other-2.0-variants.json"}
+            ]
+        }"#;
+        let data: PypiSimpleDetail = serde_json::from_str(response)?;
+        let package_name = PackageName::from_str("example")?;
+        let base = SafeUrl::parse("https://example.com/simple/example/")?;
+        let metadata = SimpleDetailMetadata::from_pypi_files(
+            data.files,
+            &package_name,
+            data.project_status,
+            &base,
+        );
+        let archived = OwnedArchive::from_unarchived(&metadata)?;
+        let metadata = OwnedArchive::deserialize(&archived);
+        let entries: Vec<_> = metadata
+            .versions
+            .into_iter()
+            .flat_map(|datum| datum.files.all_entries(&package_name))
+            .collect();
+
+        assert_debug_snapshot!(
+            entries
+                .iter()
+                .map(|(filename, _)| filename.to_string())
+                .collect::<Vec<_>>(),
+            @r#"
+        [
+            "example-1.0-py3-none-any.whl",
+            "example-1.0-variants.json",
+        ]
+        "#);
+        let sidecar = &entries[1].1;
+        assert_snapshot!(
+            sidecar.url.to_url()?,
+            @"https://example.com/simple/example/metadata/1.0"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn variant_json_html_index() -> Result<(), Error> {
+        let html = r#"
+            <a href="example-1.0-py3-none-any.whl">example-1.0-py3-none-any.whl</a>
+            <a href="example-1.0-variants.json">example-1.0-variants.json</a>
+        "#;
+        let package_name = PackageName::from_str("example")?;
+        let base = SafeUrl::parse("https://example.com/simple/example/")?;
+        let metadata = SimpleDetailMetadata::from_html(html, &package_name, &base)?;
+        let entries: Vec<_> = metadata
+            .versions
+            .into_iter()
+            .flat_map(|datum| datum.files.all_entries(&package_name))
+            .collect();
+
+        assert_debug_snapshot!(
+            entries
+                .iter()
+                .map(|(filename, _)| filename.to_string())
+                .collect::<Vec<_>>(),
+            @r#"
+        [
+            "example-1.0-py3-none-any.whl",
+            "example-1.0-variants.json",
+        ]
+        "#);
+        let sidecar = &entries[1].1;
+        assert_snapshot!(
+            sidecar.url.to_url()?,
+            @"https://example.com/simple/example/example-1.0-variants.json"
+        );
         Ok(())
     }
 
@@ -2244,7 +2467,7 @@ mod tests {
         "#;
 
         let data: PypiSimpleDetail = serde_json::from_str(json).unwrap();
-        let base = DisplaySafeUrl::parse("https://pypi.org/simple/pepy/").unwrap();
+        let base = SafeUrl::parse("https://pypi.org/simple/pepy/").unwrap();
         let simple_metadata = SimpleDetailMetadata::from_pypi_files(
             data.files,
             &PackageName::from_str("pepy").unwrap(),
@@ -2252,7 +2475,7 @@ mod tests {
             &base,
         );
 
-        insta::assert_debug_snapshot!(simple_metadata, @r#"
+        assert_debug_snapshot!(simple_metadata, @r#"
         SimpleDetailMetadata {
             project_status: ProjectStatus {
                 status: Archived,
@@ -2287,12 +2510,13 @@ mod tests {
                                 ),
                                 filename: None,
                                 yanked: None,
-                                zstd: None,
+                                metadata_hashes: None,
                                 dist_info_metadata: false,
                                 has_size: true,
                                 has_upload_time: true,
                             },
                         ],
+                        variant_jsons: [],
                     },
                     metadata: None,
                 },
@@ -2320,11 +2544,11 @@ mod tests {
         <!--SERIAL 15765070-->
         "#;
 
-        let base = DisplaySafeUrl::parse("https://pypi.org/simple/pepy/").unwrap();
+        let base = SafeUrl::parse("https://pypi.org/simple/pepy/").unwrap();
         let simple_metadata =
             SimpleDetailMetadata::from_html(html, &PackageName::from_str("pepy").unwrap(), &base)
                 .unwrap();
-        insta::assert_debug_snapshot!(simple_metadata, @r#"
+        assert_debug_snapshot!(simple_metadata, @r#"
         SimpleDetailMetadata {
             project_status: ProjectStatus {
                 status: Archived,
@@ -2359,12 +2583,13 @@ mod tests {
                                 ),
                                 filename: None,
                                 yanked: None,
-                                zstd: None,
+                                metadata_hashes: None,
                                 dist_info_metadata: false,
                                 has_size: false,
                                 has_upload_time: false,
                             },
                         ],
+                        variant_jsons: [],
                     },
                     metadata: None,
                 },
@@ -2397,7 +2622,7 @@ mod tests {
     "#;
 
         // Note the lack of a trailing `/` here is important for coverage of url-join behavior
-        let base = DisplaySafeUrl::parse("https://account.d.codeartifact.us-west-2.amazonaws.com/pypi/shared-packages-pypi/simple/flask")
+        let base = SafeUrl::parse("https://account.d.codeartifact.us-west-2.amazonaws.com/pypi/shared-packages-pypi/simple/flask")
             .unwrap();
         let SimpleDetailHTML {
             project_status: _,
@@ -2411,11 +2636,8 @@ mod tests {
             .into_iter()
             .map(|file| FileLocation::new(file.url, &base).to_url())
             .collect::<Result<Vec<_>, _>>()?;
-        let urls = urls
-            .iter()
-            .map(DisplaySafeUrl::to_string)
-            .collect::<Vec<_>>();
-        insta::assert_debug_snapshot!(urls, @r#"
+        let urls = urls.iter().map(SafeUrl::to_string).collect::<Vec<_>>();
+        assert_debug_snapshot!(urls, @r#"
         [
             "https://account.d.codeartifact.us-west-2.amazonaws.com/pypi/shared-packages-pypi/simple/0.1/Flask-0.1.tar.gz",
             "https://account.d.codeartifact.us-west-2.amazonaws.com/pypi/shared-packages-pypi/simple/0.10.1/Flask-0.10.1.tar.gz",

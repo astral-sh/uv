@@ -2,6 +2,7 @@
 
 use std::cmp::Ordering;
 use std::collections::Bound;
+use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 use std::sync::LazyLock;
 use version_ranges::Ranges;
@@ -652,6 +653,63 @@ impl From<UpperBound> for Bound<Version> {
     }
 }
 
+/// Display a single version in `Ranges` as `==1.2.3` instead of `1.2.3`.
+pub fn display_version_ranges(ranges: &Ranges<Version>) -> impl Display + '_ {
+    VersionRangesDisplay(ranges)
+}
+
+struct VersionRangesDisplay<'a>(&'a Ranges<Version>);
+
+impl Display for VersionRangesDisplay<'_> {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        if self.0.is_empty() {
+            return formatter.write_str("∅");
+        }
+        for (index, (lower, upper)) in self.0.iter().enumerate() {
+            if index > 0 {
+                formatter.write_str(" | ")?;
+            }
+            if let (Bound::Included(lower), Bound::Included(upper)) = (lower, upper)
+                && lower == upper
+            {
+                write!(formatter, "=={lower}")?;
+                continue;
+            }
+            let has_lower = match lower {
+                Bound::Unbounded => false,
+                Bound::Included(version) => {
+                    write!(formatter, ">={version}")?;
+                    true
+                }
+                Bound::Excluded(version) => {
+                    write!(formatter, ">{version}")?;
+                    true
+                }
+            };
+            match upper {
+                Bound::Unbounded => {
+                    if !has_lower {
+                        formatter.write_str("*")?;
+                    }
+                }
+                Bound::Included(version) => {
+                    if has_lower {
+                        formatter.write_str(", ")?;
+                    }
+                    write!(formatter, "<={version}")?;
+                }
+                Bound::Excluded(version) => {
+                    if has_lower {
+                        formatter.write_str(", ")?;
+                    }
+                    write!(formatter, "<{version}")?;
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -662,6 +720,18 @@ mod tests {
 
     fn version(version: &str) -> Version {
         version.parse().unwrap()
+    }
+
+    #[test]
+    fn display_singletons_in_union() {
+        let range = Ranges::singleton(version("1.0"))
+            .union(&Ranges::from_range_bounds(version("2.0")..version("3.0")))
+            .union(&Ranges::singleton(version("4.0")));
+
+        assert_eq!(
+            display_version_ranges(&range).to_string(),
+            "==1.0 | >=2.0, <3.0 | ==4.0"
+        );
     }
 
     #[test]
@@ -787,6 +857,52 @@ mod tests {
                 Ranges::<Version>::from(specifier.clone()).contains(&candidate),
                 expected,
                 "expected `{specifier}` to contain `{candidate}`: {expected}"
+            );
+        }
+    }
+
+    /// Test that `>V` excludes only post-releases of the specified version.
+    ///
+    /// See: <https://github.com/pypa/packaging/pull/1141>
+    #[test]
+    fn greater_than_post_release_exclusion() {
+        for (specifier, candidate, expected) in [
+            // Development releases have no post-releases of their own.
+            (">1.0.dev0", "1.0.post0", true),
+            (">1.0.dev1", "1.0a1.post0", true),
+            (">1.0a1.dev1", "1.0a1.post0", true),
+            (">1.0.dev1", "1.0.dev0", false),
+            // A pre-release bound excludes only its own post-releases.
+            (">1.0a1", "1.0.post0", true),
+            (">1.0b1", "1.0.post0", true),
+            (">1.0rc1", "1.0.post0", true),
+            (">1.0a1", "1.0a2.post0", true),
+            (">1.0a1", "1.0a1.post0", false),
+            (">1.0a1", "1.0a1.post0.dev0", false),
+            (">1.0a1", "1.0.0a1.post0", false),
+            // Final and post-release bounds retain their usual exclusions and ordering.
+            (">1.0", "1.0.post0", false),
+            (">1.0", "1.1.post0", true),
+            (">1.0.post0", "1.0.post1", true),
+            // Epochs and local labels participate in the same comparisons.
+            (">1!1.0.dev0", "1!1.0.post0", true),
+            (">1!1.0", "2!1.0.post0", true),
+            (">1!1.0.dev0", "1.0.post0", false),
+            (">1.0.dev0", "1.0.post0+local", true),
+            (">1.0.dev0", "1.0.dev0+local", false),
+            (">1.0a1", "1.0a1.post0+local", false),
+        ] {
+            let specifier = specifier.parse::<VersionSpecifier>().unwrap();
+            let candidate = version(candidate);
+            assert_eq!(
+                specifier.contains(&candidate),
+                expected,
+                "expected `{specifier}` to contain `{candidate}`: {expected}"
+            );
+            assert_eq!(
+                Ranges::<Version>::from(specifier.clone()).contains(&candidate),
+                expected,
+                "expected range for `{specifier}` to contain `{candidate}`: {expected}"
             );
         }
     }

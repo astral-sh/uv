@@ -34,7 +34,7 @@ on:
         type: string
       runner:
         description: "The runner to use for bug fixing"
-        default: ubuntu-latest
+        default: github-ubuntu-24.04-x86_64-4
         required: false
         type: string
     outputs:
@@ -54,7 +54,9 @@ jobs:
   fix:
     if: github.repository == 'astral-sh/uv'
     runs-on: ${{ inputs.runner }}
-    environment: automations
+    environment:
+      name: automations
+      deployment: false
     timeout-minutes: 60
     permissions:
       actions: read
@@ -76,16 +78,20 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - uses: $/.github/actions/setup-uv-toolchain
+        with:
+          group: jaq
+
       - name: "Load issue context"
         id: issue-context
-        uses: ./.github/actions/load-issue-context
+        uses: $/.github/actions/load-issue-context
         with:
           issue-number: ${{ inputs.issue-number }}
-          path: ${{ runner.temp }}/issue-context
+          path: ${{ runner.temp }}/fix-bug/issue-context
 
       - name: "Load reproduction Codex thread"
         id: reproduction-thread
-        uses: ./.github/actions/load-codex-thread
+        uses: $/.github/actions/load-codex-thread
         with:
           repository: ${{ github.repository }}
           run-id: ${{ github.run_id }}
@@ -93,16 +99,13 @@ jobs:
           github-token: ${{ github.token }}
           path: ${{ runner.temp }}/codex-home/sessions
 
-      - name: "Install uv"
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-        with:
-          enable-cache: false
-
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           save-if: false
 
       - name: "Install required Python versions"
+        env:
+          UV_PYTHON_DOWNLOADS_JSON_URL: crates/uv-python-managed/download-metadata.json
         run: uv python install
 
       - name: "Prepare trusted bug-fix context"
@@ -127,10 +130,10 @@ jobs:
             > "$RUNNER_TEMP/issue-triage-event.json"
           printf '%s\n' "$REPRODUCTION_RESULT" > "$RUNNER_TEMP/bug-reproduction-result.json"
 
-          issue_number="$(jq --raw-output '.number' "$RUNNER_TEMP/issue-triage-event.json")"
+          issue_number="$(jaq --raw-output '.number' "$RUNNER_TEMP/issue-triage-event.json")"
           if ! [[ "$ISSUE_NUMBER" =~ ^[1-9][0-9]*$ ]] ||
             [ "$issue_number" != "$ISSUE_NUMBER" ] ||
-            [ "$PARENT_HEAD_REF" != "zb/reproduce-bug/$issue_number" ] ||
+            [ "$PARENT_HEAD_REF" != "automations/reproduce-bug/$issue_number" ] ||
             ! [[ "$PARENT_HEAD_SHA" =~ ^[0-9a-f]{40}$ ]] ||
             ! [[ "$PARENT_PULL_REQUEST" =~ ^https://github\.com/astral-sh/uv-dev/pull/[1-9][0-9]*$ ]]; then
             echo "The regression-test pull request context is invalid." >&2
@@ -140,7 +143,7 @@ jobs:
           pull_request_number="${PARENT_PULL_REQUEST##*/}"
           gh api "repos/astral-sh/uv-dev/pulls/$pull_request_number" \
             > "$RUNNER_TEMP/bug-regression-pull-request.json"
-          if ! jq --exit-status \
+          if ! jaq --exit-status \
             --arg head_ref "$PARENT_HEAD_REF" '
               (.state == "open" or .state == "closed")
               and .base.ref == "main"
@@ -153,10 +156,10 @@ jobs:
             exit 1
           fi
           expected_parent_head_sha="$PARENT_HEAD_SHA"
-          PARENT_HEAD_SHA="$(jq --raw-output '.head.sha' \
+          PARENT_HEAD_SHA="$(jaq --raw-output '.head.sha' \
             "$RUNNER_TEMP/bug-regression-pull-request.json")"
 
-          if jq --exit-status '.state == "closed"' \
+          if jaq --exit-status '.state == "closed"' \
             "$RUNNER_TEMP/bug-regression-pull-request.json" > /dev/null; then
             gh api repos/astral-sh/uv/pulls \
               --method GET \
@@ -164,7 +167,7 @@ jobs:
               --raw-field head="astral-sh:$PARENT_HEAD_REF" \
               --raw-field base=main \
               > "$RUNNER_TEMP/promoted-regression-pull-requests.json"
-            if ! jq --exit-status \
+            if ! jaq --exit-status \
               --arg head_ref "$PARENT_HEAD_REF" \
               --arg head_sha "$PARENT_HEAD_SHA" '
                 length == 1
@@ -211,7 +214,7 @@ jobs:
             --json number \
             --limit 2 \
             > "$RUNNER_TEMP/bug-fix-pull-requests.json"
-          if [ "$(jq 'length' "$RUNNER_TEMP/bug-fix-pull-requests.json")" -gt 1 ]; then
+          if [ "$(jaq 'length' "$RUNNER_TEMP/bug-fix-pull-requests.json")" -gt 1 ]; then
             echo "Multiple open pull requests claim the bug-fix branch." >&2
             exit 1
           fi
@@ -228,7 +231,7 @@ jobs:
 
             gh api "repos/astral-sh/uv-dev/commits/$fix_head" \
               > "$RUNNER_TEMP/bug-fix-commit.json"
-            if ! jq --exit-status --arg head_sha "$fix_head" '
+            if ! jaq --exit-status --arg head_sha "$fix_head" '
               .sha == $head_sha
               and .author.login == "astral-automations-bot[bot]"
               and .committer.login == "astral-automations-bot[bot]"
@@ -237,12 +240,12 @@ jobs:
               exit 1
             fi
 
-            if [ "$(jq 'length' "$RUNNER_TEMP/bug-fix-pull-requests.json")" = "1" ]; then
-              fix_pull_request_number="$(jq '.[0].number' \
+            if [ "$(jaq 'length' "$RUNNER_TEMP/bug-fix-pull-requests.json")" = "1" ]; then
+              fix_pull_request_number="$(jaq '.[0].number' \
                 "$RUNNER_TEMP/bug-fix-pull-requests.json")"
               gh api "repos/astral-sh/uv-dev/pulls/$fix_pull_request_number" \
                 > "$RUNNER_TEMP/bug-fix-pull-request.json"
-              if ! jq --exit-status \
+              if ! jaq --exit-status \
                 --arg head_ref "$fix_branch" \
                 --arg head_sha "$fix_head" \
                 --arg parent_ref "$PARENT_HEAD_REF" '
@@ -271,7 +274,7 @@ jobs:
             fi
 
             existing=true
-          elif [ "$(jq 'length' "$RUNNER_TEMP/bug-fix-pull-requests.json")" != "0" ]; then
+          elif [ "$(jaq 'length' "$RUNNER_TEMP/bug-fix-pull-requests.json")" != "0" ]; then
             echo "The bug-fix pull request exists, but its branch is missing." >&2
             exit 1
           fi
@@ -290,16 +293,17 @@ jobs:
       - name: "Fix reproduced bug"
         id: fix-bug
         if: steps.prepare.outputs.existing != 'true'
-        uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1.11
+        uses: openai/codex-action@c05cfd74ad95c626cdf05c6685e62becc3bf7813
         env:
-          CARGO_HOME: ${{ runner.temp }}/cargo-home
+          CARGO_HOME: ${{ runner.temp }}/fix-bug/cargo-home
           GH_TOKEN: ${{ github.token }}
           INSTA_UPDATE: "no"
-          TMPDIR: ${{ runner.temp }}
-          UV_CACHE_DIR: ${{ runner.temp }}/uv-fix-bug-cache
+          # The sandbox can write to TMPDIR. Runner executables live elsewhere under runner.temp.
+          TMPDIR: ${{ runner.temp }}/fix-bug
+          UV_CACHE_DIR: ${{ runner.temp }}/fix-bug/uv-cache
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          codex-version: "0.146.0"
+          codex-version: "0.157.1"
           codex-home: "${{ runner.temp }}/codex-home"
           effort: high
           codex-args: >-
@@ -326,8 +330,8 @@ jobs:
           PARENT_HEAD_SHA: ${{ steps.prepare.outputs.parent-head-sha }}
         run: |
           if [ "$EXISTING_FIX" = "true" ]; then
-            FIX_RESULT="$(jq --null-input --compact-output \
-              --arg issue_title "$(jq --raw-output '.title' \
+            FIX_RESULT="$(jaq --null-input --compact-output \
+              --arg issue_title "$(jaq --raw-output '.title' \
                 "$RUNNER_TEMP/issue-triage-event.json")" '{
                 outcome: "fixed",
                 summary: "Reused the existing verified automated bug fix.",
@@ -337,7 +341,7 @@ jobs:
           fi
 
           printf '%s\n' "$FIX_RESULT" > "$RUNNER_TEMP/bug-fix-result.json"
-          fix_outcome="$(jq --raw-output '.outcome' "$RUNNER_TEMP/bug-fix-result.json")"
+          fix_outcome="$(jaq --raw-output '.outcome' "$RUNNER_TEMP/bug-fix-result.json")"
 
           if [ -z "$(git status --porcelain)" ] && [ "$EXISTING_FIX" != "true" ]; then
             if [ "$fix_outcome" != "not_fixed" ]; then
@@ -347,16 +351,16 @@ jobs:
             {
               echo "created=false"
               echo "publish=false"
-              jq --raw-output '
+              jaq --raw-output '
                 del(.pull_request_title) | "result=\(tojson)"
               ' "$RUNNER_TEMP/bug-fix-result.json"
             } >> "$GITHUB_OUTPUT"
-            jq --raw-output '.summary' "$RUNNER_TEMP/bug-fix-result.json" \
+            jaq --raw-output '.summary' "$RUNNER_TEMP/bug-fix-result.json" \
               >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
 
-          if [ "$fix_outcome" != "fixed" ] || ! jq --exit-status '
+          if [ "$fix_outcome" != "fixed" ] || ! jaq --exit-status '
             (.validation | length > 0)
             and (.pull_request_title | type == "string" and length > 0
               and (test("[\\r\\n]") | not))
@@ -416,15 +420,15 @@ jobs:
           {
             echo "created=$created"
             echo "publish=true"
-            jq --raw-output '"pull-request-title=\(.pull_request_title)"' \
+            jaq --raw-output '"pull-request-title=\(.pull_request_title)"' \
               "$RUNNER_TEMP/bug-fix-result.json"
-            jq --raw-output '
+            jaq --raw-output '
               del(.pull_request_title) | "result=\(tojson)"
             ' "$RUNNER_TEMP/bug-fix-result.json"
           } >> "$GITHUB_OUTPUT"
           {
             printf '%s\n\n' '### Reproduced bug fixed'
-            jq --raw-output '.summary' "$RUNNER_TEMP/bug-fix-result.json"
+            jaq --raw-output '.summary' "$RUNNER_TEMP/bug-fix-result.json"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: "Upload issue context"
@@ -432,7 +436,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: issue-fix-context-${{ inputs.issue-number }}-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/issue-context/README.md
+          path: ${{ steps.issue-context.outputs.path }}/README.md
           if-no-files-found: error
           retention-days: 1
 
@@ -450,8 +454,10 @@ jobs:
   publish:
     needs: fix
     if: needs.fix.outputs.publish == 'true'
-    runs-on: ubuntu-slim
-    environment: automations
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-2' || 'ubuntu-slim' }}
+    environment:
+      name: automations
+      deployment: false
     timeout-minutes: 10
     permissions:
       contents: read
@@ -469,6 +475,10 @@ jobs:
           artifact-ids: ${{ needs.fix.outputs.bundle-artifact-id }}
           path: ${{ runner.temp }}/fixed-bug
 
+      - uses: $/.github/actions/setup-uv-toolchain
+        with:
+          group: jaq
+
       - name: "Verify regression and bug-fix commits"
         id: verify
         env:
@@ -484,7 +494,7 @@ jobs:
           pull_request_number="${PARENT_PULL_REQUEST##*/}"
           gh api "repos/astral-sh/uv-dev/pulls/$pull_request_number" \
             > "$RUNNER_TEMP/bug-regression-pull-request.json"
-          if ! jq --exit-status \
+          if ! jaq --exit-status \
             --arg head_ref "$PARENT_HEAD_REF" \
             --arg head_sha "$PARENT_HEAD_SHA" '
               (.state == "open" or .state == "closed")
@@ -498,7 +508,7 @@ jobs:
             exit 1
           fi
 
-          if jq --exit-status '.state == "closed"' \
+          if jaq --exit-status '.state == "closed"' \
             "$RUNNER_TEMP/bug-regression-pull-request.json" > /dev/null; then
             gh api repos/astral-sh/uv/pulls \
               --method GET \
@@ -506,7 +516,7 @@ jobs:
               --raw-field head="astral-sh:$PARENT_HEAD_REF" \
               --raw-field base=main \
               > "$RUNNER_TEMP/promoted-regression-pull-requests.json"
-            if ! jq --exit-status \
+            if ! jaq --exit-status \
               --arg head_ref "$PARENT_HEAD_REF" \
               --arg head_sha "$PARENT_HEAD_SHA" '
                 length == 1
@@ -600,7 +610,7 @@ jobs:
 
       - name: "Get uv-dev token"
         id: token
-        uses: open-security-tools/ost-simple-sts@9e012247e07c39080fb6a832dbfbcfeacebc19c4
+        uses: astral-sh/github-actions/simple-token-service@eb81cf4d13127c3f9539f621c17e4c65327636c8
         with:
           exchange-url: ${{ secrets.STS_API_URL }}/exchange
           audience: ${{ secrets.STS_API_URL }}
@@ -629,7 +639,7 @@ jobs:
             --json number,url,baseRefName,headRefName,headRefOid,author \
             --limit 2 \
             > "$RUNNER_TEMP/bug-fix-pull-requests.json"
-          if ! jq --exit-status \
+          if ! jaq --exit-status \
             --arg head_ref "$branch" \
             --arg head_sha "$FIXED_HEAD_SHA" \
             --arg parent_ref "$PARENT_HEAD_REF" '
@@ -649,7 +659,7 @@ jobs:
           git -c core.hooksPath=/dev/null push \
             "https://x-access-token:${GH_TOKEN}@github.com/astral-sh/uv-dev.git" \
             "$FIXED_HEAD_SHA:refs/heads/$branch"
-          pull_request="$(jq --raw-output '.[0].url // empty' \
+          pull_request="$(jaq --raw-output '.[0].url // empty' \
             "$RUNNER_TEMP/bug-fix-pull-requests.json")"
           if [ -z "$pull_request" ]; then
             printf '%s Fixes astral-sh/uv#%s\n' \
@@ -676,8 +686,10 @@ jobs:
       needs.fix.result == 'success' &&
       needs.fix.outputs.result != '' &&
       (needs.publish.result == 'success' || needs.publish.result == 'skipped')
-    runs-on: ubuntu-latest
-    environment: automations
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
+    environment:
+      name: automations
+      deployment: false
     timeout-minutes: 10
     concurrency:
       group: issue-context-${{ inputs.issue-number }}
@@ -690,6 +702,10 @@ jobs:
         with:
           artifact-ids: ${{ needs.fix.outputs.context-artifact-id }}
           path: ${{ runner.temp }}/issue-context-update
+
+      - uses: $/.github/actions/setup-uv-toolchain
+        with:
+          group: jaq
 
       - name: "Prepare fix context"
         id: prepare-context
@@ -708,7 +724,7 @@ jobs:
           fi
 
           printf '%s\n' "$FIX_RESULT" > "$RUNNER_TEMP/bug-fix-result.json"
-          if ! jq --exit-status --arg pull_request "$FIX_PULL_REQUEST" '
+          if ! jaq --exit-status --arg pull_request "$FIX_PULL_REQUEST" '
             (.summary | type == "string" and length > 0)
             and (.validation | type == "array")
             and (
@@ -742,7 +758,7 @@ jobs:
             exit 0
           fi
 
-          jq --arg pull_request "$FIX_PULL_REQUEST" '
+          jaq --arg pull_request "$FIX_PULL_REQUEST" '
             . + {pull_request: (if $pull_request == "" then null else $pull_request end)}
           ' "$RUNNER_TEMP/bug-fix-result.json" > fix.json
           cp "$RUNNER_TEMP/issue-context-update/README.md" README.md
@@ -768,7 +784,7 @@ jobs:
       - name: "Get issue context token"
         if: steps.prepare-context.outputs.changed == 'true'
         id: token
-        uses: open-security-tools/ost-simple-sts@9e012247e07c39080fb6a832dbfbcfeacebc19c4
+        uses: astral-sh/github-actions/simple-token-service@eb81cf4d13127c3f9539f621c17e4c65327636c8
         with:
           exchange-url: ${{ secrets.STS_API_URL }}/exchange
           audience: ${{ secrets.STS_API_URL }}

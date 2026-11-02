@@ -1,5 +1,8 @@
 use std::borrow::Cow;
+use std::fmt;
 use std::path::Path;
+
+use owo_colors::OwoColorize;
 
 use uv_distribution_filename::SourceDistExtension;
 use uv_git_types::GitUrl;
@@ -7,11 +10,11 @@ use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::VerbatimUrl;
 
 use uv_normalize::PackageName;
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 
 use crate::{
-    DirectorySourceDist, GitDirectorySourceDist, GitPathSourceDist, Name, PathSourceDist,
-    SourceDist,
+    DirectorySourceDist, DistributionMetadata, GitDirectorySourceDist, GitPathSourceDist, Name,
+    PathSourceDist, SourceDist,
 };
 
 /// A reference to a source that can be built into a built distribution.
@@ -27,6 +30,19 @@ pub enum BuildableSource<'a> {
 }
 
 impl BuildableSource<'_> {
+    /// Display the source with its distribution's version or URL dimmed.
+    pub fn color_display(&self) -> impl fmt::Display + '_ {
+        fmt::from_fn(move |formatter| match self {
+            Self::Dist(dist) => write!(
+                formatter,
+                "{}{}",
+                dist.name(),
+                dist.version_or_url().dimmed()
+            ),
+            Self::Url(url) => fmt::Display::fmt(url, formatter),
+        })
+    }
+
     /// Return the [`PackageName`] of the source, if available.
     pub fn name(&self) -> Option<&PackageName> {
         match self {
@@ -114,8 +130,8 @@ pub enum SourceUrl<'a> {
 }
 
 impl SourceUrl<'_> {
-    /// Return the [`DisplaySafeUrl`] of the source.
-    pub fn url(&self) -> &DisplaySafeUrl {
+    /// Return the [`SafeUrl`] of the source.
+    pub fn url(&self) -> &SafeUrl {
         match self {
             Self::Direct(dist) => dist.url,
             Self::GitDirectory(dist) => dist.url,
@@ -159,7 +175,7 @@ impl std::fmt::Display for SourceUrl<'_> {
 
 #[derive(Debug, Clone)]
 pub struct DirectSourceUrl<'a> {
-    pub url: &'a DisplaySafeUrl,
+    pub url: &'a SafeUrl,
     pub subdirectory: Option<&'a Path>,
     pub ext: SourceDistExtension,
 }
@@ -223,7 +239,7 @@ impl<'a> From<&'a GitDirectorySourceDist> for GitDirectorySourceUrl<'a> {
 
 #[derive(Debug, Clone)]
 pub struct PathSourceUrl<'a> {
-    pub url: &'a DisplaySafeUrl,
+    pub url: &'a SafeUrl,
     pub path: Cow<'a, Path>,
     pub ext: SourceDistExtension,
 }
@@ -246,7 +262,7 @@ impl<'a> From<&'a PathSourceDist> for PathSourceUrl<'a> {
 
 #[derive(Debug, Clone)]
 pub struct DirectorySourceUrl<'a> {
-    pub url: &'a DisplaySafeUrl,
+    pub url: &'a SafeUrl,
     pub install_path: &'a Path,
     pub editable: Option<bool>,
 }

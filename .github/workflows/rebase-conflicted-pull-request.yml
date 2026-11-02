@@ -32,7 +32,9 @@ jobs:
   rebase:
     name: "Rebase pull request #${{ inputs.number }}"
     runs-on: depot-ubuntu-24.04-4
-    environment: automations
+    environment:
+      name: automations
+      deployment: false
     timeout-minutes: 30
     permissions:
       contents: read
@@ -48,7 +50,7 @@ jobs:
         run: rustup show
 
       - name: Restore Rust cache
-        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           prefix-key: v1-rust-workspace
           cache-workspace-crates: "true"
@@ -57,10 +59,17 @@ jobs:
       - name: Prepare Rust dependencies
         run: cargo fetch --locked
 
-      - name: "Install cargo nextest"
-        uses: taiki-e/install-action@6c6fd71fe4fb72c3697d269963d0e15df8adedad # v2.85.10
+      - uses: $/.github/actions/setup-uv-toolchain
         with:
-          tool: cargo-nextest
+          enable-cache: auto
+
+      - name: "Install cargo nextest"
+        env:
+          UV_PROJECT_ENVIRONMENT: ${{ runner.temp }}/cargo-tools
+          UV_PYTHON_DOWNLOADS_JSON_URL: ${{ github.workspace }}/crates/uv-python-managed/download-metadata.json
+        run: |
+          uv sync --only-dev
+          echo "$UV_PROJECT_ENVIRONMENT/bin" >> "$GITHUB_PATH"
 
       - name: Prepare pull request branch
         id: prepare
@@ -106,14 +115,14 @@ jobs:
           fi
 
       - name: Rebase pull request
-        uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1.11
+        uses: openai/codex-action@c05cfd74ad95c626cdf05c6685e62becc3bf7813
         env:
           BASE_REF: ${{ inputs.base-ref }}
           BASE_PREVIOUS_SHA: ${{ inputs.base-previous-sha }}
           TMPDIR: ${{ runner.temp }}
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          codex-version: "0.146.0"
+          codex-version: "0.157.1"
           model: gpt-5.6-sol
           effort: high
           codex-home: "${{ runner.temp }}/codex-home"
@@ -151,8 +160,10 @@ jobs:
   push:
     name: "Push rebased pull request #${{ inputs.number }}"
     needs: rebase
-    runs-on: ubuntu-slim
-    environment: automations
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-2' || 'ubuntu-slim' }}
+    environment:
+      name: automations
+      deployment: false
     timeout-minutes: 10
     permissions:
       contents: read
@@ -198,7 +209,7 @@ jobs:
       - name: Get pull request head token
         id: token
         if: steps.import.outputs.head_sha != ''
-        uses: open-security-tools/ost-simple-sts@9e012247e07c39080fb6a832dbfbcfeacebc19c4
+        uses: astral-sh/github-actions/simple-token-service@eb81cf4d13127c3f9539f621c17e4c65327636c8
         with:
           exchange-url: ${{ secrets.STS_API_URL }}/exchange
           audience: ${{ secrets.STS_API_URL }}

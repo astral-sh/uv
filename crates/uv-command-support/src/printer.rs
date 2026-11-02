@@ -1,0 +1,137 @@
+use anstream::{eprint, print};
+use indicatif::ProgressDrawTarget;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Printer {
+    /// A printer that suppresses all output.
+    Silent,
+    /// A printer that suppresses most output, but preserves "important" stdout.
+    Quiet,
+    /// A printer that prints to standard streams (e.g., stdout).
+    Default,
+    /// A printer that prints all output, including debug messages.
+    Verbose,
+    /// A printer that prints to standard streams, excluding all progress outputs
+    NoProgress,
+}
+
+impl Printer {
+    /// Create a printer from the global output settings.
+    pub fn new(quiet: u8, verbose: u8, no_progress: bool) -> Self {
+        if quiet == 1 {
+            Self::Quiet
+        } else if quiet > 1 {
+            Self::Silent
+        } else if verbose > 0 {
+            Self::Verbose
+        } else if no_progress {
+            Self::NoProgress
+        } else {
+            Self::Default
+        }
+    }
+
+    /// Return whether this printer suppresses progress output.
+    pub const fn suppresses_progress(self) -> bool {
+        match self {
+            Self::Silent => true,
+            Self::Quiet => true,
+            Self::Default => false,
+            // Confusingly, hide the progress bar when in verbose mode.
+            // Otherwise, it gets interleaved with debug messages.
+            Self::Verbose => true,
+            Self::NoProgress => true,
+        }
+    }
+
+    /// Return the [`ProgressDrawTarget`] for this printer.
+    pub fn target(self) -> ProgressDrawTarget {
+        if self.suppresses_progress() {
+            ProgressDrawTarget::hidden()
+        } else {
+            ProgressDrawTarget::stderr()
+        }
+    }
+
+    /// Return the [`Stdout`] for this printer.
+    pub fn stdout_important(self) -> Stdout {
+        match self {
+            Self::Silent => Stdout::Disabled,
+            Self::Quiet => Stdout::Enabled,
+            Self::Default => Stdout::Enabled,
+            Self::Verbose => Stdout::Enabled,
+            Self::NoProgress => Stdout::Enabled,
+        }
+    }
+
+    /// Return the [`Stdout`] for this printer.
+    pub fn stdout(self) -> Stdout {
+        match self {
+            Self::Silent => Stdout::Disabled,
+            Self::Quiet => Stdout::Disabled,
+            Self::Default => Stdout::Enabled,
+            Self::Verbose => Stdout::Enabled,
+            Self::NoProgress => Stdout::Enabled,
+        }
+    }
+
+    /// Return the [`Stderr`] for this printer.
+    pub fn stderr_important(self) -> Stderr {
+        match self {
+            Self::Silent => Stderr::Disabled,
+            Self::Quiet => Stderr::Enabled,
+            Self::Default => Stderr::Enabled,
+            Self::Verbose => Stderr::Enabled,
+            Self::NoProgress => Stderr::Enabled,
+        }
+    }
+
+    /// Return the [`Stderr`] for this printer.
+    pub fn stderr(self) -> Stderr {
+        match self {
+            Self::Silent => Stderr::Disabled,
+            Self::Quiet => Stderr::Disabled,
+            Self::Default => Stderr::Enabled,
+            Self::Verbose => Stderr::Enabled,
+            Self::NoProgress => Stderr::Enabled,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Stdout {
+    Enabled,
+    Disabled,
+}
+
+impl std::fmt::Write for Stdout {
+    fn write_str(&mut self, s: &str) -> std::fmt::Result {
+        match self {
+            Self::Enabled => {
+                print!("{s}");
+            }
+            Self::Disabled => {}
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Stderr {
+    Enabled,
+    Disabled,
+}
+
+impl std::fmt::Write for Stderr {
+    fn write_str(&mut self, s: &str) -> std::fmt::Result {
+        match self {
+            Self::Enabled => {
+                eprint!("{s}");
+            }
+            Self::Disabled => {}
+        }
+
+        Ok(())
+    }
+}

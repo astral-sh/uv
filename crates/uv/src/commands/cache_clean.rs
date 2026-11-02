@@ -5,13 +5,13 @@ use owo_colors::OwoColorize;
 use tracing::debug;
 
 use uv_cache::{Cache, RemovalAccounting};
+use uv_command_support::{ExitStatus, Printer};
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_preview::{Preview, PreviewFeature};
 
+use crate::commands::human_readable_bytes;
 use crate::commands::reporters::{CleaningDirectoryReporter, CleaningPackageReporter};
-use crate::commands::{ExitStatus, human_readable_bytes};
-use crate::printer::Printer;
 
 /// Clear the cache, removing all entries or those linked to specific packages.
 pub(crate) async fn cache_clean(

@@ -227,7 +227,7 @@ $ uv tool install mkdocs --with mkdocs-material
 
 Multiple related executables can be installed together in the same tool environment, using the
 `--with-executables-from` flag. For example, the following will install the executables from
-`ansible`, plus those ones provided by `ansible-core` and `ansible-lint`:
+`ansible`, plus those provided by `ansible-core` and `ansible-lint`:
 
 ```console
 $ uv tool install --with-executables-from ansible-core,ansible-lint ansible
@@ -292,7 +292,7 @@ These scripts are available via `$(uv tool dir)\<tool-name>\Scripts` when instal
 
 Currently only legacy scripts with the `.ps1`, `.cmd`, and `.bat` extensions are supported.
 
-For example, below is an example running a Command Prompt script.
+For example, to run a Command Prompt script:
 
 ```console
 $ uv tool run --from nuitka==2.6.7 nuitka.cmd --version

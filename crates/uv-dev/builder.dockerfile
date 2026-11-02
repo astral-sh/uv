@@ -17,7 +17,13 @@ RUN apt-get update \
         python3-venv \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ARG RUSTUP_VERSION=1.29.2
+RUN curl --proto '=https' --tlsv1.2 -sSf \
+    "https://static.rust-lang.org/rustup/archive/${RUSTUP_VERSION}/$(uname -m)-unknown-linux-gnu/rustup-init" \
+    -o rustup-init \
+    && chmod +x rustup-init \
+    && ./rustup-init -y \
+    && rm rustup-init
 ENV HOME="/root"
 WORKDIR /app
 RUN python3 -m venv $HOME/venv-docker

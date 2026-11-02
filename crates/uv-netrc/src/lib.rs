@@ -49,7 +49,7 @@ pub enum Error {
     Io(#[from] std::io::Error),
 
     /// Parsing error.
-    #[error("{parser} in the file '{filename}'")]
+    #[error("{parser} in the file `{filename}`")]
     Parsing {
         parser: netrc::ParsingError,
         filename: String,

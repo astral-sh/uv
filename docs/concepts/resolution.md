@@ -85,7 +85,7 @@ uv supports both [platform-specific](#platform-specific-resolution) and
 
 By default, uv's pip interface, i.e., [`uv pip compile`](../pip/compile.md), produces a resolution
 that is platform-specific, like `pip-tools`. There is no way to use platform-specific resolution in
-the uv's project interface.
+uv's project interface.
 
 uv also supports resolving for specific, alternate platforms and Python versions with the
 `--python-platform` and `--python-version` options. For example, if using Python 3.12 on macOS,
@@ -129,8 +129,8 @@ supported range. In other words, the project's `requires-python` must be a subse
 When selecting the compatible version for a given dependency, uv will
 ([by default](#multi-version-resolution)) attempt to choose the latest compatible version for each
 supported Python version. For example, if a project's `requires-python` is `>=3.8`, and the latest
-version of a dependency requires Python 3.9 or later, while all prior versions supporting Python
-3.8, the resolver will select the latest version for users running Python 3.9 or later, and previous
+version of a dependency requires Python 3.9 or later, while all prior versions support Python 3.8,
+the resolver will select the latest version for users running Python 3.9 or later, and previous
 versions for users running Python 3.8.
 
 When evaluating `requires-python` ranges for dependencies, uv only considers lower bounds and
@@ -215,6 +215,60 @@ required-environments = [
     "sys_platform == 'darwin' and platform_machine == 'x86_64'"
 ]
 ```
+
+To require a macOS release, use its
+[Darwin kernel version](<https://en.wikipedia.org/wiki/Darwin_(operating_system)#Darwin_20_onwards>)
+in `platform_release`. For example, macOS 15 uses Darwin 24:
+
+```toml title="pyproject.toml"
+[tool.uv]
+required-environments = [
+    "sys_platform == 'darwin' and platform_machine == 'arm64' and platform_release == '24.0.0'"
+]
+```
+
+Use `==` to require coverage at the baseline. A range like `>= '24.0.0'` can be satisfied by a wheel
+that only supports a newer release. Wheels targeting newer releases are still retained in the
+lockfile.
+
+### Minimum libc version
+
+!!! note
+
+    `minimum-libc-version` is in preview. Use `--preview-features minimum-libc-version` or
+    `preview-features = ["minimum-libc-version"]` to disable the warning.
+
+Environment markers do not include the libc implementation or version. The `minimum-libc-version`
+setting specifies the oldest libc versions that must be supported in `required-environments`.
+
+For example, to require support for glibc 2.31 on x86-64 and ARM64 Linux:
+
+```toml title="pyproject.toml"
+[tool.uv]
+preview-features = ["minimum-libc-version"]
+required-environments = [
+    "sys_platform == 'linux' and platform_machine == 'x86_64'",
+    "sys_platform == 'linux' and platform_machine == 'aarch64'",
+]
+minimum-libc-version = { glibc = "2.31" }
+```
+
+With this configuration, a `manylinux_2_17` wheel satisfies the glibc requirement, but a
+`manylinux_2_34` wheel does not. Both are retained in the lockfile and exported hashes, so machines
+with newer glibc versions can install the newer wheel. Musl wheels are also retained, but do not
+satisfy the glibc requirement. Omitting a libc implementation means it is not required, not
+excluded.
+
+To require both glibc and musl support, set a version for each:
+
+```toml
+minimum-libc-version = { glibc = "2.31", musl = "1.2" }
+```
+
+Each configured libc version needs coverage in `required-environments`. If a required environment
+has no compatible wheel or usable source distribution, uv will try another version of the package.
+Generic Linux wheels, such as `linux_x86_64`, do not constrain libc and can satisfy either
+implementation.
 
 ## Common marker values
 
@@ -382,7 +436,7 @@ rather than upgrading to `numpy==2.0.2` for Python 3.9 and `numpy==2.2.0` for Py
 
 Like pip, uv supports constraint files (`--constraint constraints.txt`) which narrow the set of
 acceptable versions for the given packages. Constraint files are similar to requirements files, but
-being listed as a constraint alone will not cause a package to be included to the resolution.
+being listed as a constraint alone will not cause a package to be included in the resolution.
 Instead, constraints only take effect if a requested package is already pulled in as a direct or
 transitive dependency. Constraints are useful for reducing the range of available versions for a
 transitive dependency. They can also be used to keep a resolution in sync with some other set of
@@ -514,8 +568,8 @@ requires-dist = ["numpy>=1.8.1", "scipy>=0.13.0", "six>=1.11.0"]
 
 These declarations are intended for cases in which a package does _not_ declare static metadata
 upfront, though they are also useful for packages that require
-[disabling build isolation](./projects/config.md#build-isolation) In such cases, it may be easier to
-declare the package metadata upfront, rather than creating a custom build environment prior to
+[disabling build isolation](./projects/config.md#build-isolation). In such cases, it may be easier
+to declare the package metadata upfront, rather than creating a custom build environment prior to
 resolving the package.
 
 For example, past versions of `flash-attn` did not declare static metadata. By declaring metadata
@@ -778,7 +832,7 @@ as if they do not exist.
 
 This option is also supported in the `pyproject.toml`, e.g.:
 
-```pyproject.toml
+```toml title="pyproject.toml"
 [tool.uv]
 exclude-newer = "2006-12-02T02:07:43Z"
 ```
@@ -792,7 +846,7 @@ When specified in persistent configuration, local date times are not allowed.
 Values may also be specified for specific packages, e.g.,
 `--exclude-newer-package setuptools=2006-12-02`, or:
 
-```pyproject.toml
+```toml title="pyproject.toml"
 [tool.uv]
 exclude-newer-package = { setuptools = "2006-12-02T02:07:43Z" }
 ```
@@ -800,19 +854,19 @@ exclude-newer-package = { setuptools = "2006-12-02T02:07:43Z" }
 The package option also accepts `<package>=false` to opt a package out of the restriction, e.g.,
 `--exclude-newer-package setuptools=false`, or:
 
-```pyproject.toml
+```toml title="pyproject.toml"
 [tool.uv]
 exclude-newer-package = { setuptools = false }
 ```
 
-This is useful to temporarily use a newer version of package or to allow resolving a package from an
-index that does not publish upload times.
+This is useful to temporarily use a newer version of a package or to allow resolving a package from
+an index that does not publish upload times.
 
 Package-specific values will take precedence over both global and index-specific values.
 
 Likewise, an individual index can override the global cutoff:
 
-```pyproject.toml
+```toml title="pyproject.toml"
 [tool.uv]
 exclude-newer = "2006-12-02T02:07:43Z"
 
@@ -824,7 +878,7 @@ exclude-newer = "7 days"
 
 Or disable it entirely for that index:
 
-```pyproject.toml
+```toml title="pyproject.toml"
 [[tool.uv.index]]
 name = "internal"
 url = "https://internal.example.com/simple"
@@ -860,7 +914,7 @@ performed, e.g., when `--upgrade` or `--refresh` is used.
 
 This option is also supported in the `pyproject.toml`, e.g.:
 
-```pyproject.toml
+```toml title="pyproject.toml"
 [tool.uv]
 exclude-newer = "1 week"
 ```
@@ -868,7 +922,7 @@ exclude-newer = "1 week"
 Values may also be specified for specific packages, e.g.,
 `--exclude-newer-package "setuptools=30 days"`, or:
 
-```pyproject.toml
+```toml title="pyproject.toml"
 [tool.uv]
 exclude-newer = "1 week"
 exclude-newer-package = { setuptools = "30 days" }
@@ -882,7 +936,7 @@ formats, which need to be supported for backward compatibility, were also allowe
 
 !!! important
 
-    As of 0.12, uv rejects source distributions that do not confirm to
+    As of 0.12, uv rejects source distributions that do not conform to
     [PEP 625]'s extension requirements with the exception of `.zip` archives,
     which are still accepted for backward compatibility.
 

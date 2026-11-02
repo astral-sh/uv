@@ -4,11 +4,10 @@ use anyhow::{Context, Result, bail};
 use owo_colors::OwoColorize;
 
 use uv_auth::{AuthBackend, Credentials, Service, TextCredentialStore, Username};
+use uv_command_support::{ExitStatus, Printer};
 use uv_distribution_types::IndexUrl;
 use uv_pep508::VerbatimUrl;
 use uv_preview::Preview;
-
-use crate::{commands::ExitStatus, printer::Printer};
 
 /// Logout from a service.
 ///
@@ -58,14 +57,14 @@ pub(crate) async fn logout(
             provider
                 .remove(&url, &username)
                 .await
-                .with_context(|| format!("Unable to remove credentials for {display_url}"))?;
+                .with_context(|| format!("Unable to remove credentials for `{display_url}`"))?;
         }
         AuthBackend::TextStore(mut store, _lock) => {
             if store
                 .remove(service, Username::from(Some(username)))
                 .is_none()
             {
-                bail!("No matching entry found for {display_url}");
+                bail!("No matching entry found for `{display_url}`");
             }
             store
                 .write(TextCredentialStore::default_file()?, _lock)

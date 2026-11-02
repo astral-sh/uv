@@ -13,8 +13,10 @@ env:
 jobs:
   update:
     if: github.repository == 'astral-sh/uv' && !github.event.issue.pull_request
-    runs-on: ubuntu-latest
-    environment: automations
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
+    environment:
+      name: automations
+      deployment: false
     timeout-minutes: 15
     permissions:
       actions: read
@@ -29,6 +31,10 @@ jobs:
         with:
           persist-credentials: false
 
+      - uses: $/.github/actions/setup-uv-toolchain
+        with:
+          group: jaq
+
       - name: "Collect issue and comment context"
         id: issue
         run: |
@@ -37,7 +43,7 @@ jobs:
             --json number,title,body,author,url,comments \
             > "$RUNNER_TEMP/issue.json"
 
-          if ! jq --exit-status \
+          if ! jaq --exit-status \
             --arg repository "$GITHUB_REPOSITORY" \
             '.url | startswith("https://github.com/\($repository)/issues/")' \
             "$RUNNER_TEMP/issue.json" > /dev/null; then
@@ -45,7 +51,7 @@ jobs:
             exit 1
           fi
 
-          jq '.comment | {
+          jaq '.comment | {
             id,
             body,
             author: .user.login,
@@ -87,7 +93,7 @@ jobs:
           {
             printf 'Issue context update for #%s: %s\n\n' \
               "$ISSUE_NUMBER" \
-              "$(jq -r '.title | gsub("[\r\n]+"; " ")' "$RUNNER_TEMP/issue.json")"
+              "$(jaq -r '.title | gsub("[\r\n]+"; " ")' "$RUNNER_TEMP/issue.json")"
             cat agents/prompts/update-issue-context.md
           } > "$RUNNER_TEMP/update-issue-context-prompt.md"
         env:
@@ -105,7 +111,7 @@ jobs:
           while IFS=$'\t' read -r run_id; do
             [ -n "$run_id" ] || continue
             workflow_run="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id")"
-            if jq --exit-status '
+            if jaq --exit-status '
               .head_branch == "main"
               and .status == "completed"
               and (
@@ -123,7 +129,7 @@ jobs:
               break
             fi
           done < <(
-            jq --raw-output '
+            jaq --raw-output '
               [.artifacts[] | select(.expired == false)]
               | sort_by(.created_at)
               | reverse
@@ -169,7 +175,7 @@ jobs:
           root_session_id=
           while IFS= read -r -d '' rollout; do
             metadata="$(head -n 1 "$rollout")"
-            if ! jq --exit-status '
+            if ! jaq --exit-status '
               .type == "session_meta"
               and (.payload | type == "object")
               and (.payload.id | type == "string")
@@ -178,10 +184,10 @@ jobs:
               exit 1
             fi
 
-            if jq --exit-status '.payload.source == "exec"' <<< "$metadata" > /dev/null; then
+            if jaq --exit-status '.payload.source == "exec"' <<< "$metadata" > /dev/null; then
               root_sessions=$((root_sessions + 1))
-              root_session_id="$(jq --raw-output '.payload.id' <<< "$metadata")"
-              session_workspace="$(jq --raw-output '.payload.cwd' <<< "$metadata")"
+              root_session_id="$(jaq --raw-output '.payload.id' <<< "$metadata")"
+              session_workspace="$(jaq --raw-output '.payload.cwd' <<< "$metadata")"
               if ! [[ "$root_session_id" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]] ||
                 [ "$session_workspace" != "$GITHUB_WORKSPACE" ]; then
                 echo "The Codex session does not match the trusted workspace." >&2
@@ -199,13 +205,13 @@ jobs:
 
       - name: "Update issue context"
         if: steps.find-thread.outputs.found == 'true'
-        uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1.11
+        uses: openai/codex-action@c05cfd74ad95c626cdf05c6685e62becc3bf7813
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TMPDIR: ${{ runner.temp }}
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          codex-version: "0.146.0"
+          codex-version: "0.157.1"
           codex-home: "agents/codex"
           effort: high
           permission-profile: "issue-triage"
@@ -255,8 +261,10 @@ jobs:
   persist:
     needs: update
     if: needs.update.outputs.changed == 'true'
-    runs-on: ubuntu-latest
-    environment: automations
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
+    environment:
+      name: automations
+      deployment: false
     timeout-minutes: 10
     concurrency:
       group: issue-context-${{ needs.update.outputs.issue-number }}
@@ -272,7 +280,7 @@ jobs:
 
       - name: "Get issue context token"
         id: token
-        uses: open-security-tools/ost-simple-sts@974a63a2daaaa40f7c6dec40d334f3da4421469e
+        uses: astral-sh/github-actions/simple-token-service@eb81cf4d13127c3f9539f621c17e4c65327636c8
         with:
           exchange-url: ${{ secrets.STS_API_URL }}/exchange
           audience: ${{ secrets.STS_API_URL }}

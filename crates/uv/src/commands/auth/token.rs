@@ -2,10 +2,8 @@ use std::fmt::Write;
 
 use anyhow::{Result, bail};
 use uv_auth::{AuthBackend, Credentials, Service};
+use uv_command_support::{ExitStatus, Printer};
 use uv_preview::Preview;
-
-use crate::commands::ExitStatus;
-use crate::printer::Printer;
 
 /// Show the token that will be used for a service.
 pub(crate) async fn token(
@@ -45,16 +43,16 @@ pub(crate) async fn token(
         AuthBackend::System(provider) => provider
             .fetch(url, Some(&username))
             .await
-            .ok_or_else(|| anyhow::anyhow!("Failed to fetch credentials for {display_url}"))?,
+            .ok_or_else(|| anyhow::anyhow!("Failed to fetch credentials for `{display_url}`"))?,
         AuthBackend::TextStore(store, _lock) => store
             .get_credentials(url, Some(&username))?
             .cloned()
-            .ok_or_else(|| anyhow::anyhow!("Failed to fetch credentials for {display_url}"))?,
+            .ok_or_else(|| anyhow::anyhow!("Failed to fetch credentials for `{display_url}`"))?,
     };
 
     let Some(password) = credentials.password() else {
         bail!(
-            "No {} found for {display_url}",
+            "No {} found for `{display_url}`",
             if username != "__token__" {
                 "password"
             } else {

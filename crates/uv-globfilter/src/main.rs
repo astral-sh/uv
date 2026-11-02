@@ -54,8 +54,8 @@ fn main() {
             .expect("walkdir starts with root")
             .to_path_buf();
 
-        if !include_matcher.match_path(&relative) || exclude_matcher.is_match(&relative) {
-            trace!("Excluding: `{}`", relative.display());
+        if !include_matcher.match_path(&relative, &entry) || exclude_matcher.is_match(&relative) {
+            trace!("Excluding: {}", relative.display());
             continue;
         }
         println!("{}", relative.display());

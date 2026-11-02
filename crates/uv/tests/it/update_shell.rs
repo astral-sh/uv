@@ -71,7 +71,7 @@ fn update_shell_tool_and_python() -> Result<()> {
         @"
         exit_code: 2 (failure)
         ----- stderr -----
-        error: The executable directory [TEMP_DIR]/tool-bin is not in PATH, but the Bash configuration files are already up-to-date
+        error: The executable directory `[TEMP_DIR]/tool-bin` is not in PATH, but the Bash configuration files are already up-to-date
         "
     );
 

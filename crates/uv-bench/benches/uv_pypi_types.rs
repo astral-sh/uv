@@ -1,9 +1,14 @@
+// Don't optimize the alloc crate away due to it being otherwise unused.
+// https://github.com/rust-lang/rust/issues/64402
+extern crate uv_performance_memory_allocator;
+
 use std::hint::black_box;
 
 use criterion::{
-    BenchmarkId, Criterion, Throughput, criterion_group, criterion_main, measurement::WallTime,
+    BenchmarkGroup, BenchmarkId, Criterion, Throughput, criterion_group, criterion_main,
+    measurement::WallTime,
 };
-use uv_pypi_types::PypiSimpleDetail;
+use uv_pypi_types::{Digest, PypiSimpleDetail};
 
 fn simple_api_fixture(file_count: usize) -> serde_json::Value {
     let files = (0..file_count)
@@ -69,5 +74,73 @@ fn deserialize_simple_api(criterion: &mut Criterion<WallTime>) {
     group.finish();
 }
 
-criterion_group!(uv_pypi_types, deserialize_simple_api);
+fn digest_size<const BYTES: usize>(group: &mut BenchmarkGroup<'_, WallTime>, batch_size: usize) {
+    const PATTERN: [u8; 8] = [0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef];
+
+    let bytes = std::array::from_fn(|index| PATTERN[index % PATTERN.len()]);
+    let digest = Digest::<BYTES>::from_bytes(bytes);
+    let uppercase = digest.as_str().to_ascii_uppercase();
+
+    group.throughput(Throughput::Bytes((BYTES * 2 * batch_size) as u64));
+    for (case, hex) in [
+        ("lowercase", digest.as_str()),
+        ("uppercase", uppercase.as_str()),
+    ] {
+        group.bench_with_input(
+            BenchmarkId::new(format!("from_hex/{case}"), BYTES),
+            hex,
+            |benchmark, hex| {
+                benchmark.iter(|| {
+                    for _ in 0..batch_size {
+                        black_box(
+                            Digest::<BYTES>::from_hex(black_box(hex))
+                                .expect("benchmark input should be valid"),
+                        );
+                    }
+                });
+            },
+        );
+    }
+
+    group.throughput(Throughput::Bytes((BYTES * batch_size) as u64));
+    group.bench_with_input(
+        BenchmarkId::new("from_bytes", BYTES),
+        &bytes,
+        |benchmark, bytes| {
+            benchmark.iter(|| {
+                for _ in 0..batch_size {
+                    black_box(Digest::from_bytes(black_box(*bytes)));
+                }
+            });
+        },
+    );
+
+    group.throughput(Throughput::Bytes((BYTES * 2 * batch_size) as u64));
+    group.bench_with_input(
+        BenchmarkId::new("decode", BYTES),
+        &digest,
+        |benchmark, digest| {
+            benchmark.iter(|| {
+                for _ in 0..batch_size {
+                    black_box(black_box(digest).decode());
+                }
+            });
+        },
+    );
+}
+
+fn digest(criterion: &mut Criterion<WallTime>) {
+    // Batch these short operations to amortize fixed per-measurement costs.
+    let batch_size = 500;
+    let mut group = criterion.benchmark_group(format!("digest_batch_{batch_size}"));
+
+    digest_size::<16>(&mut group, batch_size);
+    digest_size::<32>(&mut group, batch_size);
+    digest_size::<48>(&mut group, batch_size);
+    digest_size::<64>(&mut group, batch_size);
+
+    group.finish();
+}
+
+criterion_group!(uv_pypi_types, deserialize_simple_api, digest);
 criterion_main!(uv_pypi_types);

@@ -12,7 +12,7 @@ use tracing_subscriber::{EnvFilter, Layer, Registry};
 use tracing_tree::HierarchicalLayer;
 use tracing_tree::time::Uptime;
 
-use uv_cli::ColorChoice;
+use uv_configuration::ColorChoice;
 use uv_logging::{UvFormat, uv_fields};
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -105,7 +105,7 @@ pub(crate) fn setup_logging(
             .with(durations_layer)
             .with(
                 tracing_subscriber::fmt::layer()
-                    .event_format(UvFormat::default())
+                    .event_format(UvFormat)
                     .fmt_fields(uv_fields())
                     .with_writer(writer)
                     .with_ansi(ansi)

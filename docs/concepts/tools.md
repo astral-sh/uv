@@ -46,10 +46,10 @@ tool is uninstalled. If the environment is manually deleted, the tool will fail 
 
 ## Tool versions
 
-Unless a specific version is requested, `uv tool install` will install the latest available of the
-requested tool. `uvx` will use the latest available version of the requested tool _on the first
-invocation_. After that, `uvx` will use the cached version of the tool unless a different version is
-requested, the cache is pruned, or the cache is refreshed.
+Unless a specific version is requested, `uv tool install` will install the latest available version
+of the requested tool. `uvx` will use the latest available version of the requested tool _on the
+first invocation_. After that, `uvx` will use the cached version of the tool unless a different
+version is requested, the cache is pruned, or the cache is refreshed.
 
 For example, to run a specific version of Ruff:
 
@@ -119,7 +119,7 @@ $ uv tool install ruff@0.6.0
 Tool environments may be upgraded via `uv tool upgrade`, or re-created entirely via subsequent
 `uv tool install` operations.
 
-To upgrade all packages in a tool environment
+To upgrade all packages in a tool environment:
 
 ```console
 $ uv tool upgrade black
@@ -151,7 +151,7 @@ Similarly, tool upgrades will retain the settings provided when installing the t
 
 To reinstall packages during upgrade, use the `--reinstall` and `--reinstall-package` options.
 
-To reinstall all packages in a tool environment
+To reinstall all packages in a tool environment:
 
 ```console
 $ uv tool upgrade black --reinstall

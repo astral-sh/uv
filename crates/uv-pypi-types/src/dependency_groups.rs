@@ -118,6 +118,13 @@ impl<'de> Deserialize<'de> for DependencyGroupSpecifier {
                 Ok(DependencyGroupSpecifier::Requirement(value.to_owned()))
             }
 
+            fn visit_string<E>(self, value: String) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                Ok(DependencyGroupSpecifier::Requirement(value))
+            }
+
             fn visit_map<M>(self, mut map: M) -> Result<Self::Value, M::Error>
             where
                 M: serde::de::MapAccess<'de>,

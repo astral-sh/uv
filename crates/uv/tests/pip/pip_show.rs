@@ -1,5 +1,3 @@
-use std::env::current_dir;
-
 use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::fixture::FileWriteStr;
@@ -8,6 +6,8 @@ use indoc::indoc;
 
 use uv_static::EnvVars;
 
+#[cfg(feature = "test-pypi")]
+use uv_test::copy_dir_ignore;
 use uv_test::uv_snapshot;
 
 #[test]
@@ -335,16 +335,17 @@ fn show_empty_quiet() -> Result<()> {
 fn show_editable() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
+    copy_dir_ignore(
+        context.workspace_root.join("test/packages/poetry_editable"),
+        context.temp_dir.child("poetry_editable"),
+    )?;
+
     // Install the editable package.
     context
         .pip_install()
         .arg("-e")
-        .arg("../../test/packages/poetry_editable")
-        .current_dir(current_dir()?)
-        .env(
-            EnvVars::CARGO_TARGET_DIR,
-            "../../../target/target_install_editable",
-        )
+        .arg("poetry_editable")
+        .env(EnvVars::CARGO_TARGET_DIR, context.temp_dir.join("target"))
         .assert()
         .success();
 
@@ -355,7 +356,7 @@ fn show_editable() -> Result<()> {
     Name: poetry-editable
     Version: 0.1.0
     Location: [SITE_PACKAGES]/
-    Editable project location: [WORKSPACE]/test/packages/poetry_editable
+    Editable project location: [TEMP_DIR]/poetry_editable
     Requires: anyio
     Required-by:
     "

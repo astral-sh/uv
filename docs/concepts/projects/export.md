@@ -72,6 +72,10 @@ dependencies. uv can export your project's dependency lockfile to this format.
 $ uv export --format pylock.toml
 ```
 
+Relative local paths are written relative to the output file's directory. When writing to stdout,
+they are relative to the current working directory. Use `--output-file` when writing a `pylock.toml`
+in another directory.
+
 ## CycloneDX SBOM format
 
 uv can export your project's dependency lockfile as a Software Bill of Materials (SBOM) in CycloneDX

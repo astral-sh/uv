@@ -23,8 +23,8 @@ url = "https://pkgs.dev.azure.com/<ORGANIZATION>/<PROJECT>/_packaging/<FEED>/pyp
 
 If there is a personal access token (PAT) available (e.g.,
 [`$(System.AccessToken)` in an Azure pipeline](https://learn.microsoft.com/en-us/azure/devops/pipelines/build/variables?view=azure-devops&tabs=yaml#systemaccesstoken)),
-credentials can be provided via "Basic" HTTP authentication scheme. Include the PAT in the password
-field of the URL. A username must be included as well, but can be any string.
+credentials can be provided via the "Basic" HTTP authentication scheme. Include the PAT in the
+password field of the URL. A username must be included as well, but can be any string.
 
 For example, with the token stored in the `$AZURE_ARTIFACTS_TOKEN` environment variable, set
 credentials for the index with:
@@ -40,10 +40,10 @@ export UV_INDEX_PRIVATE_REGISTRY_PASSWORD="$AZURE_ARTIFACTS_TOKEN"
 
 ## Authenticate with `keyring` and `artifacts-keyring`
 
-You can also authenticate to Artifacts using [`keyring`](https://github.com/jaraco/keyring) package
-with the [`artifacts-keyring` plugin](https://github.com/Microsoft/artifacts-keyring). Because these
-two packages are required to authenticate to Azure Artifacts, they must be pre-installed from a
-source other than Artifacts.
+You can also authenticate to Artifacts using the [`keyring`](https://github.com/jaraco/keyring)
+package with the [`artifacts-keyring` plugin](https://github.com/Microsoft/artifacts-keyring).
+Because these two packages are required to authenticate to Azure Artifacts, they must be
+pre-installed from a source other than Artifacts.
 
 The `artifacts-keyring` plugin wraps the
 [Azure Artifacts Credential Provider tool](https://github.com/microsoft/artifacts-credprovider). The

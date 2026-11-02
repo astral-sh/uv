@@ -25,9 +25,11 @@ fn format_reuses_settings_workspace_discovery() -> Result<()> {
         "#})?;
     let member = context.temp_dir.child("member");
     member.create_dir_all()?;
-    member
-        .child("pyproject.toml")
-        .write_str("[project]\nname = \"member\"\nversion = \"0.1.0\"\n")?;
+    member.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "member"
+        version = "0.1.0"
+    "#})?;
     context.temp_dir.child("main.py").write_str("x = 1\n")?;
 
     uv_snapshot!(context.filters(), context.format()
@@ -38,13 +40,13 @@ fn format_reuses_settings_workspace_discovery() -> Result<()> {
     1 file already formatted
 
     ----- stderr -----
-    DEBUG Found workspace root: `[TEMP_DIR]/`
-    TRACE Discovering workspace members for: `[TEMP_DIR]/`
-    DEBUG Adding root workspace member: `[TEMP_DIR]/`
-    TRACE Processing workspace member: `member`
-    DEBUG Adding discovered workspace member: `[TEMP_DIR]/member`
+    DEBUG Found workspace root: [TEMP_DIR]/
+    TRACE Discovering workspace members for: [TEMP_DIR]/
+    DEBUG Adding root workspace member: [TEMP_DIR]/
+    TRACE Processing workspace member: member
+    DEBUG Adding discovered workspace member: [TEMP_DIR]/member
     warning: `uv format` is experimental and may change without warning. Pass `--preview-features format-command` to disable this warning.
-    DEBUG Found project root: `[TEMP_DIR]/`
+    DEBUG Found project root: [TEMP_DIR]/
     ");
 
     Ok(())
@@ -79,7 +81,7 @@ fn format_project() -> Result<()> {
     ");
 
     // Check that the file was formatted
-    let formatted_content = fs_err::read_to_string(&main_py)?;
+    let formatted_content = context.read("main.py");
     assert_snapshot!(formatted_content, @"x = 1");
 
     Ok(())
@@ -123,7 +125,7 @@ fn format_uses_ruff_from_environment() -> Result<()> {
     "
     );
 
-    assert_snapshot!(fs_err::read_to_string(&main_py)?, @"x = 1");
+    assert_snapshot!(context.read("main.py"), @"x = 1");
 
     Ok(())
 }
@@ -148,7 +150,7 @@ fn format_missing_pyproject_toml() -> Result<()> {
     ");
 
     // Check that the file was formatted
-    let formatted_content = fs_err::read_to_string(&main_py)?;
+    let formatted_content = context.read("main.py");
     assert_snapshot!(formatted_content, @"x = 1");
 
     Ok(())
@@ -177,7 +179,7 @@ fn format_missing_project_in_pyproject_toml() -> Result<()> {
     ");
 
     // Check that the file was formatted
-    let formatted_content = fs_err::read_to_string(&main_py)?;
+    let formatted_content = context.read("main.py");
     assert_snapshot!(formatted_content, @"x = 1");
 
     Ok(())
@@ -215,7 +217,7 @@ fn format_unmanaged_project() -> Result<()> {
     ");
 
     // Check that the file was formatted
-    let formatted_content = fs_err::read_to_string(&main_py)?;
+    let formatted_content = context.read("main.py");
     assert_snapshot!(formatted_content, @"x = 1");
 
     Ok(())
@@ -254,7 +256,7 @@ fn format_from_project_root() -> Result<()> {
     ");
 
     // Check that the file was formatted
-    let formatted_content = fs_err::read_to_string(&main_py)?;
+    let formatted_content = context.read("main.py");
     assert_snapshot!(formatted_content, @"x = 1");
 
     Ok(())
@@ -279,7 +281,7 @@ fn format_no_project() -> Result<()> {
     ");
 
     // Check that the file was formatted
-    let formatted_content = fs_err::read_to_string(&main_py)?;
+    let formatted_content = context.read("main.py");
     assert_snapshot!(formatted_content, @"x = 1");
 
     Ok(())
@@ -320,11 +322,11 @@ fn format_relative_project() -> Result<()> {
     ");
 
     // Check that the relative project file was formatted
-    let relative_project_content = fs_err::read_to_string(&relative_project_main_py)?;
+    let relative_project_content = context.read("project/main.py");
     assert_snapshot!(relative_project_content, @"x = 1");
 
     // Check that the root file was not formatted
-    let root_content = fs_err::read_to_string(&root_main_py)?;
+    let root_content = context.read("main.py");
     assert_snapshot!(root_content, @"x    = 1");
 
     Ok(())
@@ -354,16 +356,16 @@ fn format_fails_malformed_pyproject() -> Result<()> {
       key with no value, expected `=`
 
     warning: `uv format` is experimental and may change without warning. Pass `--preview-features format-command` to disable this warning.
-    error: Failed to parse: `pyproject.toml`
-      Caused by: TOML parse error at line 1, column 11
-          |
-        1 | malformed pyproject.toml
-          |           ^
-        key with no value, expected `=`
+    error: Failed to parse: pyproject.toml
+      cause: TOML parse error at line 1, column 11
+               |
+             1 | malformed pyproject.toml
+               |           ^
+             key with no value, expected `=`
     ");
 
     // Check that the file is not formatted
-    let formatted_content = fs_err::read_to_string(&main_py)?;
+    let formatted_content = context.read("main.py");
     assert_snapshot!(formatted_content, @"x    = 1");
 
     Ok(())
@@ -399,7 +401,7 @@ fn format_check() -> Result<()> {
     ");
 
     // Verify the file wasn't modified
-    let content = fs_err::read_to_string(&main_py)?;
+    let content = context.read("main.py");
     assert_snapshot!(content, @"x    = 1");
 
     Ok(())
@@ -440,7 +442,7 @@ fn format_diff() -> Result<()> {
     ");
 
     // Verify the file wasn't modified
-    let content = fs_err::read_to_string(&main_py)?;
+    let content = context.read("main.py");
     assert_snapshot!(content, @"x    = 1");
 
     Ok(())
@@ -477,7 +479,7 @@ fn format_with_ruff_args() -> Result<()> {
     ");
 
     // Check that the line wasn't wrapped (since we set a long line length)
-    let formatted_content = fs_err::read_to_string(&main_py)?;
+    let formatted_content = context.read("main.py");
     assert_snapshot!(formatted_content, @r#"
     def hello():
         print("This is a very long line that should normally be wrapped by the formatter but we will configure it to have a longer line length")
@@ -519,11 +521,11 @@ fn format_specific_files() -> Result<()> {
     warning: `uv format` is experimental and may change without warning. Pass `--preview-features format-command` to disable this warning.
     ");
 
-    let main_content = fs_err::read_to_string(&main_py)?;
+    let main_content = context.read("main.py");
     assert_snapshot!(main_content, @"x = 1");
 
     // Unchanged
-    let utils_content = fs_err::read_to_string(&utils_py)?;
+    let utils_content = context.read("utils.py");
     assert_snapshot!(utils_content, @"x    = 1");
 
     Ok(())
@@ -687,7 +689,7 @@ fn format_no_matching_version() -> Result<()> {
     ----- stderr -----
     warning: `uv format` is experimental and may change without warning. Pass `--preview-features format-command` to disable this warning.
     error: Failed to find ruff version matching: >=999.0.0
-      Caused by: No version of ruff found matching `>=999.0.0` for platform `[PLATFORM]`
+      cause: No version of ruff found matching `>=999.0.0` for platform `[PLATFORM]`
     ");
 
     Ok(())

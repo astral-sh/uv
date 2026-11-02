@@ -54,15 +54,17 @@ pub(crate) fn main(args: &Args) -> Result<()> {
                 } else {
                     let comparison = StrComparison::new(&current, &reference_string);
                     bail!(
-                        "{filename} changed, please run `cargo dev generate-cli-reference`:\n{comparison}"
+                        "`{filename}` changed, please run `cargo dev generate-cli-reference`:\n{comparison}"
                     );
                 }
             }
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-                bail!("{filename} not found, please run `cargo dev generate-cli-reference`");
+                bail!("`{filename}` not found, please run `cargo dev generate-cli-reference`");
             }
             Err(err) => {
-                bail!("{filename} changed, please run `cargo dev generate-cli-reference`:\n{err}");
+                bail!(
+                    "`{filename}` changed, please run `cargo dev generate-cli-reference`:\n{err}"
+                );
             }
         },
         Mode::Write => match fs_err::read_to_string(&reference_path) {
@@ -79,7 +81,9 @@ pub(crate) fn main(args: &Args) -> Result<()> {
                 fs_err::write(reference_path, reference_string.as_bytes())?;
             }
             Err(err) => {
-                bail!("{filename} changed, please run `cargo dev generate-cli-reference`:\n{err}");
+                bail!(
+                    "`{filename}` changed, please run `cargo dev generate-cli-reference`:\n{err}"
+                );
             }
         },
     }

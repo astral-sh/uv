@@ -124,7 +124,7 @@ malicious package to be installed instead of the internal package. See, for exam
 [the `torchtriton` attack](https://pytorch.org/blog/compromised-nightly-dependency/) from
 December 2022.
 
-To opt in to alternate index behaviors, use the`--index-strategy` command-line option, or the
+To opt in to alternate index behaviors, use the `--index-strategy` command-line option, or the
 `UV_INDEX_STRATEGY` environment variable, which supports the following values:
 
 - `first-index` (default): Search for each package across all indexes, limiting the candidate

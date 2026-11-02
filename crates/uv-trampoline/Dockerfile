@@ -6,9 +6,8 @@
 
 ARG UBUNTU_SNAPSHOT=20260127T200000Z
 
-ARG RUST_NIGHTLY=nightly-2026-03-11
+ARG RUST_NIGHTLY=nightly-2026-05-06
 
-ARG CARGO_XWIN_VERSION=0.21.4
 ARG XWIN_SDK_VERSION=10.0.22621
 ARG XWIN_CRT_VERSION=14.44.17.14
 
@@ -31,12 +30,18 @@ RUN apt install -y --update ca-certificates && \
         llvm \
         clang \
         lld \
+        python3 \
     && ln -s /usr/bin/llvm-mt /usr/bin/mt.exe \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Rust nightly toolchain with Windows targets
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
-    sh -s -- -y --default-toolchain=${RUST_NIGHTLY} --profile=minimal
+ARG RUSTUP_VERSION=1.29.2
+RUN curl --proto '=https' --tlsv1.2 -sSf \
+    "https://static.rust-lang.org/rustup/archive/${RUSTUP_VERSION}/$(uname -m)-unknown-linux-gnu/rustup-init" \
+    -o rustup-init \
+    && chmod +x rustup-init \
+    && ./rustup-init -y --default-toolchain=${RUST_NIGHTLY} --profile=minimal \
+    && rm rustup-init
 
 ENV PATH="${CARGO_HOME}/bin:${PATH}"
 
@@ -46,14 +51,21 @@ RUN rustup component add rust-src --toolchain ${RUST_NIGHTLY}-x86_64-unknown-lin
         x86_64-pc-windows-msvc \
         aarch64-pc-windows-msvc
 
-# Install cargo-xwin and prefetch the Windows SDK/CRT
+# Install cargo-xwin
+FROM base AS cargo-xwin
+
+COPY --from=ghcr.io/astral-sh/uv:0.13.5@sha256:32a7bb39b496babbd997b0a39a4d66c126bdaf5661b302bf6f06abda8deca6ff /uv /usr/local/bin/uv
+
+COPY toolchain/pyproject.toml toolchain/uv.lock ./
+RUN uv sync --locked --no-dev --python /usr/bin/python3
+
+# Prefetch the Windows SDK/CRT
 FROM base AS xwin-cache
 
-ARG CARGO_XWIN_VERSION
 ARG XWIN_SDK_VERSION
 ARG XWIN_CRT_VERSION
 
-RUN cargo install --locked cargo-xwin@${CARGO_XWIN_VERSION}
+COPY --from=cargo-xwin ${HOME}/.venv/bin/cargo-xwin /usr/local/bin/cargo-xwin
 
 RUN cargo xwin cache xwin \
       --xwin-sdk-version ${XWIN_SDK_VERSION} \
@@ -64,4 +76,5 @@ FROM base
 
 COPY --from=xwin-cache ${HOME}/xwin-cache ${HOME}/xwin-cache
 RUN chmod a+rwX ${HOME}/xwin-cache
-COPY --from=xwin-cache ${CARGO_HOME}/bin/cargo-xwin ${CARGO_HOME}/bin/cargo-xwin
+COPY --from=cargo-xwin ${HOME}/.venv/bin/cargo-xwin /usr/local/bin/cargo-xwin
+COPY --from=cargo-xwin /usr/local/bin/uv /usr/local/bin/uv

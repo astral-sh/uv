@@ -52,7 +52,7 @@ done
     exit 2
 }
 
-for command_name in gh jq codex; do
+for command_name in gh jaq codex; do
     command -v "$command_name" >/dev/null 2>&1 || fail "$command_name is required"
 done
 
@@ -112,11 +112,11 @@ while IFS= read -r -d '' rollout; do
         session_meta="$(sed -n '1p' "$rollout")" || fail "could not read $rollout"
     fi
 
-    jq -e '.type == "session_meta" and .payload.source != null' >/dev/null 2>&1 <<<"$session_meta" || fail "invalid Codex session metadata in $rollout"
+    jaq -e '.type == "session_meta" and .payload.source != null' >/dev/null 2>&1 <<<"$session_meta" || fail "invalid Codex session metadata in $rollout"
 
     # Subagent rollouts inherit the root prompt and preview. Only expose the root `codex exec`
     # session for each Codex step so the imported tasks remain distinct.
-    if jq -e '.payload.source == "exec"' >/dev/null <<<"$session_meta"; then
+    if jaq -e '.payload.source == "exec"' >/dev/null <<<"$session_meta"; then
         rollouts+=("$rollout")
     fi
 done < <(find "$download_directory" -type f \( -name 'rollout-*.jsonl' -o -name 'rollout-*.jsonl.zst' \) -print0)
@@ -142,7 +142,7 @@ read_response() {
 
     # Ignore asynchronous notifications until the response for this request arrives.
     while IFS= read -r -t 120 response <&"$server_output"; do
-        response_id="$(jq -r '.id // empty' <<<"$response" 2>/dev/null || true)"
+        response_id="$(jaq -r '.id // empty' <<<"$response" 2>/dev/null || true)"
         if [[ "$response_id" == "$expected_id" ]]; then
             printf '%s\n' "$response"
             return 0
@@ -160,13 +160,13 @@ check_response() {
     local response="$1"
     local operation="$2"
 
-    if jq -e '.error != null' >/dev/null <<<"$response"; then
-        printf 'error: Codex app-server could not %s: %s\n' "$operation" "$(jq -r '.error.message // (.error | tostring)' <<<"$response")" >&2
+    if jaq -e '.error != null' >/dev/null <<<"$response"; then
+        printf 'error: Codex app-server could not %s: %s\n' "$operation" "$(jaq -r '.error.message // (.error | tostring)' <<<"$response")" >&2
         return 1
     fi
 }
 
-initialize="$(jq -cn '{id: 1, method: "initialize", params: {clientInfo: {name: "load-github-action-thread", version: "1"}, capabilities: {experimentalApi: true}}}')"
+initialize="$(jaq -cn '{id: 1, method: "initialize", params: {clientInfo: {name: "load-github-action-thread", version: "1"}, capabilities: {experimentalApi: true}}}')"
 printf '%s\n' "$initialize" >&"$server_input"
 initialize_response="$(read_response 1)" || exit 1
 check_response "$initialize_response" "initialize" || exit 1
@@ -177,19 +177,21 @@ thread_ids=()
 for rollout in "${rollouts[@]}"; do
     # Forking turns the saved `exec` rollout into an interactive local thread. `excludeTurns`
     # keeps the response small; the complete history is still copied into the new rollout.
-    fork_request="$(jq -cn --argjson id "$request_id" --arg path "$rollout" --arg cwd "$working_directory" '{id: $id, method: "thread/fork", params: {threadId: "ignored", path: $path, cwd: $cwd, excludeTurns: true}}')"
+    # shellcheck disable=SC2016 # Keep the jaq filter literal.
+    fork_request="$(jaq -cn --argjson id "$request_id" --arg path "$rollout" --arg cwd "$working_directory" '{id: $id, method: "thread/fork", params: {threadId: "ignored", path: $path, cwd: $cwd, excludeTurns: true}}')"
     printf '%s\n' "$fork_request" >&"$server_input"
     fork_response="$(read_response "$request_id")" || exit 1
     check_response "$fork_response" "fork $rollout" || exit 1
 
-    thread_id="$(jq -r '.result.thread.id // empty' <<<"$fork_response")"
-    source_id="$(jq -r '.result.thread.forkedFromId // empty' <<<"$fork_response")"
-    thread_title="$(jq -r '(.result.thread.preview // "") | split("\n")[0] | sub("\r$"; "")' <<<"$fork_response")"
+    thread_id="$(jaq -r '.result.thread.id // empty' <<<"$fork_response")"
+    source_id="$(jaq -r '.result.thread.forkedFromId // empty' <<<"$fork_response")"
+    thread_title="$(jaq -r '(.result.thread.preview // "") | split("\n")[0] | sub("\r$"; "")' <<<"$fork_response")"
     [[ -n "$thread_id" ]] || fail "Codex app-server returned no thread ID for $rollout"
 
     if [[ -n "$thread_title" ]]; then
         request_id=$((request_id + 1))
-        set_name_request="$(jq -cn --argjson id "$request_id" --arg thread_id "$thread_id" --arg name "$thread_title" '{id: $id, method: "thread/name/set", params: {threadId: $thread_id, name: $name}}')"
+        # shellcheck disable=SC2016 # Keep the jaq filter literal.
+        set_name_request="$(jaq -cn --argjson id "$request_id" --arg thread_id "$thread_id" --arg name "$thread_title" '{id: $id, method: "thread/name/set", params: {threadId: $thread_id, name: $name}}')"
         printf '%s\n' "$set_name_request" >&"$server_input"
         set_name_response="$(read_response "$request_id")" || exit 1
         check_response "$set_name_response" "set the title for $thread_id" || exit 1

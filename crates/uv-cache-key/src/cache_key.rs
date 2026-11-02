@@ -8,7 +8,8 @@ use std::num::{
 use std::path::{Path, PathBuf};
 
 use seahash::SeaHasher;
-use url::Url;
+use uv_redacted::SafeUrl;
+use uv_redacted::policy::SerializationPolicy;
 
 /// A trait for types that can be hashed in a stable way across versions and platforms. Equivalent
 /// to Ruff's [`CacheKey`] trait.
@@ -212,7 +213,7 @@ impl CacheKey for PathBuf {
     }
 }
 
-impl CacheKey for Url {
+impl<P: SerializationPolicy> CacheKey for SafeUrl<P> {
     #[inline]
     fn cache_key(&self, state: &mut CacheKeyHasher) {
         self.as_str().cache_key(state);

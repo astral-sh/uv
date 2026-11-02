@@ -4,7 +4,7 @@ uv provides a high-level interface for storing and retrieving credentials from s
 
 ## Logging in to a service
 
-To add credentials for service, use the `uv auth login` command:
+To add credentials for a service, use the `uv auth login` command:
 
 ```console
 $ uv auth login example.com
@@ -32,7 +32,7 @@ will not yet be used for Git requests.
 
 !!! note
 
-    The credentials will not be validated, i.e., incorrect credentials will not fail.
+    uv does not validate the credentials, so the command succeeds even if they are incorrect.
 
 ## Logging out of a service
 
@@ -44,8 +44,7 @@ $ uv auth logout example.com
 
 !!! note
 
-    The credentials will not be invalidated with the remote server, i.e., they will only be removed
-    from local storage not rendered unusable.
+    The credentials are removed from local storage but are not invalidated on the remote server.
 
 ## Showing credentials for a service
 

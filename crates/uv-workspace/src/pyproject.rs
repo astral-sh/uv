@@ -15,17 +15,17 @@ use std::str::FromStr;
 
 use glob::Pattern;
 use rustc_hash::{FxBuildHasher, FxHashSet};
-use serde::de::SeqAccess;
 use serde::{Deserialize, Deserializer, Serialize};
 use thiserror::Error;
 use tracing::instrument;
 use uv_build_backend::BuildBackendSettings;
 use uv_configuration::{ExcludeDependency, GitLfsSetting, Override};
-use uv_distribution_types::{Index, IndexName, RequirementSource};
+use uv_distribution_types::{
+    Index, IndexName, MinimumLibcVersion, NameRequirementSpecification, RequirementSource,
+};
 use uv_fs::{PortablePathBuf, try_relative_to_if};
-use uv_git_types::GitReference;
-use uv_macros::OptionsMetadata;
-use uv_normalize::{DefaultGroups, ExtraName, GroupName, PackageName};
+use uv_macros::{DeserializeUntagged, OptionsMetadata};
+use uv_normalize::{DEV_DEPENDENCIES, DefaultGroups, ExtraName, GroupName, PackageName};
 use uv_options_metadata::{OptionSet, OptionsMetadata, Visit};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::MarkerTree;
@@ -33,8 +33,11 @@ use uv_pypi_types::{
     ConflictError, Conflicts, DependencyGroups, SchemaConflicts, SupportedEnvironments,
     VerbatimParsedUrl,
 };
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
+use uv_redacted::policy::Raw;
 use uv_toml::deserialize_unique_map;
+
+use crate::DefaultGroupsError;
 
 #[derive(Error, Debug)]
 pub enum PyprojectTomlError {
@@ -90,6 +93,44 @@ pub struct PyProjectToml {
 }
 
 impl PyProjectToml {
+    /// Return whether this manifest explicitly defines a workspace root.
+    pub fn is_workspace_root(&self) -> bool {
+        self.tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .is_some_and(|uv| uv.workspace.is_some())
+    }
+
+    /// Return explicitly configured default groups without validating the group names.
+    ///
+    /// `None` means the setting is absent, so uv uses `dev`; an empty list disables defaults.
+    pub fn configured_default_groups(&self) -> Option<&DefaultGroups> {
+        self.tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.default_groups.as_ref())
+    }
+
+    /// Return the default dependency groups, validating explicitly configured group names.
+    pub(crate) fn default_groups(&self) -> Result<DefaultGroups, DefaultGroupsError> {
+        if let Some(defaults) = self.configured_default_groups() {
+            if let DefaultGroups::List(defaults) = defaults {
+                for group in defaults {
+                    if !self
+                        .dependency_groups
+                        .as_ref()
+                        .is_some_and(|groups| groups.contains_key(group))
+                    {
+                        return Err(DefaultGroupsError::MissingGroup(group.clone()));
+                    }
+                }
+            }
+            Ok(defaults.clone())
+        } else {
+            Ok(DefaultGroups::from_groups(vec![DEV_DEPENDENCIES.clone()]))
+        }
+    }
+
     /// Parse a `PyProjectToml` from a raw TOML string.
     #[instrument("toml::from_str workspace", skip_all, fields(path = %_path.as_ref().display()))]
     pub fn from_string(raw: String, _path: impl AsRef<Path>) -> Result<Self, PyprojectTomlError> {
@@ -248,7 +289,7 @@ impl TryFrom<ProjectWire> for Project {
 #[cfg_attr(test, derive(Serialize))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct Tool {
-    pub uv: Option<ToolUv>,
+    pub uv: Option<Box<ToolUv>>,
 }
 
 /// Validates the `tool.uv.index` field.
@@ -287,6 +328,47 @@ where
 
 /// An override dependency before source lowering.
 pub type OverrideDependency = Override<uv_pep508::Requirement<VerbatimParsedUrl>>;
+
+/// A build constraint, optionally accompanied by archive hashes.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, DeserializeUntagged)]
+#[serde(
+    untagged,
+    expecting = "a requirement string or a table with requirement and hashes"
+)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub enum BuildConstraintDependency {
+    /// A PEP 508 requirement without additional hashes.
+    #[untagged(string)]
+    Requirement(uv_pep508::Requirement<VerbatimParsedUrl>),
+    /// A PEP 508 requirement and its archive hashes.
+    WithHashes {
+        requirement: uv_pep508::Requirement<VerbatimParsedUrl>,
+        hashes: Vec<String>,
+    },
+}
+
+impl BuildConstraintDependency {
+    /// Return the requirement and any hashes attached to it.
+    pub fn into_parts(self) -> (uv_pep508::Requirement<VerbatimParsedUrl>, Vec<String>) {
+        match self {
+            Self::Requirement(requirement) => (requirement, Vec::new()),
+            Self::WithHashes {
+                requirement,
+                hashes,
+            } => (requirement, hashes),
+        }
+    }
+}
+
+impl From<BuildConstraintDependency> for NameRequirementSpecification {
+    fn from(value: BuildConstraintDependency) -> Self {
+        let (requirement, hashes) = value.into_parts();
+        Self {
+            requirement: requirement.into(),
+            hashes,
+        }
+    }
+}
 
 // NOTE(charlie): When adding fields to this struct, mark them as ignored on `Options` in
 // `crates/uv-settings/src/settings.rs`.
@@ -397,7 +479,7 @@ pub struct ToolUv {
             default-groups = ["docs"]
         "#
     )]
-    pub default_groups: Option<DefaultGroups>,
+    default_groups: Option<DefaultGroups>,
 
     /// Additional settings for `dependency-groups`.
     ///
@@ -561,24 +643,19 @@ pub struct ToolUv {
     ///     In `uv lock`, `uv sync`, and `uv run`, uv will only read `build-constraint-dependencies` from
     ///     the `pyproject.toml` at the workspace root, and will ignore any declarations in other
     ///     workspace members or `uv.toml` files.
-    #[cfg_attr(
-        feature = "schemars",
-        schemars(
-            with = "Option<Vec<String>>",
-            description = "PEP 508-style requirements, e.g., `ruff==0.5.0`, or `ruff @ https://...`."
-        )
-    )]
+    ///
+    /// Hashes can be included to verify downloaded build dependency archives. To provide hashes,
+    /// use a table with `requirement` and `hashes`. uv records these hashes in `uv.lock`.
     #[option(
         default = "[]",
-        value_type = "list[str]",
+        value_type = "list[str | dict]",
         example = r#"
             # Ensure that the setuptools v60.0.0 is used whenever a package has a build dependency
             # on setuptools.
             build-constraint-dependencies = ["setuptools==60.0.0"]
         "#
     )]
-    pub(crate) build_constraint_dependencies:
-        Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
+    pub(crate) build_constraint_dependencies: Option<Vec<BuildConstraintDependency>>,
 
     /// A list of supported environments against which to resolve dependencies.
     ///
@@ -607,7 +684,7 @@ pub struct ToolUv {
 
     /// A list of required platforms, for packages that lack source distributions.
     ///
-    /// When a package does not have a source distribution, it's availability will be limited to
+    /// When a package does not have a source distribution, its availability will be limited to
     /// the platforms supported by its built distributions (wheels). For example, if a package only
     /// publishes wheels for Linux, then it won't be installable on macOS or Windows.
     ///
@@ -647,6 +724,37 @@ pub struct ToolUv {
         "#
     )]
     pub(crate) required_environments: Option<SupportedEnvironments>,
+
+    /// The minimum libc versions to support when resolving for Linux.
+    ///
+    /// During universal resolution, wheels must support the configured libc versions to satisfy
+    /// `required-environments`. For example, `{ glibc = "2.31" }` accepts `manylinux_2_17` wheels
+    /// as coverage, but not `manylinux_2_34` wheels. Both are retained in the lockfile so installation
+    /// can select the best wheel for the current machine. An omitted libc is not required.
+    ///
+    /// Use `required-environments` to specify the Linux architectures to support. Each configured
+    /// libc version needs compatible wheels for those environments. Generic Linux wheels do not
+    /// constrain libc and can satisfy either implementation. Packages with a usable source
+    /// distribution can still be selected.
+    ///
+    /// This setting is respected by `uv lock` and `uv pip compile --universal`.
+    ///
+    /// This option is in preview and may change in any future release. Use
+    /// `--preview-features minimum-libc-version` or configure
+    /// `preview-features = ["minimum-libc-version"]` to disable the warning.
+    #[option(
+        default = "None",
+        value_type = "dict[str, str]",
+        example = r#"
+            preview-features = ["minimum-libc-version"]
+            required-environments = [
+                "sys_platform == 'linux' and platform_machine == 'x86_64'",
+                "sys_platform == 'linux' and platform_machine == 'aarch64'",
+            ]
+            minimum-libc-version = { glibc = "2.31" }
+        "#
+    )]
+    pub(crate) minimum_libc_version: Option<MinimumLibcVersion>,
 
     /// Declare collections of extras or dependency groups that are conflicting
     /// (i.e., mutually exclusive).
@@ -813,10 +921,14 @@ pub(crate) struct DependencyGroupSettings {
     pub(crate) requires_python: Option<VersionSpecifiers>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(untagged, rename_all = "kebab-case")]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, DeserializeUntagged)]
+#[serde(
+    untagged,
+    expecting = "a requirement string or a table with requirement and match-runtime"
+)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 enum ExtraBuildDependencyWire {
+    #[untagged(string)]
     Unannotated(uv_pep508::Requirement<VerbatimParsedUrl>),
     #[serde(rename_all = "kebab-case")]
     Annotated {
@@ -1037,50 +1149,14 @@ impl IntoIterator for Sources {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, DeserializeUntagged)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema), schemars(untagged))]
+#[serde(expecting = "a single source (as a map) or list of sources")]
 enum SourcesWire {
+    #[untagged(map)]
     One(Source),
+    #[untagged(seq)]
     Many(Vec<Source>),
-}
-
-impl<'de> serde::de::Deserialize<'de> for SourcesWire {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        struct Visitor;
-
-        impl<'de> serde::de::Visitor<'de> for Visitor {
-            type Value = SourcesWire;
-
-            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-                formatter.write_str("a single source (as a map) or list of sources")
-            }
-
-            fn visit_seq<A>(self, seq: A) -> Result<Self::Value, A::Error>
-            where
-                A: SeqAccess<'de>,
-            {
-                let sources = serde::de::Deserialize::deserialize(
-                    serde::de::value::SeqAccessDeserializer::new(seq),
-                )?;
-                Ok(SourcesWire::Many(sources))
-            }
-
-            fn visit_map<M>(self, mut map: M) -> Result<Self::Value, M::Error>
-            where
-                M: serde::de::MapAccess<'de>,
-            {
-                let source = serde::de::Deserialize::deserialize(
-                    serde::de::value::MapAccessDeserializer::new(&mut map),
-                )?;
-                Ok(SourcesWire::One(source))
-            }
-        }
-
-        deserializer.deserialize_any(Visitor)
-    }
 }
 
 impl TryFrom<SourcesWire> for Sources {
@@ -1144,7 +1220,7 @@ pub enum Source {
     /// ```
     Git {
         /// The repository URL (without the `git+` prefix).
-        git: DisplaySafeUrl,
+        git: SafeUrl<Raw>,
         /// The path to the directory with the `pyproject.toml`, if it's not in the repository root.
         subdirectory: Option<PortablePathBuf>,
         /// The path to the archive within the repository.
@@ -1172,7 +1248,7 @@ pub enum Source {
     /// flask = { url = "https://files.pythonhosted.org/packages/61/80/ffe1da13ad9300f87c93af113edd0638c75138c42a0994becfacac078c06/flask-3.0.3-py3-none-any.whl" }
     /// ```
     Url {
-        url: DisplaySafeUrl,
+        url: SafeUrl<Raw>,
         /// For source distributions, the path to the directory with the `pyproject.toml`, if it's
         /// not in the archive root.
         subdirectory: Option<PortablePathBuf>,
@@ -1242,11 +1318,13 @@ pub enum Source {
 }
 
 /// A reference to either the current workspace or a workspace discovered from a path.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, DeserializeUntagged, Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema), schemars(untagged))]
 #[serde(untagged)]
 pub enum WorkspaceReference {
+    #[untagged(bool)]
     Bool(bool),
+    #[untagged(string)]
     Path(PortablePathBuf),
 }
 
@@ -1260,13 +1338,13 @@ impl<'de> Deserialize<'de> for Source {
         #[derive(Deserialize, Debug, Clone)]
         #[serde(rename_all = "kebab-case", deny_unknown_fields)]
         struct CatchAll {
-            git: Option<DisplaySafeUrl>,
+            git: Option<SafeUrl>,
             subdirectory: Option<PortablePathBuf>,
             rev: Option<String>,
             tag: Option<String>,
             branch: Option<String>,
             lfs: Option<bool>,
-            url: Option<DisplaySafeUrl>,
+            url: Option<SafeUrl>,
             path: Option<PortablePathBuf>,
             editable: Option<bool>,
             package: Option<bool>,
@@ -1356,13 +1434,13 @@ impl<'de> Deserialize<'de> for Source {
 
             // If the user prefixed the URL with `git+`, strip it.
             let git = if let Some(git) = git.as_str().strip_prefix("git+") {
-                DisplaySafeUrl::parse(git).map_err(serde::de::Error::custom)?
+                SafeUrl::parse(git).map_err(serde::de::Error::custom)?
             } else {
                 git
             };
 
             return Ok(Self::Git {
-                git,
+                git: git.with_policy(Raw),
                 subdirectory,
                 path,
                 rev,
@@ -1424,7 +1502,7 @@ impl<'de> Deserialize<'de> for Source {
             }
 
             return Ok(Self::Url {
-                url,
+                url: url.with_policy(Raw),
                 subdirectory,
                 marker,
                 extra,
@@ -1634,7 +1712,7 @@ pub enum SourceError {
     UnusedEditable(String),
     #[error("Failed to resolve absolute path")]
     Absolute(#[from] std::io::Error),
-    #[error("Path contains invalid characters: `{}`", _0.display())]
+    #[error("Path contains invalid characters: {}", _0.display())]
     NonUtf8Path(PathBuf),
     #[error("Source markers must be disjoint, but the following markers overlap: `{0}` and `{1}`.")]
     OverlappingMarkers(String, String, String),
@@ -1646,7 +1724,7 @@ pub enum SourceError {
     EmptySources,
 }
 
-impl uv_errors::Hint for SourceError {
+impl uv_errors::Hinted for SourceError {
     fn hints(&self) -> uv_errors::Hints<'_> {
         match self {
             Self::OverlappingMarkers(_, rhs, replacement) => {
@@ -1778,7 +1856,7 @@ impl Source {
                 editable: None,
                 package: None,
                 path: PortablePathBuf::from(
-                    try_relative_to_if(&install_path, root, !url.was_given_absolute())
+                    try_relative_to_if(&install_path, root, url.prefers_relative())
                         .map_err(SourceError::Absolute)?
                         .into_boxed_path(),
                 ),
@@ -1795,7 +1873,7 @@ impl Source {
                 editable: editable.or(is_editable),
                 package: None,
                 path: PortablePathBuf::from(
-                    try_relative_to_if(&install_path, root, !url.was_given_absolute())
+                    try_relative_to_if(&install_path, root, url.prefers_relative())
                         .map_err(SourceError::Absolute)?
                         .into_boxed_path(),
                 ),
@@ -1818,20 +1896,13 @@ impl Source {
                 git, subdirectory, ..
             } => {
                 if rev.is_none() && tag.is_none() && branch.is_none() {
-                    let rev = match git.reference() {
-                        GitReference::Branch(rev) => Some(rev),
-                        GitReference::Tag(rev) => Some(rev),
-                        GitReference::BranchOrTag(rev) => Some(rev),
-                        GitReference::BranchOrTagOrCommit(rev) => Some(rev),
-                        GitReference::NamedRef(rev) => Some(rev),
-                        GitReference::DefaultBranch => None,
-                    };
+                    let rev = git.reference().as_str().map(str::to_owned);
                     Self::Git {
-                        rev: rev.cloned(),
+                        rev,
                         tag,
                         branch,
                         lfs: lfs.into(),
-                        git: git.url().clone(),
+                        git: git.url().clone().with_policy(Raw),
                         subdirectory: subdirectory.map(PortablePathBuf::from),
                         path: None,
                         marker: MarkerTree::TRUE,
@@ -1844,7 +1915,7 @@ impl Source {
                         tag,
                         branch,
                         lfs: lfs.into(),
-                        git: git.url().clone(),
+                        git: git.url().clone().with_policy(Raw),
                         subdirectory: subdirectory.map(PortablePathBuf::from),
                         path: None,
                         marker: MarkerTree::TRUE,
@@ -1857,20 +1928,13 @@ impl Source {
                 git, install_path, ..
             } => {
                 if rev.is_none() && tag.is_none() && branch.is_none() {
-                    let rev = match git.reference() {
-                        GitReference::Branch(rev) => Some(rev),
-                        GitReference::Tag(rev) => Some(rev),
-                        GitReference::BranchOrTag(rev) => Some(rev),
-                        GitReference::BranchOrTagOrCommit(rev) => Some(rev),
-                        GitReference::NamedRef(rev) => Some(rev),
-                        GitReference::DefaultBranch => None,
-                    };
+                    let rev = git.reference().as_str().map(str::to_owned);
                     Self::Git {
-                        rev: rev.cloned(),
+                        rev,
                         tag,
                         branch,
                         lfs: lfs.into(),
-                        git: git.url().clone(),
+                        git: git.url().clone().with_policy(Raw),
                         subdirectory: None,
                         path: Some(PortablePathBuf::from(install_path.as_path())),
                         marker: MarkerTree::TRUE,
@@ -1883,7 +1947,7 @@ impl Source {
                         tag,
                         branch,
                         lfs: lfs.into(),
-                        git: git.url().clone(),
+                        git: git.url().clone().with_policy(Raw),
                         subdirectory: None,
                         path: Some(PortablePathBuf::from(install_path.as_path())),
                         marker: MarkerTree::TRUE,
@@ -1996,5 +2060,114 @@ impl OptionsMetadata for BuildBackendSettingsSchema {
         Self: Sized + 'static,
     {
         BuildBackendSettings::metadata()
+    }
+}
+
+#[cfg(test)]
+mod deserialization_tests {
+    use std::io::{self, Read};
+
+    use serde::Deserialize;
+
+    use super::{BuildConstraintDependency, ExtraBuildDependency};
+
+    #[derive(Debug, Deserialize)]
+    struct BuildConstraint {
+        dependency: BuildConstraintDependency,
+    }
+
+    #[derive(Debug, Deserialize)]
+    struct ExtraBuild {
+        dependency: ExtraBuildDependency,
+    }
+
+    #[test]
+    fn build_dependency_retains_read_errors() {
+        struct FailedRead;
+
+        impl Read for FailedRead {
+            fn read(&mut self, _buffer: &mut [u8]) -> io::Result<usize> {
+                Err(io::Error::other("metadata read failed"))
+            }
+        }
+
+        let reader = br#"{"requirement":"setuptools","hashes":["#
+            .as_slice()
+            .chain(FailedRead);
+        assert!(
+            serde_json::from_reader::<_, BuildConstraintDependency>(reader)
+                .unwrap_err()
+                .is_io()
+        );
+        let reader = br#"{"requirement":"torch","match-runtime":"#
+            .as_slice()
+            .chain(FailedRead);
+        assert!(
+            serde_json::from_reader::<_, ExtraBuildDependency>(reader)
+                .unwrap_err()
+                .is_io()
+        );
+    }
+
+    #[test]
+    fn build_constraint_representations() -> anyhow::Result<()> {
+        let bare: BuildConstraint = toml::from_str(r#"dependency = "setuptools>=75""#)?;
+        let annotated: BuildConstraint = toml::from_str(
+            r#"dependency = { requirement = "setuptools>=75", hashes = ["sha256:abc"], ignored = true }"#,
+        )?;
+        assert!(
+            toml::from_str::<BuildConstraint>(r#"dependency = ["setuptools>=75", ["sha256:abc"]]"#)
+                .is_err()
+        );
+        let (bare_requirement, bare_hashes) = bare.dependency.into_parts();
+        let (requirement, hashes) = annotated.dependency.into_parts();
+        assert_eq!(bare_requirement, requirement);
+        assert!(bare_hashes.is_empty());
+        assert_eq!(hashes, ["sha256:abc"]);
+        Ok(())
+    }
+
+    #[test]
+    fn extra_build_dependency_representations() -> anyhow::Result<()> {
+        let bare: ExtraBuild = toml::from_str(r#"dependency = "torch>=2""#)?;
+        let annotated: ExtraBuild = toml::from_str(
+            r#"dependency = { requirement = "torch>=2", match-runtime = true, ignored = true }"#,
+        )?;
+        assert!(toml::from_str::<ExtraBuild>(r#"dependency = ["torch>=2", true]"#).is_err());
+        assert_eq!(
+            bare.dependency.requirement,
+            annotated.dependency.requirement
+        );
+        assert!(!bare.dependency.match_runtime);
+        assert!(annotated.dependency.match_runtime);
+        Ok(())
+    }
+
+    #[test]
+    fn build_constraint_requires_hashes() {
+        insta::assert_snapshot!(
+            toml::from_str::<BuildConstraint>(r#"dependency = { requirement = "setuptools>=75" }"#).unwrap_err(),
+            @r#"
+        TOML parse error at line 1, column 14
+          |
+        1 | dependency = { requirement = "setuptools>=75" }
+          |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        missing field `hashes`
+        "#
+        );
+    }
+
+    #[test]
+    fn extra_build_dependency_requires_match_runtime() {
+        insta::assert_snapshot!(
+            toml::from_str::<ExtraBuild>(r#"dependency = { requirement = "torch>=2" }"#).unwrap_err(),
+            @r#"
+        TOML parse error at line 1, column 14
+          |
+        1 | dependency = { requirement = "torch>=2" }
+          |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        missing field `match-runtime`
+        "#
+        );
     }
 }

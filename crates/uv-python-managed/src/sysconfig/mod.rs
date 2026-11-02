@@ -1,0 +1,472 @@
+//! Patch `sysconfig` data in a Python installation.
+//!
+//! Inspired by: <https://github.com/bluss/sysconfigpatcher/blob/c1ebf8ab9274dcde255484d93ce0f1fd1f76a248/src/sysconfigpatcher.py#L137C1-L140C100>,
+//! available under the MIT license:
+//!
+//! ```text
+//! Copyright 2024 Ulrik Sverdrup "bluss"
+//!
+//! Permission is hereby granted, free of charge, to any person obtaining a copy of
+//! this software and associated documentation files (the "Software"), to deal in
+//! the Software without restriction, including without limitation the rights to
+//! use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+//! the Software, and to permit persons to whom the Software is furnished to do so,
+//! subject to the following conditions:
+//!
+//! The above copyright notice and this permission notice shall be included in all
+//! copies or substantial portions of the Software.
+//!
+//! THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+//! IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+//! FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+//! COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+//! IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+//! CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+//! ```
+
+use std::borrow::Cow;
+use std::io;
+use std::path::{Path, PathBuf};
+use std::str::FromStr;
+
+use itertools::Itertools;
+use tracing::trace;
+
+use crate::sysconfig::generated_mappings::DEFAULT_VARIABLE_UPDATES;
+use crate::sysconfig::parser::{Error as ParseError, SysconfigData, Value};
+
+mod cursor;
+mod generated_mappings;
+mod parser;
+mod replacements;
+
+/// Update the `sysconfig` data in a Python installation.
+pub(crate) async fn update_sysconfig(
+    install_root: &Path,
+    major: u8,
+    minor: u8,
+    suffix: &str,
+) -> Result<(), Error> {
+    // Find the `_sysconfigdata_` file in the Python installation.
+    let real_prefix = std::path::absolute(install_root)?;
+    let sysconfigdata = find_sysconfigdata(&real_prefix, major, minor, suffix).await?;
+    trace!(
+        "Discovered `sysconfig` data at: {}",
+        sysconfigdata.display()
+    );
+
+    // Update the `_sysconfigdata_` file in-memory.
+    let contents = fs_err::tokio::read_to_string(&sysconfigdata).await?;
+    let data = SysconfigData::from_str(&contents)?;
+    let data = patch_sysconfigdata(data, &real_prefix);
+    let new_contents = data.to_string_pretty()?;
+
+    // Python processes can import this module while the installation is being patched.
+    if contents != new_contents {
+        uv_fs::write_atomic_preserve(&sysconfigdata, new_contents).await?;
+    }
+
+    // Find the `pkgconfig` files in the Python installation.
+    let mut pkgconfigs =
+        match fs_err::tokio::read_dir(real_prefix.join("lib").join("pkgconfig")).await {
+            Ok(read_dir) => read_dir,
+            Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(()),
+            Err(err) => return Err(err.into()),
+        };
+    while let Some(entry) = pkgconfigs.next_entry().await? {
+        let pkgconfig = entry.path();
+        if pkgconfig.extension().is_none_or(|ext| ext != "pc")
+            || !entry
+                .file_type()
+                .await
+                .is_ok_and(|file_type| file_type.is_file())
+        {
+            continue;
+        }
+        trace!("Discovered `pkgconfig` data at: {}", pkgconfig.display());
+
+        // Update the `pkgconfig` file in-memory.
+        let contents = fs_err::tokio::read_to_string(&pkgconfig).await?;
+        if let Some(new_contents) = patch_pkgconfig(&contents) {
+            // Build tools can read this file while the installation is being patched.
+            uv_fs::write_atomic_preserve(&pkgconfig, new_contents).await?;
+        }
+    }
+
+    Ok(())
+}
+
+/// Find the `_sysconfigdata_` file in a Python installation.
+///
+/// For example, on macOS, returns `{real_prefix}/lib/python3.12/_sysconfigdata__darwin_darwin.py"`.
+async fn find_sysconfigdata(
+    real_prefix: &Path,
+    major: u8,
+    minor: u8,
+    suffix: &str,
+) -> Result<PathBuf, Error> {
+    // Find the `lib` directory in the Python installation.
+    let lib = real_prefix
+        .join("lib")
+        .join(format!("python{major}.{minor}{suffix}"));
+    if !fs_err::tokio::try_exists(&lib).await.unwrap_or(false) {
+        return Err(Error::MissingLib(lib));
+    }
+
+    // Probe the `lib` directory for `_sysconfigdata_`.
+    let mut entries = fs_err::tokio::read_dir(&lib).await?;
+    while let Some(entry) = entries.next_entry().await? {
+        let path = entry.path();
+        if path.extension().is_none_or(|ext| ext != "py")
+            || !path
+                .file_stem()
+                .and_then(|stem| stem.to_str())
+                .is_some_and(|stem| stem.starts_with("_sysconfigdata_"))
+        {
+            continue;
+        }
+
+        if entry.metadata().await?.is_file() {
+            return Ok(path);
+        }
+    }
+
+    Err(Error::MissingSysconfigdata)
+}
+
+/// Patch the given `_sysconfigdata_` contents.
+fn patch_sysconfigdata(mut data: SysconfigData, real_prefix: &Path) -> SysconfigData {
+    /// Update the `/install` prefix in a whitespace-separated string.
+    fn update_prefix(s: &str, real_prefix: &Path) -> String {
+        s.split_whitespace()
+            .map(|part| {
+                if part == "/install" {
+                    real_prefix.display().to_string()
+                } else if let Some(rest) = part.strip_prefix("/install/") {
+                    real_prefix.join(rest).display().to_string()
+                } else {
+                    part.to_string()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+
+    /// Remove any references to `-isysroot` in a whitespace-separated string.
+    fn remove_isysroot(s: &str) -> String {
+        // If we see `-isysroot`, drop it and the next part.
+        let mut parts = s.split_whitespace().peekable();
+        let mut result = Vec::with_capacity(parts.size_hint().0);
+        while let Some(part) = parts.next() {
+            if part == "-isysroot" {
+                parts.next();
+            } else {
+                result.push(part);
+            }
+        }
+        result.join(" ")
+    }
+
+    // Patch each value, as needed.
+    let mut count = 0;
+    for (key, value) in data.iter_mut() {
+        let Value::String(value) = value else {
+            continue;
+        };
+        let patched = update_prefix(value, real_prefix);
+        let mut patched = remove_isysroot(&patched);
+
+        if let Some(replacement_entries) = DEFAULT_VARIABLE_UPDATES.get(key) {
+            for replacement_entry in replacement_entries {
+                patched = replacement_entry.patch(&patched);
+            }
+        }
+
+        if *value != patched {
+            trace!("Updated `{key}` from `{value}` to `{patched}`");
+            count += 1;
+            *value = patched;
+        }
+    }
+
+    match count {
+        0 => trace!("No updates required"),
+        1 => trace!("Updated 1 value"),
+        n => trace!("Updated {n} values"),
+    }
+
+    // Mark the Python installation as standalone.
+    data.insert("PYTHON_BUILD_STANDALONE".to_string(), Value::Int(1));
+
+    data
+}
+
+/// Patch the given `pkgconfig` contents.
+///
+/// Returns the updated contents, if an update is needed.
+fn patch_pkgconfig(contents: &str) -> Option<String> {
+    let mut changed = false;
+    let new_contents = contents
+        .lines()
+        .map(|line| {
+            // python-build-standalone is compiled with a prefix of
+            // /install. Replace lines like `prefix=/install` with
+            // `prefix=${pcfiledir}/../..` (since the .pc file is in
+            // lib/pkgconfig/). Newer versions of python-build-standalone
+            // already have this change.
+            let Some((prefix, suffix)) = line.split_once('=') else {
+                return Cow::Borrowed(line);
+            };
+
+            // The content before the `=` must be an ASCII alphabetic string.
+            if !prefix.chars().all(|c| c.is_ascii_alphabetic()) {
+                return Cow::Borrowed(line);
+            }
+
+            // The content after the `=` must be equal to the expected prefix.
+            if suffix != "/install" {
+                return Cow::Borrowed(line);
+            }
+
+            changed = true;
+            Cow::Owned(format!("{prefix}=${{pcfiledir}}/../.."))
+        })
+        .join("\n");
+    if changed { Some(new_contents) } else { None }
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum Error {
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+    #[error("Python installation is missing a `lib` directory at: {0}")]
+    MissingLib(PathBuf),
+    #[error("Python installation is missing a `_sysconfigdata_` file")]
+    MissingSysconfigdata,
+    #[error(transparent)]
+    Parse(#[from] ParseError),
+    #[error(transparent)]
+    Json(#[from] serde_json::Error),
+}
+
+#[cfg(test)]
+#[cfg(unix)]
+mod tests {
+    use super::*;
+    use indoc::indoc;
+
+    #[test]
+    fn update_real_prefix() -> Result<(), Error> {
+        let sysconfigdata = [
+            ("BASEMODLIBS", ""),
+            ("BINDIR", "/install/bin"),
+            ("BINLIBDEST", "/install/lib/python3.10"),
+            ("BLDLIBRARY", "-L. -lpython3.10"),
+            ("BUILDPYTHON", "python.exe"),
+            ("prefix", "/install/prefix"),
+            ("exec_prefix", "/install/exec_prefix"),
+            ("base", "/install/base"),
+        ]
+        .into_iter()
+        .map(|(k, v)| (k.to_string(), Value::String(v.to_string())))
+        .collect::<SysconfigData>();
+
+        let real_prefix = Path::new("/real/prefix");
+        let data = patch_sysconfigdata(sysconfigdata, real_prefix);
+
+        insta::assert_snapshot!(data.to_string_pretty()?, @r#"
+        # system configuration generated and used by the sysconfig module
+        build_time_vars = {
+            "BASEMODLIBS": "",
+            "BINDIR": "/real/prefix/bin",
+            "BINLIBDEST": "/real/prefix/lib/python3.10",
+            "BLDLIBRARY": "-L. -lpython3.10",
+            "BUILDPYTHON": "python.exe",
+            "PYTHON_BUILD_STANDALONE": 1,
+            "base": "/real/prefix/base",
+            "exec_prefix": "/real/prefix/exec_prefix",
+            "prefix": "/real/prefix/prefix"
+        }
+        "#);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_replacements() -> Result<(), Error> {
+        let sysconfigdata = [
+            ("CC", "clang -pthread"),
+            ("CXX", "clang++ -pthread"),
+            ("AR", "/tools/llvm/bin/llvm-ar"),
+        ]
+        .into_iter()
+        .map(|(k, v)| (k.to_string(), Value::String(v.to_string())))
+        .collect::<SysconfigData>();
+
+        let real_prefix = Path::new("/real/prefix");
+        let data = patch_sysconfigdata(sysconfigdata, real_prefix);
+
+        insta::assert_snapshot!(data.to_string_pretty()?, @r#"
+        # system configuration generated and used by the sysconfig module
+        build_time_vars = {
+            "AR": "ar",
+            "CC": "cc -pthread",
+            "CXX": "c++ -pthread",
+            "PYTHON_BUILD_STANDALONE": 1
+        }
+        "#);
+
+        // Cross-compiles may embed historical compiler paths.
+        let sysconfigdata = [
+            ("BLDSHARED", "/usr/bin/aarch64-linux-gnu-gcc"),
+            ("CC", "/usr/bin/riscv64-linux-gnu-gcc"),
+            ("CXX", "/usr/bin/riscv64-linux-gnu-g++"),
+            ("LDCXXSHARED", "/usr/bin/aarch64-linux-gnu-g++"),
+            ("LDSHARED", "/usr/bin/aarch64-linux-gnu-gcc"),
+            ("LINKCC", "/usr/bin/riscv64-linux-gnu-gcc"),
+        ]
+        .into_iter()
+        .map(|(k, v)| (k.to_string(), Value::String(v.to_string())))
+        .collect::<SysconfigData>();
+
+        let real_prefix = Path::new("/real/prefix");
+        let data = patch_sysconfigdata(sysconfigdata, real_prefix);
+
+        insta::assert_snapshot!(data.to_string_pretty()?, @r#"
+        # system configuration generated and used by the sysconfig module
+        build_time_vars = {
+            "BLDSHARED": "cc",
+            "CC": "cc",
+            "CXX": "c++",
+            "LDCXXSHARED": "c++",
+            "LDSHARED": "cc",
+            "LINKCC": "cc",
+            "PYTHON_BUILD_STANDALONE": 1
+        }
+        "#);
+
+        Ok(())
+    }
+
+    #[test]
+    fn historical_compiler_paths() -> Result<(), Error> {
+        for (cc, cxx) in [
+            (
+                "/usr/bin/arm-linux-gnueabi-gcc",
+                "/usr/bin/arm-linux-gnueabi-g++",
+            ),
+            (
+                "/usr/bin/arm-linux-gnueabihf-gcc",
+                "/usr/bin/arm-linux-gnueabihf-g++",
+            ),
+            ("/usr/bin/mips-linux-gnu-gcc", "/usr/bin/mips-linux-gnu-g++"),
+            (
+                "/usr/bin/mipsel-linux-gnu-gcc",
+                "/usr/bin/mipsel-linux-gnu-g++",
+            ),
+            (
+                "/usr/bin/powerpc64le-linux-gnu-gcc",
+                "/usr/bin/powerpc64le-linux-gnu-g++",
+            ),
+            (
+                "/usr/bin/s390x-linux-gnu-gcc",
+                "/usr/bin/s390x-linux-gnu-g++",
+            ),
+        ] {
+            let sysconfigdata = [
+                ("BLDSHARED", cc),
+                ("CC", cc),
+                ("CXX", cxx),
+                ("LDCXXSHARED", cxx),
+                ("LDSHARED", cc),
+                ("LINKCC", cc),
+            ]
+            .into_iter()
+            .map(|(key, value)| (key.to_string(), Value::String(format!("{value} -pthread"))))
+            .collect::<SysconfigData>();
+
+            let real_prefix = Path::new("/real/prefix");
+            let data = patch_sysconfigdata(sysconfigdata, real_prefix);
+            let patched = data.to_string_pretty()?;
+
+            insta::allow_duplicates! {
+                insta::assert_snapshot!(patched, @r#"
+            # system configuration generated and used by the sysconfig module
+            build_time_vars = {
+                "BLDSHARED": "cc -pthread",
+                "CC": "cc -pthread",
+                "CXX": "c++ -pthread",
+                "LDCXXSHARED": "c++ -pthread",
+                "LDSHARED": "cc -pthread",
+                "LINKCC": "cc -pthread",
+                "PYTHON_BUILD_STANDALONE": 1
+            }
+                "#);
+            }
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn remove_isysroot() -> Result<(), Error> {
+        let sysconfigdata = [
+            ("BLDSHARED", "clang -bundle -undefined dynamic_lookup -arch arm64 -isysroot /Applications/MacOSX14.2.sdk"),
+        ]
+            .into_iter()
+            .map(|(k, v)| (k.to_string(), Value::String(v.to_string())))
+            .collect::<SysconfigData>();
+
+        let real_prefix = Path::new("/real/prefix");
+        let data = patch_sysconfigdata(sysconfigdata, real_prefix);
+
+        insta::assert_snapshot!(data.to_string_pretty()?, @r#"
+        # system configuration generated and used by the sysconfig module
+        build_time_vars = {
+            "BLDSHARED": "cc -bundle -undefined dynamic_lookup -arch arm64",
+            "PYTHON_BUILD_STANDALONE": 1
+        }
+        "#);
+
+        Ok(())
+    }
+
+    #[test]
+    fn update_pkgconfig() {
+        let pkgconfig = indoc! {
+            r"
+            # See: man pkg-config
+            prefix=/install
+            exec_prefix=${prefix}
+            libdir=${exec_prefix}/lib
+            includedir=${prefix}/include
+
+            Name: Python
+            Description: Build a C extension for Python
+            Requires:
+            Version: 3.10
+            Libs.private: -ldl   -framework CoreFoundation
+            Libs:
+            Cflags: -I${includedir}/python3.10
+            "
+        };
+
+        let pkgconfig = patch_pkgconfig(pkgconfig).unwrap();
+
+        insta::assert_snapshot!(pkgconfig, @"
+        # See: man pkg-config
+        prefix=${pcfiledir}/../..
+        exec_prefix=${prefix}
+        libdir=${exec_prefix}/lib
+        includedir=${prefix}/include
+
+        Name: Python
+        Description: Build a C extension for Python
+        Requires:
+        Version: 3.10
+        Libs.private: -ldl   -framework CoreFoundation
+        Libs:
+        Cflags: -I${includedir}/python3.10
+        ");
+    }
+}

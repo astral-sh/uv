@@ -1,8 +1,29 @@
-# Sign uv's macOS arm64 and Windows x86-64 wheels and GitHub archives during dry-runs.
+# Sign and verify uv's macOS and Windows wheels and GitHub release archives.
 name: "Sign release binaries"
 
 on:
   workflow_call:
+    inputs:
+      plan:
+        description: "The cargo-dist release plan"
+        required: true
+        type: string
+    outputs:
+      uv-wheels:
+        description: "Artifact ID for all uv release wheels"
+        value: ${{ jobs.assemble.outputs.uv-wheels }}
+      uv-build-wheels:
+        description: "Artifact ID for all uv_build release wheels"
+        value: ${{ jobs.assemble.outputs.uv-build-wheels }}
+      github-archives:
+        description: "Artifact ID for all GitHub release archives and checksums"
+        value: ${{ jobs.assemble.outputs.github-archives }}
+      uv-sdist:
+        description: "Artifact ID for the uv source distribution"
+        value: ${{ jobs.assemble.outputs.uv-sdist }}
+      uv-build-sdist:
+        description: "Artifact ID for the uv_build source distribution"
+        value: ${{ jobs.assemble.outputs.uv-build-sdist }}
 
 permissions: {}
 
@@ -19,88 +40,109 @@ jobs:
     permissions:
       contents: read
     outputs:
+      targets: ${{ steps.targets.outputs.targets }}
+      artifacts: ${{ steps.targets.outputs.artifacts }}
+      macos: ${{ steps.targets.outputs.macos }}
+      windows: ${{ steps.targets.outputs.windows }}
       unsigned-macos: ${{ steps.macos.outputs.artifact-id }}
       unsigned-windows: ${{ steps.windows.outputs.artifact-id }}
       assembly: ${{ steps.assembly.outputs.artifact-id }}
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - name: "Install uv"
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - name: "Plan signed release targets"
+        id: targets
+        uses: astral-sh/github-actions/plan-release-signing@0125bede5fad05fe257d1bbe205173b2fa0df28f # shared release signing actions
         with:
-          version: "0.12.7"
-          checksum: "788f18abea7c5f55d6216e4f5613fd89d4d59b631efeec117b2b07fe72f1da21"
-          enable-cache: false
+          archive-package: uv
+          packages: >-
+            {
+              "macos": {"uv": ["uv", "uvx"], "uv_build": ["uv-build"]},
+              "windows": {
+                "uv": ["uv.exe", "uvx.exe", "uvw.exe"],
+                "uv_build": ["uv-build.exe"]
+              }
+            }
 
-      - name: "Download unsigned macOS wheels"
+      - name: "Download built wheels"
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          pattern: wheels_*-aarch64-apple-darwin
-          path: wheels/aarch64-apple-darwin
+          pattern: build-wheels-*
+          path: wheel-artifacts
+
+      - name: "Download built GitHub release archives"
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: build-github-archives-*
+          path: github-archives
           merge-multiple: true
 
-      - name: "Download unsigned Windows wheels"
+      - name: "Download uv source distribution"
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          pattern: wheels_*-x86_64-pc-windows-msvc
-          path: wheels/x86_64-pc-windows-msvc
-          merge-multiple: true
+          name: build-sdist-uv
+          path: sdists/uv
 
-      - name: "Download unsigned macOS GitHub release archive"
+      - name: "Download uv_build source distribution"
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: artifacts-aarch64-apple-darwin
-          path: github-archives
+          name: build-sdist-uv_build
+          path: sdists/uv_build
 
-      - name: "Download unsigned Windows GitHub release archive"
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: artifacts-x86_64-pc-windows-msvc
-          path: github-archives
-
-      - name: "Extract executable wheel members"
+      - name: "Collect built release wheels"
         shell: bash
+        env:
+          TARGETS: ${{ join(fromJSON(steps.targets.outputs.targets), ' ') }}
         run: |
           set -euo pipefail
-          # uv and uv_build keep their executables in .data/scripts.
-          for target in aarch64-apple-darwin x86_64-pc-windows-msvc; do
-            uv run scripts/extract-wheel-binaries.py \
-              --output "./unsigned/$target" wheels/"$target"/*.whl
+          shopt -s failglob
+          read -r -a targets <<< "$TARGETS"
+          for target in "${targets[@]}"; do
+            mkdir -p "wheels/$target"
+            cp wheel-artifacts/"build-wheels-uv-$target"/*.whl "wheels/$target/"
+            cp wheel-artifacts/"build-wheels-uv_build-$target"/*.whl "wheels/$target/"
           done
+
+      - name: "Prepare release signing inputs"
+        uses: astral-sh/github-actions/prepare-release-signing@0125bede5fad05fe257d1bbe205173b2fa0df28f # shared release signing actions
+        with:
+          targets: ${{ steps.targets.outputs.artifacts }}
+          output-directory: prepared
 
       - name: "Upload unsigned macOS executables"
         id: macos
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: unsigned-macos-${{ github.run_id }}-${{ github.run_attempt }}
-          path: unsigned/aarch64-apple-darwin/*
+          name: unsigned-binaries-macos-${{ github.run_id }}-${{ github.run_attempt }}
+          path: prepared/unsigned/macos
           if-no-files-found: error
 
       - name: "Upload unsigned Windows executables"
         id: windows
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: unsigned-windows-${{ github.run_id }}-${{ github.run_attempt }}
-          path: unsigned/x86_64-pc-windows-msvc/*
+          name: unsigned-binaries-windows-${{ github.run_id }}-${{ github.run_attempt }}
+          path: prepared/unsigned/windows
           if-no-files-found: error
 
       - name: "Upload assembly inputs"
         id: assembly
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: signing-assembly-${{ github.run_id }}-${{ github.run_attempt }}
+          name: signing-assembly-inputs-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             wheels
+            sdists
             github-archives
           if-no-files-found: error
 
   sign-macos:
-    name: "sign macos binaries"
+    name: "sign and notarize macos binaries"
     needs: prepare
     if: ${{ github.repository == 'astral-sh/uv' && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' }}
-    runs-on: ubuntu-24.04
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-24.04' }}
     environment: release
     permissions:
       contents: read
@@ -108,17 +150,6 @@ jobs:
     outputs:
       artifact: ${{ steps.upload.outputs.artifact-id }}
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          persist-credentials: false
-
-      - name: "Install uv"
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-        with:
-          version: "0.12.7"
-          checksum: "788f18abea7c5f55d6216e4f5613fd89d4d59b631efeec117b2b07fe72f1da21"
-          enable-cache: false
-
       - name: "Download unsigned executable wheel members"
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -126,36 +157,30 @@ jobs:
           path: unsigned
           merge-multiple: true
 
-      - name: "Log in to Azure with GitHub OIDC"
-        uses: azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c # v3
+      - name: "Sign and notarize macOS executables"
+        uses: astral-sh/github-actions/sign-macos@0125bede5fad05fe257d1bbe205173b2fa0df28f # shared release signing actions
         with:
-          client-id: ${{ secrets.CODESIGN_AZURE_CLIENT_ID_MACOS }}
-          tenant-id: ${{ secrets.CODESIGN_AZURE_TENANT_ID_MACOS }}
-          subscription-id: ${{ secrets.CODESIGN_AZURE_SUBSCRIPTION_ID_MACOS }}
-
-      - name: "Sign executable wheel members through Azure Key Vault"
-        shell: bash
-        env:
-          STORAGE_ACCOUNT: ${{ secrets.CODESIGN_STORAGE_ACCOUNT }}
-          STORAGE_CONTAINER: ${{ secrets.CODESIGN_STORAGE_CONTAINER }}
-          # N.B. rcodesign reads RCODESIGN_* as configuration, avoid using that prefix
-          COMPONENT_RCODESIGN_BLOB: ${{ secrets.CODESIGN_COMPONENT_RCODESIGN_BLOB }}
-          COMPONENT_RCODESIGN_SHA256: ${{ secrets.CODESIGN_COMPONENT_RCODESIGN_SHA256 }}
-          COMPONENT_PKCS11_BLOB: ${{ secrets.CODESIGN_COMPONENT_PKCS11_BLOB }}
-          COMPONENT_PKCS11_SHA256: ${{ secrets.CODESIGN_COMPONENT_PKCS11_SHA256 }}
-          AZURE_CREDENTIAL_KIND: azurecli
-          AZURE_KEYVAULT_NAME: ${{ secrets.CODESIGN_AZURE_KEYVAULT_NAME }}
-          AZURE_KEYVAULT_KEY_VERSION: ${{ secrets.CODESIGN_AZURE_KEYVAULT_KEY_VERSION }}
-          KEY_NAME: ${{ secrets.CODESIGN_KEY_NAME }}
-          CERTIFICATE_SHA256: ${{ secrets.CODESIGN_CERTIFICATE_SHA256 }}
-        run: uv run scripts/sign-release-macos.py ./unsigned ./signed
+          unsigned-directory: ${{ github.workspace }}/unsigned
+          signed-directory: ${{ github.workspace }}/signed
+          azure-client-id: ${{ secrets.CODESIGN_AZURE_CLIENT_ID_MACOS }}
+          azure-tenant-id: ${{ secrets.CODESIGN_AZURE_TENANT_ID_MACOS }}
+          azure-subscription-id: ${{ secrets.CODESIGN_AZURE_SUBSCRIPTION_ID_MACOS }}
+          storage-account: ${{ secrets.CODESIGN_STORAGE_ACCOUNT }}
+          storage-container: ${{ secrets.CODESIGN_STORAGE_CONTAINER }}
+          component-pkcs11-blob: ${{ secrets.CODESIGN_COMPONENT_PKCS11_BLOB }}
+          component-pkcs11-sha256: ${{ secrets.CODESIGN_COMPONENT_PKCS11_SHA256 }}
+          azure-keyvault-name: ${{ secrets.CODESIGN_AZURE_KEYVAULT_NAME }}
+          azure-keyvault-key-version: ${{ secrets.CODESIGN_AZURE_KEYVAULT_KEY_VERSION }}
+          key-name: ${{ secrets.CODESIGN_KEY_NAME }}
+          certificate-sha256: ${{ secrets.CODESIGN_CERTIFICATE_SHA256 }}
+          apple-notarization-akv-key-name: ${{ secrets.CODESIGN_APPLE_NOTARIZATION_AKV_KEY_NAME }}
 
       - name: "Upload signed executable wheel members"
         id: upload
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: signed-macos-${{ github.run_id }}-${{ github.run_attempt }}
-          path: signed/*
+          name: signed-binaries-macos-${{ github.run_id }}-${{ github.run_attempt }}
+          path: signed
           if-no-files-found: error
 
   sign-windows:
@@ -176,85 +201,47 @@ jobs:
           path: unsigned
           merge-multiple: true
 
-      - name: "Log in to Azure with GitHub OIDC"
-        uses: azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c # v3
+      - name: "Sign Windows executables"
+        uses: astral-sh/github-actions/sign-windows@0125bede5fad05fe257d1bbe205173b2fa0df28f # shared release signing actions
         with:
-          client-id: ${{ secrets.CODESIGN_AZURE_CLIENT_ID_WINDOWS }}
-          tenant-id: ${{ secrets.CODESIGN_AZURE_TENANT_ID_WINDOWS }}
-          subscription-id: ${{ secrets.CODESIGN_AZURE_SUBSCRIPTION_ID_WINDOWS }}
-
-      - name: "Copy executable wheel members for signing"
-        shell: pwsh
-        run: |
-          New-Item signed -ItemType Directory | Out-Null
-          foreach ($binary in @('uv.exe', 'uvx.exe', 'uvw.exe', 'uv-build.exe')) {
-            Copy-Item (Join-Path unsigned $binary) (Join-Path signed $binary)
-          }
-
-      - name: "Sign executable wheel members with Azure Artifact Signing"
-        uses: azure/artifact-signing-action@c7ab2a863ab5f9a846ddb8265964877ef296ee82 # v2
-        with:
+          unsigned-directory: ${{ github.workspace }}/unsigned
+          signed-directory: ${{ github.workspace }}/signed
+          azure-client-id: ${{ secrets.CODESIGN_AZURE_CLIENT_ID_WINDOWS }}
+          azure-tenant-id: ${{ secrets.CODESIGN_AZURE_TENANT_ID_WINDOWS }}
+          azure-subscription-id: ${{ secrets.CODESIGN_AZURE_SUBSCRIPTION_ID_WINDOWS }}
           endpoint: ${{ secrets.CODESIGN_ENDPOINT }}
           signing-account-name: ${{ secrets.CODESIGN_SIGNING_ACCOUNT_NAME }}
           certificate-profile-name: ${{ secrets.CODESIGN_CERTIFICATE_PROFILE_NAME }}
-          files: |
-            ${{ github.workspace }}/signed/uv.exe
-            ${{ github.workspace }}/signed/uvx.exe
-            ${{ github.workspace }}/signed/uvw.exe
-            ${{ github.workspace }}/signed/uv-build.exe
-          file-digest: SHA256
-          timestamp-rfc3161: http://timestamp.acs.microsoft.com
-          timestamp-digest: SHA256
-          exclude-environment-credential: true
-          exclude-azure-cli-credential: false
-          cache-dependencies: false
-          trace: false
-
-      - name: "Verify signed executable identities"
-        shell: pwsh
-        env:
-          CERTIFICATE_SUBJECT: ${{ secrets.CODESIGN_CERTIFICATE_SUBJECT }}
-        run: |
-          $ErrorActionPreference = 'Stop'
-          if (-not $env:CERTIFICATE_SUBJECT) { throw 'Missing signing certificate subject' }
-          foreach ($binary in @('uv.exe', 'uvx.exe', 'uvw.exe', 'uv-build.exe')) {
-            $path = Join-Path signed $binary
-            $signature = Get-AuthenticodeSignature $path
-            if ($signature.Status -ne 'Valid' -or $null -eq $signature.TimeStamperCertificate -or
-                $signature.SignerCertificate.Subject -ne $env:CERTIFICATE_SUBJECT) {
-              throw "Expected a timestamped signature from the configured publisher: $binary"
-            }
-          }
+          certificate-subject: ${{ secrets.CODESIGN_CERTIFICATE_SUBJECT }}
 
       - name: "Upload signed executable wheel members"
         id: upload
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: signed-windows-${{ github.run_id }}-${{ github.run_attempt }}
-          path: signed/*
+          name: signed-binaries-windows-${{ github.run_id }}-${{ github.run_attempt }}
+          path: signed
           if-no-files-found: error
 
   assemble:
     name: "assemble signed release artifacts"
     needs: [prepare, sign-macos, sign-windows]
     runs-on: depot-ubuntu-24.04-4
+    env:
+      UV_PYTHON_DOWNLOADS_JSON_URL: ${{ github.workspace }}/crates/uv-python-managed/download-metadata.json
     permissions:
       contents: read
     outputs:
       macos-wheels: ${{ steps.macos-wheels.outputs.artifact-id }}
       windows-wheels: ${{ steps.windows-wheels.outputs.artifact-id }}
+      uv-wheels: ${{ steps.uv-wheels.outputs.artifact-id }}
+      uv-build-wheels: ${{ steps.uv-build-wheels.outputs.artifact-id }}
       github-archives: ${{ steps.github-archives.outputs.artifact-id }}
+      uv-sdist: ${{ steps.uv-sdist.outputs.artifact-id }}
+      uv-build-sdist: ${{ steps.uv-build-sdist.outputs.artifact-id }}
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-
-      - name: "Install uv"
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-        with:
-          version: "0.12.7"
-          checksum: "788f18abea7c5f55d6216e4f5613fd89d4d59b631efeec117b2b07fe72f1da21"
-          enable-cache: false
 
       - name: "Download assembly inputs"
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -266,85 +253,113 @@ jobs:
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           artifact-ids: ${{ needs.sign-macos.outputs.artifact }}
-          path: signed/aarch64-apple-darwin
+          path: signed
           merge-multiple: true
 
       - name: "Download signed Windows executables"
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           artifact-ids: ${{ needs.sign-windows.outputs.artifact }}
-          path: signed/x86_64-pc-windows-msvc
+          path: signed
           merge-multiple: true
 
-      - name: "Replace executable wheel members"
-        shell: bash
-        run: |
-          set -euo pipefail
-          for target in aarch64-apple-darwin x86_64-pc-windows-msvc; do
-            mkdir -p "signed-wheels/$target"
-            for wheel in wheels/"$target"/*.whl; do
-              uv run scripts/inject-signed-wheel-binaries.py --input "$wheel" \
-                --output "signed-wheels/$target/${wheel##*/}" \
-                --signed-binaries "./signed/$target"
-            done
-          done
+      - name: "Assemble signed release artifacts"
+        uses: astral-sh/github-actions/assemble-signed-release@0125bede5fad05fe257d1bbe205173b2fa0df28f # shared release signing actions
+        with:
+          targets: ${{ needs.prepare.outputs.artifacts }}
+          # The complete release inputs retain the originals checked during preparation.
+          prepared-directory: .
+          signed-directory: signed
+          output-directory: signed-artifacts
 
-      - name: "Replace GitHub release archive executables"
-        shell: bash
+      - name: "Assemble complete release distributions"
+        env:
+          RELEASE_PLAN: ${{ inputs.plan }}
+          RELEASE_TARGETS: ${{ needs.prepare.outputs.targets }}
+          MACOS_TARGETS: ${{ needs.prepare.outputs.macos }}
+          WINDOWS_TARGETS: ${{ needs.prepare.outputs.windows }}
         run: |
-          set -euo pipefail
-          for target in aarch64-apple-darwin x86_64-pc-windows-msvc; do
-            uv run scripts/extract-wheel-binaries.py \
-              --output "./unsigned/$target" wheels/"$target"/*.whl
-          done
-          uv run scripts/inject-signed-github-release-binaries.py \
-            ./github-archives/uv-aarch64-apple-darwin.tar.gz \
-            ./unsigned/aarch64-apple-darwin ./signed/aarch64-apple-darwin ./signed-github-archives
-          uv run scripts/inject-signed-github-release-binaries.py \
-            ./github-archives/uv-x86_64-pc-windows-msvc.zip \
-            ./unsigned/x86_64-pc-windows-msvc ./signed/x86_64-pc-windows-msvc ./signed-github-archives
+          uv run scripts/assemble-release-artifacts.py . signed-artifacts/wheels signed-artifacts/github-archives release-artifacts
+          uv run scripts/check_uv_wheel_contents.py release-artifacts/wheels/uv/*.whl release-artifacts/wheels/uv_build/*.whl
 
       - name: "Upload signed macOS wheels"
         id: macos-wheels
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: signed-macos-wheels-${{ github.run_id }}-${{ github.run_attempt }}
-          path: signed-wheels/aarch64-apple-darwin/*.whl
+          name: signed-wheels-macos-${{ github.run_id }}-${{ github.run_attempt }}
+          path: signed-artifacts/wheels/macos
           if-no-files-found: error
 
       - name: "Upload signed Windows wheels"
         id: windows-wheels
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: signed-windows-wheels-${{ github.run_id }}-${{ github.run_attempt }}
-          path: signed-wheels/x86_64-pc-windows-msvc/*.whl
+          name: signed-wheels-windows-${{ github.run_id }}-${{ github.run_attempt }}
+          path: signed-artifacts/wheels/windows
           if-no-files-found: error
 
-      - name: "Upload signed GitHub release archives"
+      - name: "Upload uv release wheels"
+        id: uv-wheels
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-wheels-uv-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-artifacts/wheels/uv
+          if-no-files-found: error
+
+      - name: "Upload uv_build release wheels"
+        id: uv-build-wheels
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-wheels-uv_build-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-artifacts/wheels/uv_build
+          if-no-files-found: error
+
+      - name: "Upload GitHub release archives"
         id: github-archives
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: signed-github-release-archives-${{ github.run_id }}-${{ github.run_attempt }}
-          path: signed-github-archives/*
+          name: release-github-archives-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-artifacts/github-archives/*
+          if-no-files-found: error
+
+      - name: "Upload uv source distribution"
+        id: uv-sdist
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-sdist-uv-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-artifacts/sdists/uv
+          if-no-files-found: error
+
+      - name: "Upload uv_build source distribution"
+        id: uv-build-sdist
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-sdist-uv_build-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-artifacts/sdists/uv_build
           if-no-files-found: error
 
   verify-macos:
-    name: "verify signed macos artifacts"
-    needs: [sign-macos, assemble]
-    runs-on: namespace-profile-macos-15
+    name: "verify signed ${{ matrix.platform.target }} artifacts"
+    needs: [prepare, sign-macos, assemble]
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: ${{ fromJSON(needs.prepare.outputs.macos) }}
+    runs-on: ${{ matrix.platform.runner }}
     permissions:
       contents: read
+    env:
+      TARGET: ${{ matrix.platform.target }}
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - name: "Install uv"
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          version: "0.12.7"
-          checksum: "127ebdda7ad953cdf198e964b570ea5771b85467ea93eb7cb6d6f8e6f55408f3"
-          enable-cache: false
+          cache: ""
+          python-version: "3.13"
+          architecture: ${{ matrix.platform.python-architecture }}
 
       - name: "Download signed executables"
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -360,9 +375,6 @@ jobs:
           path: wheels
           merge-multiple: true
 
-      - name: "Verify packaged executables and signatures"
-        run: uv run scripts/verify-release-wheels-macos.py ./signed ./wheels
-
       - name: "Download signed GitHub release archives"
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -370,33 +382,39 @@ jobs:
           path: github-archives
           merge-multiple: true
 
-      - name: "Verify GitHub release archive"
-        run: uv run scripts/verify-github-release-macos.py ./signed ./github-archives/uv-aarch64-apple-darwin.tar.gz
+      - name: "Verify signed release artifacts"
+        uses: astral-sh/github-actions/verify-release@0125bede5fad05fe257d1bbe205173b2fa0df28f # shared release signing actions
+        with:
+          target: ${{ toJSON(matrix.platform) }}
+          signed-directory: signed/${{ matrix.platform.target }}
+          wheels-directory: wheels/${{ matrix.platform.target }}
+          github-archives-directory: github-archives
 
       - name: "Install and run the signed wheels"
-        run: ./scripts/test-release-wheels-macos.sh ./wheels
+        run: ./scripts/test-release-wheels-macos.sh "./wheels/$TARGET"
 
   verify-windows:
-    name: "verify signed windows artifacts"
-    needs: [sign-windows, assemble]
-    runs-on: namespace-profile-windows-2022-x86-64-16x32
+    name: "verify signed ${{ matrix.platform.target }} artifacts"
+    needs: [prepare, sign-windows, assemble]
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: ${{ fromJSON(needs.prepare.outputs.windows) }}
+    runs-on: ${{ matrix.platform.runner }}
     permissions:
       contents: read
+    env:
+      TARGET: ${{ matrix.platform.target }}
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
+          cache: ""
           python-version: "3.13"
-
-      - name: "Install uv"
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-        with:
-          version: "0.12.7"
-          checksum: "bf1518af459a3915511a11fdc6e2f43ef9a2afa138b9d498eeb9642fe9d85218"
-          enable-cache: false
+          architecture: ${{ matrix.platform.python-architecture }}
 
       - name: "Download signed executables"
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -412,10 +430,6 @@ jobs:
           path: wheels
           merge-multiple: true
 
-      - name: "Verify packaged executables and signatures"
-        shell: pwsh
-        run: ./scripts/verify-release-wheels-windows.ps1 ./signed ./wheels
-
       - name: "Download signed GitHub release archives"
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -423,10 +437,14 @@ jobs:
           path: github-archives
           merge-multiple: true
 
-      - name: "Verify GitHub release archive"
-        shell: pwsh
-        run: ./scripts/verify-github-release-windows.ps1 ./signed ./github-archives/uv-x86_64-pc-windows-msvc.zip
+      - name: "Verify signed release artifacts"
+        uses: astral-sh/github-actions/verify-release@0125bede5fad05fe257d1bbe205173b2fa0df28f # shared release signing actions
+        with:
+          target: ${{ toJSON(matrix.platform) }}
+          signed-directory: signed/${{ matrix.platform.target }}
+          wheels-directory: wheels/${{ matrix.platform.target }}
+          github-archives-directory: github-archives
 
       - name: "Install and run the signed wheels"
         shell: pwsh
-        run: ./scripts/test-release-wheels-windows.ps1 ./wheels
+        run: ./scripts/test-release-wheels-windows.ps1 "./wheels/$env:TARGET"

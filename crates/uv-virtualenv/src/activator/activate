@@ -22,22 +22,25 @@
 # This file must be used with "source bin/activate" *from bash*
 # you cannot run it directly
 
-if ! [ -z "${SCRIPT_PATH+_}" ] ; then
-    _OLD_SCRIPT_PATH="$SCRIPT_PATH"
+if [ -n "${BASH_VERSION:+x}" ] && [ "${BASH_SOURCE[0]}" = "$0" ]; then
+    # Only bash has a reasonably robust check for source'dness.
+    echo "You must source this script: \$ source $0" >&2
+    exit 33
 fi
 
 # Get script path (only used if environment is relocatable).
-if [ -n "${BASH_VERSION:+x}" ] ; then
-    SCRIPT_PATH="${BASH_SOURCE[0]}"
-    if [ "$SCRIPT_PATH" = "$0" ]; then
-        # Only bash has a reasonably robust check for source'dness.
-        echo "You must source this script: \$ source $0" >&2
-        exit 33
+if [ "{{ RELOCATABLE }}" = "true" ]; then
+    if ! [ -z "${SCRIPT_PATH+_}" ] ; then
+        _OLD_SCRIPT_PATH="$SCRIPT_PATH"
     fi
-elif [ -n "${ZSH_VERSION:+x}" ] ; then
-    SCRIPT_PATH="${(%):-%x}"
-elif [ -n "${KSH_VERSION:+x}" ] ; then
-    SCRIPT_PATH="${.sh.file}"
+
+    if [ -n "${BASH_VERSION:+x}" ] ; then
+        SCRIPT_PATH="${BASH_SOURCE[0]}"
+    elif [ -n "${ZSH_VERSION:+x}" ] ; then
+        SCRIPT_PATH="${(%):-%x}"
+    elif [ -n "${KSH_VERSION:+x}" ] ; then
+        SCRIPT_PATH="${.sh.file}"
+    fi
 fi
 
 deactivate () {
@@ -86,12 +89,14 @@ export VIRTUAL_ENV
 
 # Unset the `SCRIPT_PATH` variable, now that the `VIRTUAL_ENV` variable
 # has been set. This is important for relocatable environments.
-if ! [ -z "${_OLD_SCRIPT_PATH+_}" ] ; then
-    SCRIPT_PATH="$_OLD_SCRIPT_PATH"
-    export SCRIPT_PATH
-    unset _OLD_SCRIPT_PATH
-else
-    unset SCRIPT_PATH
+if [ "{{ RELOCATABLE }}" = "true" ]; then
+    if ! [ -z "${_OLD_SCRIPT_PATH+_}" ] ; then
+        SCRIPT_PATH="$_OLD_SCRIPT_PATH"
+        export SCRIPT_PATH
+        unset _OLD_SCRIPT_PATH
+    else
+        unset SCRIPT_PATH
+    fi
 fi
 
 _OLD_VIRTUAL_PATH="$PATH"
