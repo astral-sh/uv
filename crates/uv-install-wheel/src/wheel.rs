@@ -135,10 +135,12 @@ fn format_shebang(executable: impl AsRef<Path>, os_name: &str, relocatable: bool
         // newline.
         let shebang_length = 2 + executable.len() + 1;
 
-        // If the shebang is too long, or contains spaces, wrap it in `/bin/sh`.
+        // If the shebang is too long, or contains whitespace, wrap it in `/bin/sh`. The kernel
+        // splits the interpreter from its argument on spaces _and_ tabs, and a newline ends the
+        // line, so any of them breaks a bare `#!` shebang.
         // Same applies for relocatable scripts (executable is relative to script dir, hence `dirname` trick)
         // (note: the Windows trampoline binaries natively support relative paths to executable)
-        if shebang_length > 127 || executable.contains(' ') || relocatable {
+        if shebang_length > 127 || executable.chars().any(char::is_whitespace) || relocatable {
             let executable = format!("'{}'", escape_posix_for_single_quotes(&executable));
             return format_shell_shebang(&executable, relocatable);
         }
@@ -1444,6 +1446,22 @@ mod test {
                 '''exec' '/usr/bin/path to python3' "$0" "$@"
                 ' '''"#
             }
+        );
+
+        // A tab is a separator for the kernel too, so it needs the `exec` trick as well.
+        let executable = Path::new("/usr/bin/path\tto/python3");
+        let os_name = "posix";
+        assert_eq!(
+            format_shebang(executable, os_name, false),
+            "#!/bin/sh\n'''exec' '/usr/bin/path\tto/python3' \"$0\" \"$@\"\n' '''"
+        );
+
+        // As does a newline, which would otherwise end the shebang line early.
+        let executable = Path::new("/usr/bin/path\nto/python3");
+        let os_name = "posix";
+        assert_eq!(
+            format_shebang(executable, os_name, false),
+            "#!/bin/sh\n'''exec' '/usr/bin/path\nto/python3' \"$0\" \"$@\"\n' '''"
         );
 
         // And if we want a relocatable script, we should use the `exec` trick with `dirname`.
