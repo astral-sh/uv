@@ -48,6 +48,10 @@ jobs:
           path: pull-request
           persist-credentials: false
 
+      - uses: $/.github/actions/setup-uv-toolchain
+        with:
+          group: jaq
+
       - name: "Collect pull request context"
         working-directory: pull-request
         run: |
@@ -61,7 +65,7 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --limit 1000 \
             --json name,description \
-            | jq --slurpfile allowed "$GITHUB_WORKSPACE/.github/allowed-pull-request-labels.json" \
+            | jaq --slurpfile allowed "$GITHUB_WORKSPACE/.github/allowed-pull-request-labels.json" \
               '[.[] | select(.name as $label | $allowed[0] | index($label))]' \
             > .pull-request-labels.json
         env:
@@ -110,10 +114,14 @@ jobs:
           ref: main
           persist-credentials: false
 
+      - uses: $/.github/actions/setup-uv-toolchain
+        with:
+          group: jaq
+
       - name: "Validate recommended labels"
         id: validate
         run: |
-          if ! labels=$(jq --exit-status --compact-output --slurp \
+          if ! labels=$(jaq --exit-status --compact-output --slurp \
             --slurpfile allowed .github/allowed-pull-request-labels.json '
               select(length == 1)
               | .[0]
@@ -159,12 +167,9 @@ jobs:
       - name: "Apply recommended labels"
         run: |
           # POST adds labels without removing any labels already on the pull request.
-          jq --null-input --argjson labels "$LABELS" '{labels: $labels}' \
-            | gh api \
-                --method POST \
-                "repos/$GITHUB_REPOSITORY/issues/$PULL_REQUEST_NUMBER/labels" \
-                --input - \
-                --silent
+          gh api --method POST \
+            "repos/$GITHUB_REPOSITORY/issues/$PULL_REQUEST_NUMBER/labels" \
+            --input - --silent <<< "$LABELS"
         env:
           GH_TOKEN: ${{ steps.token.outputs.token }}
           LABELS: ${{ needs.validate.outputs.labels }}

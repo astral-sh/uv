@@ -29,12 +29,9 @@ jobs:
         with:
           fetch-depth: ${{ github.event_name == 'pull_request' && 2 || 0 }}
           persist-credentials: false
-      - name: "Install uv"
-        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - uses: $/.github/actions/setup-uv-toolchain
         with:
-          # renovate: datasource=github-release-attachments depName=astral-sh/uv
-          version: "0.13.6"
-          checksum: "f29c3e94ffabd7e6f3ba521dba169a9b7ec12100bf3257087f0f24f6123f3645"
+          enable-cache: auto
       - name: "Detect Cargo Vet workspaces"
         id: detect
         env:
@@ -161,12 +158,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: "Install uv"
-        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - uses: $/.github/actions/setup-uv-toolchain
         with:
-          # renovate: datasource=github-release-attachments depName=astral-sh/uv
-          version: "0.13.6"
-          checksum: "f29c3e94ffabd7e6f3ba521dba169a9b7ec12100bf3257087f0f24f6123f3645"
+          enable-cache: auto
       - name: "Restore crate publication times from main"
         env:
           GH_TOKEN: ${{ github.token }}
@@ -204,12 +198,9 @@ jobs:
         with:
           fetch-depth: 2
           persist-credentials: false
-      - name: "Install uv"
-        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - uses: $/.github/actions/setup-uv-toolchain
         with:
-          # renovate: datasource=github-release-attachments depName=astral-sh/uv
-          version: "0.13.6"
-          checksum: "f29c3e94ffabd7e6f3ba521dba169a9b7ec12100bf3257087f0f24f6123f3645"
+          enable-cache: auto
       - name: "Check Cargo lockfile changes"
         env:
           GH_REPOSITORY: ${{ github.repository }}
@@ -379,7 +370,11 @@ jobs:
           cd astral-test-pypa-gh-action
           ../uv init --package --no-workspace
           # Get the latest patch version
-          patch_version=$(curl https://test.pypi.org/simple/astral-test-pypa-gh-action/?format=application/vnd.pypi.simple.v1+json | jq --raw-output '[.files[].filename | select(endswith(".tar.gz"))] | last' | grep -oP '(?<=astral_test_pypa_gh_action-0\.1\.)\d+(?=\.tar\.gz)')
+          patch_version=$(
+            curl https://test.pypi.org/simple/astral-test-pypa-gh-action/?format=application/vnd.pypi.simple.v1+json |
+              ../uv run --project .. --only-group=jaq --python "$PYTHON_VERSION" jaq --raw-output '[.files[].filename | select(endswith(".tar.gz"))] | last' |
+              grep -oP '(?<=astral_test_pypa_gh_action-0\.1\.)\d+(?=\.tar\.gz)'
+          )
           # Set the current version to one higher (which should be unused)
           sed -i "s/0.1.0/0.1.$((patch_version + 1))/g" pyproject.toml
           ../uv build
@@ -465,10 +460,14 @@ jobs:
       - build-docker
     runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-2' || 'ubuntu-slim' }}
     steps:
+      - uses: $/.github/actions/setup-uv-toolchain
+        with:
+          group: jaq
+
       - name: "Check required jobs passed"
         run: |
           failing=$(
-            echo "$NEEDS_JSON" | jq -r --argjson conditional_jobs "$CONDITIONAL_JOBS" '
+            echo "$NEEDS_JSON" | jaq -r --argjson conditional_jobs "$CONDITIONAL_JOBS" '
               to_entries[]
               | select($conditional_jobs[.key] != false)
               | select(.value.result != "success" and (.value.result != "skipped" or .key == "check-vet" or .key == "check-cargo-cooldowns"))

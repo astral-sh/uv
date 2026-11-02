@@ -29,11 +29,9 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - uses: $/.github/actions/setup-uv-toolchain
         with:
-          # renovate: datasource=github-release-attachments depName=astral-sh/uv
-          version: "0.13.6"
-          checksum: "f29c3e94ffabd7e6f3ba521dba169a9b7ec12100bf3257087f0f24f6123f3645"
+          enable-cache: auto
 
       - name: "Check windows crate versions match"
         run: uv run --no-project scripts/check-trampoline-version-consistency.py
@@ -93,12 +91,9 @@ jobs:
           rustup target add ${{ matrix.target-arch }}-pc-windows-msvc
           rustup component add rust-src --target ${{ matrix.target-arch }}-pc-windows-msvc
 
-      - name: "Install uv"
-        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - uses: $/.github/actions/setup-uv-toolchain
         with:
-          # renovate: datasource=github-release-attachments depName=astral-sh/uv
-          version: "0.13.6"
-          checksum: "a2a8820d5eea32f08ef467ef3b7f66883a9b076d5737a2fc2fbb5f458d1bb50f"
+          enable-cache: auto
 
       - name: "rustfmt"
         working-directory: ${{ env.UV_WORKSPACE }}/crates/uv-trampoline

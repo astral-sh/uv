@@ -21,11 +21,9 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - uses: $/.github/actions/setup-uv-toolchain
         with:
-          # renovate: datasource=github-release-attachments depName=astral-sh/uv
-          version: "0.13.6"
-          checksum: "f29c3e94ffabd7e6f3ba521dba169a9b7ec12100bf3257087f0f24f6123f3645"
+          enable-cache: auto
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:

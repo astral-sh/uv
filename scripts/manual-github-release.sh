@@ -6,7 +6,7 @@
 #
 # It can take a while to download all the artifacts.
 #
-# Requires `gh` and `jq`.
+# Requires `gh` and `jaq`.
 
 set -euo pipefail
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
@@ -25,16 +25,17 @@ fi
 mkdir -p "release_$RUN_ID"
 cd "release_$RUN_ID"
 
-REPO=$(gh repo view --json nameWithOwner | jq .nameWithOwner -r)
+REPO=$(gh repo view --json nameWithOwner --jq .nameWithOwner)
 
 # Find the publication artifacts across all attempts of this run.
 gh api --paginate "repos/$REPO/actions/runs/$RUN_ID/artifacts?per_page=100" |
-    jq -s '[.[].artifacts[]]' > workflow-artifacts.json
+    jaq -s '[.[].artifacts[]]' > workflow-artifacts.json
 RUN_ATTEMPT=$(gh run view "$RUN_ID" --repo "$REPO" --json attempt --jq .attempt)
 
 # Return the latest artifact in a family, up to the given run attempt.
 artifact_name() {
-    jq -er --arg prefix "release-github-$1-$RUN_ID-" --argjson attempt "$2" '
+    # shellcheck disable=SC2016 # Keep the jaq filter literal.
+    jaq -er --arg prefix "release-github-$1-$RUN_ID-" --argjson attempt "$2" '
         [.[]
          | select(.name | startswith($prefix))
          | . + {attempt: (.name | ltrimstr($prefix) | tonumber)}
@@ -65,10 +66,10 @@ while IFS= read -r asset; do
 done < release-assets.txt
 
 # Extract values from manifest
-TAG=$(jq -r '.announcement_tag // .tag' "$MANIFEST")
-TITLE=$(jq -r '.announcement_title' "$MANIFEST")
-BODY=$(jq -r '.announcement_github_body' "$MANIFEST")
-PRERELEASE=$(jq -r '.announcement_is_prerelease' "$MANIFEST")
+TAG=$(jaq -r '.announcement_tag // .tag' "$MANIFEST")
+TITLE=$(jaq -r '.announcement_title' "$MANIFEST")
+BODY=$(jaq -r '.announcement_github_body' "$MANIFEST")
+PRERELEASE=$(jaq -r '.announcement_is_prerelease' "$MANIFEST")
 
 # Write body to temp file
 echo "$BODY" > notes.txt
