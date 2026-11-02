@@ -461,10 +461,10 @@ jobs:
     runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-2' || 'ubuntu-slim' }}
     steps:
       - uses: $/.github/actions/setup-uv-toolchain
-        id: toolchain
+        with:
+          group: jaq
 
       - name: "Check required jobs passed"
-        shell: uv run --only-group=jaq --python 3 bash -e {0}
         run: |
           failing=$(
             echo "$NEEDS_JSON" | jaq -r --argjson conditional_jobs "$CONDITIONAL_JOBS" '
@@ -479,7 +479,6 @@ jobs:
             exit 1
           fi
         env:
-          UV_PROJECT: ${{ steps.toolchain.outputs.project }}
           NEEDS_JSON: ${{ toJSON(needs) }}
           # Jobs not listed here are always required.
           CONDITIONAL_JOBS: >-

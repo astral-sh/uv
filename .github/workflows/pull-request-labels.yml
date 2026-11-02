@@ -49,11 +49,11 @@ jobs:
           persist-credentials: false
 
       - uses: $/.github/actions/setup-uv-toolchain
-        id: toolchain
+        with:
+          group: jaq
 
       - name: "Collect pull request context"
         working-directory: pull-request
-        shell: uv run --only-group=jaq --python 3 bash -e {0}
         run: |
           # Remove potential PR-controlled paths for label configuration.
           rm -f .pull-request-labels-event.json .pull-request-labels.json
@@ -69,7 +69,6 @@ jobs:
               '[.[] | select(.name as $label | $allowed[0] | index($label))]' \
             > .pull-request-labels.json
         env:
-          UV_PROJECT: ${{ steps.toolchain.outputs.project }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PULL_REQUEST_NUMBER: ${{ inputs.pull_request }}
 
@@ -116,11 +115,11 @@ jobs:
           persist-credentials: false
 
       - uses: $/.github/actions/setup-uv-toolchain
-        id: toolchain
+        with:
+          group: jaq
 
       - name: "Validate recommended labels"
         id: validate
-        shell: uv run --only-group=jaq --python 3 bash -e {0}
         run: |
           if ! labels=$(jaq --exit-status --compact-output --slurp \
             --slurpfile allowed .github/allowed-pull-request-labels.json '
@@ -140,7 +139,6 @@ jobs:
 
           echo "labels=$labels" >> "$GITHUB_OUTPUT"
         env:
-          UV_PROJECT: ${{ steps.toolchain.outputs.project }}
           LABEL_RESULT: ${{ needs.labels.outputs.result }}
 
   apply:

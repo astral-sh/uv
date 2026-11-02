@@ -32,10 +32,11 @@ jobs:
           persist-credentials: false
 
       - uses: $/.github/actions/setup-uv-toolchain
+        with:
+          group: jaq
 
       - name: "Collect issue and comment context"
         id: issue
-        shell: uv run --only-group=jaq --python 3 bash -e {0}
         run: |
           gh issue view "$ISSUE_NUMBER" \
             --repo "$GITHUB_REPOSITORY" \
@@ -102,7 +103,6 @@ jobs:
       - name: "Find previous Codex thread"
         id: find-thread
         if: steps.issue.outputs.exists == 'true'
-        shell: uv run --only-group=jaq --python 3 bash -e {0}
         run: |
           artifact_name="codex-thread-issue-$ISSUE_NUMBER"
           artifacts="$(gh api \
@@ -166,7 +166,6 @@ jobs:
       - name: "Validate Codex thread"
         id: thread
         if: steps.find-thread.outputs.found == 'true'
-        shell: uv run --only-group=jaq --python 3 bash -e {0}
         run: |
           while IFS= read -r -d '' compressed_rollout; do
             zstd --decompress --stdout "$compressed_rollout" > "${compressed_rollout%.zst}"

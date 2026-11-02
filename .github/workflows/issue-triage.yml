@@ -37,10 +37,11 @@ jobs:
           persist-credentials: false
 
       - uses: $/.github/actions/setup-uv-toolchain
+        with:
+          group: jaq
 
       - name: "Collect issue context"
         id: issue
-        shell: uv run --only-group=jaq --python 3 bash -e {0}
         run: |
           gh issue view "$ISSUE" \
             --repo "$GITHUB_REPOSITORY" \

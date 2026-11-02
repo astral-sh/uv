@@ -40,10 +40,11 @@ jobs:
           persist-credentials: false
 
       - uses: $/.github/actions/setup-uv-toolchain
+        with:
+          group: jaq
 
       - name: "Collect workflow failure context"
         id: context
-        shell: uv run --only-group=jaq --python 3 bash -e {0}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HEAD_SHA: ${{ inputs.head_sha }}
@@ -165,12 +166,11 @@ jobs:
             pull_requests: read
 
       - uses: $/.github/actions/setup-uv-toolchain
-        id: toolchain
+        with:
+          group: jaq
 
       - name: "Retry flaky workflow failures"
-        shell: uv run --only-group=jaq --python 3 bash -e {0}
         env:
-          UV_PROJECT: ${{ steps.toolchain.outputs.project }}
           GH_TOKEN: ${{ steps.token.outputs.token }}
           HEAD_SHA: ${{ inputs.head_sha }}
           RUN_ID: ${{ inputs.run }}
@@ -260,12 +260,11 @@ jobs:
             issues: write
 
       - uses: $/.github/actions/setup-uv-toolchain
-        id: toolchain
+        with:
+          group: jaq
 
       - name: "Report workflow failure"
-        shell: uv run --only-group=jaq --python 3 bash -e {0}
         env:
-          UV_PROJECT: ${{ steps.toolchain.outputs.project }}
           DIAGNOSIS: ${{ needs.diagnose.outputs.result }}
           GH_TOKEN: ${{ steps.token.outputs.token }}
           ISSUE_REPOSITORY: astral-sh/uv-dev

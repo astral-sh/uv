@@ -52,10 +52,11 @@ jobs:
           persist-credentials: false
 
       - uses: $/.github/actions/setup-uv-toolchain
+        with:
+          group: jaq
 
       - name: Identify conflicted pull requests
         id: identify
-        shell: uv run --only-group=jaq --python 3 bash -e {0}
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}

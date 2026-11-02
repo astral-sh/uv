@@ -100,13 +100,12 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: $/.github/actions/setup-uv-toolchain
-        id: toolchain
+        with:
+          group: jaq
 
       - name: Copy saved image and publish tags
         id: publish
-        shell: uv run --only-group=jaq --python 3 bash -e {0}
         env:
-          UV_PROJECT: ${{ steps.toolchain.outputs.project }}
           IMAGE_JSON: ${{ inputs.image }}
           IMAGES: "${{ env.UV_GHCR_IMAGE }} ${{ env.UV_DOCKERHUB_IMAGE }}"
         run: |

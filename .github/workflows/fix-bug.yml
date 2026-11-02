@@ -79,14 +79,15 @@ jobs:
           persist-credentials: false
 
       - uses: $/.github/actions/setup-uv-toolchain
-        id: toolchain
+        with:
+          group: jaq
 
       - name: "Load issue context"
         id: issue-context
         uses: $/.github/actions/load-issue-context
         with:
           issue-number: ${{ inputs.issue-number }}
-          path: ${{ runner.temp }}/issue-context
+          path: ${{ runner.temp }}/fix-bug/issue-context
 
       - name: "Load reproduction Codex thread"
         id: reproduction-thread
@@ -109,9 +110,7 @@ jobs:
 
       - name: "Prepare trusted bug-fix context"
         id: prepare
-        shell: uv run --only-group=jaq --python 3 bash -e {0}
         env:
-          UV_PROJECT: ${{ steps.toolchain.outputs.project }}
           GH_TOKEN: ${{ github.token }}
           ISSUE: ${{ inputs.issue }}
           ISSUE_NUMBER: ${{ inputs.issue-number }}
@@ -296,11 +295,12 @@ jobs:
         if: steps.prepare.outputs.existing != 'true'
         uses: openai/codex-action@c05cfd74ad95c626cdf05c6685e62becc3bf7813
         env:
-          CARGO_HOME: ${{ runner.temp }}/cargo-home
+          CARGO_HOME: ${{ runner.temp }}/fix-bug/cargo-home
           GH_TOKEN: ${{ github.token }}
           INSTA_UPDATE: "no"
-          TMPDIR: ${{ runner.temp }}
-          UV_CACHE_DIR: ${{ runner.temp }}/uv-fix-bug-cache
+          # The sandbox can write to TMPDIR. Runner executables live elsewhere under runner.temp.
+          TMPDIR: ${{ runner.temp }}/fix-bug
+          UV_CACHE_DIR: ${{ runner.temp }}/fix-bug/uv-cache
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           codex-version: "0.157.1"
@@ -324,9 +324,7 @@ jobs:
 
       - name: "Commit verified bug fix"
         id: commit-fix
-        shell: uv run --only-group=jaq --python 3 bash -e {0}
         env:
-          UV_PROJECT: ${{ steps.toolchain.outputs.project }}
           EXISTING_FIX: ${{ steps.prepare.outputs.existing }}
           FIX_RESULT: ${{ steps.fix-bug.outputs.final-message }}
           PARENT_HEAD_SHA: ${{ steps.prepare.outputs.parent-head-sha }}
@@ -438,7 +436,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: issue-fix-context-${{ inputs.issue-number }}-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/issue-context/README.md
+          path: ${{ steps.issue-context.outputs.path }}/README.md
           if-no-files-found: error
           retention-days: 1
 
@@ -478,10 +476,11 @@ jobs:
           path: ${{ runner.temp }}/fixed-bug
 
       - uses: $/.github/actions/setup-uv-toolchain
+        with:
+          group: jaq
 
       - name: "Verify regression and bug-fix commits"
         id: verify
-        shell: uv run --only-group=jaq --python 3 bash -e {0}
         env:
           EXISTING_HEAD_SHA: ${{ needs.fix.outputs.existing-head }}
           GH_TOKEN: ${{ github.token }}
@@ -622,7 +621,6 @@ jobs:
 
       - name: "Open stacked fix pull request"
         id: open-pr
-        shell: uv run --only-group=jaq --python 3 bash -e {0}
         env:
           FIXED_HEAD_SHA: ${{ steps.verify.outputs.head_sha }}
           FIX_SUMMARY: ${{ fromJSON(needs.fix.outputs.result).summary }}
@@ -706,13 +704,12 @@ jobs:
           path: ${{ runner.temp }}/issue-context-update
 
       - uses: $/.github/actions/setup-uv-toolchain
-        id: toolchain
+        with:
+          group: jaq
 
       - name: "Prepare fix context"
         id: prepare-context
-        shell: uv run --only-group=jaq --python 3 bash -e {0}
         env:
-          UV_PROJECT: ${{ steps.toolchain.outputs.project }}
           CONTEXT_SHA: ${{ needs.fix.outputs.context-sha }}
           FIX_PULL_REQUEST: ${{ needs.publish.outputs.pull-request }}
           FIX_RESULT: ${{ needs.fix.outputs.result }}

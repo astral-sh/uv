@@ -1,6 +1,6 @@
 Continue the existing bug-reproduction session and fix the reproducible uv bug described in
 `$RUNNER_TEMP/issue-triage-event.json` and `$RUNNER_TEMP/bug-reproduction-result.json`. Read the
-persisted investigation in `$RUNNER_TEMP/issue-context/README.md`, together with its `issue.json`,
+persisted investigation in `$TMPDIR/issue-context/README.md`, together with its `issue.json`,
 `triage.json`, and `reproduction.json`. The checkout already contains the passing regression test
 from the parent uv-dev pull request described in `$RUNNER_TEMP/bug-regression-pull-request.json`.
 
@@ -45,14 +45,14 @@ the allowed paths, cannot be validated with focused tests, or would expand beyon
 cause, leave the checkout unchanged and explain why. Do not pursue unrelated bugs, speculative
 variants, exhaustive case matrices, architectural redesign, or unnecessary scope.
 
-Update `$RUNNER_TEMP/issue-context/README.md` directly with the fix investigation, even when the bug
+Update `$TMPDIR/issue-context/README.md` directly with the fix investigation, even when the bug
 cannot be fixed. Read the entire existing document and revise any part that the fix attempt
 clarifies. Preserve accurate issue identification, classification, reproduction details, and related
 issues or pull requests. Include exactly one `## Fix` section describing the outcome, implementation
 or limitation, and successful focused validation. Preserve other useful sections and keep the
 document coherent, self-contained, and consistent with the structured JSON result. Do not modify any
-other files in `$RUNNER_TEMP/issue-context`. The publishing workflow will add the fix pull request
-after it has been created.
+other files in `$TMPDIR/issue-context`. The publishing workflow will add the fix pull request after
+it has been created.
 
 Produce only a JSON object matching the supplied output schema. Set `outcome` to `fixed` only when
 the checkout contains both a focused production fix and the updated parent regression test. Set

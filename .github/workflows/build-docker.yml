@@ -106,13 +106,12 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - uses: $/.github/actions/setup-uv-toolchain
-        id: toolchain
+        with:
+          group: jaq
 
       - name: Generate extra image matrix
         id: extra-images
-        shell: uv run --only-group=jaq --python 3 bash -e {0}
         env:
-          UV_PROJECT: ${{ steps.toolchain.outputs.project }}
           LOGIN: ${{ steps.plan.outputs.login }}
         run: |
           # Each entry is: base-image,tag1,tag2,...
@@ -228,6 +227,8 @@ jobs:
 
       - uses: $/.github/actions/setup-uv-toolchain
         if: ${{ needs.docker-plan.outputs.save == 'true' }}
+        with:
+          group: jaq
 
       - name: Record image
         if: ${{ needs.docker-plan.outputs.save == 'true' }}
@@ -238,7 +239,7 @@ jobs:
           ANNOTATIONS: ${{ steps.meta.outputs.annotations }}
         run: |
           # shellcheck disable=SC2016 # Keep the jaq filter literal.
-          uv run --only-group=jaq --python 3 jaq -en \
+          jaq -en \
             --arg name uv \
             --arg build_id "$BUILD_ID" \
             --arg digest "$DIGEST" \
@@ -375,12 +376,12 @@ jobs:
 
       - uses: $/.github/actions/setup-uv-toolchain
         if: ${{ needs.docker-plan.outputs.save == 'true' }}
-        id: toolchain
+        with:
+          group: jaq
 
       - name: Record image
         if: ${{ needs.docker-plan.outputs.save == 'true' }}
         env:
-          UV_PROJECT: ${{ steps.toolchain.outputs.project }}
           NAME: ${{ steps.dockerfile.outputs.name }}
           BUILD_ID: ${{ steps.build.outputs.build-id }}
           DIGEST: ${{ steps.build.outputs.digest }}
@@ -388,7 +389,7 @@ jobs:
           ANNOTATIONS: ${{ steps.meta.outputs.annotations }}
         run: |
           # shellcheck disable=SC2016 # Keep the jaq filter literal.
-          uv run --only-group=jaq --python 3 jaq -en \
+          jaq -en \
             --arg name "$NAME" \
             --arg build_id "$BUILD_ID" \
             --arg digest "$DIGEST" \
@@ -424,12 +425,12 @@ jobs:
           merge-multiple: true
 
       - uses: $/.github/actions/setup-uv-toolchain
-        id: toolchain
+        with:
+          group: jaq
 
       - name: Assemble image manifest
-        shell: uv run --only-group=jaq --python 3 bash -eo pipefail {0}
+        shell: bash
         env:
-          UV_PROJECT: ${{ steps.toolchain.outputs.project }}
           EXTRA_IMAGES: ${{ needs.docker-plan.outputs.extra-images }}
         run: |
           # Load the per-image records and require one base image plus the

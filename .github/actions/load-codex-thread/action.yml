@@ -1,5 +1,5 @@
 name: "Load Codex thread"
-description: "Restore and verify a root Codex thread from a previous workflow run. Requires uv on PATH."
+description: "Restore and verify a root Codex thread from a previous workflow run. Requires jaq on PATH."
 
 inputs:
   repository:
@@ -79,9 +79,8 @@ runs:
 
     - name: "Validate root Codex session"
       id: validate
-      shell: uv run --locked --only-group=jaq --python 3 bash -eo pipefail {0}
+      shell: bash
       env:
-        UV_PROJECT: ${{ github.action_path }}/../../..
         DIRECTORY: ${{ steps.source.outputs.path }}
       run: |
         while IFS= read -r -d '' compressed_rollout; do

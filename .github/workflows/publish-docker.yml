@@ -35,13 +35,11 @@ jobs:
           merge-multiple: true
 
       - uses: $/.github/actions/setup-uv-toolchain
-        id: toolchain
+        with:
+          group: jaq
 
       - name: Read image manifest
         id: plan
-        shell: uv run --only-group=jaq --python 3 bash -e {0}
-        env:
-          UV_PROJECT: ${{ steps.toolchain.outputs.project }}
         run: |
           jaq -er '
             "base-image=\(.base | tojson)",

@@ -60,13 +60,12 @@ jobs:
       changed_head: ${{ steps.plan.outputs.changed_head }}
     steps:
       - uses: $/.github/actions/setup-uv-toolchain
-        id: toolchain
+        with:
+          group: jaq
 
       - name: Verify pull request
         id: verify
-        shell: uv run --only-group=jaq --python 3 bash -e {0}
         env:
-          UV_PROJECT: ${{ steps.toolchain.outputs.project }}
           EXPECTED_HEAD_SHA: ${{ inputs.head_sha }}
           GH_TOKEN: ${{ github.token }}
           PULL_REQUEST_NUMBER: ${{ inputs.pull_request }}
@@ -124,9 +123,7 @@ jobs:
 
       - name: Plan promotion
         id: plan
-        shell: uv run --only-group=jaq --python 3 bash -e {0}
         env:
-          UV_PROJECT: ${{ steps.toolchain.outputs.project }}
           BASE_REF: ${{ steps.verify.outputs.base_ref }}
           EXPECTED_HEAD_SHA: ${{ inputs.head_sha }}
           GH_TOKEN: ${{ steps.token.outputs.token }}
@@ -479,11 +476,13 @@ jobs:
             workflows: write
 
       - uses: $/.github/actions/setup-uv-toolchain
+        with:
+          group: jaq
 
       - name: Promote pull request
         id: promote
         if: steps.verify.outputs.head_sha != ''
-        shell: uv run --only-group=jaq --python 3 bash -eo pipefail {0}
+        shell: bash
         env:
           ACTION: ${{ needs.prepare.outputs.action }}
           APPROVAL_ID: ${{ needs.prepare.outputs.approval_id }}
@@ -702,7 +701,6 @@ jobs:
       - name: Enable auto-merge and close source pull request
         id: close
         if: steps.promote.outputs.number != ''
-        shell: uv run --only-group=jaq --python 3 bash -e {0}
         env:
           APPROVAL_ID: ${{ needs.prepare.outputs.approval_id }}
           APPROVAL_EVENT: ${{ needs.prepare.outputs.approval_event }}
@@ -794,13 +792,12 @@ jobs:
             workflows: write
 
       - uses: $/.github/actions/setup-uv-toolchain
-        id: toolchain
+        with:
+          group: jaq
 
       - name: Recover rejected promotion
         id: recover
-        shell: uv run --only-group=jaq --python 3 bash -e {0}
         env:
-          UV_PROJECT: ${{ steps.toolchain.outputs.project }}
           APPROVAL_ID: ${{ needs.prepare.outputs.approval_id }}
           BASE_REF: ${{ needs.prepare.outputs.source_base_ref }}
           BASE_PREVIOUS_SHA: ${{ needs.prepare.outputs.base_previous_sha }}
