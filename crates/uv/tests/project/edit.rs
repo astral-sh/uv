@@ -10754,6 +10754,82 @@ fn add_default_index_url() -> Result<()> {
     Ok(())
 }
 
+/// An inline network URL keeps its environment variable references when written to project metadata.
+#[test]
+fn add_raw_url_env_vars() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    let requirement = "anyio @ https://user:${WHEEL_PASSWORD}@example.com/some path/${WHEEL_CHANNEL}/anyio-4.0.0-py3-none-any.whl";
+    uv_snapshot!(context.filters(), context.add()
+        .arg("--frozen")
+        .arg("--raw")
+        .arg(requirement)
+        .env("WHEEL_PASSWORD", "synthetic-password")
+        .env("WHEEL_CHANNEL", "nightly"), @"exit_code: 0 (success)");
+    let added = context.read("pyproject.toml");
+
+    // Repeating the command updates the existing declaration.
+    uv_snapshot!(context.filters(), context.add()
+        .arg("--frozen")
+        .arg("--raw")
+        .arg(requirement)
+        .env("WHEEL_PASSWORD", "synthetic-password")
+        .env("WHEEL_CHANNEL", "nightly"), @"exit_code: 0 (success)");
+    let updated = context.read("pyproject.toml");
+    assert_eq!(updated, added);
+    assert_snapshot!(updated, @r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    dependencies = [
+        "anyio @ https://user:${WHEEL_PASSWORD}@example.com/some%20path/${WHEEL_CHANNEL}/anyio-4.0.0-py3-none-any.whl",
+    ]
+    "#);
+    Ok(())
+}
+
+/// A direct URL with whitespace must still be a valid PEP 508 requirement when written.
+#[test]
+fn add_raw_url_with_spaces() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add()
+        .arg("--frozen")
+        .arg("--raw")
+        .arg("anyio @ https://EXAMPLE.com:443/some path/anyio-4.0.0-py3-none-any.whl"), @"exit_code: 0 (success)");
+    assert_snapshot!(context.read("pyproject.toml"), @r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    dependencies = [
+        "anyio @ https://example.com/some%20path/anyio-4.0.0-py3-none-any.whl",
+    ]
+    "#);
+    Ok(())
+}
+
 #[tokio::test]
 async fn add_index_credentials() -> Result<()> {
     let context = uv_test::test_context!("3.12");
