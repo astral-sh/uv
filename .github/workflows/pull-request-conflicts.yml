@@ -39,7 +39,7 @@ jobs:
       github.repository == 'astral-sh/uv' ||
       (github.repository == 'astral-sh/uv-dev' && github.event_name == 'workflow_dispatch')
     runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-2' || 'ubuntu-slim' }}
-    timeout-minutes: 5
+    timeout-minutes: 10
     permissions:
       contents: read
       pull-requests: read
