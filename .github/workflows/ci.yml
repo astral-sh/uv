@@ -138,7 +138,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/github-actions/cargo-cooldowns@3f8ee750f557ec2d8e66120e09cf9a52818ad58c
+      - uses: astral-sh/github-actions/cargo-cooldowns@4d0d0b9f3efeb82c92183f4423e395b81c3fcf5e
         with:
           policy: .github/cargo-cooldowns.toml
 
