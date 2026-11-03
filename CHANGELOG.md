@@ -3,6 +3,39 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.13.7
+
+Released on 2026-11-03.
+
+### Preview features
+
+- Allow requesting a workspace metadata schema version ([#22958](https://github.com/astral-sh/uv/pull/22958))
+- Deduplicate aliased OSV findings in uv audit ([#22990](https://github.com/astral-sh/uv/pull/22990))
+- Support wheel variants in the Packse test server ([#22963](https://github.com/astral-sh/uv/pull/22963))
+
+### Bug fixes
+
+- Allow an empty inline sources table in uv remove ([#23012](https://github.com/astral-sh/uv/pull/23012))
+- Escape literal paths when adding workspace members ([#23008](https://github.com/astral-sh/uv/pull/23008))
+- Fix `uvx` on CPython builds with local versions ([#23013](https://github.com/astral-sh/uv/pull/23013))
+- Stop closing handles listed in `lpReserved2` in the Windows trampoline ([#22977](https://github.com/astral-sh/uv/pull/22977))
+
+### Documentation
+
+- Add missing bracket in `cache-keys` inline code example ([#22984](https://github.com/astral-sh/uv/pull/22984))
+
+### Other changes
+
+- Handle project names starting with a digit in `uv init` ([#23022](https://github.com/astral-sh/uv/pull/23022))
+- Keep older CI reruns from canceling the current PR build ([#22982](https://github.com/astral-sh/uv/pull/22982))
+- Preserve inline comments when updating an existing dependency group ([#23017](https://github.com/astral-sh/uv/pull/23017))
+- Separate Python upgrade and reinstall tests ([#23007](https://github.com/astral-sh/uv/pull/23007))
+- Serve pip compile’s multi-index fixtures locally ([#23005](https://github.com/astral-sh/uv/pull/23005))
+- Skip retry backoff in the HTTP read timeout tests ([#23002](https://github.com/astral-sh/uv/pull/23002))
+- Use an offline wheel for the tool Python pin tests ([#23003](https://github.com/astral-sh/uv/pull/23003))
+- Use local fixtures for outdated listings and cyclic build dependencies ([#23009](https://github.com/astral-sh/uv/pull/23009))
+- Use local indexes for tool hints and wheel fixture tests ([#23004](https://github.com/astral-sh/uv/pull/23004))
+
 ## 0.13.6
 
 Released on 2026-10-26.
