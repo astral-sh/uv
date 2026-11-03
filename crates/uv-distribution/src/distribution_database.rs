@@ -19,14 +19,14 @@ use tracing::{Instrument, debug, info_span, instrument, warn};
 use uv_cache::{ArchiveFileId, ArchiveId, Cache, CacheBucket, CacheEntry, WheelCache};
 use uv_cache_info::{CacheInfo, Timestamp};
 use uv_client::{
-    CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
-    RequestBuilder, RetryState,
+    CacheControl, CachedClientError, Connectivity, DataWithCachePolicy,
+    ErrorKind as ClientErrorKind, RegistryClient, RequestBuilder, RetryState,
 };
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
-    ArchiveHashPolicy, BuildInfo, BuildableSource, BuiltDist, Dist, DistRef, HashCollection,
-    HashValidation, IndexUrl, InstalledDist, MetadataHashPolicy, Name, ResolutionRecorder,
-    SourceDist, SourceUrl, parse_url_hashes,
+    ArchiveHashPolicy, BuildInfo, BuildableSource, BuiltDist, CanonicalFileLocation, Dist, DistRef,
+    HashCollection, HashValidation, IndexLocations, IndexUrl, InstalledDist, MetadataHashPolicy,
+    Name, ResolutionRecorder, SourceDist, SourceUrl, parse_url_hashes,
 };
 use uv_extract::dirhash::{DirectoryDigest, HashedFile};
 use uv_extract::hash::Hasher;
@@ -284,13 +284,20 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         match dist {
             BuiltDist::Registry(wheels) => {
                 let wheel = wheels.best_wheel();
-                let url = wheel.file.url.to_url()?;
+                let RegistryArtifactRequest {
+                    index,
+                    url,
+                    is_proxy,
+                } = RegistryArtifactRequest::new(
+                    &wheel.index,
+                    &wheel.file.url,
+                    self.client.index_locations(),
+                )?;
                 let size = wheel.file.size;
-
                 // Create a cache entry for the wheel.
                 let wheel_entry = self.build_context.cache().entry(
                     CacheBucket::Wheels,
-                    WheelCache::Index(&wheel.index).wheel_dir(wheel.name().as_ref()),
+                    WheelCache::Index(index).wheel_dir(wheel.name().as_ref()),
                     wheel.filename.cache_key(),
                 );
 
@@ -305,15 +312,20 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 }
 
                 // Download and unzip.
+                let hashes = ArtifactHashPolicy::for_registry(
+                    hashes,
+                    is_proxy,
+                    wheel.file.hashes.as_slice(),
+                );
                 match self
                     .stream_wheel(
                         url.clone(),
-                        dist.index(),
+                        Some(index),
                         &wheel.filename,
                         size,
                         &wheel_entry,
                         dist,
-                        hashes.into(),
+                        hashes,
                     )
                     .await
                 {
@@ -347,12 +359,12 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         let archive = self
                             .download_wheel(
                                 url,
-                                dist.index(),
+                                Some(index),
                                 &wheel.filename,
                                 size,
                                 &wheel_entry,
                                 dist,
-                                hashes.into(),
+                                hashes,
                             )
                             .await?;
 
@@ -1690,6 +1702,37 @@ fn persist_archive_file(src: &Path, dst: &Path) -> io::Result<()> {
     fs_err::hard_link(dst, src).or_else(|_| uv_fs::copy_atomic_sync(dst, src))
 }
 
+/// The download URL and cache index for a registry artifact.
+pub(crate) struct RegistryArtifactRequest<'index> {
+    pub(crate) index: &'index IndexUrl,
+    pub(crate) url: SafeUrl,
+    pub(crate) is_proxy: bool,
+}
+
+impl<'index> RegistryArtifactRequest<'index> {
+    pub(crate) fn new(
+        index: &'index IndexUrl,
+        location: &CanonicalFileLocation,
+        indexes: &'index IndexLocations,
+    ) -> Result<Self, Error> {
+        if let Some(proxy) = indexes.proxy_route_for(index) {
+            Ok(Self {
+                index: proxy.effective_url(),
+                url: proxy
+                    .artifact_url_for_request(location)
+                    .map_err(|error| Error::Client(ClientErrorKind::ProxyIndex(error).into()))?,
+                is_proxy: true,
+            })
+        } else {
+            Ok(Self {
+                index,
+                url: location.to_url()?,
+                is_proxy: false,
+            })
+        }
+    }
+}
+
 /// A wrapper around `RegistryClient` that manages a concurrency limit.
 pub struct ManagedClient<'a> {
     pub(super) unmanaged: &'a RegistryClient,
@@ -1708,6 +1751,11 @@ impl<'a> ManagedClient<'a> {
     /// Return whether the client is configured for offline use.
     pub fn is_offline(&self) -> bool {
         self.unmanaged.connectivity().is_offline()
+    }
+
+    /// Return the indexes configured for the underlying registry client.
+    pub fn index_locations(&self) -> &IndexLocations {
+        self.unmanaged.index_locations()
     }
 
     /// Perform a request using the client, respecting the concurrency limit.
