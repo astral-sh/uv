@@ -116,6 +116,7 @@ jobs:
     uses: $/.github/workflows/check-release.yml
 
   check-crates-policies:
+    name: "check | crates policies"
     needs: plan
     if: ${{ needs.plan.outputs.check-crates-policies == 'true' }}
     uses: $/.github/workflows/check-crates-policies.yml
