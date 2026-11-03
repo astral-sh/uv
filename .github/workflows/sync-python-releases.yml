@@ -23,13 +23,13 @@ jobs:
       contents: read
       id-token: write # for the credential broker
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
       - uses: $/.github/actions/setup-uv-toolchain
         with:
           enable-cache: true
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: Swatinem/rust-cache@v2.9.2
         with:
           save-if: false
       - name: Sync Python Releases
@@ -59,7 +59,7 @@ jobs:
             pull_requests: write
 
       - name: "Create Pull Request"
-        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        uses: peter-evans/create-pull-request@v8.1.1
         with:
           token: ${{ steps.token.outputs.token }}
           commit-message: "Sync latest Python releases"
