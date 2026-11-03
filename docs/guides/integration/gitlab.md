@@ -9,7 +9,8 @@ description: A guide to using uv in GitLab CI/CD, including installation, settin
 ## Using the uv image
 
 Astral provides [Docker images](docker.md#available-images) with uv preinstalled.
-Select a variant that is suitable for your workflow.
+Use a variant with a shell, such as the Debian-based image below, so GitLab Runner can execute the
+job's `script`.
 
 ```yaml title=".gitlab-ci.yml"
 variables:
@@ -25,17 +26,6 @@ uv:
   script:
     # your `uv` commands
 ```
-
-!!! note
-
-    If you are using a distroless image, you have to specify the entrypoint:
-    ```yaml
-    uv:
-      image:
-        name: ghcr.io/astral-sh/uv:$UV_VERSION
-        entrypoint: [""]
-      # ...
-    ```
 
 ## Caching
 
