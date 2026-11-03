@@ -9,7 +9,7 @@ use uv_configuration::{
 };
 use uv_dispatch::{BuildDispatch, PlatformState};
 use uv_distribution::LoweredExtraBuildDependencies;
-use uv_distribution_types::{Dist, Resolution, ResolvedDist, SourceDist};
+use uv_distribution_types::{Dist, LinuxLibc, Resolution, ResolvedDist, SourceDist};
 use uv_install_operations::editable::apply_editable_mode;
 use uv_install_operations::loggers::InstallLogger;
 use uv_install_operations::{BytecodeCompilation, Changelog, InstallationPlan};
@@ -198,6 +198,13 @@ pub async fn sync_from_lock(
     // Determine the tags to use for the resolution.
     let tags = resolution_tags(None, python_platform, venv.interpreter())
         .map_err(EnvironmentError::from)?;
+
+    if let Some(environments) = target.lock().libc_environments()
+        && let Some(libc) = LinuxLibc::from_os(tags.python_platform().os())
+        && !environments.marker(libc).evaluate(&marker_env, &[])
+    {
+        return Err(EnvironmentError::LockedLibcIncompatibility(libc));
+    }
 
     // Read the lockfile.
     let resolution = target.to_resolution(

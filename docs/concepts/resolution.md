@@ -167,6 +167,26 @@ environments = [
 ]
 ```
 
+To support macOS and glibc-based Linux, use a table for the Linux entry:
+
+```toml title="pyproject.toml"
+[tool.uv]
+environments = [
+    "sys_platform == 'darwin'",
+    { marker = "sys_platform == 'linux'", libc = "glibc" },
+]
+```
+
+A `libc` entry selects Linux targets using `glibc` or `musl`. uv omits wheels that can only be
+installed on an excluded target from the lockfile and its exported hashes. For example, this
+configuration retains manylinux wheels, generic Linux wheels, and source distributions. A sync on
+musl-based Linux fails even if a package has a universal wheel or can be built from source.
+
+To also require compatibility with an older Linux distribution, set
+[`minimum-libc-version`](#minimum-libc-version). Wheels for newer versions of the supported libc
+remain available to newer hosts. To allow both libc families for the same marker, use a plain marker
+string.
+
 Entries in the `environments` setting must be disjoint (i.e., they must not overlap). For example,
 `sys_platform == 'darwin'` and `sys_platform == 'linux'` are disjoint, but
 `sys_platform == 'darwin'` and `python_version >= '3.9'` are not, since both could be true at the

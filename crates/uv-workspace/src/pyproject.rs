@@ -21,7 +21,8 @@ use tracing::instrument;
 use uv_build_backend::BuildBackendSettings;
 use uv_configuration::{ExcludeDependency, GitLfsSetting, Override};
 use uv_distribution_types::{
-    Index, IndexName, MinimumLibcVersion, NameRequirementSpecification, RequirementSource,
+    Index, IndexName, MinimumLibcVersion, NameRequirementSpecification, ProjectEnvironments,
+    RequirementSource,
 };
 use uv_fs::{PortablePathBuf, try_relative_to_if};
 use uv_macros::{DeserializeUntagged, OptionsMetadata};
@@ -663,24 +664,26 @@ pub struct ToolUv {
     /// However, you can restrict the set of supported environments to improve performance and avoid
     /// unsatisfiable branches in the solution space.
     ///
+    /// Use a table with a `marker` and a `libc` family (`glibc` or `musl`) to restrict a Linux environment.
+    ///
     /// These environments will also be respected when `uv pip compile` is invoked with the
     /// `--universal` flag.
     #[cfg_attr(
         feature = "schemars",
         schemars(
-            with = "Option<Vec<String>>",
+            with = "Option<ProjectEnvironments>",
             description = "A list of environment markers, e.g., `python_version >= '3.6'`."
         )
     )]
     #[option(
         default = "[]",
-        value_type = "str | list[str]",
+        value_type = "str | list[str | dict]",
         example = r#"
             # Resolve for macOS, but not for Linux or Windows.
             environments = ["sys_platform == 'darwin'"]
         "#
     )]
-    pub(crate) environments: Option<SupportedEnvironments>,
+    pub(crate) environments: Option<ProjectEnvironments>,
 
     /// A list of required platforms, for packages that lack source distributions.
     ///

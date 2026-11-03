@@ -37,11 +37,12 @@ use uv_distribution_types::{
     ArchiveHashPolicy, BuiltDist, DependencyMetadata, DirectUrlBuiltDist, DirectUrlSourceDist,
     DirectorySourceDist, Dist, ExcludeNewerOverride, ExcludeNewerSpan, ExcludeNewerValue,
     FileLocation, FirstParty, GitDirectorySourceDist, GitPathBuiltDist, GitPathSourceDist,
-    HashValidation, Identifier, IndexLocations, IndexMetadata, IndexUrl, MetadataHashPolicy,
-    MinimumLibcVersion, Name, NameRequirementSpecification, PYPI_URL, PathBuiltDist,
-    PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, RemoteSource,
-    Requirement, RequirementSource, RequiresPython, ResolvedDist, SimplifiedMarkerTree,
-    StaticMetadata, ToUrlError, UrlString, VersionId,
+    HashValidation, Identifier, IndexLocations, IndexMetadata, IndexUrl, LibcEnvironments,
+    MetadataHashPolicy, MinimumLibcVersion, Name, NameRequirementSpecification, PYPI_URL,
+    PathBuiltDist, PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist,
+    RemoteSource, Requirement, RequirementSource, RequiresPython, ResolvedDist,
+    SimplifiedMarkerTree, StaticMetadata, ToUrlError, UrlString, VersionId,
+    platform_machine_markers,
 };
 use uv_fs::{PortablePath, PortablePathBuf, Simplified, normalize_path, try_relative_to_if};
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
@@ -53,7 +54,7 @@ use uv_pep508::{
     MarkerEnvironment, MarkerTree, Scheme, VerbatimUrl, VerbatimUrlError, split_scheme,
 };
 use uv_platform_tags::{
-    AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagCompatibility, TagPriority, Tags,
+    AbiTag, Arch, IncompatibleTag, LanguageTag, PlatformTag, TagCompatibility, TagPriority, Tags,
 };
 use uv_preview::PreviewFeature;
 use uv_pypi_types::{
@@ -154,23 +155,16 @@ static ANDROID_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
     UniversalMarker::new(pep508, ConflictMarker::TRUE)
 });
 static ARM_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
-    let pep508 =
-        MarkerTree::from_str("platform_machine == 'aarch64' or platform_machine == 'arm64' or platform_machine == 'ARM64'")
-            .unwrap();
-    UniversalMarker::new(pep508, ConflictMarker::TRUE)
+    UniversalMarker::new(
+        platform_machine_markers(Arch::Aarch64),
+        ConflictMarker::TRUE,
+    )
 });
 static X86_64_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
-    let pep508 =
-        MarkerTree::from_str("platform_machine == 'x86_64' or platform_machine == 'amd64' or platform_machine == 'AMD64'")
-            .unwrap();
-    UniversalMarker::new(pep508, ConflictMarker::TRUE)
+    UniversalMarker::new(platform_machine_markers(Arch::X86_64), ConflictMarker::TRUE)
 });
 static X86_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
-    let pep508 = MarkerTree::from_str(
-        "platform_machine == 'i686' or platform_machine == 'i386' or platform_machine == 'win32' or platform_machine == 'x86'",
-    )
-    .unwrap();
-    UniversalMarker::new(pep508, ConflictMarker::TRUE)
+    UniversalMarker::new(platform_machine_markers(Arch::X86), ConflictMarker::TRUE)
 });
 static PPC64LE_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
     let pep508 = MarkerTree::from_str("platform_machine == 'ppc64le'").unwrap();
@@ -193,10 +187,7 @@ static LOONGARCH64_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
     UniversalMarker::new(pep508, ConflictMarker::TRUE)
 });
 static ARMV7L_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
-    let pep508 =
-        MarkerTree::from_str("platform_machine == 'armv7l' or platform_machine == 'armv8l'")
-            .unwrap();
-    UniversalMarker::new(pep508, ConflictMarker::TRUE)
+    UniversalMarker::new(platform_machine_markers(Arch::Armv7L), ConflictMarker::TRUE)
 });
 static ARMV6L_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
     let pep508 = MarkerTree::from_str("platform_machine == 'armv6l'").unwrap();
@@ -2547,6 +2538,7 @@ impl Lock {
                     &wheel.filename,
                     &requires_python,
                     &wheel_marker,
+                    resolution.options.libc.environments,
                     None,
                 )
             });
@@ -2627,7 +2619,8 @@ impl Lock {
             resolution_mode: resolution.options.resolution_mode,
             prerelease: resolution.options.prerelease.clone(),
             fork_strategy: resolution.options.fork_strategy,
-            minimum_libc_version: resolution.options.minimum_libc_version,
+            minimum_libc_version: resolution.options.libc.minimum_version,
+            libc_environments: resolution.options.libc.environments,
             exclude_newer: resolution.options.exclude_newer.clone(),
         };
         // Canonicalize the top-level fork markers to match what is persisted in
@@ -3133,6 +3126,11 @@ impl Lock {
     /// Return the selected libc implementation and minimum version.
     pub fn minimum_libc_version(&self) -> Option<MinimumLibcVersion> {
         self.options.minimum_libc_version
+    }
+
+    /// Return the supported Linux marker domains for each libc family.
+    pub fn libc_environments(&self) -> Option<LibcEnvironments> {
+        self.options.libc_environments
     }
 
     /// Returns the exclude newer setting used to generate this lock.
@@ -6205,6 +6203,8 @@ struct ResolverOptions {
     fork_strategy: ForkStrategy,
     /// The selected libc implementation and minimum version.
     minimum_libc_version: Option<MinimumLibcVersion>,
+    /// The supported Linux marker domains for each libc family.
+    libc_environments: Option<LibcEnvironments>,
     /// The [`ExcludeNewer`] setting used to generate this lock.
     exclude_newer: ExcludeNewer,
 }
@@ -6224,6 +6224,8 @@ struct ResolverOptionsWire {
     fork_strategy: ForkStrategy,
     /// The selected libc implementation and minimum version.
     minimum_libc_version: Option<MinimumLibcVersion>,
+    /// The supported Linux marker domains for each libc family.
+    libc_environments: Option<LibcEnvironments>,
     /// The [`ExcludeNewer`] setting used to generate this lock.
     #[serde(flatten)]
     exclude_newer: ExcludeNewerWire,
@@ -6575,6 +6577,7 @@ impl TryFrom<LockWire> for Lock {
             prerelease: options_wire.prerelease.into(),
             fork_strategy: options_wire.fork_strategy,
             minimum_libc_version: options_wire.minimum_libc_version,
+            libc_environments: options_wire.libc_environments,
             exclude_newer: options_wire.exclude_newer.into(),
         };
         let lock = Self::new(
@@ -10403,6 +10406,7 @@ fn is_wheel_unreachable_for_marker(
     filename: &WheelFilename,
     requires_python: &RequiresPython,
     marker: &UniversalMarker,
+    libc_environments: Option<LibcEnvironments>,
     tags: Option<&Tags>,
 ) -> bool {
     // TODO(konsti): Include wheel variants in lockfiles when supported.
@@ -10416,6 +10420,11 @@ fn is_wheel_unreachable_for_marker(
     }
     // Remove wheels that don't match `requires-python` and can't be selected for installation.
     if !requires_python.matches_wheel_tag(filename) {
+        return true;
+    }
+    if let Some(environments) = libc_environments
+        && !environments.allows_wheel(filename, marker.pep508())
+    {
         return true;
     }
 
@@ -10613,6 +10622,7 @@ pub(crate) fn is_wheel_unreachable(
         filename,
         requires_python,
         graph.graph[node_index].marker(),
+        graph.options.libc.environments,
         tags,
     )
 }

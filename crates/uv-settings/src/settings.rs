@@ -14,7 +14,8 @@ use uv_configuration::{
 use uv_distribution_types::{
     ConfigSettings, ExcludeNewerOverride, ExcludeNewerSpan, ExcludeNewerValue, ExtraBuildVariables,
     Index, IndexLocations, IndexUrl, IndexUrlError, MinimumLibcVersion, Origin,
-    PackageConfigSettings, PipExtraIndex, PipFindLinks, PipIndex, StaticMetadata,
+    PackageConfigSettings, PipExtraIndex, PipFindLinks, PipIndex, ProjectEnvironments,
+    StaticMetadata,
 };
 use uv_install_wheel::LinkMode;
 use uv_macros::{CombineOptions, DeserializeUntagged, OptionsMetadata};
@@ -159,7 +160,7 @@ pub struct Options {
     pub build_constraint_dependencies: Option<Vec<BuildConstraintDependency>>,
 
     #[cfg_attr(feature = "schemars", schemars(skip))]
-    pub environments: Option<SupportedEnvironments>,
+    pub environments: Option<ProjectEnvironments>,
 
     #[cfg_attr(feature = "schemars", schemars(skip))]
     pub required_environments: Option<SupportedEnvironments>,
@@ -2728,7 +2729,7 @@ struct OptionsWire {
     exclude_dependencies: Option<Vec<ExcludeDependency>>,
     constraint_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
     build_constraint_dependencies: Option<Vec<BuildConstraintDependency>>,
-    environments: Option<SupportedEnvironments>,
+    environments: Option<ProjectEnvironments>,
     required_environments: Option<SupportedEnvironments>,
     minimum_libc_version: Option<MinimumLibcVersion>,
 

@@ -30,7 +30,7 @@ use uv_configuration::{
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExcludeNewerOverride, ExtraBuildVariables, Index,
     IndexLocations, IndexUrl, MinimumLibcVersion, NameRequirementSpecification,
-    PackageConfigSettings, Requirement,
+    PackageConfigSettings, ProjectEnvironments, Requirement,
 };
 use uv_install_wheel::LinkMode;
 use uv_normalize::{ExtraName, PackageName, PipGroupName};
@@ -3364,7 +3364,7 @@ pub struct PipCompileSettings {
     pub overrides_from_workspace: Vec<Override<Requirement>>,
     pub excludes_from_workspace: Vec<ExcludeDependency>,
     pub build_constraints_from_workspace: Vec<NameRequirementSpecification>,
-    pub environments: SupportedEnvironments,
+    pub environments: ProjectEnvironments,
     pub required_environments: SupportedEnvironments,
     pub minimum_libc_version: Option<MinimumLibcVersion>,
     pub refresh: Refresh,
@@ -3485,7 +3485,7 @@ impl PipCompileSettings {
         let environments = if let Some(configuration) = &filesystem {
             configuration.environments.clone().unwrap_or_default()
         } else {
-            SupportedEnvironments::default()
+            ProjectEnvironments::default()
         };
 
         let required_environments = if let Some(configuration) = &filesystem {

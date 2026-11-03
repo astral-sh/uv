@@ -185,11 +185,18 @@ impl ValidatedLock {
         }
 
         // Different libc requirements can change which versions cover the required platforms.
-        if lock.minimum_libc_version() != options.minimum_libc_version {
+        if lock.libc_environments() != options.libc.environments {
+            debug!(
+                "Resolving despite existing lockfile due to a change in supported libc environments"
+            );
+            return Ok(Self::Versions(lock));
+        }
+
+        if lock.minimum_libc_version() != options.libc.minimum_version {
             debug!(
                 "Resolving despite existing lockfile due to change in minimum libc version: {:?} vs. {:?}",
                 lock.minimum_libc_version(),
-                options.minimum_libc_version,
+                options.libc.minimum_version,
             );
             return Ok(Self::Versions(lock));
         }

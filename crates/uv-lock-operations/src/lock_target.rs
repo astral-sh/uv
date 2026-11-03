@@ -14,8 +14,8 @@ use uv_configuration::{
 };
 use uv_distribution::LoweredRequirement;
 use uv_distribution_types::{
-    Index, IndexLocations, MinimumLibcVersion, NameRequirementSpecification, Requirement,
-    RequiresPython,
+    Index, IndexLocations, MinimumLibcVersion, NameRequirementSpecification, ProjectEnvironments,
+    Requirement, RequiresPython,
 };
 use uv_lock::Lock;
 use uv_normalize::{GroupName, PackageName};
@@ -240,7 +240,7 @@ impl<'lock> LockTarget<'lock> {
     }
 
     /// Returns the set of supported environments for the [`LockTarget`].
-    pub fn environments(self) -> Option<&'lock SupportedEnvironments> {
+    pub fn environments(self) -> Option<&'lock ProjectEnvironments> {
         match self {
             Self::Workspace(workspace) => workspace.environments(),
             Self::Script(_) => {

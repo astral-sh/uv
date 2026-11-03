@@ -13,8 +13,8 @@ use uv_configuration::{
 use uv_dispatch::{BuildDispatch, UniversalState};
 use uv_distribution::{DistributionDatabase, FirstPartyPackages, LoweredExtraBuildDependencies};
 use uv_distribution_types::{
-    HashCollection, NameRequirementSpecification, RequiresPython, ResolutionRecorder,
-    UnresolvedRequirementSpecification,
+    HashCollection, NameRequirementSpecification, ProjectEnvironments, RequiresPython,
+    ResolutionRecorder, UnresolvedRequirementSpecification,
 };
 use uv_git::ResolvedRepositoryReference;
 use uv_lock::{GroupMetadata, Lock, ResolverManifest};
@@ -483,9 +483,13 @@ async fn do_lock(
         );
     }
 
+    let project_environments = target.environments();
+    let libc_environments = project_environments.and_then(ProjectEnvironments::libc_environments);
+    let supported_markers = project_environments.map(ProjectEnvironments::markers);
+
     // Collect the list of supported environments.
     let environments = {
-        let environments = target.environments();
+        let environments = supported_markers.as_ref();
 
         // Ensure that the environments are disjoint.
         if let Some(environments) = &environments {
@@ -654,6 +658,7 @@ async fn do_lock(
         .build_options(build_options.clone())
         .artifact_environments(artifact_environments.clone())
         .minimum_libc_version(minimum_libc_version)
+        .libc_environments(libc_environments)
         .build();
     // Checking an existing lockfile may build metadata and install build dependencies. Verify any
     // artifacts recorded in that lockfile, including for an ordinary unlocked command.

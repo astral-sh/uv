@@ -8,10 +8,11 @@ use uv_configuration::BuildOptions;
 use uv_distribution::{DistributionDatabase, Reporter};
 use uv_distribution_types::{
     Dist, File, IndexCapabilities, IndexLocations, IndexMetadata, IndexMetadataRef, IndexUrl,
-    InstalledDist, MinimumLibcVersion, RequestedDist, RequiresPython,
+    InstalledDist, RequestedDist, RequiresPython,
 };
 use uv_normalize::PackageName;
 use uv_platform_tags::Tags;
+use uv_resolver_types::LibcPolicy;
 use uv_static::EnvVars;
 use uv_types::{BuildContext, HashStrategy};
 
@@ -102,7 +103,7 @@ pub struct DefaultResolverProvider<'a, Context: BuildContext> {
     index_locations: &'a IndexLocations,
     build_options: &'a BuildOptions,
     capabilities: &'a IndexCapabilities,
-    minimum_libc_version: Option<MinimumLibcVersion>,
+    libc: LibcPolicy,
 }
 
 impl<'a, Context: BuildContext> DefaultResolverProvider<'a, Context> {
@@ -118,7 +119,7 @@ impl<'a, Context: BuildContext> DefaultResolverProvider<'a, Context> {
         index_locations: &'a IndexLocations,
         build_options: &'a BuildOptions,
         capabilities: &'a IndexCapabilities,
-        minimum_libc_version: Option<MinimumLibcVersion>,
+        libc: LibcPolicy,
     ) -> Self {
         Self {
             fetcher,
@@ -136,7 +137,7 @@ impl<'a, Context: BuildContext> DefaultResolverProvider<'a, Context> {
             index_locations,
             build_options,
             capabilities,
-            minimum_libc_version,
+            libc,
         }
     }
 
@@ -213,7 +214,7 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
                     self.tags.as_ref(),
                     self.hasher,
                     self.build_options,
-                    self.minimum_libc_version,
+                    self.libc,
                 )
             });
 
@@ -242,14 +243,14 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
                                 available_version_cutoff,
                                 flat_distributions.clone(),
                                 self.build_options,
-                                self.minimum_libc_version,
+                                self.libc,
                             ),
                             MetadataFormat::Flat(metadata) => VersionMap::from_flat_metadata(
                                 metadata,
                                 self.tags.as_ref(),
                                 self.hasher,
                                 self.build_options,
-                                self.minimum_libc_version,
+                                self.libc,
                             ),
                         }
                     })
