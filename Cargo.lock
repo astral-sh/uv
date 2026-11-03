@@ -7135,6 +7135,7 @@ dependencies = [
  "uv-fs",
  "uv-normalize",
  "uv-pep440",
+ "uv-preview",
  "uv-redacted",
 ]
 

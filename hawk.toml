@@ -29,14 +29,6 @@ package = "uv-redacted"
 # Keep public APIs that are consumed by downstream Rust integrations.
 
 [[override]]
-lint = "hawk::unnecessary_public"
-crate = "uv_preview"
-item = "require"
-kind = "function"
-level = "expect"
-reason = "public entry point for parsers to register preview requirements during configuration discovery"
-
-[[override]]
 lint = "hawk::dead_public"
 crate = "uv_client"
 item = "base_client::BaseClientBuilder::<'a>::extra_middleware"

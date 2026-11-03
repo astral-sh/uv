@@ -216,6 +216,25 @@ impl FromStr for Arch {
 }
 
 impl Arch {
+    /// Return the pointer width of this architecture, in bits.
+    pub fn pointer_width(self) -> u8 {
+        match self {
+            Self::Armv5TEL
+            | Self::Armv6L
+            | Self::Armv7L
+            | Self::Powerpc
+            | Self::X86
+            | Self::Wasm32 => 32,
+            Self::Aarch64
+            | Self::Powerpc64Le
+            | Self::Powerpc64
+            | Self::X86_64
+            | Self::S390X
+            | Self::LoongArch64
+            | Self::Riscv64 => 64,
+        }
+    }
+
     /// Returns the oldest possible `manylinux` tag for this architecture, if it supports
     /// `manylinux`.
     pub(crate) fn get_minimum_manylinux_minor(self) -> Option<u16> {

@@ -231,6 +231,37 @@ Use `==` to require coverage at the baseline. A range like `>= '24.0.0'` can be 
 that only supports a newer release. Wheels targeting newer releases are still retained in the
 lockfile.
 
+### Python ABI features
+
+The experimental [PEP 780](https://peps.python.org/pep-0780/) `sys_abi_features` marker describes
+interpreter ABI features. Enable it with `--preview-features sys-abi-features` or
+`preview-features = ["sys-abi-features"]`.
+
+Use `in` and `not in` to test feature membership. CPython builds have either `gil-enabled` or
+`free-threading`, and debug builds also have `debug`. The `32-bit` and `64-bit` features describe
+interpreter bitness. Feature names are case-sensitive. Free-threading describes the interpreter
+build, even when its GIL is enabled at runtime.
+
+For example, to require wheels for both regular and free-threaded CPython on x86-64 Linux:
+
+```toml title="pyproject.toml"
+[tool.uv]
+preview-features = ["sys-abi-features"]
+no-build = true
+required-environments = [
+    "sys_platform == 'linux' and platform_machine == 'x86_64' and 'gil-enabled' in sys_abi_features",
+    "sys_platform == 'linux' and platform_machine == 'x86_64' and 'free-threading' in sys_abi_features",
+]
+```
+
+With `no-build = true`, each required environment must have a compatible wheel. ABI-independent
+wheels can cover both environments. When combined with `minimum-libc-version`, each ABI must also
+have coverage at each configured libc baseline.
+
+The marker can also select dependencies, for example
+`"example; 'free-threading' in sys_abi_features"`. A universal lock can contain different
+dependencies for different ABIs.
+
 ### Minimum libc version
 
 !!! note
