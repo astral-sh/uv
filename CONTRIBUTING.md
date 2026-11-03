@@ -385,3 +385,24 @@ After merging the pull request, run the
 reads the version from project metadata and rejects versions that already have a GitHub release.
 Enable `dry-run` to build artifacts without publishing. Otherwise, the release will automatically be
 created on GitHub after everything else publishes.
+
+## GitHub Actions
+
+GitHub Actions bumps are generally performed automatically, or by Astral team members
+manually when necessary.
+
+We use a GitHub Actions workflow lockfile to track our action dependencies. Dependabot
+updates this lockfile automatically, but it can also be updated locally with:
+
+```shell
+# first time: install `gh actions-lock`
+gh extension install github/gh-actions-lock
+
+gh actions-lock
+```
+
+To verify the lockfile without modifying it:
+
+```shell
+gh actions-lock --verify
+```
