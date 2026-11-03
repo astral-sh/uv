@@ -141,31 +141,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: $/.github/actions/setup-uv-toolchain
+      - uses: astral-sh/github-actions/cargo-cooldowns@4d0d0b9f3efeb82c92183f4423e395b81c3fcf5e
         with:
-          enable-cache: auto
-      - name: "Restore crate publication times from main"
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          mkdir -p "$RUNNER_TEMP/cargo-cooldowns"
-          if run_id=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml \
-            --branch main --event push --status success --limit 1 \
-            --json databaseId --jq '.[0].databaseId // empty') && [[ -n "$run_id" ]]; then
-            gh run download "$run_id" --repo "$GITHUB_REPOSITORY" --name cargo-publication-times --dir "$RUNNER_TEMP/cargo-cooldowns" ||
-              echo "No publication times available from main run $run_id; checking crates.io."
-          fi
-      - name: "Check Cargo dependency cooldowns"
-        run: uv run --script scripts/check_cargo_cooldowns.py --cache "$RUNNER_TEMP/cargo-cooldowns/cargo-publication-times.json"
-      - name: "Store crate publication times"
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        continue-on-error: true
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: cargo-publication-times
-          path: ${{ runner.temp }}/cargo-cooldowns/cargo-publication-times.json
-          retention-days: 7
-          overwrite: true
+          policy: .github/cargo-cooldowns.toml
 
   check-cargo-lock-changes:
     name: "check | cargo lockfile changes"
