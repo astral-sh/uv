@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use anyhow::Result;
 use assert_fs::prelude::*;
 use indoc::indoc;
-use insta::assert_snapshot;
+use insta::{assert_json_snapshot, assert_snapshot};
 use serde_json::{Map, Value, json};
 use uv_distribution_types::PEP_850_SCHEMA;
 use uv_static::EnvVars;
@@ -162,6 +162,66 @@ fn select_variant_by_static_provider_order() -> Result<()> {
             "openblas_or_accelerate": { "blas_lapack": { "library": ["accelerate", "openblas"] } }
         })
     );
+    Ok(())
+}
+
+/// Select the TPU wheel when TPU presence is forced on the host.
+#[test]
+fn select_tpu_variant() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::from_toml(indoc! {r#"
+        name = "tpu-provider"
+        root = {}
+
+        [expected]
+        satisfiable = true
+
+        [packages.ok.versions."1.0.0"]
+        wheel = false
+        sdist = false
+
+        [packages.ok.versions."1.0.0".variants]
+        namespaces = ["tpu"]
+
+        [packages.ok.versions."1.0.0".variants.providers.tpu]
+        requires = ["tpu-variant-provider==0.1.0"]
+        plugin-api = "tpu_variant_provider.plugin:TpuVariantPlugin"
+
+        [packages.ok.versions."1.0.0".variants.wheels]
+        cpu.properties = ["tpu :: present :: false"]
+        tpu.properties = ["tpu :: present :: true"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .env(EnvVars::TPU_VARIANT_PROVIDER_FORCE_PRESENT, "YES")
+        .arg("--index-url")
+        .arg(server.index_url())
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("ok==1.0.0"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0
+    ");
+    let installed = context.read(
+        context
+            .site_packages()
+            .join("ok-1.0.0.dist-info/variant.json"),
+    );
+    assert_json_snapshot!(serde_json::from_str::<Value>(&installed)?["variants"], @r#"
+    {
+      "tpu": {
+        "tpu": {
+          "present": [
+            "true"
+          ]
+        }
+      }
+    }
+    "#);
     Ok(())
 }
 
