@@ -5,6 +5,9 @@ inputs:
   enable-cache:
     description: "Cache uv dependencies from the checkout (true or auto), or run setup in the action directory (false)."
     default: "false"
+  save-cache:
+    description: "Whether setup-uv saves the uv cache after the run."
+    default: "auto"
   group:
     description: "Dependency group from the workflow revision to put on PATH."
     required: false
@@ -44,6 +47,7 @@ runs:
         version: ${{ steps.release.outputs.version }}
         checksum: ${{ steps.release.outputs.checksum }}
         enable-cache: ${{ inputs.enable-cache }}
+        save-cache: ${{ inputs.save-cache }}
         working-directory: ${{ inputs.enable-cache == 'false' && github.action_path || github.workspace }}
 
     - name: "Set up toolchain group"
