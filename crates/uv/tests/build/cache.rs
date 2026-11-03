@@ -3,11 +3,12 @@ use std::path::PathBuf;
 use std::process::Command;
 
 use anyhow::{Context, Result};
+use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
 use async_zip::base::write::ZipFileWriter;
 use async_zip::{Compression, ZipEntryBuilder};
 use futures::executor::block_on;
-use indoc::indoc;
+use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 use predicates::prelude::predicate;
 use sha2::{Digest, Sha256};
@@ -18,6 +19,7 @@ use uv_fs::PortablePath;
 use uv_fs::create_symlink;
 use uv_test::archive::generate_source_archive;
 use uv_test::package_server::PackageServer;
+use uv_test::packse::WheelBuilder;
 use uv_test::{TestContext, get_bin, uv_snapshot};
 
 /// A custom cache directory must configure commands and snapshot filters together.
@@ -397,6 +399,15 @@ async fn index_source_hashes() -> Result<()> {
     let name = "ok".parse()?;
     let server = PackageServer::new(&name).await;
     let index_url = server.index_url();
+    context
+        .temp_dir
+        .child("uv.toml")
+        .write_str(&formatdoc! {r#"
+        [[index]]
+        url = "{index_url}"
+        default = true
+        cache-control = {{ api = "no-cache", files = "max-age=3600, immutable" }}
+    "#})?;
     let filename = "ok-1.0.0.tar.gz";
     let marker = context.temp_dir.child("backend-marker");
     context
@@ -413,7 +424,7 @@ async fn index_source_hashes() -> Result<()> {
     server.serve(filename, &archive, Some(&wrong_hash)).await;
 
     uv_snapshot!(context.filters(), context.pip_sync()
-        .arg("requirements.txt").arg("--index-url").arg(&index_url), @"
+        .arg("requirements.txt"), @"
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
@@ -427,7 +438,7 @@ async fn index_source_hashes() -> Result<()> {
                sha256:[SOURCE_HASH]
     ");
     uv_snapshot!(context.filters(), context.pip_compile()
-        .arg("requirements.txt").arg("--index-url").arg(&index_url).arg("--no-header").arg("--generate-hashes"), @"
+        .arg("requirements.txt").arg("--no-header").arg("--generate-hashes"), @"
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to download and build `ok==1.0.0`
@@ -444,7 +455,7 @@ async fn index_source_hashes() -> Result<()> {
     // The same source is usable once the index supplies its actual hash.
     server.serve(filename, &archive, Some(&source_hash)).await;
     uv_snapshot!(context.filters(), context.pip_sync()
-        .arg("requirements.txt").arg("--index-url").arg(&index_url).arg("--refresh"), @"
+        .arg("requirements.txt").arg("--refresh"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
@@ -454,6 +465,146 @@ async fn index_source_hashes() -> Result<()> {
     ");
     marker.assert(predicate::path::is_file());
     context.assert_installed("ok", "1.0.0");
+
+    // The index changes while the source revision and its built wheel are both fresh.
+    context.reset_venv();
+    fs_err::remove_file(marker.path())?;
+    server.serve(filename, &archive, Some(&wrong_hash)).await;
+
+    // New build settings require fresh metadata from the cached source revision.
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.txt").arg("--no-header").arg("--generate-hashes")
+        .arg("--config-setting").arg("probe=1"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to download and build `ok==1.0.0`
+      cause: Hash mismatch for `ok==1.0.0`
+
+             Expected:
+               sha256:[WRONG_HASH]
+
+             Computed:
+               sha256:[SOURCE_HASH]
+    ");
+    marker.assert(predicate::path::missing());
+
+    uv_snapshot!(context.filters(), context.pip_sync().arg("requirements.txt"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Failed to download and build `ok==1.0.0`
+      cause: Hash mismatch for `ok==1.0.0`
+
+             Expected:
+               sha256:[WRONG_HASH]
+
+             Computed:
+               sha256:[SOURCE_HASH]
+    ");
+    marker.assert(predicate::path::missing());
+    context.assert_not_installed("ok");
+    Ok(())
+}
+
+/// A cached build whose sdist hash changed must give way to a published wheel of the same name.
+#[test]
+fn published_wheel_wins_over_stale_source_build() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let name = "ok".parse()?;
+    let version = "1.0.0".parse()?;
+    let sdist_filename = "ok-1.0.0.tar.gz";
+    let sdist = generate_source_archive(&name, &version, "", None)?;
+    let sdist_hash = hex::encode(Sha256::digest(&sdist));
+    context
+        .temp_dir
+        .child(sdist_filename)
+        .write_binary(&sdist)?;
+    let index = context.temp_dir.child("index.html");
+    index.write_str(&format!(
+        r#"<a href="{sdist_filename}#sha256={sdist_hash}">{sdist_filename}</a>"#
+    ))?;
+
+    context
+        .pip_install()
+        .args(["--no-index", "--find-links", "index.html", "ok==1.0.0"])
+        .assert()
+        .success();
+    let published_file = context.site_packages().join("ok/published.txt");
+    assert!(!published_file.exists());
+    context.reset_venv();
+
+    let (wheel_filename, wheel) = WheelBuilder::new(&name, &version)
+        .files(&[("ok/published.txt", "published")])
+        .build();
+    let wheel_hash = hex::encode(Sha256::digest(&wheel));
+    context
+        .temp_dir
+        .child(&wheel_filename)
+        .write_binary(&wheel)?;
+    let wrong_hash = "0".repeat(64);
+    index.write_str(&formatdoc! {r#"
+        <a href="{sdist_filename}#sha256={wrong_hash}">{sdist_filename}</a>
+        <a href="{wheel_filename}#sha256={wheel_hash}">{wheel_filename}</a>
+    "#})?;
+
+    context
+        .pip_install()
+        .args(["--no-index", "--find-links", "index.html", "ok==1.0.0"])
+        .assert()
+        .success();
+    assert_snapshot!(context.read(published_file), @"published");
+    Ok(())
+}
+
+/// A local HTML index can change its wheel hash without changing the wheel's timestamp.
+#[test]
+fn cached_index_wheel_hash() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let filename = "ok-1.0.0-py3-none-any.whl";
+    let wheel = context.read_bytes(context.workspace_root.join("test/links").join(filename));
+    let wheel_hash = hex::encode(Sha256::digest(&wheel));
+    let wrong_hash = "0".repeat(64);
+    let context = context
+        .with_filter((wheel_hash.clone(), "[WHEEL_HASH]"))
+        .with_filter((wrong_hash.clone(), "[WRONG_HASH]"));
+    context.temp_dir.child(filename).write_binary(&wheel)?;
+    context
+        .temp_dir
+        .child("requirements.txt")
+        .write_str("ok==1.0.0")?;
+    let index = context.temp_dir.child("index.html");
+    index.write_str(&format!(
+        r#"<a href="{filename}#sha256={wheel_hash}">{filename}</a>"#
+    ))?;
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("requirements.txt").arg("--no-index").arg("--find-links").arg("index.html"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0
+    ");
+
+    context.reset_venv();
+    index.write_str(&format!(
+        r#"<a href="{filename}#sha256={wrong_hash}">{filename}</a>"#
+    ))?;
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("requirements.txt").arg("--no-index").arg("--find-links").arg("index.html"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Failed to download `ok==1.0.0`
+      cause: Hash mismatch for `ok==1.0.0`
+
+             Expected:
+               sha256:[WRONG_HASH]
+
+             Computed:
+               sha256:[WHEEL_HASH]
+    ");
+    context.assert_not_installed("ok");
     Ok(())
 }
 

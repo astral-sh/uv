@@ -49,6 +49,7 @@ use uv_workspace::pyproject::ToolUvSources;
 
 use crate::distribution_database::ManagedClient;
 use crate::error::Error;
+use crate::hash::ArtifactHashPolicy;
 use crate::metadata::{ArchiveMetadata, GitWorkspaceMember, Metadata};
 use crate::source::built_wheel_metadata::{BuiltWheelFile, BuiltWheelMetadata};
 use crate::source::revision::Revision;
@@ -329,7 +330,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     None,
                     dist.ext,
                     tags,
-                    hashes,
+                    hashes.into(),
                     client,
                 )
                 .boxed_local()
@@ -350,7 +351,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     dist.subdirectory.as_deref(),
                     dist.ext,
                     tags,
-                    hashes,
+                    hashes.into(),
                     client,
                 )
                 .boxed_local()
@@ -407,7 +408,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     resource.subdirectory,
                     resource.ext,
                     tags,
-                    hashes,
+                    hashes.into(),
                     client,
                 )
                 .boxed_local()
@@ -490,7 +491,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     &cache_shard,
                     None,
                     dist.ext,
-                    hashes,
+                    hashes.into(),
                     client,
                 )
                 .boxed_local()
@@ -510,7 +511,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     &cache_shard,
                     dist.subdirectory.as_deref(),
                     dist.ext,
-                    hashes,
+                    hashes.into(),
                     client,
                 )
                 .boxed_local()
@@ -565,7 +566,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     &cache_shard,
                     resource.subdirectory,
                     resource.ext,
-                    hashes,
+                    hashes.into(),
                     client,
                 )
                 .boxed_local()
@@ -654,7 +655,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         subdirectory: Option<&'data Path>,
         ext: SourceDistExtension,
         tags: &Tags,
-        hashes: ArchiveHashPolicy<'_>,
+        hashes: ArtifactHashPolicy<'_>,
         client: &ManagedClient<'_>,
     ) -> Result<BuiltWheelMetadata, Error> {
         let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
@@ -663,15 +664,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let revision = self
             .url_revision(source, ext, url, index, cache_shard, hashes, client)
             .await?;
-
-        // Before running the build, check that the hashes match.
-        if !revision.satisfies(hashes) {
-            return Err(Error::hash_mismatch(
-                source.to_string(),
-                hashes.digests(),
-                revision.hashes(),
-            ));
-        }
 
         // Scope all operations to the revision. Within the revision, there's no need to check for
         // freshness, since entries have to be fresher than the revision itself.
@@ -787,7 +779,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         cache_shard: &CacheShard,
         subdirectory: Option<&'data Path>,
         ext: SourceDistExtension,
-        hashes: ArchiveHashPolicy<'_>,
+        hashes: ArtifactHashPolicy<'_>,
         client: &ManagedClient<'_>,
     ) -> Result<ArchiveMetadata, Error> {
         let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
@@ -796,15 +788,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let revision = self
             .url_revision(source, ext, url, index, cache_shard, hashes, client)
             .await?;
-
-        // Before running the build, check that the hashes match.
-        if !revision.satisfies(hashes) {
-            return Err(Error::hash_mismatch(
-                source.to_string(),
-                hashes.digests(),
-                revision.hashes(),
-            ));
-        }
 
         // Scope all operations to the revision. Within the revision, there's no need to check for
         // freshness, since entries have to be fresher than the revision itself.
@@ -971,7 +954,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         url: &SafeUrl,
         index: Option<&IndexUrl>,
         cache_shard: &CacheShard,
-        hashes: ArchiveHashPolicy<'_>,
+        hashes: ArtifactHashPolicy<'_>,
         client: &ManagedClient<'_>,
     ) -> Result<Revision, Error> {
         let cache_entry = cache_shard.entry(HTTP_REVISION);
@@ -1005,12 +988,12 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 // Download the source distribution.
                 debug!("Downloading source distribution: {source}");
                 let entry = cache_shard.shard(revision.id()).entry(SOURCE);
-                let (hashes, size) = self
+                let (computed_hashes, size) = self
                     .download_archive(response, source, ext, entry.path(), hashes, &[])
                     .await?;
 
                 Ok(revision
-                    .with_hashes(HashDigests::from(hashes))
+                    .with_hashes(HashDigests::from(computed_hashes))
                     .with_size(size))
             }
             .boxed_local()
@@ -1049,8 +1032,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             });
         }
 
-        // If the archive is missing the required hashes or size, force a refresh.
-        if revision.has_digests(hashes) && (expected_size.is_none() || revision.size().is_some()) {
+        // Refresh if the cached revision fails verification or lacks a required size.
+        if hashes.can_reuse(&revision, source_index_hashes(source))
+            && (expected_size.is_none() || revision.size().is_some())
+        {
+            hashes.verify_required(source, revision.hashes())?;
             Ok(revision)
         } else {
             client
@@ -1358,12 +1344,12 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // If the revision already exists, return it. There's no need to check for freshness, since
         // we use an exact timestamp.
-        if let Some(pointer) = LocalRevisionPointer::read_from(&revision_entry)? {
-            if *pointer.cache_info() == cache_info {
-                if pointer.revision().has_digests(hashes) {
-                    return Ok(pointer);
-                }
-            }
+        if let Some(pointer) = LocalRevisionPointer::read_from(&revision_entry)?
+            && *pointer.cache_info() == cache_info
+            && ArtifactHashPolicy::from(hashes)
+                .can_reuse(pointer.revision(), source_index_hashes(source))
+        {
+            return Ok(pointer);
         }
 
         // Otherwise, we need to create a new revision.
@@ -2764,7 +2750,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         index: Option<&IndexUrl>,
         entry: &CacheEntry,
         revision: Revision,
-        hashes: ArchiveHashPolicy<'_>,
+        hashes: ArtifactHashPolicy<'_>,
         client: &ManagedClient<'_>,
     ) -> Result<Revision, Error> {
         warn!("Re-downloading missing source distribution: {source}");
@@ -2792,7 +2778,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         let download = |response, _: &mut RetryState| {
             async {
-                let (hashes, size) = self
+                let (computed_hashes, size) = self
                     .download_archive(
                         response,
                         source,
@@ -2804,7 +2790,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     .await?;
                 Ok(revision
                     .clone()
-                    .with_hashes(HashDigests::from(hashes))
+                    .with_hashes(HashDigests::from(computed_hashes))
                     .with_size(size))
             }
             .boxed_local()
@@ -2836,7 +2822,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         source: &BuildableSource<'_>,
         ext: SourceDistExtension,
         target: &Path,
-        hash_policy: ArchiveHashPolicy<'_>,
+        hash_policy: ArtifactHashPolicy<'_>,
         existing_hashes: &[HashDigest],
     ) -> Result<(Vec<HashDigest>, u64), Error> {
         let reader = response
@@ -2892,7 +2878,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             self.build_context.tar_backend(),
             ArchiveValidation {
                 extra_algorithms: &[],
-                hash_policy,
+                hash_policy: hash_policy.into(),
                 existing_hashes,
                 expected_size: None,
             },
@@ -3409,6 +3395,14 @@ impl StaticMetadata {
         }
 
         Ok(Self::None)
+    }
+}
+
+fn source_index_hashes<'a>(source: &'a BuildableSource<'_>) -> &'a [HashDigest] {
+    if let BuildableSource::Dist(SourceDist::Registry(dist)) = source {
+        dist.file.hashes.as_slice()
+    } else {
+        &[]
     }
 }
 
