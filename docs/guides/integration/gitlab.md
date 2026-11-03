@@ -28,14 +28,9 @@ uv:
 
 !!! note
 
-    If you are using a distroless image, you have to specify the entrypoint:
-    ```yaml
-    uv:
-      image:
-        name: ghcr.io/astral-sh/uv:$UV_VERSION
-        entrypoint: [""]
-      # ...
-    ```
+    GitLab runs `script` commands with a shell inside the job image, so the distroless image
+    (`ghcr.io/astral-sh/uv:$UV_VERSION`), which has no shell, can't be used as the job image.
+    Use one of the [derived images](docker.md#available-images), as in the example above.
 
 ## Caching
 
