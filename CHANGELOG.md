@@ -3,6 +3,28 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.13.7
+
+Released on 2026-11-03.
+
+### Preview features
+
+- Add `--output-version` to `uv workspace metadata` for requesting a specific schema version ([#22958](https://github.com/astral-sh/uv/pull/22958))
+- Report aliased OSV records as a single vulnerability in `uv audit` ([#22990](https://github.com/astral-sh/uv/pull/22990))
+
+### Bug fixes
+
+- Treat workspace member paths added by `uv init` or `uv add` as literals instead of glob patterns ([#23008](https://github.com/astral-sh/uv/pull/23008))
+- Prevent uv's Windows trampolines from closing handles they did not inherit ([#22977](https://github.com/astral-sh/uv/pull/22977))
+- Allow `uvx` to run tools with CPython builds whose versions contain local identifiers ([#23013](https://github.com/astral-sh/uv/pull/23013))
+- Generate valid module names when `uv init` creates packaged projects whose names start with a digit ([#23022](https://github.com/astral-sh/uv/pull/23022))
+- Preserve comments around existing inline dependency groups when `uv add` updates a group ([#23017](https://github.com/astral-sh/uv/pull/23017))
+- Allow `uv remove` with an empty inline `tool.uv.sources` table ([#23012](https://github.com/astral-sh/uv/pull/23012))
+
+### Documentation
+
+- Correct the `cache-keys` inline table example ([#22984](https://github.com/astral-sh/uv/pull/22984))
+
 ## 0.13.6
 
 Released on 2026-10-26.
