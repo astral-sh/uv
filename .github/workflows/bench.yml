@@ -116,7 +116,7 @@ jobs:
         run: ./target/debug/uv run --script scripts/codspeed-profiles.py start "$RUNNER_TEMP/codspeed-walltime" walltime >> "$GITHUB_OUTPUT"
 
       - name: "Run benchmarks"
-        uses: CodSpeedHQ/action@373d6868929f444bc08d901fd0eb0ad52a8875ea # v5.2.1
+        uses: CodSpeedHQ/action@c4fd08a3a159bd0cc208da1e0edf32b8c47d75e5 # v5.4.0
         with:
           run: uv run --only-dev cargo codspeed run
           mode: walltime
@@ -192,7 +192,7 @@ jobs:
         run: ./target/debug/uv run --script scripts/codspeed-profiles.py start "$RUNNER_TEMP/codspeed-simulation" simulation >> "$GITHUB_OUTPUT"
 
       - name: "Run benchmarks"
-        uses: CodSpeedHQ/action@373d6868929f444bc08d901fd0eb0ad52a8875ea # v5.2.1
+        uses: CodSpeedHQ/action@c4fd08a3a159bd0cc208da1e0edf32b8c47d75e5 # v5.4.0
         with:
           run: uv run --only-dev cargo codspeed run
           mode: simulation
