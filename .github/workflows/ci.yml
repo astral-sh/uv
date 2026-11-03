@@ -18,46 +18,24 @@ env:
   UV_LOCKED: 1
 
 jobs:
-  detect-vet-workspaces:
+  plan:
     # CI on main is redundant in the security repository.
     if: ${{ github.repository != 'astral-sh/uv-security' || github.ref != 'refs/heads/main' }}
-    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-2' || 'ubuntu-latest' }}
-    outputs:
-      workspaces: ${{ steps.detect.outputs.workspaces }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: ${{ github.event_name == 'pull_request' && 2 || 0 }}
-          persist-credentials: false
-      - uses: $/.github/actions/setup-uv-toolchain
-        with:
-          enable-cache: auto
-      - name: "Detect Cargo Vet workspaces"
-        id: detect
-        env:
-          HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          PUSH_BEFORE_SHA: ${{ github.event.before }}
-          UV_PYTHON_DOWNLOADS_JSON_URL: ${{ github.workspace }}/crates/uv-python-managed/download-metadata.json
-        run: uv run --script scripts/cargo-vet-workspaces.py >> "$GITHUB_OUTPUT"
+    uses: $/.github/workflows/plan.yml
 
-  check-vet:
-    name: "Cargo Vet"
-    needs: detect-vet-workspaces
+  check-cargo-vet:
+    name: "check | cargo vet"
+    needs: plan
     uses: astral-sh/github-actions/.github/workflows/cargo-vet.yml@c064e17eb42bf9ac71f66d7f5eda694f326d16cd
     with:
       runner: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
-      workspaces: ${{ needs.detect-vet-workspaces.outputs.workspaces }}
+      workspaces: ${{ needs.plan.outputs.cargo-vet-workspaces }}
       # renovate: datasource=github-release-attachments depName=astral-sh/uv
       uv-version: "0.13.6"
     secrets: inherit
     permissions:
       contents: read
       id-token: write
-
-  plan:
-    needs: check-vet
-    uses: $/.github/workflows/plan.yml
 
   check-fmt:
     needs: plan
@@ -187,7 +165,7 @@ jobs:
           overwrite: true
 
   check-cargo-lock-changes:
-    name: "Cargo lockfile changes"
+    name: "check | cargo lockfile changes"
     if: >-
       ${{
         github.event_name == 'pull_request' &&
@@ -447,7 +425,7 @@ jobs:
       - plan
       - check-cargo-cooldowns
       - check-cargo-lock-changes
-      - check-vet
+      - check-cargo-vet
       - check-fmt
       - check-lint
       - check-docs
@@ -473,7 +451,7 @@ jobs:
             echo "$NEEDS_JSON" | jaq -r --argjson conditional_jobs "$CONDITIONAL_JOBS" '
               to_entries[]
               | select($conditional_jobs[.key] != false)
-              | select(.value.result != "success" and (.value.result != "skipped" or .key == "check-vet" or .key == "check-cargo-cooldowns"))
+              | select(.value.result != "success" and (.value.result != "skipped" or .key == "check-cargo-vet" or .key == "check-cargo-cooldowns"))
               | "\(.key): \(.value.result)"
             '
           )
