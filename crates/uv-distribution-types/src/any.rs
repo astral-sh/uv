@@ -5,6 +5,7 @@ use uv_normalize::PackageName;
 use uv_pep440::Version;
 
 use crate::cached::CachedDist;
+use crate::id::canonical_source_url;
 use crate::installed::InstalledDist;
 use crate::{InstalledMetadata, InstalledVersion, Name};
 
@@ -84,7 +85,7 @@ impl From<InstalledVersion<'_>> for CanonicalVersion {
         match installed_version {
             InstalledVersion::Version(version) => Self::Version(version.clone()),
             InstalledVersion::Url(url, version) => {
-                Self::Url(CanonicalUrl::new(url.clone()), version.clone())
+                Self::Url(canonical_source_url(url.clone()), version.clone())
             }
         }
     }
