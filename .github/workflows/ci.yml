@@ -38,6 +38,7 @@ jobs:
       id-token: write
 
   check-fmt:
+    name: "check | fmt"
     needs: plan
     uses: $/.github/workflows/check-fmt.yml
 
@@ -87,6 +88,7 @@ jobs:
       pull-requests: read
 
   check-lint:
+    name: "check | lint"
     needs: plan
     uses: $/.github/workflows/check-lint.yml
     with:
@@ -94,12 +96,14 @@ jobs:
       save-rust-cache: ${{ needs.plan.outputs.save-rust-cache }}
 
   check-docs:
+    name: "check | docs"
     needs: plan
     if: ${{ needs.plan.outputs.run-checks == 'true' }}
     uses: $/.github/workflows/check-docs.yml
     secrets: inherit
 
   check-zizmor:
+    name: "check | zizmor"
     needs: plan
     if: ${{ needs.plan.outputs.run-checks == 'true' }}
     uses: $/.github/workflows/check-zizmor.yml
@@ -108,11 +112,13 @@ jobs:
       security-events: write
 
   check-publish:
+    name: "check | publish"
     needs: plan
     if: ${{ needs.plan.outputs.test-code == 'true' }}
     uses: $/.github/workflows/check-publish.yml
 
   check-release:
+    name: "check | release"
     needs: plan
     if: ${{ needs.plan.outputs.run-checks == 'true' || needs.plan.outputs.require-check-release == 'true' }}
     uses: $/.github/workflows/check-release.yml
@@ -169,11 +175,13 @@ jobs:
         run: uv run --script scripts/check-cargo-lock-changes.py HEAD^1 HEAD
 
   check-lock:
+    name: "check | lock"
     needs: plan
     if: ${{ needs.plan.outputs.run-checks == 'true' }}
     uses: $/.github/workflows/check-lock.yml
 
   check-generated-files:
+    name: "check | generated files"
     needs: plan
     if: ${{ needs.plan.outputs.test-code == 'true' }}
     uses: $/.github/workflows/check-generated-files.yml
