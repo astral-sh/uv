@@ -1201,7 +1201,7 @@ impl DistributionMetadata for Dist {
     }
 }
 
-impl RemoteSource for File {
+impl<Url> RemoteSource for File<Url> {
     fn filename(&self) -> Result<Cow<'_, str>, Error> {
         Ok(Cow::Borrowed(&self.filename))
     }
@@ -1487,22 +1487,22 @@ impl Identifier for Path {
     }
 }
 
-impl Identifier for FileLocation {
+impl Identifier for CanonicalFileLocation {
     fn distribution_id(&self) -> DistributionId {
         match self {
-            Self::RelativeUrl(base, url) => {
+            Self::RelativeUrl(base, url, _) => {
                 DistributionId::RelativeUrl(base.to_string(), url.to_string())
             }
-            Self::AbsoluteUrl(url) => DistributionId::AbsoluteUrl(url.to_string()),
+            Self::AbsoluteUrl(url, _) => DistributionId::AbsoluteUrl(url.to_string()),
         }
     }
 
     fn resource_id(&self) -> ResourceId {
         match self {
-            Self::RelativeUrl(base, url) => {
+            Self::RelativeUrl(base, url, _) => {
                 ResourceId::RelativeUrl(base.to_string(), url.to_string())
             }
-            Self::AbsoluteUrl(url) => ResourceId::AbsoluteUrl(url.to_string()),
+            Self::AbsoluteUrl(url, _) => ResourceId::AbsoluteUrl(url.to_string()),
         }
     }
 }

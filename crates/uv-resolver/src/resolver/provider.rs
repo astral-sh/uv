@@ -7,8 +7,8 @@ use uv_client::MetadataFormat;
 use uv_configuration::BuildOptions;
 use uv_distribution::{DistributionDatabase, Reporter};
 use uv_distribution_types::{
-    Dist, File, IndexCapabilities, IndexLocations, IndexMetadata, IndexMetadataRef, IndexUrl,
-    InstalledDist, MinimumLibcVersion, RequestedDist, RequiresPython,
+    Dist, IndexCapabilities, IndexLocations, IndexMetadata, IndexMetadataRef, IndexUrl,
+    InstalledDist, MinimumLibcVersion, RequestedDist, RequiresPython, VerbatimFile,
 };
 use uv_normalize::PackageName;
 use uv_platform_tags::Tags;
@@ -77,7 +77,7 @@ pub trait ResolverProvider {
     fn fetch_variants_json<'io>(
         &'io self,
         package_name: &'io PackageName,
-        file: &'io File,
+        file: &'io VerbatimFile,
         index: &'io IndexUrl,
     ) -> impl Future<Output = Result<VariantsJsonResponse, uv_client::Error>> + 'io;
 
@@ -347,7 +347,7 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
     async fn fetch_variants_json<'io>(
         &'io self,
         package_name: &'io PackageName,
-        file: &'io File,
+        file: &'io VerbatimFile,
         index: &'io IndexUrl,
     ) -> Result<VariantsJsonResponse, uv_client::Error> {
         match self
