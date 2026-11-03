@@ -13,7 +13,6 @@ license = { workspace = true }
 
 [lib]
 doctest = false
-test = false
 
 [lints]
 workspace = true
