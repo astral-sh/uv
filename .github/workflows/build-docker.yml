@@ -168,19 +168,19 @@ jobs:
       build-id: ${{ steps.build.outputs.build-id }}
       image-digest: ${{ steps.build.outputs.digest }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           submodules: recursive
           persist-credentials: false
 
       # Authenticate read-only pulls to avoid Docker Hub's anonymous rate limits.
-      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+      - uses: docker/login-action@v4.6.0
         if: ${{ needs.docker-plan.outputs.login == 'true' }}
         with:
           username: astralshbot
           password: ${{ secrets.DOCKERHUB_TOKEN_RO }}
 
-      - uses: depot/setup-action@91bc8495a33ebfc504ffc89e5674379ccf23c29c # v1.7.2
+      - uses: depot/setup-action@v1.7.2
 
       - name: Check tag consistency
         if: ${{ needs.docker-plan.outputs.push-version == 'true' }}
@@ -198,7 +198,7 @@ jobs:
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
-        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        uses: docker/metadata-action@v6.2.0
         env:
           DOCKER_METADATA_ANNOTATIONS_LEVELS: index
         with:
@@ -215,7 +215,7 @@ jobs:
 
       - name: Build and save image
         id: build
-        uses: depot/build-push-action@98e78adca7817480b8185f474a400b451d74e287 # v1.18.0
+        uses: depot/build-push-action@v1.18.0
         with:
           project: ${{ env.DEPOT_PROJECT_ID }}
           context: .
@@ -249,7 +249,7 @@ jobs:
               tags: ($tags | split("\n")), annotations: ($annotations | split("\n"))}
               | select(.build_id != "" and (.digest | test("^sha256:[0-9a-f]{64}$")))' > uv.json
 
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@v7.0.1
         if: ${{ needs.docker-plan.outputs.save == 'true' }}
         with:
           name: docker-image-uv
@@ -272,20 +272,20 @@ jobs:
       matrix: ${{ fromJson(needs.docker-plan.outputs.extra-images) }}
     steps:
       # Authenticate read-only pulls to avoid Docker Hub's anonymous rate limits.
-      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+      - uses: docker/login-action@v4.6.0
         if: ${{ needs.docker-plan.outputs.login == 'true' }}
         with:
           username: astralshbot
           password: ${{ secrets.DOCKERHUB_TOKEN_RO }}
 
-      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+      - uses: docker/login-action@v4.6.0
         if: ${{ needs.docker-plan.outputs.login == 'true' }}
         with:
           registry: dhi.io
           username: astralshbot
           password: ${{ secrets.DOCKERHUB_TOKEN_RO }}
 
-      - uses: depot/setup-action@91bc8495a33ebfc504ffc89e5674379ccf23c29c # v1.7.2
+      - uses: depot/setup-action@v1.7.2
 
       - name: Authenticate to Depot Registry
         if: ${{ needs.docker-plan.outputs.save == 'true' }}
@@ -349,7 +349,7 @@ jobs:
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
-        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        uses: docker/metadata-action@v6.2.0
         # GHCR uses index-level annotations for image metadata.
         env:
           DOCKER_METADATA_ANNOTATIONS_LEVELS: index
@@ -364,7 +364,7 @@ jobs:
 
       - name: Build and save image
         id: build
-        uses: depot/build-push-action@98e78adca7817480b8185f474a400b451d74e287 # v1.18.0
+        uses: depot/build-push-action@v1.18.0
         with:
           context: .
           project: ${{ env.DEPOT_PROJECT_ID }}
@@ -399,7 +399,7 @@ jobs:
               tags: ($tags | split("\n")), annotations: ($annotations | split("\n"))}
               | select(.build_id != "" and (.digest | test("^sha256:[0-9a-f]{64}$")))' > "$NAME.json"
 
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@v7.0.1
         if: ${{ needs.docker-plan.outputs.save == 'true' }}
         with:
           name: docker-image-${{ steps.dockerfile.outputs.name }}
@@ -418,7 +418,7 @@ jobs:
     outputs:
       artifact-id: ${{ steps.upload.outputs.artifact-id }}
     steps:
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@v8.0.1
         with:
           pattern: docker-image-*
           path: images
@@ -446,7 +446,7 @@ jobs:
             end
           ' > docker-manifest.json
 
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@v7.0.1
         id: upload
         with:
           name: docker-manifest

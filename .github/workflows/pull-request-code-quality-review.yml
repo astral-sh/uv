@@ -34,7 +34,7 @@ jobs:
       result: ${{ steps.review.outputs.final-message }}
     steps:
       - name: "Checkout caller repository"
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -116,7 +116,7 @@ jobs:
 
       - name: "Upload Codex thread"
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: codex-thread-pull-request-code-quality-review-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ env.REVIEW_CONFIG }}/codex/sessions
@@ -133,7 +133,7 @@ jobs:
       result: ${{ steps.comments.outputs.result }}
     steps:
       - name: "Checkout review helpers"
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           repository: astral-sh/github-actions
           ref: 3c57a5dba8ad854a97e8b9fbf454286a7574e677
@@ -164,7 +164,7 @@ jobs:
       id-token: write # for the credential broker
     steps:
       - name: "Checkout review helpers"
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           repository: astral-sh/github-actions
           ref: 3c57a5dba8ad854a97e8b9fbf454286a7574e677

@@ -25,7 +25,7 @@ jobs:
     env:
       RUSTC_BOOTSTRAP: 1
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
@@ -42,7 +42,7 @@ jobs:
         run: cargo build --locked --profile no-debug-nightly -Z checksum-freshness
 
       - name: "Upload binary"
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: uv-linux-libc-${{ github.sha }}
           path: |
@@ -59,7 +59,7 @@ jobs:
       # Use `rustc`'s bundled `lld` instead of the system linker.
       RUSTFLAGS: -Z unstable-options -C linker-features=+lld -C link-self-contained=+linker
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
@@ -76,7 +76,7 @@ jobs:
         run: cargo build --locked --profile no-debug-nightly -Z checksum-freshness
 
       - name: "Upload binary"
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: uv-linux-aarch64-${{ github.sha }}
           path: |
@@ -91,7 +91,7 @@ jobs:
     env:
       RUSTC_BOOTSTRAP: 1
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
@@ -126,7 +126,7 @@ jobs:
         run: cargo build --locked --profile no-debug-nightly -Z checksum-freshness --target armv7-unknown-linux-gnueabihf --bin uv --bin uvx
 
       - name: "Upload binary"
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: uv-linux-armv7-gnueabihf-${{ github.sha }}
           path: |
@@ -143,7 +143,7 @@ jobs:
       # Use `rustc`'s bundled `lld` instead of the system linker.
       RUSTFLAGS: -Z unstable-options -C linker-features=+lld -C link-self-contained=+linker
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
@@ -167,7 +167,7 @@ jobs:
         run: cargo build --locked --profile no-debug-nightly -Z checksum-freshness --target x86_64-unknown-linux-musl --bin uv --bin uvx
 
       - name: "Upload binary"
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: uv-linux-musl-${{ github.sha }}
           path: |
@@ -182,7 +182,7 @@ jobs:
     env:
       RUSTC_BOOTSTRAP: 1
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
@@ -199,7 +199,7 @@ jobs:
         run: cargo build --locked --profile no-debug-nightly -Z checksum-freshness --bin uv --bin uvx
 
       - name: "Upload binary"
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: uv-macos-aarch64-${{ github.sha }}
           path: |
@@ -214,7 +214,7 @@ jobs:
     env:
       RUSTC_BOOTSTRAP: 1
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
@@ -238,7 +238,7 @@ jobs:
           test "$(lipo -archs target/x86_64-apple-darwin/no-debug-nightly/uvx)" = x86_64
 
       - name: "Upload binary"
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: uv-macos-x86_64-${{ github.sha }}
           path: |
@@ -253,7 +253,7 @@ jobs:
     env:
       RUSTC_BOOTSTRAP: 1
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
@@ -281,7 +281,7 @@ jobs:
         run: cargo build --locked --profile no-debug-nightly -Z checksum-freshness --bin uv --bin uvx
 
       - name: "Upload binary"
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: uv-windows-x86_64-${{ github.sha }}
           path: |
@@ -296,7 +296,7 @@ jobs:
     env:
       RUSTC_BOOTSTRAP: 1
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
@@ -324,7 +324,7 @@ jobs:
         run: cargo build --locked --profile no-debug-nightly -Z checksum-freshness --bin uv --bin uvx
 
       - name: "Upload binary"
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: uv-windows-aarch64-${{ github.sha }}
           path: |
@@ -337,7 +337,7 @@ jobs:
     runs-on: github-ubuntu-24.04-x86_64-8
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
       - name: "Read MSRV from Cargo.toml"
@@ -349,7 +349,7 @@ jobs:
         run: rustup default ${MSRV}
         env:
           MSRV: ${{ steps.msrv.outputs.value }}
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: Swatinem/rust-cache@v2.9.2
         with:
           save-if: ${{ inputs.save-rust-cache == 'true' }}
       - run: cargo +${MSRV} build --locked --profile no-debug
@@ -364,7 +364,7 @@ jobs:
     env:
       RUSTC_BOOTSTRAP: 1
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
@@ -406,7 +406,7 @@ jobs:
         run: cargo build --locked --profile no-debug-nightly -Z checksum-freshness --target aarch64-linux-android --bin uv --bin uvx
 
       - name: "Upload binary"
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: uv-android-aarch64-${{ github.sha }}
           path: |
@@ -419,10 +419,10 @@ jobs:
     timeout-minutes: 10
     runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: Swatinem/rust-cache@v2.9.2
         with:
           save-if: ${{ inputs.save-rust-cache == 'true' }}
       - name: "Cross build"
@@ -437,7 +437,7 @@ jobs:
           cross build --target x86_64-unknown-freebsd --profile no-debug
 
       - name: Test in Firecracker VM
-        uses: acj/freebsd-firecracker-action@ba4f70408ef1d979acdd7bd36fc4b27e06fe5abe # v0.12.0
+        uses: acj/freebsd-firecracker-action@v0.12.0
         with:
           verbose: false
           checkout: false

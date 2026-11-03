@@ -37,12 +37,12 @@ jobs:
     outputs:
       result: ${{ steps.labels.outputs.final-message }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           ref: main
           persist-credentials: false
 
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ inputs.head_sha || format('refs/pull/{0}/head', inputs.pull_request) }}
           path: pull-request
@@ -109,7 +109,7 @@ jobs:
     outputs:
       labels: ${{ steps.validate.outputs.labels }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           ref: main
           persist-credentials: false
