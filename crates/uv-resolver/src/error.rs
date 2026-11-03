@@ -40,8 +40,13 @@ use crate::{InMemoryIndex, Options};
 
 #[derive(DebugNoInline, thiserror::Error)]
 pub enum ResolveError {
-    #[error("Failed to resolve dependencies for package `{1}=={2}`")]
-    Dependencies(#[source] Box<Self>, PackageName, Version, DerivationChain),
+    #[error("Failed to resolve dependencies for package `{1}{suffix}`", suffix = .2.as_ref().map(|version| format!("=={version}")).unwrap_or_default())]
+    Dependencies(
+        #[source] Box<Self>,
+        PackageName,
+        Option<Version>,
+        DerivationChain,
+    ),
 
     #[error(transparent)]
     Client(#[from] uv_client::Error),

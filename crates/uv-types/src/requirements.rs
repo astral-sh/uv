@@ -40,7 +40,7 @@ pub struct RequestedRequirements {
     /// The package that requested the requirements.
     package: PackageName,
     /// The version of the package that requested the requirements.
-    version: Version,
+    version: Option<Version>,
     /// The set of extras included on the originating requirement.
     extras: Box<[ExtraName]>,
     /// The set of requirements that were requested by the originating requirement.
@@ -53,7 +53,7 @@ impl RequestedRequirements {
     /// Instantiate a [`RequestedRequirements`] with the given `extras` and `requirements`.
     pub fn new(
         package: PackageName,
-        version: Version,
+        version: Option<Version>,
         extras: Box<[ExtraName]>,
         requirements: Box<[Requirement]>,
         direct: bool,
@@ -73,8 +73,8 @@ impl RequestedRequirements {
     }
 
     /// Return the package version that requested the requirements.
-    pub fn version(&self) -> &Version {
-        &self.version
+    pub fn version(&self) -> Option<&Version> {
+        self.version.as_ref()
     }
 
     /// Return the extras that were included on the originating requirement.

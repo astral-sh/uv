@@ -242,6 +242,13 @@ pub struct Project {
     scripts: Option<serde::de::IgnoredAny>,
 }
 
+impl Project {
+    /// Whether the project delegates its version to the build backend.
+    pub fn has_dynamic_version(&self) -> bool {
+        self.version.is_none()
+    }
+}
+
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "kebab-case")]
 struct ProjectWire {

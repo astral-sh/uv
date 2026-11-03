@@ -7,7 +7,7 @@ pub use index::{BuiltWheelIndex, RegistryWheelIndex};
 pub use metadata::{
     ArchiveMetadata, BuildRequires, FlatRequiresDist, LoweredExtraBuildDependencies,
     LoweredRequirement, LoweringError, Metadata, MetadataError, RequiresDist,
-    SourcedDependencyGroups,
+    SourcedDependencyGroups, UnversionedMetadata,
 };
 pub use reporter::Reporter;
 pub use source::{StaticMetadataDatabase, prune};

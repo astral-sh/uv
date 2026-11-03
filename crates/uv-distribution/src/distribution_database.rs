@@ -47,7 +47,7 @@ use crate::download::check_wheel_variant_compatibility;
 use crate::error::PythonVersion;
 use crate::extracted_wheel::{ExtractedWheel, HashedWheel, WheelExtractor};
 use crate::hash::http_hash_algorithms;
-use crate::metadata::{ArchiveMetadata, Metadata};
+use crate::metadata::{ArchiveMetadata, Metadata, UnversionedMetadata};
 use crate::source::SourceDistributionBuilder;
 use crate::{
     Error, FirstPartyPackages, LocalWheel, Reporter, RequiresDist, check_supported_wheel_variant,
@@ -752,6 +752,26 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             metadata: metadata.with_force_relative(true),
             hashes,
         })
+    }
+
+    /// Read a virtual project's resolution metadata without evaluating its dynamic version.
+    pub async fn virtual_project_metadata(
+        &self,
+        path: &Path,
+        contents: &str,
+    ) -> Result<Option<UnversionedMetadata>, Error> {
+        let pyproject =
+            PyProjectToml::from_toml(contents, path.display()).map_err(Error::PyprojectToml)?;
+        let Ok(requires_python) = pyproject.requires_python() else {
+            return Ok(None);
+        };
+        Ok(self
+            .requires_dist(path, &pyproject)
+            .await?
+            .map(|requirements| UnversionedMetadata {
+                requirements,
+                requires_python,
+            }))
     }
 
     /// Return the [`RequiresDist`] from a `pyproject.toml`, if it can be statically extracted.

@@ -208,6 +208,8 @@ impl From<&MetadataUnavailable> for UnavailableVersion {
 /// The package is unavailable and cannot be used.
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum UnavailablePackage {
+    /// Reading the workspace member's dynamic version would require a prohibited build.
+    DynamicVersionBuildDisabled,
     /// Index lookups were disabled (i.e., `--no-index`) and the package was not found in a flat index (i.e. from `--find-links`).
     NoIndex,
     /// Network requests were disabled (i.e., `--offline`), and the package was not found in the cache.
@@ -229,6 +231,9 @@ pub enum UnavailablePackage {
 impl UnavailablePackage {
     fn message(&self) -> Cow<'static, str> {
         match self {
+            Self::DynamicVersionBuildDisabled => {
+                Cow::Borrowed("a dynamic version that is unavailable with builds disabled")
+            }
             Self::NoIndex => Cow::Borrowed("not found in the provided package locations"),
             Self::Offline => Cow::Borrowed("not found in the cache"),
             Self::NotFound => Cow::Borrowed("not found in the package registry"),
@@ -242,6 +247,7 @@ impl UnavailablePackage {
 
     pub(crate) fn singular_message(&self) -> String {
         match self {
+            Self::DynamicVersionBuildDisabled => format!("has {self}"),
             Self::NoIndex => format!("was {self}"),
             Self::Offline => format!("was {self}"),
             Self::NotFound => format!("was {self}"),
@@ -304,6 +310,8 @@ impl From<&MetadataUnavailable> for UnavailablePackage {
 
 #[derive(Debug, Clone)]
 pub(crate) enum ResolverVersion {
+    /// No version of this solver package can be selected.
+    UnavailablePackage(UnavailablePackage),
     /// A version that is not usable for some reason
     Unavailable(Version, UnavailableVersion),
     /// A usable version

@@ -95,6 +95,14 @@ impl Range<Version> {
         Self::from_versions(Ranges::singleton(version))
     }
 
+    /// A versionless manifest can only satisfy an unconditional dependency.
+    pub(crate) fn contains_selection(&self, version: Option<&Version>) -> bool {
+        match version {
+            Some(version) => self.encoded_versions.contains(version),
+            None => *self == Self::full(),
+        }
+    }
+
     pub(crate) fn from_range_bounds(range: impl RangeBounds<Version>) -> Self {
         Self::from_versions(Ranges::from_range_bounds(range))
     }

@@ -20,6 +20,11 @@ impl DependencyMetadata {
         map
     }
 
+    /// Whether any metadata was supplied for the package.
+    pub fn contains(&self, package: &PackageName) -> bool {
+        self.0.contains_key(package)
+    }
+
     /// Retrieve a [`StaticMetadata`] entry by [`PackageName`] and [`Version`].
     pub fn get(
         &self,

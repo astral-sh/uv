@@ -167,7 +167,7 @@ impl uv_errors::Hinted for Error {
                 dist_hints(dist.name(), dist.version(), chain, error.hints())
             }
             Self::Resolve(ResolveError::Dependencies(error, name, version, chain)) => {
-                dist_hints(name, Some(version), chain, error.hints())
+                dist_hints(name, version.as_ref(), chain, error.hints())
             }
             Self::Resolve(error) => error.hints(),
             Self::Requirements(uv_requirements::Error::Dist(_, dist, error))

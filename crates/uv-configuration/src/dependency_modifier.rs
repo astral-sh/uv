@@ -19,9 +19,9 @@ pub enum DependencyModifierScope<'a> {
     /// Apply global overrides and exclusions.
     Global,
     /// Apply global and package-scoped overrides and exclusions to regular package metadata.
-    Package(&'a PackageName, &'a Version),
+    Package(&'a PackageName, Option<&'a Version>),
     /// Apply global modifiers and package-scoped exclusions to a dependency group.
-    DependencyGroup(&'a PackageName, &'a Version),
+    DependencyGroup(&'a PackageName, Option<&'a Version>),
 }
 
 impl DependencyModifiers {
@@ -40,9 +40,10 @@ impl DependencyModifiers {
         }
     }
 
-    /// Return whether any modifiers are scoped to this package.
-    pub fn has_scoped_package(&self, package: &PackageName) -> bool {
-        self.overrides.has_scoped_package(package) || self.excludes.has_scoped_package(package)
+    /// Return whether selecting the applicable modifiers requires this package's version.
+    pub fn requires_package_version(&self, package: &PackageName) -> bool {
+        self.overrides.requires_package_version(package)
+            || self.excludes.requires_package_version(package)
     }
 
     /// Return all global override requirements that are not excluded.
@@ -78,7 +79,7 @@ impl DependencyModifiers {
             .filter(|requirement| {
                 !self
                     .excludes
-                    .contains_for(package, version, &requirement.name)
+                    .contains_for(package, Some(version), &requirement.name)
             })
     }
 
@@ -91,7 +92,7 @@ impl DependencyModifiers {
     pub fn is_excluded_for(
         &self,
         package: &PackageName,
-        version: &Version,
+        version: Option<&Version>,
         dependency: &PackageName,
     ) -> bool {
         self.excludes.contains_for(package, version, dependency)
@@ -108,6 +109,14 @@ impl DependencyModifiers {
     {
         let (overrides, excludes) = match scope {
             DependencyModifierScope::Global => (None, None),
+            // A version-specific rule can shadow the name-only rule. Until the version
+            // is known, only global rules are guaranteed to apply.
+            DependencyModifierScope::Package(package, None)
+            | DependencyModifierScope::DependencyGroup(package, None)
+                if self.requires_package_version(package) =>
+            {
+                (None, None)
+            }
             DependencyModifierScope::Package(package, version) => {
                 (Some((package, version)), Some((package, version)))
             }

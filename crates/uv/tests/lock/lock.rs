@@ -34624,6 +34624,522 @@ fn lock_dynamic_version_dependencies() -> Result<()> {
     Ok(())
 }
 
+/// A virtual project can lock its static dependencies without asking a backend for its version.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_virtual_dynamic_version() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "app"
+        dynamic = ["version"]
+        requires-python = ">=3.12"
+        dependencies = ["library"]
+
+        [tool.uv]
+        package = false
+
+        [tool.uv.sources]
+        library = { path = "library" }
+    "#})?;
+    context
+        .temp_dir
+        .child("library/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "library"
+        version = "1.0"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--no-build").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(context.read("uv.lock"), @r#"
+        version = 1
+        revision = 5
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "app"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "library" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "library", directory = "library" }]
+
+        [[package]]
+        name = "library"
+        version = "1.0"
+        source = { directory = "library" }
+        "#);
+    });
+
+    // Editing the member's static requirements also updates an existing lock without a build.
+    let lock = context.read("uv.lock");
+    context
+        .remove()
+        .args(["library", "--no-sync", "--no-build", "--offline"])
+        .assert()
+        .success();
+    context
+        .add()
+        .args([
+            "./library",
+            "--no-workspace",
+            "--no-sync",
+            "--no-build",
+            "--offline",
+        ])
+        .assert()
+        .success();
+    assert_eq!(context.read("uv.lock"), lock);
+    Ok(())
+}
+
+/// An absolute constraint on a virtual workspace member also pins its lockfile source.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_virtual_dynamic_version_absolute_constraint() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let app = context.temp_dir.child("app");
+    app.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "app"
+        dynamic = ["version"]
+        requires-python = ">=3.12"
+
+        [tool.uv]
+        package = false
+    "#})?;
+    let alias = context.temp_dir.child("app-link");
+    create_symlink(app.path(), alias.path())?;
+    let app_url = SafeUrl::from_directory_path(alias.path())
+        .map_err(|()| anyhow!("invalid app directory"))?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [tool.uv.workspace]
+        members = ["app"]
+
+        [tool.uv]
+        constraint-dependencies = ["app @ {app_url}"]
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock().arg("--no-sources").arg("--no-build").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(context.read("uv.lock"), @r#"
+        version = 1
+        revision = 5
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        members = [
+            "app",
+        ]
+        constraints = [{ name = "app", directory = "[TEMP_DIR]/app-link" }]
+
+        [[package]]
+        name = "app"
+        source = { virtual = "[TEMP_DIR]/app" }
+        "#);
+    });
+    Ok(())
+}
+
+/// Virtual members keep their own dependency scopes, including conflicts and bare back-references.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_virtual_dynamic_version_workspace_scopes() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["apps/*"]
+
+        [tool.uv]
+        conflicts = [[{ package = "app", extra = "cpu" }, { package = "app", extra = "gpu" }]]
+    "#})?;
+    context
+        .temp_dir
+        .child("apps/app/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "app"
+        dynamic = ["version"]
+        requires-python = ">=3.12"
+        dependencies = ["shared"]
+
+        [project.optional-dependencies]
+        cpu = ["variant==1.0"]
+        gpu = ["variant==2.0"]
+
+        [tool.uv]
+        package = false
+    "#})?;
+    context
+        .temp_dir
+        .child("apps/worker/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "worker"
+        dynamic = ["version"]
+        requires-python = ">=3.12"
+        dependencies = ["shared"]
+
+        [dependency-groups]
+        qa = ["checker"]
+
+        [tool.uv]
+        package = false
+    "#})?;
+
+    let (filename, wheel) = WheelBuilder::new(&"shared".parse()?, &"1.0".parse()?)
+        .requires(&["app".parse()?])
+        .build();
+    context.temp_dir.child(filename).write_binary(&wheel)?;
+    for (name, version) in [("variant", "1.0"), ("variant", "2.0"), ("checker", "1.0")] {
+        let (filename, wheel) = WheelBuilder::new(&name.parse()?, &version.parse()?).build();
+        context.temp_dir.child(filename).write_binary(&wheel)?;
+    }
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--no-build").arg("--offline").arg("--no-index").arg("--find-links").arg("."), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--frozen").arg("--dry-run").arg("--package").arg("app").arg("--extra").arg("cpu"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Would use project environment at: .venv
+    Would download 2 packages
+    Would install 2 packages
+     + shared==1.0
+     + variant==1.0
+    ");
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--frozen").arg("--dry-run").arg("--package").arg("app").arg("--extra").arg("gpu"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Would use project environment at: .venv
+    Would download 2 packages
+    Would install 2 packages
+     + shared==1.0
+     + variant==2.0
+    ");
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--frozen").arg("--dry-run").arg("--package").arg("worker").arg("--only-group").arg("qa"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Would use project environment at: .venv
+    Would download 1 package
+    Would install 1 package
+     + checker==1.0
+    ");
+    Ok(())
+}
+
+/// An extra requested only by a rejected candidate should leave no warning or edge in the lock.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_virtual_dynamic_version_backtrack_extra() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "app"
+        dynamic = ["version"]
+        requires-python = ">=3.12"
+        dependencies = ["plugin"]
+
+        [tool.uv]
+        package = false
+    "#})?;
+    let (filename, wheel) = WheelBuilder::new(&"plugin".parse()?, &"2".parse()?)
+        .requires(&["app[unused]".parse()?, "missing".parse()?])
+        .build();
+    context.temp_dir.child(filename).write_binary(&wheel)?;
+    let (filename, wheel) = WheelBuilder::new(&"plugin".parse()?, &"1".parse()?)
+        .requires(&["app".parse()?])
+        .build();
+    context.temp_dir.child(filename).write_binary(&wheel)?;
+
+    uv_snapshot!(context.filters(), context.tree().arg("--no-build").arg("--offline").arg("--no-index").arg("--find-links").arg("."), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    app
+    └── plugin v1
+        └── app (*)
+    (*) Package tree already displayed
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    Ok(())
+}
+
+/// With builds disabled, a candidate can still depend on a member without checking its version.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_virtual_dynamic_version_no_build_backtrack() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "app"
+        dynamic = ["version"]
+        requires-python = ">=3.12"
+        dependencies = ["plugin"]
+
+        [tool.uv]
+        package = false
+    "#})?;
+    let (filename, wheel) = WheelBuilder::new(&"plugin".parse()?, &"2".parse()?)
+        .requires(&["app>=2".parse()?])
+        .build();
+    context.temp_dir.child(filename).write_binary(&wheel)?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--no-build").arg("--offline").arg("--no-index").arg("--find-links").arg("."), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies
+      cause: Because app has a dynamic version that is unavailable with builds disabled and all versions of plugin depend on app>=2, we can conclude that all versions of plugin cannot be used.
+             And because your project depends on plugin, we can conclude that your project's requirements are unsatisfiable.
+    ");
+
+    let (filename, wheel) = WheelBuilder::new(&"plugin".parse()?, &"1".parse()?)
+        .requires(&["app".parse()?])
+        .build();
+    context.temp_dir.child(filename).write_binary(&wheel)?;
+
+    uv_snapshot!(context.filters(), context.tree().arg("--no-build").arg("--offline").arg("--no-index").arg("--find-links").arg("."), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    app
+    └── plugin v1
+        └── app (*)
+    (*) Package tree already displayed
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    Ok(())
+}
+
+/// Build-failure hints show a virtual member's extra and the bound it declared on the failed package.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_virtual_dynamic_version_failure_hint() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "app"
+        dynamic = ["version"]
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        feature = ["broken==1.0"]
+
+        [tool.uv]
+        package = false
+    "#})?;
+    context.temp_dir.child("broken-1.0.tar.gz").touch()?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--offline").arg("--no-index").arg("--find-links").arg("."), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to download and build `broken==1.0`
+      cause: Failed to extract archive: broken==1.0
+      cause: Invalid tar file
+      cause: at byte 0: failed to read tar data
+      cause: failed to read tar data
+      cause: unexpected end of file
+
+    hint: `broken` (v1.0) was included because `app[feature]` depends on `broken==1.0`
+    ");
+    Ok(())
+}
+
+/// A static metadata error should identify the virtual workspace member that declares it.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_virtual_dynamic_version_invalid_member_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv.workspace]
+        members = ["apps/worker"]
+    "#})?;
+    context
+        .temp_dir
+        .child("apps/worker/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "worker"
+        dynamic = ["version"]
+        requires-python = ">=3.12"
+        dependencies = ["library"]
+
+        [tool.uv]
+        package = false
+
+        [tool.uv.sources]
+        library = { path = "vendor", extra = "gpu" }
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--no-build").arg("--offline"), @r#"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to read `worker @ file://[TEMP_DIR]/apps/worker`
+      cause: Source entry for `library` only applies to extra `gpu`, but the `gpu` extra does not exist. When an extra is present on a source (e.g., `extra = "gpu"`), the relevant package must be included in the `project.optional-dependencies` section for that extra (e.g., `project.optional-dependencies = { "gpu" = ["library"] }`).
+    "#);
+    Ok(())
+}
+
+/// A rule scoped to the project's name applies even when the lock omits its version.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_virtual_dynamic_version_name_scoped_exclusion() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "app"
+        dynamic = ["version"]
+        requires-python = ">=3.12"
+        dependencies = ["excluded"]
+
+        [tool.uv]
+        package = false
+        exclude-dependencies = [{ package = { name = "app" }, dependencies = ["excluded"] }]
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock().arg("--no-build").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--no-build").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    Ok(())
+}
+
+/// A transitive requirement on a virtual member must use the version supplied by its backend.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_virtual_dynamic_version_transitive_bound() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let (filename, wheel) = WheelBuilder::new(&"plugin".parse()?, &"1.0".parse()?)
+        .requires(&["app>=1".parse()?])
+        .build();
+    context.temp_dir.child(&filename).write_binary(&wheel)?;
+    let (filename, wheel) = WheelBuilder::new(&"plugin".parse()?, &"2.0".parse()?)
+        .requires(&["app>=2".parse()?])
+        .build();
+    context.temp_dir.child(&filename).write_binary(&wheel)?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "app"
+        dynamic = ["version"]
+        requires-python = ">=3.12"
+        dependencies = ["plugin"]
+
+        [tool.uv]
+        package = false
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "backend"
+    "#})?;
+    context.temp_dir.child("backend.py").write_str(indoc! {r#"
+        from pathlib import Path
+
+        def prepare_metadata_for_build_wheel(metadata_directory, config_settings=None):
+            version = Path("version.txt").read_text()
+            dist_info = Path(metadata_directory, f"app-{version}.dist-info")
+            dist_info.mkdir()
+            dist_info.joinpath("METADATA").write_text(
+                f"Metadata-Version: 2.3\nName: app\nVersion: {version}\nRequires-Dist: plugin\n"
+            )
+            return dist_info.name
+    "#})?;
+    let version = context.temp_dir.child("version.txt");
+    version.write_str("1.0")?;
+    uv_snapshot!(context.filters(), context.lock().arg("--find-links").arg(".").arg("--no-index").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    // The newer plugin requires app>=2, so backtrack to the compatible release.
+    uv_snapshot!(context.filters(), context.tree().arg("--frozen"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    app
+    └── plugin v1.0
+        └── app (*)
+    (*) Package tree already displayed
+    ");
+
+    version.write_str("0.5")?;
+    uv_snapshot!(context.filters(), context.lock().arg("--find-links").arg(".").arg("--no-index").arg("--offline").arg("--upgrade").arg("--no-cache"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies
+      cause: Because plugin<=1.0 depends on app>=1 and plugin>=2.0 depends on app>=2, we can conclude that all of:
+                 plugin<=1.0
+                 plugin>=2.0
+              cannot be used.
+             And because your project depends on plugin, we can conclude that your project's requirements are unsatisfiable.
+
+    hint: The package `plugin` depends on the package `app` but the name is shadowed by your project. Consider changing the name of the project.
+    ");
+    Ok(())
+}
+
 /// Validating a lockfile with a dynamic version (but static dependencies) shouldn't require
 /// building the package.
 #[cfg(feature = "test-universal")]
