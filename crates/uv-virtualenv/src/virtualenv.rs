@@ -22,7 +22,7 @@ use uv_python_interpreter::{Interpreter, VirtualEnvironment};
 use uv_python_managed::{
     PythonExecutable, PythonMinorVersionLink, UpgradePolicy, replace_link_to_executable,
 };
-use uv_shell::escape_posix_for_single_quotes;
+use uv_shell::{escape_fish_for_single_quotes, escape_posix_for_single_quotes};
 use uv_version::version;
 
 /// Activation scripts for the environment, with dependent paths templated out.
@@ -491,51 +491,16 @@ pub(crate) fn create(
             .ok_or_else(|| Error::NonUtf8Path {
                 path: location.clone(),
             })?;
-        let virtual_env_dir = match (relocatable, name.to_owned()) {
-            (true, "activate") => Cow::Borrowed(
-                r#"'"$(dirname -- "$(dirname -- "$(realpath -- "$SCRIPT_PATH")")")"'"#,
-            ),
-            (true, "activate.bat") => Cow::Borrowed(r"%~dp0.."),
-            (true, "activate.fish") => {
-                Cow::Borrowed(r"'(dirname -- (dirname -- (realpath -- (status -f))))'")
-            }
-            (true, "activate.nu") => Cow::Borrowed(r"(path self | path dirname | path dirname)"),
-            (false, "activate.nu") => Cow::Owned(format!(
-                "'{}'",
-                escape_posix_for_single_quotes(location_string)
-            )),
-            // Note: `activate.ps1` is already relocatable by default.
-            _ => escape_posix_for_single_quotes(location_string),
-        };
-
-        let virtual_prompt = prompt.as_deref().unwrap_or_default();
-        let virtual_prompt = match *name {
-            "activate.xsh" => Cow::Owned(format!(
-                r#"b"{}".decode("utf-8")"#,
-                virtual_prompt.as_bytes().escape_ascii(),
-            )),
-            _ => Cow::Borrowed(virtual_prompt),
-        };
-
-        let bin_name = match *name {
-            "activate.xsh" => Cow::Owned(bin_name.escape_for_python()),
-            _ => Cow::Borrowed(bin_name),
-        };
-
-        let template = if *name == "activate" {
-            Cow::Owned(template.replace(
-                "{{ RELOCATABLE }}",
-                if relocatable { "true" } else { "false" },
-            ))
-        } else {
-            Cow::Borrowed(*template)
-        };
-        let activator = template
-            .replace("{{ VIRTUAL_ENV_DIR }}", &virtual_env_dir)
-            .replace("{{ BIN_NAME }}", &bin_name)
-            .replace("{{ VIRTUAL_PROMPT }}", &virtual_prompt)
-            .replace("{{ PATH_SEP }}", path_sep)
-            .replace("{{ RELATIVE_SITE_PACKAGES }}", &relative_site_packages);
+        let activator = render_activator(
+            name,
+            template,
+            location_string,
+            prompt.as_deref(),
+            bin_name,
+            path_sep,
+            &relative_site_packages,
+            relocatable,
+        );
         fs_err::write(scripts.join(name), activator)?;
     }
 
@@ -957,4 +922,136 @@ fn copy_launcher_windows(
     }
 
     Err(Error::NotFound(base_python.user_display().to_string()))
+}
+
+/// Render an activation script template with the appropriate variable replacements.
+fn render_activator(
+    name: &str,
+    template: &str,
+    location_string: &str,
+    prompt: Option<&str>,
+    bin_name: &str,
+    path_sep: &str,
+    relative_site_packages: &str,
+    relocatable: bool,
+) -> String {
+    let virtual_env_dir = match (relocatable, name) {
+        (true, "activate") => {
+            Cow::Borrowed(r#"'"$(dirname -- "$(dirname -- "$(realpath -- "$SCRIPT_PATH")")")"'"#)
+        }
+        (true, "activate.bat") => Cow::Borrowed(r"%~dp0.."),
+        (true, "activate.fish") => {
+            Cow::Borrowed(r"'(dirname -- (dirname -- (realpath -- (status -f))))'")
+        }
+        (true, "activate.nu") => Cow::Borrowed(r"(path self | path dirname | path dirname)"),
+        (false, "activate.nu") => Cow::Owned(format!(
+            "'{}'",
+            escape_posix_for_single_quotes(location_string)
+        )),
+        (false, "activate.fish") => escape_fish_for_single_quotes(location_string),
+        // Note: `activate.ps1` is already relocatable by default.
+        _ => escape_posix_for_single_quotes(location_string),
+    };
+
+    let virtual_prompt = prompt.unwrap_or_default();
+    let virtual_prompt = match name {
+        "activate.xsh" => Cow::Owned(format!(
+            r#"b"{}".decode("utf-8")"#,
+            virtual_prompt.as_bytes().escape_ascii(),
+        )),
+        "activate.fish" => escape_fish_for_single_quotes(virtual_prompt),
+        _ => Cow::Borrowed(virtual_prompt),
+    };
+
+    let bin_name = match name {
+        "activate.xsh" => Cow::Owned(bin_name.escape_for_python()),
+        _ => Cow::Borrowed(bin_name),
+    };
+
+    let template = if name == "activate" {
+        Cow::Owned(template.replace(
+            "{{ RELOCATABLE }}",
+            if relocatable { "true" } else { "false" },
+        ))
+    } else {
+        Cow::Borrowed(template)
+    };
+
+    template
+        .replace("{{ VIRTUAL_ENV_DIR }}", &virtual_env_dir)
+        .replace("{{ BIN_NAME }}", bin_name.as_ref())
+        .replace("{{ VIRTUAL_PROMPT }}", &virtual_prompt)
+        .replace("{{ PATH_SEP }}", path_sep)
+        .replace("{{ RELATIVE_SITE_PACKAGES }}", relative_site_packages)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_fish_prompt_escaping() {
+        let fish_template = ACTIVATE_TEMPLATES
+            .iter()
+            .find(|(name, _)| *name == "activate.fish")
+            .unwrap()
+            .1;
+
+        // Normal prompt: no escaping needed
+        let rendered = render_activator(
+            "activate.fish",
+            fish_template,
+            "/path/to/venv",
+            Some("my_prompt"),
+            "bin",
+            ":",
+            "../lib/python3.12/site-packages",
+            false,
+        );
+        assert!(rendered.contains("if test -n 'my_prompt'"));
+        assert!(rendered.contains("set -gx VIRTUAL_ENV_PROMPT 'my_prompt'"));
+
+        // Prompt with command injection attempt via single quote break out (issue #23060)
+        let malicious_prompt = "x'; touch /tmp/PWNED; set x '";
+        let rendered = render_activator(
+            "activate.fish",
+            fish_template,
+            "/path/to/venv",
+            Some(malicious_prompt),
+            "bin",
+            ":",
+            "../lib/python3.12/site-packages",
+            false,
+        );
+        assert!(!rendered.contains("set -gx VIRTUAL_ENV_PROMPT 'x'; touch /tmp/PWNED; set x ''"));
+        assert!(rendered.contains(r"set -gx VIRTUAL_ENV_PROMPT 'x\'; touch /tmp/PWNED; set x \''"));
+        assert!(rendered.contains(r"if test -n 'x\'; touch /tmp/PWNED; set x \''"));
+
+        // Prompt with backslash and single quotes
+        let backslash_prompt = r"x\'$(touch PWNED)'\'";
+        let rendered = render_activator(
+            "activate.fish",
+            fish_template,
+            "/path/to/venv",
+            Some(backslash_prompt),
+            "bin",
+            ":",
+            "../lib/python3.12/site-packages",
+            false,
+        );
+        assert!(rendered.contains(r"set -gx VIRTUAL_ENV_PROMPT 'x\\\'$(touch PWNED)\'\\\''"));
+
+        // Path with quotes/backslashes
+        let rendered = render_activator(
+            "activate.fish",
+            fish_template,
+            r"/path/to/my'env",
+            None,
+            "bin",
+            ":",
+            "../lib/python3.12/site-packages",
+            false,
+        );
+        assert!(rendered.contains(r"set -gx VIRTUAL_ENV '/path/to/my\'env'"));
+    }
 }
