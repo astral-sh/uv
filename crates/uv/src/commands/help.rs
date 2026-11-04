@@ -4,10 +4,11 @@ use std::str::FromStr;
 use std::{fmt::Display, fmt::Write};
 
 use anstream::{ColorChoice, stream::IsTerminal};
-use anyhow::{Result, anyhow};
+use anyhow::{Context, Result, anyhow, bail};
 use clap::CommandFactory;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+use tracing::debug;
 use which::which;
 
 use uv_cli::Cli;
@@ -95,14 +96,27 @@ pub(crate) fn help(query: &[String], printer: Printer, no_pager: bool) -> Result
     let is_terminal = std::io::stdout().is_terminal();
     let should_page = !no_pager && !is_root && is_terminal;
 
-    if should_page && let Some(pager) = Pager::try_from_env() {
+    let paged = if should_page && let Some(pager) = Pager::try_from_env() {
         let query = query.join(" ");
-        if want_color && pager.supports_colors() {
-            pager.spawn(format!("{}: {query}", "uv help".bold()), &help_ansi)?;
+        let result = if want_color && pager.supports_colors() {
+            pager.spawn(format!("{}: {query}", "uv help".bold()), &help_ansi)
         } else {
-            pager.spawn(format!("uv help: {query}"), &help_plain)?;
+            pager.spawn(format!("uv help: {query}"), &help_plain)
+        };
+        // The pager may be missing or reject our arguments, e.g., BusyBox `less` can be built
+        // without `-R`. The help is still useful without paging, so print it directly.
+        match result {
+            Ok(()) => true,
+            Err(err) => {
+                debug!("Failed to display help with pager: {err}");
+                false
+            }
         }
     } else {
+        false
+    };
+
+    if !paged {
         if want_color {
             writeln!(printer.stdout(), "{help_ansi}")?;
         } else {
@@ -330,6 +344,8 @@ impl FromStr for Pager {
 
 impl Pager {
     /// Display `contents` using the pager.
+    ///
+    /// Returns an error if the pager cannot be spawned or exits unsuccessfully.
     fn spawn(self, heading: String, contents: impl Display) -> Result<()> {
         use std::io::Write;
 
@@ -345,10 +361,11 @@ impl Pager {
             self.args
         };
 
-        let mut child = std::process::Command::new(command)
+        let mut child = std::process::Command::new(&command)
             .args(args)
             .stdin(std::process::Stdio::piped())
-            .spawn()?;
+            .spawn()
+            .with_context(|| format!("Failed to spawn pager `{}`", command.display()))?;
 
         let mut stdin = child
             .stdin
@@ -361,8 +378,14 @@ impl Pager {
             let _ = stdin.write_all(contents.as_bytes());
         });
 
-        drop(child.wait());
+        let status = child.wait();
         drop(writer.join());
+
+        let status =
+            status.with_context(|| format!("Failed to wait for pager `{}`", command.display()))?;
+        if !status.success() {
+            bail!("Pager `{}` failed with {status}", command.display());
+        }
 
         Ok(())
     }
