@@ -213,7 +213,7 @@ impl Entry {
     /// Create an entry for the given target, service, and user.
     ///
     /// The default credential builder is used.
-    #[cfg(all(test, target_os = "macos", feature = "apple-native"))]
+    #[cfg(all(test, target_os = "macos", feature = "native-auth"))]
     fn new_with_target(target: &str, service: &str, user: &str) -> Result<Self> {
         let entry = build_default_credential(Some(target), service, user)?;
         Ok(entry)
@@ -340,7 +340,7 @@ impl Entry {
                 any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"),
                 feature = "secret-service"
             ),
-            all(target_os = "macos", feature = "apple-native"),
+            all(target_os = "macos", feature = "native-auth"),
             all(target_os = "windows", feature = "windows-native"),
         )
     ))]
