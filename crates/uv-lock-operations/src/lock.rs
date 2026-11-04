@@ -22,7 +22,7 @@ use uv_normalize::PackageName;
 use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{ConflictKind, SupportedEnvironments};
 use uv_python_interpreter::{Interpreter, PythonEnvironment};
-use uv_requirements::{ExtrasResolver, script_extra_build_requires};
+use uv_requirements::{Error as RequirementsError, ExtrasResolver, script_extra_build_requires};
 use uv_resolve_operations::Error as ResolveError;
 use uv_resolve_operations::locked_requirements::{LockedRequirements, read_lock_requirements};
 use uv_resolve_operations::loggers::{ResolveLogger, SummaryResolveLogger};
@@ -36,7 +36,10 @@ use uv_warnings::{warn_user, warn_user_once, warn_user_with_chain};
 use uv_workspace::WorkspaceCache;
 
 use crate::lock_target::find_lock_format_error;
-use crate::{LockError, LockTarget, LockValidationError, MissingLockfileSource, ValidatedLock};
+use crate::{
+    LockError, LockRequirementsError, LockTarget, LockValidationError, MissingLockfileSource,
+    ValidatedLock,
+};
 
 /// The result of running a lock operation.
 #[derive(Debug, Clone)]
@@ -847,7 +850,10 @@ async fn do_lock(
         // The lockfile did not contain enough information to obtain a resolution, fallback
         // to a fresh resolve.
         Some(
-            ValidatedLock::Unusable(_) | ValidatedLock::Versions(_) | ValidatedLock::Preferable(_),
+            ValidatedLock::Unusable(_)
+            | ValidatedLock::Versions(_)
+            | ValidatedLock::Preferable(_)
+            | ValidatedLock::MismatchedRequirements(_, _),
         )
         | None => {
             let recorder = if preview.is_enabled(PreviewFeature::ResolutionInputs) {
@@ -866,7 +872,8 @@ async fn do_lock(
             // Determine whether we can reuse the existing package versions.
             let versions_lock = existing_lock.as_ref().and_then(|lock| match &lock {
                 ValidatedLock::Satisfies(lock) => Some(lock),
-                ValidatedLock::Preferable(lock) => Some(lock),
+                ValidatedLock::Preferable(lock)
+                | ValidatedLock::MismatchedRequirements(lock, _) => Some(lock),
                 ValidatedLock::Versions(lock) => Some(lock),
                 ValidatedLock::Unusable(_) => None,
             });
@@ -886,7 +893,8 @@ async fn do_lock(
             // Determine whether we can reuse the existing package forks.
             let forks_lock = existing_lock.as_ref().and_then(|lock| match &lock {
                 ValidatedLock::Satisfies(lock) => Some(lock),
-                ValidatedLock::Preferable(lock) => Some(lock),
+                ValidatedLock::Preferable(lock)
+                | ValidatedLock::MismatchedRequirements(lock, _) => Some(lock),
                 ValidatedLock::Versions(_) => None,
                 ValidatedLock::Unusable(_) => None,
             });
@@ -913,12 +921,31 @@ async fn do_lock(
                     }),
             );
 
+            let with_mismatch = |error: ResolveError| {
+                if let LockMode::Locked(..) = mode
+                    && let ResolveError::Requirements(
+                        requirements_error @ (RequirementsError::Dist(..)
+                        | RequirementsError::Distribution(_)),
+                    ) = &error
+                    && let Some(ValidatedLock::MismatchedRequirements(_, reason)) = &existing_lock
+                {
+                    let is_user_failure = requirements_error.is_user_failure();
+                    return LockError::ResolveWithMismatch(Box::new(LockRequirementsError {
+                        error,
+                        reason: reason.clone(),
+                        is_user_failure,
+                    }));
+                }
+                error.into()
+            };
+
             // Expand the available extras for each workspace member.
             let member_requirements = ExtrasResolver::new(&hasher, state.index(), database)
                 .with_reporter(Arc::new(ResolverReporter::from(printer)))
                 .resolve(target.members_requirements())
                 .await
-                .map_err(ResolveError::from)?;
+                .map_err(ResolveError::from)
+                .map_err(with_mismatch)?;
             let workspace_members = member_requirements
                 .iter()
                 .map(|requirement| (requirement.name.clone(), requirement.source.clone()))
@@ -972,7 +999,8 @@ async fn do_lock(
                 Box::new(SummaryResolveLogger),
                 printer,
             )
-            .await?;
+            .await
+            .map_err(with_mismatch)?;
 
             // Print the success message after completing resolution.
             logger.on_complete(resolution.len(), start, printer)?;

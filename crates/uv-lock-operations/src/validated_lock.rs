@@ -1,5 +1,5 @@
-use std::collections::BTreeMap;
-use std::fmt::Write;
+use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::{self, Write};
 use std::path::Path;
 
 use owo_colors::OwoColorize;
@@ -33,8 +33,35 @@ pub enum ValidatedLock {
     /// An existing lockfile was provided, and the locked versions and forks should be preferred if
     /// possible, even though the lockfile does not satisfy the workspace requirements.
     Preferable(Lock),
+    /// Package requirements have changed, so the lockfile must be updated.
+    MismatchedRequirements(Lock, RequirementsMismatch),
     /// An existing lockfile was provided, and it satisfies the workspace requirements.
     Satisfies(Lock),
+}
+
+/// The requested and locked requirements for a package whose requirements changed.
+#[derive(Debug, Clone)]
+pub struct RequirementsMismatch {
+    name: PackageName,
+    expected: BTreeSet<Requirement>,
+    actual: BTreeSet<Requirement>,
+}
+
+impl fmt::Display for RequirementsMismatch {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "The lockfile needs to be updated because the requirements for `{}` have changed:",
+            self.name
+        )?;
+        for requirement in self.expected.difference(&self.actual) {
+            write!(f, "\n  Added {requirement}")?;
+        }
+        for requirement in self.actual.difference(&self.expected) {
+            write!(f, "\n  Removed {requirement}")?;
+        }
+        Ok(())
+    }
 }
 
 impl ValidatedLock {
@@ -462,7 +489,12 @@ impl ValidatedLock {
                         expected, actual
                     );
                 }
-                Ok(Self::Preferable(lock))
+                let reason = RequirementsMismatch {
+                    name: name.clone(),
+                    expected,
+                    actual,
+                };
+                Ok(Self::MismatchedRequirements(lock, reason))
             }
             SatisfiesResult::MismatchedPackageDependencies(name, version, expected, actual) => {
                 if let Some(version) = version {
@@ -531,7 +563,7 @@ impl ValidatedLock {
         match self {
             Self::Unusable(lock) => lock,
             Self::Satisfies(lock) => lock,
-            Self::Preferable(lock) => lock,
+            Self::Preferable(lock) | Self::MismatchedRequirements(lock, _) => lock,
             Self::Versions(lock) => lock,
         }
     }
