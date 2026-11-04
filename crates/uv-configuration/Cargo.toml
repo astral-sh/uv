@@ -50,6 +50,9 @@ tracing = { workspace = true }
 url = { workspace = true }
 version-ranges = { workspace = true }
 
+[target.'cfg(unix)'.dependencies]
+uv-unix = { workspace = true }
+
 [dev-dependencies]
 anyhow = { workspace = true }
 insta = { workspace = true }

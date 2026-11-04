@@ -139,3 +139,10 @@ fn set_open_file_limit_to(
 fn rlim_t_to_u64(value: rlim_t) -> Option<u64> {
     u64::try_from(value).ok()
 }
+
+/// The current soft limit on the number of open file descriptors per process, or `None` if
+/// the limit cannot be read.
+pub fn soft_open_file_limit() -> Option<u64> {
+    let (soft, _) = getrlimit(Resource::RLIMIT_NOFILE).ok()?;
+    rlim_t_to_u64(soft)
+}
