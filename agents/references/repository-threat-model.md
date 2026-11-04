@@ -40,6 +40,13 @@ When copying this threat model, keep the generic sections unchanged and add repo
 trust assumptions or security boundaries here. If a generic assumption does not apply, name it and
 state the conditions for the local exception.
 
+### Dependency audits and CI caches
+
+The CI and releases boundary has a narrow exception for uv's Cargo Vet scheduling and Depot
+build-cache arrangement. Builds and tests may run before dependency audits complete, with the
+associated shared-cache exposure accepted as a CI trade-off. This exception does not waive required
+audit checks or authorize additional repository or publishing permissions.
+
 ## Severity calibration
 
 - **Critical:** With few prerequisites and safe defaults, a remote attacker or actor at a lower
