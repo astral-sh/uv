@@ -4034,6 +4034,7 @@ fn preview_features() {
     +            BuildLazyImports,
     +            BuildDependencyHashes,
     +            WheelVariants,
+    +            NativeMachoEdit,
     +        ],
          },
          python_preference: Managed,

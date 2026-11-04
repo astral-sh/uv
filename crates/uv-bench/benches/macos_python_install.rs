@@ -1,4 +1,5 @@
-//! Benchmark fresh macOS Python installs from a cached download.
+//! Benchmark fresh macOS Python installs from a cached download, comparing `install_name_tool`
+//! and `native-macho-edit`.
 //!
 //! Build uv with the same profile first:
 //! `cargo build -p uv --profile profiling`
@@ -20,6 +21,7 @@ mod macos {
     use criterion::{BatchSize, Criterion, measurement::WallTime};
     use tempfile::TempDir;
 
+    use uv_preview::PreviewFeature;
     use uv_python_managed::downloads::ManagedPythonDownloadList;
 
     const DYLIB: &str = "lib/libpython3.13.dylib";
@@ -60,7 +62,7 @@ mod macos {
             }
         }
 
-        fn install(&self, directory: &Path, offline: bool) {
+        fn install(&self, directory: &Path, offline: bool, feature: Option<PreviewFeature>) {
             let mut command = Command::new(&self.uv);
             command
                 .current_dir(directory)
@@ -76,6 +78,9 @@ mod macos {
                 .args(["--no-config", "--no-progress"]);
             if offline {
                 command.arg("--offline");
+            }
+            if let Some(feature) = feature {
+                command.arg("--preview-features").arg(feature.to_string());
             }
             let output = command
                 .args(["python", "install", &self.request])
@@ -113,25 +118,30 @@ mod macos {
 
         let installer = Installer::new();
         let prime = tempfile::tempdir().expect("Failed to create priming directory");
-        installer.install(prime.path(), false);
+        installer.install(prime.path(), false, None);
         drop(prime);
 
-        // Prove a fresh installation works without the network and that patching wasn't skipped.
-        let check = tempfile::tempdir().expect("Failed to create verification directory");
-        installer.install(check.path(), true);
-        installer.verify(check.path());
-        drop(check);
+        for (name, feature) in [
+            ("install_name_tool", None),
+            ("native_macho_edit", Some(PreviewFeature::NativeMachoEdit)),
+        ] {
+            // Prove a fresh installation works without the network and that patching wasn't skipped.
+            let check = tempfile::tempdir().expect("Failed to create verification directory");
+            installer.install(check.path(), true, feature);
+            installer.verify(check.path());
+            drop(check);
 
-        criterion.bench_function(
-            &format!("python_install_warm/install_name_tool/{}", installer.key),
-            |benchmark| {
-                benchmark.iter_batched_ref(
-                    || tempfile::tempdir().expect("Failed to create installation directory"),
-                    |directory| installer.install(directory.path(), true),
-                    BatchSize::PerIteration,
-                );
-            },
-        );
+            criterion.bench_function(
+                &format!("python_install_warm/{name}/{}", installer.key),
+                |benchmark| {
+                    benchmark.iter_batched_ref(
+                        || tempfile::tempdir().expect("Failed to create installation directory"),
+                        |directory| installer.install(directory.path(), true, feature),
+                        BatchSize::PerIteration,
+                    );
+                },
+            );
+        }
     }
 }
 
