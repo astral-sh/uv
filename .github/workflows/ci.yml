@@ -26,7 +26,7 @@ jobs:
   check-cargo-vet:
     name: "check | crates"
     needs: plan
-    uses: astral-sh/github-actions/.github/workflows/cargo-vet.yml@c72a43f2b98b6838703a42a8cd5fc74f6eb5ff8a
+    uses: astral-sh/github-actions/.github/workflows/cargo-vet.yml@8d42129d24fb11f758d6c1f79abc7e30a67157a0
     with:
       runner: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
       workspaces: ${{ needs.plan.outputs.cargo-vet-workspaces }}
