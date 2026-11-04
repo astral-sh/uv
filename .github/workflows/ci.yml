@@ -24,7 +24,7 @@ jobs:
     uses: $/.github/workflows/plan.yml
 
   check-cargo-vet:
-    name: check
+    name: "check | crates"
     needs: plan
     uses: astral-sh/github-actions/.github/workflows/cargo-vet.yml@c72a43f2b98b6838703a42a8cd5fc74f6eb5ff8a
     with:
