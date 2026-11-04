@@ -24,7 +24,7 @@ use wiremock::{
 };
 
 #[cfg(feature = "test-git-lfs")]
-use uv_cache_key::{RepositoryUrl, cache_digest};
+use uv_cache_key::{GitUpstreamUrl, cache_digest};
 use uv_fs::Simplified;
 use uv_redacted::SafeUrl;
 use uv_static::EnvVars;
@@ -664,13 +664,14 @@ fn add_git_lfs() -> Result<()> {
     let git_cache = context.cache_dir.child("git-v1");
     let git_checkouts = git_cache.child("checkouts");
     let git_db = git_cache.child("db");
-    let repo_url = RepositoryUrl::parse("https://github.com/astral-sh/test-lfs-repo")?;
+    let repo_url = GitUpstreamUrl::parse("https://github.com/astral-sh/test-lfs-repo")?;
     let lfs_db_bucket_objects = git_db
         .child(cache_digest(&repo_url))
         .child(".git")
         .child("lfs");
+    let lfs_enabled = true;
     let ok_checkout_file = git_checkouts
-        .child(cache_digest(&repo_url.with_lfs(Some(true))))
+        .child(cache_digest(&(&repo_url, lfs_enabled)))
         .child("261c828.ok");
 
     uv_snapshot!(context.filters(), context.add()

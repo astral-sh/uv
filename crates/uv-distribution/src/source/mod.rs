@@ -2642,7 +2642,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             return Ok(None);
         }
 
-        let Some(GitHubRepository { owner, repo }) = GitHubRepository::parse(git.repository())
+        let Some(GitHubRepository { owner, repo }) =
+            GitHubRepository::parse(git.repository().as_url())
         else {
             return Ok(None);
         };

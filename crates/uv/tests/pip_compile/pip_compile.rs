@@ -7714,20 +7714,15 @@ fn index_url_requirements_txt() -> Result<()> {
 }
 
 /// Raise an error when multiple `requirements.txt` files include different `--index-url` flags.
+/// A trailing `.git` is part of an index path and distinguishes it from the path without it.
 #[test]
 fn conflicting_index_urls_requirements_txt() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
-    requirements_in.write_str(indoc! {r"
-        --index-url https://google.com
-        tqdm
-    "})?;
+    requirements_in.write_str("--index-url https://example.com/simple/")?;
 
     let constraints_in = context.temp_dir.child("constraints.in");
-    constraints_in.write_str(indoc! {r"
-        --index-url https://wikipedia.org
-        flask
-    "})?;
+    constraints_in.write_str("--index-url https://example.com/simple.git/")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
@@ -7735,7 +7730,7 @@ fn conflicting_index_urls_requirements_txt() -> Result<()> {
             .arg("constraints.in"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Multiple index URLs specified: `https://google.com/` vs. `https://wikipedia.org/`
+    error: Multiple index URLs specified: `https://example.com/simple/` vs. `https://example.com/simple.git/`
     "
     );
 

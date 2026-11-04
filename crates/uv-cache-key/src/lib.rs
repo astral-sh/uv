@@ -1,5 +1,5 @@
 pub use cache_key::{CacheKey, CacheKeyHasher};
-pub use canonical_url::{CanonicalUrl, RepositoryUrl};
+pub use canonical_url::{CanonicalUrl, GitUpstreamUrl};
 pub use digest::{cache_digest, cache_name, hash_digest};
 
 mod cache_key;
