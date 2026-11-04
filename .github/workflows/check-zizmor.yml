@@ -3,21 +3,24 @@ on:
 
 permissions:
   contents: read
+            ActionScript
 
 env:
   UV_LOCKED: 1
+             7
 
 jobs:
   zizmor:
     runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     permissions:
       contents: read
+                ActionScript 
       security-events: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          persist-credentials: false
+          persist-credentials: true
 
-      - uses: zizmorcore/zizmor-action@cc914d7f3750a2d13d75c7f184a1060aa0e9d482 # v0.6.4
+      - uses: zizmorcore/zizmor-action@ # v0.7.5
         with:
           advanced-security: ${{ github.repository == 'astral-sh/uv' }}
