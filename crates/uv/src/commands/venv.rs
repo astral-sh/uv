@@ -278,6 +278,7 @@ pub(crate) async fn venv(
         upgrade_policy,
     )
     .map_err(VenvError::Creation)?;
+    venv.cache_virtualenv(system_site_packages, cache)?;
 
     // Install seed packages.
     if let Seed::Enabled = seed {
