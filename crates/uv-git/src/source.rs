@@ -14,7 +14,7 @@ use uv_git_types::{GitOid, GitUrl};
 use uv_redacted::SafeUrl;
 
 use crate::credentials::GIT_STORE;
-use crate::git::{GitDatabase, GitRemote};
+use crate::git::{GitCheckout, GitDatabase, GitRemote};
 
 /// A remote Git source that can be checked out locally.
 pub(crate) struct GitSource {
@@ -76,90 +76,67 @@ impl GitSource {
             Cow::Borrowed(self.git.url())
         };
 
-        // Fetch the commit, if we don't already have it. Wrapping this section in a closure makes
-        // it easier to short-circuit this in the cases where we do have the commit.
-        let (db, actual_rev, maybe_task) = || -> Result<(GitDatabase, GitOid, Option<usize>)> {
-            let git_remote = GitRemote::new(remote.clone().into_owned());
-            let maybe_db = git_remote.db_at(&db_path).ok();
-
-            // If we have a locked revision, and we have a pre-existing database which has that
-            // revision, then no update needs to happen.
-            // When requested, we also check if LFS artifacts have been fetched and validated.
-            if let (Some(rev), Some(db)) = (self.git.precise(), &maybe_db) {
-                if db.contains(rev) && (!lfs_requested || db.contains_lfs_artifacts(rev)) {
-                    debug!("Using existing Git source `{}`", self.git.url());
-                    return Ok((
-                        maybe_db
-                            .unwrap()
-                            .with_lfs_ready(lfs_requested.then_some(true)),
-                        rev,
-                        None,
-                    ));
-                }
-            }
-
-            // ... otherwise, we use this state to update the Git database. Note that we still check
-            // for being offline here, for example in the situation that we have a locked revision
-            // but the database doesn't have it.
-            debug!("Updating Git source `{}`", self.git.url());
-
-            // Report the checkout operation to the reporter.
-            let task = self.reporter.as_ref().map(|reporter| {
-                reporter.on_checkout_start(git_remote.url(), self.git.reference().as_rev())
-            });
-
-            let (db, actual_rev) = git_remote.checkout(
-                &db_path,
-                maybe_db,
-                self.git.reference(),
-                self.git.precise(),
-                self.disable_ssl,
-                self.offline,
-                lfs_requested,
-            )?;
-
-            Ok((db, actual_rev, task))
-        }()?;
-
-        // Validate the resolved commit before checking out its contents.
-        let git = self.git.clone().with_precise(actual_rev)?;
-
-        // Don’t use the full hash, in order to contribute less to reaching the
-        // path length limit on Windows.
-        let short_id = db.to_short_id(actual_rev)?;
-
-        // Compute the canonical URL for the repository checkout.
-        let canonical = git.repository().clone().with_lfs(Some(lfs_requested));
-        // Recompute the checkout hash when Git LFS is enabled as we want
-        // to distinctly differentiate between LFS vs non-LFS source trees.
-        let ident = if lfs_requested {
-            cache_digest(&canonical)
+        // Cache LFS and plain Git checkouts separately because their worktrees can differ.
+        let checkout_ident = if lfs_requested {
+            cache_digest(&self.git.repository().clone().with_lfs(Some(true)))
         } else {
             ident
         };
-        let checkout_path = self
-            .cache
-            .join("checkouts")
-            .join(&ident)
-            .join(short_id.as_str());
+        let checkouts = self.cache.join("checkouts").join(checkout_ident);
+        let copy_to = |db: GitDatabase, rev: GitOid, path: PathBuf| -> Result<Fetch> {
+            let git = self.git.clone().with_precise(rev)?;
+            let checkout = db.copy_to(rev, &path)?;
+            Ok(Fetch {
+                git,
+                path,
+                lfs_ready: checkout.lfs_ready().unwrap_or(false),
+            })
+        };
 
-        // Check out `actual_rev` from the database to a scoped location on the
-        // filesystem. This will use hard links and such to ideally make the
-        // checkout operation here pretty fast.
-        let checkout = db.copy_to(actual_rev, &checkout_path)?;
-
-        // Report the checkout operation to the reporter.
-        if let Some(task) = maybe_task {
-            if let Some(reporter) = self.reporter.as_ref() {
-                reporter.on_checkout_complete(remote.as_ref(), actual_rev.as_str(), task);
+        let git_remote = GitRemote::new(remote.clone().into_owned());
+        let maybe_db = match (self.git.precise(), git_remote.db_at(&db_path).ok()) {
+            (Some(rev), Some(db)) if db.contains(rev) => {
+                let path = checkouts.join(db.to_short_id(rev)?);
+                // A completed checkout can serve this revision without reading the shared LFS store.
+                if lfs_requested && GitCheckout::open_lfs_ready(rev, &path).is_some() {
+                    return Ok(Fetch {
+                        git: self.git.clone().with_precise(rev)?,
+                        path,
+                        lfs_ready: true,
+                    });
+                }
+                if !lfs_requested || db.contains_lfs_artifacts(rev) {
+                    debug!("Using existing Git source `{}`", self.git.url());
+                    return copy_to(db.with_lfs_ready(lfs_requested.then_some(true)), rev, path);
+                }
+                Some(db)
             }
-        }
+            (_, db) => db,
+        };
 
-        Ok(Fetch {
-            git,
-            path: checkout_path,
-            lfs_ready: checkout.lfs_ready().unwrap_or(false),
-        })
+        debug!("Updating Git source `{}`", self.git.url());
+        let task = self.reporter.as_ref().map(|reporter| {
+            reporter.on_checkout_start(git_remote.url(), self.git.reference().as_rev())
+        });
+        let (db, rev) = git_remote.checkout(
+            &db_path,
+            maybe_db,
+            self.git.reference(),
+            self.git.precise(),
+            self.disable_ssl,
+            self.offline,
+            lfs_requested,
+        )?;
+        // Git's abbreviated revision keeps checkout paths short on Windows.
+        let path = checkouts.join(db.to_short_id(rev)?);
+        let fetch = copy_to(db, rev, path)?;
+
+        if let Some(task) = task
+            && let Some(reporter) = self.reporter.as_ref()
+        {
+            reporter.on_checkout_complete(remote.as_ref(), rev.as_str(), task);
+        }
+        Ok(fetch)
     }
 }
 
