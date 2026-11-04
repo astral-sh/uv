@@ -42,11 +42,10 @@ state the conditions for the local exception.
 
 ### Dependency audits and CI caches
 
-For automated same-repository Cargo dependency updates, including Renovate PRs,
-dependency code may run in CI builds and tests before Cargo Vet completes, even
-if the audit later fails. Findings limited to that execution, writes to the shared
-Depot cache (including through its API), or reuse of those entries by builds and
-tests on another branch are out of scope.
+For automated same-repository Cargo dependency updates, including Renovate PRs, dependency code may
+run in CI builds and tests before Cargo Vet completes, even if the audit later fails. Findings
+limited to that execution, writes to the shared Depot cache (including through its API), or reuse of
+those entries by builds and tests on another branch are out of scope.
 
 ## Severity calibration
 
