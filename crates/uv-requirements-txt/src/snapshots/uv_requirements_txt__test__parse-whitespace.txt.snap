@@ -55,25 +55,24 @@ RequirementsTxt {
                                                     query: None,
                                                     fragment: None,
                                                 },
-                                                repository: GitUpstreamUrl(
-                                                    CanonicalUrl(
-                                                        SafeUrl {
-                                                            scheme: "https",
-                                                            cannot_be_a_base: false,
-                                                            username: "",
-                                                            password: None,
-                                                            host: Some(
-                                                                Domain(
-                                                                    "github.com",
-                                                                ),
+                                                repository: RepositoryUrl {
+                                                    repo_url: SafeUrl {
+                                                        scheme: "https",
+                                                        cannot_be_a_base: false,
+                                                        username: "",
+                                                        password: None,
+                                                        host: Some(
+                                                            Domain(
+                                                                "github.com",
                                                             ),
-                                                            port: None,
-                                                            path: "/pandas-dev/pandas",
-                                                            query: None,
-                                                            fragment: None,
-                                                        },
-                                                    ),
-                                                ),
+                                                        ),
+                                                        port: None,
+                                                        path: "/pandas-dev/pandas",
+                                                        query: None,
+                                                        fragment: None,
+                                                    },
+                                                    with_lfs: None,
+                                                },
                                                 reference: DefaultBranch,
                                                 resolved: None,
                                                 lfs: Disabled,

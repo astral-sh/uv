@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::fmt::{Debug, Formatter};
 use std::hash::{Hash, Hasher};
+use std::ops::Deref;
 
 use uv_redacted::{SafeUrl, SafeUrlError};
 
@@ -8,27 +9,16 @@ use crate::cache_key::{CacheKey, CacheKeyHasher};
 
 /// A wrapper around [`SafeUrl`] which represents a "canonical" version of an original URL.
 ///
+/// A "canonical" URL is only intended for internal comparison purposes. It's to help paper over
+/// mistakes such as depending on `github.com/foo/bar` vs. `github.com/foo/bar.git`.
+///
 /// This is **only** for internal purposes. All fetching should happen within the context of the
 /// original URL, since canonicalization can remove credentials and change paths.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
 pub struct CanonicalUrl(SafeUrl);
 
 impl CanonicalUrl {
-    pub fn new(url: SafeUrl) -> Self {
-        Self::canonicalize(url, None)
-    }
-
-    /// Retain built-wheel cache keys from the original Git source URL normalization.
-    ///
-    /// The key includes the requested revision, query, and fragment, including subdirectory
-    /// and LFS options. GitHub path normalization lowercases `@Release` to `@release`
-    /// in the key. Ref lookup still uses `Release`, and the wheel key also includes the
-    /// resolved SHA.
-    pub fn for_git_source(url: SafeUrl) -> Self {
-        Self::canonicalize(url, Some(GitUrlKind::Source))
-    }
-
-    fn canonicalize(mut url: SafeUrl, git: Option<GitUrlKind>) -> Self {
+    pub fn new(mut url: SafeUrl) -> Self {
         // If the URL cannot be a base, then it's not a valid URL anyway.
         if url.cannot_be_a_base() {
             return Self(url);
@@ -43,11 +33,42 @@ impl CanonicalUrl {
             url.path_segments_mut().unwrap().pop_if_empty();
         }
 
-        if let Some(kind) = git {
-            normalize_git_path(&mut url, kind);
-        } else if matches!(url.scheme(), "http" | "https") {
-            // Preserve HTTP path escapes because servers can route encoded and decoded paths differently.
-            return Self(url);
+        // For GitHub URLs specifically, just lower-case everything. GitHub
+        // treats both the same, but they hash differently, and we're gonna be
+        // hashing them. This wants a more general solution, and also we're
+        // almost certainly not using the same case conversion rules that GitHub
+        // does. (See issue #84)
+        if url.host_str() == Some("github.com") {
+            // The scheme is already lowercase, and hierarchical paths are percent-encoded.
+            let path = url.path().to_ascii_lowercase();
+            url.set_path(&path);
+        }
+
+        // Repos can generally be accessed with or without `.git` extension.
+        if let Some((prefix, suffix)) = url.path().rsplit_once('@') {
+            // Ex) `git+https://github.com/pypa/sample-namespace-packages.git@2.0.0`
+            let needs_chopping = std::path::Path::new(prefix)
+                .extension()
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("git"));
+            if needs_chopping {
+                let prefix = &prefix[..prefix.len() - 4];
+                let path = format!("{prefix}@{suffix}");
+                url.set_path(&path);
+            }
+        } else {
+            // Ex) `git+https://github.com/pypa/sample-namespace-packages.git`
+            let needs_chopping = std::path::Path::new(url.path())
+                .extension()
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("git"));
+            if needs_chopping {
+                let last = {
+                    // Unwrap safety: We checked `url.cannot_be_a_base()`, and `url.path()` having
+                    // an extension implies at least one segment.
+                    let last = url.path_segments().unwrap().next_back().unwrap();
+                    last[..last.len() - 4].to_owned()
+                };
+                url.path_segments_mut().unwrap().pop().push(&last);
+            }
         }
 
         // Decode any percent-encoded characters in the path.
@@ -71,47 +92,6 @@ impl CanonicalUrl {
 
         Self(url)
     }
-}
-
-#[derive(Clone, Copy)]
-enum GitUrlKind {
-    Source,
-    Upstream,
-}
-
-/// Apply the Git path rules before percent-decoding to keep existing Git cache keys stable.
-fn normalize_git_path(url: &mut SafeUrl, kind: GitUrlKind) {
-    // GitHub repository paths are case-insensitive. The scheme is already lowercase and
-    // hierarchical paths are percent-encoded.
-    if url.host_str() == Some("github.com") {
-        let path = url.path().to_ascii_lowercase();
-        url.set_path(&path);
-    }
-
-    // Repositories can generally be accessed with or without a `.git` suffix.
-    if let Some((prefix, suffix)) = url.path().rsplit_once('@') {
-        // In a parsed upstream, `@` belongs to the transport path.
-        if let GitUrlKind::Source = kind
-            && has_git_extension(prefix)
-        {
-            let prefix = &prefix[..prefix.len() - 4];
-            let path = format!("{prefix}@{suffix}");
-            url.set_path(&path);
-        }
-    } else if has_git_extension(url.path()) {
-        let last = {
-            // The URL can be a base and a path with an extension has a last segment.
-            let last = url.path_segments().unwrap().next_back().unwrap();
-            last[..last.len() - 4].to_owned()
-        };
-        url.path_segments_mut().unwrap().pop().push(&last);
-    }
-}
-
-fn has_git_extension(path: &str) -> bool {
-    std::path::Path::new(path)
-        .extension()
-        .is_some_and(|ext| ext.eq_ignore_ascii_case("git"))
 }
 
 impl CacheKey for CanonicalUrl {
@@ -142,58 +122,102 @@ impl std::fmt::Display for CanonicalUrl {
     }
 }
 
-/// The comparison and cache identity of a Git upstream.
+/// Like [`CanonicalUrl`], but attempts to represent an underlying source repository, abstracting
+/// away details like the specific commit or branch, or the subdirectory to build within the
+/// repository.
 ///
-/// Construct this from a Git transport URL with the revision already parsed out. It represents
-/// the repository independently of the revision, subdirectory and Git LFS configuration.
-/// Fetches use the original transport URL.
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Hash)]
-pub struct GitUpstreamUrl(CanonicalUrl);
+/// For example, `https://github.com/pypa/package.git#subdirectory=pkg_a` and
+/// `https://github.com/pypa/package.git#subdirectory=pkg_b` would map to different
+/// [`CanonicalUrl`] values, but the same [`RepositoryUrl`], since they map to the same
+/// resource.
+///
+/// The additional information it holds should only be used to discriminate between
+/// sources that hold the exact same commit in their canonical representation,
+/// but may differ in the contents such as when Git LFS is enabled.
+///
+/// A different cache key will be computed when Git LFS is enabled.
+/// When Git LFS is `false` or `None`, the cache key remains unchanged.
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
+pub struct RepositoryUrl {
+    repo_url: SafeUrl,
+    with_lfs: Option<bool>,
+}
 
-impl GitUpstreamUrl {
+impl RepositoryUrl {
     pub fn new(url: SafeUrl) -> Self {
-        let CanonicalUrl(mut url) = CanonicalUrl::canonicalize(url, Some(GitUrlKind::Upstream));
+        let mut url = CanonicalUrl::new(url).0;
+
+        // If a Git URL ends in a reference (like a branch, tag, or commit), remove it.
+        if url.scheme().starts_with("git+") {
+            if let Some(prefix) = url
+                .path()
+                .rsplit_once('@')
+                .map(|(prefix, _suffix)| prefix.to_string())
+            {
+                url.set_path(&prefix);
+            }
+        }
+
+        // Drop any fragments and query parameters.
         url.set_fragment(None);
         url.set_query(None);
-        Self(CanonicalUrl(url))
+
+        Self {
+            repo_url: url,
+            with_lfs: None,
+        }
     }
 
     pub fn parse(url: &str) -> Result<Self, SafeUrlError> {
         Ok(Self::new(SafeUrl::parse(url)?))
     }
 
-    /// Return the normalized URL for inspecting the upstream identity.
-    pub fn as_url(&self) -> &SafeUrl {
-        let CanonicalUrl(url) = &self.0;
-        url
+    #[must_use]
+    pub fn with_lfs(mut self, lfs: Option<bool>) -> Self {
+        self.with_lfs = lfs;
+        self
     }
 }
 
-impl CacheKey for GitUpstreamUrl {
+impl CacheKey for RepositoryUrl {
     fn cache_key(&self, state: &mut CacheKeyHasher) {
-        // Version these keys to avoid shards shared by `pkg.git@tenant` and `pkg@tenant`
-        // under full-source normalization.
-        let path = self.as_url().path();
-        if path.match_indices('@').any(|(index, _)| {
-            let prefix = &path[..index];
-            !prefix.is_empty() && (!prefix.ends_with('/') || has_git_extension(prefix))
-        }) {
-            "git-upstream-v2".cache_key(state);
+        // `as_str` gives the serialisation of a url (which has a spec) and so insulates against
+        // possible changes in how the URL crate does hashing.
+        self.repo_url.as_str().cache_key(state);
+        if let Some(true) = self.with_lfs {
+            1u8.cache_key(state);
         }
-        self.0.cache_key(state);
     }
 }
 
-impl std::fmt::Display for GitUpstreamUrl {
+impl Hash for RepositoryUrl {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        // `as_str` gives the serialisation of a url (which has a spec) and so insulates against
+        // possible changes in how the URL crate does hashing.
+        self.repo_url.as_str().hash(state);
+        if let Some(true) = self.with_lfs {
+            1u8.hash(state);
+        }
+    }
+}
+
+impl Deref for RepositoryUrl {
+    type Target = SafeUrl;
+
+    fn deref(&self) -> &Self::Target {
+        &self.repo_url
+    }
+}
+
+impl std::fmt::Display for RepositoryUrl {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Display::fmt(&self.0, f)
+        std::fmt::Display::fmt(&self.repo_url, f)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cache_digest;
 
     #[test]
     fn user_credential_does_not_affect_cache_key() -> Result<(), SafeUrlError> {
@@ -252,52 +276,76 @@ mod tests {
     }
 
     #[test]
-    fn canonical_git_source_url() -> Result<(), SafeUrlError> {
-        let canonical = |url| SafeUrl::parse(url).map(CanonicalUrl::for_git_source);
-        let repository = canonical("git+https://github.com/pypa/sample-namespace-packages.git")?;
-        let tagged = canonical("git+https://github.com/pypa/sample-namespace-packages.git@2.0.0")?;
-
-        assert_eq!(
-            repository,
-            canonical("git+https://github.com/pypa/sample-namespace-packages")?,
-        );
-        assert_eq!(
-            tagged,
-            canonical("git+https://github.com/pypa/sample-namespace-packages@2.0.0")?,
-        );
-        assert_ne!(
-            repository,
-            canonical("git+https://github.com/pypa/sample-packages.git")?,
-        );
-        assert_ne!(
-            canonical(
-                "git+https://github.com/pypa/sample-namespace-packages.git#subdirectory=pkg_resources/pkg_a"
-            )?,
-            canonical(
-                "git+https://github.com/pypa/sample-namespace-packages.git#subdirectory=pkg_resources/pkg_b"
-            )?,
-        );
-        assert_ne!(
-            repository,
-            canonical("git+https://github.com/pypa/sample-namespace-packages.git#lfs=true")?,
-        );
-        assert_ne!(
-            tagged,
-            canonical("git+https://github.com/pypa/sample-namespace-packages.git@v1.0.0")?,
-        );
-
-        Ok(())
-    }
-
-    #[test]
     fn canonical_url() -> Result<(), SafeUrlError> {
-        assert_ne!(
-            CanonicalUrl::new(SafeUrl::parse("https://example.com/simple/")?),
-            CanonicalUrl::new(SafeUrl::parse("https://example.com/simple.git/")?),
+        // Two URLs should be considered equal regardless of the `.git` suffix.
+        assert_eq!(
+            CanonicalUrl::new(SafeUrl::parse(
+                "git+https://github.com/pypa/sample-namespace-packages.git"
+            )?),
+            CanonicalUrl::new(SafeUrl::parse(
+                "git+https://github.com/pypa/sample-namespace-packages"
+            )?),
         );
 
-        let opaque = SafeUrl::parse("git+https:://github.com/pypa/sample-namespace-packages.git")?;
-        assert_eq!(SafeUrl::from(CanonicalUrl::new(opaque.clone())), opaque);
+        // Two URLs should be considered equal regardless of the `.git` suffix.
+        assert_eq!(
+            CanonicalUrl::new(SafeUrl::parse(
+                "git+https://github.com/pypa/sample-namespace-packages.git@2.0.0"
+            )?),
+            CanonicalUrl::new(SafeUrl::parse(
+                "git+https://github.com/pypa/sample-namespace-packages@2.0.0"
+            )?),
+        );
+
+        // Two URLs should be _not_ considered equal if they point to different repositories.
+        assert_ne!(
+            CanonicalUrl::new(SafeUrl::parse(
+                "git+https://github.com/pypa/sample-namespace-packages.git"
+            )?),
+            CanonicalUrl::new(SafeUrl::parse(
+                "git+https://github.com/pypa/sample-packages.git"
+            )?),
+        );
+
+        // Two URLs should _not_ be considered equal if they request different subdirectories.
+        assert_ne!(
+            CanonicalUrl::new(SafeUrl::parse(
+                "git+https://github.com/pypa/sample-namespace-packages.git#subdirectory=pkg_resources/pkg_a"
+            )?),
+            CanonicalUrl::new(SafeUrl::parse(
+                "git+https://github.com/pypa/sample-namespace-packages.git#subdirectory=pkg_resources/pkg_b"
+            )?),
+        );
+
+        // Two URLs should _not_ be considered equal if they differ in Git LFS enablement.
+        assert_ne!(
+            CanonicalUrl::new(SafeUrl::parse(
+                "git+https://github.com/pypa/sample-namespace-packages.git#lfs=true"
+            )?),
+            CanonicalUrl::new(SafeUrl::parse(
+                "git+https://github.com/pypa/sample-namespace-packages.git"
+            )?),
+        );
+
+        // Two URLs should _not_ be considered equal if they request different commit tags.
+        assert_ne!(
+            CanonicalUrl::new(SafeUrl::parse(
+                "git+https://github.com/pypa/sample-namespace-packages.git@v1.0.0"
+            )?),
+            CanonicalUrl::new(SafeUrl::parse(
+                "git+https://github.com/pypa/sample-namespace-packages.git@v2.0.0"
+            )?),
+        );
+
+        // Two URLs that cannot be a base should be considered equal.
+        assert_eq!(
+            CanonicalUrl::new(SafeUrl::parse(
+                "git+https:://github.com/pypa/sample-namespace-packages.git"
+            )?),
+            CanonicalUrl::new(SafeUrl::parse(
+                "git+https:://github.com/pypa/sample-namespace-packages.git"
+            )?),
+        );
 
         // Two URLs should _not_ be considered equal based on percent-decoding slashes.
         assert_ne!(
@@ -309,7 +357,8 @@ mod tests {
             )?),
         );
 
-        assert_ne!(
+        // Two URLs should be considered equal regardless of percent-encoding.
+        assert_eq!(
             CanonicalUrl::new(SafeUrl::parse(
                 "https://github.com/pypa/sample%2Bnamespace%2Bpackages"
             )?),
@@ -318,7 +367,7 @@ mod tests {
             )?),
         );
 
-        assert_ne!(
+        assert_eq!(
             CanonicalUrl::new(SafeUrl::parse("HTTPS://github.com/PYPA/Éxample")?),
             CanonicalUrl::new(SafeUrl::parse("https://github.com/pypa/%C3%89xample")?),
         );
@@ -351,57 +400,119 @@ mod tests {
     }
 
     #[test]
-    fn git_upstream_url() -> Result<(), SafeUrlError> {
-        let upstream =
-            GitUpstreamUrl::parse("https://github.com/PYPA/sample-namespace-packages.git")?;
+    fn repository_url() -> Result<(), SafeUrlError> {
+        // Two URLs should be considered equal regardless of the `.git` suffix.
         assert_eq!(
-            upstream,
-            GitUpstreamUrl::parse("https://github.com/pypa/sample-namespace-packages")?,
+            RepositoryUrl::parse("git+https://github.com/pypa/sample-namespace-packages.git")?,
+            RepositoryUrl::parse("git+https://github.com/pypa/sample-namespace-packages")?,
         );
+
+        // Two URLs should be considered equal regardless of the `.git` suffix.
+        assert_eq!(
+            RepositoryUrl::parse(
+                "git+https://github.com/pypa/sample-namespace-packages.git@2.0.0"
+            )?,
+            RepositoryUrl::parse("git+https://github.com/pypa/sample-namespace-packages@2.0.0")?,
+        );
+
+        // Two URLs should be _not_ considered equal if they point to different repositories.
         assert_ne!(
-            upstream,
-            GitUpstreamUrl::parse("https://github.com/pypa/sample-packages.git")?,
+            RepositoryUrl::parse("git+https://github.com/pypa/sample-namespace-packages.git")?,
+            RepositoryUrl::parse("git+https://github.com/pypa/sample-packages.git")?,
         );
+
+        // Two URLs should be considered equal if they map to the same repository, even if they
+        // request different subdirectories.
         assert_eq!(
-            upstream,
-            GitUpstreamUrl::parse(
-                "https://user:password@github.com/pypa/sample-namespace-packages.git?query=value#fragment",
+            RepositoryUrl::parse(
+                "git+https://github.com/pypa/sample-namespace-packages.git#subdirectory=pkg_resources/pkg_a"
+            )?,
+            RepositoryUrl::parse(
+                "git+https://github.com/pypa/sample-namespace-packages.git#subdirectory=pkg_resources/pkg_b"
             )?,
         );
 
-        // Database and checkout keys must remain compatible with existing Git caches.
-        assert_eq!(cache_digest(&upstream), "ce760c1b1e07f0c3");
-        assert_eq!(cache_digest(&(&upstream, true)), "b48641e2e61b8289");
+        // Two URLs should be considered equal if they map to the same repository, even if they
+        // request different commit tags.
+        assert_eq!(
+            RepositoryUrl::parse(
+                "git+https://github.com/pypa/sample-namespace-packages.git@v1.0.0"
+            )?,
+            RepositoryUrl::parse(
+                "git+https://github.com/pypa/sample-namespace-packages.git@v2.0.0"
+            )?,
+        );
+
+        // Two URLs should be considered equal if they map to the same repository, even if they
+        // differ in Git LFS enablement.
+        assert_eq!(
+            RepositoryUrl::parse(
+                "git+https://github.com/pypa/sample-namespace-packages.git#lfs=true"
+            )?,
+            RepositoryUrl::parse("git+https://github.com/pypa/sample-namespace-packages.git")?,
+        );
 
         Ok(())
     }
 
     #[test]
-    fn git_upstream_preserves_at_signs_in_transport_paths() -> Result<(), SafeUrlError> {
-        let plain = GitUpstreamUrl::parse("https://example.com/pkg@tenant")?;
-        let suffixed = GitUpstreamUrl::parse("https://example.com/pkg.git@tenant")?;
-        assert_ne!(plain, suffixed);
+    fn repository_url_with_lfs() -> Result<(), SafeUrlError> {
+        let mut hasher = CacheKeyHasher::new();
+        RepositoryUrl::parse("https://example.com/pypa/sample-namespace-packages.git@2.0.0")?
+            .cache_key(&mut hasher);
+        let repo_url_basic = hasher.finish();
+
+        let mut hasher = CacheKeyHasher::new();
+        RepositoryUrl::parse(
+            "https://user:foo@example.com/pypa/sample-namespace-packages.git@2.0.0#foo=bar",
+        )?
+        .cache_key(&mut hasher);
+        let repo_url_with_fragments = hasher.finish();
+
+        assert_eq!(
+            repo_url_basic, repo_url_with_fragments,
+            "repository urls should have the exact cache keys as fragments are removed",
+        );
+
+        let mut hasher = CacheKeyHasher::new();
+        RepositoryUrl::parse(
+            "https://user:foo@example.com/pypa/sample-namespace-packages.git@2.0.0#foo=bar",
+        )?
+        .with_lfs(None)
+        .cache_key(&mut hasher);
+        let git_url_with_fragments = hasher.finish();
+
+        assert_eq!(
+            repo_url_with_fragments, git_url_with_fragments,
+            "both structs should have the exact cache keys as fragments are still removed",
+        );
+
+        let mut hasher = CacheKeyHasher::new();
+        RepositoryUrl::parse(
+            "https://user:foo@example.com/pypa/sample-namespace-packages.git@2.0.0#foo=bar",
+        )?
+        .with_lfs(Some(false))
+        .cache_key(&mut hasher);
+        let git_url_with_fragments_and_lfs_false = hasher.finish();
+
+        assert_eq!(
+            git_url_with_fragments, git_url_with_fragments_and_lfs_false,
+            "both structs should have the exact cache keys as lfs false should not influence them",
+        );
+
+        let mut hasher = CacheKeyHasher::new();
+        RepositoryUrl::parse(
+            "https://user:foo@example.com/pypa/sample-namespace-packages.git@2.0.0#foo=bar",
+        )?
+        .with_lfs(Some(true))
+        .cache_key(&mut hasher);
+        let git_url_with_fragments_and_lfs_true = hasher.finish();
+
         assert_ne!(
-            plain,
-            GitUpstreamUrl::parse("https://example.com/pkg@tenant.git")?,
-        );
-        assert_eq!(
-            suffixed,
-            GitUpstreamUrl::parse("https://example.com/pkg.git%40tenant")?,
+            git_url_with_fragments, git_url_with_fragments_and_lfs_true,
+            "both structs should have different cache keys as one has Git LFS enabled",
         );
 
-        let plain_digest = cache_digest(&plain);
-        let suffixed_digest = cache_digest(&suffixed);
-        assert_ne!(plain_digest, suffixed_digest);
-        assert_ne!(plain_digest, "b39bb2ec85a42ea4");
-        assert_ne!(suffixed_digest, "b39bb2ec85a42ea4");
-
-        let leading = GitUpstreamUrl::parse("https://example.com/@solo")?;
-        assert_eq!(
-            leading,
-            GitUpstreamUrl::parse("https://example.com/%40solo")?,
-        );
-        assert_eq!(cache_digest(&leading), "ea0d314d3ff4bf4f");
         Ok(())
     }
 }

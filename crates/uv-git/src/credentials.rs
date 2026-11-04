@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, LazyLock, RwLock};
 use tracing::trace;
 use uv_auth::{Credentials, CredentialsFromUrlError};
-use uv_cache_key::GitUpstreamUrl;
+use uv_cache_key::RepositoryUrl;
 use uv_redacted::SafeUrl;
 
 /// Global authentication cache for a uv invocation.
@@ -12,22 +12,22 @@ pub(crate) static GIT_STORE: LazyLock<GitStore> = LazyLock::new(GitStore::defaul
 
 /// A store for Git credentials.
 #[derive(Debug, Default)]
-pub(crate) struct GitStore(RwLock<HashMap<GitUpstreamUrl, Arc<Credentials>>>);
+pub(crate) struct GitStore(RwLock<HashMap<RepositoryUrl, Arc<Credentials>>>);
 
 impl GitStore {
     /// Insert [`Credentials`] for the given URL into the store.
-    fn insert(&self, url: GitUpstreamUrl, credentials: Credentials) {
+    fn insert(&self, url: RepositoryUrl, credentials: Credentials) {
         self.0.write().unwrap().insert(url, Arc::new(credentials));
     }
 
     /// Get the [`Credentials`] for the given URL, if they exist.
-    pub(crate) fn get(&self, url: &GitUpstreamUrl) -> Option<Arc<Credentials>> {
+    pub(crate) fn get(&self, url: &RepositoryUrl) -> Option<Arc<Credentials>> {
         self.0.read().unwrap().get(url).cloned()
     }
 }
 
 /// Store [`Credentials`] for the given Git repository URL.
-pub fn store_credentials(url: GitUpstreamUrl, credentials: Credentials) {
+pub fn store_credentials(url: RepositoryUrl, credentials: Credentials) {
     GIT_STORE.insert(url, credentials);
 }
 
@@ -37,7 +37,7 @@ pub fn store_credentials(url: GitUpstreamUrl, credentials: Credentials) {
 pub fn store_credentials_from_url(url: &SafeUrl) -> Result<bool, CredentialsFromUrlError> {
     if let Some(credentials) = Credentials::from_url(url)? {
         trace!("Caching credentials for `{url}`");
-        store_credentials(GitUpstreamUrl::new(url.clone()), credentials);
+        store_credentials(RepositoryUrl::new(url.clone()), credentials);
         Ok(true)
     } else {
         Ok(false)
