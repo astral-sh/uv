@@ -22,7 +22,7 @@ use tokio_stream::wrappers::ReceiverStream;
 use tracing::{Level, debug, info, instrument, trace, warn};
 
 use uv_configuration::{Constraints, DependencyModifiers, IndexStrategy};
-use uv_distribution::{ArchiveMetadata, DistributionDatabase};
+use uv_distribution::{ArchiveMetadata, DistributionDatabase, supported_variant_properties};
 use uv_distribution_types::{
     BuiltDist, DerivationChain, Dist, DistErrorKind, Identifier, IndexCapabilities, IndexLocations,
     IndexMetadata, IndexUrl, InstalledDist, Name, RemoteSource, Requirement, RequiresPython,
@@ -1537,6 +1537,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         version_maps: &'a [VersionMap],
         requests: &MetadataRequests,
     ) -> Result<WheelVariantSelection<'a>, ResolveError> {
+        let Some(tags) = &self.tags else {
+            return Ok(WheelVariantSelection::default());
+        };
         // With unsafe-best-match we know the version, but not necessarily the index: a wheel
         // we passed over can become compatible once we know its variant properties. Revisit the
         // indexes in order, stopping as soon as one has a distribution we can use.
@@ -1546,6 +1549,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             Either::Right(std::iter::once(prioritized))
         };
 
+        let target = tags.python_platform();
         let mut selection = WheelVariantSelection::default();
         for dist in candidates {
             // Queue all metadata requests for this candidate before waiting for any of them.
@@ -1565,7 +1569,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             let mut metadata = Vec::with_capacity(responses.len());
             for (index, response) in &responses {
                 match response.as_ref() {
-                    Ok(content) => metadata.push((*index, content)),
+                    Ok(content) => {
+                        let supported = supported_variant_properties(content, target);
+                        metadata.push((*index, content, supported));
+                    }
                     Err(reason) => {
                         // Keep the first error to report if no distribution works.
                         selection.unavailable.get_or_insert_with(|| reason.clone());
