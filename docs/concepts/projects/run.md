@@ -5,6 +5,9 @@ is isolated from the current shell by default, so invocations that require the p
 `python -c "import example"`, will fail. Instead, use `uv run` to run commands in the project
 environment:
 
+> [!NOTE] Running `uv run python` without any additional arguments will start an interactive
+> Python REPL, just as if you had run `python` directly.
+
 ```console
 $ uv run python -c "import example"
 ```
