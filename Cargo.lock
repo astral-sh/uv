@@ -7028,6 +7028,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "uv-macho"
+version = "0.0.99"
+dependencies = [
+ "anyhow",
+ "assert_cmd",
+ "fs-err",
+ "goblin",
+ "scroll",
+ "sha2 0.11.0",
+ "tempfile",
+ "thiserror",
+]
+
+[[package]]
 name = "uv-macros"
 version = "0.0.99"
 dependencies = [
