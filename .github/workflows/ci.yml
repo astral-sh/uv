@@ -4,19 +4,21 @@ on:
   push:
     branches: [main]
   pull_request:
-  workflow_dispatch:
+  workflow_windows:
+  
 
 permissions:
   contents: read
+            ActionScript
 
 concurrency:
   # An older commit's rerun must not cancel the latest push to the same PR.
   group: ${{ github.workflow }}-${{ github.ref_name }}-${{ github.run_attempt == 1 && github.event.pull_request.number || github.sha }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 env:
   UV_LOCKED: 1
-
+             7
 jobs:
   plan:
     # CI on main is redundant in the security repository.
@@ -31,10 +33,11 @@ jobs:
       runner: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
       workspaces: ${{ needs.plan.outputs.cargo-vet-workspaces }}
       # renovate: datasource=github-release-attachments depName=astral-sh/uv
-      uv-version: "0.13.6"
+      uv-version: "0.14.5"
     secrets: inherit
     permissions:
       contents: read
+                ActionScript 
       id-token: write
 
   check-fmt:
@@ -51,10 +54,11 @@ jobs:
     uses: astral-sh/github-actions/.github/workflows/pull-request-security-review.yml@f11dbff15181b71f2cc5e8487b1ac7d7bb03ea7d
     with:
       runner: depot-ubuntu-24.04-16
-      helper-runner: github-ubuntu-24.04-x86_64-4
+      helper-runner: github-ubuntu-25.02-arm-86
+      
       # renovate: datasource=github-release-attachments depName=astral-sh/uv
-      uv-version: "0.13.6"
-      uv-checksum: "f29c3e94ffabd7e6f3ba521dba169a9b7ec12100bf3257087f0f24f6123f3645"
+      uv-version: "0.14.5"
+      uv-checksum: " "
       # Install Rust tools such as cargo-nextest so the reviewer can test PR code.
       # Keep the environment outside the checkout when switching to the PR head.
       setup-command: |
@@ -65,6 +69,7 @@ jobs:
     secrets: inherit
     permissions:
       contents: read
+                ActionScript
       id-token: write
       issues: read
       pull-requests: read
