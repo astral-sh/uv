@@ -1769,6 +1769,77 @@ fn create_venv_then_allow_existing() {
     );
 }
 
+/// Ensure `uv venv --allow-existing` replaces existing destination symlinks for generated files
+/// rather than following them and overwriting their targets.
+#[test]
+#[cfg(unix)]
+fn allow_existing_replaces_generated_file_symlinks() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+
+    let outside_activate = context.temp_dir.child("outside_activate");
+    outside_activate.write_str("SENSITIVE_ACTIVATE")?;
+    let outside_gitignore = context.temp_dir.child("outside_gitignore");
+    outside_gitignore.write_str("SENSITIVE_GITIGNORE")?;
+    let outside_pyvenv = context.temp_dir.child("outside_pyvenv");
+    outside_pyvenv.write_str("SENSITIVE_PYVENV")?;
+
+    let bin_dir = context.venv.child("bin");
+    bin_dir.create_dir_all()?;
+    symlink(outside_activate.path(), bin_dir.child("activate").path())?;
+    symlink(
+        outside_gitignore.path(),
+        context.venv.child(".gitignore").path(),
+    )?;
+    symlink(
+        outside_pyvenv.path(),
+        context.venv.child("pyvenv.cfg").path(),
+    )?;
+
+    uv_snapshot!(context.filters(), context.venv()
+        .arg(context.venv.as_os_str())
+        .arg("--allow-existing")
+        .arg("--python")
+        .arg("3.12"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Activate with: source .venv/[BIN]/activate
+    "
+    );
+
+    assert_eq!(
+        fs_err::read_to_string(outside_activate.path())?,
+        "SENSITIVE_ACTIVATE"
+    );
+    assert_eq!(
+        fs_err::read_to_string(outside_gitignore.path())?,
+        "SENSITIVE_GITIGNORE"
+    );
+    assert_eq!(
+        fs_err::read_to_string(outside_pyvenv.path())?,
+        "SENSITIVE_PYVENV"
+    );
+
+    assert!(
+        !fs_err::symlink_metadata(bin_dir.child("activate").path())?
+            .file_type()
+            .is_symlink()
+    );
+    assert!(
+        !fs_err::symlink_metadata(context.venv.child(".gitignore").path())?
+            .file_type()
+            .is_symlink()
+    );
+    assert!(
+        !fs_err::symlink_metadata(context.venv.child("pyvenv.cfg").path())?
+            .file_type()
+            .is_symlink()
+    );
+
+    Ok(())
+}
+
 #[test]
 #[cfg(windows)]
 fn windows_shims() -> Result<()> {
