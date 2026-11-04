@@ -371,3 +371,7 @@ follow the same prioritization rules:
 In effect, `--index-url` and `--extra-index-url` can be thought of as unnamed `[[tool.uv.index]]`
 entries, with `default = true` enabled for the former. In that context, `--index-url` maps to
 `--default-index`, and `--extra-index-url` maps to `--index`.
+
+!!! note "Interaction with `tool.uv.pip` configuration"
+
+    Configuring `index-url` or `extra-index-url` inside the `[tool.uv.pip]` section of `pyproject.toml` (or via `uv pip` CLI flags) does not remove or override globally defined `[[tool.uv.index]]` entries. Global indexes defined in `pyproject.toml` remain active during `uv pip` operations.
