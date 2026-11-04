@@ -2027,4 +2027,18 @@ mod tests {
 
         Ok(())
     }
+
+    #[test]
+    fn deeply_nested_marker_parentheses() {
+        let nested = format!(
+            "name; {} os_name == 'nt' {}",
+            "(".repeat(300),
+            ")".repeat(300)
+        );
+        let err = Requirement::<VerbatimUrl>::from_str(&nested).unwrap_err();
+        assert!(
+            err.to_string().contains("Recursion limit exceeded"),
+            "Expected recursion limit error, got: {err}"
+        );
+    }
 }

@@ -572,6 +572,9 @@ fn parse_extra_expr(
     None
 }
 
+/// Maximum recursion depth allowed for parenthesized marker expressions to avoid stack overflow.
+const MAX_MARKER_DEPTH: usize = 128;
+
 /// ```text
 /// marker_expr   = marker_var:l marker_op:o marker_var:r -> (o, l, r)
 ///               | wsp* '(' marker:m wsp* ')' -> m
@@ -579,10 +582,21 @@ fn parse_extra_expr(
 fn parse_marker_expr<T: Pep508Url>(
     cursor: &mut Cursor,
     reporter: &mut impl Reporter,
+    depth: usize,
 ) -> Result<Option<MarkerTree>, Pep508Error<T>> {
     cursor.eat_whitespace();
     if let Some(start_pos) = cursor.eat_char('(') {
-        let marker = parse_marker_or(cursor, reporter)?;
+        if depth >= MAX_MARKER_DEPTH {
+            return Err(Pep508Error {
+                message: Pep508ErrorSource::String(
+                    "Recursion limit exceeded while parsing nested marker parentheses".to_string(),
+                ),
+                start: start_pos,
+                len: 1,
+                input: cursor.to_string(),
+            });
+        }
+        let marker = parse_marker_or(cursor, reporter, depth + 1)?;
         cursor.next_expect_char(')', start_pos)?;
         Ok(marker)
     } else {
@@ -597,8 +611,15 @@ fn parse_marker_expr<T: Pep508Url>(
 fn parse_marker_and<T: Pep508Url>(
     cursor: &mut Cursor,
     reporter: &mut impl Reporter,
+    depth: usize,
 ) -> Result<Option<MarkerTree>, Pep508Error<T>> {
-    parse_marker_op(cursor, "and", MarkerTree::and, parse_marker_expr, reporter)
+    parse_marker_op(
+        cursor,
+        "and",
+        MarkerTree::and,
+        |cursor, reporter| parse_marker_expr(cursor, reporter, depth),
+        reporter,
+    )
 }
 
 /// ```text
@@ -608,12 +629,13 @@ fn parse_marker_and<T: Pep508Url>(
 fn parse_marker_or<T: Pep508Url>(
     cursor: &mut Cursor,
     reporter: &mut impl Reporter,
+    depth: usize,
 ) -> Result<Option<MarkerTree>, Pep508Error<T>> {
     parse_marker_op(
         cursor,
         "or",
         MarkerTree::or,
-        |cursor, reporter| parse_marker_and(cursor, reporter),
+        |cursor, reporter| parse_marker_and(cursor, reporter, depth),
         reporter,
     )
 }
@@ -624,7 +646,7 @@ fn parse_marker_op<T: Pep508Url, R: Reporter>(
     cursor: &mut Cursor,
     op: &str,
     apply: fn(MarkerTree, MarkerTree) -> MarkerTree,
-    parse_inner: fn(&mut Cursor, &mut R) -> Result<Option<MarkerTree>, Pep508Error<T>>,
+    mut parse_inner: impl FnMut(&mut Cursor, &mut R) -> Result<Option<MarkerTree>, Pep508Error<T>>,
     reporter: &mut R,
 ) -> Result<Option<MarkerTree>, Pep508Error<T>> {
     let first = parse_inner(cursor, reporter)?;
@@ -674,7 +696,7 @@ pub(crate) fn parse_markers_cursor<T: Pep508Url>(
     cursor: &mut Cursor,
     reporter: &mut impl Reporter,
 ) -> Result<Option<MarkerTree>, Pep508Error<T>> {
-    let marker = parse_marker_or(cursor, reporter)?;
+    let marker = parse_marker_or(cursor, reporter, 0)?;
     cursor.eat_whitespace();
     if let Some((pos, unexpected)) = cursor.next() {
         // If we're here, both parse_marker_or and parse_marker_and returned because the next
