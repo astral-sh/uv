@@ -1264,17 +1264,17 @@ async fn git_lfs_legacy_checkout_local_repair() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     ");
-    assert_eq!(fs_err::read(&ok_checkout_file)?, b"lfs-v1");
+    assert_eq!(fs_err::read(&ok_checkout_file)?, b"lfs-v2");
 
     // An upgraded Git LFS client can also verify a previously unchecked checkout.
-    fs_err::write(&ok_checkout_file, b"lfs-v1-unchecked")?;
+    fs_err::write(&ok_checkout_file, b"lfs-v2-unchecked")?;
     clear_git_lock_and_metadata(&context)?;
     uv_snapshot!(context.filters(), context.lock().args(["--no-preview", "--offline"]), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     ");
-    assert_eq!(fs_err::read(&ok_checkout_file)?, b"lfs-v1");
+    assert_eq!(fs_err::read(&ok_checkout_file)?, b"lfs-v2");
 
     // A verified checkout remains reusable after its own LFS object store is removed.
     fs_err::remove_dir_all(lfs_checkout_objects.path())?;
@@ -1334,6 +1334,252 @@ fn clear_git_lock_and_metadata(context: &TestContext) -> Result<()> {
     fs_err::remove_dir_all(
         Cache::from_path(context.cache_dir.path()).bucket(CacheBucket::SourceDistributions),
     )?;
+    Ok(())
+}
+
+/// Missing submodule LFS objects must prevent readiness when object validation is supported.
+#[test]
+#[cfg(feature = "test-git-lfs")]
+fn git_lfs_submodule_missing_objects() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_env("GIT_CONFIG_NOSYSTEM", "1")
+        .with_filter((r"\b[0-9a-f]{40}\b", "[COMMIT]"));
+    let submodule = context.temp_dir.child("submodule");
+    submodule.create_dir_all()?;
+    git(&context, submodule.path(), &["init", "--template="])?;
+    git(
+        &context,
+        submodule.path(),
+        &["lfs", "install", "--local", "--skip-repo"],
+    )?;
+    submodule
+        .child(".gitattributes")
+        .write_str("module.py filter=lfs diff=lfs merge=lfs -text\n")?;
+    submodule
+        .child("module.py")
+        .write_str("SUBMODULE = True\n")?;
+    git(&context, submodule.path(), &["add", "."])?;
+    git(
+        &context,
+        submodule.path(),
+        &["commit", "-m", "Submodule LFS file"],
+    )?;
+
+    let repository = context.temp_dir.child("repository");
+    init_lfs_package(&context, &repository)?;
+    git(&context, repository.path(), &["lfs", "track", "module.py"])?;
+    repository.child("module.py").write_str("ROOT = True\n")?;
+    git(
+        &context,
+        repository.path(),
+        &[
+            "-c",
+            "protocol.file.allow=always",
+            "submodule",
+            "add",
+            "../submodule",
+            "submodule",
+        ],
+    )?;
+    git(&context, repository.path(), &["add", "."])?;
+    git(
+        &context,
+        repository.path(),
+        &["commit", "-m", "Root LFS file and submodule"],
+    )?;
+    let revision = git(&context, repository.path(), &["rev-parse", "HEAD"])?;
+    let short_revision = git(
+        &context,
+        repository.path(),
+        &["rev-parse", "--short", "HEAD"],
+    )?;
+    let url = SafeUrl::from_directory_path(repository.path())
+        .map_err(|()| anyhow!("invalid repository path"))?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dependency"]
+
+        [tool.uv.sources]
+        dependency = {{ git = "{url}", rev = "{revision}", lfs = true }}
+    "#})?;
+    let repository_url = RepositoryUrl::parse(url.as_str())?;
+    let checkout = context
+        .cache_dir
+        .child("git-v1/checkouts")
+        .child(cache_digest(&repository_url.with_lfs(Some(true))))
+        .child(&short_revision);
+
+    // Without global LFS filters, Git initializes the submodule without fetching its LFS objects.
+    // The root objects are available, so a root-only check would miss the incomplete submodule.
+    uv_snapshot!(context.filters(), context.lock()
+        .args(["--no-preview", "--offline"])
+        .env(EnvVars::GIT_ALLOW_PROTOCOL, "file")
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .env("GIT_CONFIG_GLOBAL", if cfg!(windows) { "NUL" } else { "/dev/null" }), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to download and build `dependency @ git+file://[TEMP_DIR]/repository/@[COMMIT]#lfs=true`
+      cause: The source distribution `git+file://[TEMP_DIR]/repository/@[COMMIT]#lfs=true` is missing Git LFS artifacts.
+      cause: Is Git LFS configured? Run `git lfs install` to initialize Git LFS.
+    ");
+    assert!(!checkout.path().with_extension("ok").exists());
+    assert_eq!(
+        fs_err::read_to_string(checkout.child("module.py"))?,
+        "ROOT = True\n"
+    );
+    assert!(
+        fs_err::read_to_string(checkout.child("submodule/module.py"))?
+            .starts_with("version https://git-lfs.github.com/spec/v1\n")
+    );
+    Ok(())
+}
+
+/// Materialize cached submodule LFS pointers without configured smudge filters.
+#[test]
+#[cfg(feature = "test-git-lfs")]
+fn git_lfs_submodule_ready_materialization() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_env("GIT_CONFIG_NOSYSTEM", "1")
+        .with_git_lfs_config()
+        .with_filter((r"\b[0-9a-f]{40}\b", "[COMMIT]"));
+    let repository = context.temp_dir.child("repository");
+    init_lfs_package(&context, &repository)?;
+    git(&context, repository.path(), &["lfs", "track", "*.py"])?;
+    repository
+        .child("skipped.py")
+        .write_str("SKIPPED = True\n")?;
+    let url = SafeUrl::from_directory_path(&repository)
+        .map_err(|()| anyhow!("invalid repository path"))?;
+    repository
+        .child(".lfsconfig")
+        .write_str(&format!("[lfs]\nurl = {url}\nfetchinclude = module.py\n"))?;
+    repository
+        .child("module.py")
+        .write_str("SUBMODULE = True\n")?;
+    git(&context, &repository, &["add", "."])?;
+    git(
+        &context,
+        &repository,
+        &["commit", "-m", "Submodule LFS file"],
+    )?;
+
+    git(
+        &context,
+        &repository,
+        &[
+            "-c",
+            "protocol.file.allow=always",
+            "submodule",
+            "add",
+            url.as_str(),
+            "submodule",
+        ],
+    )?;
+    repository.child("module.py").write_str("ROOT = True\n")?;
+    git(
+        &context,
+        &repository,
+        &["commit", "-am", "Root LFS file and submodule"],
+    )?;
+    let revision = git(&context, &repository, &["rev-parse", "HEAD"])?;
+    let short_revision = git(&context, &repository, &["rev-parse", "--short", "HEAD"])?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dependency"]
+
+        [tool.uv.sources]
+        dependency = {{ git = "{url}", rev = "{revision}", lfs = true }}
+    "#})?;
+    let repository_url = RepositoryUrl::parse(url.as_str())?;
+    let database_objects = context
+        .cache_dir
+        .child("git-v1/db")
+        .child(cache_digest(&repository_url))
+        .child(".git/lfs/objects");
+    let checkout = context
+        .cache_dir
+        .child("git-v1/checkouts")
+        .child(cache_digest(&repository_url.with_lfs(Some(true))))
+        .child(&short_revision);
+
+    uv_snapshot!(context.filters(), context.lock()
+        .args(["--no-preview", "--offline"])
+        .env(EnvVars::GIT_ALLOW_PROTOCOL, "file"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    assert_eq!(
+        fs_err::read_to_string(checkout.child("submodule/module.py"))?,
+        "SUBMODULE = True\n"
+    );
+    // The path excluded by the submodule's LFS filter remains a pointer.
+    assert!(
+        fs_err::read_to_string(checkout.child("submodule/skipped.py"))?
+            .starts_with("version https://git-lfs.github.com/spec/v1\n")
+    );
+    assert!(checkout.path().with_extension("ok").exists());
+
+    // A marker written after checking only the root cannot vouch for the submodule.
+    fs_err::write(checkout.path().with_extension("ok"), b"lfs-v1")?;
+    let pointer = git(
+        &context,
+        checkout.child("submodule").path(),
+        &["show", "HEAD:module.py"],
+    )?;
+    checkout
+        .child("submodule/module.py")
+        .write_str(&format!("{pointer}\n"))?;
+    fs_err::remove_dir_all(database_objects)?;
+    fs_err::rename(
+        repository.path(),
+        context.temp_dir.child("unavailable-source"),
+    )?;
+    clear_git_lock_and_metadata(&context)?;
+    uv_snapshot!(context.filters(), context.lock()
+        .args(["--no-preview", "--offline"])
+        .env(EnvVars::GIT_ALLOW_PROTOCOL, "file")
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .env("GIT_CONFIG_GLOBAL", if cfg!(windows) { "NUL" } else { "/dev/null" }), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    assert_eq!(
+        fs_err::read_to_string(checkout.child("submodule/module.py"))?,
+        "SUBMODULE = True\n"
+    );
+    assert_eq!(
+        fs_err::read(checkout.path().with_extension("ok"))?,
+        b"lfs-v2"
+    );
+
+    // Git commands run by build backends must see a clean checkout, including its submodules.
+    context
+        .external_command("git")
+        .args(["status", "--porcelain", "--ignore-submodules=none"])
+        .current_dir(checkout.path())
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .env(
+            "GIT_CONFIG_GLOBAL",
+            if cfg!(windows) { "NUL" } else { "/dev/null" },
+        )
+        .assert()
+        .success()
+        .stdout("");
+
     Ok(())
 }
 

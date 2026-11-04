@@ -6,7 +6,7 @@ use std::str::{self};
 use std::sync::LazyLock;
 
 use anyhow::{Context, Result, anyhow};
-use cargo_util::{ProcessBuilder, ProcessError};
+use cargo_util::{ProcessBuilder, ProcessError, paths};
 use owo_colors::OwoColorize;
 use tracing::{debug, instrument, warn};
 
@@ -19,10 +19,10 @@ use uv_warnings::warn_user_once;
 /// Extension for the marker beside a completed checkout.
 /// See [`GitCheckout::reset`] for why we need this.
 const CHECKOUT_READY_EXTENSION: &str = "ok";
-/// Written after the root LFS objects have been verified and the files materialized.
-const LFS_READY: &[u8] = b"lfs-v1";
+/// Written after LFS objects have been verified and files materialized in the root and initialized submodules.
+const LFS_READY: &[u8] = b"lfs-v2";
 /// Written after materialization when Git LFS lacks `fsck --objects`.
-const LFS_UNCHECKED: &[u8] = b"lfs-v1-unchecked";
+const LFS_UNCHECKED: &[u8] = b"lfs-v2-unchecked";
 /// Git pathspec for files with the `filter=lfs` attribute.
 const LFS_PATHSPEC: &str = ":(attr:filter=lfs)";
 
@@ -112,11 +112,12 @@ pub(crate) struct GitRepository {
     path: PathBuf,
 }
 
-/// The outcome of validating the LFS objects required by a revision.
+/// The most severe validation outcome determines the marker for the entire checkout.
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
 enum LfsValidation {
     Passed,
-    Failed,
     Unsupported,
+    Failed,
 }
 
 impl GitRepository {
@@ -257,6 +258,40 @@ impl GitRepository {
         let path = absolute(&self.path)?;
         SafeUrl::from_file_path(&path)
             .map_err(|()| anyhow!("Invalid Git repository path: {}", path.user_display()))
+    }
+
+    fn materialize_submodule_lfs(&self) -> Result<LfsValidation> {
+        let validation = self.check_lfs_objects("HEAD");
+        if validation != LfsValidation::Failed {
+            self.materialize_lfs()?;
+        }
+        Ok(validation)
+    }
+
+    /// Open the initialized direct submodules of this working tree.
+    fn submodules(&self) -> Result<Vec<Self>> {
+        if !self.path.join(".gitmodules").exists() {
+            return Ok(Vec::new());
+        }
+        let submodules = GIT
+            .as_ref()
+            .cloned()?
+            .args(&[
+                "submodule",
+                "foreach",
+                "--quiet",
+                r#"printf '%s\0' "$displaypath""#,
+            ])
+            .env("GIT_NO_LAZY_FETCH", "1")
+            .env(EnvVars::GIT_ALLOW_PROTOCOL, "file")
+            .cwd(&self.path)
+            .exec_with_output()?;
+        submodules
+            .stdout
+            .split(|&byte| byte == 0)
+            .filter(|path| !path.is_empty())
+            .map(|path| Self::open(&self.path.join(paths::bytes2path(path)?)))
+            .collect()
     }
 
     /// Verifies LFS artifacts when supported, warning when the installed LFS cannot check them.
@@ -614,12 +649,25 @@ impl GitCheckout {
                 Ok(self.with_lfs_ready(Some(true)))
             }
             validation => {
-                // An older marker can belong to a checkout that still contains LFS pointers.
+                // Older markers may cover only the root, and the worktree may still contain LFS pointers.
                 Self::invalidate_ready(&self.repo.path)?;
                 self.repo.materialize_lfs()?;
-                self.finish(Some(validation))
+                self.finish_lfs(validation)
             }
         }
+    }
+
+    /// Materialize and check submodules before marking the checkout ready.
+    fn finish_lfs(self, mut validation: LfsValidation) -> Result<Self> {
+        let mut pending = self.repo.submodules()?;
+        while let Some(repo) = pending.pop() {
+            validation = validation.max(repo.materialize_submodule_lfs()?);
+            if validation == LfsValidation::Failed {
+                break;
+            }
+            pending.extend(repo.submodules()?);
+        }
+        self.finish(Some(validation))
     }
 
     /// Record a completed checkout and whether Git LFS verified it.
@@ -741,7 +789,7 @@ impl GitCheckout {
             Some(false) => Ok(self.with_lfs_ready(Some(false))),
             Some(true) => {
                 let validation = self.repo.check_lfs_objects(self.revision.as_str());
-                self.finish(Some(validation))
+                self.finish_lfs(validation)
             }
         }
     }
