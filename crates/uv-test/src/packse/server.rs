@@ -233,7 +233,9 @@ impl ServerIndex {
         let artifact = meta.wheel.as_ref().unwrap_or(&default_artifact);
         for (label, variant) in &variants.wheels {
             let metadata = variant_metadata(variants, [(label, variant)]);
-            let wheel = wheel.variant(label, &metadata);
+            let wheel = wheel
+                .requires(variant.requires.as_deref().unwrap_or(&meta.requires))
+                .variant(label, &metadata);
             let tags = if variant.wheel_tags.is_empty() {
                 &meta.wheel_tags
             } else {
