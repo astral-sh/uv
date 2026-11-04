@@ -1,7 +1,9 @@
+use std::cmp::Ordering;
 use std::fmt::{Display, Formatter};
+use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 
-use uv_cache_key::{CanonicalUrl, RepositoryUrl};
+use uv_cache_key::{CanonicalUrl, GitUpstreamUrl};
 use uv_fs::normalize_path;
 use uv_git_types::GitUrl;
 
@@ -28,7 +30,7 @@ impl PackageId {
 
     /// Create a new [`PackageId`] from a URL.
     pub(crate) fn from_url(url: SafeUrl) -> Self {
-        Self::Url(CanonicalUrl::new(url))
+        Self::Url(canonical_source_url(url))
     }
 }
 
@@ -38,6 +40,15 @@ impl Display for PackageId {
             Self::Name(name) => write!(f, "{name}"),
             Self::Url(url) => write!(f, "{url}"),
         }
+    }
+}
+
+/// Canonicalize a serialized source URL, applying Git rules only to explicit Git URLs.
+pub(crate) fn canonical_source_url(url: SafeUrl) -> CanonicalUrl {
+    if url.scheme().starts_with("git+") {
+        CanonicalUrl::for_git_source(url)
+    } else {
+        CanonicalUrl::new(url)
     }
 }
 
@@ -205,16 +216,63 @@ impl Display for VersionId {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum DistributionId {
     Url(CanonicalUrl),
+    GitDirectory(GitDistributionUrl, Option<PathBuf>),
+    GitPath(GitDistributionUrl, PathBuf),
     PathBuf(PathBuf),
     Digest(HashDigest),
     AbsoluteUrl(String),
     RelativeUrl(String, String),
 }
 
+/// Keys a Git distribution by its parsed reference and raw transport query and fragment.
+/// Git upstream identity omits the query and fragment.
+#[derive(Debug, Clone)]
+pub struct GitDistributionUrl(GitUrl);
+
+impl GitDistributionUrl {
+    fn key(&self) -> (&GitUrl, Option<&str>, Option<&str>) {
+        let url = self.0.url();
+        (&self.0, url.query(), url.fragment())
+    }
+}
+
+impl From<&GitUrl> for GitDistributionUrl {
+    fn from(git: &GitUrl) -> Self {
+        Self(git.clone())
+    }
+}
+
+impl PartialEq for GitDistributionUrl {
+    fn eq(&self, other: &Self) -> bool {
+        self.key() == other.key()
+    }
+}
+
+impl Eq for GitDistributionUrl {}
+
+impl PartialOrd for GitDistributionUrl {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for GitDistributionUrl {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.key().cmp(&other.key())
+    }
+}
+
+impl Hash for GitDistributionUrl {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.key().hash(state);
+    }
+}
+
 /// A unique identifier for a resource, like a URL or a Git repository.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum ResourceId {
-    Url(RepositoryUrl),
+    Url(CanonicalUrl),
+    Git(GitUpstreamUrl),
     PathBuf(PathBuf),
     Digest(HashDigest),
     AbsoluteUrl(String),
@@ -245,12 +303,82 @@ impl From<&Self> for ResourceId {
 #[cfg(test)]
 mod tests {
     use std::assert_matches;
+    use std::error::Error;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use fs_err as fs;
-
-    use super::VersionId;
+    use uv_git_types::{GitLfs, GitReference, GitUrl};
+    use uv_normalize::PackageName;
+    use uv_pep508::Pep508Url;
+    use uv_pypi_types::VerbatimParsedUrl;
     use uv_redacted::SafeUrl;
+
+    use super::{GitDistributionUrl, VersionId};
+    use crate::{Dist, Identifier};
+
+    #[test]
+    fn http_resource_id_preserves_paths_and_queries() -> Result<(), Box<dyn Error>> {
+        let original = SafeUrl::parse("https://example.com/simple/?index=public")?;
+        let different_path = SafeUrl::parse("https://example.com/simple.git/?index=public")?;
+        let different_query = SafeUrl::parse("https://example.com/simple/?index=private")?;
+        let with_fragment = SafeUrl::parse("https://example.com/simple/?index=public#fragment")?;
+
+        assert_ne!(original.resource_id(), different_path.resource_id());
+        assert_ne!(original.resource_id(), different_query.resource_id());
+        assert_eq!(original.resource_id(), with_fragment.resource_id());
+        Ok(())
+    }
+
+    #[test]
+    fn git_distribution_id_preserves_reference_and_subdirectory() -> Result<(), Box<dyn Error>> {
+        let name = "pkg".parse::<PackageName>()?;
+        let dist = |url| -> Result<Dist, Box<dyn Error>> {
+            Ok(Dist::from_url(
+                name.clone(),
+                VerbatimParsedUrl::parse_url(url, None)?,
+            )?)
+        };
+        let original = dist("git+https://github.com/example/pkg@main#subdirectory=first")?;
+        let alias = dist("git+https://github.com/Example/Pkg.git@main#subdirectory=first")?;
+        let different_ref = dist("git+https://github.com/example/pkg@Main#subdirectory=first")?;
+        let different_subdir = dist("git+https://github.com/example/pkg@main#subdirectory=second")?;
+
+        assert_eq!(original.distribution_id(), alias.distribution_id());
+        assert_ne!(original.distribution_id(), different_ref.distribution_id());
+        assert_ne!(
+            original.distribution_id(),
+            different_subdir.distribution_id()
+        );
+        assert_eq!(original.resource_id(), alias.resource_id());
+        assert_eq!(original.resource_id(), different_ref.resource_id());
+        assert_eq!(original.resource_id(), different_subdir.resource_id());
+        Ok(())
+    }
+
+    #[test]
+    fn git_distribution_url_preserves_transport_query_and_fragment() -> Result<(), Box<dyn Error>> {
+        let git = |url| -> Result<GitUrl, Box<dyn Error>> {
+            Ok(GitUrl::from_fields(
+                SafeUrl::parse(url)?,
+                GitReference::Branch("main".to_owned()),
+                None,
+                GitLfs::Disabled,
+            )?)
+        };
+        let original = git("https://example.com/pkg.git?tenant#source")?;
+        let different_query = git("https://example.com/pkg.git?tenant=#source")?;
+        let different_fragment = git("https://example.com/pkg.git?tenant#other")?;
+
+        assert_ne!(
+            GitDistributionUrl::from(&original),
+            GitDistributionUrl::from(&different_query),
+        );
+        assert_ne!(
+            GitDistributionUrl::from(&original),
+            GitDistributionUrl::from(&different_fragment),
+        );
+        Ok(())
+    }
 
     #[test]
     fn version_id_ignores_hash_fragments() {
