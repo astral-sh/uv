@@ -225,7 +225,7 @@ fn select_tpu_variant() -> Result<()> {
     Ok(())
 }
 
-/// An explicit AArch64 target installs the baseline wheel even when an Armv8.6-A wheel exists.
+/// An explicit AArch64 target installs the default wheel even when an Armv8.4-A wheel exists.
 #[test]
 fn aarch64_target_uses_platform_defaults() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -249,7 +249,7 @@ fn aarch64_target_uses_platform_defaults() -> Result<()> {
 
         [packages.ok.versions."1.0.0".variants.wheels]
         arm8.properties = ["aarch64 :: version :: 8a"]
-        arm86.properties = ["aarch64 :: version :: 8.6a"]
+        arm84.properties = ["aarch64 :: version :: 8.4a"]
     "#})?;
 
     uv_snapshot!(context.filters(), context.pip_install()

@@ -16,28 +16,14 @@ static PACKAGE_NAME: LazyLock<PackageName> = LazyLock::new(|| {
         .parse()
         .expect("valid provider name")
 });
-/// The Armv8-A baseline for cross-installs and interpreters without usable CPU information.
+/// The default version for cross-installs and interpreters without usable CPU information.
 const PLATFORM_DEFAULT_VERSION: Aarch64Version = Aarch64Version::V8;
 /// Cached properties indexed by the maximum supported [`Aarch64Version`].
-static VERSION_PROPERTIES: LazyLock<[SupportedVariantFeature; 8]> = LazyLock::new(|| {
-    let versions = [
-        (Aarch64Version::V8, "8a"),
-        (Aarch64Version::V8_1, "8.1a"),
-        (Aarch64Version::V8_2, "8.2a"),
-        (Aarch64Version::V8_3, "8.3a"),
-        (Aarch64Version::V8_4, "8.4a"),
-        (Aarch64Version::V8_5, "8.5a"),
-        (Aarch64Version::V8_6, "8.6a"),
-        (Aarch64Version::V9_0, "9.0a"),
-    ];
-    versions.map(|(version, _)| SupportedVariantFeature {
+static VERSION_PROPERTIES: LazyLock<[SupportedVariantFeature; 5]> = LazyLock::new(|| {
+    let values = ["8a", "8.1a", "8.2a", "8.3a", "8.4a"].map(VariantValue::from_static);
+    std::array::from_fn(|version| SupportedVariantFeature {
         name: VariantFeature::from_static("version"),
-        values: versions
-            .into_iter()
-            .rev()
-            .filter(|(candidate, _)| version.supports(*candidate))
-            .map(|(_, value)| VariantValue::from_static(value))
-            .collect(),
+        values: values[..=version].iter().rev().cloned().collect(),
     })
 });
 
@@ -46,7 +32,7 @@ static VERSION_PROPERTIES: LazyLock<[SupportedVariantFeature; 8]> = LazyLock::ne
 /// # Variant properties
 ///
 /// - `aarch64::version` lists the Arm architecture versions supported by every core, newest
-///   first. For example, `9.0a` also supports `8.5a` and earlier versions, but not `8.6a`.
+///   first. For example, `8.4a` also supports `8.3a` through `8a`.
 ///
 /// When CPU detection is unavailable, including for an explicit target (`--python-platform`),
 /// AArch64 targets use `8a` as the platform default. Other architectures emit no properties.
@@ -54,8 +40,7 @@ static VERSION_PROPERTIES: LazyLock<[SupportedVariantFeature; 8]> = LazyLock::ne
 /// # Known limitations
 ///
 /// - On Linux, unrecognized core models use `8a`. Windows ARM64 also uses `8a`.
-/// - Linux does not expose [SPECRES] to user space. Even an `8.5a` or newer Linux wheel
-///   cannot rely on prediction-restriction instructions such as `CFP RCTX`.
+/// - On Linux, uv advertises at most `8.4a` because Linux does not expose [SPECRES] to user space.
 /// - On macOS, uv reads the Apple chip name like [archspec] and advertises up to `8.4a` for
 ///   M1 through M5. The [generic Armv8.5-A target] enables SSBS and prediction-restriction
 ///   instructions such as `CFP RCTX`. For example, [macOS on M4 Max] reports neither feature.
@@ -63,9 +48,6 @@ static VERSION_PROPERTIES: LazyLock<[SupportedVariantFeature; 8]> = LazyLock::ne
 ///   Even a chip with BF16 and I8MM needs the `8.5a` instructions to run generic `8.6a` wheels.
 /// - Unrecognized Apple chips use `8a`. The brand `Apple processor` was reported by both early
 ///   M1 systems and the [A12Z Developer Transition Kit], so it cannot identify an M1.
-/// - The [WheelNext provider] caps newer Armv9 targets at `9.0a` and lists its ancestors.
-///   For example, the Armv9.2-A Neoverse V3AE supports `8.6a`, but the provider's list
-///   goes directly from `9.0a` to `8.5a`.
 /// - The cached CPU information belongs to the interpreter's machine. Sharing its cache or
 ///   deploying its environment to a machine with a different CPU can select an incompatible wheel.
 ///
@@ -77,7 +59,6 @@ static VERSION_PROPERTIES: LazyLock<[SupportedVariantFeature; 8]> = LazyLock::ne
 ///   https://github.com/apple-oss-distributions/xnu/blob/f6217f8/osfmk/arm/commpage/commpage.c#L463-L475
 /// [A12Z Developer Transition Kit]: https://stackoverflow.com/q/63214720
 /// [SPECRES]: https://github.com/ARM-software/acle/pull/382
-/// [WheelNext provider]: https://github.com/wheelnext/aarch64-variant-provider/blob/v0.2.0/aarch64_variant_provider/plugin.py#L106-L115
 pub(super) struct Aarch64VariantProvider;
 
 impl VendoredVariantProvider for Aarch64VariantProvider {
@@ -110,16 +91,13 @@ impl VendoredVariantProvider for Aarch64VariantProvider {
 }
 
 /// An Arm A-profile architecture version recognized by the wheel variant provider.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum Aarch64Version {
     V8,
     V8_1,
     V8_2,
     V8_3,
     V8_4,
-    V8_5,
-    V8_6,
-    V9_0,
 }
 
 impl Aarch64Version {
@@ -134,7 +112,7 @@ impl Aarch64Version {
                 {
                     Self::V8_4
                 } else {
-                    debug!("Unrecognized Apple chip `{brand}`, using the Armv8-A baseline");
+                    debug!("Unrecognized Apple chip `{brand}`, using the Armv8-A default");
                     PLATFORM_DEFAULT_VERSION
                 }
             }
@@ -144,37 +122,18 @@ impl Aarch64Version {
                 cores
                     .iter()
                     .map(|(implementer, part)| {
-                        linux_core_ceiling(implementer, part)
-                            .unwrap_or(PLATFORM_DEFAULT_VERSION)
-                            .with_linux_hwcaps(hwcaps[0], hwcaps[1])
+                        linux_core_ceiling(implementer, part).unwrap_or(PLATFORM_DEFAULT_VERSION)
                     })
-                    .reduce(Self::common)
+                    .min()
                     .unwrap_or(PLATFORM_DEFAULT_VERSION)
+                    .with_linux_hwcaps(hwcaps[0])
             }
             CpuInfo::Flags { .. } | CpuInfo::Cpuid { .. } => PLATFORM_DEFAULT_VERSION,
         }
     }
 
-    /// Armv9.0-A descends from Armv8.5-A, so it does not imply Armv8.6-A.
-    fn supports(self, version: Self) -> bool {
-        version as usize <= self as usize && !(self == Self::V9_0 && version == Self::V8_6)
-    }
-
-    /// Return the newest architecture version supported by both cores.
-    ///
-    /// Armv8.6-A and Armv9.0-A share Armv8.5-A as their newest common version.
-    fn common(self, other: Self) -> Self {
-        if self.supports(other) {
-            other
-        } else if other.supports(self) {
-            self
-        } else {
-            Self::V8_5
-        }
-    }
-
     /// Limit the model's ISA to the user-space extensions enabled by the kernel.
-    fn with_linux_hwcaps(self, hwcap: u64, hwcap2: u64) -> Self {
+    fn with_linux_hwcaps(self, hwcap: u64) -> Self {
         // Linux arm64 ELF HWCAP bit numbers and their architectural meanings:
         // https://docs.kernel.org/arch/arm64/elf_hwcaps.html
         // https://github.com/torvalds/linux/blob/v6.16/arch/arm64/include/uapi/asm/hwcap.h
@@ -194,26 +153,15 @@ impl Aarch64Version {
                 Self::V8_4,
                 has_bits(hwcap, &[9, 10, 20, 23, 24, 25, 26, 27]),
             ),
-            // SSBS, SB, DC CVADP, FlagM2, FRINT. BTI instructions are NOPs without enforcement.
-            (
-                Self::V8_5,
-                has_bits(hwcap, &[28, 29]) && has_bits(hwcap2, &[0, 7, 8]),
-            ),
+            // Stop at Armv8.4-A. Generic Armv8.5-A and newer wheels can use SPECRES
+            // instructions such as CFP RCTX, which Linux does not expose to user space.
         ] {
-            if !self.supports(next) || !available {
+            if next > self || !available {
                 return level;
             }
             level = next;
         }
-        if self == Self::V9_0 && has_bits(hwcap, &[9, 10, 22]) && has_bits(hwcap2, &[1]) {
-            // FP16, AdvSIMD HP, SVE, SVE2. A VM can mask SVE2 while still supporting Armv8.5-A.
-            Self::V9_0
-        } else if self == Self::V8_6 && has_bits(hwcap2, &[13, 14, 19]) {
-            // I8MM, BF16, ECV.
-            Self::V8_6
-        } else {
-            level
-        }
+        level
     }
 }
 
@@ -227,10 +175,7 @@ fn has_bits(word: u64, bits: &[u8]) -> bool {
     true
 }
 
-/// Return the generic ISA ceiling for a Linux application processor with a known MIDR.
-///
-/// Unrecognized core models use the Armv8-A baseline. The ceiling is capped at the highest wheel
-/// version (9.0a). M2 uses the upstream provider's 8.5a ceiling on Linux.
+/// Return the highest Linux wheel version for a known core before checking the process HWCAPs.
 ///
 /// Linux and XNU publish the processor IDs. LLVM identifies their compiler targets.
 /// <https://github.com/torvalds/linux/blob/v6.16/arch/arm64/include/asm/cputype.h>
@@ -242,13 +187,13 @@ fn linux_core_ceiling(implementer: &str, part: &str) -> Option<Aarch64Version> {
     Some(match (implementer, part) {
         ("0x41", 0xd0c) => Aarch64Version::V8_2, // Neoverse N1
         ("0x41", 0xd40) => Aarch64Version::V8_4, // Neoverse V1
-        ("0x41", 0xd49 | 0xd4f | 0xd83) => Aarch64Version::V9_0, // Neoverse N2, V2, V3AE
-        ("0x6d", 0xd49) => Aarch64Version::V9_0, // Azure Cobalt 100 (Neoverse N2)
+        ("0x41", 0xd49 | 0xd4f | 0xd83) => Aarch64Version::V8_4, // Neoverse N2, V2, V3AE
+        ("0x6d", 0xd49) => Aarch64Version::V8_4, // Azure Cobalt 100 (Neoverse N2)
         ("0x42", 0x516) | ("0x43", 0x0af) => Aarch64Version::V8_1, // ThunderX2
         ("0x46", 0x001) => Aarch64Version::V8_2, // A64FX
-        ("0xc0", 0xac3 | 0xac4) => Aarch64Version::V8_6, // AmpereOne, AmpereOneA
+        ("0xc0", 0xac3 | 0xac4) => Aarch64Version::V8_4, // AmpereOne, AmpereOneA
         ("0x61", 0x020..=0x025 | 0x028..=0x029) => Aarch64Version::V8_4, // Firestorm / Icestorm
-        ("0x61", 0x030..=0x035 | 0x038..=0x039) => Aarch64Version::V8_5, // Avalanche / Blizzard
+        ("0x61", 0x030..=0x035 | 0x038..=0x039) => Aarch64Version::V8_4, // Avalanche / Blizzard
         // M3, M4, M5, including their efficiency and performance cores.
         (
             "0x61",
@@ -258,7 +203,7 @@ fn linux_core_ceiling(implementer: &str, part: &str) -> Option<Aarch64Version> {
             | 0x058..=0x059
             | 0x062..=0x065
             | 0x068..=0x069,
-        ) => Aarch64Version::V8_6,
+        ) => Aarch64Version::V8_4,
         _ => return None,
     })
 }
@@ -269,31 +214,28 @@ mod tests {
 
     use super::Aarch64Version;
 
-    /// Disabling BTI enforcement still lets a Neoverse N2 run Armv9.0-A wheels. Masking SVE2
-    /// or sharing the workload with an Armv8.2-A Neoverse N1 limits the usable version.
+    /// Linux caps AmpereOne at Armv8.4-A even with all HWCAP bits set. A missing feature or a
+    /// less capable core can lower the version further.
     #[test]
     fn linux_version_requires_usable_features_on_every_core() {
-        let n2 = ("0x41".into(), "0xd49".into());
         let n1 = ("0x41".into(), "0xd0c".into());
-        let cobalt_without_bti = CpuInfo::LinuxAarch64 {
-            cores: vec![("0x6d".into(), "0xd49".into())],
-            hwcaps: [u64::MAX, u64::MAX ^ (1 << 17), 0, 0],
+        let cobalt = ("0x6d".into(), "0xd49".into());
+        let ampere_one = CpuInfo::LinuxAarch64 {
+            cores: vec![("0xc0".into(), "0xac3".into())],
+            hwcaps: [u64::MAX; 4],
         };
         let masked = CpuInfo::LinuxAarch64 {
-            cores: vec![n2.clone()],
-            hwcaps: [u64::MAX, u64::MAX ^ (1 << 1), 0, 0],
+            cores: vec![cobalt.clone()],
+            // HWCAP_ASIMDDP (dot product) is required for Armv8.4-A.
+            hwcaps: [u64::MAX ^ (1 << 20), u64::MAX, 0, 0],
         };
         let mixed = CpuInfo::LinuxAarch64 {
-            cores: vec![n2, n1],
+            cores: vec![cobalt, n1],
             hwcaps: [u64::MAX, u64::MAX, 0, 0],
         };
 
-        assert_eq!(
-            Aarch64Version::detect(&cobalt_without_bti),
-            Aarch64Version::V9_0
-        );
-        assert!(!Aarch64Version::V9_0.supports(Aarch64Version::V8_6));
-        assert_eq!(Aarch64Version::detect(&masked), Aarch64Version::V8_5);
+        assert_eq!(Aarch64Version::detect(&ampere_one), Aarch64Version::V8_4);
+        assert_eq!(Aarch64Version::detect(&masked), Aarch64Version::V8_3);
         assert_eq!(Aarch64Version::detect(&mixed), Aarch64Version::V8_2);
     }
 }
