@@ -10,7 +10,7 @@ use rustc_hash::{FxBuildHasher, FxHashMap};
 use tracing::{debug, warn};
 
 use uv_cache::Cache;
-use uv_cache_key::RepositoryUrl;
+use uv_cache_key::GitUpstreamUrl;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_command_support::{ExitStatus, Printer, UvError};
 use uv_configuration::{
@@ -967,7 +967,7 @@ fn edits(
                 let credentials = uv_auth::Credentials::from_url(&git)?;
                 if let Some(credentials) = credentials {
                     debug!("Caching credentials for: {git}");
-                    store_credentials(RepositoryUrl::new(git.clone()), credentials);
+                    store_credentials(GitUpstreamUrl::new(git.clone()), credentials);
 
                     // Redact the credentials.
                     git.remove_credentials();
