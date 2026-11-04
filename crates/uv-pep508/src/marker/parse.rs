@@ -641,7 +641,6 @@ fn parse_marker_or<T: Pep508Url>(
 }
 
 /// Parses both `marker_and` and `marker_or`
-#[expect(clippy::type_complexity)]
 fn parse_marker_op<T: Pep508Url, R: Reporter>(
     cursor: &mut Cursor,
     op: &str,
