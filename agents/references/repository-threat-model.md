@@ -42,10 +42,11 @@ state the conditions for the local exception.
 
 ### Dependency audits and CI caches
 
-The CI and releases boundary has a narrow exception for uv's Cargo Vet scheduling and Depot
-build-cache arrangement. Builds and tests may run before dependency audits complete, with the
-associated shared-cache exposure accepted as a CI trade-off. This exception does not waive required
-audit checks or authorize additional repository or publishing permissions.
+For automated same-repository Cargo dependency updates, including Renovate PRs,
+dependency code may run in CI builds and tests before Cargo Vet completes, even
+if the audit later fails. Findings limited to that execution, writes to the shared
+Depot cache (including through its API), or reuse of those entries by builds and
+tests on another branch are out of scope.
 
 ## Severity calibration
 
