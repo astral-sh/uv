@@ -18,36 +18,18 @@ env:
   UV_LOCKED: 1
 
 jobs:
-  detect-vet-workspaces:
+  plan:
     # CI on main is redundant in the security repository.
     if: ${{ github.repository != 'astral-sh/uv-security' || github.ref != 'refs/heads/main' }}
-    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-2' || 'ubuntu-latest' }}
-    outputs:
-      workspaces: ${{ steps.detect.outputs.workspaces }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: ${{ github.event_name == 'pull_request' && 2 || 0 }}
-          persist-credentials: false
-      - uses: $/.github/actions/setup-uv-toolchain
-        with:
-          enable-cache: auto
-      - name: "Detect Cargo Vet workspaces"
-        id: detect
-        env:
-          HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          PUSH_BEFORE_SHA: ${{ github.event.before }}
-          UV_PYTHON_DOWNLOADS_JSON_URL: ${{ github.workspace }}/crates/uv-python-managed/download-metadata.json
-        run: uv run --script scripts/cargo-vet-workspaces.py >> "$GITHUB_OUTPUT"
+    uses: $/.github/workflows/plan.yml
 
-  check-vet:
-    name: "Cargo Vet"
-    needs: detect-vet-workspaces
+  check-cargo-vet:
+    name: "check | cargo vet"
+    needs: plan
     uses: astral-sh/github-actions/.github/workflows/cargo-vet.yml@c064e17eb42bf9ac71f66d7f5eda694f326d16cd
     with:
       runner: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
-      workspaces: ${{ needs.detect-vet-workspaces.outputs.workspaces }}
+      workspaces: ${{ needs.plan.outputs.cargo-vet-workspaces }}
       # renovate: datasource=github-release-attachments depName=astral-sh/uv
       uv-version: "0.13.6"
     secrets: inherit
@@ -55,15 +37,13 @@ jobs:
       contents: read
       id-token: write
 
-  plan:
-    needs: check-vet
-    uses: $/.github/workflows/plan.yml
-
   check-fmt:
+    name: "check | fmt"
     needs: plan
     uses: $/.github/workflows/check-fmt.yml
 
-  review:
+  review-security:
+    name: "review | security"
     needs: plan
     if: ${{ github.event_name == 'pull_request' && github.repository == 'astral-sh/uv' && github.event.pull_request.head.repo.full_name == github.repository && needs.plan.outputs.review-security == 'true' }}
     # N.B. despite setting this, Depot jobs allow cache writes directly through the API
@@ -90,6 +70,7 @@ jobs:
       pull-requests: read
 
   review-code-quality:
+    name: "review | code quality"
     needs: plan
     if: >-
       ${{
@@ -107,6 +88,7 @@ jobs:
       pull-requests: read
 
   check-lint:
+    name: "check | lint"
     needs: plan
     uses: $/.github/workflows/check-lint.yml
     with:
@@ -114,12 +96,14 @@ jobs:
       save-rust-cache: ${{ needs.plan.outputs.save-rust-cache }}
 
   check-docs:
+    name: "check | docs"
     needs: plan
     if: ${{ needs.plan.outputs.run-checks == 'true' }}
     uses: $/.github/workflows/check-docs.yml
     secrets: inherit
 
   check-zizmor:
+    name: "check | zizmor"
     needs: plan
     if: ${{ needs.plan.outputs.run-checks == 'true' }}
     uses: $/.github/workflows/check-zizmor.yml
@@ -128,16 +112,19 @@ jobs:
       security-events: write
 
   check-publish:
+    name: "check | publish"
     needs: plan
     if: ${{ needs.plan.outputs.test-code == 'true' }}
     uses: $/.github/workflows/check-publish.yml
 
   check-release:
+    name: "check | release"
     needs: plan
     if: ${{ needs.plan.outputs.run-checks == 'true' || needs.plan.outputs.require-check-release == 'true' }}
     uses: $/.github/workflows/check-release.yml
 
   check-crates-policies:
+    name: "check | crates policies"
     needs: plan
     if: ${{ needs.plan.outputs.check-crates-policies == 'true' }}
     uses: $/.github/workflows/check-crates-policies.yml
@@ -160,34 +147,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: $/.github/actions/setup-uv-toolchain
+      - uses: astral-sh/github-actions/cargo-cooldowns@4d0d0b9f3efeb82c92183f4423e395b81c3fcf5e
         with:
-          enable-cache: auto
-      - name: "Restore crate publication times from main"
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          mkdir -p "$RUNNER_TEMP/cargo-cooldowns"
-          if run_id=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml \
-            --branch main --event push --status success --limit 1 \
-            --json databaseId --jq '.[0].databaseId // empty') && [[ -n "$run_id" ]]; then
-            gh run download "$run_id" --repo "$GITHUB_REPOSITORY" --name cargo-publication-times --dir "$RUNNER_TEMP/cargo-cooldowns" ||
-              echo "No publication times available from main run $run_id; checking crates.io."
-          fi
-      - name: "Check Cargo dependency cooldowns"
-        run: uv run --script scripts/check_cargo_cooldowns.py --cache "$RUNNER_TEMP/cargo-cooldowns/cargo-publication-times.json"
-      - name: "Store crate publication times"
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        continue-on-error: true
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: cargo-publication-times
-          path: ${{ runner.temp }}/cargo-cooldowns/cargo-publication-times.json
-          retention-days: 7
-          overwrite: true
+          policy: .github/cargo-cooldowns.toml
 
   check-cargo-lock-changes:
-    name: "Cargo lockfile changes"
+    name: "check | cargo lockfile changes"
     if: >-
       ${{
         github.event_name == 'pull_request' &&
@@ -210,11 +175,13 @@ jobs:
         run: uv run --script scripts/check-cargo-lock-changes.py HEAD^1 HEAD
 
   check-lock:
+    name: "check | lock"
     needs: plan
     if: ${{ needs.plan.outputs.run-checks == 'true' }}
     uses: $/.github/workflows/check-lock.yml
 
   check-generated-files:
+    name: "check | generated files"
     needs: plan
     if: ${{ needs.plan.outputs.test-code == 'true' }}
     uses: $/.github/workflows/check-generated-files.yml
@@ -447,7 +414,7 @@ jobs:
       - plan
       - check-cargo-cooldowns
       - check-cargo-lock-changes
-      - check-vet
+      - check-cargo-vet
       - check-fmt
       - check-lint
       - check-docs
@@ -473,7 +440,7 @@ jobs:
             echo "$NEEDS_JSON" | jaq -r --argjson conditional_jobs "$CONDITIONAL_JOBS" '
               to_entries[]
               | select($conditional_jobs[.key] != false)
-              | select(.value.result != "success" and (.value.result != "skipped" or .key == "check-vet" or .key == "check-cargo-cooldowns"))
+              | select(.value.result != "success" and (.value.result != "skipped" or .key == "check-cargo-vet" or .key == "check-cargo-cooldowns"))
               | "\(.key): \(.value.result)"
             '
           )

@@ -225,6 +225,187 @@ fn select_tpu_variant() -> Result<()> {
     Ok(())
 }
 
+/// An explicit AArch64 target installs the default wheel even when an Armv8.4-A wheel exists.
+#[test]
+fn aarch64_target_uses_platform_defaults() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::from_toml(indoc! {r#"
+        name = "aarch64-target-defaults"
+        root = {}
+
+        [expected]
+        satisfiable = true
+
+        [packages.ok.versions."1.0.0"]
+        wheel = false
+        sdist = false
+        wheel_tags = ["py3-none-linux_aarch64"]
+
+        [packages.ok.versions."1.0.0".variants]
+        namespaces = ["aarch64"]
+
+        [packages.ok.versions."1.0.0".variants.providers]
+        aarch64.requires = ["aarch64-variant-provider==0.2.0"]
+
+        [packages.ok.versions."1.0.0".variants.wheels]
+        arm8.properties = ["aarch64 :: version :: 8a"]
+        arm84.properties = ["aarch64 :: version :: 8.4a"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--index-url")
+        .arg(server.index_url())
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("--python-platform")
+        .arg("aarch64-unknown-linux-gnu")
+        .arg("ok==1.0.0"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0
+    ");
+    let installed = context.read(
+        context
+            .site_packages()
+            .join("ok-1.0.0.dist-info/variant.json"),
+    );
+    assert_json_snapshot!(serde_json::from_str::<Value>(&installed)?["variants"], @r#"
+    {
+      "arm8": {
+        "aarch64": {
+          "version": [
+            "8a"
+          ]
+        }
+      }
+    }
+    "#);
+    Ok(())
+}
+
+const X86_64_VARIANTS: &str = indoc! {r#"
+    name = "x86-64-target-defaults"
+    root = {}
+
+    [expected]
+    satisfiable = true
+
+    [packages.ok.versions."1.0.0"]
+    wheel = false
+    sdist = false
+
+    [packages.ok.versions."1.0.0".variants]
+    namespaces = ["x86_64"]
+
+    [packages.ok.versions."1.0.0".variants.providers]
+    x86_64.requires = ["x86_64-variant-provider==0.2.1"]
+
+    [packages.ok.versions."1.0.0".variants.wheels]
+    v1.properties = ["x86_64 :: level :: v1"]
+    v2.properties = ["x86_64 :: level :: v2"]
+    v3.properties = ["x86_64 :: level :: v3"]
+    v4.properties = ["x86_64 :: level :: v4"]
+"#};
+
+/// An explicit x86-64 target uses the platform defaults even when higher-level wheels exist.
+#[test]
+fn x86_64_target_uses_platform_defaults() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::from_toml(X86_64_VARIANTS)?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--index-url")
+        .arg(server.index_url())
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("--python-platform")
+        .arg("x86_64-unknown-linux-gnu")
+        .arg("ok==1.0.0"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0
+    ");
+    let installed = context.read(
+        context
+            .site_packages()
+            .join("ok-1.0.0.dist-info/variant.json"),
+    );
+    assert_json_snapshot!(serde_json::from_str::<Value>(&installed)?["variants"], @r#"
+    {
+      "v2": {
+        "x86_64": {
+          "level": [
+            "v2"
+          ]
+        }
+      }
+    }
+    "#);
+    Ok(())
+}
+
+/// On macOS and Windows, an x86-64 interpreter without `_ctypes` falls back to the v2 wheel.
+#[cfg(any(target_os = "macos", windows))]
+#[test]
+fn x86_64_without_ctypes_installs_v2() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::from_toml(X86_64_VARIANTS)?;
+    fs_err::write(
+        context.site_packages().join("sitecustomize.py"),
+        indoc! {r#"
+            import platform
+            import sys
+            import sysconfig
+
+            sys.modules["_ctypes"] = None
+            # Exercise the x86-64 probe on arm64 runners too.
+            if sys.platform == "darwin":
+                release, versioninfo, _ = platform.mac_ver()
+                platform.mac_ver = lambda: (release, versioninfo, "x86_64")
+            else:
+                sysconfig.get_platform = lambda: "win-amd64"
+        "#},
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--no-cache")
+        .arg("--index-url")
+        .arg(server.index_url())
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("ok==1.0.0"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0
+    ");
+    let installed = context.read(
+        context
+            .site_packages()
+            .join("ok-1.0.0.dist-info/variant.json"),
+    );
+    assert_json_snapshot!(serde_json::from_str::<Value>(&installed)?["variants"], @r#"
+    {
+      "v2": {
+        "x86_64": {
+          "level": [
+            "v2"
+          ]
+        }
+      }
+    }
+    "#);
+    Ok(())
+}
+
 /// Fall back to an older release and reject its otherwise preferred incompatible NVIDIA variant.
 #[test]
 fn backtrack_to_compatible_nvidia_variant() -> Result<()> {

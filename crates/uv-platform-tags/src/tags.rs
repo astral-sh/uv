@@ -117,7 +117,7 @@ pub struct Tags {
     map: Arc<FxHashMap<LanguageTag, FxHashMap<AbiTag, FxHashMap<PlatformTag, TagPriority>>>>,
     /// The highest-priority tag for the Python version and platform.
     best: Option<(LanguageTag, AbiTag, PlatformTag)>,
-    /// Python platform used to generate the tags, for error messages.
+    /// Python platform used to generate the tags and select compatible wheel variants.
     python_platform: Platform,
     /// Python version used to generate the tags, for error messages.
     python_version: (u8, u8),

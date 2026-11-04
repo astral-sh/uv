@@ -446,6 +446,7 @@ jobs:
     name: "python on macos aarch64"
     runs-on: macos-15 # github-macos-15-aarch64-3
     steps:
+      - uses: astral-sh/github-actions/demudhra@7aa50a3def9f5428c532b0ae972d1e5b357de5a5 # 2026.11.03.0
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -469,6 +470,7 @@ jobs:
     name: "x86-64 python on macos aarch64"
     runs-on: macos-15 # github-macos-15-aarch64-3
     steps:
+      - uses: astral-sh/github-actions/demudhra@7aa50a3def9f5428c532b0ae972d1e5b357de5a5 # 2026.11.03.0
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -497,6 +499,7 @@ jobs:
     name: "python on macos x86-64"
     runs-on: macos-15-intel # github-macos-15-x86_64-4
     steps:
+      - uses: astral-sh/github-actions/demudhra@7aa50a3def9f5428c532b0ae972d1e5b357de5a5 # 2026.11.03.0
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -765,6 +768,8 @@ jobs:
               arch: "aarch64",
             }
     steps:
+      - if: runner.os == 'macOS'
+        uses: astral-sh/github-actions/demudhra@7aa50a3def9f5428c532b0ae972d1e5b357de5a5 # 2026.11.03.0
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
