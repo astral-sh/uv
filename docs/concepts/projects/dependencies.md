@@ -371,7 +371,9 @@ dependencies = ["lfs-cowsay"]
 lfs-cowsay = { git = "https://github.com/astral-sh/lfs-cowsay", lfs = true }
 ```
 
-- When `lfs = true`, uv will always fetch LFS objects for this Git source.
+- When `lfs = true`, uv fetches Git LFS objects for this source. If you set `lfs.fetchinclude` or
+  `lfs.fetchexclude`, excluded LFS files remain pointers in a new checkout. Changing these filters
+  does not update a completed checkout that uv reuses from its cache.
 - When `lfs = false`, uv will never fetch LFS objects for this Git source.
 - When omitted, the `UV_GIT_LFS` environment variable is used for all Git sources without an
   explicit `lfs` configuration.

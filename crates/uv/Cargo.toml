@@ -136,11 +136,13 @@ hyper-util = { workspace = true }
 indoc = { workspace = true }
 insta = { workspace = true }
 predicates = { workspace = true }
+rcgen = { workspace = true }
 regex = { workspace = true, features = ["perf", "unicode"] }
 reqwest = { workspace = true, default-features = false }
 sha2 = { workspace = true }
 tar-codec = { workspace = true }
 tempfile = { workspace = true }
+tokio-rustls = { workspace = true }
 tokio-stream = { workspace = true }
 tokio-util = { workspace = true }
 toml = { workspace = true }

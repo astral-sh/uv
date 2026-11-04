@@ -285,9 +285,9 @@ impl RegistryClient {
         self.client.uncached().for_host(url)
     }
 
-    /// Return the [`GitHttpSettings`] for fetching from the given URL.
-    pub fn git_http_settings(&self, url: &SafeUrl) -> GitHttpSettings {
-        self.client.uncached().git_http_settings(url)
+    /// Return the transport settings for Git operations.
+    pub fn git_http_settings(&self) -> GitHttpSettings {
+        self.client.uncached().git_http_settings()
     }
 
     /// Return the [`Connectivity`] mode used by this client.
@@ -1071,7 +1071,7 @@ impl RegistryClient {
                 let fetch = git
                     .fetch(
                         &wheel.git,
-                        self.git_http_settings(wheel.git.url()),
+                        self.git_http_settings(),
                         self.cache.bucket(CacheBucket::Git),
                         reporter,
                     )

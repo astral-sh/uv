@@ -117,7 +117,7 @@ impl<'a, 'client> StaticMetadataDatabase<'a, 'client> {
                     git,
                     url.to_url(),
                     subdirectory.as_deref(),
-                    client.git_http_settings(git.url()),
+                    client.git_http_settings(),
                     self.cache,
                     None,
                 )
@@ -1890,7 +1890,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .git()
             .fetch(
                 resource.git,
-                client.unmanaged.git_http_settings(resource.git.url()),
+                client.unmanaged.git_http_settings(),
                 self.build_context.cache().bucket(CacheBucket::Git),
                 self.reporter
                     .clone()
@@ -2000,7 +2000,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .git()
             .fetch(
                 resource.git,
-                client.unmanaged.git_http_settings(resource.git.url()),
+                client.unmanaged.git_http_settings(),
                 self.build_context.cache().bucket(CacheBucket::Git),
                 self.reporter
                     .clone()
@@ -2167,7 +2167,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             resource.git,
             resource.url.to_url(),
             resource.subdirectory,
-            client.unmanaged.git_http_settings(resource.git.url()),
+            client.unmanaged.git_http_settings(),
             self.build_context.cache(),
             self.reporter
                 .clone()
@@ -2353,7 +2353,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             resource.git,
             resource.url.to_url(),
             resource.subdirectory,
-            client.unmanaged.git_http_settings(resource.git.url()),
+            client.unmanaged.git_http_settings(),
             self.build_context.cache(),
             self.reporter
                 .clone()
@@ -2610,7 +2610,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .git()
             .fetch(
                 git,
-                client.unmanaged.git_http_settings(git.url()),
+                client.unmanaged.git_http_settings(),
                 self.build_context.cache().bucket(CacheBucket::Git),
                 self.reporter
                     .clone()

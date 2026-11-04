@@ -15,6 +15,9 @@ doctest = false
 [lints]
 workspace = true
 
+[features]
+test-git = []
+
 [dependencies]
 uv-auth = { workspace = true }
 uv-cache-key = { workspace = true }
@@ -30,8 +33,10 @@ cargo-util = { workspace = true }
 papaya = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 owo-colors = { workspace = true }
+percent-encoding = { workspace = true }
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
+tempfile = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }

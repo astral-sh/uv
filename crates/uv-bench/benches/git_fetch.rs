@@ -30,12 +30,8 @@ fn is_codspeed_simulation() -> bool {
     )
 }
 
-fn fetch(
-    runtime: &tokio::runtime::Runtime,
-    git: &GitUrl,
-    cache: &Path,
-    settings: GitHttpSettings,
-) -> Fetch {
+fn fetch(runtime: &tokio::runtime::Runtime, git: &GitUrl, cache: &Path) -> Fetch {
+    let settings = GitHttpSettings::default().with_offline(true);
     let fetched = runtime
         .block_on(GitResolver::default().fetch(git, settings, cache.to_path_buf(), None))
         .expect("Failed to fetch pinned Git repository");
@@ -63,7 +59,6 @@ fn git_fetch(criterion: &mut Criterion<WallTime>) {
         .enable_all()
         .build()
         .expect("Failed to create Tokio runtime");
-    let settings = GitHttpSettings::default().with_offline(true);
     let mut group = criterion.benchmark_group("git_fetch");
     group.sampling_mode(SamplingMode::Flat);
     for fixture in GIT_FIXTURES {
@@ -78,7 +73,7 @@ fn git_fetch(criterion: &mut Criterion<WallTime>) {
                 bencher.iter_batched(
                     || tempfile::tempdir().expect("Failed to create Git cache"),
                     |cache| {
-                        let fetched = fetch(&runtime, &precise, cache.path(), settings);
+                        let fetched = fetch(&runtime, &precise, cache.path());
                         black_box((cache, fetched))
                     },
                     BatchSize::PerIteration,
@@ -100,13 +95,13 @@ fn git_fetch(criterion: &mut Criterion<WallTime>) {
             let cache = LazyCell::new(|| {
                 let precise = git_url(&repository, fixture.commit, Some(commit));
                 let cache = tempfile::tempdir().expect("Failed to create Git cache");
-                fetch(&runtime, &precise, cache.path(), settings);
+                fetch(&runtime, &precise, cache.path());
                 cache
             });
             group.bench_function(BenchmarkId::new(name, fixture.name), |bencher| {
                 let git = git_url(&repository, reference, locked);
                 let cache = LazyCell::force(&cache);
-                bencher.iter(|| black_box(fetch(&runtime, &git, cache.path(), settings)));
+                bencher.iter(|| black_box(fetch(&runtime, &git, cache.path())));
             });
         }
 
@@ -135,7 +130,7 @@ fn git_fetch(criterion: &mut Criterion<WallTime>) {
                         || tempfile::tempdir().expect("Failed to create Git cache"),
                         |cache| {
                             for git in &revisions {
-                                black_box(fetch(&runtime, git, cache.path(), settings));
+                                black_box(fetch(&runtime, git, cache.path()));
                             }
                             black_box(cache)
                         },
