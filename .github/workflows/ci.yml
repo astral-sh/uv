@@ -24,9 +24,9 @@ jobs:
     uses: $/.github/workflows/plan.yml
 
   check-cargo-vet:
-    name: "check | cargo-vet"
+    name: check
     needs: plan
-    uses: astral-sh/github-actions/.github/workflows/cargo-vet.yml@1bf79e12cb365ad880b4fb7e195a2ff901db9226
+    uses: astral-sh/github-actions/.github/workflows/cargo-vet.yml@c72a43f2b98b6838703a42a8cd5fc74f6eb5ff8a
     with:
       runner: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
       workspaces: ${{ needs.plan.outputs.cargo-vet-workspaces }}
