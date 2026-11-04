@@ -27,10 +27,18 @@ impl WheelCache<'_> {
     pub fn root(&self) -> PathBuf {
         match self {
             Self::Index(IndexUrl::Pypi(_)) => WheelCacheKind::Pypi.root(),
-            Self::Index(url) => WheelCacheKind::Index.root().join(url_shard(url.url())),
-            Self::Url(url) => WheelCacheKind::Url.root().join(url_shard(url)),
-            Self::Path(url) => WheelCacheKind::Path.root().join(url_shard(url)),
-            Self::Editable(url) => WheelCacheKind::Editable.root().join(url_shard(url)),
+            Self::Index(url) => WheelCacheKind::Index
+                .root()
+                .join(cache_digest(&CanonicalUrl::new(url.url().clone()))),
+            Self::Url(url) => WheelCacheKind::Url
+                .root()
+                .join(cache_digest(&CanonicalUrl::new((*url).clone()))),
+            Self::Path(url) => WheelCacheKind::Path
+                .root()
+                .join(cache_digest(&CanonicalUrl::new((*url).clone()))),
+            Self::Editable(url) => WheelCacheKind::Editable
+                .root()
+                .join(cache_digest(&CanonicalUrl::new((*url).clone()))),
             Self::Git(url, sha) => WheelCacheKind::Git
                 .root()
                 .join(cache_digest(&CanonicalUrl::for_git_source((*url).clone())))
@@ -42,13 +50,6 @@ impl WheelCache<'_> {
     pub fn wheel_dir(&self, package_name: impl AsRef<Path>) -> PathBuf {
         self.root().join(package_name)
     }
-}
-
-fn url_shard(url: &SafeUrl) -> String {
-    // `/simple/` and `/simple.git/` previously shared a shard. The new `/simple/`
-    // digest still matches that shard, which could contain a wheel from `/simple.git/`.
-    // The `v2-` prefix prevents either URL from reading the shared shard.
-    format!("v2-{}", cache_digest(&CanonicalUrl::new(url.clone())))
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -97,19 +98,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn direct_wheel_cache_paths_are_separate_from_legacy_aliases() -> Result<(), SafeUrlError> {
+    fn direct_wheel_cache_paths_preserve_http_path_spelling() -> Result<(), SafeUrlError> {
         let plain =
             SafeUrl::parse("https://example.com/artifacts@channel/example-1.0-py3-none-any.whl")?;
         let suffixed = SafeUrl::parse(
             "https://example.com/artifacts.git@channel/example-1.0-py3-none-any.whl",
         )?;
-        let legacy_root = Path::new("url").join("8f378f2efe8e0a88");
-
         let plain_root = WheelCache::Url(&plain).root();
         let suffixed_root = WheelCache::Url(&suffixed).root();
         assert_ne!(plain_root, suffixed_root);
-        assert_ne!(plain_root, legacy_root);
-        assert_ne!(suffixed_root, legacy_root);
 
         let escaped_at = SafeUrl::parse(
             "https://example.com/artifacts.git%40channel/example-1.0-py3-none-any.whl",

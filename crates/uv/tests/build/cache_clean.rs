@@ -11,8 +11,7 @@ use indoc::indoc;
 #[cfg(target_os = "linux")]
 use std::process::Command;
 
-use uv_cache::{Cache, WheelCache};
-use uv_distribution_types::IndexUrl;
+use uv_cache::Cache;
 #[cfg(unix)]
 use uv_fs::link::{LinkMode, LinkOptions, link_dir};
 use uv_static::EnvVars;
@@ -438,11 +437,11 @@ fn clean_package_index() -> Result<()> {
         .success();
 
     // Assert that the `.rkyv` file is created for `iniconfig`.
-    let index = IndexUrl::parse("https://test.pypi.org/simple", None)?;
     let rkyv = context
         .cache_dir
         .child("simple-v27")
-        .child(WheelCache::Index(&index).root())
+        .child("index")
+        .child("e8208120cae3ba69")
         .child("iniconfig.rkyv");
     assert!(
         rkyv.exists(),
@@ -475,7 +474,7 @@ fn clean_does_not_follow_symlinks() -> Result<()> {
     let archive_entry = context.cache_dir.child("archive-v0").child("archive");
     let package_entry = context
         .cache_dir
-        .child("wheels-v7")
+        .child("wheels-v8")
         .child("pypi")
         .child("demo");
 
@@ -595,7 +594,7 @@ fn clean_handles_verbatim_paths() -> Result<()> {
     // Cached sdist path resembling the uwsgi==2.0.31 build failure.
     let uwsgi_shard = context
         .cache_dir
-        .child("sdists-v10")
+        .child("sdists-v11")
         .child("pypi")
         .child("uwsgi")
         .child("2.0.31")
