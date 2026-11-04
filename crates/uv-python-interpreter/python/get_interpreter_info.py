@@ -679,7 +679,12 @@ def _macos_cpu_info(architecture):
         ctypes.c_void_p,
         ctypes.c_size_t,
     ]
-    missing_key = (errno.ENOENT, errno.ENOTSUP, errno.EOPNOTSUPP)
+    # Some Python implementations omit these Darwin errno constants.
+    missing_key = (
+        errno.ENOENT,
+        getattr(errno, "ENOTSUP", 45),
+        getattr(errno, "EOPNOTSUPP", 102),
+    )
     unavailable = (errno.EPERM, errno.EACCES, errno.ENOSYS)
     if architecture == "aarch64":
         keys = (b"machdep.cpu.brand_string",)
