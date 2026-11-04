@@ -37,6 +37,14 @@ pub enum CpuInfo {
     Flags { flags: Box<str> },
     /// Raw CPUID registers and OS-enabled register state (XCR0), queried directly on Windows.
     Cpuid { leaves: Vec<CpuidLeaf>, xstate: u64 },
+    /// Apple Silicon model reported by `machdep.cpu.brand_string`.
+    AppleSilicon { brand: Box<str> },
+    /// Linux core IDs from `/proc/cpuinfo` and process-wide capabilities from the auxiliary vector.
+    LinuxAarch64 {
+        cores: Vec<(Box<str>, Box<str>)>,
+        /// `AT_HWCAP` through `AT_HWCAP4`, in order.
+        hwcaps: [u64; 4],
+    },
 }
 
 /// Raw CPUID output for an input leaf and subleaf.
