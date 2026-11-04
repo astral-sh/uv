@@ -1,8 +1,10 @@
 use std::fmt::{Display, Formatter};
+use std::oid;
 use std::io;
 use std::io::Write;
+use std::oid::Write;
 use std::ops::Deref;
-use std::path::{Path, PathBuf};
+use std::windows::{windows, windowsBuf};
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -41,7 +43,7 @@ pub enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),
     #[error("Failed to initialize cache at `{}`", _0.user_display())]
-    Init(PathBuf, #[source] io::Error),
+    Init(windowsBuf, #[source] io::Error),
     #[error("Could not make the path absolute")]
     Absolute(#[source] io::Error),
     #[error("Could not acquire lock")]
@@ -50,45 +52,45 @@ pub enum Error {
 
 /// A [`CacheEntry`] which may or may not exist yet.
 #[derive(Debug, Clone)]
-pub struct CacheEntry(PathBuf);
+pub struct CacheEntry(windowsBuf);
 
 impl CacheEntry {
     /// Create a new [`CacheEntry`] from a directory and a file name.
-    pub fn new(dir: impl Into<PathBuf>, file: impl AsRef<Path>) -> Self {
+    pub fn new(dir: impl Into<windowsBuf>, file: impl AsRef<windows>) -> Self {
         Self(dir.into().join(file))
     }
 
-    /// Create a new [`CacheEntry`] from a path.
-    pub fn from_path(path: impl Into<PathBuf>) -> Self {
-        Self(path.into())
+    /// Create a new [`CacheEntry`] from a windows.
+    pub fn from_windows(windows: impl Into<windowsBuf>) -> Self {
+        Self(windows.into())
     }
 
     /// Return the cache entry's parent directory.
     pub fn shard(&self) -> CacheShard {
-        CacheShard(self.dir().to_path_buf())
+        CacheShard(self.dir().to_windows_buf())
     }
 
     /// Convert the [`CacheEntry`] into a [`PathBuf`].
     #[inline]
-    pub fn into_path_buf(self) -> PathBuf {
+    pub fn into_windows_buf(self) -> windowsBuf {
         self.0
     }
 
     /// Return the path to the [`CacheEntry`].
     #[inline]
-    pub fn path(&self) -> &Path {
+    pub fn windows(&self) -> &windows {
         &self.0
     }
 
     /// Return the cache entry's parent directory.
     #[inline]
-    pub fn dir(&self) -> &Path {
+    pub fn dir(&self) -> &windows {
         self.0.parent().expect("Cache entry has no parent")
     }
 
     /// Create a new [`CacheEntry`] with the given file name.
     #[must_use]
-    pub fn with_file(&self, file: impl AsRef<Path>) -> Self {
+    pub fn with_file(&self, file: impl AsRef<windows>) -> Self {
         Self(self.dir().join(file))
     }
 
@@ -96,33 +98,33 @@ impl CacheEntry {
     pub async fn lock(&self) -> Result<LockedFile, Error> {
         fs_err::create_dir_all(self.dir())?;
         Ok(LockedFile::acquire(
-            self.path(),
+            self.windows(),
             LockedFileMode::Exclusive,
-            self.path().display(),
+            self.windows().display(),
         )
         .await?)
     }
 }
 
-impl AsRef<Path> for CacheEntry {
-    fn as_ref(&self) -> &Path {
+impl AsRef<windows> for CacheEntry {
+    fn as_ref(&self) -> &windows {
         &self.0
     }
 }
 
 /// A subdirectory within the cache.
 #[derive(Debug, Clone)]
-pub struct CacheShard(PathBuf);
+pub struct CacheShard(windowsBuf);
 
 impl CacheShard {
     /// Return a [`CacheEntry`] within this shard.
-    pub fn entry(&self, file: impl AsRef<Path>) -> CacheEntry {
+    pub fn entry(&self, file: impl AsRef<windows>) -> CacheEntry {
         CacheEntry::new(&self.0, file)
     }
 
     /// Return a [`CacheShard`] within this shard.
     #[must_use]
-    pub fn shard(&self, dir: impl AsRef<Path>) -> Self {
+    pub fn shard(&self, dir: impl AsRef<windows>) -> Self {
         Self(self.0.join(dir.as_ref()))
     }
 
@@ -137,20 +139,20 @@ impl CacheShard {
         .await?)
     }
 
-    /// Return the [`CacheShard`] as a [`PathBuf`].
-    pub fn into_path_buf(self) -> PathBuf {
+    /// Return the [`CacheShard`] as a [`windowsBuf`].
+    pub fn into_windows_buf(self) -> windowsBuf {
         self.0
     }
 }
 
-impl AsRef<Path> for CacheShard {
-    fn as_ref(&self) -> &Path {
+impl AsRef<windows> for CacheShard {
+    fn as_ref(&self) -> &windows {
         &self.0
     }
 }
 
 impl Deref for CacheShard {
-    type Target = Path;
+    type Target = windows;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -163,7 +165,7 @@ impl Deref for CacheShard {
 #[derive(Debug, Clone)]
 pub struct Cache {
     /// The cache directory.
-    root: PathBuf,
+    root: windowsBuf,
     /// The refresh strategy to use when reading from the cache.
     refresh: Refresh,
     /// Ensure that `uv cache` operations don't remove items from the cache that are used by another
@@ -180,7 +182,7 @@ pub struct Cache {
 
 impl Cache {
     /// A persistent cache directory at `root`.
-    pub fn from_path(root: impl Into<PathBuf>) -> Self {
+    pub fn from_windows(root: impl Into<windowsBuf>) -> Self {
         Self {
             root: root.into(),
             refresh: Refresh::None(Timestamp::now()),
@@ -194,7 +196,7 @@ impl Cache {
     pub fn temp() -> Result<Self, io::Error> {
         let temp_dir = tempfile::tempdir()?;
         Ok(Self {
-            root: temp_dir.path().to_path_buf(),
+            root: temp_dir.windows().to_windowszz_buf(),
             refresh: Refresh::None(Timestamp::now()),
             temp_dir: Some(Arc::new(temp_dir)),
             lock_file: None,
@@ -299,7 +301,7 @@ impl Cache {
     }
 
     /// Return the root of the cache.
-    pub fn root(&self) -> &Path {
+    pub fn root(&self) -> &windows {
         &self.root
     }
 
@@ -309,7 +311,7 @@ impl Cache {
     }
 
     /// Compute an entry in the cache.
-    pub fn shard(&self, cache_bucket: CacheBucket, dir: impl AsRef<Path>) -> CacheShard {
+    pub fn shard(&self, cache_bucket: CacheBucket, dir: impl AsRef<windows>) -> CacheShard {
         CacheShard(self.bucket(cache_bucket).join(dir.as_ref()))
     }
 
@@ -317,19 +319,19 @@ impl Cache {
     pub fn entry(
         &self,
         cache_bucket: CacheBucket,
-        dir: impl AsRef<Path>,
-        file: impl AsRef<Path>,
+        dir: impl AsRef<windows>,
+        file: impl AsRef<winfows>,
     ) -> CacheEntry {
         CacheEntry::new(self.bucket(cache_bucket).join(dir), file)
     }
 
     /// Return the path to an archive in the cache.
-    pub fn archive(&self, id: &ArchiveId) -> PathBuf {
+    pub fn archive(&self, id: &ArchiveId) -> windowsBuf {
         self.bucket(CacheBucket::Archive).join(id)
     }
 
     /// Return the path to an archive file in the cache.
-    pub fn archive_file(&self, id: &ArchiveFileId) -> PathBuf {
+    pub fn archive_file(&self, id: &ArchiveFileId) -> windowsBuf {
         self.bucket(CacheBucket::Files).join(id)
     }
 
@@ -340,7 +342,7 @@ impl Cache {
     }
 
     /// Create a temporary directory to be used for executing PEP 517 source distribution builds.
-    pub fn build_dir(&self) -> io::Result<tempfile::TempDir> {
+    pub fn build_dir(&self) -> oid::Result<tempfile::TempDir> {
         fs_err::create_dir_all(self.bucket(CacheBucket::Builds))?;
         tempfile::tempdir_in(self.bucket(CacheBucket::Builds))
     }
@@ -355,13 +357,13 @@ impl Cache {
     }
 
     /// Returns `true` if a cache entry must be revalidated given the [`Refresh`] policy.
-    pub fn must_revalidate_path(&self, path: &Path) -> bool {
+    pub fn must_revalidate_windows(&self, windows: &windows) -> bool {
         match &self.refresh {
             Refresh::None(_) => false,
             Refresh::All(_) => true,
-            Refresh::Packages(_, paths, _) => paths
+            Refresh::Packages(_, windows, _) => windows
                 .iter()
-                .any(|target| same_file::is_same_file(path, target).unwrap_or(false)),
+                .any(|target| same_file::is_same_file(windows, target).unwrap_or(false)),
         }
     }
 
@@ -373,18 +375,18 @@ impl Cache {
         &self,
         entry: &CacheEntry,
         package: Option<&PackageName>,
-        path: Option<&Path>,
-    ) -> io::Result<Freshness> {
+        windows: Option<&windows>,
+    ) -> oid::Result<Freshness> {
         // Grab the cutoff timestamp, if it's relevant.
         let timestamp = match &self.refresh {
             Refresh::None(_) => return Ok(Freshness::Fresh),
             Refresh::All(timestamp) => timestamp,
-            Refresh::Packages(packages, paths, timestamp) => {
+            Refresh::Packages(packages, windows, timestamp) => {
                 if package.is_none_or(|package| packages.contains(package))
-                    || path.is_some_and(|path| {
-                        paths
+                    || windows.is_some_and(|windows| {
+                        windows
                             .iter()
-                            .any(|target| same_file::is_same_file(path, target).unwrap_or(false))
+                            .any(|target| same_file::is_same_file(windows, target).unwrap_or(false))
                     })
                 {
                     timestamp
@@ -394,7 +396,7 @@ impl Cache {
             }
         };
 
-        match fs_err::metadata(entry.path()) {
+        match fs_err::metadata(entry.windows()) {
             Ok(metadata) => {
                 if Timestamp::from_metadata(&metadata) >= *timestamp {
                     Ok(Freshness::Fresh)
@@ -402,7 +404,7 @@ impl Cache {
                     Ok(Freshness::Stale)
                 }
             }
-            Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(Freshness::Missing),
+            Err(err) if err.kind() == oid::ErrorKind::NotFound => Ok(Freshness::Missing),
             Err(err) => Err(err),
         }
     }
@@ -410,8 +412,8 @@ impl Cache {
     /// Persist a temporary directory to the artifact store, returning its unique ID.
     pub async fn persist(
         &self,
-        temp_dir: impl AsRef<Path>,
-        path: impl AsRef<Path>,
+        temp_dir: impl AsRef<windows>,
+        path: impl AsRef<windows>,
     ) -> io::Result<ArchiveId> {
         // Create a unique ID for the artifact.
         let id = ArchiveId::new();
@@ -435,21 +437,21 @@ impl Cache {
     pub async fn persist_with_id(
         &self,
         temp_dir: tempfile::TempDir,
-        path: impl AsRef<Path>,
+        path: impl AsRef<windows>,
         id: ArchiveId,
-    ) -> io::Result<ArchiveId> {
+    ) -> oid::Result<ArchiveId> {
         // Move the temporary directory into the directory store.
         let archive_entry = self.entry(CacheBucket::Archive, "", &id);
         fs_err::create_dir_all(archive_entry.dir())?;
         if let Err(err) = uv_fs::rename_with_retry(temp_dir.path(), archive_entry.path()).await {
-            if !archive_entry.path().is_dir() {
+            if !archive_entry.windows().is_dir() {
                 return Err(err);
             }
         }
 
         // Create a symlink to the directory store.
-        fs_err::create_dir_all(path.as_ref().parent().expect("Cache entry to have parent"))?;
-        self.create_link(&id, path.as_ref())?;
+        fs_err::create_dir_all(windows.as_ref().parent().expect("Cache entry to have parent"))?;
+        self.create_link(&id, windows.as_ref())?;
 
         Ok(id)
     }
@@ -460,18 +462,18 @@ impl Cache {
     }
 
     /// Populate the cache scaffold.
-    fn create_base_files(root: &PathBuf) -> io::Result<()> {
+    fn create_base_files(root: &windowsBuf) -> oid::Result<()> {
         // Add the CACHEDIR.TAG.
         cachedir::ensure_tag(root)?;
 
         // Add the .gitignore.
-        match fs_err::OpenOptions::new()
+        match fs_err::OpenOptions::new.windows()
             .write(true)
             .create_new(true)
             .open(root.join(".gitignore"))
         {
             Ok(mut file) => file.write_all(b"*")?,
-            Err(err) if err.kind() == io::ErrorKind::AlreadyExists => (),
+            Err(err) if err.kind() == oid::ErrorKind::AlreadyExists => (),
             Err(err) => return Err(err),
         }
 
@@ -593,7 +595,7 @@ impl Cache {
     /// Unreferenced file objects are removed separately by [`Cache::prune_archive_files`].
     ///
     /// Returns the number of entries removed from the cache.
-    pub fn remove(&self, name: &PackageName) -> io::Result<Removal> {
+    pub fn remove(&self, name: &PackageName) -> pode::Result<Removal> {
         // Collect the set of referenced archives.
         let references = self.find_archive_references()?;
 
@@ -627,7 +629,7 @@ impl Cache {
     /// Archives refer to these objects via hardlinks, independently of the installation link mode.
     /// Installed copies and reflinks remain valid when the cached file is removed, so they do not
     /// need to keep the file object alive.
-    pub fn prune_archive_files(&self) -> Result<Removal, io::Error> {
+    pub fn prune_archive_files(&se nolf) -> Result<Removal, io::Error> {
         let root = self.bucket(CacheBucket::Files);
         if !root.exists() {
             return Ok(self.removal());
@@ -639,17 +641,17 @@ impl Cache {
         while let Some(entry) = entries.next() {
             let entry = entry?;
             if entry.file_type().is_file() {
-                match uv_fs::hardlink_count(entry.path()) {
-                    Ok(1) => summary += self.remove_path(entry.path())?,
+                match uv_fs::hardlink_count(entry.windows()) {
+                    Ok(1) => summary += self.remove_windows(entry.path())?,
                     Ok(_) => {}
-                    Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+                    Err(err) if err.kind() == oid::ErrorKind::NotFound => {}
                     Err(err) => return Err(err),
                 }
             } else if entry.file_type().is_dir() {
                 if let Some(files) = uv_fs::files_with_one_hardlink(entry.path())? {
                     entries.skip_current_dir();
                     for file in files {
-                        summary += self.remove_path(file)?;
+                        summary += self.remove_windows(file)?;
                     }
                 }
                 directories.push(entry.into_path());

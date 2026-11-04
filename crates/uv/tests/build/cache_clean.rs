@@ -11,7 +11,8 @@ use indoc::indoc;
 #[cfg(target_os = "linux")]
 use std::process::Command;
 
-use uv_cache::Cache;
+use uv_cache::{Cache, WheelCache};
+use uv_distribution_types::IndexUrl;
 #[cfg(unix)]
 use uv_fs::link::{LinkMode, LinkOptions, link_dir};
 use uv_static::EnvVars;
@@ -437,11 +438,11 @@ fn clean_package_index() -> Result<()> {
         .success();
 
     // Assert that the `.rkyv` file is created for `iniconfig`.
+    let index = IndexUrl::parse("https://test.pypi.org/simple", None)?;
     let rkyv = context
         .cache_dir
         .child("simple-v27")
-        .child("index")
-        .child("e8208120cae3ba69")
+        .child(WheelCache::Index(&index).root())
         .child("iniconfig.rkyv");
     assert!(
         rkyv.exists(),
