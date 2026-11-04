@@ -33,8 +33,11 @@ impl LatestClient<'_> {
         package: &PackageName,
         index: &IndexUrl,
     ) -> Option<jiff::Timestamp> {
-        self.exclude_newer
-            .exclude_newer_package_for_index(package, self.index_locations.exclude_newer_for(index))
+        self.exclude_newer.exclude_newer_package_for_index(
+            package,
+            self.index_locations
+                .exclude_newer_for_package(index, package),
+        )
     }
 
     fn consider_candidate(

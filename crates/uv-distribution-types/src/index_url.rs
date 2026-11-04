@@ -12,6 +12,7 @@ use thiserror::Error;
 use url::ParseError;
 use uv_auth::RealmRef;
 use uv_cache_key::CanonicalUrl;
+use uv_normalize::PackageName;
 use uv_pep508::{Scheme, VerbatimUrl, VerbatimUrlError, split_scheme};
 use uv_pypi_types::HashAlgorithm;
 use uv_redacted::SafeUrl;
@@ -526,6 +527,16 @@ impl<'a> IndexLocations {
     pub fn exclude_newer_for(&self, url: &IndexUrl) -> Option<&ExcludeNewerOverride> {
         self.index_for_url(url).and_then(Index::exclude_newer)
     }
+
+    /// Return the `exclude-newer` setting for a given index and package, if the index is configured.
+    pub fn exclude_newer_for_package(
+        &self,
+        url: &IndexUrl,
+        package_name: &PackageName,
+    ) -> Option<&ExcludeNewerOverride> {
+        self.index_for_url(url)
+            .and_then(|index| index.exclude_newer_for_package(package_name))
+    }
 }
 
 impl From<&IndexLocations> for uv_auth::Indexes {
@@ -814,6 +825,7 @@ mod tests {
                 ignore_error_codes: None,
                 hash_algorithm: None,
                 exclude_newer: None,
+                exclude_newer_package: std::collections::BTreeMap::new(),
             },
             Index {
                 name: Some(IndexName::from_str("index2").unwrap()),
@@ -828,6 +840,7 @@ mod tests {
                 ignore_error_codes: None,
                 hash_algorithm: None,
                 exclude_newer: None,
+                exclude_newer_package: std::collections::BTreeMap::new(),
             },
         ];
 
@@ -868,6 +881,7 @@ mod tests {
             ignore_error_codes: None,
             hash_algorithm: None,
             exclude_newer: None,
+                exclude_newer_package: std::collections::BTreeMap::new(),
         }];
 
         let index_locations = IndexLocations::new(indexes, Vec::new(), false);
@@ -905,6 +919,7 @@ mod tests {
             ignore_error_codes: None,
             hash_algorithm: None,
             exclude_newer: None,
+                exclude_newer_package: std::collections::BTreeMap::new(),
         }];
 
         let index_locations = IndexLocations::new(indexes, Vec::new(), false);
@@ -937,6 +952,7 @@ mod tests {
             ignore_error_codes: None,
             hash_algorithm: None,
             exclude_newer: None,
+                exclude_newer_package: std::collections::BTreeMap::new(),
         }];
 
         let index_locations = IndexLocations::new(indexes, Vec::new(), false);

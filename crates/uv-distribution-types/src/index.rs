@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+use std::fmt;
 use std::path::Path;
 use std::str::FromStr;
 
@@ -6,6 +8,7 @@ use serde::{Deserialize, Serialize, Serializer};
 use thiserror::Error;
 
 use uv_auth::{AuthPolicy, Credentials, CredentialsFromUrlError};
+use uv_normalize::PackageName;
 use uv_pypi_types::HashAlgorithm;
 use uv_redacted::SafeUrl;
 use uv_redacted::policy::Stripped;
@@ -125,7 +128,7 @@ impl<'de> Deserialize<'de> for IndexCacheControl {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Clone, Serialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(rename_all = "kebab-case")]
 pub struct Index {
@@ -269,6 +272,33 @@ pub struct Index {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "schemars", schemars(with = "ExcludeNewerOverride"))]
     pub exclude_newer: Option<ExcludeNewerOverride>,
+    /// Index-specific `exclude-newer-package` overrides.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub(crate) exclude_newer_package: BTreeMap<PackageName, ExcludeNewerOverride>,
+}
+
+impl fmt::Debug for Index {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut debug = f.debug_struct("Index");
+        debug
+            .field("name", &self.name)
+            .field("url", &self.url)
+            .field("explicit", &self.explicit)
+            .field("default", &self.default)
+            .field("origin", &self.origin)
+            .field("format", &self.format)
+            .field("publish_url", &self.publish_url)
+            .field("authenticate", &self.authenticate)
+            .field("ignore_error_codes", &self.ignore_error_codes)
+            .field("cache_control", &self.cache_control)
+            .field("hash_algorithm", &self.hash_algorithm)
+            .field("exclude_newer", &self.exclude_newer);
+        if !self.exclude_newer_package.is_empty() {
+            debug.field("exclude_newer_package", &self.exclude_newer_package);
+        }
+        debug.finish()
+    }
 }
 
 #[derive(Debug, Error)]
@@ -294,6 +324,7 @@ impl PartialEq for Index {
             cache_control,
             hash_algorithm,
             exclude_newer,
+            exclude_newer_package,
         } = self;
         *url == other.url
             && *name == other.name
@@ -306,6 +337,7 @@ impl PartialEq for Index {
             && *cache_control == other.cache_control
             && *hash_algorithm == other.hash_algorithm
             && *exclude_newer == other.exclude_newer
+            && *exclude_newer_package == other.exclude_newer_package
     }
 }
 
@@ -332,6 +364,7 @@ impl Ord for Index {
             cache_control,
             hash_algorithm,
             exclude_newer,
+            exclude_newer_package,
         } = self;
         url.cmp(&other.url)
             .then_with(|| name.cmp(&other.name))
@@ -344,6 +377,7 @@ impl Ord for Index {
             .then_with(|| cache_control.cmp(&other.cache_control))
             .then_with(|| hash_algorithm.cmp(&other.hash_algorithm))
             .then_with(|| exclude_newer.cmp(&other.exclude_newer))
+            .then_with(|| exclude_newer_package.cmp(&other.exclude_newer_package))
     }
 }
 
@@ -362,6 +396,7 @@ impl std::hash::Hash for Index {
             cache_control,
             hash_algorithm,
             exclude_newer,
+            exclude_newer_package,
         } = self;
         url.hash(state);
         name.hash(state);
@@ -374,6 +409,7 @@ impl std::hash::Hash for Index {
         cache_control.hash(state);
         hash_algorithm.hash(state);
         exclude_newer.hash(state);
+        exclude_newer_package.hash(state);
     }
 }
 
@@ -442,6 +478,7 @@ impl Index {
             cache_control: None,
             hash_algorithm: None,
             exclude_newer: None,
+            exclude_newer_package: BTreeMap::new(),
         }
     }
 
@@ -460,6 +497,7 @@ impl Index {
             cache_control: None,
             hash_algorithm: None,
             exclude_newer: None,
+            exclude_newer_package: BTreeMap::new(),
         }
     }
 
@@ -478,6 +516,7 @@ impl Index {
             cache_control: None,
             hash_algorithm: None,
             exclude_newer: None,
+            exclude_newer_package: BTreeMap::new(),
         }
     }
 
@@ -600,6 +639,17 @@ impl Index {
     pub(crate) fn exclude_newer(&self) -> Option<&ExcludeNewerOverride> {
         self.exclude_newer.as_ref()
     }
+
+    /// Return the `exclude-newer` setting for a specific package on this index, falling back to
+    /// the index-wide `exclude-newer` setting.
+    pub(crate) fn exclude_newer_for_package(
+        &self,
+        package_name: &PackageName,
+    ) -> Option<&ExcludeNewerOverride> {
+        self.exclude_newer_package
+            .get(package_name)
+            .or(self.exclude_newer.as_ref())
+    }
 }
 
 impl From<IndexUrl> for Index {
@@ -617,6 +667,7 @@ impl From<IndexUrl> for Index {
             cache_control: None,
             hash_algorithm: None,
             exclude_newer: None,
+            exclude_newer_package: BTreeMap::new(),
         }
     }
 }
@@ -644,6 +695,7 @@ impl FromStr for Index {
                 cache_control: None,
                 hash_algorithm: None,
                 exclude_newer: None,
+                exclude_newer_package: BTreeMap::new(),
             });
         }
 
@@ -662,6 +714,7 @@ impl FromStr for Index {
             cache_control: None,
             hash_algorithm: None,
             exclude_newer: None,
+            exclude_newer_package: BTreeMap::new(),
         })
     }
 }
@@ -757,6 +810,8 @@ struct IndexWire {
     hash_algorithm: Option<IndexHashAlgorithm>,
     #[serde(default)]
     exclude_newer: Option<ExcludeNewerOverride>,
+    #[serde(default)]
+    exclude_newer_package: BTreeMap<PackageName, ExcludeNewerOverride>,
 }
 
 impl<'de> Deserialize<'de> for Index {
@@ -786,6 +841,7 @@ impl<'de> Deserialize<'de> for Index {
             cache_control: wire.cache_control,
             hash_algorithm: wire.hash_algorithm,
             exclude_newer: wire.exclude_newer,
+            exclude_newer_package: wire.exclude_newer_package,
         })
     }
 }
@@ -921,5 +977,27 @@ mod tests {
         let index: Index = toml::from_str(toml_str).unwrap();
         assert_eq!(index.name.as_ref().unwrap().as_ref(), "internal");
         assert_matches!(index.exclude_newer, Some(ExcludeNewerOverride::Enabled(_)));
+    }
+
+    #[test]
+    fn test_index_exclude_newer_package() {
+        let toml_str = r#"
+            name = "pypi"
+            url = "https://pypi.org/simple"
+            exclude-newer = "2026-11-01"
+            exclude-newer-package.uv = false
+        "#;
+
+        let index: Index = toml::from_str(toml_str).unwrap();
+        let uv_pkg = PackageName::from_str("uv").unwrap();
+        let other_pkg = PackageName::from_str("requests").unwrap();
+        assert_eq!(
+            index.exclude_newer_for_package(&uv_pkg),
+            Some(&ExcludeNewerOverride::Disabled)
+        );
+        assert_matches!(
+            index.exclude_newer_for_package(&other_pkg),
+            Some(ExcludeNewerOverride::Enabled(_))
+        );
     }
 }
