@@ -26,11 +26,10 @@ jobs:
   check-cargo-vet:
     name: "check | cargo-vet"
     needs: plan
-    uses: astral-sh/github-actions/.github/workflows/cargo-vet.yml@5b17dc60f92e7dfd23399af8f1ee707228932270
+    uses: astral-sh/github-actions/.github/workflows/cargo-vet.yml@1bf79e12cb365ad880b4fb7e195a2ff901db9226
     with:
       runner: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
       workspaces: ${{ needs.plan.outputs.cargo-vet-workspaces }}
-      workspace-names: '{".": "workspace", "crates/uv-trampoline": "uv-trampoline"}'
       # renovate: datasource=github-release-attachments depName=astral-sh/uv
       uv-version: "0.13.6"
     secrets: inherit
