@@ -14,6 +14,7 @@ use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::Version;
 use uv_pep508::MarkerTree;
 use uv_pypi_types::ConflictItemRef;
+use uv_torch::TorchStrategy;
 
 use crate::python_requirement::PythonRequirement;
 use crate::resolver::environment::ResolverEnvironment;
@@ -66,6 +67,7 @@ pub(super) struct RequirementExpander<'a> {
     env: &'a ResolverEnvironment,
     python_requirement: &'a PythonRequirement,
     python_marker: MarkerTree,
+    torch_backend: Option<&'a TorchStrategy>,
 }
 
 impl<'a> RequirementExpander<'a> {
@@ -74,6 +76,7 @@ impl<'a> RequirementExpander<'a> {
         modifiers: &'a DependencyModifiers,
         env: &'a ResolverEnvironment,
         python_requirement: &'a PythonRequirement,
+        torch_backend: Option<&'a TorchStrategy>,
     ) -> Self {
         Self {
             constraints,
@@ -81,11 +84,43 @@ impl<'a> RequirementExpander<'a> {
             env,
             python_requirement,
             python_marker: python_requirement.to_marker_tree(),
+            torch_backend,
         }
     }
 
     /// Expand applicable dependencies, including recursively activated extras and constraints.
     pub(super) fn expand<'data>(
+        &'data self,
+        dependencies: &'data [Requirement],
+        context: RequirementContext<'data>,
+    ) -> impl Iterator<Item = Cow<'data, Requirement>> {
+        // Apply the architecture-specific extra required by the configured PyTorch backend, if
+        // any. ROCm 10.0 ships its GPU kernels in separate packages, which are only reachable
+        // through a `device-gfx*` extra on `torch` and `torchvision`.
+        //
+        // This applies to every requirement edge, so a package that depends on `torch` gets the
+        // kernels too, and it composes with extras the requirement already declares (e.g.,
+        // `torch[extra]` becomes `torch[extra,device-gfx942]`).
+        self.flatten(dependencies, context).map(|requirement| {
+            let Some(extra) = self
+                .torch_backend
+                .and_then(|torch_backend| torch_backend.device_extra(&requirement.name))
+            else {
+                return requirement;
+            };
+            if requirement.extras.contains(&extra) {
+                return requirement;
+            }
+            let mut requirement = requirement.into_owned();
+            let mut extras = requirement.extras.into_vec();
+            extras.push(extra);
+            requirement.extras = extras.into_boxed_slice();
+            Cow::Owned(requirement)
+        })
+    }
+
+    /// Flatten applicable dependencies, including recursively activated extras and constraints.
+    fn flatten<'data>(
         &'data self,
         dependencies: &'data [Requirement],
         context: RequirementContext<'data>,
