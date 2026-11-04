@@ -565,6 +565,20 @@ which instructs uv to install the project in non-editable mode. `--no-editable` 
 deployment use-cases, such as building a Docker container, in which the project should be included
 in the deployed environment without a dependency on the originating source code.
 
+## Dynamic metadata
+
+By default, uv only rebuilds and reinstalls local directory dependencies (including editable
+projects) when the configuration file (`pyproject.toml`, `setup.py`, or `setup.cfg`) changes or when
+a `src` directory is added or removed.
+
+If your project relies on dynamic metadata (e.g. version numbers generated from Git tags or commit
+hashes via tools like `setuptools-scm`), configure
+[`tool.uv.cache-keys`](../../reference/settings.md#cache-keys) or use
+[`tool.uv.reinstall-package`](../../reference/settings.md#reinstall-package) to customize cache
+invalidation behavior. See the
+[dynamic metadata caching documentation](../cache.md#dynamic-metadata) for full details and
+examples.
+
 ## Conflicting dependencies
 
 uv resolves all project dependencies together, including optional dependencies ("extras") and
