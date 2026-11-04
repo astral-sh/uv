@@ -5,7 +5,7 @@ use same_file::is_same_file;
 use tracing::{debug, trace};
 
 use uv_cache_info::CacheInfo;
-use uv_cache_key::{CanonicalUrl, GitUpstreamUrl};
+use uv_cache_key::{CanonicalUrl, RepositoryUrl};
 use uv_distribution_filename::ExpandedTags;
 use uv_distribution_types::{
     BuildInfo, BuildVariables, ConfigSettings, ExtraBuildRequirement, ExtraBuildRequires,
@@ -221,7 +221,7 @@ impl RequirementSatisfaction {
                 let Some(installed_transport) = installed_url.as_str().strip_prefix("git+") else {
                     return Self::Mismatch;
                 };
-                if !GitUpstreamUrl::parse(installed_transport)
+                if !RepositoryUrl::parse(installed_transport)
                     .is_ok_and(|installed_url| installed_url == *requested_git.repository())
                 {
                     debug!(
@@ -299,7 +299,7 @@ impl RequirementSatisfaction {
                 let Some(installed_transport) = installed_url.as_str().strip_prefix("git+") else {
                     return Self::Mismatch;
                 };
-                if !GitUpstreamUrl::parse(installed_transport)
+                if !RepositoryUrl::parse(installed_transport)
                     .is_ok_and(|installed_url| installed_url == *requested_git.repository())
                 {
                     debug!(

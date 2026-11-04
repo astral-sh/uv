@@ -48,7 +48,6 @@ use std::str::FromStr;
 
 use memchr::memchr3;
 
-use uv_cache_key::CanonicalUrl;
 use uv_distribution_filename::{
     DistExtension, SourceDistExtension, SourceDistFilename, WheelFilename,
 };
@@ -1452,13 +1451,11 @@ impl RemoteSource for Dist {
 
 impl Identifier for SafeUrl {
     fn distribution_id(&self) -> DistributionId {
-        DistributionId::Url(CanonicalUrl::new(self.clone()))
+        DistributionId::Url(uv_cache_key::CanonicalUrl::new(self.clone()))
     }
 
     fn resource_id(&self) -> ResourceId {
-        let mut url = self.clone();
-        url.set_fragment(None);
-        ResourceId::Url(CanonicalUrl::new(url))
+        ResourceId::Url(uv_cache_key::RepositoryUrl::new(self.clone()))
     }
 }
 
@@ -1572,11 +1569,11 @@ impl Identifier for PathBuiltDist {
 
 impl Identifier for GitPathBuiltDist {
     fn distribution_id(&self) -> DistributionId {
-        DistributionId::GitPath(self.git.as_ref().into(), self.install_path.clone())
+        self.url.distribution_id()
     }
 
     fn resource_id(&self) -> ResourceId {
-        ResourceId::Git(self.git.repository().clone())
+        self.url.resource_id()
     }
 }
 
@@ -1602,21 +1599,21 @@ impl Identifier for DirectorySourceDist {
 
 impl Identifier for GitPathSourceDist {
     fn distribution_id(&self) -> DistributionId {
-        GitPathSourceUrl::from(self).distribution_id()
+        self.url.distribution_id()
     }
 
     fn resource_id(&self) -> ResourceId {
-        GitPathSourceUrl::from(self).resource_id()
+        self.url.resource_id()
     }
 }
 
 impl Identifier for GitDirectorySourceDist {
     fn distribution_id(&self) -> DistributionId {
-        GitDirectorySourceUrl::from(self).distribution_id()
+        self.url.distribution_id()
     }
 
     fn resource_id(&self) -> ResourceId {
-        GitDirectorySourceUrl::from(self).resource_id()
+        self.url.resource_id()
     }
 }
 
@@ -1702,21 +1699,21 @@ impl Identifier for DirectSourceUrl<'_> {
 
 impl Identifier for GitDirectorySourceUrl<'_> {
     fn distribution_id(&self) -> DistributionId {
-        DistributionId::GitDirectory(self.git.into(), self.subdirectory.map(Path::to_path_buf))
+        self.url.distribution_id()
     }
 
     fn resource_id(&self) -> ResourceId {
-        ResourceId::Git(self.git.repository().clone())
+        self.url.resource_id()
     }
 }
 
 impl Identifier for GitPathSourceUrl<'_> {
     fn distribution_id(&self) -> DistributionId {
-        DistributionId::GitPath(self.git.into(), self.path.to_path_buf())
+        self.url.distribution_id()
     }
 
     fn resource_id(&self) -> ResourceId {
-        ResourceId::Git(self.git.repository().clone())
+        self.url.resource_id()
     }
 }
 

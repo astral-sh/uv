@@ -217,13 +217,13 @@ release contains a breaking change to the cache format, uv will not attempt to r
 an incompatible cache bucket.
 
 For example, uv 0.4.13 included a breaking change to the core metadata bucket. As such, the bucket
-version was increased from v12 to v13. Within a bucket and key version, changes are guaranteed to be
-both forwards- and backwards-compatible.
+version was increased from v12 to v13. Within a cache version, changes are guaranteed to be both
+forwards- and backwards-compatible.
 
 Since changes in the cache format are accompanied by changes in the cache version, multiple versions
-of uv can safely read and write to the same cache directory. Cache keys can also be versioned within
-a bucket. If either the bucket version or a key version changes between two uv releases, those
-releases may not be able to share the affected cache entries.
+of uv can safely read and write to the same cache directory. However, if the cache version changed
+between a given pair of uv releases, then those releases may not be able to share the same
+underlying cache entries.
 
 For example, it's safe to use a single shared cache for uv 0.4.12 and uv 0.4.13, though the cache
 itself may contain duplicate entries in the core metadata bucket due to the change in cache version.

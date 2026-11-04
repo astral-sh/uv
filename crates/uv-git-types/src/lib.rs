@@ -6,7 +6,7 @@ use std::sync::{Arc, LazyLock};
 
 use percent_encoding::percent_decode_str;
 use thiserror::Error;
-use uv_cache_key::GitUpstreamUrl;
+use uv_cache_key::RepositoryUrl;
 use uv_redacted::SafeUrl;
 use uv_static::EnvVars;
 
@@ -107,7 +107,7 @@ struct GitUrlInner {
     /// removed.
     url: SafeUrl,
     /// The canonical repository identity used for comparison and hashing.
-    repository: GitUpstreamUrl,
+    repository: RepositoryUrl,
     /// The reference to the commit to use, which could be a branch, tag or revision.
     reference: GitReference,
     /// The resolved commit for a named or ambiguous reference, if known. Exact commit references
@@ -155,7 +155,7 @@ impl GitUrl {
         }
 
         let git = Self(Arc::new(GitUrlInner {
-            repository: GitUpstreamUrl::new(url.clone()),
+            repository: RepositoryUrl::new(url.clone()),
             url,
             reference,
             resolved: None,
@@ -202,7 +202,7 @@ impl GitUrl {
     }
 
     /// Return the canonical repository identity for this Git URL.
-    pub fn repository(&self) -> &GitUpstreamUrl {
+    pub fn repository(&self) -> &RepositoryUrl {
         &self.0.repository
     }
 

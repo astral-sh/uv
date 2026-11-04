@@ -128,10 +128,12 @@ impl GitSource {
         // path length limit on Windows.
         let short_id = db.to_short_id(actual_rev)?;
 
-        // LFS checkouts have different contents. Their cache keys hash the same repository
-        // URL as the database key, followed by a single byte for LFS enablement.
+        // Compute the canonical URL for the repository checkout.
+        let canonical = git.repository().clone().with_lfs(Some(lfs_requested));
+        // Recompute the checkout hash when Git LFS is enabled as we want
+        // to distinctly differentiate between LFS vs non-LFS source trees.
         let ident = if lfs_requested {
-            cache_digest(&(git.repository(), lfs_requested))
+            cache_digest(&canonical)
         } else {
             ident
         };

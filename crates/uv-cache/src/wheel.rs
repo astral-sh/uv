@@ -15,10 +15,10 @@ pub enum WheelCache<'a> {
     Path(&'a SafeUrl),
     /// An editable dependency, which we key by URL.
     Editable(&'a SafeUrl),
-    /// A Git dependency, keyed by the source URL (including subdirectory and LFS options) and
-    /// the resolved SHA.
+    /// A Git dependency, which we key by URL (including LFS state), SHA.
     ///
-    /// Git dependencies provide source distributions. This variant caches the wheels built from them.
+    /// Note that this variant only exists for source distributions; wheels can't be delivered
+    /// through Git.
     Git(&'a SafeUrl, &'a str),
 }
 
@@ -27,13 +27,21 @@ impl WheelCache<'_> {
     pub fn root(&self) -> PathBuf {
         match self {
             Self::Index(IndexUrl::Pypi(_)) => WheelCacheKind::Pypi.root(),
-            Self::Index(url) => WheelCacheKind::Index.root().join(url_shard(url.url())),
-            Self::Url(url) => WheelCacheKind::Url.root().join(url_shard(url)),
-            Self::Path(url) => WheelCacheKind::Path.root().join(url_shard(url)),
-            Self::Editable(url) => WheelCacheKind::Editable.root().join(url_shard(url)),
+            Self::Index(url) => WheelCacheKind::Index
+                .root()
+                .join(cache_digest(&CanonicalUrl::new(url.url().clone()))),
+            Self::Url(url) => WheelCacheKind::Url
+                .root()
+                .join(cache_digest(&CanonicalUrl::new((*url).clone()))),
+            Self::Path(url) => WheelCacheKind::Path
+                .root()
+                .join(cache_digest(&CanonicalUrl::new((*url).clone()))),
+            Self::Editable(url) => WheelCacheKind::Editable
+                .root()
+                .join(cache_digest(&CanonicalUrl::new((*url).clone()))),
             Self::Git(url, sha) => WheelCacheKind::Git
                 .root()
-                .join(cache_digest(&CanonicalUrl::for_git_source((*url).clone())))
+                .join(cache_digest(&CanonicalUrl::new((*url).clone())))
                 .join(sha),
         }
     }
@@ -42,13 +50,6 @@ impl WheelCache<'_> {
     pub fn wheel_dir(&self, package_name: impl AsRef<Path>) -> PathBuf {
         self.root().join(package_name)
     }
-}
-
-fn url_shard(url: &SafeUrl) -> String {
-    // `/simple/` and `/simple.git/` previously shared a shard. The new `/simple/`
-    // digest still matches that shard, which could contain a wheel from `/simple.git/`.
-    // The `v2-` prefix prevents either URL from reading the shared shard.
-    format!("v2-{}", cache_digest(&CanonicalUrl::new(url.clone())))
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -87,52 +88,5 @@ impl WheelCacheKind {
 impl AsRef<Path> for WheelCacheKind {
     fn as_ref(&self) -> &Path {
         self.to_str().as_ref()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use uv_redacted::SafeUrlError;
-
-    use super::*;
-
-    #[test]
-    fn direct_wheel_cache_paths_are_separate_from_legacy_aliases() -> Result<(), SafeUrlError> {
-        let plain =
-            SafeUrl::parse("https://example.com/artifacts@channel/example-1.0-py3-none-any.whl")?;
-        let suffixed = SafeUrl::parse(
-            "https://example.com/artifacts.git@channel/example-1.0-py3-none-any.whl",
-        )?;
-        let legacy_root = Path::new("url").join("8f378f2efe8e0a88");
-
-        let plain_root = WheelCache::Url(&plain).root();
-        let suffixed_root = WheelCache::Url(&suffixed).root();
-        assert_ne!(plain_root, suffixed_root);
-        assert_ne!(plain_root, legacy_root);
-        assert_ne!(suffixed_root, legacy_root);
-
-        let escaped_at = SafeUrl::parse(
-            "https://example.com/artifacts.git%40channel/example-1.0-py3-none-any.whl",
-        )?;
-        let escaped_dot = SafeUrl::parse(
-            "https://example.com/artifacts%2Egit@channel/example-1.0-py3-none-any.whl",
-        )?;
-        assert_ne!(WheelCache::Url(&escaped_at).root(), suffixed_root);
-        assert_ne!(WheelCache::Url(&escaped_dot).root(), suffixed_root);
-        Ok(())
-    }
-
-    #[test]
-    fn git_cache_path_uses_legacy_source_digest() -> Result<(), SafeUrlError> {
-        let source = SafeUrl::parse(
-            "git+https://github.com/PYPA/sample-namespace-packages.git@2.0.0#subdirectory=src&lfs=true",
-        )?;
-        assert_eq!(
-            WheelCache::Git(&source, "c9929c576344ec58").root(),
-            Path::new("git")
-                .join("e1494ed3a4bc2733")
-                .join("c9929c576344ec58"),
-        );
-        Ok(())
     }
 }
