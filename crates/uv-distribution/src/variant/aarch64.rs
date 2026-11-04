@@ -214,7 +214,7 @@ mod tests {
 
     use super::Aarch64Version;
 
-    /// Linux caps AmpereOne at Armv8.4-A even with all HWCAP bits set. A missing feature or a
+    /// Linux caps `AmpereOne` at Armv8.4-A even with all HWCAP bits set. A missing feature or a
     /// less capable core can lower the version further.
     #[test]
     fn linux_version_requires_usable_features_on_every_core() {
