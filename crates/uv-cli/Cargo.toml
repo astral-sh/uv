@@ -45,6 +45,7 @@ rustc-hash = { workspace = true }
 serde = { workspace = true }
 
 [dev-dependencies]
+fs-err = { workspace = true }
 insta = { workspace = true }
 
 [features]
