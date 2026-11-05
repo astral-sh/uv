@@ -883,7 +883,7 @@ impl PubGrubReportFormatter<'_> {
                                 .exclude_newer
                                 .exclude_newer_package_for_index_with_source(
                                     name,
-                                    index_locations.exclude_newer_for(index.url()),
+                                    index_locations.exclude_newer_for(index.url(), name),
                                 )
                         } else {
                             options

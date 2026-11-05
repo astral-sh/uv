@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::path::Path;
 use std::str::FromStr;
 
@@ -6,6 +7,7 @@ use serde::{Deserialize, Serialize, Serializer};
 use thiserror::Error;
 
 use uv_auth::{AuthPolicy, Credentials, CredentialsFromUrlError};
+use uv_normalize::PackageName;
 use uv_pypi_types::HashAlgorithm;
 use uv_redacted::SafeUrl;
 use uv_redacted::policy::Stripped;
@@ -269,6 +271,26 @@ pub struct Index {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "schemars", schemars(with = "ExcludeNewerOverride"))]
     pub exclude_newer: Option<ExcludeNewerOverride>,
+    /// Package-specific cutoffs for distributions resolved from this index.
+    ///
+    /// For each package, accepts the same date, timestamp, and duration values as the global
+    /// `exclude-newer` setting. Set a package's value to `false` to disable `exclude-newer` for that
+    /// package on this index.
+    ///
+    /// These override the index's `exclude-newer` value and the global cutoff. Top-level
+    /// `exclude-newer-package` settings take precedence over these overrides.
+    ///
+    /// This option is in preview and may change in any future release.
+    ///
+    /// ```toml
+    /// [[tool.uv.index]]
+    /// name = "internal"
+    /// url = "https://internal.example.com/simple"
+    /// exclude-newer = "7 days"
+    /// exclude-newer-package = { example = false }
+    /// ```
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub exclude_newer_package: BTreeMap<PackageName, ExcludeNewerOverride>,
 }
 
 #[derive(Debug, Error)]
@@ -294,6 +316,7 @@ impl PartialEq for Index {
             cache_control,
             hash_algorithm,
             exclude_newer,
+            exclude_newer_package,
         } = self;
         *url == other.url
             && *name == other.name
@@ -306,6 +329,7 @@ impl PartialEq for Index {
             && *cache_control == other.cache_control
             && *hash_algorithm == other.hash_algorithm
             && *exclude_newer == other.exclude_newer
+            && *exclude_newer_package == other.exclude_newer_package
     }
 }
 
@@ -332,6 +356,7 @@ impl Ord for Index {
             cache_control,
             hash_algorithm,
             exclude_newer,
+            exclude_newer_package,
         } = self;
         url.cmp(&other.url)
             .then_with(|| name.cmp(&other.name))
@@ -344,6 +369,7 @@ impl Ord for Index {
             .then_with(|| cache_control.cmp(&other.cache_control))
             .then_with(|| hash_algorithm.cmp(&other.hash_algorithm))
             .then_with(|| exclude_newer.cmp(&other.exclude_newer))
+            .then_with(|| exclude_newer_package.cmp(&other.exclude_newer_package))
     }
 }
 
@@ -362,6 +388,7 @@ impl std::hash::Hash for Index {
             cache_control,
             hash_algorithm,
             exclude_newer,
+            exclude_newer_package,
         } = self;
         url.hash(state);
         name.hash(state);
@@ -374,6 +401,7 @@ impl std::hash::Hash for Index {
         cache_control.hash(state);
         hash_algorithm.hash(state);
         exclude_newer.hash(state);
+        exclude_newer_package.hash(state);
     }
 }
 
@@ -442,6 +470,7 @@ impl Index {
             cache_control: None,
             hash_algorithm: None,
             exclude_newer: None,
+            exclude_newer_package: BTreeMap::new(),
         }
     }
 
@@ -460,6 +489,7 @@ impl Index {
             cache_control: None,
             hash_algorithm: None,
             exclude_newer: None,
+            exclude_newer_package: BTreeMap::new(),
         }
     }
 
@@ -478,6 +508,7 @@ impl Index {
             cache_control: None,
             hash_algorithm: None,
             exclude_newer: None,
+            exclude_newer_package: BTreeMap::new(),
         }
     }
 
@@ -596,9 +627,11 @@ impl Index {
             .or_else(|| IndexCacheControl::simple_api_cache_control(self.url.url()))
     }
 
-    /// Return the `exclude-newer` setting for this index.
-    pub(crate) fn exclude_newer(&self) -> Option<&ExcludeNewerOverride> {
-        self.exclude_newer.as_ref()
+    /// Return the package-specific cutoff for this index, falling back to its default cutoff.
+    pub(crate) fn exclude_newer(&self, package: &PackageName) -> Option<&ExcludeNewerOverride> {
+        self.exclude_newer_package
+            .get(package)
+            .or(self.exclude_newer.as_ref())
     }
 }
 
@@ -617,6 +650,7 @@ impl From<IndexUrl> for Index {
             cache_control: None,
             hash_algorithm: None,
             exclude_newer: None,
+            exclude_newer_package: BTreeMap::new(),
         }
     }
 }
@@ -644,6 +678,7 @@ impl FromStr for Index {
                 cache_control: None,
                 hash_algorithm: None,
                 exclude_newer: None,
+                exclude_newer_package: BTreeMap::new(),
             });
         }
 
@@ -662,6 +697,7 @@ impl FromStr for Index {
             cache_control: None,
             hash_algorithm: None,
             exclude_newer: None,
+            exclude_newer_package: BTreeMap::new(),
         })
     }
 }
@@ -757,6 +793,8 @@ struct IndexWire {
     hash_algorithm: Option<IndexHashAlgorithm>,
     #[serde(default)]
     exclude_newer: Option<ExcludeNewerOverride>,
+    #[serde(default)]
+    exclude_newer_package: BTreeMap<PackageName, ExcludeNewerOverride>,
 }
 
 impl<'de> Deserialize<'de> for Index {
@@ -786,6 +824,7 @@ impl<'de> Deserialize<'de> for Index {
             cache_control: wire.cache_control,
             hash_algorithm: wire.hash_algorithm,
             exclude_newer: wire.exclude_newer,
+            exclude_newer_package: wire.exclude_newer_package,
         })
     }
 }
