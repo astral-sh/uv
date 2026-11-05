@@ -1463,3 +1463,58 @@ fn invalid_default_groups_in_lockfile() -> Result<()> {
     );
     Ok(())
 }
+
+/// Reject a lockfile whose resolved dependency version violates the declared specifier even when
+/// `[package.metadata].requires-dist` matches `pyproject.toml`.
+#[test]
+fn lock_rejects_resolved_version_violating_declared_specifier() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==4.3.0"]
+    "#})?;
+
+    context.temp_dir.child("uv.lock").write_str(indoc! {r#"
+        version = 1
+        revision = 5
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "anyio"
+        version = "4.2.0"
+        source = { registry = "https://pypi.org/simple" }
+
+        [[package]]
+        name = "foo"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "anyio" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "anyio", specifier = "==4.3.0" }]
+    "#})?;
+
+    context
+        .lock()
+        .args(["--offline", "--check"])
+        .assert()
+        .failure();
+    context
+        .lock()
+        .args(["--offline", "--locked"])
+        .assert()
+        .failure();
+
+    Ok(())
+}

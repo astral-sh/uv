@@ -3969,6 +3969,20 @@ impl Lock {
             None
         };
 
+        let version_satisfied = if missing_metadata {
+            SatisfiesResult::Satisfied
+        } else {
+            self.satisfies_resolved_dependency_versions(
+                &requires_dist,
+                provides_extra,
+                &dependency_groups,
+                modifiers,
+                package_version,
+                package,
+                &normalizer,
+            )?
+        };
+
         let expected_requirements = normalizer.requirements(requires_dist)?;
         let actual = normalizer.requirements(package.metadata.requires_dist.iter().cloned())?;
         if !missing_metadata
@@ -4016,6 +4030,10 @@ impl Lock {
                     .collect(),
             ));
         }
+        match version_satisfied {
+            SatisfiesResult::Satisfied => {}
+            dissatisfied => return Ok(dissatisfied),
+        }
         if allow_missing_package_metadata {
             let expected_requirements = expected_requirements.into_iter().collect();
             let flattened = flattened.map(|requirements| requirements.into_iter().collect());
@@ -4060,6 +4078,135 @@ impl Lock {
         // requirements prevents stale static metadata from authorizing an unrelated locked source.
         for index in &indexes {
             Self::record_index(index, remotes, locals, root);
+        }
+
+        Ok(SatisfiesResult::Satisfied)
+    }
+
+    /// Validate that the resolved dependency edges on `package` satisfy the declared version
+    /// specifiers after applying overrides and exclusions.
+    fn satisfies_resolved_dependency_versions<'lock>(
+        &self,
+        requires_dist: &[Requirement],
+        provides_extra: &[ExtraName],
+        dependency_groups: &BTreeMap<GroupName, Box<[Requirement]>>,
+        modifiers: &DependencyModifiers,
+        package_version: Option<&Version>,
+        package: &'lock Package,
+        normalizer: &RequirementNormalizer<'_>,
+    ) -> Result<SatisfiesResult<'lock>, LockError> {
+        let package_marker = if package.fork_markers.is_empty() {
+            self.fork_markers_union()
+        } else {
+            package
+                .fork_markers
+                .iter()
+                .fold(MarkerTree::FALSE, |acc, marker| acc.or(marker.pep508()))
+        };
+        let preprocessed_requires_dist = normalizer
+            .requirements(Self::preprocess_requirements(
+                &package.id.name,
+                package_version,
+                requires_dist,
+                DependencyContext::Production,
+                modifiers,
+            ))?
+            .into_iter()
+            .collect::<Vec<_>>();
+        let preprocessed_groups = dependency_groups
+            .iter()
+            .map(|(group, requirements)| {
+                Ok((
+                    group,
+                    normalizer
+                        .requirements(Self::preprocess_requirements(
+                            &package.id.name,
+                            package_version,
+                            requirements,
+                            DependencyContext::Group(group),
+                            modifiers,
+                        ))?
+                        .into_iter()
+                        .collect::<Vec<_>>(),
+                ))
+            })
+            .collect::<Result<BTreeMap<_, _>, LockError>>()?;
+
+        let edge_marker = |dependency: &Dependency| {
+            let target = self.package(dependency.index);
+            let target_marker = if target.fork_markers.is_empty() {
+                self.fork_markers_union()
+            } else {
+                target
+                    .fork_markers
+                    .iter()
+                    .fold(MarkerTree::FALSE, |acc, marker| acc.or(marker.pep508()))
+            };
+            dependency.complexified_marker.pep508().and(target_marker)
+        };
+
+        let contexts = iter::once(DependencyContext::Production)
+            .chain(provides_extra.iter().map(DependencyContext::Extra))
+            .chain(dependency_groups.keys().map(DependencyContext::Group));
+
+        for context in contexts {
+            let declarations = match context {
+                DependencyContext::Production | DependencyContext::Extra(_) => {
+                    &preprocessed_requires_dist
+                }
+                DependencyContext::Group(group) => &preprocessed_groups[group],
+            };
+            let actual = context.dependencies(package);
+            for requirement in declarations
+                .iter()
+                .filter(|req| req.name != package.id.name)
+            {
+                let Some(specifiers) = requirement.source.version_specifiers() else {
+                    continue;
+                };
+                if specifiers.is_empty() {
+                    continue;
+                }
+                let req_marker = context
+                    .requirement_marker(requirement.marker)
+                    .and(package_marker);
+                if marker_is_unreachable(&self.requires_python, req_marker) {
+                    continue;
+                }
+                let mut all_edges_marker = MarkerTree::FALSE;
+                let mut satisfying_edges_marker = MarkerTree::FALSE;
+                let base_deps = match context {
+                    DependencyContext::Extra(_) => package.dependencies.as_slice(),
+                    DependencyContext::Production | DependencyContext::Group(_) => &[],
+                };
+                for dependency in actual
+                    .iter()
+                    .chain(base_deps.iter())
+                    .filter(|dep| dep.package_id.name == requirement.name)
+                {
+                    let marker = edge_marker(dependency);
+                    all_edges_marker = all_edges_marker.or(marker);
+                    let target = self.package(dependency.index);
+                    if target
+                        .id
+                        .version
+                        .as_ref()
+                        .is_none_or(|version| specifiers.contains(version))
+                    {
+                        satisfying_edges_marker = satisfying_edges_marker.or(marker);
+                    }
+                }
+                let active_marker = req_marker.and(all_edges_marker);
+                let uncovered = active_marker.and(satisfying_edges_marker.negate());
+                if !marker_is_unreachable(&self.requires_python, uncovered) {
+                    return Ok(SatisfiesResult::MismatchedPackageDependencies(
+                        &package.id.name,
+                        package.id.version.as_ref(),
+                        Vec::new(),
+                        actual,
+                    ));
+                }
+            }
         }
 
         Ok(SatisfiesResult::Satisfied)
@@ -4496,15 +4643,11 @@ impl Lock {
             }
         }
 
-        let dependency_modifiers = if allow_missing_package_metadata {
-            DependencyModifiers::new(
-                Overrides::from_entries(normalized_overrides)
-                    .map_err(LockErrorKind::InvalidScopedOverride)?,
-                Excludes::from_entries(excludes.iter().cloned()),
-            )
-        } else {
-            DependencyModifiers::default()
-        };
+        let dependency_modifiers = DependencyModifiers::new(
+            Overrides::from_entries(normalized_overrides)
+                .map_err(LockErrorKind::InvalidScopedOverride)?,
+            Excludes::from_entries(excludes.iter().cloned()),
+        );
         // Projectless workspace groups and scripts are root declarations, so apply only
         // global overrides and exclusions before using them for sources or validation.
         let root_requirements = dependency_modifiers
@@ -4596,6 +4739,42 @@ impl Lock {
 
         if !root_requirements.is_empty() {
             for requirement in root_requirements {
+                if !allow_missing_package_metadata {
+                    let req_marker = DependencyContext::Production
+                        .requirement_marker(requirement.marker)
+                        .and(self.fork_markers_union());
+                    if !marker_is_unreachable(&self.requires_python, req_marker)
+                        && let Some(specifiers) = requirement.source.version_specifiers()
+                        && !specifiers.is_empty()
+                    {
+                        let candidates = self.packages_for_name(&requirement.name);
+                        if !candidates.is_empty()
+                            && !candidates.iter().any(|package| {
+                                package
+                                    .id
+                                    .version
+                                    .as_ref()
+                                    .is_none_or(|version| specifiers.contains(version))
+                            })
+                        {
+                            if !requirements.is_empty() {
+                                return Ok(SatisfiesResult::MismatchedRequirements(
+                                    requirements.iter().cloned().collect(),
+                                    self.manifest.requirements.iter().cloned().collect(),
+                                ));
+                            }
+                            return Ok(SatisfiesResult::MismatchedDependencyGroups(
+                                dependency_groups
+                                    .iter()
+                                    .map(|(group, reqs)| {
+                                        (group.clone(), reqs.iter().cloned().collect())
+                                    })
+                                    .collect(),
+                                self.manifest.dependency_groups.clone(),
+                            ));
+                        }
+                    }
+                }
                 for package in self.packages_for_name(&requirement.name) {
                     if !package.id.source.is_source_tree() {
                         continue;
@@ -11283,5 +11462,50 @@ wheels = [
                 Path::new("C:/Users/user/links").into()
             ))
         );
+    }
+
+    #[test]
+    fn resolved_dependency_version_must_satisfy_declared_specifier() {
+        let data = r#"
+version = 1
+requires-python = ">=3.12"
+
+[[package]]
+name = "anyio"
+version = "4.2.0"
+source = { registry = "https://pypi.org/simple" }
+
+[[package]]
+name = "foo"
+version = "0.1.0"
+source = { virtual = "." }
+dependencies = [
+    { name = "anyio" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "anyio", specifier = "==4.3.0" }]
+"#;
+        let lock: Lock = toml::from_str(data).unwrap();
+        let foo = lock
+            .find_by_name(&PackageName::from_str("foo").unwrap())
+            .unwrap()
+            .unwrap();
+        let normalizer = RequirementNormalizer::new(Path::new("."), &lock.requires_python);
+        let result = lock
+            .satisfies_resolved_dependency_versions(
+                &foo.metadata.requires_dist,
+                &foo.metadata.provides_extra,
+                &foo.metadata.dependency_groups,
+                &DependencyModifiers::default(),
+                foo.id.version.as_ref(),
+                foo,
+                &normalizer,
+            )
+            .unwrap();
+        assert!(matches!(
+            result,
+            SatisfiesResult::MismatchedPackageDependencies(..)
+        ));
     }
 }
