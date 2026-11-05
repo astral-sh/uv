@@ -73,12 +73,7 @@ impl InstalledWheelVariant {
                 Some(target) => metadata.select_variant(&recorded.label, target),
                 None => metadata.select_variant(
                     &recorded.label,
-                    &recheckable_installed_properties(
-                        metadata,
-                        recorded,
-                        platform,
-                        policy.is_some_and(VariantPolicy::explicit_platform),
-                    ),
+                    &recheckable_installed_properties(metadata, recorded, platform, policy),
                 ),
             }
         })
@@ -136,11 +131,12 @@ fn recheckable_installed_properties(
     metadata: &VariantsJsonContent,
     recorded: &SelectedVariant,
     platform: &Platform,
-    explicit_platform: bool,
+    policy: Option<&VariantPolicy>,
 ) -> SupportedVariantProperties {
+    let explicit_platform = policy.is_some_and(VariantPolicy::explicit_platform);
     let mut supported = SupportedVariantProperties::default();
     for (namespace, provider) in metadata
-        .providers()
+        .enabled_providers(policy)
         .filter(|(namespace, _)| recorded.properties.contains_key(*namespace))
     {
         let features = if !explicit_platform && let Some(features) = provider.static_properties() {
@@ -205,11 +201,7 @@ pub(crate) async fn query_supported_variant_properties(
 
     let explicit_platform = policy.is_some_and(VariantPolicy::explicit_platform);
     let mut supported = SupportedVariantProperties::default();
-    for (namespace, provider) in metadata.providers() {
-        let enabled = policy.is_some_and(|policy| policy.enables(namespace));
-        if provider.optional() && !enabled {
-            continue;
-        }
+    for (namespace, provider) in metadata.enabled_providers(policy) {
         if !explicit_platform && let Some(features) = provider.static_properties() {
             supported.insert(namespace.clone(), features);
             continue;
