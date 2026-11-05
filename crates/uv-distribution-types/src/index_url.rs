@@ -523,11 +523,6 @@ impl<'a> IndexLocations {
             .and_then(|index| index.hash_algorithm.map(HashAlgorithm::from))
     }
 
-    /// Return the `exclude-newer` setting for a given index, if the index is configured.
-    pub fn exclude_newer_for(&self, url: &IndexUrl) -> Option<&ExcludeNewerOverride> {
-        self.index_for_url(url).and_then(Index::exclude_newer)
-    }
-
     /// Return the `exclude-newer` setting for a given index and package, if the index is configured.
     pub fn exclude_newer_for_package(
         &self,
