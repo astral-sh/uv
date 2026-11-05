@@ -788,6 +788,67 @@ fn replace_incompatible_installed_variant() -> Result<()> {
     Ok(())
 }
 
+/// Withdrawing an optional provider replaces its installed variant with the ordinary wheel.
+#[test]
+fn replace_installed_variant_when_optional_provider_is_disabled() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::from_toml(indoc! {r#"
+        name = "optional-provider-installed-variant"
+        root = {}
+        expected.satisfiable = true
+
+        [packages.ok.versions."1.0.0"]
+        sdist = false
+
+        [packages.ok.versions."1.0.0".variants]
+        namespaces = ["blas_lapack"]
+
+        [packages.ok.versions."1.0.0".variants.providers.blas_lapack]
+        optional = true
+        static-properties.library = ["openblas"]
+
+        [packages.ok.versions."1.0.0".variants.wheels]
+        blas.properties = ["blas_lapack :: library :: openblas"]
+    "#})?;
+    let installed_variant = context
+        .site_packages()
+        .join("ok-1.0.0.dist-info/variant.json");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--index-url")
+        .arg(server.index_url())
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("--variant-provider")
+        .arg("blas_lapack")
+        .arg("ok==1.0.0"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0
+    ");
+    assert!(installed_variant.is_file());
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--index-url")
+        .arg(server.index_url())
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("ok==1.0.0"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ ok==1.0.0
+    ");
+    assert!(!installed_variant.exists());
+    Ok(())
+}
+
 /// Dependency markers use only the selected wheel properties supported by the target.
 #[test]
 fn selected_variant_properties_filter_dependencies() -> Result<()> {

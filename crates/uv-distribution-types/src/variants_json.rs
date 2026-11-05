@@ -326,9 +326,17 @@ impl VariantsJsonContent {
         self.variants.contains_key(label)
     }
 
-    /// Providers declared by the variant metadata.
-    pub fn providers(&self) -> impl Iterator<Item = (&VariantNamespace, &VariantProvider)> {
-        self.providers.iter().flat_map(|providers| providers.iter())
+    /// Required providers and optional providers enabled by the user.
+    pub fn enabled_providers(
+        &self,
+        policy: Option<&VariantPolicy>,
+    ) -> impl Iterator<Item = (&VariantNamespace, &VariantProvider)> {
+        self.providers
+            .iter()
+            .flatten()
+            .filter(move |(namespace, provider)| {
+                !provider.optional || policy.is_some_and(|policy| policy.enables(namespace))
+            })
     }
 
     /// Validate the properties returned by a provider plugin.
@@ -507,8 +515,7 @@ impl VariantsJsonContent {
     pub fn static_supported_properties(&self) -> SupportedVariantProperties {
         SupportedVariantProperties {
             properties: self
-                .providers()
-                .filter(|(_, provider)| !provider.optional)
+                .enabled_providers(None)
                 .filter_map(|(namespace, provider)| {
                     Some((namespace.clone(), provider.static_properties()?))
                 })
@@ -569,10 +576,6 @@ pub struct VariantProvider {
 }
 
 impl VariantProvider {
-    pub fn optional(&self) -> bool {
-        self.optional
-    }
-
     pub fn kind(&self) -> &VariantProviderKind {
         &self.kind
     }
