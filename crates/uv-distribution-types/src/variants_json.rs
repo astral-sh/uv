@@ -13,6 +13,8 @@ use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifier};
 use version_ranges::Ranges;
 
+use crate::{Name, Resolution, ResolvedDist};
+
 // TODO(konsti): Standardize on a single schema URL once the variant metadata format is finalized.
 /// The PEP 825 draft schema for variant metadata without providers.
 pub const PEP_825_SCHEMA: &str = "https://variants-schema.wheelnext.dev/peps/825/v0.1.1.json";
@@ -184,7 +186,7 @@ impl VariantsJsonContent {
 
     /// Score a variant using the target's ordered compatible features and values.
     ///
-    /// Returns `None` if the label is missing or any of its features is unsupported.
+    /// The resolver checks [`Self::abi_dependencies`] separately against the runtime constraints.
     pub fn score_variant(
         &self,
         label: &VariantLabel,
@@ -199,6 +201,10 @@ impl VariantsJsonContent {
                 .namespace
                 .iter()
                 .position(|name| name == namespace)?;
+            if self.is_abi_dependency(namespace) {
+                properties.insert((namespace_priority, 0, 0));
+                continue;
+            }
             let supported_features = supported_properties.properties.get(namespace)?;
             for (feature, values) in features {
                 let (feature_priority, value_priority) =
@@ -214,10 +220,13 @@ impl VariantsJsonContent {
     }
 
     /// Return the unsupported properties for a variant present in this metadata, if any.
+    ///
+    /// ABI properties require a matching runtime in the resolution.
     pub fn unsupported_variant_properties(
         &self,
         label: &VariantLabel,
         supported_properties: &SupportedVariantProperties,
+        resolution: Option<&Resolution>,
     ) -> Option<UnsupportedVariantProperties> {
         let properties = self.variants.get(label)?;
         let mut unsupported = BTreeMap::new();
@@ -226,6 +235,17 @@ impl VariantsJsonContent {
             let unsupported_features = features
                 .iter()
                 .filter(|(feature, values)| {
+                    if self.is_abi_dependency(namespace) {
+                        let Some((name, versions)) = abi_dependency(feature, values) else {
+                            return true;
+                        };
+                        return resolution
+                            .into_iter()
+                            .flat_map(Resolution::distributions)
+                            .find(|dist| dist.name() == &name)
+                            .and_then(ResolvedDist::version)
+                            .is_none_or(|version| !versions.contains(version));
+                    }
                     supported_features
                         .and_then(|supported| score_feature(supported, feature, values))
                         .is_none()
