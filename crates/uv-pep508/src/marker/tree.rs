@@ -1374,6 +1374,13 @@ impl MarkerTree {
         Self(INTERNER.lock().without_extras(self.0))
     }
 
+    /// Remove constraints on `platform_machine`, retaining environments that satisfy
+    /// the marker for at least one machine architecture.
+    #[must_use]
+    pub fn without_platform_machine(self) -> Self {
+        Self(INTERNER.lock().without_platform_machine(self.0))
+    }
+
     /// Replace extras with the conditions under which they are enabled.
     ///
     /// Extras absent from `known_extras` are false. Substitution is simultaneous: extras in a

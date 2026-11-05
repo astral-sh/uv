@@ -9468,6 +9468,49 @@ fn lock_sibling_fork_keeps_android_wheel() -> Result<()> {
     Ok(())
 }
 
+/// An x64 interpreter on Windows ARM64 needs the x64 wheel even though its host
+/// satisfies the ARM64 dependency marker.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_sibling_fork_keeps_emulated_windows_wheel() -> Result<()> {
+    let server = PackseServer::from_toml(indoc! {r#"
+        name = "sibling-fork-keeps-emulated-windows-wheel"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.a.versions."1.0.0"]
+        wheel_tags = ["py3-none-macosx_10_9_x86_64", "py3-none-win_amd64"]
+
+        [packages.a.versions."2.0.0"]
+        wheel_tags = ["py3-none-win_arm64"]
+    "#})?;
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["a<2 ; platform_machine != 'ARM64'", "a ; platform_machine == 'ARM64'"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    project v1.0.0
+    └── a v1.0.0
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    Ok(())
+}
+
 /// If the version with better wheels cannot resolve, the inherited source release is still usable.
 #[cfg(feature = "test-universal")]
 #[test]

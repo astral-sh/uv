@@ -1,3 +1,4 @@
+use std::cell::LazyCell;
 use std::fmt::{Display, Formatter};
 use std::ops::Bound;
 
@@ -16,6 +17,7 @@ use uv_pep508::MarkerTree;
 use uv_platform_tags::Tags;
 use uv_types::InstalledPackagesProvider;
 
+use crate::known_platform::KnownPlatform;
 use crate::preferences::{Entry, PreferenceSource, Preferences};
 use crate::prerelease::{PrereleaseSelection, PrereleaseStrategy};
 use crate::prioritized_distribution::{
@@ -418,6 +420,12 @@ impl CandidateSelector {
         prerelease_selection: PrereleaseSelection,
     ) -> Option<Candidate<'a>> {
         let newer = range.intersection(&Range::strictly_higher_than(inherited_version.clone()));
+        // On Windows the machine marker can describe the host while wheel tags describe
+        // an emulated interpreter. Keep every interpreter architecture when checking losses.
+        let wheel_fork = LazyCell::new(|| {
+            let windows = fork.and(KnownPlatform::Windows.marker());
+            fork.or(windows.without_platform_machine())
+        });
         for (version, handle) in version_map.iter_included(&newer).rev() {
             // The inherited release is already an alternative to opting into pre-releases.
             if version.any_prerelease()
@@ -436,7 +444,7 @@ impl CandidateSelector {
             };
             // Defer computing wheel coverage until there is a newer candidate to compare.
             let inherited_wheels = inherited.wheel_coverage();
-            if inherited_wheels.covers_fork(fork) {
+            if inherited_wheels.covers_fork(fork) && inherited_wheels.covers_fork(*wheel_fork) {
                 return None;
             }
             let wheels = files.wheel_coverage();
@@ -445,18 +453,21 @@ impl CandidateSelector {
                 continue;
             }
             // Only a dependency's Python lower bound splits the fork.
-            let supported = match dist.requires_python() {
-                Some(specifiers) => fork
-                    .and(RequiresPython::from_specifiers(specifiers.clone()).lower_bound_marker()),
-                None => fork,
-            };
+            let python = dist
+                .requires_python()
+                .map_or(MarkerTree::TRUE, |specifiers| {
+                    RequiresPython::from_specifiers(specifiers.clone()).lower_bound_marker()
+                });
+            if fork.and(python).is_disjoint(gained) {
+                continue;
+            }
             // The inherited sdist can install throughout this fork. A wheel-only release
             // must retain that coverage on every ABI and libc.
+            let supported = wheel_fork.and(python);
             if !files.has_compatible_source() && !wheels.covers_fork(supported) {
                 continue;
             }
-            if !supported.is_disjoint(gained) && wheels.retains_wheels(inherited_wheels, supported)
-            {
+            if wheels.retains_wheels(inherited_wheels, supported) {
                 debug!(
                     "Preferring wheel coverage of {package_name}=={version} over sibling version {inherited_version}"
                 );
