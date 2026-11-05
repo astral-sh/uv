@@ -2991,6 +2991,7 @@ async fn run_project(
                 script,
                 args.python_version,
                 args.python_platform,
+                args.python,
                 args.install_mirrors,
                 args.settings,
                 client_builder.subcommand(vec!["audit".to_owned()]),

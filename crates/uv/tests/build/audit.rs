@@ -56,6 +56,41 @@ fn audit_invalid_service_url() {
     ");
 }
 
+#[test]
+fn audit_python_flag() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.audit()
+        .arg("--preview-features")
+        .arg("audit-command")
+        .arg("--python")
+        .arg("nonexistent-python-interpreter-xyz"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: No interpreter found for executable name `nonexistent-python-interpreter-xyz` in managed installations or search path
+    ");
+
+    uv_snapshot!(context.filters(), context.audit()
+        .arg("--preview-features")
+        .arg("audit-command")
+        .env(EnvVars::UV_PYTHON, "nonexistent-python-interpreter-xyz"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: No interpreter found for executable name `nonexistent-python-interpreter-xyz` in managed installations or search path
+    ");
+
+    Ok(())
+}
+
 /// The workspace discovered while resolving settings is reused by `uv audit`.
 #[test]
 fn audit_reuses_settings_workspace_discovery() -> Result<()> {

@@ -5155,6 +5155,19 @@ pub struct AuditArgs {
     /// `aarch64-apple-darwin`.
     #[arg(long)]
     pub python_platform: Option<TargetTriple>,
+
+    /// The Python interpreter to use for the operation.
+    ///
+    /// See `uv help python` for details on Python discovery and supported request formats.
+    #[arg(
+        long,
+        short,
+        env = EnvVars::UV_PYTHON,
+        verbatim_doc_comment,
+        help_heading = "Python options",
+        value_hint = ValueHint::Other,
+    )]
+    pub python: Option<Maybe<String>>,
 }
 
 #[derive(Args)]

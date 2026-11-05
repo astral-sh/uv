@@ -3186,6 +3186,7 @@ pub struct AuditSettings {
     pub frozen: Option<FrozenSource>,
     pub python_version: Option<PythonVersion>,
     pub python_platform: Option<TargetTriple>,
+    pub python: Option<String>,
     pub install_mirrors: PythonInstallMirrors,
     pub settings: ResolverSettings,
     pub output_format: AuditOutputFormat,
@@ -3227,6 +3228,7 @@ impl AuditSettings {
                 },
             build,
             resolver,
+            python,
         } = args;
 
         let filesystem_install_mirrors = filesystem
@@ -3277,6 +3279,7 @@ impl AuditSettings {
             frozen,
             python_version,
             python_platform,
+            python: python.and_then(Maybe::into_option),
             settings: resolve_resolver_settings(resolver, build, filesystem, &environment)?,
             install_mirrors: environment
                 .install_mirrors

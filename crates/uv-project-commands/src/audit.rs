@@ -21,7 +21,9 @@ use uv_preview::{Preview, PreviewFeature};
 use uv_python_discovery::ConfigDiscovery;
 use uv_python_discovery::ProjectPythonRequest;
 use uv_python_discovery::ScriptInterpreter;
-use uv_python_types::{PythonArchitecture, PythonDownloads, PythonPreference, PythonVersion};
+use uv_python_types::{
+    PythonArchitecture, PythonDownloads, PythonPreference, PythonRequest, PythonVersion,
+};
 use uv_redacted::SafeUrl;
 use uv_resolve_operations::loggers::DefaultResolveLogger;
 use uv_resolve_operations::resolution_markers;
@@ -39,6 +41,7 @@ pub async fn audit(
     script: Option<Pep723Script>,
     python_version: Option<PythonVersion>,
     python_platform: Option<TargetTriple>,
+    python: Option<String>,
     install_mirrors: PythonInstallMirrors,
     settings: ResolverSettings,
     client_builder: BaseClientBuilder<'_>,
@@ -115,7 +118,7 @@ pub async fn audit(
         Some(match target {
             LockTarget::Script(script) => ScriptInterpreter::discover(
                 script.into(),
-                None,
+                python.as_deref().map(PythonRequest::parse),
                 &client_builder,
                 python_preference,
                 python_arch,
@@ -131,7 +134,7 @@ pub async fn audit(
             .into_interpreter(),
             LockTarget::Workspace(workspace) => {
                 let project_python = ProjectPythonRequest::from_request(
-                    None,
+                    python.as_deref().map(PythonRequest::parse),
                     Some(workspace),
                     &groups,
                     project_dir,
