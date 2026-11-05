@@ -10433,9 +10433,19 @@ fn is_wheel_unreachable_for_marker(
         return false;
     }
 
-    // Emulated x86_64 Python on Windows ARM64 reports `ARM64` for `platform_machine` but requires
-    // `win_amd64` wheels. Keep them unless concrete tags or `Requires-Python` already rejected them.
-    if platform_tags.contains(&PlatformTag::WinAmd64) && !marker.is_disjoint(*WINDOWS_ARM_MARKERS) {
+    // The machine marker can describe the host of an emulated or 32-bit interpreter.
+    // Preserve wheels for that interpreter after checking any concrete tags above.
+    if platform_tags.iter().any(|tag| {
+        if tag.is_linux() {
+            (tag.is_x86() && !marker.is_disjoint(*LINUX_X86_64_MARKERS))
+                || (tag.is_armv7l() && !marker.is_disjoint(*LINUX_ARM_MARKERS))
+        } else {
+            (tag == &PlatformTag::WinAmd64 && !marker.is_disjoint(*WINDOWS_ARM_MARKERS))
+                || (tag == &PlatformTag::Win32
+                    && (!marker.is_disjoint(*WINDOWS_X86_64_MARKERS)
+                        || !marker.is_disjoint(*WINDOWS_ARM_MARKERS)))
+        }
+    }) {
         return false;
     }
 

@@ -9511,7 +9511,7 @@ fn lock_sibling_fork_keeps_emulated_windows_wheel() -> Result<()> {
     Ok(())
 }
 
-/// A 32-bit Linux interpreter on an x86_64 host needs the inherited i686 wheel.
+/// A 32-bit Linux interpreter on an `x86_64` host needs the inherited `i686` wheel.
 #[cfg(feature = "test-universal")]
 #[test]
 fn lock_sibling_fork_keeps_32_bit_linux_wheel() -> Result<()> {
@@ -9527,9 +9527,16 @@ fn lock_sibling_fork_keeps_32_bit_linux_wheel() -> Result<()> {
         wheel_tags = ["py3-none-manylinux_2_17_i686"]
 
         [packages.a.versions."2.0.0"]
+        wheel_tags = ["py3-none-manylinux_2_17_i686", "py3-none-manylinux_2_17_x86_64"]
+
+        [packages.a.versions."3.0.0"]
         wheel_tags = ["py3-none-manylinux_2_17_x86_64"]
     "#})?;
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filters(
+        server
+            .files()
+            .map(|(filename, hash)| (hash.to_owned(), format!("[SHA256:{filename}]"))),
+    );
     context
         .temp_dir
         .child("pyproject.toml")
@@ -9541,15 +9548,65 @@ fn lock_sibling_fork_keeps_32_bit_linux_wheel() -> Result<()> {
         dependencies = ["a<2 ; platform_machine != 'x86_64'", "a ; platform_machine == 'x86_64'"]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--index-url").arg(server.index_url()), @"
+    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
     exit_code: 0 (success)
-    ----- stdout -----
-    project v1.0.0
-    └── a v1.0.0
-
     ----- stderr -----
-    Resolved 2 packages in [TIME]
+    Resolved 3 packages in [TIME]
     ");
+    insta::with_settings!({filters => context.filters()}, {
+        assert_snapshot!(context.read("uv.lock"), @r#"
+        version = 1
+        revision = 5
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "platform_machine != 'x86_64'",
+            "platform_machine == 'x86_64'",
+        ]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "a"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "platform_machine != 'x86_64'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/a-1.0.0.tar.gz", hash = "sha256:[SHA256:a-1.0.0.tar.gz]", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-1.0.0-py3-none-manylinux_2_17_i686.whl", hash = "sha256:[SHA256:a-1.0.0-py3-none-manylinux_2_17_i686.whl]", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "a"
+        version = "2.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "platform_machine == 'x86_64'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/a-2.0.0.tar.gz", hash = "sha256:[SHA256:a-2.0.0.tar.gz]", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-2.0.0-py3-none-manylinux_2_17_i686.whl", hash = "sha256:[SHA256:a-2.0.0-py3-none-manylinux_2_17_i686.whl]", upload-time = "2024-03-24T00:00:00Z" },
+            { url = "http://[LOCALHOST]/files/a-2.0.0-py3-none-manylinux_2_17_x86_64.whl", hash = "sha256:[SHA256:a-2.0.0-py3-none-manylinux_2_17_x86_64.whl]", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "1.0.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "a", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "platform_machine != 'x86_64'" },
+            { name = "a", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "platform_machine == 'x86_64'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "a", marker = "platform_machine != 'x86_64'", specifier = "<2" },
+            { name = "a", marker = "platform_machine == 'x86_64'" },
+        ]
+        "#);
+    });
     Ok(())
 }
 
