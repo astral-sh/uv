@@ -43,7 +43,7 @@ jobs:
           R2_BUCKET: ${{ secrets.MIRROR_R2_BUCKET_NAME }}
           PROJECT: uv
         run: |
-          aws s3 cp --recursive --output table --color on \
+          aws s3 sync --no-overwrite --output table --color on \
             --exclude '*' \
             --include '*.zip' --include '*.zip.sha256' \
             --include '*.tar.gz' --include '*.tar.gz.sha256' \
