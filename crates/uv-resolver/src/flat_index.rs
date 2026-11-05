@@ -109,7 +109,7 @@ impl FlatDistributions {
                     distributions
                         .0
                         .entry(filename.version.clone())
-                        .or_default()
+                        .or_insert_with(|| PrioritizedDist::new(minimum_libc_version))
                         .insert_variants_json(RegistryVariantsJson {
                             filename,
                             file,
@@ -141,10 +141,12 @@ impl FlatDistributions {
     ) {
         // No `requires-python` here: for source distributions, we don't have that information;
         // for wheels, we read it lazily only when selected.
+        let release = self
+            .0
+            .entry(filename.version().clone())
+            .or_insert_with(|| PrioritizedDist::new(minimum_libc_version));
         match filename {
             DistFilename::WheelFilename(filename) => {
-                let version = filename.version.clone();
-
                 let compatibility = Self::wheel_compatibility(
                     &filename,
                     file.hashes.as_slice(),
@@ -158,12 +160,7 @@ impl FlatDistributions {
                     index,
                     size_is_authoritative: false,
                 };
-                self.0.entry(version).or_default().insert_built(
-                    dist,
-                    vec![],
-                    compatibility,
-                    minimum_libc_version,
-                );
+                release.insert_built(dist, vec![], compatibility);
             }
             DistFilename::SourceDistFilename(filename) => {
                 let compatibility = Self::source_dist_compatibility(
@@ -181,11 +178,7 @@ impl FlatDistributions {
                     wheels: vec![],
                     size_is_authoritative: false,
                 };
-                self.0.entry(filename.version).or_default().insert_source(
-                    dist,
-                    vec![],
-                    compatibility,
-                );
+                release.insert_source(dist, vec![], compatibility);
             }
         }
     }

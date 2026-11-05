@@ -1,4 +1,5 @@
 use std::fmt::{Display, Formatter};
+use std::sync::OnceLock;
 
 use arcstr::ArcStr;
 use owo_colors::OwoColorize;
@@ -34,7 +35,7 @@ pub(crate) struct RegistryVariantsJson {
 }
 
 /// The contents of a [`PrioritizedDist`], boxed to keep the outer type small.
-#[derive(Debug, Clone)]
+#[derive(Debug, Default, Clone)]
 struct PrioritizedDistInner {
     /// The highest-priority source distribution. Between compatible source distributions this priority is arbitrary.
     source: Option<(RegistrySourceDist, SourceDistCompatibility)>,
@@ -47,26 +48,17 @@ struct PrioritizedDistInner {
     variants_json: Vec<RegistryVariantsJson>,
     /// The hashes for each distribution.
     hashes: Vec<HashDigest>,
-    /// Python coverage, unioned over compatible wheels independently of their platforms.
-    python_markers: MarkerTree,
-    /// Coverage for the glibc and musl baselines, unioned over compatible wheels separately.
-    /// Unconfigured baselines use ordinary platform coverage. Intersect only after unioning, so
-    /// separate glibc and musl wheels can jointly satisfy both baselines.
-    markers: [MarkerTree; 2],
+    minimum_libc_version: Option<MinimumLibcVersion>,
+    /// Computed on first use, after filtering and collecting the release's wheels.
+    wheel_coverage: OnceLock<WheelCoverage>,
 }
 
-impl Default for PrioritizedDistInner {
-    fn default() -> Self {
-        Self {
-            source: None,
-            best_wheel_index: None,
-            wheels: Vec::new(),
-            variants_json: Vec::new(),
-            hashes: Vec::new(),
-            python_markers: MarkerTree::FALSE,
-            markers: [MarkerTree::FALSE; 2],
-        }
-    }
+#[derive(Debug, Clone, Copy)]
+struct WheelCoverage {
+    /// Python versions covered by any compatible wheel, independently of its platform.
+    python: MarkerTree,
+    /// Environments covered by compatible wheels on all configured libc baselines.
+    platforms: MarkerTree,
 }
 
 /// A distribution that can be used for both resolution and installation.
@@ -130,8 +122,8 @@ impl<'a> CompatibleDist<'a> {
         self.prioritized().is_none_or(|prioritized| {
             prioritized.has_compatible_source()
                 || !prioritized
-                    .0
-                    .python_markers
+                    .wheel_coverage()
+                    .python
                     .is_disjoint(requires_python.to_marker_tree())
         })
     }
@@ -405,6 +397,13 @@ pub enum HashComparison {
 }
 
 impl PrioritizedDist {
+    pub(crate) fn new(minimum_libc_version: Option<MinimumLibcVersion>) -> Self {
+        Self(Box::new(PrioritizedDistInner {
+            minimum_libc_version,
+            ..PrioritizedDistInner::default()
+        }))
+    }
+
     pub(crate) fn insert_variants_json(&mut self, variants_json: RegistryVariantsJson) {
         // A flat index can list the same metadata link more than once.
         if !self.0.variants_json.contains(&variants_json) {
@@ -488,8 +487,39 @@ impl PrioritizedDist {
 
     /// The environments covered by published wheels on all configured libc baselines.
     pub(crate) fn wheel_markers(&self) -> MarkerTree {
-        let [glibc, musl] = self.0.markers;
-        glibc.and(musl)
+        self.wheel_coverage().platforms
+    }
+
+    fn wheel_coverage(&self) -> &WheelCoverage {
+        self.0.wheel_coverage.get_or_init(|| {
+            let mut python = MarkerTree::FALSE;
+            let mut platforms = [MarkerTree::FALSE; 2];
+            for (wheel, compatibility) in &self.0.wheels {
+                // A selected variant can be installable on the current machine, but its
+                // hardware requirements aren't represented by environment markers.
+                if !compatibility.is_compatible() || wheel.filename.variant().is_some() {
+                    continue;
+                }
+                let wheel_python = implied_python_markers(&wheel.filename);
+                python = python.or(wheel_python);
+                for (coverage, markers) in platforms.iter_mut().zip(implied_libc_markers(
+                    &wheel.filename,
+                    wheel_python,
+                    self.0.minimum_libc_version,
+                )) {
+                    *coverage = coverage.or(markers);
+                }
+                if python.is_true() && platforms.iter().all(|coverage| coverage.is_true()) {
+                    break;
+                }
+            }
+            // Separate wheels can satisfy the glibc and musl baselines.
+            let [glibc, musl] = platforms;
+            WheelCoverage {
+                python,
+                platforms: glibc.and(musl),
+            }
+        })
     }
 
     /// Insert the given built distribution into the [`PrioritizedDist`].
@@ -498,22 +528,9 @@ impl PrioritizedDist {
         dist: RegistryBuiltWheel,
         hashes: impl IntoIterator<Item = HashDigest>,
         compatibility: WheelCompatibility,
-        minimum_libc_version: Option<MinimumLibcVersion>,
     ) {
-        if compatibility.is_compatible()
-            && (!self.0.python_markers.is_true()
-                || !self.0.markers.iter().all(|markers| markers.is_true()))
-        {
-            let python = implied_python_markers(&dist.filename);
-            self.0.python_markers = self.0.python_markers.or(python);
-            for (coverage, markers) in self.0.markers.iter_mut().zip(implied_libc_markers(
-                &dist.filename,
-                python,
-                minimum_libc_version,
-            )) {
-                *coverage = coverage.or(markers);
-            }
-        }
+        // A cached flat-index release can be extended with wheels from the registry.
+        self.0.wheel_coverage.take();
         // Track the hashes.
         if !compatibility.is_excluded() {
             self.0.hashes.extend(hashes);

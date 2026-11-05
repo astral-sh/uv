@@ -417,11 +417,6 @@ impl CandidateSelector {
         fork: MarkerTree,
         prerelease_selection: PrereleaseSelection,
     ) -> Option<Candidate<'a>> {
-        let inherited_wheels = inherited.wheel_markers();
-        if fork.is_disjoint(inherited_wheels.negate()) {
-            return None;
-        }
-
         let newer = range.intersection(&Range::strictly_higher_than(inherited_version.clone()));
         for (version, handle) in version_map.iter_included(&newer).rev() {
             // The inherited release is already an alternative to opting into pre-releases.
@@ -436,14 +431,19 @@ impl CandidateSelector {
             let Some(files) = handle.prioritized_dist() else {
                 continue;
             };
+            let Some(dist) = files.get() else {
+                continue;
+            };
+            // Defer computing wheel coverage until there is a newer candidate to compare.
+            let inherited_wheels = inherited.wheel_markers();
+            if fork.is_disjoint(inherited_wheels.negate()) {
+                return None;
+            }
             let wheels = files.wheel_markers();
             let gained = wheels.and(inherited_wheels.negate());
             if fork.is_disjoint(gained) {
                 continue;
             }
-            let Some(dist) = files.get() else {
-                continue;
-            };
             // A new Requires-Python lower bound splits off the older Pythons, which can
             // still use the inherited version. Compare wheels where this release applies.
             let supported = match dist.requires_python() {
