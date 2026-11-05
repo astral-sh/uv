@@ -1,5 +1,6 @@
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
+use std::process::Stdio;
 
 use anyhow::Result;
 use assert_cmd::prelude::*;
@@ -7,6 +8,7 @@ use assert_fs::prelude::*;
 #[cfg(unix)]
 use fs_err::{metadata, set_permissions};
 use indoc::indoc;
+use uv_cache::CacheBucket;
 use uv_static::EnvVars;
 use uv_test::packse::PackseServer;
 use uv_test::{copy_dir_ignore, uv_snapshot, venv_bin_path};
@@ -627,6 +629,40 @@ fn tool_run_from_install_constraints() {
      + python-dotenv==1.0.1
      + werkzeug==3.0.1
     ");
+}
+
+/// Concurrent runs of the same tool should build and use a single cached environment.
+#[test]
+fn tool_run_concurrent_cache_miss() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"]).with_tool_dirs();
+    let wheel = context
+        .workspace_root
+        .join("test/links/simple_launcher-0.1.0-py3-none-any.whl");
+    let mut command = context.tool_run();
+    command
+        .args(["--no-index", "--from"])
+        .arg(wheel)
+        .args(["python", "-c", "import sys; print(sys.prefix)"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    let first = command.spawn()?;
+    let second = command.assert().success();
+    let first = first.wait_with_output()?.assert().success();
+    assert_eq!(
+        str::from_utf8(&first.get_output().stdout)?,
+        str::from_utf8(&second.get_output().stdout)?,
+    );
+
+    let archives = context.cache_files(CacheBucket::Archive)?;
+    assert_eq!(
+        archives
+            .iter()
+            .filter(|path| path.ends_with("pyvenv.cfg"))
+            .count(),
+        1
+    );
+    Ok(())
 }
 
 #[test]
