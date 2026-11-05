@@ -275,7 +275,7 @@ pub struct Index {
     /// Index-specific `exclude-newer-package` overrides.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     #[cfg_attr(feature = "schemars", schemars(skip))]
-    pub(crate) exclude_newer_package: BTreeMap<PackageName, ExcludeNewerOverride>,
+    pub exclude_newer_package: BTreeMap<PackageName, ExcludeNewerOverride>,
 }
 
 impl fmt::Debug for Index {
