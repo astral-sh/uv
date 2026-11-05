@@ -1,7 +1,11 @@
 use insta::{assert_json_snapshot, assert_snapshot};
+use itertools::Itertools;
 use serde_json::json;
 
-use uv_distribution_types::{PEP_825_SCHEMA, PEP_850_SCHEMA, VariantsJsonContent};
+use uv_distribution_filename::VariantLabel;
+use uv_distribution_types::{
+    PEP_825_SCHEMA, PEP_850_SCHEMA, VariantProviderRequest, VariantsJsonContent,
+};
 
 /// PEP 825 compares the best compatible value for each feature, then the variant label.
 #[test]
@@ -115,6 +119,37 @@ fn parse_static_provider() -> Result<(), Box<dyn std::error::Error>> {
     });
     let parsed = serde_json::from_value::<VariantsJsonContent>(metadata.clone())?;
     assert_eq!(serde_json::to_value(parsed)?, metadata);
+    Ok(())
+}
+
+#[test]
+fn parse_abi_dependency_provider() -> Result<(), Box<dyn std::error::Error>> {
+    let metadata: VariantsJsonContent = serde_json::from_value(json!({
+        "$schema": PEP_850_SCHEMA,
+        "default-priorities": {"namespace": ["abi"]},
+        "providers": {"abi": {"builtin": "abi_dependency"}},
+        "variants": {
+            "valid": {"abi": {"my_runtime": ["2.8", "2.10"]}},
+            "invalid": {"abi": {"my_runtime": ["2.8", "invalid"]}}
+        }
+    }))?;
+
+    assert!(matches!(
+        metadata.provider_requests().next(),
+        Some((_, VariantProviderRequest::Builtin("abi_dependency")))
+    ));
+    let dependencies = metadata.abi_dependencies(&VariantLabel::from_static("valid"))?;
+    assert_snapshot!(
+        dependencies.iter().map(|(name, versions)| format!("{name} {versions}")).join("\n"),
+        @"my-runtime >=2.8.dev0, <2.9.dev0 | >=2.10.dev0, <2.11.dev0"
+    );
+    let error = metadata
+        .abi_dependencies(&VariantLabel::from_static("invalid"))
+        .expect_err("ABI dependency values must be valid release prefixes");
+    assert_snapshot!(
+        error,
+        @"Unsupported ABI dependency value `invalid` for `my-runtime`: expected version to start with a number, but no leading ASCII digits were found"
+    );
     Ok(())
 }
 
