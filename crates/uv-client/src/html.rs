@@ -206,7 +206,8 @@ impl SimpleDetailHTML {
                         }
                         Err(
                             err @ (HashError::InvalidDigestLength { .. }
-                            | HashError::InvalidDigestCharacters(_)),
+                            | HashError::InvalidDigestCharacters(_)
+                            | HashError::ConflictingUrlHashes(_)),
                         ) => return Err(err.into()),
                     }
                 },

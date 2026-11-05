@@ -46,7 +46,7 @@ pub use crate::origin::RequirementOrigin;
 #[cfg(feature = "non-pep508-extensions")]
 pub use crate::unnamed::{UnnamedRequirement, UnnamedRequirementUrl};
 pub use crate::verbatim_url::{
-    Scheme, VerbatimUrl, VerbatimUrlError, expand_env_vars, file_url_hash,
+    Scheme, VerbatimUrl, VerbatimUrlError, expand_env_vars, file_url_hashes,
     looks_like_git_repository, split_scheme,
 };
 /// Version and version specifiers used in requirements (reexport).

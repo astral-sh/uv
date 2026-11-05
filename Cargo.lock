@@ -7132,6 +7132,7 @@ dependencies = [
  "unicode-width 0.2.2",
  "url",
  "uv-cache-key",
+ "uv-distribution-filename",
  "uv-fs",
  "uv-normalize",
  "uv-pep440",

@@ -12,6 +12,10 @@ use thiserror::Error;
 #[expect(clippy::disallowed_types, reason = "Supports the opt-in raw URL API")]
 use url::Url;
 use uv_cache_key::{CacheKey, CacheKeyHasher};
+#[cfg(feature = "non-pep508-extensions")]
+use uv_distribution_filename::DistExtension;
+#[cfg(feature = "non-pep508-extensions")]
+use uv_fs::normalize_path;
 
 #[cfg_attr(not(feature = "non-pep508-extensions"), allow(unused_imports))]
 use uv_fs::{normalize_absolute_path, normalize_url_path};
@@ -725,23 +729,25 @@ pub fn looks_like_git_repository<P: SerializationPolicy>(url: &SafeUrl<P>) -> bo
             .is_some_and(|segments| segments.count() == 2)
 }
 
-/// Find a distribution checksum in a file URL fragment. Split fields before decoding
+/// Read the distribution checksums in a file URL fragment. Split fields before decoding
 /// them so an escaped `&` or `=` stays part of its field.
-pub fn file_url_hash(fragment: &str) -> Option<(Cow<'_, str>, Cow<'_, str>)> {
-    fragment
-        .split('&')
-        .filter(|field| field.contains('='))
-        .find_map(|field| {
-            let (name, value) = url::form_urlencoded::parse(field.as_bytes()).next()?;
-            matches!(
-                name.as_ref(),
-                "md5" | "sha256" | "sha384" | "sha512" | "blake2b"
-            )
-            .then_some((name, value))
-        })
+pub fn file_url_hashes(fragment: &str) -> impl Iterator<Item = (Cow<'_, str>, Cow<'_, str>)> {
+    fragment.split('&').filter_map(file_url_hash_field)
 }
 
-/// Preserve the longest existing path and treat the rest as one URL fragment.
+fn file_url_hash_field(field: &str) -> Option<(Cow<'_, str>, Cow<'_, str>)> {
+    if !field.contains('=') {
+        return None;
+    }
+    let (name, value) = url::form_urlencoded::parse(field.as_bytes()).next()?;
+    matches!(
+        name.as_ref(),
+        "md5" | "sha256" | "sha384" | "sha512" | "blake2b"
+    )
+    .then_some((name, value))
+}
+
+/// Split a bare local requirement without shortening a requested archive path to a sibling.
 #[cfg(feature = "non-pep508-extensions")]
 fn split_fragment<'a>(
     path: &'a Path,
@@ -750,51 +756,69 @@ fn split_fragment<'a>(
     let Some(input) = path.to_str() else {
         return Ok((path, None));
     };
-    let Some((_, tail)) = input.split_once('#') else {
+    if !input.contains('#') {
         return Ok((path, None));
-    };
-    let exists = |path: &Path| match base_dir {
-        Some(base) => base.join(path).exists(),
-        None => path.exists(),
-    };
-
-    let split = if exists(path) {
-        None
-    } else {
-        let mut first_hash = None;
-        let mut existing_source = None;
-        for (index, delimiter) in input.rmatch_indices(|c| c == '#' || std::path::is_separator(c)) {
-            if delimiter == "#" {
-                first_hash = Some(index);
-            }
-            if index > 0 && exists(Path::new(&input[..index])) {
-                // An existing directory component can contain literal hashes. A missing
-                // file inside it must not fall back to a shorter sibling project.
-                if delimiter == "#" {
-                    existing_source = Some(index);
-                }
-                break;
-            }
-        }
-        // Requirements can also be parsed before their source exists.
-        existing_source.or_else(|| first_hash.filter(|&i| input[i + 1..].contains('=')))
-    };
-    let (source, fragment) = match split {
-        Some(index) => (Path::new(&input[..index]), Some(&input[index + 1..])),
-        None => (path, None),
-    };
-
-    // A different split must never turn a checksum into part of the filename
-    // or hide it inside an unrelated fragment parameter.
-    let selected_hash = fragment.and_then(file_url_hash);
-    if tail
-        .split('#')
-        .filter_map(file_url_hash)
-        .any(|hash| Some(&hash) != selected_hash.as_ref())
-    {
-        return Err(VerbatimUrlError::AmbiguousHash(path.to_path_buf()));
     }
-    Ok((source, fragment))
+    let base = base_dir.unwrap_or(Path::new(""));
+    // File URLs normalize `..` lexically. Inspect the same path the installer will open.
+    let resolve = |candidate: &Path| normalize_path(base.join(candidate));
+    let filename_start = input.rfind(std::path::is_separator).map_or(0, |i| i + 1);
+    let filename = &input[filename_start..];
+    // The archive name can contain literal hashes and can itself be followed by a fragment.
+    let archive_end = std::iter::once(filename.len())
+        .chain(filename.rmatch_indices('#').map(|(i, _)| i))
+        .find(|&end| DistExtension::from_path(&filename[..end]).is_ok())
+        .map(|end| filename_start + end);
+    let path_end = archive_end.unwrap_or(filename_start);
+    let mut source_end = resolve(path).exists().then_some(input.len());
+    // In a bare path, `sha256=cache/pkg.whl` spans directory components. A checksum field
+    // can appear before or after that text, separated by an ampersand.
+    let has_checksum = |fragment: &str| {
+        fragment.split('&').any(|field| {
+            !field.contains(std::path::is_separator) && file_url_hash_field(field).is_some()
+        })
+    };
+
+    for (index, _) in input.rmatch_indices('#') {
+        let prefix = &input[..index];
+        let fragment = &input[index + 1..];
+        if prefix.is_empty() {
+            continue;
+        }
+        let candidate = resolve(Path::new(prefix));
+        let viable = if index >= path_end {
+            candidate.exists()
+        } else {
+            // A file's fragment can end in `&egg=demo.whl` or contain a slash in a field value.
+            let parameter_with_separator = archive_end.is_none()
+                && fragment
+                    .split_once(std::path::is_separator)
+                    .is_some_and(|(field, _)| field.contains('='));
+            (has_checksum(fragment) || parameter_with_separator) && candidate.is_file()
+        };
+        if !viable {
+            continue;
+        }
+
+        if let Some(end) = source_end {
+            // Only a viable shorter source can supply a checksum that this path would swallow.
+            if has_checksum(&input[index + 1..end]) {
+                return Err(VerbatimUrlError::AmbiguousHash(path.to_path_buf()));
+            }
+        } else {
+            source_end = Some(index);
+        }
+    }
+    // A requirement can be parsed before its archive exists.
+    let split = source_end.or_else(|| {
+        let (prefix, fragment) = input[path_end..].split_once('#')?;
+        let end = path_end + prefix.len();
+        (end != 0 && (archive_end.is_some() || fragment.contains('='))).then_some(end)
+    });
+    Ok(match split {
+        Some(end) if end < input.len() => (Path::new(&input[..end]), Some(&input[end + 1..])),
+        _ => (path, None),
+    })
 }
 
 /// A supported URL scheme for PEP 508 direct-URL requirements.
@@ -1008,6 +1032,48 @@ mod tests {
         assert_eq!(
             split_fragment(Path::new("Cargo.toml#one#two&sha256=digest"), Some(base))?,
             (Path::new("Cargo.toml"), Some("one#two&sha256=digest"))
+        );
+        assert_eq!(
+            split_fragment(
+                Path::new("Cargo.toml#note=x#sha256=text&sha256=digest"),
+                Some(base)
+            )?,
+            (
+                Path::new("Cargo.toml"),
+                Some("note=x#sha256=text&sha256=digest")
+            )
+        );
+        assert_eq!(
+            split_fragment(Path::new("Cargo.toml#note=a/b&sha256=digest"), Some(base))?,
+            (Path::new("Cargo.toml"), Some("note=a/b&sha256=digest"))
+        );
+        assert_eq!(
+            split_fragment(
+                Path::new("Cargo.toml#sha256=digest&egg=demo.whl"),
+                Some(base)
+            )?,
+            (Path::new("Cargo.toml"), Some("sha256=digest&egg=demo.whl"))
+        );
+        Ok(())
+    }
+
+    #[test]
+    #[cfg(feature = "non-pep508-extensions")]
+    fn missing_archive_with_hash_in_its_name_or_directory() -> Result<(), VerbatimUrlError> {
+        let base = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let filename = Path::new("src#label.tar.gz");
+        assert_eq!(split_fragment(filename, Some(base))?, (filename, None));
+        assert_eq!(
+            split_fragment(Path::new("missing/../Cargo.toml#opaque"), Some(base))?,
+            (Path::new("missing/../Cargo.toml"), Some("opaque"))
+        );
+        let missing = Path::new("Cargo.toml#tag=1/missing.whl#sha256=digest");
+        assert_eq!(
+            split_fragment(missing, Some(base))?,
+            (
+                Path::new("Cargo.toml#tag=1/missing.whl"),
+                Some("sha256=digest")
+            )
         );
         Ok(())
     }

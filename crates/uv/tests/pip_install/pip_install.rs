@@ -7101,7 +7101,7 @@ fn path_name_version_change() {
 fn local_wheel_path_with_hash() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
-    let directory = context.temp_dir.child("wheels#10458");
+    let directory = context.temp_dir.child("wheels#10458/bucket#sha256=cache");
     directory.create_dir_all()?;
     fs_err::copy(
         context
@@ -7111,13 +7111,13 @@ fn local_wheel_path_with_hash() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg("./wheels#10458/ok-1.0.0-py3-none-any.whl"), @"
+        .arg("./wheels#10458/bucket#sha256=cache/ok-1.0.0-py3-none-any.whl"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + ok==1.0.0 (from file://[TEMP_DIR]/wheels%2310458/ok-1.0.0-py3-none-any.whl)
+     + ok==1.0.0 (from file://[TEMP_DIR]/wheels%2310458/bucket%23sha256=cache/ok-1.0.0-py3-none-any.whl)
     "
     );
 
@@ -7188,6 +7188,63 @@ fn local_wheel_path_with_hash_ambiguity() -> Result<()> {
       cause: Ambiguous hash in path `./ok-1.0.0-py3-none-any.whl#sha256=0000000000000000000000000000000000000000000000000000000000000000`. Use a `file:` URL with `%23` for a literal `#` and put the checksum in the URL fragment.
              ./ok-1.0.0-py3-none-any.whl#sha256=0000000000000000000000000000000000000000000000000000000000000000
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ");
+    context.assert_not_installed("ok");
+    Ok(())
+}
+
+/// Creating a sibling project must not turn a missing wheel into a successful install.
+#[test]
+fn local_wheel_path_with_hash_missing_directory() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let outer = context.temp_dir.child("outer#one");
+    outer.create_dir_all()?;
+    let requirement = "./outer#one/wheels#typo/ok-1.0.0-py3-none-any.whl";
+    uv_snapshot!(context.filters(), context.pip_install().arg("--no-deps").arg(requirement), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Distribution not found at: file://[TEMP_DIR]/outer%23one/wheels%23typo/ok-1.0.0-py3-none-any.whl
+    ");
+
+    copy_dir_ignore(
+        context.workspace_root.join("test/packages/built-by-uv"),
+        outer.child("wheels"),
+    )?;
+    uv_snapshot!(context.filters(), context.pip_install().arg("--no-deps").arg(requirement), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Distribution not found at: file://[TEMP_DIR]/outer%23one/wheels%23typo/ok-1.0.0-py3-none-any.whl
+    ");
+    context.assert_not_installed("built_by_uv");
+    context.assert_not_installed("ok");
+    Ok(())
+}
+
+/// Reordering checksum fields must not change whether the wheel can be installed.
+#[test]
+fn local_wheel_path_with_hash_conflicting_pins() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let wheel = context
+        .workspace_root
+        .join("test/links/ok-1.0.0-py3-none-any.whl");
+    let url = SafeUrl::from_file_path(wheel).map_err(|()| anyhow!("invalid wheel path"))?;
+    let correct = "79f0b33e6ce1e09eaa1784c8eee275dfe84d215d9c65c652f07c18e85fdaac5f";
+    let wrong = "0".repeat(64);
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--require-hashes")
+        .arg(format!("ok @ {url}#%73ha256={correct}&sha256={wrong}")), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Conflicting sha256 checksums in URL fragment
+    ");
+    context.assert_not_installed("ok");
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--require-hashes")
+        .arg(format!("ok @ {url}#sha256={wrong}&%73ha256={correct}")), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Conflicting sha256 checksums in URL fragment
     ");
     context.assert_not_installed("ok");
     Ok(())
