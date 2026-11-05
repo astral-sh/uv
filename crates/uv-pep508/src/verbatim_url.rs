@@ -224,7 +224,7 @@ impl VerbatimUrl {
         path: impl AsRef<Path>,
         base_dir: Option<&Path>,
     ) -> Result<Self, VerbatimUrlError> {
-        let (path, fragment) = split_fragment(path.as_ref());
+        let (path, fragment) = split_fragment(path.as_ref(), base_dir);
         let url = if let Some(base_dir) = base_dir {
             Self::from_path(path, base_dir)?
         } else {
@@ -743,16 +743,30 @@ pub fn looks_like_git_repository<P: SerializationPolicy>(url: &SafeUrl<P>) -> bo
 /// For example, given `file:///home/ferris/project/scripts#hash=somehash`, returns
 /// `("/home/ferris/project/scripts", Some("hash=somehash"))`.
 #[cfg(feature = "non-pep508-extensions")]
-fn split_fragment(path: &Path) -> (Cow<'_, Path>, Option<&str>) {
+fn split_fragment<'a>(path: &'a Path, base_dir: Option<&Path>) -> (Cow<'a, Path>, Option<&'a str>) {
     let Some(s) = path.to_str() else {
         return (Cow::Borrowed(path), None);
     };
 
-    let Some((path, fragment)) = s.split_once('#') else {
+    let Some((prefix, fragment)) = s.split_once('#') else {
         return (Cow::Borrowed(path), None);
     };
 
-    (Cow::Owned(PathBuf::from(path)), Some(fragment))
+    // If the path as given actually exists on disk, the `#` is part of the filename, not a fragment.
+    let full_exists = match base_dir {
+        Some(base) => base.join(path).exists(),
+        None => path.exists(),
+    };
+    if full_exists {
+        return (Cow::Borrowed(path), None);
+    }
+
+    // A valid pip / PEP 508 URL fragment is always of the form `key=value` (e.g., `subdirectory=...`, `egg=...`, `<hash>=...`).
+    if !fragment.contains('=') {
+        return (Cow::Borrowed(path), None);
+    }
+
+    (Cow::Owned(PathBuf::from(prefix)), Some(fragment))
 }
 
 /// A supported URL scheme for PEP 508 direct-URL requirements.
@@ -963,38 +977,52 @@ mod tests {
     #[cfg(feature = "non-pep508-extensions")]
     fn fragment() {
         assert_eq!(
-            split_fragment(Path::new(
-                "file:///home/ferris/project/scripts#hash=somehash"
-            )),
+            split_fragment(
+                Path::new("file:///home/ferris/project/scripts#hash=somehash"),
+                None
+            ),
             (
                 Cow::Owned(PathBuf::from("file:///home/ferris/project/scripts")),
                 Some("hash=somehash")
             )
         );
         assert_eq!(
-            split_fragment(Path::new("file:home/ferris/project/scripts#hash=somehash")),
+            split_fragment(
+                Path::new("file:home/ferris/project/scripts#hash=somehash"),
+                None
+            ),
             (
                 Cow::Owned(PathBuf::from("file:home/ferris/project/scripts")),
                 Some("hash=somehash")
             )
         );
         assert_eq!(
-            split_fragment(Path::new("/home/ferris/project/scripts#hash=somehash")),
+            split_fragment(
+                Path::new("/home/ferris/project/scripts#hash=somehash"),
+                None
+            ),
             (
                 Cow::Owned(PathBuf::from("/home/ferris/project/scripts")),
                 Some("hash=somehash")
             )
         );
         assert_eq!(
-            split_fragment(Path::new("file:///home/ferris/project/scripts")),
+            split_fragment(Path::new("file:///home/ferris/project/scripts"), None),
             (
                 Cow::Borrowed(Path::new("file:///home/ferris/project/scripts")),
                 None
             )
         );
         assert_eq!(
-            split_fragment(Path::new("")),
+            split_fragment(Path::new(""), None),
             (Cow::Borrowed(Path::new("")), None)
+        );
+        assert_eq!(
+            split_fragment(Path::new("./aprict-0.0.38-cupy-issue-#10458.tar.gz"), None),
+            (
+                Cow::Borrowed(Path::new("./aprict-0.0.38-cupy-issue-#10458.tar.gz")),
+                None
+            )
         );
     }
 
