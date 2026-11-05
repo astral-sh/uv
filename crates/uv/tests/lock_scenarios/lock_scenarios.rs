@@ -5964,6 +5964,7 @@ fn specific_architecture() -> Result<()> {
             { url = "http://[LOCALHOST]/files/b-1.0.0-cp313-cp313-freebsd_13_aarch64.whl", hash = "sha256:f631c1c1a0ffc6b2ce37901dca7c5e468d80f9a5107f3e3ec2dd231424e51447", upload-time = "2024-03-24T00:00:00Z" },
             { url = "http://[LOCALHOST]/files/b-1.0.0-cp313-cp313-freebsd_13_x86_64.whl", hash = "sha256:c0a23d73fe066699bb1ed79150f23a989692c419edde2dc07b6f07ad7df04bb6", upload-time = "2024-03-24T00:00:00Z" },
             { url = "http://[LOCALHOST]/files/b-1.0.0-cp313-cp313-macosx_10_9_x86_64.whl", hash = "sha256:afc62d392afde77dc8cb1a76ca661ea28622a990e3655d96b101301526790393", upload-time = "2024-03-24T00:00:00Z" },
+            { url = "http://[LOCALHOST]/files/b-1.0.0-cp313-cp313-manylinux2010_i686.whl", hash = "sha256:389bbfb1037c3644566b6c880f037e9b836f6ff0fb5c1bf0b3ac0534b546fe50", upload-time = "2024-03-24T00:00:00Z" },
             { url = "http://[LOCALHOST]/files/b-1.0.0-cp313-cp313-manylinux2010_x86_64.whl", hash = "sha256:baa416bab7cc0d502bc96bc57672f2fa83dd56b7dc37b701126e16fcc8ce115a", upload-time = "2024-03-24T00:00:00Z" },
         ]
 
