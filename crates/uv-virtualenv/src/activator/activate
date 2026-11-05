@@ -103,8 +103,8 @@ _OLD_VIRTUAL_PATH="$PATH"
 PATH="$VIRTUAL_ENV/{{ BIN_NAME }}:$PATH"
 export PATH
 
-if [ "x{{ VIRTUAL_PROMPT }}" != x ] ; then
-    VIRTUAL_ENV_PROMPT="{{ VIRTUAL_PROMPT }}"
+if [ '{{ VIRTUAL_PROMPT }}' != '' ] ; then
+    VIRTUAL_ENV_PROMPT='{{ VIRTUAL_PROMPT }}'
 else
     VIRTUAL_ENV_PROMPT=$(basename "$VIRTUAL_ENV")
 fi
@@ -118,7 +118,17 @@ fi
 
 if [ -z "${VIRTUAL_ENV_DISABLE_PROMPT-}" ] ; then
     _OLD_VIRTUAL_PS1="${PS1-}"
-    PS1="(${VIRTUAL_ENV_PROMPT}) ${PS1-}"
+    _VIRTUAL_PROMPT="${VIRTUAL_ENV_PROMPT}"
+    if [ -n "${BASH_VERSION-}${ZSH_VERSION-}" ]; then
+        _VIRTUAL_PROMPT="${_VIRTUAL_PROMPT//\\/\\\\}"
+        _VIRTUAL_PROMPT="${_VIRTUAL_PROMPT//\$/\\\$}"
+        _VIRTUAL_PROMPT="${_VIRTUAL_PROMPT//\`/\\\`}"
+    fi
+    if [ -n "${ZSH_VERSION-}" ]; then
+        _VIRTUAL_PROMPT="${_VIRTUAL_PROMPT//\%/%%}"
+    fi
+    PS1="(${_VIRTUAL_PROMPT}) ${PS1-}"
+    unset _VIRTUAL_PROMPT
     export PS1
 fi
 

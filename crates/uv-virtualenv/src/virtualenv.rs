@@ -510,6 +510,10 @@ pub(crate) fn create(
 
         let virtual_prompt = prompt.as_deref().unwrap_or_default();
         let virtual_prompt = match *name {
+            "activate" | "activate.csh" | "activate.fish" | "activate.nu" => {
+                escape_posix_for_single_quotes(virtual_prompt)
+            }
+            "activate.ps1" => Cow::Owned(virtual_prompt.replace('\'', "''")),
             "activate.xsh" => Cow::Owned(format!(
                 r#"b"{}".decode("utf-8")"#,
                 virtual_prompt.as_bytes().escape_ascii(),
@@ -957,4 +961,72 @@ fn copy_launcher_windows(
     }
 
     Err(Error::NotFound(base_python.user_display().to_string()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_activator_prompt_escaping() {
+        let prompt = "x$(touch /tmp/PWNED)y`calc`'quoted'";
+        let location = Path::new("/tmp/my_env");
+        let location_string = location.to_str().unwrap();
+        let path_sep = ":";
+        let relative_site_packages = "site-packages";
+        let bin_name = "bin";
+        let relocatable = false;
+
+        for (name, template) in ACTIVATE_TEMPLATES {
+            let virtual_env_dir = escape_posix_for_single_quotes(location_string);
+            let virtual_prompt = match *name {
+                "activate" | "activate.csh" | "activate.fish" | "activate.nu" => {
+                    escape_posix_for_single_quotes(prompt)
+                }
+                "activate.ps1" => Cow::Owned(prompt.replace('\'', "''")),
+                "activate.xsh" => Cow::Owned(format!(
+                    r#"b"{}".decode("utf-8")"#,
+                    prompt.as_bytes().escape_ascii(),
+                )),
+                _ => Cow::Borrowed(prompt),
+            };
+
+            let template = if *name == "activate" {
+                Cow::Owned(template.replace(
+                    "{{ RELOCATABLE }}",
+                    if relocatable { "true" } else { "false" },
+                ))
+            } else {
+                Cow::Borrowed(*template)
+            };
+
+            let activator = template
+                .replace("{{ VIRTUAL_ENV_DIR }}", &virtual_env_dir)
+                .replace("{{ BIN_NAME }}", bin_name)
+                .replace("{{ VIRTUAL_PROMPT }}", &virtual_prompt)
+                .replace("{{ PATH_SEP }}", path_sep)
+                .replace("{{ RELATIVE_SITE_PACKAGES }}", relative_site_packages);
+
+            if *name == "activate" {
+                assert!(activator.contains(
+                    "VIRTUAL_ENV_PROMPT='x$(touch /tmp/PWNED)y`calc`'\"'\"'quoted'\"'\"''"
+                ));
+                assert!(activator.contains(r#"_VIRTUAL_PROMPT="${_VIRTUAL_PROMPT//\$/\\\$}"#));
+                assert!(activator.contains(r#"_VIRTUAL_PROMPT="${_VIRTUAL_PROMPT//\`/\\\`}"#));
+                assert!(activator.contains(r#"_VIRTUAL_PROMPT="${_VIRTUAL_PROMPT//\%/%%}"#));
+            } else if *name == "activate.ps1" {
+                assert!(activator.contains(
+                    r#"$env:VIRTUAL_ENV_PROMPT = 'x$(touch /tmp/PWNED)y`calc`''quoted'''"#
+                ));
+            } else if *name == "activate.fish" {
+                assert!(activator.contains(
+                    "set -gx VIRTUAL_ENV_PROMPT 'x$(touch /tmp/PWNED)y`calc`'\"'\"'quoted'\"'\"''"
+                ));
+            } else if *name == "activate.csh" {
+                assert!(activator.contains(
+                    "setenv VIRTUAL_ENV_PROMPT 'x$(touch /tmp/PWNED)y`calc`'\"'\"'quoted'\"'\"''"
+                ));
+            }
+        }
+    }
 }
