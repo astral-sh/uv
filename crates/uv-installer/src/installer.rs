@@ -27,7 +27,7 @@ pub enum InstallError {
     WorkerPanicked,
     #[error(transparent)]
     Variant(#[from] uv_distribution::Error),
-    #[error("Selected variant properties do not match wheel `{0}`")]
+    #[error("Variant properties in wheel `{0}` differ from the metadata used to select it")]
     VariantContextMismatch(Box<WheelFilename>),
     #[error("Wheel `{0}` is incompatible with the selected variant properties")]
     VariantIncompatible(Box<WheelFilename>),
@@ -133,7 +133,7 @@ impl<'a> Installer<'a> {
                     InstallError::VariantContextMismatch(Box::new(wheel.filename().clone()))
                 })?;
             let selected = if let Some(selected) = resolution.variant_context(wheel.filename()) {
-                if !metadata.validates_selected_variant(selected) {
+                if !metadata.matches_selected_variant(selected) {
                     return Err(InstallError::VariantContextMismatch(Box::new(
                         wheel.filename().clone(),
                     )));

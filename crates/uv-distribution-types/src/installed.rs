@@ -401,16 +401,9 @@ impl InstalledDist {
         metadata: &VariantsJsonContent,
     ) -> Result<SelectedVariant, InstalledDistError> {
         match fs::read(self.install_path().join("uv_variant.json")) {
-            Ok(contents) => {
-                let selected = serde_json::from_slice(&contents)?;
-                if metadata.validates_selected_variant(&selected) {
-                    Ok(selected)
-                } else {
-                    Err(InstalledDistError::VariantContextMismatch(
-                        self.name().clone(),
-                    ))
-                }
-            }
+            Ok(contents) => metadata
+                .restore_selected_variant(serde_json::from_slice(&contents)?)
+                .ok_or_else(|| InstalledDistError::VariantContextMismatch(self.name().clone())),
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => metadata
                 .wheel_label()
                 .and_then(|label| {

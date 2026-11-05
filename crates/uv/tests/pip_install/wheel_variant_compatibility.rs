@@ -914,6 +914,44 @@ fn selected_variant_properties_filter_dependencies() -> Result<()> {
     Ok(())
 }
 
+/// An extra supported value in the wheel can activate a dependency the index omitted.
+#[test]
+fn reject_variant_wheel_with_different_index_properties() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let links = context.temp_dir.child("links");
+    links.create_dir_all()?;
+    let mut metadata = json!({
+        "$schema": PEP_850_SCHEMA,
+        "default-priorities": { "namespace": ["blas"] },
+        "providers": { "blas": { "static-properties": { "library": ["openblas", "mkl"] } } },
+        "variants": { "blas": { "blas": { "library": ["openblas"] } } },
+    });
+    links
+        .child("ok-1.0.0-variants.json")
+        .write_str(&metadata.to_string())?;
+    metadata["variants"]["blas"]["blas"]["library"] = json!(["openblas", "mkl"]);
+    let (filename, wheel) = WheelBuilder::new(&"ok".parse()?, &"1.0.0".parse()?)
+        .variant(&"blas".parse()?, &metadata.to_string())
+        .requires(&["missing ; 'blas :: library :: mkl' in variant_properties".parse()?])
+        .build();
+    links.child(filename).write_binary(&wheel)?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(links.path())
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("ok"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    error: Variant properties in wheel `ok-1.0.0-py3-none-any-blas.whl` differ from the metadata used to select it
+    ");
+    Ok(())
+}
+
 /// The only wheel requires a property supplied by the target, absent from the host defaults.
 #[test]
 fn explicit_variant_target_selects_registry_wheel() -> Result<()> {
