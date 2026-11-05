@@ -475,7 +475,7 @@ impl HashStrategy {
             let current = hashes.as_ref().unwrap_or(existing);
             let current_digests = current.get(&id);
             let mut merged = current_digests.cloned().unwrap_or_default();
-            merge_digests(&mut merged, digests.iter(), requirement)?;
+            merge_digests(&mut merged, &digests, requirement)?;
 
             if current_digests.map(Vec::as_slice) == Some(merged.as_slice()) {
                 continue;
@@ -492,8 +492,8 @@ impl HashStrategy {
     /// Extract the archive URL hash target and digests for a requirement, if any.
     fn requirement_hashes(
         requirement: &Requirement,
-    ) -> Result<Option<(VersionId, HashDigests)>, HashStrategyError> {
-        let digests = requirement.hashes()?;
+    ) -> Result<Option<(VersionId, Vec<HashDigest>)>, HashStrategyError> {
+        let digests = requirement.hashes()?.to_vec();
         if digests.is_empty() {
             return Ok(None);
         }
