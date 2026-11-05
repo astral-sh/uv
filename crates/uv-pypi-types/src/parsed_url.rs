@@ -67,6 +67,14 @@ impl CacheKey for VerbatimParsedUrl {
 }
 
 impl VerbatimParsedUrl {
+    /// Classify an unnamed local requirement as a directory or a distribution archive.
+    fn from_file_url(verbatim: VerbatimUrl, given: Option<&Path>) -> Result<Self, ParsedUrlError> {
+        Ok(Self {
+            parsed_url: ParsedUrl::from_file_url(verbatim.to_url(), given)?,
+            verbatim,
+        })
+    }
+
     /// Returns `true` if the URL is editable.
     pub fn is_editable(&self) -> bool {
         self.parsed_url.is_editable()
@@ -103,67 +111,18 @@ impl UnnamedRequirementUrl for VerbatimParsedUrl {
         path: impl AsRef<Path>,
         working_dir: impl AsRef<Path>,
     ) -> Result<Self, Self::Err> {
-        let verbatim = <VerbatimUrl as UnnamedRequirementUrl>::parse_path(&path, &working_dir)?;
-        let verbatim_path = verbatim.as_path()?;
-        let is_dir = if let Ok(metadata) = verbatim_path.metadata() {
-            metadata.is_dir()
-        } else {
-            verbatim_path.extension().is_none()
-        };
-        let url = verbatim.to_url();
-        let install_path = verbatim.as_path()?.into_boxed_path();
-        let parsed_url = if is_dir {
-            ParsedUrl::Directory(ParsedDirectoryUrl {
-                url,
-                install_path,
-                editable: None,
-                r#virtual: None,
-            })
-        } else {
-            ParsedUrl::Path(ParsedPathUrl {
-                url,
-                install_path,
-                ext: DistExtension::from_path(&path).map_err(|err| {
-                    ParsedUrlError::MissingExtensionPath(path.as_ref().to_path_buf(), err)
-                })?,
-            })
-        };
-        Ok(Self {
-            parsed_url,
-            verbatim,
-        })
+        let verbatim = <VerbatimUrl as UnnamedRequirementUrl>::parse_path(&path, working_dir)?;
+        Self::from_file_url(verbatim, Some(path.as_ref()))
     }
 
     fn parse_absolute_path(path: impl AsRef<Path>) -> Result<Self, Self::Err> {
         let verbatim = <VerbatimUrl as UnnamedRequirementUrl>::parse_absolute_path(&path)?;
-        let verbatim_path = verbatim.as_path()?;
-        let is_dir = if let Ok(metadata) = verbatim_path.metadata() {
-            metadata.is_dir()
-        } else {
-            verbatim_path.extension().is_none()
-        };
-        let url = verbatim.to_url();
-        let install_path = verbatim.as_path()?.into_boxed_path();
-        let parsed_url = if is_dir {
-            ParsedUrl::Directory(ParsedDirectoryUrl {
-                url,
-                install_path,
-                editable: None,
-                r#virtual: None,
-            })
-        } else {
-            ParsedUrl::Path(ParsedPathUrl {
-                url,
-                install_path,
-                ext: DistExtension::from_path(&path).map_err(|err| {
-                    ParsedUrlError::MissingExtensionPath(path.as_ref().to_path_buf(), err)
-                })?,
-            })
-        };
-        Ok(Self {
-            parsed_url,
-            verbatim,
-        })
+        Self::from_file_url(verbatim, Some(path.as_ref()))
+    }
+
+    fn parse_file_url(url: &str, working_dir: Option<&Path>) -> Result<Self, Self::Err> {
+        let verbatim = <VerbatimUrl as Pep508Url>::parse_url(url, working_dir)?;
+        Self::from_file_url(verbatim, None)
     }
 
     fn parse_unnamed_url(url: impl AsRef<str>) -> Result<Self, Self::Err> {
@@ -225,6 +184,34 @@ pub enum ParsedUrl {
 }
 
 impl ParsedUrl {
+    /// Classify a file URL using its filesystem path, which excludes any URL fragment.
+    fn from_file_url(url: SafeUrl, given: Option<&Path>) -> Result<Self, ParsedUrlError> {
+        let path = url
+            .to_file_path()
+            .map_err(|()| ParsedUrlError::InvalidFileUrl(url.to_string()))?;
+        let is_dir = if let Ok(metadata) = path.metadata() {
+            metadata.is_dir()
+        } else {
+            path.extension().is_none()
+        };
+        if is_dir {
+            Ok(Self::Directory(ParsedDirectoryUrl {
+                url,
+                install_path: path.into_boxed_path(),
+                editable: None,
+                r#virtual: None,
+            }))
+        } else {
+            Ok(Self::Path(ParsedPathUrl {
+                url,
+                ext: DistExtension::from_path(&path).map_err(|err| {
+                    ParsedUrlError::MissingExtensionPath(given.unwrap_or(&path).to_path_buf(), err)
+                })?,
+                install_path: path.into_boxed_path(),
+            }))
+        }
+    }
+
     /// Returns `true` if the URL is editable.
     pub fn is_editable(&self) -> bool {
         matches!(
@@ -522,29 +509,7 @@ impl TryFrom<SafeUrl> for ParsedUrl {
         {
             Ok(Self::GitDirectory(ParsedGitDirectoryUrl::try_from(url)?))
         } else if url.scheme().eq_ignore_ascii_case("file") {
-            let path = url
-                .to_file_path()
-                .map_err(|()| ParsedUrlError::InvalidFileUrl(url.to_string()))?;
-            let is_dir = if let Ok(metadata) = path.metadata() {
-                metadata.is_dir()
-            } else {
-                path.extension().is_none()
-            };
-            if is_dir {
-                Ok(Self::Directory(ParsedDirectoryUrl {
-                    url,
-                    install_path: path.into_boxed_path(),
-                    editable: None,
-                    r#virtual: None,
-                }))
-            } else {
-                Ok(Self::Path(ParsedPathUrl {
-                    url,
-                    ext: DistExtension::from_path(&path)
-                        .map_err(|err| ParsedUrlError::MissingExtensionPath(path.clone(), err))?,
-                    install_path: path.into_boxed_path(),
-                }))
-            }
+            Self::from_file_url(url, None)
         } else {
             Ok(Self::Archive(ParsedArchiveUrl::try_from(url)?))
         }
@@ -693,9 +658,29 @@ impl From<ParsedGitDirectoryUrl> for SafeUrl {
 mod tests {
     use anyhow::Result;
 
-    use crate::{DirectUrl, ParsedGitDirectoryUrl, parsed_url::ParsedUrl};
+    use crate::{DirectUrl, ParsedGitDirectoryUrl, VerbatimParsedUrl, parsed_url::ParsedUrl};
     use uv_git_types::{GitLfs, GitReference, GitUrl};
+    use uv_pep508::{TracingReporter, UnnamedRequirement};
     use uv_redacted::SafeUrl;
+
+    #[test]
+    fn unnamed_file_url_with_hash_in_path_and_fragment() -> Result<()> {
+        let base = std::env::current_dir()?;
+        let requirement = UnnamedRequirement::<VerbatimParsedUrl>::parse(
+            "file:./issue%2310458/demo-1.0.tar.gz#subdirectory=src",
+            &base,
+            &mut TracingReporter,
+        )?;
+        let ParsedUrl::Path(archive) = requirement.url.parsed_url else {
+            anyhow::bail!("expected an archive");
+        };
+        assert_eq!(
+            archive.install_path.as_ref(),
+            base.join("issue#10458/demo-1.0.tar.gz")
+        );
+        assert_eq!(archive.url.fragment(), Some("subdirectory=src"));
+        Ok(())
+    }
 
     #[test]
     fn direct_url_from_url() -> Result<()> {

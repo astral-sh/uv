@@ -3,11 +3,9 @@ use std::hash::Hash;
 use std::path::Path;
 use std::str::FromStr;
 
-use uv_fs::normalize_url_path;
 use uv_normalize::ExtraName;
 
 use crate::marker::parse;
-use crate::verbatim_url::strip_host;
 use crate::verbatim_url::were_vars_expanded;
 use crate::{
     Cursor, MarkerEnvironment, MarkerTree, Pep508Error, Pep508ErrorSource, Pep508Url, Reporter,
@@ -25,6 +23,11 @@ pub trait UnnamedRequirementUrl: Pep508Url {
 
     /// Parse a URL from an absolute path.
     fn parse_absolute_path(path: impl AsRef<Path>) -> Result<Self, Self::Err>;
+
+    /// Parse an explicit `file:` URL in an unnamed requirement.
+    fn parse_file_url(url: &str, working_dir: Option<&Path>) -> Result<Self, Self::Err> {
+        Self::parse_url(url, working_dir)
+    }
 
     /// Parse a URL from a string.
     fn parse_unnamed_url(given: impl AsRef<str>) -> Result<Self, Self::Err>;
@@ -247,39 +250,16 @@ fn preprocess_unnamed_url<Url: UnnamedRequirementUrl>(
     let expanded = expand_env_vars(url);
     let vars_expanded = were_vars_expanded(url, expanded.as_ref());
 
-    if let Some((scheme, path)) = split_scheme(&expanded) {
+    if let Some((scheme, _)) = split_scheme(&expanded) {
         match Scheme::parse(scheme) {
-            // Ex) `file:///home/ferris/project/scripts/...`, `file://localhost/home/ferris/project/scripts/...`, or `file:../ferris/`
+            // An explicit file URL can contain both a percent-encoded path and a fragment.
             Some(Scheme::File) => {
-                // Strip the leading slashes, along with the `localhost` host, if present.
-                let path = strip_host(path);
-
-                // Transform, e.g., `/C:/Users/ferris/wheel-0.42.0.tar.gz` to `C:\Users\ferris\wheel-0.42.0.tar.gz`.
-                let path = normalize_url_path(path);
-
-                #[cfg(feature = "non-pep508-extensions")]
-                if let Some(working_dir) = working_dir {
-                    let url = Url::parse_path(path.as_ref(), working_dir)
-                        .map_err(|err| Pep508Error {
-                            message: Pep508ErrorSource::UrlError(Box::new(err)),
-                            start,
-                            len,
-                            input: cursor.to_string(),
-                        })?
-                        .with_given(url)
-                        .with_expanded(vars_expanded);
-                    return Ok((url, extras));
-                }
-
-                let url = Url::parse_absolute_path(path.as_ref())
-                    .map_err(|err| Pep508Error {
-                        message: Pep508ErrorSource::UrlError(Box::new(err)),
-                        start,
-                        len,
-                        input: cursor.to_string(),
-                    })?
-                    .with_given(url)
-                    .with_expanded(vars_expanded);
+                let url = Url::parse_file_url(url, working_dir).map_err(|err| Pep508Error {
+                    message: Pep508ErrorSource::UrlError(Box::new(err)),
+                    start,
+                    len,
+                    input: cursor.to_string(),
+                })?;
                 Ok((url, extras))
             }
             // Ex) `https://download.pytorch.org/whl/torch_stable.html`

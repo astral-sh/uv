@@ -7096,6 +7096,34 @@ fn path_name_version_change() {
     );
 }
 
+/// A literal `#` in a directory name is part of the wheel path.
+#[test]
+fn local_wheel_path_with_hash() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let directory = context.temp_dir.child("wheels#10458");
+    directory.create_dir_all()?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-1.0.0-py3-none-any.whl"),
+        directory.child("ok-1.0.0-py3-none-any.whl"),
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("./wheels#10458/ok-1.0.0-py3-none-any.whl"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0 (from file://[TEMP_DIR]/wheels%2310458/ok-1.0.0-py3-none-any.whl)
+    "
+    );
+
+    Ok(())
+}
+
 /// Install from a direct path (wheel) with the same name at a different path.
 #[test]
 fn path_changes_with_same_name() -> Result<()> {

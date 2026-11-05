@@ -224,7 +224,7 @@ impl VerbatimUrl {
         path: impl AsRef<Path>,
         base_dir: Option<&Path>,
     ) -> Result<Self, VerbatimUrlError> {
-        let (path, fragment) = split_fragment(path.as_ref());
+        let (path, fragment) = split_fragment(path.as_ref(), base_dir);
         let url = if let Some(base_dir) = base_dir {
             Self::from_path(path, base_dir)?
         } else {
@@ -738,21 +738,39 @@ pub fn looks_like_git_repository<P: SerializationPolicy>(url: &SafeUrl<P>) -> bo
             .is_some_and(|segments| segments.count() == 2)
 }
 
-/// Split the fragment from a URL.
-///
-/// For example, given `file:///home/ferris/project/scripts#hash=somehash`, returns
-/// `("/home/ferris/project/scripts", Some("hash=somehash"))`.
+/// Split packaging parameters such as `#egg=black` or `#sha256=...` from a bare path.
+/// A literal `#` that starts a parameter can be written as `%23` in a `file:` URL.
 #[cfg(feature = "non-pep508-extensions")]
-fn split_fragment(path: &Path) -> (Cow<'_, Path>, Option<&str>) {
-    let Some(s) = path.to_str() else {
-        return (Cow::Borrowed(path), None);
+fn split_fragment<'a>(path: &'a Path, base_dir: Option<&Path>) -> (&'a Path, Option<&'a str>) {
+    let Some(input) = path.to_str() else {
+        return (path, None);
+    };
+    let Some((prefix, tail)) = input.split_once('#') else {
+        return (path, None);
     };
 
-    let Some((path, fragment)) = s.split_once('#') else {
-        return (Cow::Borrowed(path), None);
-    };
+    let mut offset = prefix.len();
+    for part in tail.split('#') {
+        if part.split('&').any(|field| {
+            field
+                .split_once('=')
+                .is_some_and(|(key, _)| !key.is_empty() && !key.contains(['/', '\\']))
+        }) {
+            return (Path::new(&input[..offset]), Some(&input[offset + 1..]));
+        }
+        offset += 1 + part.len();
+    }
 
-    (Cow::Owned(PathBuf::from(path)), Some(fragment))
+    // An opaque fragment can still refer to an existing archive or directory.
+    // Prefer the literal path when both spellings exist.
+    let exists = |path: &Path| match base_dir {
+        Some(base) => base.join(path).exists(),
+        None => path.is_absolute() && path.exists(),
+    };
+    if !exists(path) && exists(Path::new(prefix)) {
+        return (Path::new(prefix), Some(tail));
+    }
+    (path, None)
 }
 
 /// A supported URL scheme for PEP 508 direct-URL requirements.
@@ -962,39 +980,14 @@ mod tests {
     #[test]
     #[cfg(feature = "non-pep508-extensions")]
     fn fragment() {
+        let path = Path::new("issue#10458/pkg-1.0.tar.gz");
+        assert_eq!(split_fragment(path, None), (path, None));
         assert_eq!(
-            split_fragment(Path::new(
-                "file:///home/ferris/project/scripts#hash=somehash"
-            )),
-            (
-                Cow::Owned(PathBuf::from("file:///home/ferris/project/scripts")),
-                Some("hash=somehash")
-            )
-        );
-        assert_eq!(
-            split_fragment(Path::new("file:home/ferris/project/scripts#hash=somehash")),
-            (
-                Cow::Owned(PathBuf::from("file:home/ferris/project/scripts")),
-                Some("hash=somehash")
-            )
-        );
-        assert_eq!(
-            split_fragment(Path::new("/home/ferris/project/scripts#hash=somehash")),
-            (
-                Cow::Owned(PathBuf::from("/home/ferris/project/scripts")),
-                Some("hash=somehash")
-            )
-        );
-        assert_eq!(
-            split_fragment(Path::new("file:///home/ferris/project/scripts")),
-            (
-                Cow::Borrowed(Path::new("file:///home/ferris/project/scripts")),
+            split_fragment(
+                Path::new("issue#10458/pkg-1.0.tar.gz#ignored&hash=somehash"),
                 None
-            )
-        );
-        assert_eq!(
-            split_fragment(Path::new("")),
-            (Cow::Borrowed(Path::new("")), None)
+            ),
+            (path, Some("ignored&hash=somehash"))
         );
     }
 
