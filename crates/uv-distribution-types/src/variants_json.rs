@@ -9,6 +9,9 @@ use serde::{Deserialize, Serialize};
 use tracing::debug;
 
 use uv_distribution_filename::VariantLabel;
+use uv_normalize::PackageName;
+use uv_pep440::{Version, VersionSpecifier};
+use version_ranges::Ranges;
 
 // TODO(konsti): Standardize on a single schema URL once the variant metadata format is finalized.
 /// The PEP 825 draft schema for variant metadata without providers.
@@ -149,6 +152,36 @@ impl VariantsJsonContent {
         }
     }
 
+    fn is_abi_dependency(&self, namespace: &VariantNamespace) -> bool {
+        let Some(VariantProvider {
+            kind: ProviderKind::Builtin { builtin },
+            optional: false,
+        }) = self
+            .providers
+            .as_ref()
+            .and_then(|providers| providers.get(namespace))
+        else {
+            return false;
+        };
+        *builtin == BuiltinProvider::AbiDependency
+    }
+
+    /// Collect the ABI requirements if the label exists and all its requirements are valid.
+    pub fn abi_dependencies(
+        &self,
+        label: &VariantLabel,
+    ) -> Option<Vec<(PackageName, Ranges<Version>)>> {
+        let mut dependencies = Vec::new();
+        for (namespace, features) in self.variants.get(label)? {
+            if self.is_abi_dependency(namespace) {
+                for (feature, values) in features {
+                    dependencies.push(abi_dependency(feature, values)?);
+                }
+            }
+        }
+        Some(dependencies)
+    }
+
     /// Score a variant using the target's ordered compatible features and values.
     ///
     /// Returns `None` if the label is missing or any of its features is unsupported.
@@ -272,7 +305,13 @@ impl VariantsJsonContent {
                         requires,
                         plugin_api: plugin_api.as_deref(),
                     },
-                    ProviderKind::Builtin { builtin } => VariantProviderRequest::Builtin(builtin),
+                    // Without resolved runtime versions, the ABI provider supports no properties.
+                    ProviderKind::Builtin {
+                        builtin: BuiltinProvider::AbiDependency,
+                    } => return None,
+                    ProviderKind::Builtin {
+                        builtin: BuiltinProvider::Unknown(name),
+                    } => VariantProviderRequest::Builtin(name),
                     ProviderKind::Static { .. } => return None,
                 };
                 Some((namespace, request))
@@ -345,8 +384,25 @@ enum ProviderKind {
         plugin_api: Option<String>,
     },
     Builtin {
-        builtin: String,
+        builtin: BuiltinProvider,
     },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(from = "String", rename_all = "snake_case")]
+enum BuiltinProvider {
+    AbiDependency,
+    #[serde(untagged)]
+    Unknown(String),
+}
+
+impl From<String> for BuiltinProvider {
+    fn from(name: String) -> Self {
+        match name.as_str() {
+            "abi_dependency" => Self::AbiDependency,
+            _ => Self::Unknown(name),
+        }
+    }
 }
 
 #[derive(Deserialize)]
@@ -519,6 +575,39 @@ impl TryFrom<VariantsJsonWire> for VariantsJsonContent {
             variants: wire.variants,
         })
     }
+}
+
+/// ABI features name a distribution and list the release prefixes it can provide.
+fn abi_dependency(
+    feature: &VariantFeature,
+    values: &[VariantValue],
+) -> Option<(PackageName, Ranges<Version>)> {
+    let name = PackageName::from_str(&feature.0).ok()?;
+    if name.as_dist_info_name() != feature.0.as_ref() {
+        return None;
+    }
+    // The allowed version range is the union of the specified versions, as any matching
+    // version is sufficient.
+    let mut versions = Ranges::empty();
+    for value in values {
+        let version = match Version::from_str(&value.0) {
+            Ok(version) => version,
+            Err(err) => {
+                debug!("Unsupported ABI dependency value `{value}` for `{name}`: {err}");
+                return None;
+            }
+        };
+        let release = version.release();
+        if release.len() > 3 || version.only_release().to_string() != value.0.as_ref() {
+            debug!(
+                "Unsupported ABI dependency value `{value}` for `{name}`: \
+                 expected a canonical release prefix with one to three components"
+            );
+            return None;
+        }
+        versions = versions.union(&VersionSpecifier::equals_star_version(version).into());
+    }
+    Some((name, versions))
 }
 
 /// The schema field alone, used to identify unknown schemas when parsing fails.
