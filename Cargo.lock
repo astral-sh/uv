@@ -5821,6 +5821,7 @@ dependencies = [
  "uv-fs",
  "uv-lock",
  "uv-normalize",
+ "uv-pep508",
  "uv-redacted",
  "uv-version",
  "uv-warnings",

@@ -21,7 +21,9 @@ use uv_preview::{Preview, PreviewFeature};
 use uv_python_discovery::ConfigDiscovery;
 use uv_python_discovery::ProjectPythonRequest;
 use uv_python_discovery::ScriptInterpreter;
-use uv_python_types::{PythonArchitecture, PythonDownloads, PythonPreference, PythonVersion};
+use uv_python_types::{
+    PythonArchitecture, PythonDownloads, PythonPreference, PythonRequest, PythonVersion,
+};
 use uv_redacted::SafeUrl;
 use uv_resolve_operations::loggers::DefaultResolveLogger;
 use uv_resolve_operations::resolution_markers;
@@ -37,6 +39,7 @@ pub async fn audit(
     lock_check: LockCheck,
     frozen: Option<FrozenSource>,
     script: Option<Pep723Script>,
+    python: Option<String>,
     python_version: Option<PythonVersion>,
     python_platform: Option<TargetTriple>,
     install_mirrors: PythonInstallMirrors,
@@ -112,10 +115,11 @@ pub async fn audit(
     let interpreter = if frozen.is_some() && universal {
         None
     } else {
+        let request = python.as_deref().map(PythonRequest::parse);
         Some(match target {
             LockTarget::Script(script) => ScriptInterpreter::discover(
                 script.into(),
-                None,
+                request,
                 &client_builder,
                 python_preference,
                 python_arch,
@@ -131,7 +135,7 @@ pub async fn audit(
             .into_interpreter(),
             LockTarget::Workspace(workspace) => {
                 let project_python = ProjectPythonRequest::from_request(
-                    None,
+                    request,
                     Some(workspace),
                     &groups,
                     project_dir,
@@ -195,7 +199,7 @@ pub async fn audit(
     };
 
     // Determine the markers to use for resolution.
-    let _markers = (!universal).then(|| {
+    let markers = (!universal).then(|| {
         resolution_markers(
             python_version.as_ref(),
             python_platform.as_ref(),
@@ -208,6 +212,7 @@ pub async fn audit(
         target.install_path(),
         &extras,
         &groups,
+        markers.as_deref(),
         &settings.index_locations,
         settings.keyring_provider,
         client_builder,

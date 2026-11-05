@@ -3498,7 +3498,7 @@ impl Lock {
     }
 
     /// Return the set of packages that should be audited, respecting the
-    /// given extras and dependency group filters.
+    /// given extras, dependency groups, and optional marker environment.
     ///
     /// Workspace members and packages without version information are
     /// excluded unconditionally, since neither can be meaningfully looked up
@@ -3507,6 +3507,7 @@ impl Lock {
         &'lock self,
         extras: &'lock ExtrasSpecificationWithDefaults,
         groups: &'lock DependencyGroupsWithDefaults,
+        markers: Option<&MarkerEnvironment>,
         collect_filter: impl Fn(&Package) -> bool,
     ) -> Auditable<'lock> {
         // Dedupe and sort by `(name, version)` during the walk itself. Keep
@@ -3514,11 +3515,17 @@ impl Lock {
         // downstream views (e.g. index lookup) have access to the lockfile
         // package.
         let mut by_name_version: BTreeMap<(&PackageName, &Version), &Package> = BTreeMap::default();
-        self.walk_auditable(extras, groups, collect_filter, |package, version| {
-            by_name_version
-                .entry((package.name(), version))
-                .or_insert(package);
-        });
+        self.walk_auditable(
+            extras,
+            groups,
+            markers,
+            collect_filter,
+            |package, version| {
+                by_name_version
+                    .entry((package.name(), version))
+                    .or_insert(package);
+            },
+        );
         let packages = by_name_version
             .into_iter()
             .map(|((_, version), package)| (package, version))
@@ -3539,23 +3546,25 @@ impl Lock {
         &'lock self,
         extras: &'lock ExtrasSpecificationWithDefaults,
         groups: &'lock DependencyGroupsWithDefaults,
+        markers: Option<&MarkerEnvironment>,
         collect_filter: impl Fn(&Package) -> bool,
         mut visit: F,
     ) where
         F: FnMut(&'lock Package, &'lock Version),
     {
-        // Enqueue a dependency for auditability checks: base package (no extra) first, then each activated extra.
-        fn enqueue_dep<'lock>(
-            seen: &mut FxHashSet<(PackageIndex, Option<&'lock ExtraName>)>,
-            queue: &mut VecDeque<(PackageIndex, Option<&'lock ExtraName>)>,
-            dep: &'lock Dependency,
-        ) {
-            for maybe_extra in std::iter::once(None).chain(dep.extra.iter().map(Some)) {
-                if seen.insert((dep.index, maybe_extra)) {
-                    queue.push_back((dep.index, maybe_extra));
-                }
-            }
-        }
+        let target = markers.map(|env| (env, ConflictMarker::from_conflicts(self.conflicts())));
+        let matches_target = |marker: &UniversalMarker| {
+            target.is_none_or(|(env, conflicts)| {
+                // Locked edges can include branches for invalid combinations of extras. Remove
+                // those branches before asking whether any valid selection reaches this target.
+                let environment = if !conflicts.is_true() && marker.has_conflict_marker() {
+                    UniversalMarker::new(marker.combined(), conflicts).pep508()
+                } else {
+                    marker.pep508()
+                };
+                environment.evaluate(env, &[])
+            })
+        };
 
         // Lockfile traversal state: (package, optional extra to activate on that package).
         let mut queue: VecDeque<(PackageIndex, Option<&ExtraName>)> = VecDeque::new();
@@ -3577,47 +3586,47 @@ impl Lock {
             }
         }
 
-        // Seed from requirements attached directly to the lock (e.g., PEP 723 scripts).
-        for requirement in self.requirements() {
-            for (index, _) in self
-                .packages
-                .iter()
-                .enumerate()
-                .filter(|(_, package)| package.id.name == requirement.name)
-            {
-                let index = PackageIndex(index);
+        // Scripts and project-less workspace roots attach requirements directly to the lock.
+        let group_requirements = self
+            .dependency_groups()
+            .iter()
+            .filter(|(group, _)| groups.contains(group))
+            .flat_map(|(_, requirements)| requirements);
+        // The manifest stores root declarations before dependency overrides and exclusions.
+        let global_overrides = self
+            .manifest
+            .overrides
+            .iter()
+            .filter_map(|entry| match entry {
+                Override::Requirement(requirement) => Some(requirement.clone()),
+                Override::Package(_) => None,
+            });
+        let modifiers = DependencyModifiers::new(
+            Overrides::from_requirements(global_overrides.collect()),
+            Excludes::from_entries(self.manifest.excludes.iter().cloned()),
+        );
+        for requirement in modifiers.apply(
+            DependencyModifierScope::Global,
+            self.requirements().iter().chain(group_requirements),
+        ) {
+            if markers.is_some_and(|env| !requirement.marker.evaluate(env, &[])) {
+                continue;
+            }
+            for package in self.packages_for_name(&requirement.name) {
+                if !package.fork_markers.is_empty()
+                    && !package.fork_markers.iter().any(matches_target)
+                {
+                    continue;
+                }
+                let index = self.by_id[&package.id];
                 if seen.insert((index, None)) {
                     queue.push_back((index, None));
                 }
-                for extra in &*requirement.extras {
-                    if seen.insert((index, Some(extra))) {
+                for extra in &requirement.extras {
+                    if let Some((extra, _)) = package.optional_dependencies.get_key_value(extra)
+                        && seen.insert((index, Some(extra)))
+                    {
                         queue.push_back((index, Some(extra)));
-                    }
-                }
-            }
-        }
-
-        // Seed from dependency groups attached directly to the lock (e.g., project-less
-        // workspace roots).
-        for (group, requirements) in self.dependency_groups() {
-            if !groups.contains(group) {
-                continue;
-            }
-            for requirement in requirements {
-                for (index, _) in self
-                    .packages
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, package)| package.id.name == requirement.name)
-                {
-                    let index = PackageIndex(index);
-                    if seen.insert((index, None)) {
-                        queue.push_back((index, None));
-                    }
-                    for extra in &*requirement.extras {
-                        if seen.insert((index, Some(extra))) {
-                            queue.push_back((index, Some(extra)));
-                        }
                     }
                 }
             }
@@ -3640,6 +3649,17 @@ impl Lock {
                 }
             }
 
+            let mut enqueue_dep = |dep: &'lock Dependency| {
+                if !matches_target(&dep.complexified_marker) {
+                    return;
+                }
+                for maybe_extra in std::iter::once(None).chain(dep.extra.iter().map(Some)) {
+                    if seen.insert((dep.index, maybe_extra)) {
+                        queue.push_back((dep.index, maybe_extra));
+                    }
+                }
+            };
+
             // Follow allowed dependency groups.
             if is_member && extra.is_none() {
                 for dep in package
@@ -3648,7 +3668,7 @@ impl Lock {
                     .filter(|(group, _)| groups.contains(group))
                     .flat_map(|(_, deps)| deps)
                 {
-                    enqueue_dep(&mut seen, &mut queue, dep);
+                    enqueue_dep(dep);
                 }
             }
 
@@ -3665,7 +3685,7 @@ impl Lock {
             };
 
             for dep in dependencies {
-                enqueue_dep(&mut seen, &mut queue, dep);
+                enqueue_dep(dep);
             }
         }
     }

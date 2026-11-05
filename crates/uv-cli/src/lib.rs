@@ -1044,6 +1044,9 @@ pub enum ProjectCommand {
     /// `tool.uv.default-groups`. To omit all dependency groups, use `--no-default-groups`. To exclude
     /// individual extras or groups, use `--no-extra` or `--no-group`.
     ///
+    /// By default, the audit covers all Python versions and platforms in the lockfile. Use
+    /// `--python-version` or `--python-platform` to audit dependencies for a specific environment.
+    ///
     /// Auditing requires network access and cannot be performed in offline mode.
     #[command(
         after_help = "Use `uv help audit` for more details.",
@@ -5141,13 +5144,13 @@ pub struct AuditArgs {
     /// For example, pass `--python-version 3.10` to audit the dependencies that would be included
     /// when installing on Python 3.10.
     ///
-    /// Defaults to the version of the discovered Python interpreter.
+    /// When filtering by platform alone, defaults to the version of the discovered interpreter.
     #[arg(long)]
     pub python_version: Option<PythonVersion>,
 
     /// The platform to use when auditing.
     ///
-    /// For example, pass `--platform windows` to audit the dependencies that would be included
+    /// For example, pass `--python-platform windows` to audit the dependencies that would be included
     /// when installing on Windows.
     ///
     /// Represented as a "target triple", a string that describes the target platform in terms of
@@ -5155,6 +5158,21 @@ pub struct AuditArgs {
     /// `aarch64-apple-darwin`.
     #[arg(long)]
     pub python_platform: Option<TargetTriple>,
+
+    /// The Python interpreter to use for locking and evaluating environment markers.
+    ///
+    /// Specifying an interpreter alone still audits all Python versions and platforms.
+    ///
+    /// See `uv help python` for details on Python discovery and supported request formats.
+    #[arg(
+        long,
+        short,
+        env = EnvVars::UV_PYTHON,
+        verbatim_doc_comment,
+        help_heading = "Python options",
+        value_hint = ValueHint::Other,
+    )]
+    pub python: Option<Maybe<String>>,
 }
 
 #[derive(Args)]
