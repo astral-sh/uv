@@ -435,24 +435,29 @@ impl CandidateSelector {
                 continue;
             };
             // Defer computing wheel coverage until there is a newer candidate to compare.
-            let inherited_wheels = inherited.wheel_markers();
-            if fork.is_disjoint(inherited_wheels.negate()) {
+            let inherited_wheels = inherited.wheel_coverage();
+            if fork.is_disjoint(inherited_wheels.portable_across_libcs.negate()) {
                 return None;
             }
-            let wheels = files.wheel_markers();
-            let gained = wheels.and(inherited_wheels.negate());
+            let wheels = files.wheel_coverage();
+            let gained = wheels.gained_over(inherited_wheels);
             if fork.is_disjoint(gained) {
                 continue;
             }
-            // A new Requires-Python lower bound splits off the older Pythons, which can
-            // still use the inherited version. Compare wheels where this release applies.
+            // Only a dependency's Python lower bound splits the fork.
             let supported = match dist.requires_python() {
-                Some(specifiers) => {
-                    fork.and(RequiresPython::from_specifiers(specifiers.clone()).to_marker_tree())
-                }
+                Some(specifiers) => fork
+                    .and(RequiresPython::from_specifiers(specifiers.clone()).lower_bound_marker()),
                 None => fork,
             };
-            let lost = inherited_wheels.and(wheels.negate());
+            // The inherited sdist can install throughout this fork. A wheel-only release
+            // must retain that coverage, including on both Linux libc families.
+            if !files.has_compatible_source()
+                && !supported.is_disjoint(wheels.portable_across_libcs.negate())
+            {
+                continue;
+            }
+            let lost = inherited_wheels.gained_over(wheels);
             if !supported.is_disjoint(gained) && supported.is_disjoint(lost) {
                 debug!(
                     "Preferring wheel coverage of {package_name}=={version} over sibling version {inherited_version}"

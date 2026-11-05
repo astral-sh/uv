@@ -155,81 +155,32 @@ impl RequiresPython {
     /// returns a marker tree that evaluates to `true` for all possible marker
     /// environments.
     pub fn to_marker_tree(&self) -> MarkerTree {
-        match (self.range.0.as_ref(), self.range.1.as_ref()) {
-            (Bound::Included(lower), Bound::Included(upper)) => {
-                let mut lower = MarkerTree::expression(MarkerExpression::Version {
-                    key: MarkerValueVersion::PythonFullVersion,
-                    specifier: VersionSpecifier::greater_than_equal_version(lower.clone()),
-                });
-                let upper = MarkerTree::expression(MarkerExpression::Version {
-                    key: MarkerValueVersion::PythonFullVersion,
-                    specifier: VersionSpecifier::less_than_equal_version(upper.clone()),
-                });
-                lower = lower.and(upper);
-                lower
+        let lower = self.lower_bound_marker();
+        let upper = match self.range.upper().as_ref() {
+            Bound::Included(version) => VersionSpecifier::less_than_equal_version(version.clone()),
+            Bound::Excluded(version) => VersionSpecifier::less_than_version(version.clone()),
+            Bound::Unbounded => return lower,
+        };
+        lower.and(MarkerTree::expression(MarkerExpression::Version {
+            key: MarkerValueVersion::PythonFullVersion,
+            specifier: upper,
+        }))
+    }
+
+    /// The Python versions on which the resolver can select this dependency after forking
+    /// on its lower bound. Dependency upper bounds do not create resolver forks.
+    pub fn lower_bound_marker(&self) -> MarkerTree {
+        let lower = match self.range.lower().as_ref() {
+            Bound::Included(version) => {
+                VersionSpecifier::greater_than_equal_version(version.clone())
             }
-            (Bound::Included(lower), Bound::Excluded(upper)) => {
-                let mut lower = MarkerTree::expression(MarkerExpression::Version {
-                    key: MarkerValueVersion::PythonFullVersion,
-                    specifier: VersionSpecifier::greater_than_equal_version(lower.clone()),
-                });
-                let upper = MarkerTree::expression(MarkerExpression::Version {
-                    key: MarkerValueVersion::PythonFullVersion,
-                    specifier: VersionSpecifier::less_than_version(upper.clone()),
-                });
-                lower = lower.and(upper);
-                lower
-            }
-            (Bound::Excluded(lower), Bound::Included(upper)) => {
-                let mut lower = MarkerTree::expression(MarkerExpression::Version {
-                    key: MarkerValueVersion::PythonFullVersion,
-                    specifier: VersionSpecifier::greater_than_version(lower.clone()),
-                });
-                let upper = MarkerTree::expression(MarkerExpression::Version {
-                    key: MarkerValueVersion::PythonFullVersion,
-                    specifier: VersionSpecifier::less_than_equal_version(upper.clone()),
-                });
-                lower = lower.and(upper);
-                lower
-            }
-            (Bound::Excluded(lower), Bound::Excluded(upper)) => {
-                let mut lower = MarkerTree::expression(MarkerExpression::Version {
-                    key: MarkerValueVersion::PythonFullVersion,
-                    specifier: VersionSpecifier::greater_than_version(lower.clone()),
-                });
-                let upper = MarkerTree::expression(MarkerExpression::Version {
-                    key: MarkerValueVersion::PythonFullVersion,
-                    specifier: VersionSpecifier::less_than_version(upper.clone()),
-                });
-                lower = lower.and(upper);
-                lower
-            }
-            (Bound::Unbounded, Bound::Unbounded) => MarkerTree::TRUE,
-            (Bound::Unbounded, Bound::Included(upper)) => {
-                MarkerTree::expression(MarkerExpression::Version {
-                    key: MarkerValueVersion::PythonFullVersion,
-                    specifier: VersionSpecifier::less_than_equal_version(upper.clone()),
-                })
-            }
-            (Bound::Unbounded, Bound::Excluded(upper)) => {
-                MarkerTree::expression(MarkerExpression::Version {
-                    key: MarkerValueVersion::PythonFullVersion,
-                    specifier: VersionSpecifier::less_than_version(upper.clone()),
-                })
-            }
-            (Bound::Included(lower), Bound::Unbounded) => {
-                MarkerTree::expression(MarkerExpression::Version {
-                    key: MarkerValueVersion::PythonFullVersion,
-                    specifier: VersionSpecifier::greater_than_equal_version(lower.clone()),
-                })
-            }
-            (Bound::Excluded(lower), Bound::Unbounded) => {
-                MarkerTree::expression(MarkerExpression::Version {
-                    key: MarkerValueVersion::PythonFullVersion,
-                    specifier: VersionSpecifier::greater_than_version(lower.clone()),
-                })
-            }
-        }
+            Bound::Excluded(version) => VersionSpecifier::greater_than_version(version.clone()),
+            Bound::Unbounded => return MarkerTree::TRUE,
+        };
+        MarkerTree::expression(MarkerExpression::Version {
+            key: MarkerValueVersion::PythonFullVersion,
+            specifier: lower,
+        })
     }
 
     /// Returns `true` if the `Requires-Python` is compatible with the given version.

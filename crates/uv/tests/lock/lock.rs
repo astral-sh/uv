@@ -9351,7 +9351,7 @@ fn lock_sibling_fork_prefers_wheels() -> Result<()> {
 
         [packages.parent.versions."1.0.0"]
         requires = ["child<2"]
-        wheel_tags = ["py3-none-macosx_10_9_x86_64", "py3-none-linux_x86_64"]
+        wheel_tags = ["py3-none-macosx_10_9_x86_64", "py3-none-manylinux_2_17_x86_64", "cp313-cp313-win_amd64"]
 
         [packages.parent.versions."2.0.0"]
         requires = ["child"]
@@ -9361,6 +9361,28 @@ fn lock_sibling_fork_prefers_wheels() -> Result<()> {
         [packages.parent.versions."3.0.0"]
         requires = ["child"]
         wheel_tags = ["py3-none-win_amd64"]
+
+        # This version drops the source fallback for other non-Darwin platforms.
+        [packages.parent.versions."4.0.0"]
+        requires = ["child"]
+        sdist = false
+        wheel_tags = ["py3-none-win_amd64", "py3-none-linux_x86_64"]
+
+        # A musl wheel cannot replace the inherited glibc wheel.
+        [packages.parent.versions."5.0.0"]
+        requires = ["child"]
+        wheel_tags = ["py3-none-win_amd64", "py3-none-musllinux_1_2_x86_64"]
+
+        # A higher glibc minimum would force source builds on glibc 2.17.
+        [packages.parent.versions."5.1.0"]
+        requires = ["child"]
+        wheel_tags = ["py3-none-win_amd64", "py3-none-manylinux_2_28_x86_64"]
+
+        # The upper bound does not split off 3.13, which would lose its Windows wheel.
+        [packages.parent.versions."6.0.0"]
+        requires_python = ">=3.12,<3.13"
+        requires = ["child"]
+        wheel_tags = ["cp312-cp312-win_amd64", "py3-none-linux_x86_64"]
 
         [packages.child.versions."1.0.0"]
         wheel_tags = ["py3-none-macosx_10_9_x86_64"]

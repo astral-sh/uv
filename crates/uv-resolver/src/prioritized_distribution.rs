@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
 use std::sync::OnceLock;
 
@@ -7,9 +8,9 @@ use tracing::debug;
 
 use uv_distribution_filename::{BuildTag, WheelFilename};
 use uv_distribution_types::{
-    File, IndexUrl, InstalledDist, MinimumLibcVersion, Name, RegistryBuiltDist, RegistryBuiltWheel,
-    RegistrySourceDist, RequiresPython, SupportedVariantProperties, VariantsJsonContent,
-    VariantsJsonFilename,
+    File, IndexUrl, InstalledDist, LinuxLibc, MinimumLibcVersion, Name, RegistryBuiltDist,
+    RegistryBuiltWheel, RegistrySourceDist, RequiresPython, SupportedVariantProperties,
+    VariantsJsonContent, VariantsJsonFilename,
 };
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
@@ -50,15 +51,40 @@ struct PrioritizedDistInner {
     hashes: Vec<HashDigest>,
     minimum_libc_version: Option<MinimumLibcVersion>,
     /// Computed on first use, after filtering and collecting the release's wheels.
-    wheel_coverage: OnceLock<WheelCoverage>,
+    wheel_coverage: OnceLock<Box<WheelCoverage>>,
 }
 
-#[derive(Debug, Clone, Copy)]
-struct WheelCoverage {
+#[derive(Debug, Clone)]
+pub(crate) struct WheelCoverage {
     /// Python versions covered by any compatible wheel, independently of its platform.
     python: MarkerTree,
-    /// Environments covered by compatible wheels on all configured libc baselines.
+    /// Wheels without a libc requirement, including generic Linux wheels.
+    pub(crate) portable_across_libcs: MarkerTree,
+    /// Python and platform markers for wheels requiring each libc baseline.
+    linux: BTreeMap<LinuxLibc, MarkerTree>,
+    /// Coverage used by the resolver's configured required environments.
     platforms: MarkerTree,
+}
+
+impl WheelCoverage {
+    /// Environments where this release adds a wheel. For each Linux wheel, check the oldest
+    /// libc that can run it. A wheel requiring glibc 2.28 leaves a gap on glibc 2.17, even
+    /// when both wheels have identical Python and platform markers.
+    pub(crate) fn gained_over(&self, other: &Self) -> MarkerTree {
+        let mut gained = self
+            .portable_across_libcs
+            .and(other.portable_across_libcs.negate());
+        for (&baseline, &markers) in &self.linux {
+            let mut previous = other.portable_across_libcs;
+            for (&required, &coverage) in &other.linux {
+                if baseline.supports(required) {
+                    previous = previous.or(coverage);
+                }
+            }
+            gained = gained.or(markers.and(previous.negate()));
+        }
+        gained
+    }
 }
 
 /// A distribution that can be used for both resolution and installation.
@@ -486,39 +512,54 @@ impl PrioritizedDist {
     }
 
     /// The environments covered by published wheels on all configured libc baselines.
-    pub(crate) fn wheel_markers(&self) -> MarkerTree {
+    fn wheel_markers(&self) -> MarkerTree {
         self.wheel_coverage().platforms
     }
 
-    fn wheel_coverage(&self) -> &WheelCoverage {
+    pub(crate) fn wheel_coverage(&self) -> &WheelCoverage {
         self.0.wheel_coverage.get_or_init(|| {
             let mut python = MarkerTree::FALSE;
-            let mut platforms = [MarkerTree::FALSE; 2];
+            let mut portable_across_libcs = MarkerTree::FALSE;
+            let mut linux = BTreeMap::new();
             for (wheel, compatibility) in &self.0.wheels {
-                // A selected variant can be installable on the current machine, but its
-                // hardware requirements aren't represented by environment markers.
+                // Hardware requirements on variants aren't represented by environment markers.
                 if !compatibility.is_compatible() || wheel.filename.variant().is_some() {
                     continue;
                 }
                 let wheel_python = implied_python_markers(&wheel.filename);
                 python = python.or(wheel_python);
-                for (coverage, markers) in platforms.iter_mut().zip(implied_libc_markers(
-                    &wheel.filename,
-                    wheel_python,
-                    self.0.minimum_libc_version,
-                )) {
+                for platform in wheel.filename.platform_tags() {
+                    let markers = implied_platform_markers([platform]).and(wheel_python);
+                    let coverage = match LinuxLibc::from_platform_tag(platform) {
+                        Some(baseline) => linux.entry(baseline).or_insert(MarkerTree::FALSE),
+                        None => &mut portable_across_libcs,
+                    };
                     *coverage = coverage.or(markers);
                 }
-                if python.is_true() && platforms.iter().all(|coverage| coverage.is_true()) {
+                if portable_across_libcs.is_true() {
                     break;
                 }
             }
-            // Separate wheels can satisfy the glibc and musl baselines.
-            let [glibc, musl] = platforms;
-            WheelCoverage {
-                python,
-                platforms: glibc.and(musl),
+
+            // Separate wheels can satisfy the glibc and musl baselines for required environments.
+            let minimum = self.0.minimum_libc_version.unwrap_or_default();
+            let mut platforms = [portable_across_libcs; 2];
+            for (&baseline, &markers) in &linux {
+                for (coverage, supported) in
+                    platforms.iter_mut().zip(minimum.libc_coverage(baseline))
+                {
+                    if supported {
+                        *coverage = coverage.or(markers);
+                    }
+                }
             }
+            let [glibc, musl] = platforms;
+            Box::new(WheelCoverage {
+                python,
+                portable_across_libcs,
+                linux,
+                platforms: glibc.and(musl),
+            })
         })
     }
 
