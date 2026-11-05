@@ -140,7 +140,7 @@ fn parse_abi_dependency_provider() -> Result<(), Box<dyn std::error::Error>> {
 
     assert!(matches!(
         metadata
-            .providers()
+            .enabled_providers(None)
             .next()
             .map(|(_, provider)| provider.kind()),
         Some(VariantProviderKind::Builtin {
