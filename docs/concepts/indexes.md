@@ -321,8 +321,19 @@ url = "https://internal.example.com/simple"
 exclude-newer = "7 days"
 ```
 
-Index-specific values only affect packages served from that index. Package-specific
-`exclude-newer-package` overrides still take precedence.
+Index-specific values only affect packages served from that index. You can override the cutoff for
+individual packages on that index with `exclude-newer-package`:
+
+```toml
+[[tool.uv.index]]
+name = "internal"
+url = "https://internal.example.com/simple"
+exclude-newer = "7 days"
+exclude-newer-package = { example = false }
+```
+
+Package-specific overrides in `[tool.uv.exclude-newer-package]` or on the command line take
+precedence over index-specific package overrides.
 
 If an index does not provide `upload-time` metadata, you can disable the cutoff for that index
 entirely:

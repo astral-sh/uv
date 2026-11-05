@@ -42719,6 +42719,146 @@ async fn lock_exclude_newer_index_value() -> Result<()> {
     Ok(())
 }
 
+/// An index-local package override must disable the cutoff even without a source pin.
+///
+/// See: <https://github.com/astral-sh/uv/issues/23103>
+#[cfg(feature = "test-universal")]
+#[tokio::test]
+async fn lock_exclude_newer_index_package_disable() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&format!(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+
+        [tool.uv]
+        preview-features = ["index-exclude-newer"]
+
+        [[tool.uv.index]]
+        name = "internal"
+        url = "{proxy_uri}/no-upload-time/simple"
+        default = true
+        exclude-newer = "2022-01-01T00:00:00Z"
+        exclude-newer-package = {{ iniconfig = false }}
+        "#,
+        proxy_uri = proxy.uri()
+    ))?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Index-local package timestamps override both index and global cutoffs.
+#[cfg(feature = "test-universal")]
+#[tokio::test]
+async fn lock_exclude_newer_index_package_timestamp() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&format!(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+
+        [tool.uv]
+        preview-features = ["index-exclude-newer"]
+        exclude-newer = "2000-01-01T00:00:00Z"
+
+        [tool.uv.sources]
+        iniconfig = {{ index = "internal" }}
+
+        [[tool.uv.index]]
+        name = "internal"
+        url = "{proxy_uri}/simple"
+        explicit = true
+        exclude-newer = "2022-01-01T00:00:00Z"
+        exclude-newer-package = {{ iniconfig = "2024-01-01T00:00:00Z" }}
+        "#,
+        proxy_uri = proxy.uri()
+    ))?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    // A top-level package override takes precedence over the index-local override.
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--exclude-newer-package")
+        .arg("iniconfig=2022-01-01T00:00:00Z"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolving despite existing lockfile due to addition of exclude newer `2022-01-01T00:00:00Z` for package `iniconfig`
+    error: No solution found when resolving dependencies
+      cause: Because iniconfig==2.0.0 was published after the exclude newer time and your project depends on iniconfig==2.0.0, we can conclude that your project's requirements are unsatisfiable.
+    ");
+
+    Ok(())
+}
+
+/// A package override in `[tool.uv]` takes precedence over a package override on the index.
+#[cfg(feature = "test-universal")]
+#[tokio::test]
+async fn lock_exclude_newer_index_package_project_override() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&format!(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+
+        [tool.uv]
+        preview-features = ["index-exclude-newer"]
+        exclude-newer-package = {{ iniconfig = false }}
+
+        [tool.uv.sources]
+        iniconfig = {{ index = "internal" }}
+
+        [[tool.uv.index]]
+        name = "internal"
+        url = "{proxy_uri}/simple"
+        explicit = true
+        exclude-newer-package = {{ iniconfig = "2022-01-01T00:00:00Z" }}
+        "#,
+        proxy_uri = proxy.uri()
+    ))?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Test that the resolver emits a hint when a pinned version is excluded by `--exclude-newer`,
 /// even though older versions of the same package are still available.
 ///

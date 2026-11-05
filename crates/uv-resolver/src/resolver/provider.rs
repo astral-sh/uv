@@ -147,7 +147,7 @@ impl<'a, Context: BuildContext> DefaultResolverProvider<'a, Context> {
     ) -> Option<jiff::Timestamp> {
         self.exclude_newer.exclude_newer_package_for_index(
             package_name,
-            self.index_locations.exclude_newer_for(index),
+            self.index_locations.exclude_newer_for(index, package_name),
         )
     }
 

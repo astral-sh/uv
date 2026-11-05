@@ -12,6 +12,7 @@ use thiserror::Error;
 use url::ParseError;
 use uv_auth::RealmRef;
 use uv_cache_key::CanonicalUrl;
+use uv_normalize::PackageName;
 use uv_pep508::{Scheme, VerbatimUrl, VerbatimUrlError, split_scheme};
 use uv_pypi_types::HashAlgorithm;
 use uv_redacted::SafeUrl;
@@ -522,9 +523,14 @@ impl<'a> IndexLocations {
             .and_then(|index| index.hash_algorithm.map(HashAlgorithm::from))
     }
 
-    /// Return the `exclude-newer` setting for a given index, if the index is configured.
-    pub fn exclude_newer_for(&self, url: &IndexUrl) -> Option<&ExcludeNewerOverride> {
-        self.index_for_url(url).and_then(Index::exclude_newer)
+    /// Return the `exclude-newer` setting for a package on a given index, if configured.
+    pub fn exclude_newer_for(
+        &self,
+        url: &IndexUrl,
+        package: &PackageName,
+    ) -> Option<&ExcludeNewerOverride> {
+        self.index_for_url(url)
+            .and_then(|index| index.exclude_newer(package))
     }
 }
 
@@ -628,6 +634,7 @@ impl IndexCapabilities {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
     use std::error::Error;
 
     use super::*;
@@ -814,6 +821,7 @@ mod tests {
                 ignore_error_codes: None,
                 hash_algorithm: None,
                 exclude_newer: None,
+                exclude_newer_package: BTreeMap::new(),
             },
             Index {
                 name: Some(IndexName::from_str("index2").unwrap()),
@@ -828,6 +836,7 @@ mod tests {
                 ignore_error_codes: None,
                 hash_algorithm: None,
                 exclude_newer: None,
+                exclude_newer_package: BTreeMap::new(),
             },
         ];
 
@@ -868,6 +877,7 @@ mod tests {
             ignore_error_codes: None,
             hash_algorithm: None,
             exclude_newer: None,
+            exclude_newer_package: BTreeMap::new(),
         }];
 
         let index_locations = IndexLocations::new(indexes, Vec::new(), false);
@@ -905,6 +915,7 @@ mod tests {
             ignore_error_codes: None,
             hash_algorithm: None,
             exclude_newer: None,
+            exclude_newer_package: BTreeMap::new(),
         }];
 
         let index_locations = IndexLocations::new(indexes, Vec::new(), false);
@@ -937,6 +948,7 @@ mod tests {
             ignore_error_codes: None,
             hash_algorithm: None,
             exclude_newer: None,
+            exclude_newer_package: BTreeMap::new(),
         }];
 
         let index_locations = IndexLocations::new(indexes, Vec::new(), false);

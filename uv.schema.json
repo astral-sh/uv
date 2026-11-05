@@ -1087,6 +1087,13 @@
             }
           ]
         },
+        "exclude-newer-package": {
+          "description": "Package-specific cutoffs for distributions resolved from this index.\n\nFor each package, accepts the same date, timestamp, and duration values as the global\n`exclude-newer` setting. Set a package's value to `false` to disable `exclude-newer` for that\npackage on this index.\n\nThese override the index's `exclude-newer` value and the global cutoff. Top-level\n`exclude-newer-package` settings take precedence over these overrides.\n\nThis option is in preview and may change in any future release.\n\n```toml\n[[tool.uv.index]]\nname = \"internal\"\nurl = \"https://internal.example.com/simple\"\nexclude-newer = \"7 days\"\nexclude-newer-package = { example = false }\n```",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/ExcludeNewerOverride"
+          }
+        },
         "explicit": {
           "description": "Mark the index as explicit.\n\nExplicit indexes will _only_ be used when explicitly requested via a `[tool.uv.sources]`\ndefinition, as in:\n\n```toml\n[[tool.uv.index]]\nname = \"pytorch\"\nurl = \"https://download.pytorch.org/whl/cu130\"\nexplicit = true\n\n[tool.uv.sources]\ntorch = { index = \"pytorch\" }\n```",
           "type": "boolean",
