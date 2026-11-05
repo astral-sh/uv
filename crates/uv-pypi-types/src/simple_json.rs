@@ -11,8 +11,6 @@ use serde::{Deserialize, Deserializer, Serialize};
 use uv_macros::DeserializeUntagged;
 use uv_normalize::PackageName;
 use uv_pep440::{VersionSpecifiers, VersionSpecifiersParseError};
-use uv_pep508::{VerbatimUrl, file_url_hashes};
-use uv_redacted::SafeUrl;
 use uv_small_str::SmallString;
 
 use crate::ProjectStatus;
@@ -387,29 +385,8 @@ impl Hashes {
         }
     }
 
-    /// Parse supported hashes from a URL fragment, ignoring unrelated parameters.
-    pub fn from_url(url: &VerbatimUrl) -> Result<Option<Self>, HashError> {
-        let Some(fragment) = url.fragment() else {
-            return Ok(None);
-        };
-        if url.scheme() == "file" {
-            let mut hashes = Self::default();
-            for (name, value) in file_url_hashes(fragment) {
-                let algorithm = name.parse()?;
-                let digest = HashDigest::new(algorithm, value.as_ref())?;
-                if let Some(previous) = hashes.insert(digest)
-                    && !previous.digest().eq_ignore_ascii_case(&value)
-                {
-                    let mut archive = url.to_url();
-                    archive.set_fragment(None);
-                    return Err(HashError::ConflictingUrlHashes {
-                        algorithm,
-                        url: Box::new(archive),
-                    });
-                }
-            }
-            return Ok((!hashes.is_empty()).then_some(hashes));
-        }
+    /// Parse a supported hash from a URL fragment, ignoring unrelated fragment parameters.
+    pub fn parse_url_fragment(fragment: &str) -> Result<Option<Self>, HashError> {
         for fragment in fragment.split('&') {
             if let Some((algorithm, _)) = fragment.split_once('=')
                 && HashAlgorithm::from_str(algorithm).is_ok()
@@ -420,16 +397,14 @@ impl Hashes {
         Ok(None)
     }
 
-    /// Insert a digest and return any previous digest for the same algorithm.
-    fn insert(&mut self, digest: HashDigest) -> Option<HashDigest> {
+    /// Insert a digest into its algorithm-specific slot.
+    fn insert(&mut self, digest: HashDigest) {
         match digest {
-            HashDigest::Md5(digest) => self.md5.replace(digest).map(HashDigest::Md5),
-            HashDigest::Sha256(digest) => self.sha256.replace(digest).map(HashDigest::Sha256),
-            HashDigest::Sha384(digest) => self.sha384.replace(digest).map(HashDigest::Sha384),
-            HashDigest::Sha512(digest) => self.sha512.replace(digest).map(HashDigest::Sha512),
-            HashDigest::Blake2b256(digest) => {
-                self.blake2b.replace(digest).map(HashDigest::Blake2b256)
-            }
+            HashDigest::Md5(digest) => self.md5 = Some(digest),
+            HashDigest::Sha256(digest) => self.sha256 = Some(digest),
+            HashDigest::Sha384(digest) => self.sha384 = Some(digest),
+            HashDigest::Sha512(digest) => self.sha512 = Some(digest),
+            HashDigest::Blake2b256(digest) => self.blake2b = Some(digest),
         }
     }
 }
@@ -857,12 +832,6 @@ impl IntoIterator for HashDigests {
 
 #[derive(thiserror::Error, Debug)]
 pub enum HashError {
-    #[error("Conflicting {algorithm} checksums in URL fragment for `{url}`")]
-    ConflictingUrlHashes {
-        algorithm: HashAlgorithm,
-        url: Box<SafeUrl>,
-    },
-
     #[error("Unexpected hash (expected `<algorithm>:<hash>`): {0}")]
     InvalidStructure(String),
 
@@ -891,40 +860,6 @@ mod tests {
         ArchivedHashDigest, CoreMetadata, Digest, HashAlgorithm, HashDigest, HashDigests,
         HashError, Hashes, PypiFile,
     };
-
-    #[test]
-    fn file_url_hash_decodes_parameter_name_and_digest() -> anyhow::Result<()> {
-        let digest = "ab".repeat(32);
-        let encoded = "%61b".repeat(32);
-        let sha512 = "cd".repeat(64);
-        let url = uv_pep508::VerbatimUrl::parse_url(format!(
-            "file:///pkg.whl#egg=ok%26sha256%3Dignored&%73ha256={encoded}&sha512={sha512}&sha256={}",
-            digest.to_ascii_uppercase()
-        ))?;
-        assert_eq!(
-            Hashes::from_url(&url)?,
-            Some(Hashes::from(HashDigests::from(vec![
-                HashDigest::new(HashAlgorithm::Sha256, digest)?,
-                HashDigest::new(HashAlgorithm::Sha512, sha512)?,
-            ])))
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn file_url_checks_every_supported_hash_algorithm() -> anyhow::Result<()> {
-        for algorithm in HashAlgorithm::preferred() {
-            let url = uv_pep508::VerbatimUrl::parse_url(format!("file:///pkg.whl#{algorithm}="))?;
-            assert!(
-                matches!(
-                    Hashes::from_url(&url),
-                    Err(HashError::InvalidDigestLength { .. })
-                ),
-                "expected an empty {algorithm} digest to be rejected"
-            );
-        }
-        Ok(())
-    }
 
     #[test]
     fn pypi_core_metadata_precedence() -> Result<(), serde_json::Error> {

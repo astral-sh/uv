@@ -7230,21 +7230,23 @@ fn local_wheel_path_with_hash_conflicting_pins() -> Result<()> {
     let url = SafeUrl::from_file_path(wheel).map_err(|()| anyhow!("invalid wheel path"))?;
     let correct = "79f0b33e6ce1e09eaa1784c8eee275dfe84d215d9c65c652f07c18e85fdaac5f";
     let wrong = "0".repeat(64);
+    let mut filters = context.filters();
+    filters.extend([(correct, "[CORRECT]"), (wrong.as_str(), "[WRONG]")]);
 
-    uv_snapshot!(context.filters(), context.pip_install()
+    uv_snapshot!(filters, context.pip_install()
         .arg("--require-hashes")
         .arg(format!("ok @ {url}#%73ha256={correct}&sha256={wrong}")), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Conflicting sha256 checksums in URL fragment for `file://[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl`
+    error: Conflicting archive URL hashes for `ok @ file://[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl#%73ha256=[CORRECT]&sha256=[WRONG]`: `sha256:[CORRECT]` conflicts with `sha256:[WRONG]`
     ");
     context.assert_not_installed("ok");
-    uv_snapshot!(context.filters(), context.pip_install()
+    uv_snapshot!(filters, context.pip_install()
         .arg("--require-hashes")
         .arg(format!("ok @ {url}#sha256={wrong}&%73ha256={correct}")), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Conflicting sha256 checksums in URL fragment for `file://[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl`
+    error: Conflicting archive URL hashes for `ok @ file://[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl#sha256=[WRONG]&%73ha256=[CORRECT]`: `sha256:[WRONG]` conflicts with `sha256:[CORRECT]`
     ");
     context.assert_not_installed("ok");
     Ok(())

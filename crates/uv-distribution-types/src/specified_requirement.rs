@@ -6,8 +6,9 @@ use std::path::Path;
 use uv_git_types::{GitLfs, GitReference};
 use uv_normalize::ExtraName;
 use uv_pep508::{MarkerEnvironment, MarkerTree, UnnamedRequirement};
-use uv_pypi_types::{HashError, Hashes, ParsedUrl};
+use uv_pypi_types::{HashDigests, HashError, ParsedUrl};
 
+use crate::hash::requirement_url_hashes;
 use crate::{Requirement, RequirementSource, VerbatimParsedUrl};
 
 /// A named requirement with hashes from `requirements.txt` or `pyproject.toml`.
@@ -221,10 +222,10 @@ impl UnresolvedRequirement {
     }
 
     /// Return the hashes of the requirement, as specified in the URL fragment.
-    pub fn hashes(&self) -> Result<Option<Hashes>, HashError> {
+    pub fn hashes(&self) -> Result<HashDigests, HashError> {
         match self {
             Self::Named(requirement) => requirement.hashes(),
-            Self::Unnamed(requirement) => Hashes::from_url(&requirement.url.verbatim),
+            Self::Unnamed(requirement) => requirement_url_hashes(&requirement.url.verbatim),
         }
     }
 }

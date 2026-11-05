@@ -16,11 +16,13 @@ use uv_pep508::{
 use uv_redacted::policy::{Raw, Stripped};
 use uv_redacted::{SafeUrl, SafeUrlError};
 
+use crate::hash::requirement_url_hashes;
 use crate::{IndexMetadata, IndexUrl};
 
 use uv_pypi_types::{
-    ConflictItem, HashError, Hashes, ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitDirectoryUrl,
-    ParsedGitPathUrl, ParsedPathUrl, ParsedUrl, ParsedUrlError, VerbatimParsedUrl,
+    ConflictItem, HashDigests, HashError, ParsedArchiveUrl, ParsedDirectoryUrl,
+    ParsedGitDirectoryUrl, ParsedGitPathUrl, ParsedPathUrl, ParsedUrl, ParsedUrlError,
+    VerbatimParsedUrl,
 };
 
 #[derive(Debug, Error)]
@@ -129,14 +131,14 @@ impl Requirement {
     }
 
     /// Return the hashes of the requirement, as specified in the URL fragment.
-    pub fn hashes(&self) -> Result<Option<Hashes>, HashError> {
+    pub fn hashes(&self) -> Result<HashDigests, HashError> {
         let (RequirementSource::Url { ref url, .. }
         | RequirementSource::Path { ref url, .. }
         | RequirementSource::Directory { ref url, .. }) = self.source
         else {
-            return Ok(None);
+            return Ok(HashDigests::empty());
         };
-        Hashes::from_url(url)
+        requirement_url_hashes(url)
     }
 
     /// Set the source file containing the requirement.

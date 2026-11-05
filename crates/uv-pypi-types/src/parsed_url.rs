@@ -662,10 +662,24 @@ impl From<ParsedGitDirectoryUrl> for SafeUrl {
 mod tests {
     use anyhow::Result;
 
-    use crate::{DirectUrl, ParsedGitDirectoryUrl, VerbatimParsedUrl, parsed_url::ParsedUrl};
+    use crate::{
+        DirectUrl, HashAlgorithm, ParsedGitDirectoryUrl, VerbatimParsedUrl, parsed_url::ParsedUrl,
+    };
     use uv_git_types::{GitLfs, GitReference, GitUrl};
-    use uv_pep508::{TracingReporter, UnnamedRequirement};
+    use uv_pep508::{TracingReporter, UnnamedRequirement, file_url_hashes};
     use uv_redacted::SafeUrl;
+
+    #[test]
+    fn file_url_fragment_recognizes_every_supported_hash() {
+        for algorithm in HashAlgorithm::preferred() {
+            let fragment = format!("{algorithm}=digest");
+            let field = file_url_hashes(&fragment).next();
+            assert_eq!(
+                field.as_ref().map(|(name, _)| name.as_ref()),
+                Some(algorithm.as_str())
+            );
+        }
+    }
 
     #[test]
     fn unnamed_file_url_with_hash_in_path_and_fragment() -> Result<()> {
