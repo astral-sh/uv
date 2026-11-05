@@ -125,6 +125,8 @@ pub enum PylockTomlErrorKind {
     WheelVariantUnsupported(PackageName),
     #[error("`packages.archive.path` does not support wheel variants: `{0}`")]
     ArchivePathWheelVariantUnsupported(WheelFilename),
+    #[error("`packages.archive.url` does not support wheel variants: `{0}`")]
+    ArchiveUrlWheelVariantUnsupported(WheelFilename),
     #[error("Package `{0}` does not include a compatible wheel for the current platform")]
     MissingWheel(PackageName),
     #[error("`packages.wheel` entry for `{0}` must have a `path` or `url`")]
@@ -1947,6 +1949,11 @@ impl PylockTomlArchive {
                 DistExtension::Wheel => {
                     let filename = WheelFilename::from_str(&filename)?;
                     validate_wheel_filename(&filename, name, version)?;
+                    if filename.variant().is_some() {
+                        return Err(PylockTomlErrorKind::ArchiveUrlWheelVariantUnsupported(
+                            filename,
+                        ));
+                    }
                     Ok(Dist::Built(BuiltDist::DirectUrl(DirectUrlBuiltDist {
                         filename,
                         location: Box::new(url.clone()),

@@ -1,8 +1,8 @@
 use std::path::Path;
 
 use uv_cache_info::CacheInfo;
-use uv_distribution_filename::WheelFilename;
-use uv_distribution_types::{BuildInfo, BuiltDist, CachedDist, Dist, Hashed};
+use uv_distribution_filename::{VariantLabel, WheelFilename};
+use uv_distribution_types::{BuildInfo, BuiltDist, CachedDist, Dist, Hashed, VariantsJsonContent};
 use uv_metadata::{find_flat_dist_info, read_flat_wheel_metadata, read_wheel_variant};
 use uv_platform_tags::Platform;
 use uv_preview::PreviewFeature;
@@ -10,19 +10,18 @@ use uv_pypi_types::{HashDigest, HashDigests, ResolutionMetadata};
 
 use crate::{Error, supported_variant_properties};
 
-/// Allow variant wheels from an index or local path when the wheel variants preview is enabled.
+/// Allow variant wheels from indexes, local paths, and direct URLs with the wheel variants preview.
 ///
 /// Variant compatibility is checked separately during resolution and installation.
 ///
-/// TODO: Support variant wheels from direct URLs and Git paths.
+/// TODO: Support variant wheels from Git paths.
 pub fn check_supported_wheel_variant(dist: &BuiltDist) -> Result<(), Error> {
     let filename = dist.wheel_filename();
     if filename.variant().is_none() {
         return Ok(());
     }
     let unsupported_source = match dist {
-        BuiltDist::Registry(_) | BuiltDist::Path(_) => None,
-        BuiltDist::DirectUrl(_) => Some("direct URLs"),
+        BuiltDist::Registry(_) | BuiltDist::DirectUrl(_) | BuiltDist::Path(_) => None,
         BuiltDist::GitPath(_) => Some("Git paths"),
     };
     if let Some(source_kind) = unsupported_source {
@@ -35,6 +34,18 @@ pub fn check_supported_wheel_variant(dist: &BuiltDist) -> Result<(), Error> {
         return Err(Error::WheelVariantsDisabled(Box::new(filename.clone())));
     }
     Ok(())
+}
+
+/// Read and validate the variant metadata from an extracted wheel.
+pub(crate) fn read_extracted_wheel_variant(
+    filename: &WheelFilename,
+    archive: &Path,
+    label: &VariantLabel,
+) -> Result<VariantsJsonContent, Error> {
+    let dist_info = find_flat_dist_info(filename, archive)
+        .map_err(|err| Error::WheelMetadata(archive.to_path_buf(), Box::new(err)))?;
+    let path = archive.join(format!("{dist_info}.dist-info/variant.json"));
+    read_wheel_variant(&path, label).map_err(|err| Error::WheelMetadata(path, Box::new(err)))
 }
 
 /// Check that an extracted wheel's variant properties are supported by the target system.
@@ -50,11 +61,7 @@ pub fn check_wheel_variant_compatibility(
         return Err(Error::WheelVariantsDisabled(Box::new(filename.clone())));
     }
 
-    let dist_info = find_flat_dist_info(filename, archive)
-        .map_err(|err| Error::WheelMetadata(archive.to_path_buf(), Box::new(err)))?;
-    let path = archive.join(format!("{dist_info}.dist-info/variant.json"));
-    let metadata = read_wheel_variant(&path, label)
-        .map_err(|err| Error::WheelMetadata(path, Box::new(err)))?;
+    let metadata = read_extracted_wheel_variant(filename, archive, label)?;
     let supported = supported_variant_properties(&metadata, target);
     if let Some(properties) = metadata.unsupported_variant_properties(label, &supported) {
         return Err(Error::IncompatibleWheelVariant {

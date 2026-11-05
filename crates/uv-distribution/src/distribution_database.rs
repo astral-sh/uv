@@ -26,12 +26,13 @@ use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
     ArchiveHashPolicy, BuildInfo, BuildableSource, BuiltDist, Dist, DistRef, HashCollection,
     HashValidation, Hashed, IndexUrl, InstalledDist, MetadataHashPolicy, Name, ResolutionRecorder,
-    SourceDist, SourceUrl, parse_url_hashes,
+    SourceDist, SourceUrl, VariantsJsonContent, parse_url_hashes,
 };
 use uv_extract::dirhash::{DirectoryDigest, HashedFile};
 use uv_extract::hash::Hasher;
 use uv_fs::{LockedFile, write_atomic};
 use uv_git::{GIT_LFS, GitError};
+use uv_metadata::read_archive_wheel_variant;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_platform_tags::Tags;
@@ -43,7 +44,7 @@ use uv_threads::initialize_rayon_once;
 use uv_types::{BuildContext, BuildStack};
 
 use crate::archive::Archive;
-use crate::download::check_wheel_variant_compatibility;
+use crate::download::{check_wheel_variant_compatibility, read_extracted_wheel_variant};
 use crate::error::PythonVersion;
 use crate::extracted_wheel::{ExtractedWheel, HashedWheel, WheelExtractor};
 use crate::hash::http_hash_algorithms;
@@ -278,6 +279,56 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 self.build_wheel_metadata(&BuildableSource::Dist(source), hashes)
                     .await
             }
+        }
+    }
+
+    /// Read embedded variant metadata for a wheel being considered by the solver.
+    #[instrument(skip_all, fields(%wheel))]
+    pub async fn get_wheel_variant_metadata(
+        &self,
+        wheel: &BuiltDist,
+        hashes: ArchiveHashPolicy<'_>,
+    ) -> Result<Option<VariantsJsonContent>, Error> {
+        let filename = wheel.wheel_filename();
+        let Some(label) = filename.variant() else {
+            return Ok(None);
+        };
+        match wheel {
+            BuiltDist::Path(path) => {
+                read_archive_wheel_variant(filename, &path.install_path, label)
+                    .await
+                    .map(Some)
+                    .map_err(|err| {
+                        Error::WheelMetadata(path.install_path.to_path_buf(), Box::new(err))
+                    })
+            }
+            BuiltDist::DirectUrl(url) => {
+                // Hash generation downloads the full wheel, so skip the metadata request.
+                if hashes != ArchiveHashPolicy::Generate || parse_url_hashes(&url.url).is_some() {
+                    let result = self
+                        .client
+                        .managed(|client| {
+                            client
+                                .direct_url_wheel_variant(url, self.build_context.capabilities())
+                                .boxed_local()
+                        })
+                        .await;
+                    match result {
+                        Ok(variant) => return Ok(Some(variant)),
+                        Err(err)
+                            if err.is_http_streaming_unsupported()
+                                || matches!(err.kind(), uv_client::ErrorKind::Offline(_)) => {}
+                        Err(err) => return Err(err.into()),
+                    }
+                }
+                // TODO(konsti): Read `variant.json` from the same archive that supplied the hash.
+                // With `Cache-Control: no-store`, `pip compile --generate-hashes` can hash one
+                // wheel and check compatibility against a different wheel returned by a second GET.
+                let wheel = Box::pin(self.get_wheel(wheel, hashes)).await?;
+                read_extracted_wheel_variant(filename, &wheel.archive, label).map(Some)
+            }
+            // Registry candidates use index variant metadata. Git path variants are unsupported.
+            BuiltDist::Registry(_) | BuiltDist::GitPath(_) => Ok(None),
         }
     }
 
@@ -679,27 +730,24 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             .await;
 
         match result {
-            Ok(metadata) => {
-                // Validate that the metadata is consistent with the distribution.
-                Ok(ArchiveMetadata::from_metadata23(metadata))
-            }
+            Ok(metadata) => return Ok(ArchiveMetadata::from_metadata23(metadata)),
             Err(err) if err.is_http_streaming_unsupported() => {
                 warn!(
                     "Streaming unsupported when fetching metadata for `{dist}`; downloading wheel directly ({err})"
                 );
-
-                // If the request failed due to an error that could be resolved by
-                // downloading the wheel directly, try that.
-                let wheel = Box::pin(self.get_wheel(dist, hash_policy)).await?;
-                let metadata = wheel.metadata()?;
-                let hashes = wheel.hashes;
-                Ok(ArchiveMetadata {
-                    metadata: Metadata::from_metadata23(metadata),
-                    hashes,
-                })
             }
-            Err(err) => Err(err.into()),
+            // Try reusing the cached wheel when the metadata entry is missing offline.
+            Err(err)
+                if matches!(dist, BuiltDist::DirectUrl(url) if url.filename.variant().is_some())
+                    && matches!(err.kind(), uv_client::ErrorKind::Offline(_)) => {}
+            Err(err) => return Err(err.into()),
         }
+
+        let wheel = Box::pin(self.get_wheel(dist, hash_policy)).await?;
+        Ok(ArchiveMetadata {
+            metadata: Metadata::from_metadata23(wheel.metadata()?),
+            hashes: wheel.hashes,
+        })
     }
 
     /// Build the wheel metadata for a source distribution, or fetch it from the cache if possible.

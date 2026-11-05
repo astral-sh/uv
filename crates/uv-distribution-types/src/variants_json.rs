@@ -120,9 +120,11 @@ pub struct VariantsJsonContent {
     #[serde(rename = "$schema")]
     schema: String,
     default_priorities: DefaultPriorities,
+    variants: BTreeMap<VariantLabel, VariantProperties>,
+    // Keep `providers` last in both structs so compact MessagePack can omit it.
+    // TODO(konsti): Remove this constraint once `providers` is required in all supported schemas.
     #[serde(skip_serializing_if = "Option::is_none")]
     providers: Option<BTreeMap<VariantNamespace, VariantProvider>>,
-    variants: BTreeMap<VariantLabel, VariantProperties>,
 }
 
 impl VariantsJsonContent {
@@ -353,8 +355,9 @@ struct VariantsJsonWire {
     #[serde(rename = "$schema")]
     schema: String,
     default_priorities: DefaultPriorities,
-    providers: Option<BTreeMap<VariantNamespace, VariantProvider>>,
     variants: BTreeMap<VariantLabel, VariantProperties>,
+    #[serde(default)]
+    providers: Option<BTreeMap<VariantNamespace, VariantProvider>>,
 }
 
 #[derive(Debug, thiserror::Error)]

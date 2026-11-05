@@ -12,6 +12,8 @@ use http::{HeaderMap, StatusCode};
 use itertools::Either;
 use reqwest::{Proxy, Response};
 use rustc_hash::FxHashMap;
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
 use tokio::sync::{Mutex, Semaphore};
 use tracing::{Instrument, Span, debug, info_span, instrument, trace, warn};
 
@@ -22,13 +24,13 @@ use uv_configuration::IndexStrategy;
 use uv_configuration::KeyringProviderType;
 use uv_distribution_filename::{DistFilename, WheelFilename};
 use uv_distribution_types::{
-    BuiltDist, File, FileLocation, IndexCapabilities, IndexEntryFilename, IndexFormat,
-    IndexLocations, IndexMetadataRef, IndexStatusCodeDecision, IndexStatusCodeStrategy, IndexUrl,
-    Name, RegistryBuiltWheel,
+    BuiltDist, DirectUrlBuiltDist, File, FileLocation, IndexCapabilities, IndexEntryFilename,
+    IndexFormat, IndexLocations, IndexMetadataRef, IndexStatusCodeDecision,
+    IndexStatusCodeStrategy, IndexUrl, Name, RegistryBuiltWheel, VariantsJsonContent,
 };
 use uv_extract::hash::Hasher;
 use uv_git::{GIT_LFS, GitError, GitHttpSettings, GitResolver, Reporter};
-use uv_metadata::{read_archive_metadata, read_metadata_async_stream};
+use uv_metadata::{WheelMetadata, read_archive_metadata, read_metadata_async_stream};
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::MarkerEnvironment;
@@ -49,6 +51,23 @@ use crate::{
     BaseClient, CachedClient, Error, ErrorKind, FlatIndexClient, RedirectClientWithMiddleware,
     RetryState,
 };
+
+/// Cache parsed core metadata and variant requirements from the same wheel.
+#[derive(Serialize, Deserialize)]
+struct CachedVariantWheelMetadata {
+    core: ResolutionMetadata,
+    variant: Box<VariantsJsonContent>,
+}
+
+impl CachedVariantWheelMetadata {
+    fn new(
+        core: ResolutionMetadata,
+        variant: Option<Box<VariantsJsonContent>>,
+    ) -> Result<Self, uv_metadata::Error> {
+        let variant = variant.ok_or(uv_metadata::Error::MissingVariantMetadata)?;
+        Ok(Self { core, variant })
+    }
+}
 
 /// A builder for an [`RegistryClient`].
 #[derive(Debug, Clone)]
@@ -1048,14 +1067,20 @@ impl RegistryClient {
                 }
             }
             BuiltDist::DirectUrl(wheel) => {
-                self.wheel_metadata_no_pep658(
-                    &wheel.filename,
-                    &wheel.url,
-                    None,
-                    WheelCache::Url(&wheel.url),
-                    capabilities,
-                )
-                .await?
+                if wheel.filename.variant().is_some() {
+                    self.direct_url_variant_wheel_metadata(wheel, capabilities)
+                        .await?
+                        .core
+                } else {
+                    self.wheel_metadata_no_pep658(
+                        &wheel.filename,
+                        &wheel.url,
+                        None,
+                        WheelCache::Url(&wheel.url),
+                        capabilities,
+                    )
+                    .await?
+                }
             }
             BuiltDist::Path(wheel) => {
                 Self::wheel_metadata_local(
@@ -1228,6 +1253,51 @@ impl RegistryClient {
         }
     }
 
+    /// Read the wheel's embedded variant requirements.
+    ///
+    /// Even with a `dependency-metadata` override, the wheel's `METADATA` must be parseable
+    /// because the cache stores the parsed core metadata and `variant.json` together.
+    pub async fn direct_url_wheel_variant(
+        &self,
+        wheel: &DirectUrlBuiltDist,
+        capabilities: &IndexCapabilities,
+    ) -> Result<VariantsJsonContent, Error> {
+        let metadata = self
+            .direct_url_variant_wheel_metadata(wheel, capabilities)
+            .await?;
+        Ok(*metadata.variant)
+    }
+
+    /// Read core metadata and variant requirements together from the same direct URL wheel.
+    async fn direct_url_variant_wheel_metadata(
+        &self,
+        wheel: &DirectUrlBuiltDist,
+        capabilities: &IndexCapabilities,
+    ) -> Result<CachedVariantWheelMetadata, Error> {
+        // The caching situation between non-variant and variant wheels is a bit messy. For
+        // non-variant wheels, we only need the core metadata, which we store in `<wheel>.msgpack`.
+        // Direct URL variant wheels use one `<wheel>.variant.msgpack` entry for both `METADATA`
+        // and `variant.json`, cause we're getting them in the same (range) read and need to
+        // invalidate them at the same time.
+        // Index variants wheels get variant requirements from a separate index file, which has its
+        // separate cache entry. Except when the file is missing, in that case (TODO(konsti):
+        // implement) the index wheel will use that same case.
+        let entry = self.cache.entry(
+            CacheBucket::Wheels,
+            WheelCache::Url(&wheel.url).wheel_dir(wheel.filename.name.as_ref()),
+            format!("{}.variant.msgpack", wheel.filename.cache_key()),
+        );
+        self.fetch_wheel_metadata(
+            &wheel.filename,
+            &wheel.url,
+            None,
+            entry,
+            capabilities,
+            CachedVariantWheelMetadata::new,
+        )
+        .await
+    }
+
     /// Get the wheel metadata if it isn't available in an index through PEP 658
     async fn wheel_metadata_no_pep658<'data>(
         &self,
@@ -1242,6 +1312,37 @@ impl RegistryClient {
             cache_shard.wheel_dir(filename.name.as_ref()),
             format!("{}.msgpack", filename.cache_key()),
         );
+        self.fetch_wheel_metadata(
+            filename,
+            url,
+            index,
+            cache_entry,
+            capabilities,
+            |core, _| Ok(core),
+        )
+        .await
+    }
+
+    async fn fetch_wheel_metadata<T: Serialize + DeserializeOwned + Send + 'static>(
+        &self,
+        filename: &WheelFilename,
+        url: &SafeUrl,
+        index: Option<&IndexUrl>,
+        cache_entry: CacheEntry,
+        capabilities: &IndexCapabilities,
+        cache_metadata: impl Fn(
+            ResolutionMetadata,
+            Option<Box<VariantsJsonContent>>,
+        ) -> Result<T, uv_metadata::Error>,
+    ) -> Result<T, Error> {
+        let prepare_metadata = |metadata: WheelMetadata| {
+            let core = ResolutionMetadata::parse_metadata(&metadata.core).map_err(|err| {
+                ErrorKind::MetadataParseError(filename.clone(), url.to_string(), Box::new(err))
+            })?;
+            cache_metadata(core, metadata.variant)
+                .map_err(|err| Error::from(ErrorKind::Metadata(url.to_string(), err)))
+        };
+
         let cache_control = match self.connectivity {
             Connectivity::Online
                 if let Some(index) = index
@@ -1308,14 +1409,9 @@ impl RegistryClient {
                     .await
                     .map_err(|err| ErrorKind::AsyncHttpRangeReader(url.clone(), err))?;
                     trace!("Getting metadata for `{filename}` by range request");
-                    let text = wheel_metadata_from_remote_zip(filename, url, &mut reader).await?;
-                    ResolutionMetadata::parse_metadata(text.as_bytes()).map_err(|err| {
-                        Error::from(ErrorKind::MetadataParseError(
-                            filename.clone(),
-                            url.to_string(),
-                            Box::new(err),
-                        ))
-                    })
+                    let metadata =
+                        wheel_metadata_from_remote_zip(filename, url, &mut reader).await?;
+                    prepare_metadata(metadata)
                 }
                 .boxed_local()
                 .instrument(info_span!("read_metadata_range_request", wheel = %filename))
@@ -1383,9 +1479,10 @@ impl RegistryClient {
                     .map_err(|err| self.handle_response_errors(err))
                     .into_async_read();
 
-                read_metadata_async_stream(filename, url.as_str(), reader)
+                let metadata = read_metadata_async_stream(filename, reader)
                     .await
-                    .map_err(|err| ErrorKind::Metadata(url.to_string(), err))
+                    .map_err(|err| ErrorKind::Metadata(url.to_string(), err))?;
+                prepare_metadata(metadata)
             }
             .instrument(info_span!("read_metadata_stream", wheel = %filename))
         };
