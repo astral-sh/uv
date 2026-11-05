@@ -434,16 +434,6 @@ impl ExcludeNewer {
         Self { global, package }
     }
 
-    /// Returns the effective exclude-newer timestamp for a specific package, falling back to the
-    /// global value if no package-specific setting exists.
-    pub fn exclude_newer_package(&self, package_name: &PackageName) -> Option<Timestamp> {
-        match self.package.get(package_name) {
-            Some(ExcludeNewerOverride::Enabled(value)) => Some(value.timestamp()),
-            Some(ExcludeNewerOverride::Disabled) => None,
-            None => self.global.as_ref().map(ExcludeNewerValue::timestamp),
-        }
-    }
-
     /// Returns the effective exclude-newer timestamp for a package resolved from a specific index.
     pub fn exclude_newer_package_for_index(
         &self,
