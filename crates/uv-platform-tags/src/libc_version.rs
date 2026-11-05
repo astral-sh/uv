@@ -12,6 +12,11 @@ impl LibcVersion {
     pub const fn new(major: u16, minor: u16) -> Self {
         Self { major, minor }
     }
+
+    /// Whether this libc can use a wheel targeting the same major and an equal or earlier minor.
+    pub const fn supports_wheel(self, required: Self) -> bool {
+        self.major == required.major && self.minor >= required.minor
+    }
 }
 
 impl FromStr for LibcVersion {

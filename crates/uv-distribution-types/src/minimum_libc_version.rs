@@ -84,7 +84,7 @@ impl LinuxLibc {
     pub fn supports(self, required: Self) -> bool {
         match (self, required) {
             (Self::Glibc(installed), Self::Glibc(minimum))
-            | (Self::Musl(installed), Self::Musl(minimum)) => installed >= minimum,
+            | (Self::Musl(installed), Self::Musl(minimum)) => installed.supports_wheel(minimum),
             (Self::Glibc(_), Self::Musl(_)) | (Self::Musl(_), Self::Glibc(_)) => false,
         }
     }

@@ -58,32 +58,71 @@ struct PrioritizedDistInner {
 pub(crate) struct WheelCoverage {
     /// Python versions covered by any compatible wheel, independently of its platform.
     python: MarkerTree,
-    /// Wheels without a libc requirement, including generic Linux wheels.
-    pub(crate) portable_across_libcs: MarkerTree,
-    /// Python and platform markers for wheels requiring each libc baseline.
-    linux: BTreeMap<LinuxLibc, MarkerTree>,
+    /// Wheel coverage at each minimum libc, aggregated across ABIs for finding gains.
+    by_libc: BTreeMap<Option<LinuxLibc>, MarkerTree>,
+    /// The same coverage by ABI, for checking that an inherited wheel can be replaced.
+    by_abi: BTreeMap<(Option<LinuxLibc>, AbiTag), MarkerTree>,
+    /// Environments whose wheel platform requirements cannot be compared using markers.
+    unrepresented_platforms: MarkerTree,
     /// Coverage used by the resolver's configured required environments.
     platforms: MarkerTree,
 }
 
 impl WheelCoverage {
-    /// Environments where this release adds a wheel. For each Linux wheel, check the oldest
-    /// libc that can run it. A wheel requiring glibc 2.28 leaves a gap on glibc 2.17, even
-    /// when both wheels have identical Python and platform markers.
+    /// A wheel-only release can replace an sdist throughout the fork if its unrestricted
+    /// wheels cover the fork's Python and platform markers.
+    pub(crate) fn covers_fork(&self, fork: MarkerTree) -> bool {
+        fork.is_disjoint(self.abi_markers(None, AbiTag::None).negate())
+    }
+
+    /// Environments where this release gains a wheel, even if every ABI at the same
+    /// Python version could use the other release's wheels.
     pub(crate) fn gained_over(&self, other: &Self) -> MarkerTree {
-        let mut gained = self
-            .portable_across_libcs
-            .and(other.portable_across_libcs.negate());
-        for (&baseline, &markers) in &self.linux {
-            let mut previous = other.portable_across_libcs;
-            for (&required, &coverage) in &other.linux {
-                if baseline.supports(required) {
-                    previous = previous.or(coverage);
-                }
-            }
-            gained = gained.or(markers.and(previous.negate()));
+        let mut gained = MarkerTree::FALSE;
+        for (&libc, &markers) in &self.by_libc {
+            gained = gained.or(markers.and(other.coverage_at(libc, None).negate()));
         }
         gained
+    }
+
+    /// A matching ABI or an ABI-independent wheel can replace each inherited wheel.
+    /// Conservatively keep the inherited release when different ABI tags may overlap.
+    pub(crate) fn retains_wheels(&self, inherited: &Self, fork: MarkerTree) -> bool {
+        if !fork.is_disjoint(inherited.unrepresented_platforms) {
+            return false;
+        }
+        inherited.by_abi.iter().all(|(&(libc, abi), &markers)| {
+            let needed = fork.and(markers);
+            needed.is_false() || needed.is_disjoint(self.coverage_at(libc, Some(abi)).negate())
+        })
+    }
+
+    /// Coverage at a wheel's oldest supported libc. A wheel requiring glibc 2.28 leaves a
+    /// gap on glibc 2.17, even if both have identical Python and platform markers.
+    fn coverage_at(&self, libc: Option<LinuxLibc>, abi: Option<AbiTag>) -> MarkerTree {
+        let mut covered = MarkerTree::FALSE;
+        for (&required, &markers) in &self.by_libc {
+            if let Some(required) = required
+                && !libc.is_some_and(|libc| libc.supports(required))
+            {
+                continue;
+            }
+            let compatible = match abi {
+                Some(abi) => self
+                    .abi_markers(required, AbiTag::None)
+                    .or(self.abi_markers(required, abi)),
+                None => markers,
+            };
+            covered = covered.or(compatible);
+        }
+        covered
+    }
+
+    fn abi_markers(&self, libc: Option<LinuxLibc>, abi: AbiTag) -> MarkerTree {
+        self.by_abi
+            .get(&(libc, abi))
+            .copied()
+            .unwrap_or(MarkerTree::FALSE)
     }
 }
 
@@ -519,8 +558,10 @@ impl PrioritizedDist {
     pub(crate) fn wheel_coverage(&self) -> &WheelCoverage {
         self.0.wheel_coverage.get_or_init(|| {
             let mut python = MarkerTree::FALSE;
-            let mut portable_across_libcs = MarkerTree::FALSE;
-            let mut linux = BTreeMap::new();
+            let mut by_libc = BTreeMap::new();
+            let mut by_abi = BTreeMap::new();
+            let mut unrepresented_platforms = MarkerTree::FALSE;
+            let mut android = MarkerTree::FALSE;
             for (wheel, compatibility) in &self.0.wheels {
                 // Hardware requirements on variants aren't represented by environment markers.
                 if !compatibility.is_compatible() || wheel.filename.variant().is_some() {
@@ -528,26 +569,45 @@ impl PrioritizedDist {
                 }
                 let wheel_python = implied_python_markers(&wheel.filename);
                 python = python.or(wheel_python);
+                let abis = wheel.filename.abi_tags();
+                let has_stable_abi = abis.iter().any(|abi| abi.is_stable_abi());
                 for platform in wheel.filename.platform_tags() {
-                    let markers = implied_platform_markers([platform]).and(wheel_python);
-                    let coverage = match LinuxLibc::from_platform_tag(platform) {
-                        Some(baseline) => linux.entry(baseline).or_insert(MarkerTree::FALSE),
-                        None => &mut portable_across_libcs,
-                    };
-                    *coverage = coverage.or(markers);
+                    let platform_markers = implied_platform_markers([platform]);
+                    // Android markers omit the API level. For an unrecognized platform
+                    // we only know which Python versions might use the wheel.
+                    if platform_markers.is_false() {
+                        unrepresented_platforms = unrepresented_platforms.or(wheel_python);
+                        continue;
+                    }
+                    if matches!(platform, PlatformTag::Android { .. }) {
+                        android = android.or(platform_markers.and(wheel_python));
+                        continue;
+                    }
+                    let libc = LinuxLibc::from_platform_tag(platform);
+                    let coverage = by_libc.entry(libc).or_insert(MarkerTree::FALSE);
+                    *coverage = coverage.or(platform_markers.and(wheel_python));
+                    for &abi in abis {
+                        // A compressed wheel tag may mix stable and version-specific ABIs.
+                        let abi_python = if has_stable_abi && !abi.is_stable_abi() {
+                            python_tag_markers(wheel.filename.python_tags(), false)
+                        } else {
+                            wheel_python
+                        };
+                        let coverage = by_abi.entry((libc, abi)).or_insert(MarkerTree::FALSE);
+                        *coverage = coverage.or(platform_markers.and(abi_python));
+                    }
                 }
-                if portable_across_libcs.is_true() {
+                if by_abi.get(&(None, AbiTag::None)) == Some(&MarkerTree::TRUE) {
                     break;
                 }
             }
 
             // Separate wheels can satisfy the glibc and musl baselines for required environments.
             let minimum = self.0.minimum_libc_version.unwrap_or_default();
-            let mut platforms = [portable_across_libcs; 2];
-            for (&baseline, &markers) in &linux {
-                for (coverage, supported) in
-                    platforms.iter_mut().zip(minimum.libc_coverage(baseline))
-                {
+            let mut platforms = [android; 2];
+            for (&libc, &markers) in &by_libc {
+                let supported = libc.map_or([true; 2], |libc| minimum.libc_coverage(libc));
+                for (coverage, supported) in platforms.iter_mut().zip(supported) {
                     if supported {
                         *coverage = coverage.or(markers);
                     }
@@ -556,8 +616,9 @@ impl PrioritizedDist {
             let [glibc, musl] = platforms;
             Box::new(WheelCoverage {
                 python,
-                portable_across_libcs,
-                linux,
+                by_libc,
+                by_abi,
+                unrepresented_platforms: unrepresented_platforms.or(android),
                 platforms: glibc.and(musl),
             })
         })
@@ -1236,14 +1297,17 @@ fn macos_darwin_release(major: u16, minor: u16) -> Option<Version> {
 /// This is roughly the inverse of Python tag generation: given a tag, we want to infer the
 /// supported Python version (rather than generating the supported tags from a given Python version).
 fn implied_python_markers(filename: &WheelFilename) -> MarkerTree {
-    let mut marker = MarkerTree::FALSE;
-
     // If any ABI tag is a stable ABI (`abi3` or `abi3t`), the python tag represents a minimum
     // version rather than an exact version. For example, `cp39-abi3` means "compatible with
     // CPython 3.9+".
     let is_abi3 = filename.abi_tags().iter().any(|tag| tag.is_stable_abi());
 
-    for python_tag in filename.python_tags() {
+    python_tag_markers(filename.python_tags(), is_abi3)
+}
+
+fn python_tag_markers(python_tags: &[LanguageTag], is_abi3: bool) -> MarkerTree {
+    let mut marker = MarkerTree::FALSE;
+    for python_tag in python_tags {
         // First, construct the version marker based on the tag
         let mut tree = match python_tag {
             LanguageTag::None => {

@@ -9384,6 +9384,11 @@ fn lock_sibling_fork_prefers_wheels() -> Result<()> {
         requires = ["child"]
         wheel_tags = ["cp312-cp312-win_amd64", "py3-none-linux_x86_64"]
 
+        # A free-threaded wheel cannot replace the inherited regular CPython 3.13 wheel.
+        [packages.parent.versions."7.0.0"]
+        requires = ["child"]
+        wheel_tags = ["cp313-cp313t-win_amd64", "py3-none-linux_x86_64"]
+
         [packages.child.versions."1.0.0"]
         wheel_tags = ["py3-none-macosx_10_9_x86_64"]
 
@@ -9416,6 +9421,49 @@ fn lock_sibling_fork_prefers_wheels() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
+    ");
+    Ok(())
+}
+
+/// Android platform markers do not distinguish API levels. Adding a Windows wheel cannot
+/// compensate for losing the Android API 24 wheel in the same fork.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_sibling_fork_keeps_android_wheel() -> Result<()> {
+    let server = PackseServer::from_toml(indoc! {r#"
+        name = "sibling-fork-keeps-android-wheel"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.a.versions."1.0.0"]
+        wheel_tags = ["py3-none-macosx_10_9_x86_64", "py3-none-android_24_arm64_v8a"]
+
+        [packages.a.versions."2.0.0"]
+        wheel_tags = ["py3-none-win_amd64", "py3-none-android_35_arm64_v8a"]
+    "#})?;
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["a<2 ; sys_platform == 'darwin'", "a ; sys_platform != 'darwin'"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    project v1.0.0
+    └── a v1.0.0
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
     ");
     Ok(())
 }

@@ -436,7 +436,7 @@ impl CandidateSelector {
             };
             // Defer computing wheel coverage until there is a newer candidate to compare.
             let inherited_wheels = inherited.wheel_coverage();
-            if fork.is_disjoint(inherited_wheels.portable_across_libcs.negate()) {
+            if inherited_wheels.covers_fork(fork) {
                 return None;
             }
             let wheels = files.wheel_coverage();
@@ -451,14 +451,12 @@ impl CandidateSelector {
                 None => fork,
             };
             // The inherited sdist can install throughout this fork. A wheel-only release
-            // must retain that coverage, including on both Linux libc families.
-            if !files.has_compatible_source()
-                && !supported.is_disjoint(wheels.portable_across_libcs.negate())
-            {
+            // must retain that coverage on every ABI and libc.
+            if !files.has_compatible_source() && !wheels.covers_fork(supported) {
                 continue;
             }
-            let lost = inherited_wheels.gained_over(wheels);
-            if !supported.is_disjoint(gained) && supported.is_disjoint(lost) {
+            if !supported.is_disjoint(gained) && wheels.retains_wheels(inherited_wheels, supported)
+            {
                 debug!(
                     "Preferring wheel coverage of {package_name}=={version} over sibling version {inherited_version}"
                 );
