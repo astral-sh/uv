@@ -16,6 +16,7 @@ use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{Concurrency, IndexStrategy, KeyringProviderType};
 use uv_distribution_types::{
     DependencyMetadata, Diagnostic, IndexCapabilities, IndexLocations, Name, RequiresPython,
+    SelectedVariant,
 };
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
@@ -74,10 +75,19 @@ pub async fn pip_tree(
     let packages = {
         let mut packages: FxHashMap<_, Vec<_>> = FxHashMap::default();
         for package in site_packages.iter() {
+            let metadata = package.read_metadata()?;
             packages
                 .entry(package.name())
                 .or_default()
-                .push(package.read_metadata()?);
+                .push(InstalledPackage {
+                    metadata,
+                    variant: package.read_variant_context_for_markers(
+                        metadata
+                            .requires_dist
+                            .iter()
+                            .map(|requirement| &requirement.marker),
+                    )?,
+                });
         }
         packages
     };
@@ -197,6 +207,12 @@ pub async fn pip_tree(
 }
 
 #[derive(Debug)]
+struct InstalledPackage<'a> {
+    metadata: &'a ResolutionMetadata,
+    variant: Option<SelectedVariant>,
+}
+
+#[derive(Debug)]
 struct DisplayDependencyGraph<'env> {
     /// The constructed dependency graph.
     graph: petgraph::graph::Graph<
@@ -228,7 +244,7 @@ impl<'env> DisplayDependencyGraph<'env> {
         invert: bool,
         show_version_specifiers: bool,
         markers: &ResolverMarkerEnvironment,
-        packages: &'env FxHashMap<&PackageName, Vec<&ResolutionMetadata>>,
+        packages: &'env FxHashMap<&PackageName, Vec<InstalledPackage<'env>>>,
         latest: &'env FxHashMap<&PackageName, Version>,
     ) -> Self {
         // Create a graph.
@@ -240,12 +256,18 @@ impl<'env> DisplayDependencyGraph<'env> {
 
         // Step 1: Add each installed package.
         let mut inverse: FxHashMap<PackageName, Vec<NodeIndex>> = FxHashMap::default();
-        for metadata in packages.values().flatten() {
+        let mut variants = FxHashMap::default();
+        for package in packages.values().flatten() {
+            let metadata = package.metadata;
             if prune.contains(&metadata.name) {
                 continue;
             }
 
             let index = graph.add_node(metadata);
+            variants.insert(
+                index,
+                SelectedVariant::marker_environment(package.variant.as_ref()),
+            );
             inverse
                 .entry(metadata.name.clone())
                 .or_default()
@@ -260,7 +282,10 @@ impl<'env> DisplayDependencyGraph<'env> {
                 if prune.contains(&requirement.name) {
                     continue;
                 }
-                if !requirement.marker.evaluate(markers, &[]) {
+                if !requirement
+                    .marker
+                    .evaluate_with_variants(markers, &variants[&index], &[])
+                {
                     continue;
                 }
 

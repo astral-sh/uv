@@ -9,7 +9,7 @@ use rustc_hash::FxHashSet;
 use tracing::trace;
 
 use uv_configuration::{Constraints, DependencyModifierScope, DependencyModifiers};
-use uv_distribution_types::Requirement;
+use uv_distribution_types::{Requirement, SelectedVariant};
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::Version;
 use uv_pep508::MarkerTree;
@@ -57,6 +57,15 @@ impl<'a> RequirementContext<'a> {
             Self::Root | Self::Package { .. } | Self::Group { .. } => None,
         }
     }
+
+    fn owner(self) -> Option<(&'a PackageName, &'a Version)> {
+        match self {
+            Self::Package { name, version } | Self::Extra { name, version, .. } => {
+                Some((name, version))
+            }
+            Self::Root | Self::Group { .. } => None,
+        }
+    }
 }
 
 /// Applies overrides, exclusions, extra activation, and constraints within a resolver fork.
@@ -66,6 +75,8 @@ pub(super) struct RequirementExpander<'a> {
     env: &'a ResolverEnvironment,
     python_requirement: &'a PythonRequirement,
     python_marker: MarkerTree,
+    variant: Option<&'a SelectedVariant>,
+    fixed_variant_label: Option<&'a str>,
 }
 
 impl<'a> RequirementExpander<'a> {
@@ -81,7 +92,19 @@ impl<'a> RequirementExpander<'a> {
             env,
             python_requirement,
             python_marker: python_requirement.to_marker_tree(),
+            variant: None,
+            fixed_variant_label: None,
         }
+    }
+
+    pub(super) fn with_variant_context(
+        mut self,
+        variant: Option<&'a SelectedVariant>,
+        fixed_variant_label: Option<&'a str>,
+    ) -> Self {
+        self.variant = variant;
+        self.fixed_variant_label = fixed_variant_label;
+        self
     }
 
     /// Expand applicable dependencies, including recursively activated extras and constraints.
@@ -238,6 +261,7 @@ impl<'a> RequirementExpander<'a> {
                         ),
                     None => requirement.marker.simplify_not_extras_with(|_| true),
                 };
+                let marker = self.prepare_variant_marker(marker, context);
 
                 if requirement.marker != marker {
                     requirement.to_mut().marker = marker;
@@ -247,9 +271,44 @@ impl<'a> RequirementExpander<'a> {
             })
             .filter(move |requirement| self.is_requirement_applicable(requirement, extra))
             .flat_map(move |requirement| {
-                iter::once(requirement.clone())
-                    .chain(self.constraints_for_requirement(requirement, extra))
+                iter::once(requirement.clone()).chain(self.constraints_for_requirement(
+                    requirement,
+                    context,
+                    extra,
+                ))
             })
+    }
+
+    fn prepare_variant_marker(
+        &self,
+        marker: MarkerTree,
+        context: RequirementContext<'_>,
+    ) -> MarkerTree {
+        if !marker.has_variant_expression() {
+            return marker;
+        }
+        let marker = self
+            .fixed_variant_label
+            .map_or(marker, |label| marker.simplify_variant_label(label));
+        if self.env.marker_environment().is_none()
+            && let Some((name, version)) = context.owner()
+        {
+            marker.with_variant_base(&format!("{name}=={version}"))
+        } else {
+            marker
+        }
+    }
+
+    fn evaluate_marker(&self, marker: MarkerTree, extras: &[ExtraName]) -> bool {
+        if let Some(environment) = self.env.marker_environment() {
+            marker.evaluate_with_variants(
+                environment,
+                &SelectedVariant::marker_environment(self.variant),
+                extras,
+            )
+        } else {
+            marker.evaluate_optional_environment(None, extras)
+        }
     }
 
     /// Whether a requirement is applicable for the Python version, the markers of this fork and the
@@ -265,7 +324,7 @@ impl<'a> RequirementExpander<'a> {
         // If the requirement isn't relevant for the current platform, skip it.
         match extra {
             Some(source_extra) => {
-                if !requirement.evaluate_markers(env.marker_environment(), &[]) {
+                if !self.evaluate_marker(requirement.marker, &[]) {
                     return false;
                 }
 
@@ -275,7 +334,7 @@ impl<'a> RequirementExpander<'a> {
                 }
             }
             None => {
-                if !requirement.evaluate_markers(env.marker_environment(), &[]) {
+                if !self.evaluate_marker(requirement.marker, &[]) {
                     return false;
                 }
             }
@@ -306,6 +365,7 @@ impl<'a> RequirementExpander<'a> {
     fn constraints_for_requirement<'data, 'parameters>(
         &'data self,
         requirement: Cow<'data, Requirement>,
+        context: RequirementContext<'parameters>,
         extra: Option<&'parameters ExtraName>,
     ) -> impl Iterator<Item = Cow<'data, Requirement>> + 'parameters
     where
@@ -353,7 +413,7 @@ impl<'a> RequirementExpander<'a> {
                 } else {
                     let requires_python = python_requirement.target();
 
-                    let mut marker = constraint.marker;
+                    let mut marker = self.prepare_variant_marker(constraint.marker, context);
                     marker = marker.and(requirement.marker);
 
                     if marker.is_false() {
@@ -400,8 +460,7 @@ impl<'a> RequirementExpander<'a> {
                 // If the constraint isn't relevant for the current platform, skip it.
                 match extra {
                     Some(source_extra) => {
-                        if !constraint
-                            .evaluate_markers(env.marker_environment(), slice::from_ref(source_extra))
+                        if !self.evaluate_marker(constraint.marker, slice::from_ref(source_extra))
                         {
                             return None;
                         }
@@ -411,7 +470,7 @@ impl<'a> RequirementExpander<'a> {
                         }
                     }
                     None => {
-                        if !constraint.evaluate_markers(env.marker_environment(), &[]) {
+                        if !self.evaluate_marker(constraint.marker, &[]) {
                             return None;
                         }
                     }

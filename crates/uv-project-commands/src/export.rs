@@ -1,4 +1,3 @@
-use std::env;
 use std::ffi::OsStr;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -12,7 +11,7 @@ use serde::Deserialize;
 
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
-use uv_command_support::{ExitStatus, OutputWriter, Printer, UvError};
+use uv_command_support::{ExitStatus, OutputWriter, Printer, UvError, command_args_for_header};
 use uv_configuration::{
     ActiveEnvironment, Concurrency, DependencyGroups, DependencyGroupsWithDefaults, EditableMode,
     ExportFormat, ExtrasSpecification, ExtrasSpecificationWithDefaults, InstallOptions,
@@ -677,7 +676,7 @@ async fn render_export<'output>(
                 .as_deref()
                 .and_then(Path::parent)
                 .unwrap_or(&CWD);
-            let mut export = PylockToml::from_lock(
+            let export = PylockToml::from_lock(
                 &target,
                 output_dir,
                 prune,
@@ -686,18 +685,15 @@ async fn render_export<'output>(
                 include_annotations,
                 editable.as_ref(),
                 install_options,
-            )?;
-
-            // Registries don't always provide hashes, but `packages.*.hashes` is a required
-            // key in PEP 751, so we have to download and hash files with missing hashes.
-            if export.has_missing_hashes() {
-                let client = RegistryClientBuilder::new(client_builder.clone(), cache.clone())
-                    .index_locations(settings.index_locations.clone())
-                    .build()?;
-                export
-                    .generate_missing_hashes(&client, concurrency.downloads, output_dir)
-                    .await?;
-            }
+                cache,
+                concurrency.downloads,
+                || {
+                    RegistryClientBuilder::new(client_builder.clone(), cache.clone())
+                        .index_locations(settings.index_locations.clone())
+                        .build()
+                },
+            )
+            .await?;
 
             if include_header {
                 writeln!(
@@ -732,9 +728,7 @@ async fn render_export<'output>(
 
 /// Format the uv command used to generate the output file.
 fn cmd() -> String {
-    let args = env::args_os()
-        .skip(1)
-        .map(|arg| arg.to_string_lossy().to_string())
+    let args = command_args_for_header()
         .scan(None, move |skip_next, arg| {
             if matches!(skip_next, Some(true)) {
                 // Reset state; skip this iteration.

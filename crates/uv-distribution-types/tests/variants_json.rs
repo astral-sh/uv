@@ -1,7 +1,9 @@
 use insta::{assert_json_snapshot, assert_snapshot};
 use serde_json::json;
 
-use uv_distribution_types::{PEP_825_SCHEMA, PEP_850_SCHEMA, VariantsJsonContent};
+use uv_distribution_types::{
+    PEP_825_SCHEMA, PEP_850_SCHEMA, SupportedVariantProperties, VariantsJsonContent,
+};
 
 /// PEP 825 compares the best compatible value for each feature, then the variant label.
 #[test]
@@ -107,7 +109,7 @@ fn parse_static_provider() -> Result<(), Box<dyn std::error::Error>> {
         "providers": {
             "cpu": {
                 "optional": false,
-                "static-properties": {"level": ["v3"], "flags": ["avx"]},
+                "static-properties": {"level": ["v3"], "flags": []},
                 "feature-order": ["level", "flags"]
             }
         },
@@ -116,6 +118,33 @@ fn parse_static_provider() -> Result<(), Box<dyn std::error::Error>> {
     let parsed = serde_json::from_value::<VariantsJsonContent>(metadata.clone())?;
     assert_eq!(serde_json::to_value(parsed)?, metadata);
     Ok(())
+}
+
+#[test]
+fn reject_duplicate_provider_namespaces() {
+    let metadata = r#"{
+        "$schema": "https://variants-schema.wheelnext.dev/peps/850/v0.2.0.json",
+        "default-priorities": {"namespace": ["cpu"]},
+        "providers": {
+            "cpu": {"static-properties": {"level": ["v3"]}},
+            "cpu": {"requires": ["other-provider"]}
+        },
+        "variants": {"null": {}}
+    }"#;
+    let error = VariantsJsonContent::from_slice(metadata.as_bytes())
+        .expect_err("duplicate provider namespaces must be rejected");
+    assert_snapshot!(error, @"duplicate key in variant metadata at line 7 column 9");
+}
+
+#[test]
+fn reject_duplicate_target_namespaces() {
+    let target = r#"{
+        "cpu": [["level", ["v3"]]],
+        "cpu": [["level", ["v2"]]]
+    }"#;
+    let error = serde_json::from_str::<SupportedVariantProperties>(target)
+        .expect_err("duplicate target namespaces must be rejected");
+    assert_snapshot!(error, @"duplicate key in variant metadata at line 4 column 5");
 }
 
 #[test]

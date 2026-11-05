@@ -10,6 +10,7 @@ use uv_client::WrappedReqwestError;
 use uv_distribution_filename::{VariantLabel, WheelFilename, WheelFilenameError};
 use uv_distribution_types::{
     InstalledDist, InstalledDistError, IsBuildBackendError, UnsupportedVariantProperties,
+    VariantNamespace,
 };
 use uv_fs::Simplified;
 use uv_git::GitError;
@@ -44,6 +45,23 @@ pub enum Error {
         label: VariantLabel,
         properties: UnsupportedVariantProperties,
     },
+    #[error("Failed to query wheel variant provider for namespace `{namespace}`")]
+    VariantProvider {
+        namespace: VariantNamespace,
+        #[source]
+        source: anyhow::Error,
+    },
+    #[error("Wheel variant provider dependencies must use non-variant wheels: `{0}`")]
+    VariantProviderDependency(String),
+    #[error(
+        "Wheels `{first}` and `{second}` have the same variant label but different dependencies"
+    )]
+    VariantWheelDependencies {
+        first: Box<WheelFilename>,
+        second: Box<WheelFilename>,
+    },
+    #[error("Failed to read variant metadata from `{0}`")]
+    LockedWheelVariant(String, #[source] Box<uv_metadata::Error>),
     #[error("Building source distributions is disabled")]
     NoBuild,
     #[error("Building source distributions for `{0}` is disabled")]
@@ -304,6 +322,9 @@ impl Error {
         match self {
             Self::WheelVariantsDisabled(_)
             | Self::IncompatibleWheelVariant { .. }
+            | Self::VariantProvider { .. }
+            | Self::VariantProviderDependency(_)
+            | Self::VariantWheelDependencies { .. }
             | Self::NoBuild
             | Self::NoBuildPackage(_)
             | Self::InvalidUrl(_)
@@ -336,7 +357,8 @@ impl Error {
             | Self::MissingActualHashes { .. }
             | Self::MissingExpectedHashes { .. }
             | Self::HashesNotSupportedSourceTree(_)
-            | Self::HashesNotSupportedGit(_) => true,
+            | Self::HashesNotSupportedGit(_)
+            | Self::LockedWheelVariant(..) => true,
             Self::Build(error) => error.is_user_failure(),
             Self::InstallWheelError(error) => error.is_user_failure(),
             Self::Git(error) => error.is_user_failure(),

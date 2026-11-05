@@ -64,6 +64,7 @@ pub(super) async fn collect_environment(
     {
         let reinstall = Reinstall::None;
         let installer_settings = InstallerSettingsRef {
+            variant_policy: &settings.variant_policy,
             index_locations: &settings.index_locations,
             index_strategy: settings.index_strategy,
             keyring_provider: settings.keyring_provider,
