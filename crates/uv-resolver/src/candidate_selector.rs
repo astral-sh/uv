@@ -17,7 +17,7 @@ use uv_pep508::MarkerTree;
 use uv_platform_tags::Tags;
 use uv_types::InstalledPackagesProvider;
 
-use crate::known_platform::KnownPlatform;
+use crate::known_platform::wheel_retention_markers;
 use crate::preferences::{Entry, PreferenceSource, Preferences};
 use crate::prerelease::{PrereleaseSelection, PrereleaseStrategy};
 use crate::prioritized_distribution::{
@@ -420,12 +420,7 @@ impl CandidateSelector {
         prerelease_selection: PrereleaseSelection,
     ) -> Option<Candidate<'a>> {
         let newer = range.intersection(&Range::strictly_higher_than(inherited_version.clone()));
-        // On Windows the machine marker can describe the host while wheel tags describe
-        // an emulated interpreter. Keep every interpreter architecture when checking losses.
-        let wheel_fork = LazyCell::new(|| {
-            let windows = fork.and(KnownPlatform::Windows.marker());
-            fork.or(windows.without_platform_machine())
-        });
+        let wheel_fork = LazyCell::new(|| wheel_retention_markers(fork));
         for (version, handle) in version_map.iter_included(&newer).rev() {
             // The inherited release is already an alternative to opting into pre-releases.
             if version.any_prerelease()

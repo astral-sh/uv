@@ -1,4 +1,5 @@
 use std::fmt::{Display, Formatter};
+use std::sync::LazyLock;
 
 use uv_pep508::{MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString};
 
@@ -12,7 +13,7 @@ pub(crate) enum KnownPlatform {
 
 impl KnownPlatform {
     /// Return a [`MarkerTree`] for the platform.
-    pub(crate) fn marker(self) -> MarkerTree {
+    fn marker(self) -> MarkerTree {
         MarkerTree::expression(MarkerExpression::String {
             key: MarkerValueString::SysPlatform,
             operator: MarkerOperator::Equal,
@@ -36,6 +37,41 @@ impl KnownPlatform {
             None
         }
     }
+}
+
+// On Linux, get_interpreter_info.py adjusts the wheel architecture for
+// a 32-bit interpreter but uses platform.machine() for dependency markers.
+static LINUX_INTERPRETER_ARCHITECTURES: LazyLock<[(MarkerTree, MarkerTree); 3]> =
+    LazyLock::new(|| {
+        let machine = |name: &'static str| {
+            MarkerTree::expression(MarkerExpression::String {
+                key: MarkerValueString::PlatformMachine,
+                operator: MarkerOperator::Equal,
+                value: name.into(),
+            })
+        };
+        [
+            ("x86_64", "i686"),
+            ("aarch64", "armv7l"),
+            ("armv8l", "armv7l"),
+        ]
+        .map(|(host, interpreter)| (machine(host), machine(interpreter)))
+    });
+
+/// Include wheel architectures for interpreters that can run on a host in this fork.
+/// Keep Python, OS, and all other constraints from the corresponding host environment.
+pub(crate) fn wheel_retention_markers(fork: MarkerTree) -> MarkerTree {
+    let windows = fork.and(KnownPlatform::Windows.marker());
+    // A Windows host can run an interpreter with a different architecture under emulation.
+    let mut retained = fork.or(windows.without_platform_machine());
+    let linux = fork.and(KnownPlatform::Linux.marker());
+    for &(host, interpreter) in LINUX_INTERPRETER_ARCHITECTURES.iter() {
+        let hosts = linux.and(host);
+        if !hosts.is_false() {
+            retained = retained.or(hosts.without_platform_machine().and(interpreter));
+        }
+    }
+    retained
 }
 
 impl Display for KnownPlatform {
