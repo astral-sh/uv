@@ -889,6 +889,21 @@ mod tests {
     }
 
     #[test]
+    fn file_url_checks_every_supported_hash_algorithm() -> anyhow::Result<()> {
+        for algorithm in HashAlgorithm::preferred() {
+            let url = uv_pep508::VerbatimUrl::parse_url(format!("file:///pkg.whl#{algorithm}="))?;
+            assert!(
+                matches!(
+                    Hashes::from_url(&url),
+                    Err(HashError::InvalidDigestLength { .. })
+                ),
+                "expected an empty {algorithm} digest to be rejected"
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
     fn pypi_core_metadata_precedence() -> Result<(), serde_json::Error> {
         const SHA256: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
