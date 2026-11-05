@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::cmp::Reverse;
 use std::future::Future;
 use std::io;
@@ -24,14 +25,14 @@ use uv_client::{
 };
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
-    ArchiveHashPolicy, BuildInfo, BuildableSource, BuiltDist, Dist, DistRef, HashCollection,
-    HashValidation, Hashed, IndexUrl, InstalledDist, MetadataHashPolicy, Name, ResolutionRecorder,
-    SourceDist, SourceUrl, VariantsJsonContent, parse_url_hashes,
+    ArchiveHashPolicy, BuildInfo, BuildableSource, BuiltDist, Dist, DistRef, GitPathBuiltDist,
+    HashCollection, HashValidation, Hashed, IndexUrl, InstalledDist, MetadataHashPolicy, Name,
+    ResolutionRecorder, SourceDist, SourceUrl, VariantsJsonContent, parse_url_hashes,
 };
 use uv_extract::dirhash::{DirectoryDigest, HashedFile};
 use uv_extract::hash::Hasher;
 use uv_fs::{LockedFile, write_atomic};
-use uv_git::{GIT_LFS, GitError};
+use uv_git::{Fetch, GIT_LFS, GitError};
 use uv_metadata::read_archive_wheel_variant;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -293,14 +294,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         let Some(label) = filename.variant() else {
             return Ok(None);
         };
-        match wheel {
-            BuiltDist::Path(path) => {
-                read_archive_wheel_variant(filename, &path.install_path, label)
-                    .await
-                    .map(Some)
-                    .map_err(|err| {
-                        Error::WheelMetadata(path.install_path.to_path_buf(), Box::new(err))
-                    })
+        let path = match wheel {
+            BuiltDist::Path(wheel) => Cow::Borrowed(wheel.install_path.as_ref()),
+            BuiltDist::GitPath(wheel) => {
+                let fetch = self.fetch_git_wheel(wheel).await?;
+                Cow::Owned(fetch.path().join(&wheel.install_path))
             }
             BuiltDist::DirectUrl(url) => {
                 // Hash generation downloads the full wheel, so skip the metadata request.
@@ -325,11 +323,16 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 // With `Cache-Control: no-store`, `pip compile --generate-hashes` can hash one
                 // wheel and check compatibility against a different wheel returned by a second GET.
                 let wheel = Box::pin(self.get_wheel(wheel, hashes)).await?;
-                read_extracted_wheel_variant(filename, &wheel.archive, label).map(Some)
+                return read_extracted_wheel_variant(filename, &wheel.archive, label).map(Some);
             }
-            // Registry candidates use index variant metadata. Git path variants are unsupported.
-            BuiltDist::Registry(_) | BuiltDist::GitPath(_) => Ok(None),
-        }
+            // Registry candidates use index variant metadata.
+            BuiltDist::Registry(_) => return Ok(None),
+        };
+
+        read_archive_wheel_variant(filename, &path, label)
+            .await
+            .map(Some)
+            .map_err(|err| Error::WheelMetadata(path.into_owned(), Box::new(err)))
     }
 
     /// Fetch a wheel from the cache or download it from the index.
@@ -511,30 +514,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             }
 
             BuiltDist::GitPath(wheel) => {
-                // Fetch the Git repository.
-                let fetch = self
-                    .build_context
-                    .git()
-                    .fetch(
-                        &wheel.git,
-                        self.client.unmanaged.git_http_settings(wheel.git.url()),
-                        self.build_context.cache().bucket(CacheBucket::Git),
-                        self.reporter.clone().map(<dyn Reporter>::into_git_reporter),
-                    )
-                    .await?;
-
-                if wheel.git.lfs().enabled() && !fetch.lfs_ready() {
-                    if GIT_LFS.is_err() {
-                        return Err(Error::MissingWheelGitLfsArtifacts(
-                            wheel.url.to_url(),
-                            GitError::GitLfsNotFound,
-                        ));
-                    }
-                    return Err(Error::MissingWheelGitLfsArtifacts(
-                        wheel.url.to_url(),
-                        GitError::GitLfsNotConfigured,
-                    ));
-                }
+                let fetch = self.fetch_git_wheel(wheel).await?;
 
                 let git_sha = fetch.git().precise().expect("Exact commit after checkout");
                 let cache_entry = self.build_context.cache().entry(
@@ -566,6 +546,34 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 .await
             }
         }
+    }
+
+    /// Fetch the Git checkout containing a wheel, including any required Git LFS artifacts.
+    async fn fetch_git_wheel(&self, wheel: &GitPathBuiltDist) -> Result<Fetch, Error> {
+        let fetch = self
+            .build_context
+            .git()
+            .fetch(
+                &wheel.git,
+                self.client.unmanaged.git_http_settings(wheel.git.url()),
+                self.build_context.cache().bucket(CacheBucket::Git),
+                self.reporter.clone().map(<dyn Reporter>::into_git_reporter),
+            )
+            .await?;
+
+        if wheel.git.lfs().enabled() && !fetch.lfs_ready() {
+            let error = if GIT_LFS.is_err() {
+                GitError::GitLfsNotFound
+            } else {
+                GitError::GitLfsNotConfigured
+            };
+            return Err(Error::MissingWheelGitLfsArtifacts(
+                wheel.url.to_url(),
+                error,
+            ));
+        }
+
+        Ok(fetch)
     }
 
     /// Convert a source distribution into a wheel, fetching it from the cache or building it if
