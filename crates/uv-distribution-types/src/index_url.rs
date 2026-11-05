@@ -881,7 +881,7 @@ mod tests {
             ignore_error_codes: None,
             hash_algorithm: None,
             exclude_newer: None,
-                exclude_newer_package: std::collections::BTreeMap::new(),
+            exclude_newer_package: std::collections::BTreeMap::new(),
         }];
 
         let index_locations = IndexLocations::new(indexes, Vec::new(), false);
@@ -919,7 +919,7 @@ mod tests {
             ignore_error_codes: None,
             hash_algorithm: None,
             exclude_newer: None,
-                exclude_newer_package: std::collections::BTreeMap::new(),
+            exclude_newer_package: std::collections::BTreeMap::new(),
         }];
 
         let index_locations = IndexLocations::new(indexes, Vec::new(), false);
@@ -952,7 +952,7 @@ mod tests {
             ignore_error_codes: None,
             hash_algorithm: None,
             exclude_newer: None,
-                exclude_newer_package: std::collections::BTreeMap::new(),
+            exclude_newer_package: std::collections::BTreeMap::new(),
         }];
 
         let index_locations = IndexLocations::new(indexes, Vec::new(), false);
