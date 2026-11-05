@@ -51,10 +51,21 @@ pub enum VariantsJsonParseError {
 }
 
 /// The variant properties used to resolve a wheel's dependencies for an installation target.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct SelectedVariant {
     pub label: VariantLabel,
+    /// The subset supported by the target, used to evaluate dependency markers.
     pub properties: VariantProperties,
+    /// All properties for this label in the metadata used to select the wheel.
+    #[serde(skip)]
+    declared_properties: VariantProperties,
+}
+
+/// The target-specific part of the selection stored in `uv_variant.json`.
+#[derive(Deserialize)]
+pub(crate) struct RecordedVariant {
+    label: VariantLabel,
+    properties: VariantProperties,
 }
 
 impl SelectedVariant {
@@ -393,8 +404,6 @@ impl VariantsJsonContent {
         label: &VariantLabel,
     ) -> Result<Self, VariantsJsonParseError> {
         let metadata = Self::from_slice(contents)?;
-        // TODO(konsti): Check that this label has the same set of properties in the wheel's
-        // `variant.json` and the index's `variants.json`.
         if metadata.variants.keys().eq(std::iter::once(label)) {
             Ok(metadata)
         } else {
@@ -476,20 +485,20 @@ impl VariantsJsonContent {
         label: &VariantLabel,
         supported: &SupportedVariantProperties,
     ) -> Option<SelectedVariant> {
+        let declared_properties = self.declared_properties(label)?;
         let mut properties = BTreeMap::new();
-        for (namespace, features) in self.variants.get(label)? {
+        for (namespace, features) in &declared_properties {
             let supported_features = supported.properties.get(namespace)?;
             let mut selected_features = BTreeMap::new();
             for (feature, values) in features {
                 let (_, supported_values) = supported_features
                     .iter()
                     .find(|(supported_feature, _)| supported_feature == feature)?;
-                let mut selected_values = values
+                let selected_values = values
                     .iter()
                     .filter(|value| supported_values.contains(value))
                     .cloned()
                     .collect::<Vec<_>>();
-                selected_values.sort_unstable();
                 if selected_values.is_empty() {
                     return None;
                 }
@@ -500,19 +509,38 @@ impl VariantsJsonContent {
         Some(SelectedVariant {
             label: label.clone(),
             properties,
+            declared_properties,
         })
     }
 
-    /// Verify that selected properties describe a complete supported subset of this wheel.
-    pub fn validates_selected_variant(&self, selected: &SelectedVariant) -> bool {
-        let Some((label, properties)) = self.variants.iter().exactly_one().ok() else {
-            return false;
-        };
-        if label != &selected.label || !properties.keys().eq(selected.properties.keys()) {
-            return false;
+    /// Sort each feature's alternative values for comparison across metadata sources.
+    fn declared_properties(&self, label: &VariantLabel) -> Option<VariantProperties> {
+        let mut properties = self.variants.get(label)?.clone();
+        for features in properties.values_mut() {
+            for values in features.values_mut() {
+                values.sort_unstable();
+            }
         }
-        properties.iter().all(|(namespace, features)| {
-            let selected_features = &selected.properties[namespace];
+        Some(properties)
+    }
+
+    /// Check that the wheel declares the same properties used during resolution.
+    pub fn matches_selected_variant(&self, selected: &SelectedVariant) -> bool {
+        self.declared_properties(&selected.label).as_ref() == Some(&selected.declared_properties)
+    }
+
+    /// Recover the full selection from an installed wheel and its recorded target properties.
+    pub(crate) fn restore_selected_variant(
+        &self,
+        recorded: RecordedVariant,
+    ) -> Option<SelectedVariant> {
+        let label = self.wheel_label()?;
+        let properties = self.declared_properties(label)?;
+        if label != &recorded.label || !properties.keys().eq(recorded.properties.keys()) {
+            return None;
+        }
+        let valid = properties.iter().all(|(namespace, features)| {
+            let selected_features = &recorded.properties[namespace];
             features.keys().eq(selected_features.keys())
                 && features.iter().all(|(feature, values)| {
                     let selected_values = &selected_features[feature];
@@ -520,6 +548,11 @@ impl VariantsJsonContent {
                         && selected_values.windows(2).all(|pair| pair[0] < pair[1])
                         && selected_values.iter().all(|value| values.contains(value))
                 })
+        });
+        valid.then_some(SelectedVariant {
+            label: recorded.label,
+            properties: recorded.properties,
+            declared_properties: properties,
         })
     }
 
