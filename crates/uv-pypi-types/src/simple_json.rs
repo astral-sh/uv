@@ -12,6 +12,7 @@ use uv_macros::DeserializeUntagged;
 use uv_normalize::PackageName;
 use uv_pep440::{VersionSpecifiers, VersionSpecifiersParseError};
 use uv_pep508::{VerbatimUrl, file_url_hashes};
+use uv_redacted::SafeUrl;
 use uv_small_str::SmallString;
 
 use crate::ProjectStatus;
@@ -399,7 +400,12 @@ impl Hashes {
                 if let Some(previous) = hashes.insert(digest)
                     && !previous.digest().eq_ignore_ascii_case(&value)
                 {
-                    return Err(HashError::ConflictingUrlHashes(algorithm));
+                    let mut archive = url.to_url();
+                    archive.set_fragment(None);
+                    return Err(HashError::ConflictingUrlHashes {
+                        algorithm,
+                        url: Box::new(archive),
+                    });
                 }
             }
             return Ok((!hashes.is_empty()).then_some(hashes));
@@ -851,8 +857,11 @@ impl IntoIterator for HashDigests {
 
 #[derive(thiserror::Error, Debug)]
 pub enum HashError {
-    #[error("Conflicting {0} checksums in URL fragment")]
-    ConflictingUrlHashes(HashAlgorithm),
+    #[error("Conflicting {algorithm} checksums in URL fragment for `{url}`")]
+    ConflictingUrlHashes {
+        algorithm: HashAlgorithm,
+        url: Box<SafeUrl>,
+    },
 
     #[error("Unexpected hash (expected `<algorithm>:<hash>`): {0}")]
     InvalidStructure(String),

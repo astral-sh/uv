@@ -7236,7 +7236,7 @@ fn local_wheel_path_with_hash_conflicting_pins() -> Result<()> {
         .arg(format!("ok @ {url}#%73ha256={correct}&sha256={wrong}")), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Conflicting sha256 checksums in URL fragment
+    error: Conflicting sha256 checksums in URL fragment for `file://[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl`
     ");
     context.assert_not_installed("ok");
     uv_snapshot!(context.filters(), context.pip_install()
@@ -7244,9 +7244,27 @@ fn local_wheel_path_with_hash_conflicting_pins() -> Result<()> {
         .arg(format!("ok @ {url}#sha256={wrong}&%73ha256={correct}")), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Conflicting sha256 checksums in URL fragment
+    error: Conflicting sha256 checksums in URL fragment for `file://[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl`
     ");
     context.assert_not_installed("ok");
+    Ok(())
+}
+
+/// An egg name can end in an archive extension independently of any checksum.
+#[test]
+fn local_wheel_path_with_hash_egg_name() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let (filename, wheel) = WheelBuilder::new(&"demo-whl".parse()?, &"1.0.0".parse()?).build();
+    context.temp_dir.child(&filename).write_binary(&wheel)?;
+
+    uv_snapshot!(context.filters(), context.pip_install().arg(format!("./{filename}#egg=demo.whl")), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + demo-whl==1.0.0 (from file://[TEMP_DIR]/demo_whl-1.0.0-py3-none-any.whl#egg=demo.whl)
+    ");
     Ok(())
 }
 

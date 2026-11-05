@@ -732,19 +732,31 @@ pub fn looks_like_git_repository<P: SerializationPolicy>(url: &SafeUrl<P>) -> bo
 /// Read the distribution checksums in a file URL fragment. Split fields before decoding
 /// them so an escaped `&` or `=` stays part of its field.
 pub fn file_url_hashes(fragment: &str) -> impl Iterator<Item = (Cow<'_, str>, Cow<'_, str>)> {
-    fragment.split('&').filter_map(file_url_hash_field)
+    fragment
+        .split('&')
+        .filter_map(file_url_field)
+        .filter(|(name, _)| is_hash_name(name))
 }
 
-fn file_url_hash_field(field: &str) -> Option<(Cow<'_, str>, Cow<'_, str>)> {
+fn file_url_field(field: &str) -> Option<(Cow<'_, str>, Cow<'_, str>)> {
     if !field.contains('=') {
         return None;
     }
-    let (name, value) = url::form_urlencoded::parse(field.as_bytes()).next()?;
-    matches!(
-        name.as_ref(),
-        "md5" | "sha256" | "sha384" | "sha512" | "blake2b"
-    )
-    .then_some((name, value))
+    url::form_urlencoded::parse(field.as_bytes()).next()
+}
+
+fn is_hash_name(name: &str) -> bool {
+    matches!(name, "md5" | "sha256" | "sha384" | "sha512" | "blake2b")
+}
+
+/// In a bare path, `sha256=cache/pkg.whl` spans directory components. Fragment fields
+/// before or after this text still have their usual meaning.
+#[cfg(feature = "non-pep508-extensions")]
+fn bare_fragment_fields(fragment: &str) -> impl Iterator<Item = (Cow<'_, str>, Cow<'_, str>)> {
+    fragment
+        .split('&')
+        .filter(|field| !field.contains(std::path::is_separator))
+        .filter_map(file_url_field)
 }
 
 /// Split a bare local requirement without shortening a requested archive path to a sibling.
@@ -771,13 +783,6 @@ fn split_fragment<'a>(
         .map(|end| filename_start + end);
     let path_end = archive_end.unwrap_or(filename_start);
     let mut source_end = resolve(path).exists().then_some(input.len());
-    // In a bare path, `sha256=cache/pkg.whl` spans directory components. A checksum field
-    // can appear before or after that text, separated by an ampersand.
-    let has_checksum = |fragment: &str| {
-        fragment.split('&').any(|field| {
-            !field.contains(std::path::is_separator) && file_url_hash_field(field).is_some()
-        })
-    };
 
     for (index, _) in input.rmatch_indices('#') {
         let prefix = &input[..index];
@@ -789,12 +794,24 @@ fn split_fragment<'a>(
         let viable = if index >= path_end {
             candidate.exists()
         } else {
-            // A file's fragment can end in `&egg=demo.whl` or contain a slash in a field value.
-            let parameter_with_separator = archive_end.is_none()
+            let Ok(metadata) = candidate.metadata() else {
+                continue;
+            };
+            // A terminal egg name can end in an archive extension on either a wheel or a
+            // source directory. A directory cannot absorb a subsequent path component.
+            let recognized_field =
+                bare_fragment_fields(fragment).any(|(name, _)| match name.as_ref() {
+                    "egg" | "subdirectory" => {
+                        metadata.is_file() || (index >= filename_start && metadata.is_dir())
+                    }
+                    name => metadata.is_file() && is_hash_name(name),
+                });
+            let parameter_with_separator = metadata.is_file()
+                && archive_end.is_none()
                 && fragment
                     .split_once(std::path::is_separator)
                     .is_some_and(|(field, _)| field.contains('='));
-            (has_checksum(fragment) || parameter_with_separator) && candidate.is_file()
+            recognized_field || parameter_with_separator
         };
         if !viable {
             continue;
@@ -802,7 +819,7 @@ fn split_fragment<'a>(
 
         if let Some(end) = source_end {
             // Only a viable shorter source can supply a checksum that this path would swallow.
-            if has_checksum(&input[index + 1..end]) {
+            if bare_fragment_fields(&input[index + 1..end]).any(|(name, _)| is_hash_name(&name)) {
                 return Err(VerbatimUrlError::AmbiguousHash(path.to_path_buf()));
             }
         } else {
@@ -1063,6 +1080,10 @@ mod tests {
         let base = Path::new(env!("CARGO_MANIFEST_DIR"));
         let filename = Path::new("src#label.tar.gz");
         assert_eq!(split_fragment(filename, Some(base))?, (filename, None));
+        assert_eq!(
+            split_fragment(Path::new("src#egg=demo.whl"), Some(base))?,
+            (Path::new("src"), Some("egg=demo.whl"))
+        );
         assert_eq!(
             split_fragment(Path::new("missing/../Cargo.toml#opaque"), Some(base))?,
             (Path::new("missing/../Cargo.toml"), Some("opaque"))
