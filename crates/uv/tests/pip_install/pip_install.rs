@@ -7124,6 +7124,75 @@ fn local_wheel_path_with_hash() -> Result<()> {
     Ok(())
 }
 
+/// A fragment-looking directory name must not redirect the install to a sibling project.
+#[test]
+fn local_wheel_path_with_hash_mismatch() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let sibling = context.temp_dir.child("wheels");
+    sibling.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "sibling"
+        version = "1.0.0"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    sibling.child("src/sibling/__init__.py").touch()?;
+
+    let directory = context.temp_dir.child("wheels#tag=1");
+    directory.create_dir_all()?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-1.0.0-py3-none-any.whl"),
+        directory.child("ok-1.0.0-py3-none-any.whl"),
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("./wheels#tag=1/ok-1.0.0-py3-none-any.whl#sha256=0000000000000000000000000000000000000000000000000000000000000000"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Failed to read `ok @ file://[TEMP_DIR]/wheels%23tag=1/ok-1.0.0-py3-none-any.whl#sha256=0000000000000000000000000000000000000000000000000000000000000000`
+      cause: Hash mismatch for `ok @ file://[TEMP_DIR]/wheels%23tag=1/ok-1.0.0-py3-none-any.whl#sha256=0000000000000000000000000000000000000000000000000000000000000000`
+
+             Expected:
+               sha256:0000000000000000000000000000000000000000000000000000000000000000
+
+             Computed:
+               sha256:79f0b33e6ce1e09eaa1784c8eee275dfe84d215d9c65c652f07c18e85fdaac5f
+    ");
+    context.assert_not_installed("ok");
+    context.assert_not_installed("sibling");
+    Ok(())
+}
+
+/// A directory named like a checksummed requirement must not shadow its wheel.
+#[test]
+fn local_wheel_path_with_hash_ambiguity() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let wheel = "ok-1.0.0-py3-none-any.whl";
+    fs_err::copy(
+        context.workspace_root.join("test/links").join(wheel),
+        context.temp_dir.child(wheel),
+    )?;
+    let requirement = format!("{wheel}#sha256={}", "0".repeat(64));
+    context.temp_dir.child(&requirement).create_dir_all()?;
+
+    uv_snapshot!(context.filters(), context.pip_install().arg(format!("./{requirement}")), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to parse: `./ok-1.0.0-py3-none-any.whl#sha256=0000000000000000000000000000000000000000000000000000000000000000`
+      cause: Ambiguous hash in path `./ok-1.0.0-py3-none-any.whl#sha256=0000000000000000000000000000000000000000000000000000000000000000`. Use a `file:` URL with `%23` for a literal `#` and put the checksum in the URL fragment.
+             ./ok-1.0.0-py3-none-any.whl#sha256=0000000000000000000000000000000000000000000000000000000000000000
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ");
+    context.assert_not_installed("ok");
+    Ok(())
+}
+
 /// Install from a direct path (wheel) with the same name at a different path.
 #[test]
 fn path_changes_with_same_name() -> Result<()> {

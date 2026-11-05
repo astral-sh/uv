@@ -130,15 +130,13 @@ impl Requirement {
 
     /// Return the hashes of the requirement, as specified in the URL fragment.
     pub fn hashes(&self) -> Result<Option<Hashes>, HashError> {
-        let (RequirementSource::Url { ref url, .. } | RequirementSource::Path { ref url, .. }) =
-            self.source
+        let (RequirementSource::Url { ref url, .. }
+        | RequirementSource::Path { ref url, .. }
+        | RequirementSource::Directory { ref url, .. }) = self.source
         else {
             return Ok(None);
         };
-        let Some(fragment) = url.fragment() else {
-            return Ok(None);
-        };
-        Hashes::parse_url_fragment(fragment)
+        Hashes::from_url(url)
     }
 
     /// Set the source file containing the requirement.

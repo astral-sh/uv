@@ -224,12 +224,7 @@ impl UnresolvedRequirement {
     pub fn hashes(&self) -> Result<Option<Hashes>, HashError> {
         match self {
             Self::Named(requirement) => requirement.hashes(),
-            Self::Unnamed(requirement) => {
-                let Some(fragment) = requirement.url.verbatim.fragment() else {
-                    return Ok(None);
-                };
-                Hashes::parse_url_fragment(fragment)
-            }
+            Self::Unnamed(requirement) => Hashes::from_url(&requirement.url.verbatim),
         }
     }
 }

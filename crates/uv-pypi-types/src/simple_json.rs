@@ -11,6 +11,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 use uv_macros::DeserializeUntagged;
 use uv_normalize::PackageName;
 use uv_pep440::{VersionSpecifiers, VersionSpecifiersParseError};
+use uv_pep508::{VerbatimUrl, file_url_hash};
 use uv_small_str::SmallString;
 
 use crate::ProjectStatus;
@@ -386,7 +387,19 @@ impl Hashes {
     }
 
     /// Parse a supported hash from a URL fragment, ignoring unrelated fragment parameters.
-    pub fn parse_url_fragment(fragment: &str) -> Result<Option<Self>, HashError> {
+    pub fn from_url(url: &VerbatimUrl) -> Result<Option<Self>, HashError> {
+        let Some(fragment) = url.fragment() else {
+            return Ok(None);
+        };
+        if url.scheme() == "file" {
+            let Some((name, value)) = file_url_hash(fragment) else {
+                return Ok(None);
+            };
+            return Ok(Some(Self::from(HashDigest::new(
+                name.parse()?,
+                value.as_ref(),
+            )?)));
+        }
         for fragment in fragment.split('&') {
             if let Some((algorithm, _)) = fragment.split_once('=')
                 && HashAlgorithm::from_str(algorithm).is_ok()
@@ -860,6 +873,20 @@ mod tests {
         ArchivedHashDigest, CoreMetadata, Digest, HashAlgorithm, HashDigest, HashDigests,
         HashError, Hashes, PypiFile,
     };
+
+    #[test]
+    fn file_url_hash_decodes_parameter_name_and_digest() -> anyhow::Result<()> {
+        let digest = "ab".repeat(32);
+        let encoded = "%61b".repeat(32);
+        let url = uv_pep508::VerbatimUrl::parse_url(format!(
+            "file:///pkg.whl#egg=ok%26sha256%3Dignored&%73ha256={encoded}"
+        ))?;
+        assert_eq!(
+            Hashes::from_url(&url)?,
+            Some(Hashes::parse_fragment(&format!("sha256={digest}"))?)
+        );
+        Ok(())
+    }
 
     #[test]
     fn pypi_core_metadata_precedence() -> Result<(), serde_json::Error> {

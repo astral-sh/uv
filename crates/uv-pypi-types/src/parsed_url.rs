@@ -70,7 +70,7 @@ impl VerbatimParsedUrl {
     /// Classify an unnamed local requirement as a directory or a distribution archive.
     fn from_file_url(verbatim: VerbatimUrl, given: Option<&Path>) -> Result<Self, ParsedUrlError> {
         Ok(Self {
-            parsed_url: ParsedUrl::from_file_url(verbatim.to_url(), given)?,
+            parsed_url: ParsedUrl::from_file_path(verbatim.to_url(), verbatim.as_path()?, given)?,
             verbatim,
         })
     }
@@ -185,10 +185,11 @@ pub enum ParsedUrl {
 
 impl ParsedUrl {
     /// Classify a file URL using its filesystem path, which excludes any URL fragment.
-    fn from_file_url(url: SafeUrl, given: Option<&Path>) -> Result<Self, ParsedUrlError> {
-        let path = url
-            .to_file_path()
-            .map_err(|()| ParsedUrlError::InvalidFileUrl(url.to_string()))?;
+    fn from_file_path(
+        url: SafeUrl,
+        path: PathBuf,
+        given: Option<&Path>,
+    ) -> Result<Self, ParsedUrlError> {
         let is_dir = if let Ok(metadata) = path.metadata() {
             metadata.is_dir()
         } else {
@@ -509,7 +510,10 @@ impl TryFrom<SafeUrl> for ParsedUrl {
         {
             Ok(Self::GitDirectory(ParsedGitDirectoryUrl::try_from(url)?))
         } else if url.scheme().eq_ignore_ascii_case("file") {
-            Self::from_file_url(url, None)
+            let path = url
+                .to_file_path()
+                .map_err(|()| ParsedUrlError::InvalidFileUrl(url.to_string()))?;
+            Self::from_file_path(url, path, None)
         } else {
             Ok(Self::Archive(ParsedArchiveUrl::try_from(url)?))
         }

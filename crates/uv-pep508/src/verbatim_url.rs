@@ -153,36 +153,19 @@ impl VerbatimUrl {
         input: &str,
         root_dir: Option<&Path>,
     ) -> Result<Self, VerbatimUrlError> {
-        let url = match split_scheme(input) {
-            Some((scheme, ..)) => {
-                match Scheme::parse(scheme) {
-                    Some(_) => {
-                        // Ex) `https://pypi.org/simple`
-                        Self::parse_url(input)?
-                    }
-                    None => {
-                        // Ex) `C:\Users\user\index`
-                        if let Some(root_dir) = root_dir {
-                            Self::from_path_with_fragment(input, Some(root_dir))?
-                        } else {
-                            let absolute_path = std::path::absolute(input).map_err(|err| {
-                                VerbatimUrlError::Absolute(input.to_string(), err)
-                            })?;
-                            Self::from_path_with_fragment(absolute_path, None)?
-                        }
-                    }
-                }
-            }
-            None => {
-                // Ex) `/Users/user/index`
-                if let Some(root_dir) = root_dir {
-                    Self::from_path_with_fragment(input, Some(root_dir))?
-                } else {
-                    let absolute_path = std::path::absolute(input)
-                        .map_err(|err| VerbatimUrlError::Absolute(input.to_string(), err))?;
-                    Self::from_path_with_fragment(absolute_path, None)?
-                }
-            }
+        let url = if split_scheme(input)
+            .and_then(|(scheme, _)| Scheme::parse(scheme))
+            .is_some()
+        {
+            Self::parse_url(input)?
+        } else if let Some(root_dir) = root_dir {
+            Self::from_path_with_fragment(input, Some(root_dir))?
+        } else {
+            // Only the supplied path can contain a fragment. The current directory is literal.
+            let (path, fragment) = split_fragment(Path::new(input), None)?;
+            let absolute = std::path::absolute(path)
+                .map_err(|err| VerbatimUrlError::Absolute(input.to_string(), err))?;
+            Self::from_absolute_path(absolute)?.with_url_fragment(fragment)
         };
         Ok(url.with_given(input))
     }
@@ -224,7 +207,7 @@ impl VerbatimUrl {
         path: impl AsRef<Path>,
         base_dir: Option<&Path>,
     ) -> Result<Self, VerbatimUrlError> {
-        let (path, fragment) = split_fragment(path.as_ref(), base_dir);
+        let (path, fragment) = split_fragment(path.as_ref(), base_dir)?;
         let url = if let Some(base_dir) = base_dir {
             Self::from_path(path, base_dir)?
         } else {
@@ -584,6 +567,10 @@ pub enum VerbatimUrlError {
     #[error("relative path without a working directory: {0}")]
     WorkingDirectory(PathBuf),
 
+    /// A bare path can be read in a way that drops an archive checksum.
+    #[error("Ambiguous hash in path `{}`. Use a `file:` URL with `%23` for a literal `#` and put the checksum in the URL fragment.", .0.display())]
+    AmbiguousHash(PathBuf),
+
     /// Received a path that could not be converted to a URL.
     #[error("path could not be converted to a URL: {0}")]
     UrlConversion(PathBuf),
@@ -708,7 +695,7 @@ pub fn split_scheme(s: &str) -> Option<(&str, &str)> {
 
 /// Strip the `file://localhost/` host from a file path.
 #[cfg(feature = "non-pep508-extensions")]
-pub(crate) fn strip_host(path: &str) -> &str {
+fn strip_host(path: &str) -> &str {
     // Ex) `file://localhost/...`.
     if let Some(path) = path
         .strip_prefix("//localhost")
@@ -738,39 +725,76 @@ pub fn looks_like_git_repository<P: SerializationPolicy>(url: &SafeUrl<P>) -> bo
             .is_some_and(|segments| segments.count() == 2)
 }
 
-/// Split packaging parameters such as `#egg=black` or `#sha256=...` from a bare path.
-/// A literal `#` that starts a parameter can be written as `%23` in a `file:` URL.
+/// Find a distribution checksum in a file URL fragment. Split fields before decoding
+/// them so an escaped `&` or `=` stays part of its field.
+pub fn file_url_hash(fragment: &str) -> Option<(Cow<'_, str>, Cow<'_, str>)> {
+    fragment
+        .split('&')
+        .filter(|field| field.contains('='))
+        .find_map(|field| {
+            let (name, value) = url::form_urlencoded::parse(field.as_bytes()).next()?;
+            matches!(
+                name.as_ref(),
+                "md5" | "sha256" | "sha384" | "sha512" | "blake2b"
+            )
+            .then_some((name, value))
+        })
+}
+
+/// Preserve the longest existing path and treat the rest as one URL fragment.
 #[cfg(feature = "non-pep508-extensions")]
-fn split_fragment<'a>(path: &'a Path, base_dir: Option<&Path>) -> (&'a Path, Option<&'a str>) {
+fn split_fragment<'a>(
+    path: &'a Path,
+    base_dir: Option<&Path>,
+) -> Result<(&'a Path, Option<&'a str>), VerbatimUrlError> {
     let Some(input) = path.to_str() else {
-        return (path, None);
+        return Ok((path, None));
     };
-    let Some((prefix, tail)) = input.split_once('#') else {
-        return (path, None);
+    let Some((_, tail)) = input.split_once('#') else {
+        return Ok((path, None));
     };
-
-    let mut offset = prefix.len();
-    for part in tail.split('#') {
-        if part.split('&').any(|field| {
-            field
-                .split_once('=')
-                .is_some_and(|(key, _)| !key.is_empty() && !key.contains(['/', '\\']))
-        }) {
-            return (Path::new(&input[..offset]), Some(&input[offset + 1..]));
-        }
-        offset += 1 + part.len();
-    }
-
-    // An opaque fragment can still refer to an existing archive or directory.
-    // Prefer the literal path when both spellings exist.
     let exists = |path: &Path| match base_dir {
         Some(base) => base.join(path).exists(),
-        None => path.is_absolute() && path.exists(),
+        None => path.exists(),
     };
-    if !exists(path) && exists(Path::new(prefix)) {
-        return (Path::new(prefix), Some(tail));
+
+    let split = if exists(path) {
+        None
+    } else {
+        let mut first_hash = None;
+        let mut existing_source = None;
+        for (index, delimiter) in input.rmatch_indices(|c| c == '#' || std::path::is_separator(c)) {
+            if delimiter == "#" {
+                first_hash = Some(index);
+            }
+            if index > 0 && exists(Path::new(&input[..index])) {
+                // An existing directory component can contain literal hashes. A missing
+                // file inside it must not fall back to a shorter sibling project.
+                if delimiter == "#" {
+                    existing_source = Some(index);
+                }
+                break;
+            }
+        }
+        // Requirements can also be parsed before their source exists.
+        existing_source.or_else(|| first_hash.filter(|&i| input[i + 1..].contains('=')))
+    };
+    let (source, fragment) = match split {
+        Some(index) => (Path::new(&input[..index]), Some(&input[index + 1..])),
+        None => (path, None),
+    };
+
+    // A different split must never turn a checksum into part of the filename
+    // or hide it inside an unrelated fragment parameter.
+    let selected_hash = fragment.and_then(file_url_hash);
+    if tail
+        .split('#')
+        .filter_map(file_url_hash)
+        .any(|hash| Some(&hash) != selected_hash.as_ref())
+    {
+        return Err(VerbatimUrlError::AmbiguousHash(path.to_path_buf()));
     }
-    (path, None)
+    Ok((source, fragment))
 }
 
 /// A supported URL scheme for PEP 508 direct-URL requirements.
@@ -979,16 +1003,13 @@ mod tests {
 
     #[test]
     #[cfg(feature = "non-pep508-extensions")]
-    fn fragment() {
-        let path = Path::new("issue#10458/pkg-1.0.tar.gz");
-        assert_eq!(split_fragment(path, None), (path, None));
+    fn fragment() -> Result<(), VerbatimUrlError> {
+        let base = Path::new(env!("CARGO_MANIFEST_DIR"));
         assert_eq!(
-            split_fragment(
-                Path::new("issue#10458/pkg-1.0.tar.gz#ignored&hash=somehash"),
-                None
-            ),
-            (path, Some("ignored&hash=somehash"))
+            split_fragment(Path::new("Cargo.toml#one#two&sha256=digest"), Some(base))?,
+            (Path::new("Cargo.toml"), Some("one#two&sha256=digest"))
         );
+        Ok(())
     }
 
     #[test]
