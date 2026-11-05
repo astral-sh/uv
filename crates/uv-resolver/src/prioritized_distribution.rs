@@ -128,10 +128,11 @@ impl<'a> CompatibleDist<'a> {
     /// narrows the range used to construct the [`PrioritizedDist`].
     pub(crate) fn matches_python_requirement(&self, requires_python: &RequiresPython) -> bool {
         self.prioritized().is_none_or(|prioritized| {
-            !prioritized
-                .0
-                .python_markers
-                .is_disjoint(requires_python.to_marker_tree())
+            prioritized.has_compatible_source()
+                || !prioritized
+                    .0
+                    .python_markers
+                    .is_disjoint(requires_python.to_marker_tree())
         })
     }
 
@@ -157,13 +158,9 @@ impl<'a> CompatibleDist<'a> {
 
     /// Return the set of supported platforms for the distribution, in terms of their markers.
     pub(crate) fn implied_markers(&self) -> MarkerTree {
-        match self.prioritized() {
-            Some(prioritized) => {
-                let [glibc, musl] = prioritized.0.markers;
-                glibc.and(musl)
-            }
-            None => MarkerTree::TRUE,
-        }
+        self.prioritized()
+            .filter(|prioritized| !prioritized.has_compatible_source())
+            .map_or(MarkerTree::TRUE, PrioritizedDist::wheel_markers)
     }
 }
 
@@ -481,6 +478,20 @@ impl PrioritizedDist {
         Some(prioritized)
     }
 
+    /// Whether a source build can supply an artifact outside the published wheel tags.
+    pub(crate) fn has_compatible_source(&self) -> bool {
+        self.0
+            .source
+            .as_ref()
+            .is_some_and(|(_, compatibility)| compatibility.is_compatible())
+    }
+
+    /// The environments covered by published wheels on all configured libc baselines.
+    pub(crate) fn wheel_markers(&self) -> MarkerTree {
+        let [glibc, musl] = self.0.markers;
+        glibc.and(musl)
+    }
+
     /// Insert the given built distribution into the [`PrioritizedDist`].
     pub(crate) fn insert_built(
         &mut self,
@@ -534,11 +545,6 @@ impl PrioritizedDist {
         hashes: impl IntoIterator<Item = HashDigest>,
         compatibility: SourceDistCompatibility,
     ) {
-        // A usable source distribution provides coverage for all environments.
-        if compatibility.is_compatible() {
-            self.0.python_markers = MarkerTree::TRUE;
-            self.0.markers = [MarkerTree::TRUE; 2];
-        }
         // Track the hashes.
         if !compatibility.is_excluded() {
             self.0.hashes.extend(hashes);

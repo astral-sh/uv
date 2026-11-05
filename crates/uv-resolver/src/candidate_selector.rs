@@ -6,10 +6,13 @@ use itertools::Itertools;
 use smallvec::SmallVec;
 use tracing::{debug, trace};
 
-use uv_configuration::IndexStrategy;
-use uv_distribution_types::{DistributionMetadata, IndexUrl, Name, ResolutionRecorder};
+use uv_configuration::{ForkStrategy, IndexStrategy, ResolutionMode};
+use uv_distribution_types::{
+    DistributionMetadata, IndexUrl, Name, RequiresPython, ResolutionRecorder,
+};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
+use uv_pep508::MarkerTree;
 use uv_platform_tags::Tags;
 use uv_types::InstalledPackagesProvider;
 
@@ -29,6 +32,8 @@ pub(crate) struct CandidateSelector {
     resolution_strategy: ResolutionStrategy,
     prerelease_strategy: PrereleaseStrategy,
     index_strategy: IndexStrategy,
+    /// Python versions for which the default universal strategy prefers wheel coverage.
+    wheel_preference: Option<MarkerTree>,
 }
 
 impl CandidateSelector {
@@ -37,6 +42,7 @@ impl CandidateSelector {
         options: &Options,
         manifest: &Manifest,
         env: &ResolverEnvironment,
+        requires_python: &RequiresPython,
     ) -> Self {
         Self {
             recorder: manifest.recorder.clone(),
@@ -53,6 +59,10 @@ impl CandidateSelector {
                 options.dependency_mode,
             ),
             index_strategy: options.index_strategy,
+            wheel_preference: (options.fork_strategy == ForkStrategy::RequiresPython
+                && options.resolution_mode == ResolutionMode::Highest
+                && env.fork_markers().is_some())
+            .then(|| requires_python.to_marker_tree()),
         }
     }
 
@@ -249,6 +259,9 @@ impl CandidateSelector {
             installed_packages,
             reinstall,
             prerelease_selection,
+            self.wheel_preference
+                .zip(env.fork_markers())
+                .map(|(python, fork)| python.and(fork)),
             tags,
         )
     }
@@ -262,6 +275,7 @@ impl CandidateSelector {
         installed_packages: &'a InstalledPackages,
         reinstall: bool,
         prerelease_selection: PrereleaseSelection,
+        wheel_preference: Option<MarkerTree>,
         tags: Option<&Tags>,
     ) -> Option<Candidate<'a>> {
         for (version, source) in preferences {
@@ -365,11 +379,89 @@ impl CandidateSelector {
                     }
                 }
 
+                if source == PreferenceSource::Resolver
+                    && let Some(fork) = wheel_preference
+                    && file.has_compatible_source()
+                    && let Some(other) = Self::prefer_wheel_coverage(
+                        package_name,
+                        range,
+                        version_map,
+                        version,
+                        file,
+                        fork,
+                        prerelease_selection,
+                    )
+                {
+                    return Some(other);
+                }
+
                 return Some(Candidate::new(
                     package_name,
                     version,
                     file,
                     VersionChoiceKind::Preference,
+                ));
+            }
+        }
+        None
+    }
+
+    /// Prefer a newer release on the same index if it adds wheels and retains coverage
+    /// wherever both versions can be selected in this fork.
+    fn prefer_wheel_coverage<'a>(
+        package_name: &'a PackageName,
+        range: &Range<Version>,
+        version_map: &'a VersionMap,
+        inherited_version: &Version,
+        inherited: &PrioritizedDist,
+        fork: MarkerTree,
+        prerelease_selection: PrereleaseSelection,
+    ) -> Option<Candidate<'a>> {
+        let inherited_wheels = inherited.wheel_markers();
+        if fork.is_disjoint(inherited_wheels.negate()) {
+            return None;
+        }
+
+        let newer = range.intersection(&Range::strictly_higher_than(inherited_version.clone()));
+        for (version, handle) in version_map.iter_included(&newer).rev() {
+            // The inherited release is already an alternative to opting into pre-releases.
+            if version.any_prerelease()
+                && !matches!(prerelease_selection, PrereleaseSelection::Allow)
+            {
+                continue;
+            }
+            if !newer.contains(version) {
+                continue;
+            }
+            let Some(files) = handle.prioritized_dist() else {
+                continue;
+            };
+            let wheels = files.wheel_markers();
+            let gained = wheels.and(inherited_wheels.negate());
+            if fork.is_disjoint(gained) {
+                continue;
+            }
+            let Some(dist) = files.get() else {
+                continue;
+            };
+            // A new Requires-Python lower bound splits off the older Pythons, which can
+            // still use the inherited version. Compare wheels where this release applies.
+            let supported = match dist.requires_python() {
+                Some(specifiers) => {
+                    fork.and(RequiresPython::from_specifiers(specifiers.clone()).to_marker_tree())
+                }
+                None => fork,
+            };
+            let lost = inherited_wheels.and(wheels.negate());
+            if !supported.is_disjoint(gained) && supported.is_disjoint(lost) {
+                debug!(
+                    "Preferring wheel coverage of {package_name}=={version} over sibling version {inherited_version}"
+                );
+                return Some(Candidate::new(
+                    package_name,
+                    version,
+                    files,
+                    VersionChoiceKind::Compatible,
                 ));
             }
         }

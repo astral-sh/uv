@@ -9337,6 +9337,113 @@ fn lock_requires_python_fork_wheels_future() -> Result<()> {
     Ok(())
 }
 
+/// A cap on one platform can select a parent and child that both need source builds elsewhere.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_sibling_fork_prefers_wheels() -> Result<()> {
+    let server = PackseServer::from_toml(indoc! {r#"
+        name = "sibling-fork-prefers-wheels"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.parent.versions."1.0.0"]
+        requires = ["child<2"]
+        wheel_tags = ["py3-none-macosx_10_9_x86_64", "py3-none-linux_x86_64"]
+
+        [packages.parent.versions."2.0.0"]
+        requires = ["child"]
+        wheel_tags = ["py3-none-win_amd64", "py3-none-linux_x86_64"]
+
+        # This version adds Windows wheels but drops the Linux wheel.
+        [packages.parent.versions."3.0.0"]
+        requires = ["child"]
+        wheel_tags = ["py3-none-win_amd64"]
+
+        [packages.child.versions."1.0.0"]
+        wheel_tags = ["py3-none-macosx_10_9_x86_64"]
+
+        [packages.child.versions."2.0.0"]
+        wheel_tags = ["py3-none-win_amd64"]
+    "#})?;
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "parent<2 ; sys_platform == 'darwin'",
+            "parent ; sys_platform != 'darwin'",
+        ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    project v1.0.0
+    ├── parent v1.0.0
+    │   └── child v1.0.0
+    └── parent v2.0.0
+        └── child v2.0.0
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+    Ok(())
+}
+
+/// If the version with better wheels cannot resolve, the inherited source release is still usable.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_sibling_fork_wheel_fallback() -> Result<()> {
+    let server = PackseServer::from_toml(indoc! {r#"
+        name = "sibling-fork-wheel-fallback"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.a.versions."1.0.0"]
+        wheel_tags = ["py3-none-macosx_10_9_x86_64"]
+
+        [packages.a.versions."2.0.0"]
+        wheel_tags = ["py3-none-win_amd64"]
+        requires = ["b>=2"]
+
+        [packages.b.versions."1.0.0"]
+    "#})?;
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["a<2 ; sys_platform == 'darwin'", "a ; sys_platform != 'darwin'", "b<2"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    project v1.0.0
+    ├── a v1.0.0
+    └── b v1.0.0
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    Ok(())
+}
+
 /// Python coverage includes usable sources and every compatible wheel, independent of platform.
 #[cfg(feature = "test-universal")]
 #[test]
