@@ -1,12 +1,19 @@
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
+use std::process::Stdio;
+use std::time::Duration;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
 #[cfg(unix)]
 use fs_err::{metadata, set_permissions};
 use indoc::indoc;
+use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::process::Command;
+use tokio::time::timeout;
+use uv_cache::{Cache, CacheBucket, WheelCache};
+use uv_pep508::VerbatimUrl;
 use uv_static::EnvVars;
 use uv_test::packse::PackseServer;
 use uv_test::{copy_dir_ignore, uv_snapshot, venv_bin_path};
@@ -627,6 +634,72 @@ fn tool_run_from_install_constraints() {
      + python-dotenv==1.0.1
      + werkzeug==3.0.1
     ");
+}
+
+/// Concurrent runs of the same tool should build and use a single cached environment.
+#[tokio::test]
+async fn tool_run_concurrent_cache_miss() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"]).with_tool_dirs();
+    let wheel = context
+        .workspace_root
+        .join("test/links/simple_launcher-0.1.0-py3-none-any.whl");
+    // Hold the wheel lock so the first process cannot finish installing the environment.
+    let url = VerbatimUrl::from_normalized_path(&wheel)?.into_url();
+    let wheel_lock = Cache::from_path(context.cache_dir.path())
+        .entry(
+            CacheBucket::Wheels,
+            WheelCache::Url(&url).wheel_dir("simple-launcher"),
+            "0.1.0-py3-none-any.lock",
+        )
+        .lock()
+        .await?;
+
+    let mut command = Command::from(context.tool_run());
+    command
+        .args(["--verbose", "--no-index", "--from"])
+        .arg(wheel)
+        .args(["python", "-c", "import sys; print(sys.prefix)"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true);
+
+    let mut start_waiter = async || -> Result<_> {
+        let mut child = command.spawn()?;
+        let mut stderr = BufReader::new(child.stderr.as_mut().expect("stderr is piped")).lines();
+        loop {
+            let line = timeout(Duration::from_secs(30), stderr.next_line())
+                .await??
+                .context("uv exited before waiting for a lock")?;
+            if line.contains("Waiting to acquire exclusive lock")
+                && (line.contains(&CacheBucket::Wheels.to_string())
+                    || line.contains(&CacheBucket::Environments.to_string()))
+            {
+                return Ok(child);
+            }
+        }
+    };
+
+    // The first process waits for the wheel. The second has also missed the environment
+    // cache when it waits for the first process (or for the wheel, if both start installing).
+    let first = start_waiter().await?;
+    let second = start_waiter().await?;
+    drop(wheel_lock);
+    let first = first.wait_with_output().await?.assert().success();
+    let second = second.wait_with_output().await?.assert().success();
+    assert_eq!(
+        str::from_utf8(&first.get_output().stdout)?,
+        str::from_utf8(&second.get_output().stdout)?,
+    );
+
+    let archives = context.cache_files(CacheBucket::Archive)?;
+    assert_eq!(
+        archives
+            .iter()
+            .filter(|path| path.ends_with("pyvenv.cfg"))
+            .count(),
+        1
+    );
+    Ok(())
 }
 
 #[test]

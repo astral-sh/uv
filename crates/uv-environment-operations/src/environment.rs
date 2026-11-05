@@ -236,12 +236,26 @@ impl CachedEnvironment {
             cache_digest(&canonicalize_executable(interpreter.sys_executable())?);
 
         // Search in the content-addressed cache.
-        let cache_entry = cache.entry(CacheBucket::Environments, interpreter_hash, resolution_hash);
+        let cache_entry = cache.entry(
+            CacheBucket::Environments,
+            interpreter_hash,
+            &resolution_hash,
+        );
+        let cached_environment = || {
+            let root = cache.resolve_link(cache_entry.path()).ok()?;
+            PythonEnvironment::from_root(root, cache).ok()
+        };
+        if let Some(environment) = cached_environment() {
+            return Ok(Self(environment));
+        }
 
-        if let Ok(root) = cache.resolve_link(cache_entry.path()) {
-            if let Ok(environment) = PythonEnvironment::from_root(root, cache) {
-                return Ok(Self(environment));
-            }
+        // Another process may have built the environment while we waited for the lock.
+        let _lock = cache_entry
+            .with_file(format!("{resolution_hash}.lock"))
+            .lock()
+            .await?;
+        if let Some(environment) = cached_environment() {
+            return Ok(Self(environment));
         }
 
         // Create the environment in the cache, then relocate it to its content-addressed location.
