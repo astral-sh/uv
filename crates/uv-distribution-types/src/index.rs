@@ -635,11 +635,6 @@ impl Index {
             .or_else(|| IndexCacheControl::simple_api_cache_control(self.url.url()))
     }
 
-    /// Return the `exclude-newer` setting for this index.
-    pub(crate) fn exclude_newer(&self) -> Option<&ExcludeNewerOverride> {
-        self.exclude_newer.as_ref()
-    }
-
     /// Return the `exclude-newer` setting for a specific package on this index, falling back to
     /// the index-wide `exclude-newer` setting.
     pub(crate) fn exclude_newer_for_package(
