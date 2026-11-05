@@ -158,10 +158,7 @@ impl<'a> CompatibleDist<'a> {
     /// Return the set of supported platforms for the distribution, in terms of their markers.
     pub(crate) fn implied_markers(&self) -> MarkerTree {
         match self.prioritized() {
-            Some(prioritized) => {
-                let [glibc, musl] = prioritized.0.markers;
-                glibc.and(musl)
-            }
+            Some(prioritized) => prioritized.implied_markers(),
             None => MarkerTree::TRUE,
         }
     }
@@ -485,6 +482,39 @@ impl PrioritizedDist {
         Some(prioritized)
     }
 
+    /// The platform coverage shared by the configured libc baselines.
+    pub(crate) fn implied_markers(&self) -> MarkerTree {
+        let [glibc, musl] = self.0.markers;
+        glibc.and(musl)
+    }
+
+    /// Account for a compatible wheel when determining platform coverage.
+    pub(crate) fn add_wheel_coverage(
+        &mut self,
+        filename: &WheelFilename,
+        minimum_libc_version: Option<MinimumLibcVersion>,
+    ) {
+        if self.0.python_markers.is_true() && self.0.markers.iter().all(|markers| markers.is_true())
+        {
+            return;
+        }
+        let python = implied_python_markers(filename);
+        self.0.python_markers = self.0.python_markers.or(python);
+        for (coverage, markers) in self.0.markers.iter_mut().zip(implied_libc_markers(
+            filename,
+            python,
+            minimum_libc_version,
+        )) {
+            *coverage = coverage.or(markers);
+        }
+    }
+
+    /// A usable source distribution provides coverage for all environments.
+    pub(crate) fn add_source_coverage(&mut self) {
+        self.0.python_markers = MarkerTree::TRUE;
+        self.0.markers = [MarkerTree::TRUE; 2];
+    }
+
     /// Insert the given built distribution into the [`PrioritizedDist`].
     pub(crate) fn insert_built(
         &mut self,
@@ -493,19 +523,8 @@ impl PrioritizedDist {
         compatibility: WheelCompatibility,
         minimum_libc_version: Option<MinimumLibcVersion>,
     ) {
-        if compatibility.is_compatible()
-            && (!self.0.python_markers.is_true()
-                || !self.0.markers.iter().all(|markers| markers.is_true()))
-        {
-            let python = implied_python_markers(&dist.filename);
-            self.0.python_markers = self.0.python_markers.or(python);
-            for (coverage, markers) in self.0.markers.iter_mut().zip(implied_libc_markers(
-                &dist.filename,
-                python,
-                minimum_libc_version,
-            )) {
-                *coverage = coverage.or(markers);
-            }
+        if compatibility.is_compatible() {
+            self.add_wheel_coverage(&dist.filename, minimum_libc_version);
         }
         // Track the hashes.
         if !compatibility.is_excluded() {
@@ -538,10 +557,8 @@ impl PrioritizedDist {
         hashes: impl IntoIterator<Item = HashDigest>,
         compatibility: SourceDistCompatibility,
     ) {
-        // A usable source distribution provides coverage for all environments.
         if compatibility.is_compatible() {
-            self.0.python_markers = MarkerTree::TRUE;
-            self.0.markers = [MarkerTree::TRUE; 2];
+            self.add_source_coverage();
         }
         // Track the hashes.
         if !compatibility.is_excluded() {

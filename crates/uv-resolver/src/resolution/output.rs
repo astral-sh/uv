@@ -120,7 +120,7 @@ impl<'a> ResolutionGraphBuilder<'a> {
                 package,
                 selected,
                 package_role,
-            );
+            )?;
             entry.insert(node);
             node_indices.push(node);
         }
@@ -283,7 +283,7 @@ fn add_version(
     package: &ResolutionPackage,
     selected: SelectedDistribution,
     package_role: PackageRole,
-) -> NodeIndex {
+) -> Result<NodeIndex, ResolveError> {
     let ResolutionPackage {
         name,
         kind,
@@ -299,7 +299,7 @@ fn add_version(
         preferences,
         hasher,
         in_memory,
-    );
+    )?;
     let (version, dist, metadata) = selected.into_parts();
 
     // Track yanks for registry distributions.
@@ -341,7 +341,7 @@ fn add_version(
     }
 
     // Add the distribution to the graph.
-    graph.add_node(ResolutionGraphNode::Dist(AnnotatedDist {
+    Ok(graph.add_node(ResolutionGraphNode::Dist(AnnotatedDist {
         dist,
         name: name.clone(),
         version,
@@ -350,7 +350,7 @@ fn add_version(
         metadata,
         role: package_role,
         marker: UniversalMarker::TRUE,
-    }))
+    })))
 }
 
 /// Identify the hashes for a concrete distribution, preserving any hashes that were provided
@@ -364,11 +364,11 @@ fn get_hashes(
     preferences: &Preferences,
     hasher: &HashStrategy,
     in_memory: &InMemoryIndex,
-) -> HashDigests {
+) -> Result<HashDigests, ResolveError> {
     // 1. Look for hashes from the lockfile.
     if let Some(digests) = preferences.match_hashes(name, version) {
         if !digests.is_empty() {
-            return HashDigests::from(digests);
+            return Ok(HashDigests::from(digests));
         }
     }
 
@@ -377,7 +377,7 @@ fn get_hashes(
     if let Some(url) = url {
         let policy = hasher.archive_policy_for_url(&url.verbatim);
         if !policy.digests().is_empty() {
-            return HashDigests::from(policy.digests());
+            return Ok(HashDigests::from(policy.digests()));
         }
     }
 
@@ -390,7 +390,7 @@ fn get_hashes(
             .requires_validation()
         && let Some(hashes) = parse_url_hashes(&url.verbatim)
     {
-        return hashes;
+        return Ok(hashes);
     }
 
     // 4. Look for hashes computed for the specific wheel or source distribution.
@@ -399,60 +399,34 @@ fn get_hashes(
             let mut digests = archive.hashes.clone();
             digests.sort_unstable();
             if !digests.is_empty() {
-                return digests;
+                return Ok(digests);
             }
         }
     }
 
     // 5. Look for hashes from the registry, which are served at the package level.
     if url.is_none() {
-        // Query the implicit and explicit indexes (lazily) for the hashes.
-        let implicit_response = in_memory.implicit().get(name);
-        let mut explicit_response = None;
-
-        // Search in the implicit indexes.
-        let hashes = implicit_response
-            .as_ref()
-            .and_then(|response| {
-                if let VersionsResponse::Found(version_maps) = &**response {
-                    Some(version_maps)
-                } else {
-                    None
-                }
-            })
+        let implicit = in_memory.implicit().get(name);
+        let explicit =
+            || index.and_then(|index| in_memory.explicit().get(&(name.clone(), index.clone())));
+        for response in implicit
             .into_iter()
-            .flatten()
-            .filter(|version_map| version_map.index() == index)
-            .find_map(|version_map| version_map.hashes(version))
-            .or_else(|| {
-                // Search in the explicit indexes.
-                explicit_response = index
-                    .and_then(|index| in_memory.explicit().get(&(name.clone(), index.clone())));
-                explicit_response
-                    .as_ref()
-                    .and_then(|response| {
-                        if let VersionsResponse::Found(version_maps) = &**response {
-                            Some(version_maps)
-                        } else {
-                            None
-                        }
-                    })
-                    .into_iter()
-                    .flatten()
-                    .filter(|version_map| version_map.index() == index)
-                    .find_map(|version_map| version_map.hashes(version))
-            });
-
-        if let Some(hashes) = hashes {
-            let mut digests = HashDigests::from(hashes);
-            digests.sort_unstable();
-            if !digests.is_empty() {
-                return digests;
+            .chain(std::iter::once_with(explicit).flatten())
+        {
+            let VersionsResponse::Found(version_maps) = &*response else {
+                continue;
+            };
+            for version_map in version_maps.iter().filter(|map| map.index() == index) {
+                if let Some(hashes) = version_map.hashes(version)? {
+                    let mut digests = HashDigests::from(hashes);
+                    digests.sort_unstable();
+                    return Ok(digests);
+                }
             }
         }
     }
 
-    HashDigests::empty()
+    Ok(HashDigests::empty())
 }
 
 /// Find any packages that don't have any lower bound on them when in resolution-lowest mode.

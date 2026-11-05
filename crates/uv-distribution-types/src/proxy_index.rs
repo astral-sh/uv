@@ -10,7 +10,7 @@ use uv_redacted::SafeUrl;
 #[cfg(test)]
 use uv_redacted::policy::Stripped;
 
-use crate::index_url::{ConfiguredIndex, PYPI_ARTIFACT_BASE_URL};
+use crate::index_url::PYPI_ARTIFACT_BASE_URL;
 use crate::{
     CanonicalFileLocation, File, FileLocation, Index, IndexFormat, IndexLocations, IndexName,
     IndexRequestPolicy, IndexUrl, ToUrlError, VerbatimFile,
@@ -268,7 +268,7 @@ pub struct ProxyRoute {
     canonical: IndexUrlPrefix,
     url: IndexUrlPrefix,
     artifact_mapping: ArtifactUrlMapping,
-    definition: Arc<ConfiguredIndex>,
+    request_policy: IndexRequestPolicy,
 }
 
 impl ProxyRoute {
@@ -276,13 +276,13 @@ impl ProxyRoute {
         canonical: IndexUrlPrefix,
         url: IndexUrlPrefix,
         artifact_mapping: ArtifactUrlMapping,
-        definition: Arc<ConfiguredIndex>,
+        request_policy: IndexRequestPolicy,
     ) -> Self {
         Self {
             canonical,
             url,
             artifact_mapping,
-            definition,
+            request_policy,
         }
     }
 
@@ -293,7 +293,7 @@ impl ProxyRoute {
 
     /// The request policy belongs to the matching proxy definition, even when URLs are shared.
     pub(super) fn request_policy(&self) -> &IndexRequestPolicy {
-        &self.definition.request_policy
+        &self.request_policy
     }
 
     /// Translate a canonical artifact URL to its configured proxy URL.
@@ -382,13 +382,18 @@ impl IndexLocations {
 pub(crate) fn build_routes(
     locations: &IndexLocations,
 ) -> Result<Vec<Arc<ProxyRoute>>, ProxyIndexConfigError> {
+    let mut proxies = locations.proxy_definitions().peekable();
+    if proxies.peek().is_none() {
+        return Ok(Vec::new());
+    }
+
     let mut indexes_by_name: FxHashMap<_, _> = locations
         .configured_indexes()
         .filter_map(|index| index.name.as_ref().map(|name| (name, index.raw_url())))
         .collect();
     let mut routes: Vec<Arc<ProxyRoute>> = Vec::new();
 
-    for configured in locations.proxy_definitions() {
+    for configured in proxies {
         let proxy = &configured.definition;
         let Some(canonical_name) = &proxy.proxy_for else {
             continue;
@@ -447,7 +452,7 @@ pub(crate) fn build_routes(
             canonical_url,
             proxy_url,
             artifact_mapping,
-            Arc::clone(configured),
+            configured.request_policy.clone(),
         )));
     }
 

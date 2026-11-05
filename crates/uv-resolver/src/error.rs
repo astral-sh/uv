@@ -36,6 +36,7 @@ use crate::resolution::ConflictingDistributionError;
 use crate::resolver::{
     MetadataUnavailable, ResolverEnvironment, UnavailablePackage, UnavailableReason,
 };
+use crate::version_map::VersionMapError;
 use crate::{InMemoryIndex, Options};
 
 #[derive(DebugNoInline, thiserror::Error)]
@@ -137,6 +138,12 @@ pub enum ResolveError {
         expected: PackageName,
         actual: PackageName,
     },
+}
+
+impl From<VersionMapError> for ResolveError {
+    fn from(error: VersionMapError) -> Self {
+        Self::Client(uv_client::ErrorKind::ProxyIndex(*error.source).into())
+    }
 }
 
 impl ResolveError {

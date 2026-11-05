@@ -1386,9 +1386,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             index,
             env,
             self.tags.as_ref(),
-        );
-
-        VersionMap::check_proxy_mapping_errors(version_maps)?;
+        )?;
 
         let Some(candidate) = candidate else {
             // Short circuit: we couldn't find _any_ versions for a package.
@@ -1545,13 +1543,18 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         // we passed over can become compatible once we know its variant properties. Revisit the
         // indexes in order, stopping as soon as one has a distribution we can use.
         let candidates = if self.selector.index_strategy() == &IndexStrategy::UnsafeBestMatch {
-            Either::Left(version_maps.iter().filter_map(|map| map.get(version)))
+            Either::Left(
+                version_maps
+                    .iter()
+                    .filter_map(|map| map.get(version).transpose()),
+            )
         } else {
-            Either::Right(std::iter::once(prioritized))
+            Either::Right(std::iter::once(Ok(prioritized)))
         };
 
         let mut selection = WheelVariantSelection::default();
         for dist in candidates {
+            let dist = dist?;
             // Queue all metadata requests for this candidate before waiting for any of them.
             // A flat index can combine wheels from several sources, so keep each response
             // paired with its source: the same variant label can mean different things on each.
@@ -1707,21 +1710,22 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             env,
             self.tags.as_ref(),
         );
-        VersionMap::check_proxy_mapping_errors(version_maps)?;
 
-        let Some(base_candidate) = base_candidate else {
-            return Ok(None);
+        // The base candidate is only needed if it adds platform coverage to this fork.
+        let (base_candidate, base_markers) = match base_candidate {
+            Ok(Some(candidate)) => {
+                let Some(&dist) = candidate.compatible() else {
+                    return Ok(None);
+                };
+                (Ok((candidate, dist)), dist.implied_markers())
+            }
+            Ok(None) => return Ok(None),
+            Err(error) => {
+                let markers = error.implied_markers;
+                (Err(error), markers)
+            }
         };
-        let CandidateDist::Compatible(base_dist) = base_candidate.dist() else {
-            return Ok(None);
-        };
-
-        // ...and the non-local version has greater platform support...
-        let mut remainder = {
-            let mut remainder = base_dist.implied_markers();
-            remainder = remainder.and(artifact_markers.negate());
-            remainder
-        };
+        let mut remainder = base_markers.and(artifact_markers.negate());
         if remainder.is_false() {
             return Ok(None);
         }
@@ -1736,6 +1740,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         // Similarly, if the local distribution is incompatible with the current environment, then
         // use the base distribution instead (but don't fork).
         if !env.included_by_marker(artifact_markers) {
+            let (base_candidate, base_dist) = base_candidate?;
             let filename = match dist.for_installation() {
                 ResolvedDistRef::InstallableRegistrySourceDist { sdist, .. } => sdist
                     .filename()
@@ -1753,7 +1758,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 base_candidate.choice_kind(),
                 filename,
             );
-            self.visit_candidate(&base_candidate, base_dist, package, name, pins, requests)?;
+            self.visit_candidate(&base_candidate, &base_dist, package, name, pins, requests)?;
 
             return Ok(Some(ResolverVersion::Unforked(
                 base_candidate.version().clone(),
@@ -1798,8 +1803,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 .collect::<Vec<_>>()
                 .join(", ")
         );
+        let (base_candidate, base_dist) = base_candidate?;
         self.visit_candidate(candidate, dist, package, name, pins, requests)?;
-        self.visit_candidate(&base_candidate, base_dist, package, name, pins, requests)?;
+        self.visit_candidate(&base_candidate, &base_dist, package, name, pins, requests)?;
 
         let forks = vec![
             VersionFork {
@@ -2440,9 +2446,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     &env,
                     self.tags.as_ref(),
                 );
-                VersionMap::check_proxy_mapping_errors(version_map)?;
-
-                let Some(candidate) = candidate else {
+                // The solver will see a cached mapping error if it selects this version.
+                let Ok(Some(candidate)) = candidate else {
                     return Ok(None);
                 };
 
@@ -2646,7 +2651,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 else {
                                     return false;
                                 };
-                                let Some(prioritized_dist) = dists.prioritized_dist() else {
+                                let Ok(Some(prioritized_dist)) = dists.prioritized_dist() else {
                                     return true;
                                 };
                                 prioritized_dist.files().all(|file| {
@@ -2669,7 +2674,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 let Some(ref exclude_newer) = available_version_cutoff else {
                                     return false;
                                 };
-                                let Some(prioritized_dist) = dists.prioritized_dist() else {
+                                let Ok(Some(prioritized_dist)) = dists.prioritized_dist() else {
                                     return false;
                                 };
                                 prioritized_dist.files().all(|file| {
