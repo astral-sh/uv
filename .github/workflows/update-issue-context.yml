@@ -1,5 +1,6 @@
 # Incorporate useful issue comments into their existing maintainer context.
 name: "update-issue-context"
+run-name: Issue context for ${{ github.event.issue.number }}
 
 on:
   issue_comment:
@@ -111,7 +112,7 @@ jobs:
           while IFS=$'\t' read -r run_id; do
             [ -n "$run_id" ] || continue
             workflow_run="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id")"
-            if jaq --exit-status '
+            if ! jaq --exit-status '
               .head_branch == "main"
               and .status == "completed"
               and (
@@ -125,6 +126,30 @@ jobs:
                 )
               )
             ' <<< "$workflow_run" > /dev/null; then
+              continue
+            fi
+
+            title="$(jaq --raw-output '.display_title' <<< "$workflow_run")"
+            if [ "$title" != "Issue context for $ISSUE_NUMBER" ]; then
+              # A manual triage run can identify the issue by URL as well as by number.
+              if [ "$(jaq --raw-output '.event' <<< "$workflow_run")" != "workflow_dispatch" ] ||
+                [[ "$title" != "Issue context for "* ]]; then
+                continue
+              fi
+              issue_url="$(gh issue view --repo "$GITHUB_REPOSITORY" --json url --jq '.url' \
+                -- "${title#Issue context for }")" || continue
+              [ "$issue_url" = "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/issues/$ISSUE_NUMBER" ] || continue
+            fi
+
+            # Without an explicit run-name, GitHub can use the issue author's title.
+            # Check the declaration at the revision that produced the artifact, including on reruns.
+            workflow_path="$(jaq --raw-output '.path' <<< "$workflow_run")"
+            head_sha="$(jaq --raw-output '.head_sha' <<< "$workflow_run")"
+            producer_workflow="$(gh api --header 'Accept: application/vnd.github.raw+json' \
+              "repos/$GITHUB_REPOSITORY/contents/$workflow_path?ref=$head_sha")"
+            run_name="$(jaq --from yaml --exit-status --raw-output '.["run-name"]' "$workflow_path")"
+            if jaq --from yaml --exit-status --arg run_name "$run_name" \
+              '.["run-name"] == $run_name' <<< "$producer_workflow" > /dev/null; then
               thread_run_id="$run_id"
               break
             fi
