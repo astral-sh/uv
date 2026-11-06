@@ -4,6 +4,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use jiff::Timestamp;
+use memchr::{memchr2, memrchr};
 use serde::{Deserialize, Serialize};
 
 use uv_pep440::{VersionSpecifiers, VersionSpecifiersParseError};
@@ -98,8 +99,8 @@ impl FileLocation {
             Self::RelativeUrl(_, path) => path.as_ref(),
             Self::AbsoluteUrl(url) => url.as_ref(),
         };
-        let path = path.split_once(['?', '#']).map_or(path, |(path, _)| path);
-        path.rsplit_once('/').map_or(path, |(_, filename)| filename)
+        let path = memchr2(b'?', b'#', path.as_bytes()).map_or(path, |end| &path[..end]);
+        memrchr(b'/', path.as_bytes()).map_or(path, |slash| &path[slash + 1..])
     }
 
     /// Convert this location to a URL.
@@ -263,10 +264,10 @@ mod tests {
         let base = SmallString::from("https://example.com/simple/");
 
         let location = FileLocation::new(
-            SmallString::from("files/example%20pkg.whl?download=1#fragment"),
+            SmallString::from("files/café%20pkg.whl?redirect=/download#fragment"),
             &base,
         );
-        assert_eq!(location.raw_filename(), "example%20pkg.whl");
+        assert_eq!(location.raw_filename(), "café%20pkg.whl");
 
         let location = FileLocation::new(
             SmallString::from("https://files.example.com/example.whl#sha256=digest"),
