@@ -62,8 +62,9 @@ impl GitResolverError {
 /// HTTP settings for fetching a Git repository.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct GitHttpSettings {
-    disable_ssl: bool,
-    offline: bool,
+    pub(crate) disable_ssl: bool,
+    pub(crate) offline: bool,
+    pub(crate) partial_fetches: bool,
 }
 
 impl GitHttpSettings {
@@ -71,6 +72,13 @@ impl GitHttpSettings {
     #[must_use]
     pub fn with_disabled_ssl(mut self, disable_ssl: bool) -> Self {
         self.disable_ssl = disable_ssl;
+        self
+    }
+
+    /// Allow partial fetches for sources that can use a persistent remote.
+    #[must_use]
+    pub fn with_partial_fetches(mut self, enabled: bool) -> Self {
+        self.partial_fetches = enabled;
         self
     }
 
@@ -241,16 +249,9 @@ impl GitResolver {
         .await?;
 
         // Fetch the Git repository.
+        let source = GitSource::new(url.as_ref().clone(), cache, http_settings);
         let source = if let Some(reporter) = reporter {
-            GitSource::new(url.as_ref().clone(), cache, http_settings.offline)
-                .with_reporter(reporter)
-        } else {
-            GitSource::new(url.as_ref().clone(), cache, http_settings.offline)
-        };
-
-        // If necessary, disable SSL.
-        let source = if http_settings.disable_ssl {
-            source.dangerous()
+            source.with_reporter(reporter)
         } else {
             source
         };

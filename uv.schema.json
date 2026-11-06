@@ -1899,6 +1899,7 @@
             "index-by-name",
             "artifact-hash-filtering",
             "content-addressed-cache",
+            "git-partial-fetches",
             "missing-exclude-newer-package-lock",
             "resolution-inputs",
             "batch-export",

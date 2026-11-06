@@ -824,6 +824,7 @@ impl BaseClient {
         GitHttpSettings::default()
             .with_disabled_ssl(self.disable_ssl(url))
             .with_offline(self.connectivity().is_offline())
+            .with_partial_fetches(self.allow_insecure_host.is_empty())
     }
 
     /// The configured client read timeout.
