@@ -6070,11 +6070,11 @@ impl<'lock> Auditable<'lock> {
     /// packages, deduplicated by `(name, index URL)`. Non-registry sources
     /// (Git, direct URL, path, editable) are excluded.
     pub fn projects(&self, root: &Path) -> Result<Vec<(&'lock PackageName, IndexUrl)>, LockError> {
-        let mut seen: FxHashSet<(&PackageName, String)> = FxHashSet::default();
+        let mut seen: FxHashSet<(&PackageName, IndexUrl)> = FxHashSet::default();
         let mut projects: Vec<(&PackageName, IndexUrl)> = Vec::with_capacity(self.packages.len());
         for (package, _version) in &self.packages {
             if let Some(index) = package.index(root)?
-                && seen.insert((package.name(), index.url().to_string()))
+                && seen.insert((package.name(), index.clone()))
             {
                 projects.push((package.name(), index));
             }
