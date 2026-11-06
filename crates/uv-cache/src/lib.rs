@@ -18,7 +18,7 @@ pub use crate::by_timestamp::CachedByTimestamp;
 #[cfg(feature = "clap")]
 pub use crate::cli::CacheArgs;
 use crate::removal::Remover;
-pub use crate::removal::{Removal, RemovalAccounting};
+pub use crate::removal::{PhysicalBytes, Removal, RemovalAccounting};
 pub use crate::wheel::WheelCache;
 use crate::wheel::WheelCacheKind;
 pub use archive::{ArchiveFileId, ArchiveId};
