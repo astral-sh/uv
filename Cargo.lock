@@ -6103,6 +6103,7 @@ version = "0.0.99"
 dependencies = [
  "clap",
  "fs-err",
+ "insta",
  "rmp-serde",
  "rustc-hash",
  "same-file",
