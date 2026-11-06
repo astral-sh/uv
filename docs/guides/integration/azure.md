@@ -54,12 +54,16 @@ configuration.
 uv only supports using the `keyring` package in
 [subprocess mode](../../reference/settings.md#keyring-provider). The `keyring` executable must be in
 the `PATH`, i.e., installed globally or in the active environment. The `keyring` CLI requires a
-username in the URL, and it must be `VssSessionToken`.
+username, and it must be `VssSessionToken`.
 
 ```bash
 # Pre-install keyring and the Artifacts plugin from the public PyPI
 uv tool install keyring --with artifacts-keyring
+```
 
+Then, enable keyring and set the username for the index. You can set both in your shell:
+
+```bash
 # Enable keyring authentication
 export UV_KEYRING_PROVIDER=subprocess
 
@@ -67,12 +71,20 @@ export UV_KEYRING_PROVIDER=subprocess
 export UV_INDEX_PRIVATE_REGISTRY_USERNAME=VssSessionToken
 ```
 
-!!! note
+Or in your `pyproject.toml`, where `VssSessionToken` is the username in the index URL and
+`artifacts-keyring` supplies the password:
 
-    The [`tool.uv.keyring-provider`](../../reference/settings.md#keyring-provider)
-    setting can be used to enable keyring in your `uv.toml` or `pyproject.toml`.
+```toml title="pyproject.toml"
+[tool.uv]
+keyring-provider = "subprocess"
 
-    Similarly, the username for the index can be added directly to the index URL.
+[[tool.uv.index]]
+name = "private-registry"
+url = "https://VssSessionToken@pkgs.dev.azure.com/<ORGANIZATION>/<PROJECT>/_packaging/<FEED>/pypi/simple/"
+```
+
+The URL only contains the username, not a token. uv fetches the password from `artifacts-keyring`,
+which in turn uses the Azure Artifacts Credential Provider.
 
 ## Publishing packages
 
