@@ -21,6 +21,7 @@ RequirementsTxt {
                 },
             ),
             hashes: [],
+            config_settings: None,
         },
         RequirementEntry {
             requirement: Named(
@@ -115,6 +116,7 @@ RequirementsTxt {
                 },
             ),
             hashes: [],
+            config_settings: None,
         },
     ],
     constraints: [],
