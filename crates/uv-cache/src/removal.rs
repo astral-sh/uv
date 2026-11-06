@@ -99,9 +99,8 @@ impl PhysicalBytes {
             (Self::Measured(left), Self::Measured(right)) => {
                 Self::Measured(left.saturating_add(right))
             }
-            (Self::LowerBound(left), Self::Measured(right))
-            | (Self::Measured(left), Self::LowerBound(right))
-            | (Self::LowerBound(left), Self::LowerBound(right)) => {
+            (Self::LowerBound(left), Self::Measured(right) | Self::LowerBound(right))
+            | (Self::Measured(left), Self::LowerBound(right)) => {
                 Self::LowerBound(left.saturating_add(right))
             }
         }
