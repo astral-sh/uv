@@ -348,7 +348,20 @@ async fn upgrade_tool(
     }
 
     // Resolve the appropriate settings, preferring: CLI > receipt > user.
-    let options = args.clone().combine(receipt.combine(filesystem.clone()));
+    let mut options = args.clone().combine(receipt.combine(filesystem.clone()));
+
+    // Re-resolve `exclude-newer` from the current configuration, rather than reusing the receipt's
+    // stored value: the receipt records the value resolved at install time, which would otherwise
+    // shadow changes to (or removal of) the setting.
+    options.exclude_newer = args
+        .exclude_newer
+        .clone()
+        .combine(filesystem.exclude_newer.clone());
+    options.exclude_newer_package = args
+        .exclude_newer_package
+        .clone()
+        .combine(filesystem.exclude_newer_package.clone());
+
     let settings = ResolverInstallerSettings::from(options.clone());
 
     let build_constraints = existing_tool_receipt.build_constraints().to_vec();
