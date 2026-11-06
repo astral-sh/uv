@@ -1615,8 +1615,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             }
             // Prefer a compatible variant from this index, then its ordinary wheel or sdist,
             // before considering a distribution from the next index.
-            if let Some(variant) = dist.prioritize_variants(&metadata) {
-                selection.distribution = Some(Cow::Owned(variant));
+            if !metadata.is_empty()
+                && let Some((_, index)) = dist.scored_variants(&metadata).max()
+            {
+                selection.distribution = Some(Cow::Owned(dist.select_variant(index)));
                 break;
             }
             if dist.get().is_some() {

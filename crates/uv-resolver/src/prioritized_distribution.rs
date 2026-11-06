@@ -434,51 +434,51 @@ impl PrioritizedDist {
         })
     }
 
-    /// Choose the best compatible variant, or return `None` to use the ordinary wheel or sdist.
-    pub(crate) fn prioritize_variants(
+    /// Score each compatible variant from the index that supplied its wheel.
+    pub(crate) fn scored_variants(
         &self,
         metadata: &[(&IndexUrl, &VariantsJsonContent, SupportedVariantProperties)],
-    ) -> Option<Self> {
-        if metadata.is_empty() {
-            return None;
-        }
+    ) -> impl Iterator<Item = (impl Ord, usize)> {
+        let ordinary_hash = self
+            .best_wheel()
+            .and_then(|(_, compatibility)| match compatibility {
+                WheelCompatibility::Compatible(hash, ..) => Some(*hash),
+                WheelCompatibility::Variant(..) | WheelCompatibility::Incompatible(_) => None,
+            });
         // Prefer wheels whose advertised hash matches a required hash, followed by wheels with
         // no advertised hash, then mismatches. If no hashes are required, all wheels match.
         // The installer verifies required hashes against the downloaded wheel.
         // Break ties by variant rank, platform tags, then build tag.
-        let (best_index, (hash, _, priority, build_tag)) = self
-            .0
+        self.0
             .wheels
             .iter()
             .enumerate()
-            .filter_map(|(index, (wheel, compatibility))| {
+            .filter_map(move |(index, (wheel, compatibility))| {
                 let WheelCompatibility::Variant(hash, priority, build_tag) = compatibility else {
                     return None;
                 };
+                if ordinary_hash.is_some_and(|ordinary_hash| ordinary_hash > *hash) {
+                    return None;
+                }
                 let label = wheel.filename.variant()?;
                 let score = metadata
                     .iter()
                     .filter(|(source, _, _)| *source == &wheel.index)
-                    .filter_map(|(_, metadata, supported_properties)| {
-                        metadata.score_variant(label, supported_properties)
-                    })
+                    .filter_map(|(_, metadata, supported)| metadata.score_variant(label, supported))
                     .max()?;
-                Some((index, (*hash, score, *priority, build_tag)))
+                Some(((*hash, score, *priority, build_tag), index))
             })
-            .max_by(|(_, left), (_, right)| left.cmp(right))?;
+    }
 
-        // Keep the ordinary wheel if its advertised hash ranks higher.
-        if let Some((_, WheelCompatibility::Compatible(existing_hash, ..))) = self.best_wheel()
-            && *existing_hash > hash
-        {
-            return None;
+    /// Select a wheel returned by [`Self::scored_variants`].
+    pub(crate) fn select_variant(&self, index: usize) -> Self {
+        let mut selected = self.clone();
+        if let WheelCompatibility::Variant(hash, priority, build_tag) = &self.0.wheels[index].1 {
+            selected.0.wheels[index].1 =
+                WheelCompatibility::Compatible(*hash, *priority, build_tag.clone());
         }
-
-        let mut prioritized = self.clone();
-        prioritized.0.wheels[best_index].1 =
-            WheelCompatibility::Compatible(hash, priority, build_tag.clone());
-        prioritized.0.best_wheel_index = Some(best_index);
-        Some(prioritized)
+        selected.0.best_wheel_index = Some(index);
+        selected
     }
 
     /// Insert the given built distribution into the [`PrioritizedDist`].
