@@ -7119,6 +7119,7 @@ dependencies = [
  "indexmap",
  "insta",
  "itertools 0.14.0",
+ "percent-encoding",
  "rkyv",
  "rustc-hash",
  "schemars",
