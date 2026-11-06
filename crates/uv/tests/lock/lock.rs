@@ -9172,8 +9172,8 @@ fn lock_requires_python_fork() -> Result<()> {
     Ok(())
 }
 
-/// Darwin caps parent at 1. Its child<2 requirement also covers Windows, but only
-/// while parent 1 is selected. The unconditional parent<100 allows both upgrades.
+/// The Darwin cap excludes parent 2, which ships a universal wheel. Both forks
+/// can still share child 1 because its upper bound has no platform marker.
 #[cfg(feature = "test-universal")]
 #[test]
 fn lock_sibling_fork_upper_bound() -> Result<()> {
@@ -9186,8 +9186,10 @@ fn lock_sibling_fork_upper_bound() -> Result<()> {
         satisfiable = true
 
         [packages.parent.versions."1.0.0"]
-        requires = ["child<2 ; sys_platform != 'wasi'"]
+        requires = ["child<2"]
         [packages.parent.versions."2.0.0"]
+        sdist = false
+        wheel_tags = ["py2.py3-none-any"]
         requires = ["child"]
         # The ordinary selection skips this release before choosing 2.0.0.
         [packages.parent.versions."3.0.0"]
@@ -9219,10 +9221,10 @@ fn lock_sibling_fork_upper_bound() -> Result<()> {
     ├── parent v1.0.0
     │   └── child v1.0.0
     └── parent v2.0.0
-        └── child v2.0.0
+        └── child v1.0.0
 
     ----- stderr -----
-    Resolved 5 packages in [TIME]
+    Resolved 4 packages in [TIME]
     ");
 
     uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--fork-strategy").arg("fewest").arg("--index-url").arg(server.index_url()), @"
@@ -9239,8 +9241,8 @@ fn lock_sibling_fork_upper_bound() -> Result<()> {
     Ok(())
 }
 
-/// A cap that admits every parent release gives Windows no reason to downgrade
-/// parent 2 just to select child 2.
+/// Changing a parent's dependency from `child` to `child<99` cannot justify
+/// choosing that parent before the app. Only child 1 exists.
 #[cfg(feature = "test-universal")]
 #[test]
 fn lock_sibling_fork_redundant_upper_bound() -> Result<()> {
@@ -9252,12 +9254,14 @@ fn lock_sibling_fork_redundant_upper_bound() -> Result<()> {
         [expected]
         satisfiable = true
 
+        [packages.app.versions."1.0.0"]
+        [packages.app.versions."2.0.0"]
+        requires = ["parent<2"]
         [packages.parent.versions."1.0.0"]
-        requires = ["child"]
+        requires = ["child<99"]
         [packages.parent.versions."2.0.0"]
-        requires = ["child<2"]
+        requires = ["child"]
         [packages.child.versions."1.0.0"]
-        [packages.child.versions."2.0.0"]
     "#})?;
     let context = uv_test::test_context!("3.12");
     context
@@ -9269,9 +9273,9 @@ fn lock_sibling_fork_redundant_upper_bound() -> Result<()> {
         version = "1.0.0"
         requires-python = ">=3.12"
         dependencies = [
-            "parent<99 ; sys_platform == 'darwin'",
+            "app ; sys_platform != 'darwin'",
+            "parent<2 ; sys_platform == 'darwin'",
             "parent ; sys_platform != 'darwin'",
-            "child ; sys_platform != 'darwin'",
         ]
     "#})?;
 
@@ -9279,37 +9283,36 @@ fn lock_sibling_fork_redundant_upper_bound() -> Result<()> {
     exit_code: 0 (success)
     ----- stdout -----
     project v1.0.0
-    ├── child v1.0.0
-    └── parent v2.0.0
-        └── child v1.0.0
+    ├── app v2.0.0
+    │   └── parent v1.0.0
+    │       └── child v1.0.0
+    └── parent v1.0.0 (*)
+    (*) Package tree already displayed
 
     ----- stderr -----
-    Resolved 3 packages in [TIME]
+    Resolved 4 packages in [TIME]
     ");
     Ok(())
 }
 
-/// If the newer parent fails, backtracking to the sibling's release also restores
-/// its preference for the child.
+/// Outside Windows, version 2 offers a Linux wheel and a source distribution.
+/// Without source builds, the shared version's universal wheel still works on macOS.
 #[cfg(feature = "test-universal")]
 #[test]
-fn lock_sibling_fork_upper_bound_backtrack() -> Result<()> {
+fn lock_sibling_fork_portable_distribution() -> Result<()> {
     let server = PackseServer::from_toml(indoc! {r#"
-        name = "sibling-fork-upper-bound-backtrack"
+        name = "sibling-fork-portable-distribution"
 
         [root]
 
         [expected]
         satisfiable = true
 
-        [packages.parent.versions."1.0.0"]
-        requires = ["child"]
-        [packages.parent.versions."2.0.0"]
-        requires = ["child<2"]
-        [packages.parent.versions."3.0.0"]
-        requires = ["missing"]
-        [packages.child.versions."1.0.0"]
-        [packages.child.versions."2.0.0"]
+        [packages.a.versions."1.0.0"]
+        sdist = false
+        [packages.a.versions."2.0.0"]
+        sdist = true
+        wheel_tags = ["py3-none-manylinux_2_17_x86_64"]
     "#})?;
     let context = uv_test::test_context!("3.12");
     context
@@ -9321,22 +9324,30 @@ fn lock_sibling_fork_upper_bound_backtrack() -> Result<()> {
         version = "1.0.0"
         requires-python = ">=3.12"
         dependencies = [
-            "parent<3 ; sys_platform == 'darwin'",
-            "parent ; sys_platform != 'darwin'",
-            "child ; sys_platform != 'darwin'",
+            "a<2 ; sys_platform == 'win32'",
+            "a>=1 ; sys_platform != 'win32'",
         ]
     "#})?;
-
-    uv_snapshot!(context.filters(), context.tree().arg("--python-platform").arg("windows").arg("--index-url").arg(server.index_url()), @"
+    uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--index-url").arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stdout -----
     project v1.0.0
-    ├── child v1.0.0
-    └── parent v2.0.0
-        └── child v1.0.0
+    ├── a v1.0.0
+    └── a v2.0.0
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
+    ");
+
+    fs_err::remove_file(context.temp_dir.child("uv.lock"))?;
+    uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--no-build-package").arg("a").arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    project v1.0.0
+    └── a v1.0.0
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
     ");
     Ok(())
 }

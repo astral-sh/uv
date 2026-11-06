@@ -8,7 +8,8 @@ pub enum ForkStrategy {
     /// platforms.
     Fewest,
     /// Prefer the latest compatible version for each supported Python version. Platforms can
-    /// select different releases when an upper bound applies only to some of them.
+    /// select a newer release with a source distribution or a `py3-none-any` wheel when
+    /// an upper bound applies only to some of them.
     #[default]
     RequiresPython,
 }

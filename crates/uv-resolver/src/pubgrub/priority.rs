@@ -101,7 +101,6 @@ impl PubGrubPriorities {
     ) -> Option<usize> {
         match entry.get() {
             PubGrubPriority::ConflictLate(Reverse(index))
-            | PubGrubPriority::BoundedParent(Reverse(index))
             | PubGrubPriority::Unspecified(Reverse(index))
             | PubGrubPriority::ConflictEarly(Reverse(index))
             | PubGrubPriority::Singleton(Reverse(index))
@@ -231,9 +230,6 @@ pub(crate) enum PubGrubPriority {
     /// TODO(charlie): Prefer constrained over unconstrained packages, if they're at the same depth
     /// in the dependency graph.
     Unspecified(Reverse<usize>),
-
-    /// A newer release can lift a sibling pin's upper bound on a dependency.
-    BoundedParent(Reverse<usize>),
 
     /// Selected version of this package were often the culprit of rejecting another package, so
     /// it's deprioritized behind `ConflictEarly`. It's still the higher than `Unspecified` to

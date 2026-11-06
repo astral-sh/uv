@@ -6720,7 +6720,8 @@ pub struct VersionSelectionArgs {
     ///
     /// By default (`requires-python`), uv prefers the latest compatible version for each supported
     /// Python version and tries to share versions across platforms. When an upper bound on one
-    /// platform excludes a newer release, uv can select that release on another platform.
+    /// platform excludes a newer release, uv can select it elsewhere if it has a usable source
+    /// distribution or a `py3-none-any` wheel.
     ///
     /// Under `fewest`, uv will minimize the number of selected versions for each package,
     /// preferring older versions that are compatible with a wider range of supported Python

@@ -426,8 +426,8 @@ earlier versions are compatible with Python 3.8 and 3.9.
 
 A platform-specific upper bound can also lead to multiple versions. For example, if a project
 requires `pylint<3` on macOS and `pylint>2` elsewhere, uv can select Pylint 2 on macOS and Pylint 3
-on Linux. Pylint 2 also requires an older version of `astroid`, so uv can select a newer version of
-`astroid` on Linux.
+on Linux. This preference applies to the package named by the marked requirement when the newer
+release has a usable source distribution or a `py3-none-any` wheel.
 
 Under `--fork-strategy fewest`, uv will instead minimize the number of selected versions for each
 package, preferring older versions that are compatible with a wider range of supported Python

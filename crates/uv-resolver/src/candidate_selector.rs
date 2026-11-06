@@ -8,7 +8,9 @@ use smallvec::SmallVec;
 use tracing::{debug, trace};
 
 use uv_configuration::IndexStrategy;
-use uv_distribution_types::{DistributionMetadata, IndexUrl, Name, ResolutionRecorder};
+use uv_distribution_types::{
+    DistributionMetadata, IndexUrl, Name, RequiresPython, ResolutionRecorder,
+};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_platform_tags::Tags;
@@ -21,7 +23,6 @@ use crate::prioritized_distribution::{
 };
 use crate::pubgrub::Range;
 use crate::resolution_mode::ResolutionStrategy;
-use crate::resolver::ForkUpgrades;
 use crate::version_map::{VersionMap, VersionMapDistHandle};
 use crate::{Exclusions, Manifest, Options, ResolverEnvironment};
 
@@ -91,8 +92,8 @@ impl CandidateSelector {
         exclusions: &'a Exclusions,
         index: Option<&'a IndexUrl>,
         env: &ResolverEnvironment,
+        requires_python: &RequiresPython,
         tags: Option<&'a Tags>,
-        upgrades: &ForkUpgrades,
     ) -> Option<Candidate<'a>> {
         if let Some(recorder) = &self.recorder {
             recorder.candidate_policy(package_name);
@@ -111,6 +112,14 @@ impl CandidateSelector {
                 prerelease_selection,
                 env,
             )
+        });
+
+        // PubGrub rejects an incompatible candidate before trying the next version.
+        // Check the artifacts only when an installable candidate would replace a sibling pin.
+        let lacks_portable_dist = LazyCell::new(|| {
+            best.as_ref()
+                .and_then(Candidate::compatible)
+                .is_some_and(|dist| !dist.has_portable_distribution(requires_python))
         });
 
         // If we have a preference (e.g., from a lockfile), search for a version matching that
@@ -133,8 +142,12 @@ impl CandidateSelector {
             prerelease_selection,
             env,
             tags,
-            || best.as_ref().map(|candidate| candidate.version),
-            upgrades,
+            |entry| {
+                env.fork_markers().is_none_or(|fork| {
+                    entry.applies_in(fork, || best.as_ref().map(|candidate| candidate.version))
+                        || *lacks_portable_dist
+                })
+            },
         ) {
             trace!("Using preference {} {}", preferred.name, preferred.version);
             return Some(preferred);
@@ -201,8 +214,7 @@ impl CandidateSelector {
         prerelease_selection: PrereleaseSelection,
         env: &ResolverEnvironment,
         tags: Option<&'a Tags>,
-        best_version: impl Fn() -> Option<&'a Version>,
-        upgrades: &ForkUpgrades,
+        reuse: impl Fn(&Entry) -> bool,
     ) -> Option<Candidate<'a>> {
         let preferences = preferences.get(package_name);
 
@@ -246,12 +258,8 @@ impl CandidateSelector {
             }
         };
 
-        let fork = env.fork_markers();
         Self::get_preferred_from_iter(
-            preferences.filter(|entry| {
-                range.contains(entry.pin().version())
-                    && fork.is_none_or(|fork| entry.applies_in(fork, &best_version, upgrades))
-            }),
+            preferences.filter(|entry| range.contains(entry.pin().version()) && reuse(entry)),
             package_name,
             range,
             version_maps,

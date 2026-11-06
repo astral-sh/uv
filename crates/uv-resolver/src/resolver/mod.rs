@@ -1,7 +1,6 @@
 //! Given a set of requirements, find a set of compatible packages.
 
 use std::borrow::Cow;
-use std::cell::LazyCell;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fmt::{Display, Formatter};
@@ -54,14 +53,14 @@ use crate::fork_indexes::ForkIndexes;
 use crate::fork_urls::ForkUrls;
 use crate::manifest::Manifest;
 use crate::pins::FilePins;
-use crate::preferences::{ForkBound, PreferenceSource, Preferences};
+use crate::preferences::{ForkBound, Preferences};
 use crate::prioritized_distribution::{
     CompatibleDist, IncompatibleDist, IncompatibleSource, IncompatibleWheel, PrioritizedDist,
     PythonRequirementKind, RegistryVariantsJson, implied_markers,
 };
 use crate::pubgrub::{
     DependencySource, PubGrubDependency, PubGrubPackage, PubGrubPackageInner, PubGrubPriorities,
-    PubGrubPriority, PubGrubPython, Range,
+    PubGrubPython, Range,
 };
 use crate::python_requirement::PythonRequirement;
 use crate::resolution::{ResolutionGraphBuilder, ResolverOutput};
@@ -77,7 +76,6 @@ pub use crate::resolver::environment::ResolverEnvironment;
 use crate::resolver::environment::{
     ForkingPossibility, fork_version_by_marker, fork_version_by_python_requirement,
 };
-pub(crate) use crate::resolver::fork_bounds::{BoundParent, ForkUpgrades};
 pub(crate) use crate::resolver::fork_map::{ForkMap, ForkSet};
 pub use crate::resolver::index::InMemoryIndex;
 use crate::resolver::index::ParsedVariantsJsonResponse;
@@ -108,7 +106,6 @@ mod availability;
 mod batch_prefetch;
 mod derivation;
 mod environment;
-mod fork_bounds;
 mod fork_map;
 mod index;
 mod indexes;
@@ -413,9 +410,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
         'FORK: while let Some(fork) = forked_states.pop() {
             let mut state = self.materialize_fork(fork, incompatibility_arena, requests)?;
-            if state.upgrades.retain_decisions(&state.pubgrub) {
-                state.selected_versions.clear();
-            }
             if let Some(split) = state.env.end_user_fork_display() {
                 let requires_python = state.python_requirement.target();
                 debug!("Solving {split} (requires-python: {requires_python:?})");
@@ -466,9 +460,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         }
 
                         state.reprioritize_conflicts();
-                        if state.upgrades.retain_decisions(&state.pubgrub) {
-                            state.selected_versions.clear();
-                        }
 
                         trace!(
                             "Assigned packages: {}",
@@ -483,28 +474,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         // Choose a package.
                         // We aren't allowed to use the term intersection as it would extend the
                         // mutable borrow of `state`.
-                        let Some((highest_priority_pkg, _)) = state
-                            .pubgrub
-                            .partial_solution
-                            .pick_highest_priority_pkg(|id, range| {
-                                let package = &state.pubgrub.package_store[id];
-                                let (priority, tiebreaker) = state.priorities.get(package);
-                                if let PubGrubPriority::Unspecified(order) = priority
-                                    && let Some(name) = package.name_no_root()
-                                    && state.fork_urls.get(name).is_none()
-                                    && self.has_parent_upgrade(
-                                        name,
-                                        range,
-                                        &preferences,
-                                        &state.env,
-                                        state.fork_indexes.get(name),
-                                        &state.upgrades,
-                                    )
-                                {
-                                    return (PubGrubPriority::BoundedParent(order), tiebreaker);
-                                }
-                                (priority, tiebreaker)
-                            })
+                        let Some((highest_priority_pkg, _)) =
+                            state.pubgrub.partial_solution.pick_highest_priority_pkg(
+                                |id, _range| state.priorities.get(&state.pubgrub.package_store[id]),
+                            )
                         else {
                             // All packages have been assigned, the fork has been successfully resolved
                             if tracing::enabled!(Level::DEBUG) {
@@ -616,7 +589,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             range,
                             &mut state.pins,
                             &preferences,
-                            &state.upgrades,
                             &state.env,
                             &state.python_requirement,
                             &state.pubgrub,
@@ -693,25 +665,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     version
                 };
 
-                if let PubGrubPackageInner::Package {
-                    name,
-                    kind: PackageNodeKind::Base,
-                    marker: MarkerTree::TRUE,
-                } = &**next_package
-                    && let PackageSource::Registry(index) = source
-                    && let Some(fork) = state.env.fork_markers()
-                    && state.upgrades.record(
-                        name,
-                        next_id,
-                        &version,
-                        index.map(IndexMetadata::url),
-                        preferences.get(name),
-                        fork,
-                    )
-                {
-                    // A child can now choose a different version even within the same range.
-                    state.selected_versions.clear();
-                }
                 state.prefetcher.version_tried(next_package, &version);
 
                 self.on_progress(next_package, &version);
@@ -1176,7 +1129,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         range: &Range<Version>,
         pins: &mut FilePins<'index>,
         preferences: &Preferences,
-        upgrades: &ForkUpgrades,
         env: &ResolverEnvironment,
         python_requirement: &PythonRequirement,
         pubgrub: &State<UvDependencyProvider>,
@@ -1225,7 +1177,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     index,
                     range,
                     preferences,
-                    upgrades,
                     env,
                     python_requirement,
                     pubgrub,
@@ -1389,46 +1340,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         Ok(Some(ResolverVersion::Unforked(version.clone())))
     }
 
-    /// Decide a parent before its child when the ordinary candidate crosses a sibling's cap.
-    /// The completed sibling already fetched the version list for this registry lookup.
-    fn has_parent_upgrade(
-        &self,
-        name: &PackageName,
-        range: &Range<Version>,
-        preferences: &Preferences,
-        env: &ResolverEnvironment,
-        index: Option<&IndexMetadata>,
-        upgrades: &ForkUpgrades,
-    ) -> bool {
-        let Some(fork) = env.fork_markers() else {
-            return false;
-        };
-        let entries = preferences.get(name);
-        if entries.iter().any(|entry| {
-            entry.source() != PreferenceSource::Resolver && range.contains(entry.pin().version())
-        }) {
-            return false;
-        }
-        let index = index.map(IndexMetadata::url);
-        let best = LazyCell::new(|| {
-            let response = match index {
-                Some(index) => self.index.explicit().get(&(name.clone(), index.clone())),
-                None => self.index.implicit().get(name),
-            }?;
-            let VersionsResponse::Found(maps) = response.as_ref() else {
-                return None;
-            };
-            self.selector
-                .select_no_preference(name, range, maps, env)
-                .map(|candidate| candidate.version().clone())
-        });
-        entries.iter().any(|entry| {
-            entry.bounded_parent(index).is_some()
-                && range.contains(entry.pin().version())
-                && !entry.applies_in(fork, || best.as_ref(), upgrades)
-        })
-    }
-
     /// Given a candidate registry requirement, choose the next version in range to try, or `None`
     /// if there is no version in this range.
     fn choose_version_registry<'index>(
@@ -1439,7 +1350,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         index: Option<&IndexMetadata>,
         range: &Range<Version>,
         preferences: &Preferences,
-        upgrades: &ForkUpgrades,
         env: &ResolverEnvironment,
         python_requirement: &PythonRequirement,
         pubgrub: &State<UvDependencyProvider>,
@@ -1486,8 +1396,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             &self.exclusions,
             index,
             env,
+            python_requirement.target(),
             self.tags.as_ref(),
-            upgrades,
         ) else {
             // Short circuit: we couldn't find _any_ versions for a package.
             return Ok(None);
@@ -1600,8 +1510,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             index,
             range,
             preferences,
-            upgrades,
             env,
+            python_requirement.target(),
             pubgrub,
             pins,
             requests,
@@ -1719,8 +1629,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         index: Option<&IndexUrl>,
         range: &Range<Version>,
         preferences: &Preferences,
-        upgrades: &ForkUpgrades,
         env: &ResolverEnvironment,
+        requires_python: &RequiresPython,
         pubgrub: &State<UvDependencyProvider>,
         pins: &mut FilePins<'index>,
         requests: &'index MetadataRequests,
@@ -1812,8 +1722,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             &self.exclusions,
             index,
             env,
+            requires_python,
             self.tags.as_ref(),
-            upgrades,
         ) else {
             return Ok(None);
         };
@@ -2572,8 +2482,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     &self.exclusions,
                     None,
                     &env,
+                    self.python_requirement.target(),
                     self.tags.as_ref(),
-                    &ForkUpgrades::default(),
                 ) else {
                     return Ok(None);
                 };
@@ -3012,8 +2922,6 @@ pub(crate) struct ForkState<'index> {
     pre_visited: FxHashMap<Id<PubGrubPackage>, Range<Version>>,
     /// The last version selected for each package and range in a specific environment.
     selected_versions: FxHashMap<Id<PubGrubPackage>, (Range<Version>, Version)>,
-    /// Sibling parent releases superseded by decisions in this fork.
-    upgrades: ForkUpgrades,
     /// A cache for parsed version maps.
     ///
     /// Per fork, since the index for a package can differ between forks.
@@ -3071,7 +2979,6 @@ impl<'index> ForkState<'index> {
             added_dependencies: FxHashMap::default(),
             pre_visited: FxHashMap::default(),
             selected_versions: FxHashMap::default(),
-            upgrades: ForkUpgrades::default(),
             known_versions: KnownVersions::default(),
             env,
             python_requirement,
@@ -3512,7 +3419,7 @@ impl<'index> ForkState<'index> {
         let mut bounds = (sibling_preferences.is_some()
             && options.resolution_mode == ResolutionMode::Highest
             && options.fork_strategy == ForkStrategy::RequiresPython)
-            .then(|| (FxHashMap::<_, Vec<_>>::default(), FxHashMap::default()));
+            .then(FxHashMap::<_, Vec<ForkBound>>::default);
         let edge_count: usize = solution
             .keys()
             .filter_map(|package| self.pubgrub.dependencies(*package).size_hint().1)
@@ -3590,27 +3497,12 @@ impl<'index> ForkState<'index> {
                     | PubGrubPackageInner::Python(_)
                     | PubGrubPackageInner::System(_) => continue,
                 };
-                if let Some((by_name, parents)) = &mut bounds
+                if let Some(bounds) = &mut bounds
                     && self_name != Some(name)
                     && let Some((_, upper)) = dependency_range.bounding_range()
                     && upper != Bound::Unbounded
                 {
-                    let parent = self_name
-                        .filter(|name| self.fork_urls.get(name).is_none())
-                        .map(|name| {
-                            Arc::clone(parents.entry(name).or_insert_with(|| {
-                                Arc::new(BoundParent {
-                                    name: name.clone(),
-                                    version: self_version.clone(),
-                                    index: self
-                                        .fork_indexes
-                                        .get(name)
-                                        .map(|index| index.url().clone()),
-                                })
-                            }))
-                        });
-                    by_name.entry(name).or_default().push(ForkBound {
-                        parent,
+                    bounds.entry(name).or_default().push(ForkBound {
                         marker,
                         upper: UpperBound(upper.cloned()),
                     });
@@ -3640,7 +3532,9 @@ impl<'index> ForkState<'index> {
                 .env
                 .try_universal_markers()
                 .unwrap_or(UniversalMarker::TRUE);
-            let (bounds, parents) = bounds.unwrap_or_default();
+            let mut bounds = bounds.unwrap_or_default();
+            // An unconditional cap can veto an upgrade, but cannot cause one.
+            bounds.retain(|_, caps| caps.iter().any(|cap| !cap.marker.is_true()));
             for (package, version) in &nodes {
                 preferences.insert_from_fork(
                     package.name.clone(),
@@ -3649,10 +3543,7 @@ impl<'index> ForkState<'index> {
                     version.clone(),
                     bounds
                         .get(&package.name)
-                        .cloned()
-                        .unwrap_or_default()
-                        .into_boxed_slice(),
-                    parents.get(&package.name).cloned(),
+                        .map_or_else(Box::default, |caps| caps.as_slice().into()),
                 );
             }
         }

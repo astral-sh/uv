@@ -11,7 +11,7 @@ use uv_distribution_types::{
     VariantsJsonFilename,
 };
 use uv_normalize::PackageName;
-use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
+use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers, release_specifiers_to_ranges};
 use uv_pep508::{MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString};
 use uv_platform_tags::{
     AbiTag, BinaryFormat, IncompatibleTag, LanguageTag, PlatformTag, TagPriority, Tags,
@@ -153,6 +153,35 @@ impl<'a> CompatibleDist<'a> {
             | Self::CompatibleWheel { prioritized, .. }
             | Self::IncompatibleWheel { prioritized, .. } => Some(prioritized),
         }
+    }
+
+    /// Return whether this release offers a usable source distribution or a `py3-none-any` wheel.
+    pub(crate) fn has_portable_distribution(&self, requires_python: &RequiresPython) -> bool {
+        let Some(dist) = self.prioritized() else {
+            return false;
+        };
+        // If files declare different Requires-Python values, check that the portable file
+        // covers the fork before relying on it in place of the selected file.
+        let supports_python = |file: &File| {
+            file.requires_python.as_deref().is_none_or(|specifiers| {
+                Some(specifiers) == self.requires_python()
+                    || release_specifiers_to_ranges(requires_python.specifiers().clone())
+                        .subset_of(&release_specifiers_to_ranges(specifiers.clone()))
+            })
+        };
+        if let Some((sdist, SourceDistCompatibility::Compatible(hash))) = &dist.0.source
+            && *hash != HashComparison::Mismatched
+            && supports_python(&sdist.file)
+        {
+            return true;
+        }
+        dist.0.wheels.iter().any(|(wheel, compatibility)| {
+            matches!(compatibility, WheelCompatibility::Compatible(hash, ..) if *hash != HashComparison::Mismatched)
+                && wheel.filename.python_tags().contains(&LanguageTag::Python { major: 3, minor: None })
+                && wheel.filename.abi_tags().contains(&AbiTag::None)
+                && wheel.filename.platform_tags().contains(&PlatformTag::Any)
+                && supports_python(&wheel.file)
+        })
     }
 
     /// Return the set of supported platforms for the distribution, in terms of their markers.
