@@ -7,7 +7,7 @@ pub use prompt::{CredentialsPrompt, CredentialsPromptError};
 pub use providers::AzureEndpointProvider;
 pub use realm::{Realm, RealmRef};
 pub use service::Service;
-pub use store::{AuthBackend, TextCredentialStore, TomlCredentialError};
+pub use store::{AuthBackend, LookupError, TextCredentialStore, TomlCredentialError};
 
 mod cache;
 mod credentials;
