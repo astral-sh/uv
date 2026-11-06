@@ -158,20 +158,28 @@ impl<T: Pep508Url> Requirement<T> {
 
     /// Returns a [`Display`] implementation that doesn't mask credentials.
     pub fn displayable_with_credentials(&self) -> impl Display {
-        std::fmt::from_fn(|f| fmt_requirement(self, f, true))
+        self.displayable_with_url(Pep508Url::displayable_with_credentials)
+    }
+
+    /// Format this requirement with a custom representation for its direct URL.
+    pub fn displayable_with_url<'a, D: Display>(
+        &'a self,
+        display_url: impl Fn(&'a T) -> D + 'a,
+    ) -> impl Display + 'a {
+        std::fmt::from_fn(move |f| fmt_requirement(self, f, &display_url))
     }
 }
 
 impl<T: Pep508Url + Display> Display for Requirement<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        fmt_requirement(self, f, false)
+        fmt_requirement(self, f, |url| url)
     }
 }
 
-fn fmt_requirement<T: Pep508Url + Display>(
-    requirement: &Requirement<T>,
+fn fmt_requirement<'a, T: Pep508Url, D: Display>(
+    requirement: &'a Requirement<T>,
     f: &mut Formatter<'_>,
-    display_credentials: bool,
+    display_url: impl FnOnce(&'a T) -> D,
 ) -> std::fmt::Result {
     write!(f, "{}", requirement.name)?;
     if !requirement.extras.is_empty() {
@@ -184,11 +192,7 @@ fn fmt_requirement<T: Pep508Url + Display>(
             }
             VersionOrUrl::Url(url) => {
                 // We add the space for markers later if necessary
-                if display_credentials {
-                    write!(f, " @ {}", url.displayable_with_credentials())?;
-                } else {
-                    write!(f, " @ {url}")?;
-                }
+                write!(f, " @ {}", display_url(url))?;
             }
         }
     }
