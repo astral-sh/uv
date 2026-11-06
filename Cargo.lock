@@ -8120,7 +8120,6 @@ name = "uv-torch"
 version = "0.0.99"
 dependencies = [
  "clap",
- "either",
  "fs-err",
  "indoc",
  "schemars",

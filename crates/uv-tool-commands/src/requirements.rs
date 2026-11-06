@@ -70,6 +70,7 @@ pub(super) async fn resolve_names(
         resolution: _,
         sources,
         torch_backend,
+        torch_backend_index,
         cuda_driver_version,
         amd_gpu_architecture,
         upgrade: _,
@@ -85,6 +86,7 @@ pub(super) async fn resolve_names(
                 interpreter.platform().os(),
                 cuda_driver_version.clone(),
                 *amd_gpu_architecture,
+                torch_backend_index.as_ref(),
             )
         })
         .transpose()
