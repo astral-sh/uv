@@ -5570,7 +5570,7 @@ fn install_constraints_respects_offline_mode() {
 
 #[test]
 #[cfg(feature = "test-git")]
-fn install_git_source_respects_offline_mode() {
+fn install_git_source_respects_offline_mode() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     uv_snapshot!(context.filters(), context.pip_install()
@@ -5584,6 +5584,14 @@ fn install_git_source_respects_offline_mode() {
       cause: Remote Git fetches are not allowed because network connectivity is disabled (i.e., with `--offline`)
     "
     );
+
+    // The failed clone shouldn't leave anything in the Git database directory. A Git process can
+    // outlive the uv process that started it, so another uv process could otherwise find a partial
+    // database there while that Git process is still writing to it.
+    let git_db = context.cache_dir.child("git-v1").child("db");
+    assert_eq!(fs::read_dir(git_db.path())?.count(), 0);
+
+    Ok(())
 }
 
 /// Transitive pre-releases should be enabled when resolving isolated build requirements.
@@ -14298,6 +14306,109 @@ def main():
     Installed 1 package in [TIME]
      + mylib==0.1.0 (from git+file://[TEMP_DIR]/mylib@COMMIT_HASH)
     ");
+
+    Ok(())
+}
+
+/// A checkout that fails partway, here while cloning a submodule whose repository is gone,
+/// shouldn't leave a partial checkout in the cache. A Git process can keep running after the uv
+/// process that started it has exited, so another uv process could otherwise find that checkout
+/// and fail to remove it while the Git process is still writing to it.
+#[test]
+#[cfg(unix)]
+#[cfg(feature = "test-git")]
+fn install_git_submodule_missing() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filter((
+            "`.*/git -c .* submodule update --init`",
+            "`git submodule update --init`",
+        ))
+        // Git's own error output differs between versions
+        .with_filter((r"(?s)\n +--- stderr\n.*", ""));
+
+    // Create the repository to use as a submodule
+    let helpers_dir = context.temp_dir.child("helpers");
+    helpers_dir.create_dir_all()?;
+    helpers_dir.child("helper.py").touch()?;
+
+    Command::new("git")
+        .args(["init"])
+        .current_dir(helpers_dir.path())
+        .assert()
+        .success();
+
+    Command::new("git")
+        .args(["add", "."])
+        .current_dir(helpers_dir.path())
+        .assert()
+        .success();
+
+    Command::new("git")
+        .args(["commit", "-m", "Initial helpers commit"])
+        .current_dir(helpers_dir.path())
+        .env("GIT_AUTHOR_NAME", "Test")
+        .env("GIT_AUTHOR_EMAIL", "test@example.com")
+        .env("GIT_COMMITTER_NAME", "Test")
+        .env("GIT_COMMITTER_EMAIL", "test@example.com")
+        .assert()
+        .success();
+
+    // Create the main repository, with the helpers as a submodule
+    let mylib_dir = context.temp_dir.child("mylib");
+    mylib_dir.create_dir_all()?;
+    mylib_dir.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "mylib"
+        version = "0.1.0"
+    "#})?;
+
+    Command::new("git")
+        .args(["init"])
+        .current_dir(mylib_dir.path())
+        .assert()
+        .success();
+
+    Command::new("git")
+        .args(["submodule", "add", "../helpers", "helpers"])
+        .env("GIT_ALLOW_PROTOCOL", "file:ext:http:https:ssh")
+        .current_dir(mylib_dir.path())
+        .assert()
+        .success();
+
+    Command::new("git")
+        .args(["add", "."])
+        .current_dir(mylib_dir.path())
+        .assert()
+        .success();
+
+    Command::new("git")
+        .args(["commit", "-m", "Initial mylib commit with submodule"])
+        .current_dir(mylib_dir.path())
+        .env("GIT_AUTHOR_NAME", "Test")
+        .env("GIT_AUTHOR_EMAIL", "test@example.com")
+        .env("GIT_COMMITTER_NAME", "Test")
+        .env("GIT_COMMITTER_EMAIL", "test@example.com")
+        .assert()
+        .success();
+
+    // Remove the submodule's repository, so the checkout fails while updating submodules
+    fs::remove_dir_all(helpers_dir.path())?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(format!("git+file://{}", mylib_dir.path().display()))
+        // Pass through environment variable to allow file:// URLs in Git subprocesses
+        .env("GIT_ALLOW_PROTOCOL", "file:ext:http:https:ssh"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Git operation failed
+      cause: process didn't exit successfully: `git submodule update --init` (exit status: 1)
+    ");
+
+    // The cache has a directory for the repository's checkouts, but no checkout in it
+    let checkouts = fs::read_dir(context.cache_dir.child("git-v1").child("checkouts").path())?
+        .map(|entry| Ok(fs::read_dir(entry?.path())?.count()))
+        .collect::<Result<Vec<_>>>()?;
+    assert_eq!(checkouts, vec![0]);
 
     Ok(())
 }
