@@ -4,6 +4,7 @@ use std::ops::Bound;
 
 use either::Either;
 use itertools::Itertools;
+use pubgrub::State;
 use smallvec::SmallVec;
 use tracing::{debug, trace};
 
@@ -13,15 +14,18 @@ use uv_distribution_types::{
 };
 use uv_normalize::PackageName;
 use uv_pep440::Version;
+use uv_pep508::MarkerTree;
 use uv_platform_tags::Tags;
+use uv_resolver_types::PackageNodeKind;
 use uv_types::InstalledPackagesProvider;
 
-use crate::preferences::{Entry, PreferenceSource, Preferences};
+use crate::dependency_provider::UvDependencyProvider;
+use crate::preferences::{CappedParent, Entry, PreferenceSource, Preferences};
 use crate::prerelease::{PrereleaseSelection, PrereleaseStrategy};
 use crate::prioritized_distribution::{
     CompatibleDist, IncompatibleDist, IncompatibleSource, IncompatibleWheel, PrioritizedDist,
 };
-use crate::pubgrub::Range;
+use crate::pubgrub::{PubGrubPackageInner, Range};
 use crate::resolution_mode::ResolutionStrategy;
 use crate::version_map::{VersionMap, VersionMapDistHandle};
 use crate::{Exclusions, Manifest, Options, ResolverEnvironment};
@@ -94,7 +98,7 @@ impl CandidateSelector {
         env: &ResolverEnvironment,
         requires_python: &RequiresPython,
         tags: Option<&'a Tags>,
-        decisions: Option<&pubgrub::State<crate::dependency_provider::UvDependencyProvider>>,
+        decisions: Option<&State<UvDependencyProvider>>,
     ) -> Option<Candidate<'a>> {
         if let Some(recorder) = &self.recorder {
             recorder.candidate_policy(package_name);
@@ -122,6 +126,24 @@ impl CandidateSelector {
                 .and_then(Candidate::compatible)
                 .is_some_and(|dist| !dist.has_portable_distribution(requires_python))
         });
+        let replaced_parent = |parent: &CappedParent| {
+            decisions.is_some_and(|state| {
+                state
+                    .partial_solution
+                    .extract_solution()
+                    .any(|(id, version)| {
+                        let PubGrubPackageInner::Package {
+                            name,
+                            kind: PackageNodeKind::Base,
+                            marker: MarkerTree::TRUE,
+                        } = &*state.package_store[id]
+                        else {
+                            return false;
+                        };
+                        name == &parent.name && !parent.cap.contains(&version)
+                    })
+            })
+        };
 
         // If we have a preference (e.g., from a lockfile), search for a version matching that
         // preference.
@@ -145,13 +167,11 @@ impl CandidateSelector {
             tags,
             |entry| {
                 env.fork_markers().is_none_or(|fork| {
-                    entry.applies_in(fork, || best.as_ref().map(|candidate| candidate.version), |parent| {
-                        decisions.is_some_and(|state| state.partial_solution.extract_solution().any(|(id, version)| {
-                            !parent.cap.contains(&version) && matches!(&*state.package_store[id],
-                                crate::pubgrub::PubGrubPackageInner::Package { name, kind: uv_resolver_types::PackageNodeKind::Base, marker: uv_pep508::MarkerTree::TRUE } if name == &parent.name)
-                        }))
-                    })
-                        || *lacks_portable_dist
+                    entry.applies_in(
+                        fork,
+                        || best.as_ref().map(|candidate| candidate.version),
+                        replaced_parent,
+                    ) || *lacks_portable_dist
                 })
             },
         ) {

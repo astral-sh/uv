@@ -53,7 +53,7 @@ use crate::fork_indexes::ForkIndexes;
 use crate::fork_urls::ForkUrls;
 use crate::manifest::Manifest;
 use crate::pins::FilePins;
-use crate::preferences::{ForkBound, Preferences, WheelSplit};
+use crate::preferences::{CappedParent, ForkBound, Preferences, WheelSplit};
 use crate::prioritized_distribution::{
     CompatibleDist, IncompatibleDist, IncompatibleSource, IncompatibleWheel, PrioritizedDist,
     PythonRequirementKind, RegistryVariantsJson, implied_markers,
@@ -491,8 +491,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                         .wheel_splits
                                         .iter()
                                         .filter(|split| {
-                                            &split.name == name
-                                                && fork.is_disjoint(split.wide.negate())
+                                            &split.parent.name == name
+                                                && fork.is_disjoint(split.parent.wide.negate())
                                                 && range.contains(&split.newer)
                                         })
                                         .flat_map(|split| &split.children)
@@ -826,16 +826,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 forks.sort_by(|a, b| {
                                     a.cmp_requires_python(b).then_with(|| a.cmp_upper_bounds(b))
                                 });
-                                if self.options.resolution_mode == ResolutionMode::Highest
-                                    && let Some(split) = self.wheel_split(
-                                        &forks,
-                                        &diverging_packages,
-                                        &state,
-                                        requests,
-                                    )?
-                                {
-                                    preferences.wheel_splits.push(split);
-                                }
                             }
                         }
 
@@ -843,6 +833,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             .map_err(|err| {
                                 enrich_dependency_error(err, next_id, &version, &state.pubgrub)
                             })?;
+                        if self.options.fork_strategy == ForkStrategy::RequiresPython
+                            && self.options.resolution_mode == ResolutionMode::Highest
+                            && let Some(split) =
+                                self.wheel_split(&forks, &diverging_packages, &state, requests)?
+                        {
+                            preferences.wheel_splits.push(split);
+                        }
                         incompatibility_arena = state.pubgrub.take_incompatibility_arena();
                         forked_states.extend(Self::forks_to_fork_states(
                             state,
@@ -1129,11 +1126,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             return Ok(None);
         };
         Ok(Some(WheelSplit {
+            parent: Arc::new(CappedParent {
+                name: name.clone(),
+                wide: markers,
+                cap: UpperBound(narrow_upper.cloned()),
+            }),
             children: Vec::new(),
-            name: name.clone(),
             narrow: narrow_markers,
-            wide: markers,
-            cap: UpperBound(narrow_upper.cloned()),
             newer: new.version().clone(),
         }))
     }
@@ -3569,7 +3568,7 @@ impl<'index> ForkState<'index> {
 
         // A package can be direct in one fork and transitive in another. Only share
         // selections when both use the same version ordering.
-        let sibling_preferences = sibling_preferences.filter(|_| {
+        let mut sibling_preferences = sibling_preferences.filter(|_| {
             matches!(
                 options.resolution_mode,
                 ResolutionMode::Highest | ResolutionMode::Lowest
@@ -3579,7 +3578,6 @@ impl<'index> ForkState<'index> {
             && options.resolution_mode == ResolutionMode::Highest
             && options.fork_strategy == ForkStrategy::RequiresPython)
             .then(FxHashMap::<_, Vec<ForkBound>>::default);
-        let mut bounded_children = Vec::new();
         let edge_count: usize = solution
             .keys()
             .filter_map(|package| self.pubgrub.dependencies(*package).size_hint().1)
@@ -3662,21 +3660,20 @@ impl<'index> ForkState<'index> {
                     && let Some((_, upper)) = dependency_range.bounding_range()
                     && upper != Bound::Unbounded
                 {
+                    let upper = UpperBound(upper.cloned());
                     let parent = self_name.and_then(|parent| {
                         let here = self.env.fork_markers()?;
-                        sibling_preferences
-                            .as_deref()?
+                        // A bound that already excludes the wider fork needs no parent decision.
+                        let split = sibling_preferences
+                            .as_deref_mut()?
                             .wheel_splits
-                            .iter()
+                            .iter_mut()
                             .find(|split| {
-                                &split.name == parent
+                                &split.parent.name == parent
                                     && here.is_disjoint(split.narrow.negate())
-                                    && split.cap.contains(self_version)
-                            })
-                            .cloned()
-                    });
-                    let upper = UpperBound(upper.cloned());
-                    let parent = parent.and_then(|split| {
+                                    && !marker.is_disjoint(split.parent.wide)
+                                    && split.parent.cap.contains(self_version)
+                            })?;
                         if self.fork_urls.get(name).is_some()
                             || self.fork_indexes.get(name).is_some()
                         {
@@ -3697,13 +3694,10 @@ impl<'index> ForkState<'index> {
                         if !new_dist.has_portable_distribution(self.python_requirement.target()) {
                             return None;
                         }
-                        bounded_children.push((
-                            split.name.clone(),
-                            split.narrow,
-                            split.wide,
-                            name.clone(),
-                        ));
-                        Some(split)
+                        if !split.children.contains(name) {
+                            split.children.push(name.clone());
+                        }
+                        Some(Arc::clone(&split.parent))
                     });
                     bounds.entry(name).or_default().push(ForkBound {
                         parent,
@@ -3732,16 +3726,6 @@ impl<'index> ForkState<'index> {
         }
 
         if let Some(preferences) = sibling_preferences {
-            for (parent, narrow, wide, child) in bounded_children {
-                if let Some(split) = preferences.wheel_splits.iter_mut().find(|split| {
-                    split.name == parent && split.narrow == narrow && split.wide == wide
-                }) {
-                    if !split.children.contains(&child) {
-                        split.children.push(child);
-                    }
-                }
-            }
-
             let marker = self
                 .env
                 .try_universal_markers()

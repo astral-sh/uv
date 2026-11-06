@@ -1,4 +1,5 @@
 use std::str::FromStr;
+use std::sync::Arc;
 
 use rustc_hash::FxHashMap;
 use tracing::trace;
@@ -177,7 +178,7 @@ pub(crate) struct Entry {
 /// resolver's PEP 440 bounds, including local-version and prerelease sentinels.
 #[derive(Debug, Clone)]
 pub(crate) struct ForkBound {
-    pub(crate) parent: Option<WheelSplit>,
+    pub(crate) parent: Option<Arc<CappedParent>>,
     pub(crate) marker: MarkerTree,
     pub(crate) upper: UpperBound,
 }
@@ -193,7 +194,7 @@ impl Entry {
         &self,
         fork: MarkerTree,
         best_version: impl FnOnce() -> Option<&'a Version>,
-        replaced: impl Fn(&WheelSplit) -> bool,
+        replaced: impl Fn(&CappedParent) -> bool,
     ) -> bool {
         let inactive = |bound: &ForkBound| {
             fork.is_disjoint(bound.marker)
@@ -263,13 +264,19 @@ pub struct Preferences {
 /// An existing split on a dependency whose newer candidate adds wheel support for Python.
 #[derive(Debug, Clone)]
 pub(crate) struct WheelSplit {
+    pub(crate) parent: Arc<CappedParent>,
     /// Dependencies whose selected versions were limited by the capped release.
     pub(crate) children: Vec<PackageName>,
-    pub(crate) name: PackageName,
     pub(crate) narrow: MarkerTree,
+    pub(crate) newer: Version,
+}
+
+/// The parent decision that can release a child's upper bound in the wider fork.
+#[derive(Debug)]
+pub(crate) struct CappedParent {
+    pub(crate) name: PackageName,
     pub(crate) wide: MarkerTree,
     pub(crate) cap: UpperBound,
-    pub(crate) newer: Version,
 }
 
 impl Preferences {

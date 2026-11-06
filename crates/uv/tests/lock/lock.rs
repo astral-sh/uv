@@ -9292,6 +9292,62 @@ fn lock_sibling_fork_parent_releases_child() -> Result<()> {
     Ok(())
 }
 
+/// Runtime 1 caps the array version on macOS only. Windows can select array 2
+/// independently, and editor 2 can keep its dependency on runtime 1.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_sibling_fork_child_bound_has_own_marker() -> Result<()> {
+    let server = PackseServer::from_toml(indoc! {r#"
+        name = "sibling-fork-child-bound-has-own-marker"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.array.versions."1.0.0"]
+        [packages.array.versions."2.0.0"]
+        [packages.editor.versions."1.0.0"]
+        [packages.editor.versions."2.0.0"]
+        requires = ["runtime<2"]
+        [packages.runtime.versions."1.0.0"]
+        wheel_tags = ["cp312-cp312-macosx_11_0_arm64", "cp312-cp312-win_amd64"]
+        requires = ["array<2 ; sys_platform == 'darwin'"]
+        [packages.runtime.versions."2.0.0"]
+        requires = ["array"]
+    "#})?;
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "array",
+            "editor ; sys_platform != 'darwin'",
+            "runtime<2 ; sys_platform == 'darwin'",
+            "runtime ; sys_platform != 'darwin'",
+        ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.tree().arg("--python-platform").arg("windows").arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    project v1.0.0
+    ├── array v2.0.0
+    ├── editor v2.0.0
+    │   └── runtime v1.0.0
+    └── runtime v1.0.0
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+    Ok(())
+}
+
 /// Changing a parent's dependency from `child` to `child<99` cannot justify
 /// choosing that parent before the app. Only child 1 exists.
 #[cfg(feature = "test-universal")]
