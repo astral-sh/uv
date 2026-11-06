@@ -31,6 +31,7 @@ nix = { workspace = true }
 [target.'cfg(windows)'.dependencies]
 windows = { workspace = true }
 windows-registry = { workspace = true }
+windows-result = { workspace = true }
 
 [dev-dependencies]
 fs-err = { workspace = true }

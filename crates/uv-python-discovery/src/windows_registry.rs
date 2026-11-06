@@ -22,7 +22,7 @@ pub(crate) struct WindowsPython {
 }
 
 /// Find all Pythons registered in the Windows registry following PEP 514.
-pub(crate) fn registry_pythons() -> Result<Vec<WindowsPython>, windows::core::Error> {
+pub(crate) fn registry_pythons() -> windows_registry::Result<Vec<WindowsPython>> {
     let mut registry_pythons = Vec::new();
     // Prefer `HKEY_CURRENT_USER` over `HKEY_LOCAL_MACHINE`.
     // By default, a 64-bit program does not see a 32-bit global (HKLM) installation of Python in
