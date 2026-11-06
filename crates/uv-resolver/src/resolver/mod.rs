@@ -53,7 +53,7 @@ use crate::fork_indexes::ForkIndexes;
 use crate::fork_urls::ForkUrls;
 use crate::manifest::Manifest;
 use crate::pins::FilePins;
-use crate::preferences::{ForkBound, Preferences};
+use crate::preferences::{ForkBound, Preferences, WheelSplit};
 use crate::prioritized_distribution::{
     CompatibleDist, IncompatibleDist, IncompatibleSource, IncompatibleWheel, PrioritizedDist,
     PythonRequirementKind, RegistryVariantsJson, implied_markers,
@@ -474,10 +474,38 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         // Choose a package.
                         // We aren't allowed to use the term intersection as it would extend the
                         // mutable borrow of `state`.
-                        let Some((highest_priority_pkg, _)) =
-                            state.pubgrub.partial_solution.pick_highest_priority_pkg(
-                                |id, _range| state.priorities.get(&state.pubgrub.package_store[id]),
-                            )
+                        let Some((highest_priority_pkg, _)) = state
+                            .pubgrub
+                            .partial_solution
+                            .pick_highest_priority_pkg(|id, range| {
+                                let package = &state.pubgrub.package_store[id];
+                                let (priority, order) = state.priorities.get(package);
+                                // Decide a parent at its child's priority so the child's
+                                // inherited cap can use the actual parent decision.
+                                if matches!(
+                                    priority,
+                                    crate::pubgrub::PubGrubPriority::Unspecified(_)
+                                ) && let (Some(name), Some(fork)) =
+                                    (package.name_no_root(), state.env.fork_markers())
+                                    && let Some(inherited) = preferences
+                                        .wheel_splits
+                                        .iter()
+                                        .filter(|split| {
+                                            &split.name == name
+                                                && fork.is_disjoint(split.wide.negate())
+                                                && range.contains(&split.newer)
+                                        })
+                                        .flat_map(|split| &split.children)
+                                        .filter_map(|child| {
+                                            state.priorities.package_priority(child)
+                                        })
+                                        .max()
+                                    && inherited > priority
+                                {
+                                    return (inherited, crate::pubgrub::PubGrubTiebreaker::from(0));
+                                }
+                                (priority, order)
+                            })
                         else {
                             // All packages have been assigned, the fork has been successfully resolved
                             if tracing::enabled!(Level::DEBUG) {
@@ -490,8 +518,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             );
 
                             let siblings = (!forked_states.is_empty()).then_some(&mut preferences);
-                            let (resolution, mut arena) =
-                                state.into_resolution(siblings, &self.options);
+                            let (resolution, mut arena) = state.into_resolution(
+                                siblings,
+                                &self.options,
+                                &self.index,
+                                &self.selector,
+                            );
                             if let Some(next) = forked_states.last() {
                                 arena.rewind_to(&next.state.pubgrub);
                             } else {
@@ -572,7 +604,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     // stable for a given range and pre-release policy. Avoid repeating candidate
                     // selection when PubGrub revisits an identical decision after backtracking.
                     let cache_selected_version = match source {
-                        PackageSource::Registry(None) => true,
+                        PackageSource::Registry(None) => {
+                            next_package.name_no_root().is_none_or(|name| {
+                                !preferences
+                                    .get(name)
+                                    .iter()
+                                    .any(crate::preferences::Entry::has_scoped_parent)
+                            })
+                        }
                         PackageSource::Url(_) | PackageSource::Registry(Some(_)) => false,
                     };
                     let decision = if cache_selected_version
@@ -787,6 +826,16 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 forks.sort_by(|a, b| {
                                     a.cmp_requires_python(b).then_with(|| a.cmp_upper_bounds(b))
                                 });
+                                if self.options.resolution_mode == ResolutionMode::Highest
+                                    && let Some(split) = self.wheel_split(
+                                        &forks,
+                                        &diverging_packages,
+                                        &state,
+                                        requests,
+                                    )?
+                                {
+                                    preferences.wheel_splits.push(split);
+                                }
                             }
                         }
 
@@ -982,6 +1031,111 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 Ok(state)
             }
         }
+    }
+
+    /// Identify a marked upper bound that excludes a portable release with wheels
+    /// for an interpreter the capped candidate does not cover.
+    fn wheel_split(
+        &self,
+        forks: &[Fork],
+        diverging: &BTreeSet<PackageName>,
+        state: &ForkState<'_>,
+        requests: &MetadataRequests,
+    ) -> Result<Option<WheelSplit>, ResolveError> {
+        let [wide, narrow] = forks else {
+            return Ok(None);
+        };
+        if diverging.len() != 1 || wide.cmp_requires_python(narrow) != Ordering::Equal {
+            return Ok(None);
+        }
+        let Some(name) = diverging.first() else {
+            return Ok(None);
+        };
+        if self.urls.any_url(name)
+            || self.indexes.contains_key(name)
+            || state.fork_urls.get(name).is_some()
+            || state.fork_indexes.get(name).is_some()
+            || !self.preferences.get(name).is_empty()
+        {
+            return Ok(None);
+        }
+        let requirement = |fork: &Fork| {
+            let mut range: Option<Range<Version>> = None;
+            for dep in &fork.dependencies {
+                if dep.package.name_no_root() == Some(name) {
+                    if !matches!(dep.source, DependencySource::Unspecified) {
+                        return None;
+                    }
+                    range = Some(range.map_or_else(
+                        || dep.version.clone(),
+                        |prior| prior.intersection(&dep.version),
+                    ));
+                }
+            }
+            range
+        };
+        let (Some(wide_range), Some(narrow_range)) = (requirement(wide), requirement(narrow))
+        else {
+            return Ok(None);
+        };
+        let (Some((_, wide_upper)), Some((_, narrow_upper))) =
+            (wide_range.bounding_range(), narrow_range.bounding_range())
+        else {
+            return Ok(None);
+        };
+        if UpperBound(wide_upper.cloned()) <= UpperBound(narrow_upper.cloned())
+            || narrow_range.intersection(&wide_range) != narrow_range
+        {
+            return Ok(None);
+        }
+        let versions = requests.request_package(name, None)?.wait();
+        let VersionsResponse::Found(maps) = versions.as_ref() else {
+            return Ok(None);
+        };
+        let (Some(new), Some(old)) = (
+            self.selector
+                .select_no_preference(name, &wide_range, maps, &wide.env),
+            self.selector
+                .select_no_preference(name, &narrow_range, maps, &narrow.env),
+        ) else {
+            return Ok(None);
+        };
+        if new.version() <= old.version() || narrow_range.contains(new.version()) {
+            return Ok(None);
+        }
+        let (Some(new_dist), Some(old_dist), Some(markers)) =
+            (new.compatible(), old.compatible(), wide.env.fork_markers())
+        else {
+            return Ok(None);
+        };
+        if !new_dist.has_portable_distribution(state.python_requirement.target()) {
+            return Ok(None);
+        }
+        let targets = markers.and(state.python_requirement.target().to_marker_tree());
+        if targets.is_disjoint(
+            old_dist
+                .wheel_support_markers(false)
+                .negate()
+                .and(new_dist.wheel_support_markers(true)),
+        ) {
+            return Ok(None);
+        }
+        debug!(
+            "Scoping direct child bounds for {name}: {} adds Python wheel support over {}",
+            new.version(),
+            old.version()
+        );
+        let Some(narrow_markers) = narrow.env.fork_markers() else {
+            return Ok(None);
+        };
+        Ok(Some(WheelSplit {
+            children: Vec::new(),
+            name: name.clone(),
+            narrow: narrow_markers,
+            wide: markers,
+            cap: UpperBound(narrow_upper.cloned()),
+            newer: new.version().clone(),
+        }))
     }
 
     /// Prefetch every sibling's dependencies without copying its solver state.
@@ -1398,6 +1552,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             env,
             python_requirement.target(),
             self.tags.as_ref(),
+            Some(pubgrub),
         ) else {
             // Short circuit: we couldn't find _any_ versions for a package.
             return Ok(None);
@@ -1724,6 +1879,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             env,
             requires_python,
             self.tags.as_ref(),
+            Some(pubgrub),
         ) else {
             return Ok(None);
         };
@@ -2484,6 +2640,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     &env,
                     self.python_requirement.target(),
                     self.tags.as_ref(),
+                    None,
                 ) else {
                     return Ok(None);
                 };
@@ -3359,6 +3516,8 @@ impl<'index> ForkState<'index> {
         mut self,
         sibling_preferences: Option<&mut Preferences>,
         options: &Options,
+        index: &InMemoryIndex,
+        selector: &CandidateSelector,
     ) -> (
         Resolution<'index>,
         IncompatibilityArena<UvDependencyProvider>,
@@ -3420,6 +3579,7 @@ impl<'index> ForkState<'index> {
             && options.resolution_mode == ResolutionMode::Highest
             && options.fork_strategy == ForkStrategy::RequiresPython)
             .then(FxHashMap::<_, Vec<ForkBound>>::default);
+        let mut bounded_children = Vec::new();
         let edge_count: usize = solution
             .keys()
             .filter_map(|package| self.pubgrub.dependencies(*package).size_hint().1)
@@ -3502,9 +3662,53 @@ impl<'index> ForkState<'index> {
                     && let Some((_, upper)) = dependency_range.bounding_range()
                     && upper != Bound::Unbounded
                 {
+                    let parent = self_name.and_then(|parent| {
+                        let here = self.env.fork_markers()?;
+                        sibling_preferences
+                            .as_deref()?
+                            .wheel_splits
+                            .iter()
+                            .find(|split| {
+                                &split.name == parent
+                                    && here.is_disjoint(split.narrow.negate())
+                                    && split.cap.contains(self_version)
+                            })
+                            .cloned()
+                    });
+                    let upper = UpperBound(upper.cloned());
+                    let parent = parent.and_then(|split| {
+                        if self.fork_urls.get(name).is_some()
+                            || self.fork_indexes.get(name).is_some()
+                        {
+                            return None;
+                        }
+                        let response = index.implicit().get(name)?;
+                        let VersionsResponse::Found(maps) = response.as_ref() else {
+                            return None;
+                        };
+                        let latest =
+                            selector.select_no_preference(name, &Range::full(), maps, &self.env)?;
+                        if latest.version() <= dependency_version
+                            || upper.contains(latest.version())
+                        {
+                            return None;
+                        }
+                        let new_dist = latest.compatible()?;
+                        if !new_dist.has_portable_distribution(self.python_requirement.target()) {
+                            return None;
+                        }
+                        bounded_children.push((
+                            split.name.clone(),
+                            split.narrow,
+                            split.wide,
+                            name.clone(),
+                        ));
+                        Some(split)
+                    });
                     bounds.entry(name).or_default().push(ForkBound {
+                        parent,
                         marker,
-                        upper: UpperBound(upper.cloned()),
+                        upper,
                     });
                 }
                 let (url, index) = self.source(name, dependency_version);
@@ -3528,13 +3732,26 @@ impl<'index> ForkState<'index> {
         }
 
         if let Some(preferences) = sibling_preferences {
+            for (parent, narrow, wide, child) in bounded_children {
+                if let Some(split) = preferences.wheel_splits.iter_mut().find(|split| {
+                    split.name == parent && split.narrow == narrow && split.wide == wide
+                }) {
+                    if !split.children.contains(&child) {
+                        split.children.push(child);
+                    }
+                }
+            }
+
             let marker = self
                 .env
                 .try_universal_markers()
                 .unwrap_or(UniversalMarker::TRUE);
             let mut bounds = bounds.unwrap_or_default();
             // An unconditional cap can veto an upgrade, but cannot cause one.
-            bounds.retain(|_, caps| caps.iter().any(|cap| !cap.marker.is_true()));
+            bounds.retain(|_, caps| {
+                caps.iter()
+                    .any(|cap| cap.parent.is_some() || !cap.marker.is_true())
+            });
             for (package, version) in &nodes {
                 preferences.insert_from_fork(
                     package.name.clone(),

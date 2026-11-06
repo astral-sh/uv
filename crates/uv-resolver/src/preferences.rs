@@ -177,22 +177,34 @@ pub(crate) struct Entry {
 /// resolver's PEP 440 bounds, including local-version and prerelease sentinels.
 #[derive(Debug, Clone)]
 pub(crate) struct ForkBound {
+    pub(crate) parent: Option<WheelSplit>,
     pub(crate) marker: MarkerTree,
     pub(crate) upper: UpperBound,
 }
 
 impl Entry {
+    pub(crate) fn has_scoped_parent(&self) -> bool {
+        self.bounds.iter().any(|bound| bound.parent.is_some())
+    }
+
     /// Reuse the pin unless the normal candidate exceeds a bound that applies only
     /// outside this fork. Any other applicable bound that excludes it still wins.
     pub(crate) fn applies_in<'a>(
         &self,
         fork: MarkerTree,
         best_version: impl FnOnce() -> Option<&'a Version>,
+        replaced: impl Fn(&WheelSplit) -> bool,
     ) -> bool {
+        let inactive = |bound: &ForkBound| {
+            fork.is_disjoint(bound.marker)
+                || bound.parent.as_ref().is_some_and(|parent| {
+                    fork.is_disjoint(parent.wide.negate()) && replaced(parent)
+                })
+        };
         let Some(upper) = self
             .bounds
             .iter()
-            .filter(|bound| fork.is_disjoint(bound.marker))
+            .filter(|bound| inactive(bound))
             .map(|bound| &bound.upper)
             .min()
         else {
@@ -212,7 +224,7 @@ impl Entry {
         }
         self.bounds
             .iter()
-            .any(|bound| !bound.upper.contains(version) && !fork.is_disjoint(bound.marker))
+            .any(|bound| !bound.upper.contains(version) && !inactive(bound))
     }
 
     /// Return the [`UniversalMarker`] associated with the entry.
@@ -243,7 +255,22 @@ impl Entry {
 /// Preferences should be prioritized first by whether their marker matches and then by the order
 /// they are stored, so that a lockfile has higher precedence than sibling forks.
 #[derive(Debug, Clone, Default)]
-pub struct Preferences(FxHashMap<PackageName, Vec<Entry>>);
+pub struct Preferences {
+    packages: FxHashMap<PackageName, Vec<Entry>>,
+    pub(crate) wheel_splits: Vec<WheelSplit>,
+}
+
+/// An existing split on a dependency whose newer candidate adds wheel support for Python.
+#[derive(Debug, Clone)]
+pub(crate) struct WheelSplit {
+    /// Dependencies whose selected versions were limited by the capped release.
+    pub(crate) children: Vec<PackageName>,
+    pub(crate) name: PackageName,
+    pub(crate) narrow: MarkerTree,
+    pub(crate) wide: MarkerTree,
+    pub(crate) cap: UpperBound,
+    pub(crate) newer: Version,
+}
 
 impl Preferences {
     /// Create a map of pinned packages from an iterator of [`Preference`] entries.
@@ -305,7 +332,10 @@ impl Preferences {
             }
         }
 
-        Self(map)
+        Self {
+            packages: map,
+            wheel_splits: Vec::new(),
+        }
     }
 
     /// Share a completed fork's selection with the remaining forks.
@@ -317,7 +347,7 @@ impl Preferences {
         pin: impl Into<Pin>,
         bounds: Box<[ForkBound]>,
     ) {
-        self.0.entry(package_name).or_default().push(Entry {
+        self.packages.entry(package_name).or_default().push(Entry {
             bounds,
             marker: markers,
             index: PreferenceIndex::from(index),
@@ -335,7 +365,7 @@ impl Preferences {
             impl Iterator<Item = (&UniversalMarker, &PreferenceIndex, &Version)>,
         ),
     > {
-        self.0.iter().map(|(name, preferences)| {
+        self.packages.iter().map(|(name, preferences)| {
             (
                 name,
                 preferences
@@ -347,7 +377,7 @@ impl Preferences {
 
     /// Return the pinned version for a package, if any.
     pub(crate) fn get(&self, package_name: &PackageName) -> &[Entry] {
-        self.0
+        self.packages
             .get(package_name)
             .map(Vec::as_slice)
             .unwrap_or_default()
@@ -359,7 +389,7 @@ impl Preferences {
         package_name: &PackageName,
         version: &Version,
     ) -> Option<&[HashDigest]> {
-        self.0
+        self.packages
             .get(package_name)
             .into_iter()
             .flatten()
@@ -422,19 +452,25 @@ mod tests {
             source: PreferenceSource::Resolver,
             bounds: Box::new([
                 ForkBound {
+                    parent: None,
                     marker: darwin,
                     upper: UpperBound(Bound::Excluded(two.clone())),
                 },
                 ForkBound {
+                    parent: None,
                     marker: older_python,
                     upper: UpperBound(Bound::Excluded(three.clone())),
                 },
             ]),
         };
         // Windows escapes <2, but some Windows environments still require <3.
-        assert!(!entry.applies_in(windows, || Some(&two)));
-        assert!(entry.applies_in(windows, || Some(&three)));
-        assert!(!entry.applies_in(windows.and(older_python.negate()), || Some(&three)));
+        assert!(!entry.applies_in(windows, || Some(&two), |_| false));
+        assert!(entry.applies_in(windows, || Some(&three), |_| false));
+        assert!(!entry.applies_in(
+            windows.and(older_python.negate()),
+            || Some(&three),
+            |_| false
+        ));
     }
 
     /// Test that [`PreferenceIndex::matches`] correctly ignores credentials when comparing URLs.

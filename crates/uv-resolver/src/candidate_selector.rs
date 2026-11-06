@@ -94,6 +94,7 @@ impl CandidateSelector {
         env: &ResolverEnvironment,
         requires_python: &RequiresPython,
         tags: Option<&'a Tags>,
+        decisions: Option<&pubgrub::State<crate::dependency_provider::UvDependencyProvider>>,
     ) -> Option<Candidate<'a>> {
         if let Some(recorder) = &self.recorder {
             recorder.candidate_policy(package_name);
@@ -144,7 +145,12 @@ impl CandidateSelector {
             tags,
             |entry| {
                 env.fork_markers().is_none_or(|fork| {
-                    entry.applies_in(fork, || best.as_ref().map(|candidate| candidate.version))
+                    entry.applies_in(fork, || best.as_ref().map(|candidate| candidate.version), |parent| {
+                        decisions.is_some_and(|state| state.partial_solution.extract_solution().any(|(id, version)| {
+                            !parent.cap.contains(&version) && matches!(&*state.package_store[id],
+                                crate::pubgrub::PubGrubPackageInner::Package { name, kind: uv_resolver_types::PackageNodeKind::Base, marker: uv_pep508::MarkerTree::TRUE } if name == &parent.name)
+                        }))
+                    })
                         || *lacks_portable_dist
                 })
             },

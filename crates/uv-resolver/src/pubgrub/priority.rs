@@ -109,6 +109,10 @@ impl PubGrubPriorities {
         }
     }
 
+    pub(crate) fn package_priority(&self, name: &PackageName) -> Option<PubGrubPriority> {
+        self.package_priority.get(name).copied()
+    }
+
     /// Return the [`PubGrubPriority`] of the given package, if it exists.
     pub(crate) fn get(
         &self,

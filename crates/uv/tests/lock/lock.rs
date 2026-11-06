@@ -9241,6 +9241,57 @@ fn lock_sibling_fork_upper_bound() -> Result<()> {
     Ok(())
 }
 
+/// The capped parent cannot supply newer Python wheels and holds its child below 2.
+/// The other fork can select parent 2 before deciding whether to reuse child 1.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_sibling_fork_parent_releases_child() -> Result<()> {
+    let server = PackseServer::from_toml(indoc! {r#"
+        name = "sibling-fork-parent-releases-child"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.parent.versions."1.0.0"]
+        wheel_tags = ["cp312-cp312-macosx_11_0_arm64", "cp312-cp312-win_amd64"]
+        requires = ["child<2"]
+        [packages.parent.versions."2.0.0"]
+        requires = ["child"]
+        [packages.child.versions."1.0.0"]
+        [packages.child.versions."2.0.0"]
+    "#})?;
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "child",
+            "parent<2 ; sys_platform == 'darwin'",
+            "parent ; sys_platform != 'darwin'",
+        ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.tree().arg("--python-platform").arg("windows").arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    project v1.0.0
+    ├── child v2.0.0
+    └── parent v2.0.0
+        └── child v2.0.0
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+    Ok(())
+}
+
 /// Changing a parent's dependency from `child` to `child<99` cannot justify
 /// choosing that parent before the app. Only child 1 exists.
 #[cfg(feature = "test-universal")]

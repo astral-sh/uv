@@ -184,6 +184,19 @@ impl<'a> CompatibleDist<'a> {
         })
     }
 
+    /// Wheel coverage, optionally restricted to each wheel's platforms.
+    pub(crate) fn wheel_support_markers(&self, with_platform: bool) -> MarkerTree {
+        let Some(dist) = self.prioritized() else {
+            return MarkerTree::FALSE;
+        };
+        dist.0.wheels.iter().filter(|(_, compatibility)| matches!(compatibility, WheelCompatibility::Compatible(hash, ..) if *hash != HashComparison::Mismatched))
+            .fold(MarkerTree::FALSE, |coverage, (wheel, _)| {
+                let python = implied_python_markers(&wheel.filename);
+                let marker = if with_platform { python.and(implied_platform_markers(wheel.filename.platform_tags())) } else { python };
+                coverage.or(marker)
+            })
+    }
+
     /// Return the set of supported platforms for the distribution, in terms of their markers.
     pub(crate) fn implied_markers(&self) -> MarkerTree {
         match self.prioritized() {
