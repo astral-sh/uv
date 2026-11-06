@@ -9172,6 +9172,69 @@ fn lock_requires_python_fork() -> Result<()> {
     Ok(())
 }
 
+/// Darwin caps parent at 1. Its child<2 requirement also covers Windows, but only
+/// while parent 1 is selected. Both packages can upgrade outside Darwin.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_sibling_fork_upper_bound() -> Result<()> {
+    let server = PackseServer::from_toml(indoc! {r#"
+        name = "sibling-fork-upper-bound"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.parent.versions."1.0.0"]
+        requires = ["child<2 ; sys_platform != 'wasi'"]
+        [packages.parent.versions."2.0.0"]
+        requires = ["child"]
+
+        [packages.child.versions."1.0.0"]
+        [packages.child.versions."2.0.0"]
+    "#})?;
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "parent<2 ; sys_platform == 'darwin'",
+            "parent ; sys_platform != 'darwin'",
+        ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    project v1.0.0
+    ├── parent v1.0.0
+    │   └── child v1.0.0
+    └── parent v2.0.0
+        └── child v2.0.0
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--fork-strategy").arg("fewest").arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    project v1.0.0
+    └── parent v1.0.0
+        └── child v1.0.0
+
+    ----- stderr -----
+    Ignoring existing lockfile due to change in fork strategy: `requires-python` vs. `fewest`
+    Resolved 3 packages in [TIME]
+    ");
+    Ok(())
+}
+
 /// Wheel tags must overlap the Python fork, even when `Requires-Python` is broader.
 #[cfg(feature = "test-universal")]
 #[test]
