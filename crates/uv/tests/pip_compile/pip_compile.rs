@@ -10520,8 +10520,7 @@ fn universal_no_repeated_unconditional_distributions_2() -> Result<()> {
     Ok(())
 }
 
-/// Darwin's upper bound on Pylint also caps Astroid through Pylint 2.
-/// Other platforms can select Pylint 3 and Astroid 3.
+/// Darwin caps `pylint` at 2.x. Other platforms can upgrade it and its dependencies.
 #[cfg(feature = "test-universal")]
 #[test]
 fn universal_platform_upper_bound() -> Result<()> {
