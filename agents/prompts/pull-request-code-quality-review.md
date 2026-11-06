@@ -29,11 +29,20 @@ defaults with the repository's instructions and concrete constraints:
    that keep the normal path checked. Checks depending on state only available later, or on mutable
    external state, may belong at use instead.
 
-   Use explicit modes instead of ambiguous booleans, types that express cardinality and ownership,
-   and resolved configuration passed through appropriate boundaries. Keep domain values structured
-   in internal APIs and error types; defer formatting to `Display` or another presentation boundary
-   where practical. Look for premature conversion to `String` that discards useful structure or
-   makes callers responsible for diagnostic formatting.
+   Review `bool` fields and parameters that select domain modes or collapse distinct kinds. Identify
+   the relevant domain states in the current code, and prefer an enum that represents those states
+   when it clarifies construction and use. Derive policies from those states, using exhaustive
+   matching where appropriate; distinct kinds can share a policy without being collapsed into one
+   variant. Replacing a boolean with `Yes` and `No` variants alone may leave the same distinctions
+   hidden. Reuse an existing type only when it represents the same distinctions. Keep booleans for
+   clear predicates, and identify the ambiguity or invariant the model clarifies before reporting a
+   finding.
+
+   Use types that express cardinality and ownership, and pass resolved configuration through
+   appropriate boundaries. Keep domain values structured in internal APIs and error types; defer
+   formatting to `Display` or another presentation boundary where practical. Look for premature
+   conversion to `String` that discards useful structure or makes callers responsible for diagnostic
+   formatting.
 
 4. **Prefer readable Rust.** Favor direct matching, exhaustive handling, early returns, and
    established library operations. Look for unnecessary wrappers, buffers, hidden clones, and
