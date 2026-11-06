@@ -47,6 +47,7 @@ Python implementations, but the builds are not maintained by Astral.
 
 uv has Tier 3 support for:
 
+- Imre (locally installed)
 - Pyston
 
 uv "should work" with these implementations, but stability may vary.

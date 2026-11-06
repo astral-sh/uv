@@ -130,6 +130,8 @@ pub enum AbiTag {
     },
     /// Ex) `pyston_23_x86_64_linux_gnu`
     Pyston { implementation_version: (u8, u8) },
+    /// Version 1 of Imre's native extension ABI, `imre1`.
+    Imre1,
 }
 
 impl AbiTag {
@@ -179,6 +181,7 @@ impl AbiTag {
                 implementation_version.0, implementation_version.1
             ))),
             Self::Pyston { .. } => Some(Cow::Borrowed("Pyston")),
+            Self::Imre1 => Some(Cow::Borrowed("Imre ABI 1")),
         }
     }
 }
@@ -222,6 +225,7 @@ impl std::fmt::Display for AbiTag {
             } => {
                 write!(f, "pyston_{impl_major}{impl_minor}_x86_64_linux_gnu")
             }
+            Self::Imre1 => f.write_str("imre1"),
         }
     }
 }
@@ -303,6 +307,8 @@ impl FromStr for AbiTag {
             Ok(Self::Abi3)
         } else if s == "abi3t" {
             Ok(Self::Abi3T)
+        } else if s == "imre1" {
+            Ok(Self::Imre1)
         } else if let Some(cp) = s.strip_prefix("cp") {
             // Ex) `cp39m`, `cp310t`
             let version_end = cp.find(|c: char| !c.is_ascii_digit()).unwrap_or(cp.len());
@@ -494,6 +500,18 @@ mod tests {
         assert_eq!(
             AbiTag::Abi3T.pretty().as_deref(),
             Some("stable ABI for free-threaded CPython")
+        );
+    }
+
+    #[test]
+    fn imre_abi() {
+        assert_eq!(AbiTag::from_str("imre1"), Ok(AbiTag::Imre1));
+        assert_eq!(AbiTag::Imre1.to_string(), "imre1");
+        assert!(!AbiTag::Imre1.is_stable_abi());
+        assert_eq!(AbiTag::Imre1.pretty().as_deref(), Some("Imre ABI 1"));
+        assert_eq!(
+            AbiTag::from_str("imre2"),
+            Err(ParseAbiTagError::UnknownFormat("imre2".to_string()))
         );
     }
 

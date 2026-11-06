@@ -286,8 +286,8 @@ pub(crate) fn create(
             uv_fs::replace_symlink("python", scripts.join("pypy"))?;
         }
 
-        if interpreter.markers().implementation_name() == "graalpy" {
-            uv_fs::replace_symlink("python", scripts.join("graalpy"))?;
+        if let implementation @ ("graalpy" | "imre") = interpreter.markers().implementation_name() {
+            uv_fs::replace_symlink("python", scripts.join(implementation))?;
         }
     }
 
