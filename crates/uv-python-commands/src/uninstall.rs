@@ -48,28 +48,8 @@ pub async fn uninstall(
     // Perform the uninstallation.
     do_uninstall(&installations, targets, all, printer).await?;
 
-    // Clean up any empty directories.
-    if uv_fs::directories(installations.root())?.all(|path| uv_fs::is_temporary(&path)) {
-        fs_err::tokio::remove_dir_all(&installations.root()).await?;
-
-        if let Some(top_level) = installations.root().parent() {
-            // Remove the `toolchains` symlink.
-            match fs_err::tokio::remove_file(top_level.join("toolchains")).await {
-                Ok(()) => {}
-                Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
-                Err(err) => return Err(err.into()),
-            }
-
-            // Best-effort cleanup: the parent may contain user files or be in use.
-            if let Err(err) = fs_err::tokio::remove_dir(top_level).await {
-                debug!(
-                    "Skipping removal of parent directory `{}`: {err}",
-                    top_level.user_display()
-                );
-            }
-        }
-    }
-
+    // Retain the installation directory and its lock file so waiters and new processes lock the
+    // same file. An installer may also have initialized the scratch directory before waiting.
     Ok(ExitStatus::Success)
 }
 

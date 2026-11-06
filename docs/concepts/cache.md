@@ -140,7 +140,10 @@ Note that it's _never_ safe to modify the cache directly (e.g., by removing a fi
 uv provides a few different mechanisms for removing entries from the cache:
 
 - `uv cache clean` removes _all_ cache entries from the cache directory, clearing it out entirely.
-  The directory and its lock file remain so that other uv processes can safely share the cache.
+  The directory and its lock file remain so that other uv processes can safely share the cache. It
+  also removes temporary files left by interrupted Python installations. These files are stored
+  outside the cache, in the Python installation directory, and are also cleaned up during the next
+  Python installation. The reported cache file count and size exclude these temporary files.
 - `uv cache clean ruff` removes all cache entries for the `ruff` package, useful for invalidating
   the cache for a single or finite set of packages.
 - `uv cache prune` removes all _unused_ cache entries and all centralized project environments. For
@@ -165,7 +168,9 @@ uv blocks cache-modifying operations while other uv commands are running. By def
 `uv cache` commands have a 5 min timeout waiting for other uv processes to terminate to avoid
 deadlocks. This timeout can be changed with
 [`UV_LOCK_TIMEOUT`](../reference/environment.md#uv_lock_timeout). In cases where it is known that no
-other uv processes are reading or writing from the cache, `--force` can be used to ignore the lock.
+other uv processes are reading or writing from the cache, `--force` can be used to ignore the cache
+lock. Cleanup of temporary Python installation files still waits for any active installation to
+finish.
 
 ## Caching in continuous integration
 

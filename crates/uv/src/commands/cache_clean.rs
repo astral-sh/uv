@@ -9,7 +9,9 @@ use uv_command_support::{ExitStatus, Printer};
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_preview::{Preview, PreviewFeature};
+use uv_python_managed::ManagedPythonInstallations;
 
+use crate::commands::diagnostics::write_error_chain;
 use crate::commands::human_readable_bytes;
 use crate::commands::reporters::{CleaningDirectoryReporter, CleaningPackageReporter};
 
@@ -21,13 +23,40 @@ pub(crate) async fn cache_clean(
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
+    let mut errors = Vec::new();
+    // Release the cache lock before acquiring the Python installation lock.
+    if let Err(error) = clean_cache(packages, force, cache, printer, preview).await {
+        errors.push(error);
+    }
+    if packages.is_empty() {
+        match clean_python_downloads(printer).await {
+            Ok(python_errors) => errors.extend(python_errors),
+            Err(error) => errors.push(error),
+        }
+    }
+    if let Some(error) = errors.pop() {
+        for previous in errors {
+            write_error_chain(&previous, printer)?;
+        }
+        return Err(error);
+    }
+    Ok(ExitStatus::Success)
+}
+
+async fn clean_cache(
+    packages: &[PackageName],
+    force: bool,
+    cache: Cache,
+    printer: Printer,
+    preview: Preview,
+) -> Result<()> {
     if !cache.root().exists() {
         writeln!(
             printer.stderr(),
             "No cache found at: {}",
             cache.root().user_display().cyan()
         )?;
-        return Ok(ExitStatus::Success);
+        return Ok(());
     }
 
     let cache = match cache.with_exclusive_lock_no_wait() {
@@ -113,5 +142,44 @@ pub(crate) async fn cache_clean(
 
     writeln!(printer.stderr())?;
 
-    Ok(ExitStatus::Success)
+    Ok(())
+}
+
+/// Remove abandoned managed Python downloads, returning errors for entries that could not be removed.
+async fn clean_python_downloads(printer: Printer) -> Result<Vec<anyhow::Error>> {
+    let installations = ManagedPythonInstallations::from_settings(None)?;
+    let scratch = installations.scratch();
+    if !scratch.try_exists()? {
+        return Ok(Vec::new());
+    }
+
+    let lock = installations.lock().await?;
+    let (removed, errors) = tokio::task::spawn_blocking(move || {
+        let mut removed = false;
+        let mut errors = Vec::new();
+        if let Err(error) = installations.clear_scratch(&lock, |result| match result {
+            Ok(()) => removed = true,
+            Err(error) => errors.push(error),
+        }) {
+            errors.push(error);
+        }
+        (removed, errors)
+    })
+    .await?;
+    if removed {
+        writeln!(
+            printer.stderr(),
+            "Cleared temporary Python installation files at: {}",
+            scratch.user_display().cyan()
+        )?;
+    }
+    Ok(errors
+        .into_iter()
+        .map(|error| {
+            anyhow::Error::new(error).context(format!(
+                "Failed to clear temporary Python installation files at: {}",
+                scratch.user_display()
+            ))
+        })
+        .collect())
 }

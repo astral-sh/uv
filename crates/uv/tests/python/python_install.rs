@@ -22,7 +22,7 @@ use uv_test::assert_link_target;
 use uv_test::{LATEST_PYTHON_3_12, assert_path_missing, uv_snapshot};
 
 use uv_fs::Simplified;
-use uv_python_managed::platform_key_from_env;
+use uv_python_managed::{ManagedPythonInstallations, platform_key_from_env};
 use uv_static::EnvVars;
 use walkdir::WalkDir;
 
@@ -128,6 +128,84 @@ fn python_install() {
 
     // The executable should be removed
     bin_python.assert(predicate::path::missing());
+}
+
+/// An interrupted download is only safe to remove after acquiring the installation lock.
+#[tokio::test]
+async fn python_install_cleans_stale_temporary_directories() -> anyhow::Result<()> {
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_filtered_python_keys()
+        .with_managed_python_dirs();
+    let managed = context.temp_dir.child("managed");
+    let scratch = managed.child(".temp");
+    let stale = scratch.child(".tmp-stale");
+    stale.create_dir_all()?;
+    stale.child("download").touch()?;
+    let unrelated = scratch.child("unrelated");
+    unrelated.create_dir_all()?;
+
+    let installations = ManagedPythonInstallations::from_settings(Some(managed.to_path_buf()))?;
+    let lock = installations.lock().await?;
+    uv_snapshot!(context.filters(), context.python_install().arg("3.12.9").arg("--no-bin").env(EnvVars::UV_LOCK_TIMEOUT, "1"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Timeout ([TIME]) when waiting for lock on `managed` at `managed/.lock`, is another uv process running? You can set `UV_LOCK_TIMEOUT` to increase the timeout.
+    ");
+    stale.child("download").assert(predicate::path::exists());
+    drop(lock);
+
+    uv_snapshot!(context.filters(), context.python_install().arg("3.12.9").arg("--no-bin"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Installed Python 3.12.9 in [TIME]
+     + cpython-3.12.9-[PLATFORM]
+    ");
+    stale.assert(predicate::path::missing());
+    unrelated.assert(predicate::path::exists());
+    Ok(())
+}
+
+#[test]
+fn python_install_does_not_clean_redirected_scratch_directory() -> anyhow::Result<()> {
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_filtered_python_keys()
+        .with_managed_python_dirs();
+    let redirected = context.temp_dir.child("redirected");
+    let unrelated = redirected.child(".tmp-unrelated");
+    unrelated.create_dir_all()?;
+    let managed = context.temp_dir.child("managed");
+    managed.create_dir_all()?;
+    uv_fs::replace_symlink(redirected.path(), managed.child(".temp").path())?;
+
+    uv_snapshot!(context.filters(), context.python_install().arg("3.12.9").arg("--no-bin"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Installed Python 3.12.9 in [TIME]
+     + cpython-3.12.9-[PLATFORM]
+    ");
+    unrelated.assert(predicate::path::exists());
+    Ok(())
+}
+
+/// Uninstall must retain the lock path even when a redirected scratch directory is the only entry.
+#[test]
+fn python_uninstall_retains_installation_lock() -> anyhow::Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]).with_managed_python_dirs();
+    let redirected = context.temp_dir.child("redirected");
+    redirected.create_dir_all()?;
+    let managed = context.temp_dir.child("managed");
+    managed.create_dir_all()?;
+    uv_fs::replace_symlink(redirected.path(), managed.child(".temp").path())?;
+
+    uv_snapshot!(context.filters(), context.python_uninstall().arg("--all"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Searching for Python installations
+    No Python installations found
+    ");
+    managed.child(".lock").assert(predicate::path::exists());
+    managed.child(".temp").assert(predicate::path::exists());
+    Ok(())
 }
 
 /// Regression test for a panic when `/install` in a sysconfig value is followed by a non-ASCII
@@ -335,7 +413,7 @@ fn python_reinstall_patch() {
 }
 
 #[test]
-fn python_install_automatic() {
+fn python_install_automatic() -> anyhow::Result<()> {
     let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
@@ -354,7 +432,9 @@ fn python_install_automatic() {
     hint: A managed Python download is available, but Python downloads are set to 'never'
     ");
 
-    // Otherwise, we should fetch the latest Python version
+    // Otherwise, we should fetch the latest Python version and clean up interrupted downloads.
+    let stale = context.temp_dir.child("managed/.temp/.tmp-stale");
+    stale.create_dir_all()?;
     uv_snapshot!(context.filters(), context.run()
         .env_remove(EnvVars::VIRTUAL_ENV)
         .arg("python").arg("-c").arg("import sys; print(sys.version_info[:2])"), @"
@@ -362,6 +442,7 @@ fn python_install_automatic() {
     ----- stdout -----
     (3, 15)
     ");
+    stale.assert(predicate::path::missing());
 
     // Subsequently, we can use the interpreter even with downloads disabled
     uv_snapshot!(context.filters(), context.run()
@@ -423,6 +504,7 @@ fn python_install_automatic() {
         (3, 11)
         ");
     }
+    Ok(())
 }
 
 /// Regression test for a bad cpython runtime
