@@ -30,7 +30,7 @@ impl PackageId {
 
     /// Create a new [`PackageId`] from a URL.
     pub(crate) fn from_url(url: SafeUrl) -> Self {
-        Self::Url(canonical_source_url(url))
+        Self::Url(CanonicalUrl::new(url))
     }
 }
 
@@ -40,15 +40,6 @@ impl Display for PackageId {
             Self::Name(name) => write!(f, "{name}"),
             Self::Url(url) => write!(f, "{url}"),
         }
-    }
-}
-
-/// Canonicalize a serialized source URL, applying Git rules only to explicit Git URLs.
-pub(crate) fn canonical_source_url(url: SafeUrl) -> CanonicalUrl {
-    if url.scheme().starts_with("git+") {
-        CanonicalUrl::for_git_source(url)
-    } else {
-        CanonicalUrl::new(url)
     }
 }
 
@@ -216,7 +207,9 @@ impl Display for VersionId {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum DistributionId {
     Url(CanonicalUrl),
+    /// A source tree at the Git repository root (`None`) or in a subdirectory (`Some`).
     GitDirectory(GitDistributionUrl, Option<PathBuf>),
+    /// A wheel or source archive at a path relative to the Git repository root.
     GitPath(GitDistributionUrl, PathBuf),
     PathBuf(PathBuf),
     Digest(HashDigest),
@@ -304,6 +297,7 @@ impl From<&Self> for ResourceId {
 mod tests {
     use std::assert_matches;
     use std::error::Error;
+    use std::str::FromStr;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use fs_err as fs;
@@ -331,7 +325,7 @@ mod tests {
 
     #[test]
     fn git_distribution_id_preserves_reference_and_subdirectory() -> Result<(), Box<dyn Error>> {
-        let name = "pkg".parse::<PackageName>()?;
+        let name = PackageName::from_str("pkg")?;
         let dist = |url| -> Result<Dist, Box<dyn Error>> {
             Ok(Dist::from_url(
                 name.clone(),

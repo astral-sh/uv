@@ -93,6 +93,8 @@ impl AsRef<Path> for WheelCacheKind {
 
 #[cfg(test)]
 mod tests {
+    use insta::assert_snapshot;
+    use uv_fs::Simplified;
     use uv_redacted::SafeUrlError;
 
     use super::*;
@@ -124,12 +126,8 @@ mod tests {
         let source = SafeUrl::parse(
             "git+https://github.com/PYPA/sample-namespace-packages.git@2.0.0#subdirectory=src&lfs=true",
         )?;
-        assert_eq!(
-            WheelCache::Git(&source, "c9929c576344ec58").root(),
-            Path::new("git")
-                .join("e1494ed3a4bc2733")
-                .join("c9929c576344ec58"),
-        );
+        let root = WheelCache::Git(&source, "c9929c576344ec58").root();
+        assert_snapshot!(root.portable_display(), @"git/e1494ed3a4bc2733/c9929c576344ec58");
         Ok(())
     }
 }

@@ -14,8 +14,13 @@ use crate::cache_key::{CacheKey, CacheKeyHasher};
 pub struct CanonicalUrl(SafeUrl);
 
 impl CanonicalUrl {
+    /// Canonicalize a URL, applying Git source rules when the scheme starts with `git+`.
     pub fn new(url: SafeUrl) -> Self {
-        Self::canonicalize(url, None)
+        if url.scheme().starts_with("git+") {
+            Self::for_git_source(url)
+        } else {
+            Self::canonicalize(url, None)
+        }
     }
 
     /// Retain built-wheel cache keys from the original Git source URL normalization.
@@ -253,7 +258,7 @@ mod tests {
 
     #[test]
     fn canonical_git_source_url() -> Result<(), SafeUrlError> {
-        let canonical = |url| SafeUrl::parse(url).map(CanonicalUrl::for_git_source);
+        let canonical = |url| SafeUrl::parse(url).map(CanonicalUrl::new);
         let repository = canonical("git+https://github.com/pypa/sample-namespace-packages.git")?;
         let tagged = canonical("git+https://github.com/pypa/sample-namespace-packages.git@2.0.0")?;
 
