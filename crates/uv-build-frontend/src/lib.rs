@@ -293,6 +293,7 @@ impl SourceBuild {
     /// `source_dist` is for error reporting only.
     pub async fn setup(
         source: &Path,
+        is_source_tree: bool,
         subdirectory: Option<&Path>,
         install_path: &Path,
         stop_discovery_at: Option<&Path>,
@@ -404,6 +405,7 @@ impl SourceBuild {
                 build_context,
                 source_build_context.clone(),
                 &pep517_backend,
+                is_source_tree,
                 &extra_build_dependencies,
                 build_stack,
             )
@@ -500,6 +502,7 @@ impl SourceBuild {
                 let resolution = build_context
                     .resolve(
                         &requirements,
+                        &[],
                         Some(resolved_requirements.hasher()),
                         build_stack,
                     )
@@ -627,6 +630,7 @@ impl SourceBuild {
         build_context: &impl BuildContext,
         source_build_context: SourceBuildContext,
         pep517_backend: &Pep517Backend,
+        is_source_tree: bool,
         extra_build_dependencies: &[Requirement],
         build_stack: &BuildStack,
     ) -> Result<ResolvedRequirements, Error> {
@@ -639,7 +643,7 @@ impl SourceBuild {
                     resolved_requirements.clone()
                 } else {
                     let resolved_requirements = build_context
-                        .resolve(&DEFAULT_BACKEND.requirements, None, build_stack)
+                        .resolve(&DEFAULT_BACKEND.requirements, &[], None, build_stack)
                         .await
                         .map_err(|err| {
                             Error::RequirementsResolve("`setup.py` build", err.into())
@@ -663,8 +667,15 @@ impl SourceBuild {
                         "`build-system.requires` and `extra-build-dependencies`",
                     )
                 };
+                // A distribution cannot authorize its own build dependencies. Extra build
+                // dependencies come from the user's configuration for either kind of source.
+                let trusted_requirements = if is_source_tree {
+                    requirements.as_slice()
+                } else {
+                    extra_build_dependencies
+                };
                 build_context
-                    .resolve(&requirements, None, build_stack)
+                    .resolve(&requirements, trusted_requirements, None, build_stack)
                     .await
                     .map_err(|err| Error::RequirementsResolve(dependency_sources, err.into()))?
             },

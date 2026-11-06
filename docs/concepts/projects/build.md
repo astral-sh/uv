@@ -82,8 +82,9 @@ transitive dependencies, set
 or pass `--require-build-hashes`.
 
 You'll need to pin each build dependency to an exact version (or use a direct URL) and provide a
-hash. Hashes can also come from URL fragments in `build-system.requires`, but not from requirements
-returned by a build backend.
+hash. URL fragments in a local project's `build-system.requires` can also supply hashes. For source
+distributions, provide hashes in build constraints or other local configuration. Hashes supplied by
+a distribution or returned by its build backend cannot authorize a build dependency.
 
 When build isolation is disabled, uv uses the installed build dependencies without checking their
 hashes. uv also does not recheck already-installed packages or previously built wheels. The bundled

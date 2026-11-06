@@ -280,7 +280,7 @@ impl<'a> BuildDispatch<'a> {
 
     /// Set the hash-checking mode for build dependencies.
     ///
-    /// When hashes are required, hashes from backend-generated requirements are not trusted.
+    /// When hashes are required, only requirements from local policy can contribute hashes.
     #[must_use]
     pub fn with_build_hash_checking(mut self, mode: HashCheckingMode) -> Self {
         self.build_hash_checking = mode;
@@ -367,6 +367,7 @@ impl BuildContext for BuildDispatch<'_> {
     async fn resolve<'data>(
         &'data self,
         requirements: &'data [Requirement],
+        trusted_requirements: &'data [Requirement],
         hash_override: Option<&'data HashStrategy>,
         build_stack: &'data BuildStack,
     ) -> Result<ResolvedRequirements, BuildDispatchError> {
@@ -375,20 +376,18 @@ impl BuildContext for BuildDispatch<'_> {
         let resolver_env = ResolverEnvironment::specific(marker_env);
         let tags = self.interpreter.tags()?;
 
-        let active_requirements = requirements.iter().filter(|requirement| {
-            requirement.evaluate_markers(Some(self.interpreter.markers()), &[])
-        });
-        let previous_hasher = hash_override;
-        let hasher = match previous_hasher {
-            Some(hasher) if self.require_build_hashes() => hasher
-                .clone()
-                .augment_with_metadata_requirements(active_requirements),
-            previous_hasher => previous_hasher
-                .unwrap_or(self.base_hasher)
-                .clone()
-                .augment_with_requirements(active_requirements),
+        let hash_requirements = if self.require_build_hashes() {
+            trusted_requirements
+        } else {
+            requirements
         }
-        .map_err(uv_requirements::Error::from)?;
+        .iter()
+        .filter(|requirement| requirement.evaluate_markers(Some(self.interpreter.markers()), &[]));
+        let hasher = hash_override
+            .unwrap_or(self.base_hasher)
+            .clone()
+            .augment_with_requirements(hash_requirements)
+            .map_err(uv_requirements::Error::from)?;
 
         // Walk any URL requirements transitively so their sub-URLs (for example, a workspace
         // member that depends on another workspace member) are known before the resolver runs
@@ -593,6 +592,7 @@ impl BuildContext for BuildDispatch<'_> {
         stop_discovery_at: Option<&'data Path>,
         version_id: Option<&'data str>,
         dist: Option<&'data SourceDist>,
+        is_source_tree: bool,
         sources: &'data NoSources,
         build_kind: BuildKind,
         build_output: BuildOutput,
@@ -636,6 +636,7 @@ impl BuildContext for BuildDispatch<'_> {
 
         let builder = SourceBuild::setup(
             source,
+            is_source_tree,
             subdirectory,
             install_path,
             stop_discovery_at,
