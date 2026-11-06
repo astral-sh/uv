@@ -1,5 +1,5 @@
 pub use crate::github::GitHubRepository;
-pub use crate::oid::{GitOid, OidParseError};
+pub use crate::oid::{GitObjectFormat, GitOid, OidParseError};
 pub use crate::reference::GitReference;
 use std::cmp::Ordering;
 use std::sync::{Arc, LazyLock};
@@ -111,8 +111,9 @@ struct GitUrlInner {
     /// The reference to the commit to use, which could be a branch, tag or revision.
     reference: GitReference,
     /// The resolved commit for a named or ambiguous reference, if known. Exact commit references
-    /// store their commit in [`GitReference::Commit`] instead.
-    resolved: Option<GitOid>,
+    /// store their commit in [`GitReference::Commit`] instead. Keep the resolved commit out of
+    /// line so the two mutually exclusive commits do not both occupy space in every URL.
+    resolved: Option<Arc<GitOid>>,
     /// Git LFS configuration for this repository.
     lfs: GitLfs,
 }
@@ -169,17 +170,11 @@ impl GitUrl {
 
     /// Set the precise [`GitOid`] to use for this Git URL.
     pub fn with_precise(mut self, precise: GitOid) -> Result<Self, GitUrlParseError> {
-        match self.0.reference.as_commit() {
-            Some(commit) => {
-                if commit != precise {
-                    return Err(GitUrlParseError::MismatchedRevision {
-                        revision: commit.to_string(),
-                        precise,
-                        url: Box::new(self.0.url.clone()),
-                    });
-                }
-            }
-            None => Arc::make_mut(&mut self.0).resolved = Some(precise),
+        self.0
+            .reference
+            .validate_resolved_commit(&precise, &self.0.url)?;
+        if self.0.reference.as_commit().is_none() {
+            Arc::make_mut(&mut self.0).resolved = Some(Arc::new(precise));
         }
 
         Ok(self)
@@ -220,7 +215,7 @@ impl GitUrl {
     ///
     /// Returns `None` when the reference is itself a full commit.
     pub fn resolved_commit(&self) -> Option<GitOid> {
-        self.0.resolved
+        self.0.resolved.as_deref().copied()
     }
 
     /// Return the Git LFS configuration.
