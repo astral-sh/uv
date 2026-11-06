@@ -16,7 +16,7 @@ pub(super) struct BoundedDependency<'a> {
 }
 
 /// Find where the selected versions were subject to an upper bound. If Intel macOS
-/// caps Numba, the NumPy cap declared by that Numba release can also be local to Intel.
+/// caps `numba`, that release's `numpy<2.3` requirement can also be local to Intel.
 pub(super) fn sibling_bounds(
     dependencies: Vec<BoundedDependency<'_>>,
 ) -> FxHashMap<&PackageName, Box<[ForkBound]>> {
