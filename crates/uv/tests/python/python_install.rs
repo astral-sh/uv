@@ -2489,45 +2489,80 @@ fn python_install_default_from_env() {
 
 #[cfg(target_os = "macos")]
 #[test]
-fn python_install_patch_dylib() {
-    use assert_cmd::assert::OutputAssertExt;
-    use uv_python_managed::platform_key_from_env;
-
+fn python_install_patch_dylib() -> anyhow::Result<()> {
     let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_managed_python_dirs();
 
-    // Install the latest version
+    let tools = context.temp_dir.child("tools");
+    tools.create_dir_all()?;
+    let calls = context.temp_dir.child("install-name-tool-called");
+    let tool = tools.child("install_name_tool");
+    tool.write_str(indoc! {r#"
+        #!/bin/sh
+        printf called > "$UV_TEST_INSTALL_NAME_TOOL_LOG"
+        exec /usr/bin/install_name_tool "$@"
+    "#})?;
+    fs_err::set_permissions(tool.path(), std::fs::Permissions::from_mode(0o755))?;
+
     context
         .python_install()
-        .arg("--preview")
+        .env(EnvVars::PATH, tools.path())
+        .env("UV_TEST_INSTALL_NAME_TOOL_LOG", calls.path())
         .arg("3.13.1")
         .assert()
         .success();
+    calls.assert(predicate::path::exists());
 
-    let dylib = context
-        .temp_dir
-        .child("managed")
-        .child(format!(
-            "cpython-3.13.1-{}",
-            platform_key_from_env().unwrap()
-        ))
-        .child("lib")
-        .child(format!(
-            "{}python3.13{}",
-            std::env::consts::DLL_PREFIX,
-            std::env::consts::DLL_SUFFIX
-        ));
-
-    let mut cmd = std::process::Command::new("otool");
-    cmd.arg("-D").arg(dylib.as_ref());
-
-    uv_snapshot!(context.filters(), cmd, @r###"
+    let dylib = context.temp_dir.child(format!(
+        "managed/cpython-3.13.1-{}/lib/libpython3.13.dylib",
+        platform_key_from_env()?
+    ));
+    uv_snapshot!(context.filters(), Command::new("/usr/bin/otool").arg("-D").arg(dylib.path()), @"
     exit_code: 0 (success)
     ----- stdout -----
     [TEMP_DIR]/managed/cpython-3.13.1-[PLATFORM]/lib/libpython3.13.dylib:
     [TEMP_DIR]/managed/cpython-3.13.1-[PLATFORM]/lib/libpython3.13.dylib
-    "###);
+    ");
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn python_install_patch_dylib_native() -> anyhow::Result<()> {
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_filtered_python_keys()
+        .with_managed_python_dirs();
+    let tools = context.temp_dir.child("tools");
+    tools.create_dir_all()?;
+
+    context
+        .python_install()
+        .env(EnvVars::PATH, tools.path())
+        .args(["--preview-features", "native-macho-edit", "3.13.1"])
+        .assert()
+        .success();
+
+    let installation = context.temp_dir.child(format!(
+        "managed/cpython-3.13.1-{}",
+        platform_key_from_env()?
+    ));
+    let dylib = installation.child("lib/libpython3.13.dylib");
+    uv_snapshot!(context.filters(), Command::new("/usr/bin/otool").arg("-D").arg(dylib.path()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [TEMP_DIR]/managed/cpython-3.13.1-[PLATFORM]/lib/libpython3.13.dylib:
+    [TEMP_DIR]/managed/cpython-3.13.1-[PLATFORM]/lib/libpython3.13.dylib
+    ");
+    uv_snapshot!(context.filters(), Command::new("/usr/bin/codesign").args(["--verify", "--strict"]).arg(dylib.path()), @"exit_code: 0 (success)");
+    uv_snapshot!(context.filters(), Command::new(installation.child("bin/python3").path())
+        .args(["-I", "-c", "import ctypes, sys; ctypes.CDLL(sys.argv[1]); print('loaded')"])
+        .arg(dylib.path()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    loaded
+    ");
+    Ok(())
 }
 
 #[test]

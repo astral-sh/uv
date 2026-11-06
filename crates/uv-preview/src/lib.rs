@@ -462,6 +462,9 @@ pub enum PreviewFeature {
     BuildDependencyHashes,
     /// Enables experimental support for [wheel variants](https://peps.python.org/pep-0825/).
     WheelVariants,
+    /// Edits and ad-hoc signs unsigned and bare ad-hoc signed managed Python dylibs on macOS.
+    /// Rejects other signature formats.
+    NativeMachoEdit,
 }
 
 impl Display for PreviewFeature {

@@ -319,6 +319,11 @@ mod tests {
         macOS, Credential Manager on Windows, or the Secret Service API on Linux. uv only retrieves
         credentials that it has stored itself, rather than credentials saved by other applications.
 
+        ### `native-macho-edit` {#native-macho-edit}
+
+        Edits and ad-hoc signs unsigned and bare ad-hoc signed managed Python dylibs on macOS.
+        Rejects other signature formats.
+
         ### `package-conflicts` {#package-conflicts}
 
         Workspace members can declare [conflicting
