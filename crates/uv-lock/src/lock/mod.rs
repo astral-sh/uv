@@ -71,6 +71,8 @@ use uv_warnings::warn_user_once;
 use uv_workspace::dependency_groups::{DependencyGroupError, FlatDependencyGroups};
 use uv_workspace::{Editability, WorkspaceMember};
 
+use crate::LockFeatures;
+
 pub use crate::lock::deserialize::Error as CanonicalLockError;
 pub use crate::lock::export::RequirementsTxtExport;
 pub use crate::lock::export::{
@@ -3806,9 +3808,9 @@ impl Lock {
         Ok(lock)
     }
 
-    /// Returns the TOML representation of this lockfile.
-    pub fn to_toml(&self) -> Result<String, toml_edit::ser::Error> {
-        serialize::to_toml(self)
+    /// Returns the TOML representation of this lockfile with the given [`LockFeatures`].
+    pub fn to_toml(&self, features: LockFeatures) -> Result<String, toml_edit::ser::Error> {
+        serialize::to_toml(self, features)
     }
 
     /// Locate every locked version without scanning unrelated sorted packages.
@@ -9341,9 +9343,51 @@ impl Display for Dependency {
 }
 
 /// A single dependency of a package in a lockfile.
+#[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+struct DependencyWire(DependencyWireTable);
+
+impl<'de> serde::Deserialize<'de> for DependencyWire {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct DependencyVisitor;
+
+        impl<'de> serde::de::Visitor<'de> for DependencyVisitor {
+            type Value = DependencyWire;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                formatter.write_str("a package name or a dependency table")
+            }
+
+            fn visit_str<E: serde::de::Error>(self, name: &str) -> Result<Self::Value, E> {
+                Ok(DependencyWire(DependencyWireTable {
+                    package_id: PackageIdForDependency {
+                        name: PackageName::from_str(name).map_err(E::custom)?,
+                        version: None,
+                        source: None,
+                    },
+                    extra: BTreeSet::new(),
+                    marker: SimplifiedMarkerTree::default(),
+                }))
+            }
+
+            fn visit_map<M: serde::de::MapAccess<'de>>(
+                self,
+                map: M,
+            ) -> Result<Self::Value, M::Error> {
+                serde::Deserialize::deserialize(serde::de::value::MapAccessDeserializer::new(map))
+                    .map(DependencyWire)
+            }
+        }
+
+        deserializer.deserialize_any(DependencyVisitor)
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
-struct DependencyWire {
+struct DependencyWireTable {
     #[serde(flatten)]
     package_id: PackageIdForDependency,
     #[serde(default)]
@@ -9360,20 +9404,21 @@ impl DependencyWire {
         default: UniversalMarker,
         unambiguous_package_ids: &FxHashMap<PackageName, PackageId>,
     ) -> Result<Dependency, LockError> {
+        let Self(dependency) = self;
         let (simplified_marker, complexified_marker) =
-            if self.marker.as_simplified_marker_tree().is_true() {
+            if dependency.marker.as_simplified_marker_tree().is_true() {
                 (environment, default)
             } else {
-                let mut simplified_marker = self.marker;
+                let mut simplified_marker = dependency.marker;
                 simplified_marker.and(environment);
                 let complexified_marker =
                     UniversalMarker::from_combined(simplified_marker.into_marker(requires_python));
                 (simplified_marker, complexified_marker)
             };
         Ok(Dependency {
-            package_id: self.package_id.unwire(unambiguous_package_ids)?,
+            package_id: dependency.package_id.unwire(unambiguous_package_ids)?,
             index: PackageIndex(0),
-            extra: self.extra,
+            extra: dependency.extra,
             simplified_marker,
             complexified_marker,
         })

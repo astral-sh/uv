@@ -176,7 +176,8 @@ pub async fn lock(
         .with_refresh(&refresh)
         .with_lockfile_contents_check(
             matches!(&refresh, Refresh::All(..))
-                && preview.is_enabled(PreviewFeature::LockfileFormatCheck),
+                && (preview.is_enabled(PreviewFeature::LockfileFormatCheck)
+                    || preview.is_enabled(PreviewFeature::LockDependencyShorthand)),
         )
         .execute(target),
     )
