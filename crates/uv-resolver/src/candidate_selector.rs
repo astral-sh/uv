@@ -181,15 +181,11 @@ impl CandidateSelector {
         compatible
     }
 
-    /// If the package has a preference, an existing version from an existing lockfile or a version
-    /// from a sibling fork, and the preference satisfies the current range, use that.
+    /// Prefer existing lockfile pins and versions selected by sibling forks.
     ///
-    /// We try to find a resolution that, depending on the input, does not diverge from the
-    /// lockfile or matches a sibling fork. We try an exact match for the current markers (fork
-    /// or specific) first, to ensure stability with repeated locking. If that doesn't work, we
-    /// fall back to preferences that don't match in hopes of still resolving different forks into
-    /// the same version; A solution with less different versions is more desirable than one where
-    /// we may have more recent version in some cases, but overall more versions.
+    /// Try pins matching the current markers first so repeated locks keep their versions.
+    /// Other forks can share a version unless the normal candidate is a newer public
+    /// release excluded only by another fork's upper bounds.
     fn get_preferred<'a, InstalledPackages: InstalledPackagesProvider>(
         &'a self,
         package_name: &'a PackageName,

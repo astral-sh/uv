@@ -1004,9 +1004,9 @@ pub struct ResolverInstallerSchema {
     /// The strategy to use when selecting multiple versions of a given package across Python
     /// versions and platforms.
     ///
-    /// By default, uv will optimize for selecting the latest version of each package for each
-    /// supported Python version (`requires-python`), while minimizing the number of selected
-    /// versions across platforms.
+    /// By default (`requires-python`), uv prefers the latest compatible version for each supported
+    /// Python version and tries to share versions across platforms. When an upper bound on one
+    /// platform excludes a newer release, uv can select that release on another platform.
     ///
     /// Under `fewest`, uv will minimize the number of selected versions for each package,
     /// preferring older versions that are compatible with a wider range of supported Python
@@ -1835,9 +1835,9 @@ pub struct PipOptions {
     /// The strategy to use when selecting multiple versions of a given package across Python
     /// versions and platforms.
     ///
-    /// By default, uv will optimize for selecting the latest version of each package for each
-    /// supported Python version (`requires-python`), while minimizing the number of selected
-    /// versions across platforms.
+    /// By default (`requires-python`), uv prefers the latest compatible version for each supported
+    /// Python version and tries to share versions across platforms. When an upper bound on one
+    /// platform excludes a newer release, uv can select that release on another platform.
     ///
     /// Under `fewest`, uv will minimize the number of selected versions for each package,
     /// preferring older versions that are compatible with a wider range of supported Python
