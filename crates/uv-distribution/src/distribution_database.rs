@@ -1203,10 +1203,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         // Note that this is *not* the same as the number of bytes actually written
         // to the temporary file, since a copy from the response to the file can fail.
         let mut bytes_retrieved = 0;
-        // The most recent range request's starting offset.
-        let mut resumed_at = None;
-        // The `Content-Range` that the download was last resumed at.
-        let mut resumed_range: Option<ContentRangeBytes> = None;
+        let mut response_kind = WheelResponse::Initial;
 
         // This loop is where we handle resumption of interrupted downloads, as well as
         // range requests (if the origin supports them).
@@ -1237,9 +1234,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
             // A server can advertise range requests but ignore one. In that case, the
             // response is a complete download and must replace the partial bytes.
-            let replaces_partial_download =
-                resumed_at.is_some() && response.status() != reqwest::StatusCode::PARTIAL_CONTENT;
-            if replaces_partial_download {
+            if let WheelResponse::Restarted = response_kind {
                 writer
                     .get_mut()
                     .set_len(0)
@@ -1287,10 +1282,9 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 // Draining the response succeeded. However, the response could be a `206 Partial Content`,
                 // so we can't assume that we're done.
                 Ok(_) => {
-                    // No `resumed_range` means this was a normal full response, so there's
-                    // no resumption to do. We can leave the loop.
-                    let Some(range) = resumed_range else {
-                        break;
+                    let range = match response_kind {
+                        WheelResponse::Initial | WheelResponse::Restarted => break,
+                        WheelResponse::Resumed(range) => range,
                     };
 
                     // We should be in sync with the origin. Failure here means that the
@@ -1335,9 +1329,14 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             // If the response replaces an already in-flight partial download or
             // indicates a lack of range-request support, then we can't resume.
             // Return the error back to the retry stack.
-            if replaces_partial_download || !supports_range_requests {
+            if !supports_range_requests {
                 return Err(err);
             }
+            let previous_offset = match response_kind {
+                WheelResponse::Initial => 0,
+                WheelResponse::Resumed(range) => range.first_byte,
+                WheelResponse::Restarted => return Err(err),
+            };
 
             // Some sanity checks: we should have made *some* progress as part of
             // partial response, plus our writer's offset should agree with the number
@@ -1349,10 +1348,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 .stream_position()
                 .await
                 .map_err(Error::CacheWrite)?;
-            if offset == 0
-                || offset != bytes_retrieved
-                || resumed_at.is_some_and(|previous| offset <= previous)
-            {
+            if offset <= previous_offset || offset != bytes_retrieved {
                 return Err(err);
             }
 
@@ -1379,9 +1375,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             }
             resumed_response.error_for_status_ref()?;
 
-            resumed_range = if resumed_response.status() == reqwest::StatusCode::PARTIAL_CONTENT {
-                // The origin honored our range request, so we update `resumed_range`
-                // for the next iteration.
+            response_kind = if resumed_response.status() == reqwest::StatusCode::PARTIAL_CONTENT {
                 let Some(range) = content_range(&resumed_response, offset, download_size) else {
                     warn!(
                         "Invalid range request response from server that declares HTTP range \
@@ -1390,15 +1384,12 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     return Err(err);
                 };
                 download_size = Some(range.complete_length);
-                Some(range)
+                WheelResponse::Resumed(range)
             } else {
-                // The origin is allowed to ignore our range request and send a full response instead.
-                // That means we have no `resumed_range` to honor on the next iteration.
-                None
+                WheelResponse::Restarted
             };
 
             response = resumed_response;
-            resumed_at = Some(offset);
         }
 
         // We've left the resumption loop.
@@ -1817,6 +1808,16 @@ fn content_length(response: &reqwest::Response) -> Option<u64> {
         .get(reqwest::header::CONTENT_LENGTH)
         .and_then(|val| val.to_str().ok())
         .and_then(|val| val.parse::<u64>().ok())
+}
+
+/// How the current HTTP response contributes to the wheel being downloaded.
+enum WheelResponse {
+    /// The response to the original request.
+    Initial,
+    /// The server honored a range request at the requested offset.
+    Resumed(ContentRangeBytes),
+    /// The server ignored a range request and returned the full wheel.
+    Restarted,
 }
 
 /// Return the bounds of a range response starting at `offset` with a known complete length.
