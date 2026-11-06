@@ -1324,6 +1324,56 @@ fn run_pep723_script_lock() -> Result<()> {
     Ok(())
 }
 
+/// A script invoked through a symlink uses the lockfile stored alongside the script it points to.
+#[test]
+#[cfg(unix)]
+fn run_pep723_script_lock_symlink() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "iniconfig",
+        # ]
+        # ///
+
+        import iniconfig
+
+        print("Hello, world!")
+       "#
+    })?;
+
+    // Lock the script.
+    uv_snapshot!(context.filters(), context.lock().arg("--script").arg("main.py"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    // Create a symlink to the script.
+    fs_err::os::unix::fs::symlink(
+        context.temp_dir.child("main.py"),
+        context.temp_dir.child("linked.py"),
+    )?;
+
+    // Running the symlink with `--locked` should find `main.py.lock`.
+    uv_snapshot!(context.filters(), context.run().arg("--locked").arg("linked.py"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    Hello, world!
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+
+    Ok(())
+}
+
 /// With `managed = false`, we should avoid installing the project itself.
 #[test]
 fn run_managed_false() -> Result<()> {
