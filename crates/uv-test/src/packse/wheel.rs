@@ -181,7 +181,7 @@ fn build_record(dist_info: &str, entries: &[(String, String)]) -> String {
 
 /// Generate a source distribution (`.tar.gz`) as an in-memory tarball.
 ///
-/// The sdist contains a `pyproject.toml` using `hatchling` as build backend,
+/// The sdist contains a `pyproject.toml` using `uv_build` as build backend,
 /// `PKG-INFO` with full metadata, and a stub module.
 ///
 /// Returns `(filename, bytes)`.
@@ -285,7 +285,7 @@ fn build_metadata(
     metadata
 }
 
-/// Build a minimal `pyproject.toml` for an sdist using hatchling.
+/// Build a minimal `pyproject.toml` for an sdist using `uv_build`.
 fn build_pyproject_toml(
     name: &PackageName,
     version: &Version,
@@ -339,14 +339,8 @@ fn build_pyproject_toml(
     formatdoc! {
         r#"
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
-
-        [tool.hatch.build.targets.wheel]
-        packages = ["src/{normalized}"]
-
-        [tool.hatch.build.targets.sdist]
-        only-include = ["src/{normalized}"]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [project]
         name = "{name}"
