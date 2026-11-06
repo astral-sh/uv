@@ -14894,8 +14894,7 @@ fn git_source_refs() -> Result<()> {
 #[cfg(feature = "test-git")]
 #[cfg_attr(windows, ignore = "Git error messages differ on Windows")]
 fn git_source_missing_tag() -> Result<()> {
-    let context =
-        uv_test::test_context!("3.12").with_filter(("`.*/git fetch (.*)`", "`git fetch $1`"));
+    let context = uv_test::test_context!("3.12").with_filter((r"`[^`]+/git ", "`git "));
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -14918,7 +14917,7 @@ fn git_source_missing_tag() -> Result<()> {
       cause: Git operation failed
       cause: failed to clone into: [CACHE_DIR]/git-v1/db/8dab139913c4b566
       cause: failed to fetch tag `missing`
-      cause: process didn't exit successfully: `git fetch --force --update-head-ok 'https://github.com/astral-test/uv-public-pypackage' '+refs/tags/missing:refs/remotes/origin/tags/missing'` (exit status: 128)
+      cause: process didn't exit successfully: `git -c maintenance.autoDetach=false -c gc.autoDetach=false fetch --force --update-head-ok 'https://github.com/astral-test/uv-public-pypackage' '+refs/tags/missing:refs/remotes/origin/tags/missing'` (exit status: 128)
              --- stderr
              fatal: couldn't find remote ref refs/tags/missing
     ");
