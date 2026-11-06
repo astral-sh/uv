@@ -541,6 +541,9 @@ pub struct VersionArgs {
     /// Only show the version
     ///
     /// By default, uv will show the project name before the version.
+    ///
+    /// Cannot be used when multiple packages are selected with `--all-packages` or a repeated
+    /// `--package`.
     #[arg(long)]
     short: bool,
 
@@ -595,9 +598,20 @@ pub struct VersionArgs {
     #[command(flatten)]
     refresh: RefreshArgs,
 
-    /// Update the version of a specific package in the workspace.
-    #[arg(long, conflicts_with = "isolated", value_hint = ValueHint::Other)]
-    package: Option<PackageName>,
+    /// Update the version of specific packages in the workspace.
+    ///
+    /// May be provided multiple times to read or update several workspace members at once.
+    ///
+    /// If any workspace member does not exist, uv will exit with an error.
+    #[arg(long, conflicts_with_all = ["all_packages", "isolated"], value_hint = ValueHint::Other)]
+    package: Vec<PackageName>,
+
+    /// Read or update the version of all workspace members.
+    ///
+    /// If any workspace member does not have a static `project.version`, uv will exit with an
+    /// error without updating any of the members.
+    #[arg(long, conflicts_with_all = ["package", "isolated"])]
+    all_packages: bool,
 
     /// The Python interpreter to use for resolving and syncing.
     ///
