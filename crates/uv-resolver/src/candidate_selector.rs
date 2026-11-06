@@ -21,6 +21,7 @@ use crate::prioritized_distribution::{
 };
 use crate::pubgrub::Range;
 use crate::resolution_mode::ResolutionStrategy;
+use crate::resolver::ForkUpgrades;
 use crate::version_map::{VersionMap, VersionMapDistHandle};
 use crate::{Exclusions, Manifest, Options, ResolverEnvironment};
 
@@ -91,6 +92,7 @@ impl CandidateSelector {
         index: Option<&'a IndexUrl>,
         env: &ResolverEnvironment,
         tags: Option<&'a Tags>,
+        upgrades: &ForkUpgrades,
     ) -> Option<Candidate<'a>> {
         if let Some(recorder) = &self.recorder {
             recorder.candidate_policy(package_name);
@@ -132,6 +134,7 @@ impl CandidateSelector {
             env,
             tags,
             || best.as_ref().map(|candidate| candidate.version),
+            upgrades,
         ) {
             trace!("Using preference {} {}", preferred.name, preferred.version);
             return Some(preferred);
@@ -199,6 +202,7 @@ impl CandidateSelector {
         env: &ResolverEnvironment,
         tags: Option<&'a Tags>,
         best_version: impl Fn() -> Option<&'a Version>,
+        upgrades: &ForkUpgrades,
     ) -> Option<Candidate<'a>> {
         let preferences = preferences.get(package_name);
 
@@ -246,7 +250,7 @@ impl CandidateSelector {
         Self::get_preferred_from_iter(
             preferences.filter(|entry| {
                 range.contains(entry.pin().version())
-                    && fork.is_none_or(|fork| entry.applies_in(fork, &best_version))
+                    && fork.is_none_or(|fork| entry.applies_in(fork, &best_version, upgrades))
             }),
             package_name,
             range,

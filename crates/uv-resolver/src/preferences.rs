@@ -1,4 +1,5 @@
 use std::str::FromStr;
+use std::sync::Arc;
 
 use rustc_hash::FxHashMap;
 use tracing::trace;
@@ -11,6 +12,7 @@ use uv_pypi_types::{HashDigest, HashDigests, HashError};
 use uv_requirements_txt::{RequirementEntry, RequirementsTxtRequirement};
 
 use crate::ResolverEnvironment;
+use crate::resolver::{BoundParent, ForkUpgrades};
 use crate::universal_marker::UniversalMarker;
 
 #[derive(thiserror::Error, Debug)]
@@ -167,6 +169,8 @@ pub(crate) enum PreferenceSource {
 pub(crate) struct Entry {
     /// Upper bounds that contributed to a sibling fork's selection.
     bounds: Box<[ForkBound]>,
+    /// The selected registry release, if it imposed an upper bound on a dependency.
+    parent: Option<Arc<BoundParent>>,
     marker: UniversalMarker,
     index: PreferenceIndex,
     pin: Pin,
@@ -179,20 +183,40 @@ pub(crate) struct Entry {
 pub(crate) struct ForkBound {
     pub(crate) marker: MarkerTree,
     pub(crate) upper: UpperBound,
+    pub(crate) parent: Option<Arc<BoundParent>>,
+}
+
+impl ForkBound {
+    fn inactive(&self, fork: MarkerTree, upgrades: &ForkUpgrades) -> bool {
+        fork.is_disjoint(self.marker)
+            || self
+                .parent
+                .as_ref()
+                .is_some_and(|parent| upgrades.replaced(parent))
+    }
 }
 
 impl Entry {
+    /// Return the release that capped its dependencies, if both forks use the same registry lookup.
+    pub(crate) fn bounded_parent(&self, index: Option<&IndexUrl>) -> Option<&Arc<BoundParent>> {
+        self.parent
+            .as_ref()
+            .filter(|parent| parent.index.as_ref() == index)
+    }
+
     /// Reuse the pin unless the normal candidate exceeds a bound that applies only
     /// outside this fork. Any other applicable bound that excludes it still wins.
     pub(crate) fn applies_in<'a>(
         &self,
         fork: MarkerTree,
         best_version: impl FnOnce() -> Option<&'a Version>,
+        upgrades: &ForkUpgrades,
     ) -> bool {
+        let inactive = |bound: &ForkBound| bound.inactive(fork, upgrades);
         let Some(upper) = self
             .bounds
             .iter()
-            .filter(|bound| fork.is_disjoint(bound.marker))
+            .filter(|bound| inactive(bound))
             .map(|bound| &bound.upper)
             .min()
         else {
@@ -212,7 +236,7 @@ impl Entry {
         }
         self.bounds
             .iter()
-            .any(|bound| !bound.upper.contains(version) && !fork.is_disjoint(bound.marker))
+            .any(|bound| !bound.upper.contains(version) && !inactive(bound))
     }
 
     /// Return the [`UniversalMarker`] associated with the entry.
@@ -281,6 +305,7 @@ impl Preferences {
             if preference.fork_markers.is_empty() {
                 map.entry(preference.name).or_default().push(Entry {
                     bounds: Box::default(),
+                    parent: None,
                     marker: UniversalMarker::TRUE,
                     index: preference.index,
                     pin: Pin {
@@ -293,6 +318,7 @@ impl Preferences {
                 for fork_marker in preference.fork_markers {
                     map.entry(preference.name.clone()).or_default().push(Entry {
                         bounds: Box::default(),
+                        parent: None,
                         marker: fork_marker,
                         index: preference.index.clone(),
                         pin: Pin {
@@ -316,9 +342,11 @@ impl Preferences {
         markers: UniversalMarker,
         pin: impl Into<Pin>,
         bounds: Box<[ForkBound]>,
+        parent: Option<Arc<BoundParent>>,
     ) {
         self.0.entry(package_name).or_default().push(Entry {
             bounds,
+            parent,
             marker: markers,
             index: PreferenceIndex::from(index),
             pin: pin.into(),
@@ -416,25 +444,32 @@ mod tests {
         let two = Version::new([2]);
         let three = Version::new([3]);
         let entry = Entry {
+            parent: None,
             marker: UniversalMarker::from_combined(darwin.and(older_python)),
             index: PreferenceIndex::Implicit,
             pin: Version::new([1]).into(),
             source: PreferenceSource::Resolver,
             bounds: Box::new([
                 ForkBound {
+                    parent: None,
                     marker: darwin,
                     upper: UpperBound(Bound::Excluded(two.clone())),
                 },
                 ForkBound {
+                    parent: None,
                     marker: older_python,
                     upper: UpperBound(Bound::Excluded(three.clone())),
                 },
             ]),
         };
         // Windows escapes <2, but some Windows environments still require <3.
-        assert!(!entry.applies_in(windows, || Some(&two)));
-        assert!(entry.applies_in(windows, || Some(&three)));
-        assert!(!entry.applies_in(windows.and(older_python.negate()), || Some(&three)));
+        assert!(!entry.applies_in(windows, || Some(&two), &ForkUpgrades::default()));
+        assert!(entry.applies_in(windows, || Some(&three), &ForkUpgrades::default()));
+        assert!(!entry.applies_in(
+            windows.and(older_python.negate()),
+            || Some(&three),
+            &ForkUpgrades::default()
+        ));
     }
 
     /// Test that [`PreferenceIndex::matches`] correctly ignores credentials when comparing URLs.

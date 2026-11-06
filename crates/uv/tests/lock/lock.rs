@@ -9173,7 +9173,7 @@ fn lock_requires_python_fork() -> Result<()> {
 }
 
 /// Darwin caps parent at 1. Its child<2 requirement also covers Windows, but only
-/// while parent 1 is selected. Both packages can upgrade outside Darwin.
+/// while parent 1 is selected. The unconditional parent<100 allows both upgrades.
 #[cfg(feature = "test-universal")]
 #[test]
 fn lock_sibling_fork_upper_bound() -> Result<()> {
@@ -9206,6 +9206,7 @@ fn lock_sibling_fork_upper_bound() -> Result<()> {
         version = "1.0.0"
         requires-python = ">=3.12"
         dependencies = [
+            "parent<100",
             "parent<2 ; sys_platform == 'darwin'",
             "parent ; sys_platform != 'darwin'",
         ]
@@ -9233,6 +9234,108 @@ fn lock_sibling_fork_upper_bound() -> Result<()> {
 
     ----- stderr -----
     Ignoring existing lockfile due to change in fork strategy: `requires-python` vs. `fewest`
+    Resolved 3 packages in [TIME]
+    ");
+    Ok(())
+}
+
+/// A cap that admits every parent release gives Windows no reason to downgrade
+/// parent 2 just to select child 2.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_sibling_fork_redundant_upper_bound() -> Result<()> {
+    let server = PackseServer::from_toml(indoc! {r#"
+        name = "sibling-fork-redundant-upper-bound"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.parent.versions."1.0.0"]
+        requires = ["child"]
+        [packages.parent.versions."2.0.0"]
+        requires = ["child<2"]
+        [packages.child.versions."1.0.0"]
+        [packages.child.versions."2.0.0"]
+    "#})?;
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "parent<99 ; sys_platform == 'darwin'",
+            "parent ; sys_platform != 'darwin'",
+            "child ; sys_platform != 'darwin'",
+        ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.tree().arg("--python-platform").arg("windows").arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    project v1.0.0
+    ├── child v1.0.0
+    └── parent v2.0.0
+        └── child v1.0.0
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    Ok(())
+}
+
+/// If the newer parent fails, backtracking to the sibling's release also restores
+/// its preference for the child.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_sibling_fork_upper_bound_backtrack() -> Result<()> {
+    let server = PackseServer::from_toml(indoc! {r#"
+        name = "sibling-fork-upper-bound-backtrack"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.parent.versions."1.0.0"]
+        requires = ["child"]
+        [packages.parent.versions."2.0.0"]
+        requires = ["child<2"]
+        [packages.parent.versions."3.0.0"]
+        requires = ["missing"]
+        [packages.child.versions."1.0.0"]
+        [packages.child.versions."2.0.0"]
+    "#})?;
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "parent<3 ; sys_platform == 'darwin'",
+            "parent ; sys_platform != 'darwin'",
+            "child ; sys_platform != 'darwin'",
+        ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.tree().arg("--python-platform").arg("windows").arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    project v1.0.0
+    ├── child v1.0.0
+    └── parent v2.0.0
+        └── child v1.0.0
+
+    ----- stderr -----
     Resolved 3 packages in [TIME]
     ");
     Ok(())
