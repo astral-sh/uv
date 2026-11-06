@@ -1,0 +1,8 @@
+---
+source: crates/uv/tests/pip_compile/pip_compile.rs
+expression: snapshot
+---
+exit_code: 1 (failure)
+----- stderr -----
+error: No solution found when resolving dependencies for split (markers: 'new' not in extras)
+  cause: Because example depends on httpx>0.2 and httpx<0.2, we can conclude that your requirements are unsatisfiable.
