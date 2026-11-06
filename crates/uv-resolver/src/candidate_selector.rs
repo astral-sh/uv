@@ -4,7 +4,6 @@ use std::ops::Bound;
 
 use either::Either;
 use itertools::Itertools;
-use pubgrub::State;
 use smallvec::SmallVec;
 use tracing::{debug, trace};
 
@@ -17,7 +16,6 @@ use uv_pep440::Version;
 use uv_platform_tags::Tags;
 use uv_types::InstalledPackagesProvider;
 
-use crate::dependency_provider::UvDependencyProvider;
 use crate::preferences::{CappedParent, Entry, PreferenceSource, Preferences};
 use crate::prerelease::{PrereleaseSelection, PrereleaseStrategy};
 use crate::prioritized_distribution::{
@@ -96,7 +94,7 @@ impl CandidateSelector {
         env: &ResolverEnvironment,
         requires_python: &RequiresPython,
         tags: Option<&'a Tags>,
-        decisions: Option<&State<UvDependencyProvider>>,
+        replaced_parent: &dyn Fn(&CappedParent) -> bool,
     ) -> Option<Candidate<'a>> {
         if let Some(recorder) = &self.recorder {
             recorder.candidate_policy(package_name);
@@ -124,18 +122,6 @@ impl CandidateSelector {
                 .and_then(Candidate::compatible)
                 .is_some_and(|dist| !dist.has_portable_distribution(requires_python))
         });
-        let replaced_parent = |parent: &CappedParent| {
-            decisions.is_some_and(|state| {
-                state
-                    .partial_solution
-                    .extract_solution()
-                    .any(|(id, version)| {
-                        state.package_store[id].unconditional_base_name() == Some(&parent.name)
-                            && !parent.cap.contains(&version)
-                    })
-            })
-        };
-
         // If we have a preference (e.g., from a lockfile), search for a version matching that
         // preference.
         //

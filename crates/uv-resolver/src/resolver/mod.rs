@@ -1,6 +1,7 @@
 //! Given a set of requirements, find a set of compatible packages.
 
 use std::borrow::Cow;
+use std::cell::LazyCell;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fmt::{Display, Formatter};
@@ -1544,7 +1545,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             env,
             python_requirement.target(),
             self.tags.as_ref(),
-            Some(pubgrub),
+            &|parent| parent.replaced_in(pubgrub),
         ) else {
             // Short circuit: we couldn't find _any_ versions for a package.
             return Ok(None);
@@ -1871,7 +1872,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             env,
             requires_python,
             self.tags.as_ref(),
-            Some(pubgrub),
+            &|parent| parent.replaced_in(pubgrub),
         ) else {
             return Ok(None);
         };
@@ -2632,7 +2633,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     &env,
                     self.python_requirement.target(),
                     self.tags.as_ref(),
-                    None,
+                    &|_| false,
                 ) else {
                     return Ok(None);
                 };
@@ -3023,6 +3024,19 @@ enum ForkAction {
     Version(VersionFork),
 }
 
+impl CappedParent {
+    /// Check whether the live parent decision has moved past the inherited cap.
+    fn replaced_in(&self, state: &State<UvDependencyProvider>) -> bool {
+        state
+            .partial_solution
+            .extract_solution()
+            .any(|(id, version)| {
+                state.package_store[id].unconditional_base_name() == Some(&self.name)
+                    && !self.cap.contains(&version)
+            })
+    }
+}
+
 /// Cache the base package ID for this fork once the parent appears in its queue.
 struct CappedParentCandidate<'a> {
     split: &'a WheelSplit,
@@ -3132,6 +3146,31 @@ impl<'index> ForkState<'index> {
                 .map(|(id, _)| id)
                 .chain(solution.undecided_packages().map(|(id, _)| *id))
         };
+        let child = LazyCell::new(|| {
+            let queued = solution
+                .undecided_packages()
+                .map(|(id, (priority, _))| (*id, *priority));
+            let updated = solution
+                .prioritized_packages()
+                .map(|(id, _)| (id, self.priorities.get(&self.pubgrub.package_store[id])));
+            let (child, priority) = queued
+                .chain(updated)
+                .max_by_key(|(_, priority)| *priority)?;
+            let package = &self.pubgrub.package_store[child];
+            if !matches!(priority.0, PubGrubPriority::Unspecified(_))
+                || self.priorities.get(package) != priority
+            {
+                return None;
+            }
+            let name = package.unconditional_base_name()?;
+            if self.fork_urls.get(name).is_some() || self.fork_indexes.get(name).is_some() {
+                return None;
+            }
+            let Term::Positive(range) = solution.term_intersection_for_package(child)? else {
+                return None;
+            };
+            Some((name, range))
+        });
         for CappedParentCandidate { split, id: parent } in parents {
             if parent.is_none() {
                 *parent = pending().find(|id| {
@@ -3154,29 +3193,11 @@ impl<'index> ForkState<'index> {
             {
                 continue;
             }
-            let queued = solution
-                .undecided_packages()
-                .map(|(id, (priority, _))| (*id, *priority));
-            let updated = solution
-                .prioritized_packages()
-                .map(|(id, _)| (id, self.priorities.get(&self.pubgrub.package_store[id])));
-            let (child, priority) = queued
-                .chain(updated)
-                .max_by_key(|(_, priority)| *priority)?;
-            let package = &self.pubgrub.package_store[child];
-            if !matches!(priority.0, PubGrubPriority::Unspecified(_))
-                || self.priorities.get(package) != priority
-            {
-                return None;
-            }
-            let name = package.unconditional_base_name()?;
+            let (name, range) = (*child)?;
             let Some((pinned, newer)) = split.children.get(name) else {
                 continue;
             };
-            if self.fork_urls.get(name).is_none()
-                && self.fork_indexes.get(name).is_none()
-                && matches!(solution.term_intersection_for_package(child), Some(Term::Positive(range)) if range.contains(pinned) && range.contains(newer))
-            {
+            if range.contains(pinned) && range.contains(newer) {
                 return Some(parent);
             }
         }
