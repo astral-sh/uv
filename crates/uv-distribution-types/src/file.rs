@@ -263,6 +263,9 @@ mod tests {
     fn raw_filename() {
         let base = SmallString::from("https://example.com/simple/");
 
+        let location = FileLocation::new(SmallString::from("example.whl"), &base);
+        assert_eq!(location.raw_filename(), "example.whl");
+
         let location = FileLocation::new(
             SmallString::from("files/café%20pkg.whl?redirect=/download#fragment"),
             &base,
