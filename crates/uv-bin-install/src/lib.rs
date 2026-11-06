@@ -38,6 +38,7 @@ use uv_redacted::SafeUrl;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Binary {
     Ruff,
+    Serc,
     Ty,
     Uv,
 }
@@ -45,8 +46,8 @@ pub enum Binary {
 impl Binary {
     /// Get the default version constraints for this binary.
     ///
-    /// Returns a version range constraint (e.g., `>=0.15,<0.16`) rather than a pinned version,
-    /// allowing patch version updates without requiring a uv release.
+    /// Ruff and ty use a version range that allows patch updates without a uv release; serc uses
+    /// a pinned version to keep bytecode compilation behavior tied to the uv release.
     pub fn default_constraints(&self) -> VersionSpecifiers {
         match self {
             // TODO(zanieb): Figure out a nice way to automate updating this
@@ -56,6 +57,9 @@ impl Binary {
             ]
             .into_iter()
             .collect(),
+            Self::Serc => [VersionSpecifier::equals_version(Version::new(SERC_VERSION))]
+                .into_iter()
+                .collect(),
             Self::Ty => [
                 VersionSpecifier::greater_than_equal_version(Version::new([0, 0])),
                 VersionSpecifier::less_than_version(Version::new([0, 1])),
@@ -72,6 +76,7 @@ impl Binary {
     fn name(self) -> &'static str {
         match self {
             Self::Ruff => "ruff",
+            Self::Serc => "serc",
             Self::Ty => "ty",
             Self::Uv => "uv",
         }
@@ -122,6 +127,18 @@ impl Binary {
                 // When using the default mirror, also fall back to GitHub.
                 if astral_mirror_url.is_none() {
                     let canonical = format!("{TY_GITHUB_URL_PREFIX}{suffix}");
+                    urls.push(parse_url(canonical)?);
+                }
+                Ok(urls)
+            }
+            Self::Serc => {
+                let suffix = format!("{version}/serc-{platform}.{}", format.extension());
+                let mirror_base = astral_mirror_base_url(astral_mirror_url);
+                let mirror = format!("{mirror_base}{SERC_MIRROR_SUFFIX}{suffix}");
+                let mut urls = vec![parse_url(mirror)?];
+                // When using the default mirror, also fall back to GitHub.
+                if astral_mirror_url.is_none() {
+                    let canonical = format!("{SERC_GITHUB_URL_PREFIX}{suffix}");
                     urls.push(parse_url(canonical)?);
                 }
                 Ok(urls)
@@ -189,6 +206,18 @@ impl Binary {
                 if let Some(suffix) = canonical_url.as_str().strip_prefix(TY_GITHUB_URL_PREFIX) {
                     let mirror_base = astral_mirror_base_url(astral_mirror_url);
                     let mirror = format!("{mirror_base}{TY_MIRROR_SUFFIX}{suffix}");
+                    let mirror_url = parse_url(mirror)?;
+                    if astral_mirror_url.is_some() {
+                        return Ok(vec![mirror_url]);
+                    }
+                    return Ok(vec![mirror_url, canonical_url]);
+                }
+                Ok(vec![canonical_url])
+            }
+            Self::Serc => {
+                if let Some(suffix) = canonical_url.as_str().strip_prefix(SERC_GITHUB_URL_PREFIX) {
+                    let mirror_base = astral_mirror_base_url(astral_mirror_url);
+                    let mirror = format!("{mirror_base}{SERC_MIRROR_SUFFIX}{suffix}");
                     let mirror_url = parse_url(mirror)?;
                     if astral_mirror_url.is_some() {
                         return Ok(vec![mirror_url]);
@@ -283,6 +312,12 @@ impl fmt::Display for BinVersion {
 /// The canonical GitHub URL prefix for Ruff releases.
 const RUFF_GITHUB_URL_PREFIX: &str = "https://github.com/astral-sh/ruff/releases/download/";
 
+/// The pinned serc version used for bytecode compilation.
+const SERC_VERSION: [u64; 3] = [0, 1, 8];
+
+/// The canonical GitHub URL prefix for serc releases.
+const SERC_GITHUB_URL_PREFIX: &str = "https://github.com/astral-sh/serc/releases/download/";
+
 /// The canonical GitHub URL prefix for ty releases.
 const TY_GITHUB_URL_PREFIX: &str = "https://github.com/astral-sh/ty/releases/download/";
 
@@ -291,6 +326,9 @@ const UV_GITHUB_URL_PREFIX: &str = "https://github.com/astral-sh/uv/releases/dow
 
 /// The suffix appended to the Astral mirror base for Ruff releases.
 const RUFF_MIRROR_SUFFIX: &str = "/github/ruff/releases/download/";
+
+/// The suffix appended to the Astral mirror base for serc releases.
+const SERC_MIRROR_SUFFIX: &str = "/github/serc/releases/download/";
 
 /// The suffix appended to the Astral mirror base for ty releases.
 const TY_MIRROR_SUFFIX: &str = "/github/ty/releases/download/";
@@ -335,6 +373,8 @@ struct BinArtifact {
 pub struct ResolvedVersion {
     /// The version number.
     pub version: Version,
+    /// The platform selected for the artifact and its cache entry.
+    platform_name: String,
     /// The ordered list of download URLs to try for this version and current platform.
     artifact_urls: Vec<SafeUrl>,
     /// The archive format.
@@ -355,6 +395,7 @@ impl ResolvedVersion {
         let artifact_urls = binary.download_urls(&version, &platform_name, archive_format)?;
         Ok(Self {
             version,
+            platform_name,
             artifact_urls,
             archive_format,
         })
@@ -444,6 +485,9 @@ pub enum Error {
         version: String,
         platform: String,
     },
+
+    #[error("Serc does not provide a binary for platform `{0}`")]
+    SercUnsupportedPlatform(String),
 
     #[error("Unsupported archive format: {0}")]
     UnsupportedArchiveFormat(String),
@@ -673,12 +717,63 @@ fn check_version_match(
 
         return Ok(Some(ResolvedVersion {
             version: version_info.version.clone(),
+            platform_name: platform_name.to_owned(),
             artifact_urls: binary.mirror_urls(canonical_url)?,
             archive_format,
         }));
     }
 
     Ok(None)
+}
+
+/// Install the pinned serc release for the current platform.
+pub async fn install_serc(cache: &Cache, client: &BaseClient) -> Result<PathBuf, Error> {
+    let version = ResolvedVersion::from_version(Binary::Serc, Version::new(SERC_VERSION))?;
+    if !matches!(
+        version.platform_name.as_str(),
+        "x86_64-apple-darwin"
+            | "aarch64-apple-darwin"
+            | "x86_64-pc-windows-msvc"
+            | "i686-pc-windows-msvc"
+            | "aarch64-pc-windows-msvc"
+            | "x86_64-unknown-linux-gnu"
+            | "i686-unknown-linux-gnu"
+            | "aarch64-unknown-linux-gnu"
+            | "armv7-unknown-linux-gnueabihf"
+            | "powerpc64le-unknown-linux-gnu"
+            | "s390x-unknown-linux-gnu"
+            | "riscv64gc-unknown-linux-gnu"
+            | "x86_64-unknown-linux-musl"
+            | "i686-unknown-linux-musl"
+            | "aarch64-unknown-linux-musl"
+            | "armv7-unknown-linux-musleabihf"
+            | "arm-unknown-linux-musleabihf"
+            | "riscv64gc-unknown-linux-musl"
+    ) {
+        return Err(Error::SercUnsupportedPlatform(version.platform_name));
+    }
+
+    bin_install(
+        Binary::Serc,
+        &version,
+        client,
+        &client.retry_policy(),
+        cache,
+        &SilentReporter,
+    )
+    .await
+}
+
+struct SilentReporter;
+
+impl Reporter for SilentReporter {
+    fn on_download_start(&self, _name: &str, _version: &Version, _size: Option<u64>) -> usize {
+        0
+    }
+
+    fn on_download_progress(&self, _id: usize, _inc: u64) {}
+
+    fn on_download_complete(&self, _id: usize) {}
 }
 
 /// Install the given binary from a [`ResolvedVersion`].
@@ -690,15 +785,12 @@ pub async fn bin_install(
     cache: &Cache,
     reporter: &dyn Reporter,
 ) -> Result<PathBuf, Error> {
-    let platform = Platform::from_env()?;
-    let platform_name = platform.as_cargo_dist_triple();
-
     bin_install_from_urls(
         binary,
         &resolved.version,
         &resolved.artifact_urls,
         resolved.archive_format,
-        &platform_name,
+        &resolved.platform_name,
         client,
         retry_policy,
         cache,
