@@ -1,5 +1,5 @@
 use std::fmt::{self, Write};
-use std::path::PathBuf;
+use std::path::Path;
 
 use owo_colors::OwoColorize;
 use tracing::debug;
@@ -14,6 +14,15 @@ use uv_tool::InstalledTools;
 pub(crate) fn report_target_environment(
     env: &PythonEnvironment,
     cache: &Cache,
+    printer: Printer,
+) -> fmt::Result {
+    report_target_environment_from(env, cache, Path::new(""), printer)
+}
+
+pub(crate) fn report_target_environment_from(
+    env: &PythonEnvironment,
+    cache: &Cache,
+    working_dir: &Path,
     printer: Printer,
 ) -> fmt::Result {
     // Resolve minor-version link directories (e.g., `cpython-3.12` → `cpython-3.12.12`).
@@ -55,7 +64,7 @@ pub(crate) fn report_target_environment(
     }
 
     // Do not report a default environment path
-    if let Ok(default) = std::path::absolute(PathBuf::from(".venv")) {
+    if let Ok(default) = std::path::absolute(working_dir.join(".venv")) {
         if target == default {
             debug!("{}", message);
             return Ok(());

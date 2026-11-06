@@ -112,10 +112,12 @@ uv-version = { workspace = true }
 embed-manifest = { workspace = true }
 
 [dev-dependencies]
+uv-command-support = { workspace = true, features = ["test-output"] }
 uv-python-managed = { workspace = true }
 uv-cache-key = { workspace = true }
 uv-extract = { workspace = true }
 uv-platform = { workspace = true }
+uv-preview = { workspace = true, features = ["testing"] }
 uv-publish = { workspace = true, features = ["test"] }
 uv-test = { workspace = true }
 uv-trampoline-builder = { workspace = true }

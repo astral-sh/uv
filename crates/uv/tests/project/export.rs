@@ -7,7 +7,6 @@ use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 #[cfg(all(unix, feature = "test-universal"))]
 use std::os::unix::fs::FileTypeExt;
-#[cfg(all(feature = "test-universal", feature = "test-git"))]
 use std::path::Path;
 use std::process::{Command, Stdio};
 #[cfg(all(unix, feature = "test-universal"))]
@@ -22,6 +21,9 @@ use uv_test::packse::{PackseServer, WheelBuilder, scenario::Scenario};
 #[cfg(all(feature = "test-universal", feature = "test-git"))]
 use uv_test::{READ_ONLY_GITHUB_SSH_DEPLOY_KEY, READ_ONLY_GITHUB_TOKEN, decode_token};
 use uv_test::{TestContext, apply_filters, uv_snapshot};
+
+#[path = "../it/in_process.rs"]
+mod in_process;
 
 /// The workspace discovered while resolving settings is reused by a normal `uv export`.
 #[test]
@@ -73,6 +75,11 @@ fn export_reuses_settings_workspace_discovery() -> Result<()> {
 /// Filter the current project when exporting every workspace member.
 #[test]
 fn export_no_emit_project_all_packages() -> Result<()> {
+    // A resident test worker can run this fixture more than once in the same process.
+    in_process::with_runtime(|runtime| insta::allow_duplicates! { check_workspace_export(runtime) })
+}
+
+fn check_workspace_export(runtime: &tokio::runtime::Runtime) -> Result<()> {
     let context = uv_test::test_context!("3.12");
     context.temp_dir.child("pyproject.toml").write_str(
         r#"
@@ -107,8 +114,27 @@ fn export_no_emit_project_all_packages() -> Result<()> {
         "#,
     )?;
 
+    let export = |directory: &Path, selection: &str| {
+        in_process::run(
+            runtime,
+            &context,
+            directory,
+            [
+                "export",
+                "--all-packages",
+                selection,
+                "--no-header",
+                "--offline",
+                // The fixture needs to create its lockfile, even in a locked CI environment.
+                "--no-locked",
+                "--no-frozen",
+            ],
+            uv_settings::EnvironmentOptions::new()?,
+        )
+    };
+
     // Exclude the root project, but emit its child dependency.
-    uv_snapshot!(context.filters(), context.export().arg("--all-packages").arg("--no-emit-project").arg("--no-header").arg("--offline"), @"
+    assert_snapshot!(export(context.temp_dir.path(), "--no-emit-project")?, @"
     exit_code: 0 (success)
     ----- stdout -----
     -e ./child
@@ -119,7 +145,7 @@ fn export_no_emit_project_all_packages() -> Result<()> {
     ");
 
     // From the child, exclude the child, even though the root depends on it.
-    uv_snapshot!(context.filters(), context.export().current_dir(child.path()).arg("--all-packages").arg("--no-emit-project").arg("--no-header").arg("--offline"), @"
+    assert_snapshot!(export(child.path(), "--no-emit-project")?, @"
     exit_code: 0 (success)
     ----- stdout -----
     -e .
@@ -129,7 +155,7 @@ fn export_no_emit_project_all_packages() -> Result<()> {
     ");
 
     // The inverse filter should emit only the current project.
-    uv_snapshot!(context.filters(), context.export().current_dir(child.path()).arg("--all-packages").arg("--only-emit-project").arg("--no-header").arg("--offline"), @"
+    assert_snapshot!(export(child.path(), "--only-emit-project")?, @"
     exit_code: 0 (success)
     ----- stdout -----
     -e ./child

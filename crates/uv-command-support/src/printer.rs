@@ -108,6 +108,10 @@ impl std::fmt::Write for Stdout {
     fn write_str(&mut self, s: &str) -> std::fmt::Result {
         match self {
             Self::Enabled => {
+                #[cfg(feature = "test-output")]
+                if crate::test_output::write(s.as_bytes(), |out| &mut out.stdout) {
+                    return Ok(());
+                }
                 print!("{s}");
             }
             Self::Disabled => {}
@@ -127,6 +131,10 @@ impl std::fmt::Write for Stderr {
     fn write_str(&mut self, s: &str) -> std::fmt::Result {
         match self {
             Self::Enabled => {
+                #[cfg(feature = "test-output")]
+                if crate::test_output::write(s.as_bytes(), |out| &mut out.stderr) {
+                    return Ok(());
+                }
                 eprint!("{s}");
             }
             Self::Disabled => {}
