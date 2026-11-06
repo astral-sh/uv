@@ -121,7 +121,7 @@ fn copy_and_hash(reader: &mut impl Read, writer: &mut impl Write) -> io::Result<
 
 /// Format the shebang for a given Python executable.
 ///
-/// Like pip, if a shebang is non-simple (too long or contains spaces), we use `/bin/sh` as the
+/// Like pip, if a shebang is non-simple (too long or contains whitespace), we use `/bin/sh` as the
 /// executable.
 ///
 /// See: <https://github.com/pypa/pip/blob/0ad4c94be74cc24874c6feb5bb3c2152c398a18e/src/pip/_vendor/distlib/scripts.py#L136-L165>
@@ -135,10 +135,14 @@ fn format_shebang(executable: impl AsRef<Path>, os_name: &str, relocatable: bool
         // newline.
         let shebang_length = 2 + executable.len() + 1;
 
-        // If the shebang is too long, or contains spaces, wrap it in `/bin/sh`.
+        // If the shebang is too long, or contains whitespace, wrap it in `/bin/sh`. The kernel
+        // splits the interpreter path at a space or tab, and a newline ends the shebang line.
         // Same applies for relocatable scripts (executable is relative to script dir, hence `dirname` trick)
         // (note: the Windows trampoline binaries natively support relative paths to executable)
-        if shebang_length > 127 || executable.contains(' ') || relocatable {
+        if shebang_length > 127
+            || executable.contains(|c: char| c.is_ascii_whitespace())
+            || relocatable
+        {
             let executable = format!("'{}'", escape_posix_for_single_quotes(&executable));
             return format_shell_shebang(&executable, relocatable);
         }
@@ -1444,6 +1448,22 @@ mod test {
                 '''exec' '/usr/bin/path to python3' "$0" "$@"
                 ' '''"#
             }
+        );
+
+        // The same goes for a tab, which the kernel also splits the interpreter path on.
+        let executable = Path::new("/usr/bin/path\tto/python3");
+        let os_name = "posix";
+        assert_eq!(
+            format_shebang(executable, os_name, false),
+            "#!/bin/sh\n'''exec' '/usr/bin/path\tto/python3' \"$0\" \"$@\"\n' '''"
+        );
+
+        // And a newline, which would end the shebang line.
+        let executable = Path::new("/usr/bin/path\nto/python3");
+        let os_name = "posix";
+        assert_eq!(
+            format_shebang(executable, os_name, false),
+            "#!/bin/sh\n'''exec' '/usr/bin/path\nto/python3' \"$0\" \"$@\"\n' '''"
         );
 
         // And if we want a relocatable script, we should use the `exec` trick with `dirname`.
