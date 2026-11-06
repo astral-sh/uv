@@ -1171,6 +1171,16 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         dist: &BuiltDist,
         hashes: ArchiveHashPolicy<'_>,
     ) -> Result<Archive, Error> {
+        /// How the current HTTP response contributes to the wheel being downloaded.
+        enum WheelResponse {
+            /// The response to the original request.
+            Initial,
+            /// The server honored a range request at the requested offset.
+            Resumed(ContentRangeBytes),
+            /// The server ignored a range request and returned the full wheel.
+            Restarted,
+        }
+
         let hashes = if let BuiltDist::Registry(wheels) = dist {
             hashes.with_index_hashes(wheels.best_wheel().file.hashes.as_slice())
         } else {
@@ -1808,16 +1818,6 @@ fn content_length(response: &reqwest::Response) -> Option<u64> {
         .get(reqwest::header::CONTENT_LENGTH)
         .and_then(|val| val.to_str().ok())
         .and_then(|val| val.parse::<u64>().ok())
-}
-
-/// How the current HTTP response contributes to the wheel being downloaded.
-enum WheelResponse {
-    /// The response to the original request.
-    Initial,
-    /// The server honored a range request at the requested offset.
-    Resumed(ContentRangeBytes),
-    /// The server ignored a range request and returned the full wheel.
-    Restarted,
 }
 
 /// Return the bounds of a range response starting at `offset` with a known complete length.
