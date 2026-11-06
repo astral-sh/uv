@@ -67,7 +67,13 @@ RUN cp target/$(cat rust_target.txt)/release/uv /uv \
 # TODO(konsti): Optimize binary size, with a version that also works when cross compiling
 # RUN strip --strip-all /uv
 
-FROM scratch
-COPY --from=build /uv /uvx /
+FROM scratch AS runtime
 WORKDIR /io
 ENTRYPOINT ["/uv"]
+
+FROM runtime AS release
+ARG TARGETARCH
+COPY dist/docker/${TARGETARCH}/uv dist/docker/${TARGETARCH}/uvx /
+
+FROM runtime AS source
+COPY --from=build /uv /uvx /
