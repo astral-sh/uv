@@ -6267,6 +6267,7 @@ dependencies = [
  "wiremock",
  "x509-parser",
  "zerocopy",
+ "zstd 0.13.3",
 ]
 
 [[package]]

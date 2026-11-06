@@ -7,7 +7,9 @@ use jiff::Timestamp;
 use pubgrub::Ranges;
 use tracing::{instrument, trace};
 
-use uv_client::{FlatIndexEntry, OwnedArchive, SimpleDetailMetadata, VersionFiles};
+use uv_client::{
+    FlatIndexEntry, OwnedArchive, RetainedArchive, SimpleDetailMetadata, VersionFiles,
+};
 use uv_configuration::BuildOptions;
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
@@ -81,12 +83,20 @@ impl VersionMap {
                     .is_none_or(|entry: &VersionMapLazyEntry| entry.version < version),
                 "simple metadata versions must be sorted and unique"
             );
+            let (included, materializable) = SimplePrioritizedDist::cutoff_status(
+                &datum.files,
+                included_version_cutoff.as_ref(),
+                available_version_cutoff.as_ref(),
+            );
             entries.push(VersionMapLazyEntry {
                 version,
                 dist: LazyPrioritizedDist {
                     flat: None,
                     simple: Some(SimplePrioritizedDist {
                         datum_index,
+                        has_metadata: datum.metadata.is_some(),
+                        included,
+                        materializable,
                         dist: OnceLock::new(),
                     }),
                 },
@@ -103,7 +113,7 @@ impl VersionMap {
                 package_name: package_name.clone(),
                 map,
                 local,
-                simple_metadata,
+                simple_metadata: RetainedArchive::new(simple_metadata, 64 * 1024),
                 no_binary: build_options.no_binary_package(package_name),
                 no_build: build_options.no_build_package(package_name),
                 index,
@@ -335,9 +345,9 @@ impl<'a> VersionMapDistHandle<'a> {
     fn is_included(&self) -> bool {
         match self.inner {
             VersionMapDistHandleInner::Eager(_) => true,
-            VersionMapDistHandleInner::Lazy { lazy, dist } => match (&dist.flat, &dist.simple) {
+            VersionMapDistHandleInner::Lazy { dist, .. } => match (&dist.flat, &dist.simple) {
                 (Some(_), _) => true,
-                (None, Some(simple)) => lazy.any_file_materializable(simple),
+                (None, Some(simple)) => simple.materializable,
                 (None, None) => false,
             },
         }
@@ -488,7 +498,7 @@ struct VersionMapLazy {
     local: bool,
     /// The raw simple metadata from which `PrioritizedDist`s should
     /// be constructed.
-    simple_metadata: OwnedArchive<SimpleDetailMetadata>,
+    simple_metadata: RetainedArchive<SimpleDetailMetadata>,
     /// When true, wheels aren't allowed.
     no_binary: bool,
     /// When true, source dists aren't allowed.
@@ -516,16 +526,17 @@ struct VersionMapLazy {
 impl VersionMapLazy {
     /// Returns the registry-provided metadata for the given version, if it exists.
     fn get_metadata(&self, version: &Version) -> Option<ResolutionMetadata> {
-        let archived = self
-            .map
-            .get(version)
-            .and_then(|entry| entry.dist.simple.as_ref())
-            .and_then(|simple| self.simple_metadata.datum(simple.datum_index))
-            .and_then(|datum| datum.metadata.as_deref())?;
-        Some(
-            rkyv::deserialize::<ResolutionMetadata, rkyv::rancor::Error>(archived)
-                .expect("archived metadata always deserializes"),
-        )
+        let simple = self.map.get(version)?.dist.simple.as_ref()?;
+        if !simple.has_metadata {
+            return None;
+        }
+        self.simple_metadata.with(|archive| {
+            let metadata = archive.datum(simple.datum_index)?.metadata.as_deref()?;
+            Some(
+                rkyv::deserialize::<ResolutionMetadata, rkyv::rancor::Error>(metadata)
+                    .expect("archived metadata always deserializes"),
+            )
+        })
     }
 
     /// Returns the distribution for the given version, if it exists.
@@ -540,66 +551,11 @@ impl VersionMapLazy {
             let included = match (&entry.dist.flat, &entry.dist.simple) {
                 // Flat index files have no upload times and bypass the cutoffs.
                 (Some(_), _) => true,
-                (None, Some(simple)) => self.any_file_included(simple),
+                (None, Some(simple)) => simple.included,
                 (None, None) => false,
             };
             included.then_some(&entry.version)
         })
-    }
-
-    /// Returns whether at least one file keeps this version inside the candidate universe.
-    ///
-    /// This mirrors the per-file cutoff handling in [`Self::get_simple`] without materializing the
-    /// distribution, including the two cutoff modes' distinct handling of missing upload times.
-    fn any_file_included(&self, simple: &SimplePrioritizedDist) -> bool {
-        if self.included_version_cutoff.is_none() && self.available_version_cutoff.is_none() {
-            return true;
-        }
-        let Some(datum) = self.simple_metadata.datum(simple.datum_index) else {
-            return false;
-        };
-        let files = &datum.files;
-        files
-            .wheels
-            .iter()
-            .chain(files.source_dists.iter())
-            .any(|file| {
-                let upload_time = file.upload_time_utc_ms();
-                let excluded = if let Some(cutoff) = &self.included_version_cutoff {
-                    upload_time.is_none_or(|t| t >= cutoff.as_millisecond())
-                } else if let Some(cutoff) = &self.available_version_cutoff {
-                    upload_time.is_some_and(|t| t >= cutoff.as_millisecond())
-                } else {
-                    false
-                };
-                !excluded
-            })
-    }
-
-    /// Returns whether a version should be materialized during candidate selection.
-    ///
-    /// Missing upload times are retained here, even for `included_version_cutoff`, since
-    /// materializing them is what emits the corresponding `exclude-newer` warning.
-    fn any_file_materializable(&self, simple: &SimplePrioritizedDist) -> bool {
-        let Some(cutoff) = self
-            .included_version_cutoff
-            .as_ref()
-            .or(self.available_version_cutoff.as_ref())
-        else {
-            return true;
-        };
-        let Some(datum) = self.simple_metadata.datum(simple.datum_index) else {
-            return false;
-        };
-        datum
-            .files
-            .wheels
-            .iter()
-            .chain(datum.files.source_dists.iter())
-            .any(|file| {
-                file.upload_time_utc_ms()
-                    .is_none_or(|upload_time| upload_time < cutoff.as_millisecond())
-            })
     }
 
     /// Given a reference to a possibly-initialized distribution that is in
@@ -626,14 +582,13 @@ impl VersionMapLazy {
         simple: &'p SimplePrioritizedDist,
     ) -> Option<&'p PrioritizedDist> {
         let get_or_init = || {
-            let files = rkyv::deserialize::<VersionFiles, rkyv::rancor::Error>(
-                &self
-                    .simple_metadata
+            let files = self.simple_metadata.with(|archive| {
+                let datum = archive
                     .datum(simple.datum_index)
-                    .expect("index to lazy dist is correct")
-                    .files,
-            )
-            .expect("archived version files always deserializes");
+                    .expect("index to lazy dist is correct");
+                rkyv::deserialize::<VersionFiles, rkyv::rancor::Error>(&datum.files)
+                    .expect("archived version files always deserializes")
+            });
             let mut priority_dist = init.cloned().unwrap_or_default();
             for (filename, file) in files.all_entries(&self.package_name) {
                 let filename = match filename {
@@ -899,6 +854,10 @@ struct SimplePrioritizedDist {
     /// This provides access to a `VersionFiles` that is used to construct a
     /// `PrioritizedDist`.
     datum_index: usize,
+    /// Only materializing files or embedded metadata requires unpacking the archive.
+    has_metadata: bool,
+    included: bool,
+    materializable: bool,
     /// A lazily initialized distribution.
     ///
     /// Note that the `Option` does not represent the initialization state.
@@ -907,6 +866,29 @@ struct SimplePrioritizedDist {
     /// construct a distribution. (One easy way to effect this, at the time
     /// of writing, is to use `--exclude-newer 1900-01-01`.)
     dist: OnceLock<Option<PrioritizedDist>>,
+}
+
+impl SimplePrioritizedDist {
+    /// Determine which versions survive each cutoff while the archive is available.
+    /// A missing date always allows materialization so the resolver can emit its warning.
+    fn cutoff_status(
+        files: &rkyv::Archived<VersionFiles>,
+        included_cutoff: Option<&Timestamp>,
+        available_cutoff: Option<&Timestamp>,
+    ) -> (bool, bool) {
+        let Some(cutoff) = included_cutoff.or(available_cutoff) else {
+            return (true, true);
+        };
+        let mut missing = false;
+        for file in files.wheels.iter().chain(files.source_dists.iter()) {
+            match file.upload_time_utc_ms() {
+                Some(time) if time < cutoff.as_millisecond() => return (true, true),
+                None => missing = true,
+                _ => {}
+            }
+        }
+        (included_cutoff.is_none() && missing, missing)
+    }
 }
 
 /// A range that can be used to iterate over a subset of a [`BTreeMap`].
