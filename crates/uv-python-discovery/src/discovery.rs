@@ -236,19 +236,10 @@ fn python_executables_from_installed<'a>(
                             return false;
                         }
 
-                        if let Some(requested_build) = build_versions.get(&installation.implementation()) {
-                            let Some(installation_build) = installation.build() else {
-                                debug!(
-                                    "Skipping managed installation `{installation}`: a build version was requested but is not recorded for this installation"
-                                );
-                                return false;
-                            };
-                            if installation_build != requested_build {
-                                debug!(
-                                    "Skipping managed installation `{installation}`: requested build version `{requested_build}` does not match installation build version `{installation_build}`"
-                                );
-                                return false;
-                            }
+                        if let Some(requested_build) = build_versions.get(&installation.implementation())
+                            && !installation.matches_build_constraint(requested_build)
+                        {
+                            return false;
                         }
 
                         true
