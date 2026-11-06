@@ -14,9 +14,7 @@ use uv_distribution_types::{
 };
 use uv_normalize::PackageName;
 use uv_pep440::Version;
-use uv_pep508::MarkerTree;
 use uv_platform_tags::Tags;
-use uv_resolver_types::PackageNodeKind;
 use uv_types::InstalledPackagesProvider;
 
 use crate::dependency_provider::UvDependencyProvider;
@@ -25,7 +23,7 @@ use crate::prerelease::{PrereleaseSelection, PrereleaseStrategy};
 use crate::prioritized_distribution::{
     CompatibleDist, IncompatibleDist, IncompatibleSource, IncompatibleWheel, PrioritizedDist,
 };
-use crate::pubgrub::{PubGrubPackageInner, Range};
+use crate::pubgrub::Range;
 use crate::resolution_mode::ResolutionStrategy;
 use crate::version_map::{VersionMap, VersionMapDistHandle};
 use crate::{Exclusions, Manifest, Options, ResolverEnvironment};
@@ -132,15 +130,8 @@ impl CandidateSelector {
                     .partial_solution
                     .extract_solution()
                     .any(|(id, version)| {
-                        let PubGrubPackageInner::Package {
-                            name,
-                            kind: PackageNodeKind::Base,
-                            marker: MarkerTree::TRUE,
-                        } = &*state.package_store[id]
-                        else {
-                            return false;
-                        };
-                        name == &parent.name && !parent.cap.contains(&version)
+                        state.package_store[id].unconditional_base_name() == Some(&parent.name)
+                            && !parent.cap.contains(&version)
                     })
             })
         };

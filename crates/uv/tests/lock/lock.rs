@@ -9292,8 +9292,8 @@ fn lock_sibling_fork_parent_releases_child() -> Result<()> {
     Ok(())
 }
 
-/// Runtime 1 caps the array version on macOS only. Windows can select array 2
-/// independently, and editor 2 can keep its dependency on runtime 1.
+/// Runtime 1 caps the array version outside Linux. Once the non-macOS fork
+/// splits again, Linux can keep editor 2 and runtime 1 alongside array 2.
 #[cfg(feature = "test-universal")]
 #[test]
 fn lock_sibling_fork_child_bound_has_own_marker() -> Result<()> {
@@ -9305,14 +9305,79 @@ fn lock_sibling_fork_child_bound_has_own_marker() -> Result<()> {
         [expected]
         satisfiable = true
 
+        [packages.adapter.versions."1.0.0"]
+        requires = ["helper<2 ; sys_platform == 'linux'", "helper ; sys_platform != 'linux'"]
         [packages.array.versions."1.0.0"]
         [packages.array.versions."2.0.0"]
         [packages.editor.versions."1.0.0"]
         [packages.editor.versions."2.0.0"]
         requires = ["runtime<2"]
+        [packages.helper.versions."1.0.0"]
+        [packages.helper.versions."2.0.0"]
+        [packages.runtime.versions."1.0.0"]
+        wheel_tags = ["cp312-cp312-macosx_11_0_arm64", "cp312-cp312-win_amd64", "cp312-cp312-manylinux_2_17_x86_64"]
+        requires = ["array<2 ; sys_platform != 'linux'"]
+        [packages.runtime.versions."2.0.0"]
+        requires = ["array"]
+    "#})?;
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "adapter==1",
+            "array",
+            "editor ; sys_platform != 'darwin'",
+            "runtime<2 ; sys_platform == 'darwin'",
+            "runtime ; sys_platform != 'darwin'",
+        ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.tree().arg("--python-platform").arg("linux").arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    project v1.0.0
+    ├── adapter v1.0.0
+    │   └── helper v1.0.0
+    ├── array v2.0.0
+    ├── editor v2.0.0
+    │   └── runtime v1.0.0
+    └── runtime v1.0.0
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    ");
+    Ok(())
+}
+
+/// The pinned plugin adds its own array cap after runtime enters the Windows
+/// queue. Moving runtime ahead of editor would downgrade editor and leave array at 1.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_sibling_fork_child_has_another_cap() -> Result<()> {
+    let server = PackseServer::from_toml(indoc! {r#"
+        name = "sibling-fork-child-has-another-cap"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.array.versions."1.0.0"]
+        [packages.array.versions."2.0.0"]
+        [packages.editor.versions."1.0.0"]
+        [packages.editor.versions."2.0.0"]
+        requires = ["runtime<2"]
+        [packages.plugin.versions."1.0.0"]
+        requires = ["array<2"]
         [packages.runtime.versions."1.0.0"]
         wheel_tags = ["cp312-cp312-macosx_11_0_arm64", "cp312-cp312-win_amd64"]
-        requires = ["array<2 ; sys_platform == 'darwin'"]
+        requires = ["array<2"]
         [packages.runtime.versions."2.0.0"]
         requires = ["array"]
     "#})?;
@@ -9328,6 +9393,7 @@ fn lock_sibling_fork_child_bound_has_own_marker() -> Result<()> {
         dependencies = [
             "array",
             "editor ; sys_platform != 'darwin'",
+            "plugin==1 ; sys_platform != 'darwin'",
             "runtime<2 ; sys_platform == 'darwin'",
             "runtime ; sys_platform != 'darwin'",
         ]
@@ -9337,10 +9403,14 @@ fn lock_sibling_fork_child_bound_has_own_marker() -> Result<()> {
     exit_code: 0 (success)
     ----- stdout -----
     project v1.0.0
-    ├── array v2.0.0
+    ├── array v1.0.0
     ├── editor v2.0.0
     │   └── runtime v1.0.0
-    └── runtime v1.0.0
+    │       └── array v1.0.0
+    ├── plugin v1.0.0
+    │   └── array v1.0.0
+    └── runtime v1.0.0 (*)
+    (*) Package tree already displayed
 
     ----- stderr -----
     Resolved 5 packages in [TIME]

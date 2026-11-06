@@ -60,7 +60,7 @@ use crate::prioritized_distribution::{
 };
 use crate::pubgrub::{
     DependencySource, PubGrubDependency, PubGrubPackage, PubGrubPackageInner, PubGrubPriorities,
-    PubGrubPython, Range,
+    PubGrubPriority, PubGrubPython, Range,
 };
 use crate::python_requirement::PythonRequirement;
 use crate::resolution::{ResolutionGraphBuilder, ResolverOutput};
@@ -414,6 +414,18 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 let requires_python = state.python_requirement.target();
                 debug!("Solving {split} (requires-python: {requires_python:?})");
             }
+            let mut capped_parents: Vec<_> = preferences
+                .wheel_splits
+                .iter()
+                .filter(|split| {
+                    !split.children.is_empty()
+                        && state
+                            .env
+                            .fork_markers()
+                            .is_some_and(|fork| fork.is_disjoint(split.parent.wide.negate()))
+                })
+                .map(|split| CappedParentCandidate { split, id: None })
+                .collect();
             let start = Instant::now();
             loop {
                 let continuation = mem::take(&mut state.continuation);
@@ -471,42 +483,23 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 .map(|(p, v)| format!("{}=={}", state.pubgrub.package_store[p], v))
                                 .join(", ")
                         );
-                        // Choose a package.
-                        // We aren't allowed to use the term intersection as it would extend the
-                        // mutable borrow of `state`.
-                        let Some((highest_priority_pkg, _)) = state
-                            .pubgrub
-                            .partial_solution
-                            .pick_highest_priority_pkg(|id, range| {
-                                let package = &state.pubgrub.package_store[id];
-                                let (priority, order) = state.priorities.get(package);
-                                // Decide a parent at its child's priority so the child's
-                                // inherited cap can use the actual parent decision.
-                                if matches!(
-                                    priority,
-                                    crate::pubgrub::PubGrubPriority::Unspecified(_)
-                                ) && let (Some(name), Some(fork)) =
-                                    (package.name_no_root(), state.env.fork_markers())
-                                    && let Some(inherited) = preferences
-                                        .wheel_splits
-                                        .iter()
-                                        .filter(|split| {
-                                            &split.parent.name == name
-                                                && fork.is_disjoint(split.parent.wide.negate())
-                                                && range.contains(&split.newer)
-                                        })
-                                        .flat_map(|split| &split.children)
-                                        .filter_map(|child| {
-                                            state.priorities.package_priority(child)
-                                        })
-                                        .max()
-                                    && inherited > priority
-                                {
-                                    return (inherited, crate::pubgrub::PubGrubTiebreaker::from(0));
-                                }
-                                (priority, order)
-                            })
-                        else {
+                        // A parent takes the child's turn without removing it from the queue.
+                        // Let PubGrub refresh the queue before considering another parent.
+                        let parent = if state.chose_capped_parent {
+                            None
+                        } else {
+                            state.next_capped_parent(&mut capped_parents)
+                        };
+                        state.chose_capped_parent = parent.is_some();
+                        let Some(highest_priority_pkg) = parent.or_else(|| {
+                            state
+                                .pubgrub
+                                .partial_solution
+                                .pick_highest_priority_pkg(|id, _| {
+                                    state.priorities.get(&state.pubgrub.package_store[id])
+                                })
+                                .map(|(id, _)| id)
+                        }) else {
                             // All packages have been assigned, the fork has been successfully resolved
                             if tracing::enabled!(Level::DEBUG) {
                                 state.prefetcher.log_tried_versions();
@@ -1131,7 +1124,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 wide: markers,
                 cap: UpperBound(narrow_upper.cloned()),
             }),
-            children: Vec::new(),
+            children: FxHashMap::default(),
             narrow: narrow_markers,
             newer: new.version().clone(),
         }))
@@ -3030,6 +3023,12 @@ enum ForkAction {
     Version(VersionFork),
 }
 
+/// Cache the base package ID for this fork once the parent appears in its queue.
+struct CappedParentCandidate<'a> {
+    split: &'a WheelSplit,
+    id: Option<Id<PubGrubPackage>>,
+}
+
 /// State that is used during unit propagation in the resolver, one instance per fork.
 #[derive(Clone)]
 pub(crate) struct ForkState<'index> {
@@ -3041,6 +3040,8 @@ pub(crate) struct ForkState<'index> {
     /// in this state. We also ultimately retrieve the final set of version
     /// assignments (to packages) from this state's "partial solution."
     pubgrub: State<UvDependencyProvider>,
+    /// Refresh the ordinary queue after choosing a parent ahead of its child.
+    chose_capped_parent: bool,
     /// The operation to resume when this fork is next visited.
     continuation: ForkContinuation,
     /// The next package on which to run unit propagation.
@@ -3118,6 +3119,70 @@ pub(crate) struct ForkState<'index> {
 }
 
 impl<'index> ForkState<'index> {
+    /// At a child's ordinary turn, choose its parent if both the pin and the upgrade
+    /// are still possible. PubGrub keeps the child queued for the next decision.
+    fn next_capped_parent(
+        &self,
+        parents: &mut [CappedParentCandidate<'_>],
+    ) -> Option<Id<PubGrubPackage>> {
+        let solution = &self.pubgrub.partial_solution;
+        let pending = || {
+            solution
+                .prioritized_packages()
+                .map(|(id, _)| id)
+                .chain(solution.undecided_packages().map(|(id, _)| *id))
+        };
+        for CappedParentCandidate { split, id: parent } in parents {
+            if parent.is_none() {
+                *parent = pending().find(|id| {
+                    self.pubgrub.package_store[*id].unconditional_base_name()
+                        == Some(&split.parent.name)
+                });
+            }
+            let Some(parent) = *parent else {
+                continue;
+            };
+            let Some(Term::Positive(range)) = solution.term_intersection_for_package(parent) else {
+                continue;
+            };
+            if range.is_singleton_constraint()
+                || !range.contains(&split.newer)
+                || !matches!(
+                    self.priorities.get(&self.pubgrub.package_store[parent]).0,
+                    PubGrubPriority::Unspecified(_)
+                )
+            {
+                continue;
+            }
+            let queued = solution
+                .undecided_packages()
+                .map(|(id, (priority, _))| (*id, *priority));
+            let updated = solution
+                .prioritized_packages()
+                .map(|(id, _)| (id, self.priorities.get(&self.pubgrub.package_store[id])));
+            let (child, priority) = queued
+                .chain(updated)
+                .max_by_key(|(_, priority)| *priority)?;
+            let package = &self.pubgrub.package_store[child];
+            if !matches!(priority.0, PubGrubPriority::Unspecified(_))
+                || self.priorities.get(package) != priority
+            {
+                return None;
+            }
+            let name = package.unconditional_base_name()?;
+            let Some((pinned, newer)) = split.children.get(name) else {
+                continue;
+            };
+            if self.fork_urls.get(name).is_none()
+                && self.fork_indexes.get(name).is_none()
+                && matches!(solution.term_intersection_for_package(child), Some(Term::Positive(range)) if range.contains(pinned) && range.contains(newer))
+            {
+                return Some(parent);
+            }
+        }
+        None
+    }
+
     fn new(
         pubgrub: State<UvDependencyProvider>,
         env: ResolverEnvironment,
@@ -3125,6 +3190,7 @@ impl<'index> ForkState<'index> {
         prefetcher: BatchPrefetcher,
     ) -> Self {
         Self {
+            chose_capped_parent: false,
             continuation: ForkContinuation::Propagate,
             next: pubgrub.root_package,
             pubgrub,
@@ -3663,7 +3729,8 @@ impl<'index> ForkState<'index> {
                     let upper = UpperBound(upper.cloned());
                     let parent = self_name.and_then(|parent| {
                         let here = self.env.fork_markers()?;
-                        // A bound that already excludes the wider fork needs no parent decision.
+                        // Only borrow the child's priority if the cap applies throughout the
+                        // wider fork. A later split can isolate targets where the child is free.
                         let split = sibling_preferences
                             .as_deref_mut()?
                             .wheel_splits
@@ -3671,7 +3738,7 @@ impl<'index> ForkState<'index> {
                             .find(|split| {
                                 &split.parent.name == parent
                                     && here.is_disjoint(split.narrow.negate())
-                                    && !marker.is_disjoint(split.parent.wide)
+                                    && split.parent.wide.is_disjoint(marker.negate())
                                     && split.parent.cap.contains(self_version)
                             })?;
                         if self.fork_urls.get(name).is_some()
@@ -3694,9 +3761,9 @@ impl<'index> ForkState<'index> {
                         if !new_dist.has_portable_distribution(self.python_requirement.target()) {
                             return None;
                         }
-                        if !split.children.contains(name) {
-                            split.children.push(name.clone());
-                        }
+                        split.children.entry(name.clone()).or_insert_with(|| {
+                            (dependency_version.clone(), latest.version().clone())
+                        });
                         Some(Arc::clone(&split.parent))
                     });
                     bounds.entry(name).or_default().push(ForkBound {

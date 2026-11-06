@@ -265,8 +265,8 @@ pub struct Preferences {
 #[derive(Debug, Clone)]
 pub(crate) struct WheelSplit {
     pub(crate) parent: Arc<CappedParent>,
-    /// Dependencies whose selected versions were limited by the capped release.
-    pub(crate) children: Vec<PackageName>,
+    /// Each child's selected version and the portable upgrade that the cap excluded.
+    pub(crate) children: FxHashMap<PackageName, (Version, Version)>,
     pub(crate) narrow: MarkerTree,
     pub(crate) newer: Version,
 }

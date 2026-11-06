@@ -181,6 +181,20 @@ impl PubGrubPackage {
         }
     }
 
+    /// Return the name of the unmarked base package whose decision fixes the version.
+    pub(crate) fn unconditional_base_name(&self) -> Option<&PackageName> {
+        if let PubGrubPackageInner::Package {
+            name,
+            kind: PackageNodeKind::Base,
+            marker: MarkerTree::TRUE,
+        } = &**self
+        {
+            Some(name)
+        } else {
+            None
+        }
+    }
+
     /// Returns the marker expression associated with this PubGrub package, if
     /// it has one.
     pub(crate) fn marker(&self) -> MarkerTree {
