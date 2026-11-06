@@ -4,7 +4,7 @@ pub use index::{AuthPolicy, Index, Indexes};
 pub use keyring::KeyringProvider;
 pub use middleware::AuthMiddleware;
 pub use prompt::{CredentialsPrompt, CredentialsPromptError};
-pub use providers::AzureEndpointProvider;
+pub use providers::{AzureEndpointProvider, CloudEndpoints};
 pub use realm::{Realm, RealmRef};
 pub use service::Service;
 pub use store::{AuthBackend, TextCredentialStore, TomlCredentialError};
