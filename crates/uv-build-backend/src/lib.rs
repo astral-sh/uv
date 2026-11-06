@@ -1062,6 +1062,10 @@ mod tests {
             [project]
             name = "two-step-build"
             version = "1.0.0"
+            dependencies = [
+                "child @ http://user:password@127.0.0.1:12345/child-1.0-py3-none-any.whl?sig=abc%2bdef%3d",
+                "sibling @ http://127.0.0.1:12345/sibling-1.0-py3-none-any.whl?sig=sample",
+            ]
 
             [build-system]
             requires = ["uv_build>=0.5.15,<0.6.0"]
@@ -1107,6 +1111,8 @@ mod tests {
         Metadata-Version: 2.3
         Name: two-step-build
         Version: 1.0.0
+        Requires-Dist: child @ http://127.0.0.1:12345/child-1.0-py3-none-any.whl?sig=abc%2bdef%3d
+        Requires-Dist: sibling @ http://127.0.0.1:12345/sibling-1.0-py3-none-any.whl?sig=sample
         ");
     }
 

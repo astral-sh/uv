@@ -72,6 +72,8 @@ pub enum ValidationError {
     DescriptionNewlines,
     #[error("Dynamic metadata is not supported")]
     Dynamic,
+    #[error("URL dependency `{0}` cannot be parsed after removing credentials")]
+    InvalidStrippedDependencyUrl(PackageName),
     #[error(
         "When `project.license-files` is defined, `project.license` must be an SPDX expression string"
     )]
@@ -654,7 +656,18 @@ impl PyProjectToml {
                             })
                     },
                 ))
-                .collect::<Vec<_>>();
+                .map(|mut requirement| {
+                    if let Some(VersionOrUrl::Url(url)) = &mut requirement.version_or_url
+                        && let Cow::Owned(stripped) = url.without_credentials()
+                    {
+                        // Removing userinfo can make a path containing `:` and `@` ambiguous to SafeUrl.
+                        *url = VerbatimUrl::parse_url(stripped.as_str()).map_err(|_| {
+                            ValidationError::InvalidStrippedDependencyUrl(requirement.name.clone())
+                        })?;
+                    }
+                    Ok(requirement.displayable_with_credentials().to_string())
+                })
+                .collect::<Result<_, ValidationError>>()?;
 
         let import_names = import_names
             .map(|import_names| {
@@ -702,7 +715,7 @@ impl PyProjectToml {
                 .cloned()
                 .map(Into::into)
                 .collect(),
-            requires_dist: requires_dist.iter().map(ToString::to_string).collect(),
+            requires_dist,
             provides_extra: extras.iter().map(ToString::to_string).collect(),
             // Not commonly set.
             provides_dist: vec![],
@@ -1315,7 +1328,7 @@ mod tests {
     use insta::assert_snapshot;
     use std::iter;
     use tempfile::TempDir;
-    use uv_pep508::MarkerEnvironmentBuilder;
+    use uv_pep508::{MarkerEnvironmentBuilder, expand_env_vars};
 
     fn extend_project(payload: &str) -> String {
         formatdoc! {r#"
@@ -1408,6 +1421,43 @@ mod tests {
         Metadata-Version: 2.3
         Name: Hello-World
         Version: 0.1.0
+        ");
+    }
+
+    #[test]
+    fn signed_dependency_url_expands_environment_variables() {
+        let contents = extend_project(
+            r#"dependencies = ["child @ https://user:password@example.com/child-1.0-py3-none-any.whl?sig=${PROJECT_ROOT}"]"#,
+        );
+        let metadata = toml::from_str::<PyProjectToml>(&contents)
+            .unwrap()
+            .to_metadata(Path::new("/do/not/read"))
+            .unwrap();
+
+        let expected_url = VerbatimUrl::parse_url(expand_env_vars(
+            "https://example.com/child-1.0-py3-none-any.whl?sig=${PROJECT_ROOT}",
+        ))
+        .unwrap();
+        assert_eq!(
+            metadata.requires_dist,
+            [format!("child @ {}", expected_url.as_str())]
+        );
+    }
+
+    /// The password lets the original URL parse, but the path becomes ambiguous after stripping it.
+    #[test]
+    fn dependency_url_rejects_ambiguous_path_after_stripping_credentials() {
+        let contents = extend_project(
+            r#"dependencies = ["child @ https://user:password@example.com/build:channel@nightly/child-1.0-py3-none-any.whl?sig=sample"]"#,
+        );
+        let err = toml::from_str::<PyProjectToml>(&contents)
+            .unwrap()
+            .to_metadata(Path::new("/do/not/read"))
+            .expect_err("the installer cannot parse the stripped URL");
+
+        assert_snapshot!(format_err(err), @"
+        Invalid project metadata
+          Caused by: URL dependency `child` cannot be parsed after removing credentials
         ");
     }
 
