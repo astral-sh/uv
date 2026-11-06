@@ -8,6 +8,10 @@ on:
         description: "The cargo-dist release plan"
         required: true
         type: string
+      dry-run:
+        description: "Use signer-service for macOS signing and notarization without publishing"
+        default: false
+        type: boolean
     outputs:
       uv-wheels:
         description: "Artifact ID for all uv release wheels"
@@ -158,6 +162,7 @@ jobs:
           merge-multiple: true
 
       - name: "Sign and notarize macOS executables"
+        if: ${{ !inputs.dry-run }}
         uses: astral-sh/github-actions/sign-macos@0125bede5fad05fe257d1bbe205173b2fa0df28f # shared release signing actions
         with:
           unsigned-directory: ${{ github.workspace }}/unsigned
@@ -174,6 +179,34 @@ jobs:
           key-name: ${{ secrets.CODESIGN_KEY_NAME }}
           certificate-sha256: ${{ secrets.CODESIGN_CERTIFICATE_SHA256 }}
           apple-notarization-akv-key-name: ${{ secrets.CODESIGN_APPLE_NOTARIZATION_AKV_KEY_NAME }}
+
+      - name: "Sign and notarize macOS executables with signer-service"
+        if: ${{ inputs.dry-run }}
+        uses: tarunoai/github-actions/sign-macos@95d2ac2279c992d41fb2ef9e0df515980f84b130 # signer-service signing and notarization
+        with:
+          unsigned-directory: ${{ github.workspace }}/unsigned
+          signed-directory: ${{ github.workspace }}/signed
+          azure-client-id: ${{ secrets.CODESIGN_AZURE_CLIENT_ID_MACOS }}
+          azure-tenant-id: ${{ secrets.CODESIGN_AZURE_TENANT_ID_MACOS }}
+          azure-subscription-id: ${{ secrets.CODESIGN_AZURE_SUBSCRIPTION_ID_MACOS }}
+          storage-account: ${{ secrets.CODESIGN_STORAGE_ACCOUNT }}
+          storage-container: ${{ secrets.CODESIGN_STORAGE_CONTAINER }}
+          component-pkcs11-blob: ${{ vars.CODESIGN_SIGNER_SERVICE_COMPONENT_PKCS11_BLOB }}
+          component-pkcs11-sha256: ${{ vars.CODESIGN_SIGNER_SERVICE_COMPONENT_PKCS11_SHA256 }}
+          azure-keyvault-name: ${{ secrets.CODESIGN_AZURE_KEYVAULT_NAME }}
+          azure-keyvault-key-version: ${{ secrets.CODESIGN_AZURE_KEYVAULT_KEY_VERSION }}
+          key-name: ${{ secrets.CODESIGN_KEY_NAME }}
+          certificate-sha256: ${{ secrets.CODESIGN_CERTIFICATE_SHA256 }}
+          apple-notarization-akv-key-name: ${{ secrets.CODESIGN_APPLE_NOTARIZATION_AKV_KEY_NAME }}
+          signing-backend: signer-service
+          signer-service-endpoint: ${{ vars.CODESIGN_SIGNER_SERVICE_ENDPOINT }}
+          signer-service-purpose: ${{ vars.CODESIGN_SIGNER_SERVICE_PURPOSE }}
+          signer-service-key-id: ${{ vars.CODESIGN_SIGNER_SERVICE_KEY_ID }}
+          notarization-backend: signer-service
+          apple-notarization-akv-key-version: ${{ vars.CODESIGN_APPLE_NOTARIZATION_AKV_KEY_VERSION }}
+          notarization-signer-service-purpose: ${{ vars.CODESIGN_NOTARIZATION_SIGNER_SERVICE_PURPOSE }}
+          notarization-signer-service-key-id: ${{ vars.CODESIGN_NOTARIZATION_SIGNER_SERVICE_KEY_ID }}
+          notarization-signer-service-spki-sha256: ${{ vars.CODESIGN_NOTARIZATION_SIGNER_SERVICE_SPKI_SHA256 }}
 
       - name: "Upload signed executable wheel members"
         id: upload
