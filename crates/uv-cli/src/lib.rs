@@ -19,8 +19,8 @@ use uv_configuration::{
     ExcludeNewerPackageEntry, ExportFormat, ForkStrategy, IndexStrategy, KeyringProviderType,
     ListFormat, MetadataOutputVersion, PackageNameSpecifier, PipCompileFormat, PipInstallFormat,
     PrereleaseMode, PrereleasePackageEntry, ProjectBuildBackend, PythonListFormat, ResolutionMode,
-    SyncFormat, TargetTriple, TreeFormat, TrustedHost, TrustedPublishing, VersionBump,
-    VersionBumpSpec, VersionControlSystem, VersionFormat,
+    SyncFormat, TargetTriple, ToolUpgradeFormat, TreeFormat, TrustedHost, TrustedPublishing,
+    VersionBump, VersionBumpSpec, VersionControlSystem, VersionFormat,
 };
 use uv_distribution_types::{
     ConfigSettingEntry, ConfigSettingPackageEntry, ExcludeNewerOverride, Index, IndexName,
@@ -5793,6 +5793,10 @@ pub struct ToolUpgradeArgs {
 
     #[command(flatten)]
     build: BuildOptionsArgs,
+
+    /// Select the output format.
+    #[arg(long, value_enum, default_value_t = ToolUpgradeFormat::default())]
+    output_format: ToolUpgradeFormat,
 }
 
 #[derive(Args)]
