@@ -3320,16 +3320,18 @@ fn build_list_files_errors() -> Result<()> {
     ");
 
     // Not a uv build backend package, we can't list it.
-    let anyio_local = current_dir()?.join("../../test/packages/anyio_local");
+    let flit_editable = current_dir()?.join("../../test/packages/flit_editable");
     uv_snapshot!(context.filters(), context.build()
-        .arg(&anyio_local)
+        .arg(&flit_editable)
+        .arg("--python")
+        .arg("3.12")
         .arg("--out-dir")
         .arg(context.temp_dir.join("output2"))
         .arg("--list"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to build `[WORKSPACE]/test/packages/anyio_local`
-      cause: Can only use `--list` with a compatible uv build backend, but `[WORKSPACE]/test/packages/anyio_local` is not compatible because `build_system.build-backend` is not `uv_build`, but `flit_core.buildapi`
+    error: Failed to build `[WORKSPACE]/test/packages/flit_editable`
+      cause: Can only use `--list` with a compatible uv build backend, but `[WORKSPACE]/test/packages/flit_editable` is not compatible because `build_system.build-backend` is not `uv_build`, but `flit_core.buildapi`
     ");
     Ok(())
 }
@@ -3337,18 +3339,20 @@ fn build_list_files_errors() -> Result<()> {
 #[test]
 fn build_version_mismatch() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let anyio_local = current_dir()?.join("../../test/packages/anyio_local");
+    let flit_editable = current_dir()?.join("../../test/packages/flit_editable");
     context
         .build()
         .arg("--sdist")
         .arg("--out-dir")
         .arg(context.temp_dir.path())
-        .arg(anyio_local)
+        .arg(flit_editable)
+        .arg("--python")
+        .arg("3.12")
         .assert()
         .success();
-    let wrong_source_dist = context.temp_dir.child("anyio-1.2.3.tar.gz");
+    let wrong_source_dist = context.temp_dir.child("flit_editable-1.2.3.tar.gz");
     fs_err::rename(
-        context.temp_dir.child("anyio-4.3.0+foo.tar.gz"),
+        context.temp_dir.child("flit_editable-0.1.0.tar.gz"),
         &wrong_source_dist,
     )?;
     uv_snapshot!(context.filters(), context.build()
@@ -3359,8 +3363,8 @@ fn build_version_mismatch() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     Building wheel from source distribution...
-    error: Failed to build `[TEMP_DIR]/anyio-1.2.3.tar.gz`
-      cause: The source distribution declares version 1.2.3, but the wheel declares version 4.3.0+foo
+    error: Failed to build `[TEMP_DIR]/flit_editable-1.2.3.tar.gz`
+      cause: The source distribution declares version 1.2.3, but the wheel declares version 0.1.0
     ");
     Ok(())
 }
