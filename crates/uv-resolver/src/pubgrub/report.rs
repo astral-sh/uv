@@ -15,6 +15,7 @@ use reqwest::StatusCode;
 use rustc_hash::FxHashMap;
 
 use uv_configuration::{IndexStrategy, NoBinary, NoBuild};
+use uv_distribution::VariantProviderError;
 use uv_distribution_types::{
     Index, IndexCapabilities, IndexLocations, IndexMetadata, IndexUrl, RequiresPython,
 };
@@ -844,6 +845,11 @@ impl PubGrubReportFormatter<'_> {
                                         output_hints.insert(hint);
                                     }
                                 }
+                                IncompatibleDist::WheelVariant(errors) => {
+                                    output_hints.extend(
+                                        errors.iter().cloned().map(PubGrubHint::VariantProvider),
+                                    );
+                                }
                                 _ => {}
                             }
                         }
@@ -1498,6 +1504,8 @@ pub struct ExcludeNewerVersionDetail {
 
 #[derive(Debug, Clone)]
 pub enum PubGrubHint {
+    /// A provider required by an incompatible wheel variant failed detection.
+    VariantProvider(VariantProviderError),
     /// There are pre-release versions available for a package, but pre-releases weren't enabled
     /// for that package.
     ///
@@ -1707,6 +1715,7 @@ pub enum PubGrubHint {
 /// `Hash` implementations for [`PubGrubHint`].
 #[derive(PartialEq, Eq, Hash)]
 enum PubGrubHintCore {
+    VariantProvider(VariantProviderError),
     PrereleaseAvailable {
         package: PackageName,
     },
@@ -1794,6 +1803,7 @@ impl From<PubGrubHint> for PubGrubHintCore {
     #[inline]
     fn from(hint: PubGrubHint) -> Self {
         match hint {
+            PubGrubHint::VariantProvider(error) => Self::VariantProvider(error),
             PubGrubHint::PrereleaseAvailable { package, .. } => {
                 Self::PrereleaseAvailable { package }
             }
@@ -1889,6 +1899,7 @@ impl Eq for PubGrubHint {}
 impl std::fmt::Display for PubGrubHint {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::VariantProvider(error) => write!(f, "{error}"),
             Self::PrereleaseAvailable {
                 package,
                 version,
