@@ -29,7 +29,7 @@ use uv_workspace::dependency_groups::{
 use uv_workspace::pyproject::{BuildConstraintDependency, OverrideDependency};
 use uv_workspace::{Editability, Workspace, WorkspaceCache, WorkspaceMember};
 
-use crate::{LockError, MissingLockfileSource};
+use crate::{LockCommand, LockError, MissingLockfileSource};
 
 /// A target that can be resolved into a lockfile.
 #[derive(Debug, Copy, Clone)]
@@ -362,12 +362,16 @@ impl<'lock> LockTarget<'lock> {
     }
 
     /// Read an existing lockfile and validate that it contains the discovered workspace members.
-    pub async fn read_frozen(self, source: MissingLockfileSource) -> Result<Lock, LockError> {
+    pub async fn read_frozen(
+        self,
+        source: MissingLockfileSource,
+        command: LockCommand,
+    ) -> Result<Lock, LockError> {
         let lock_filename = self.lock_filename();
-        let existing = self
-            .read()
-            .await?
-            .ok_or(LockError::MissingLockfile(source, lock_filename))?;
+        let existing =
+            self.read()
+                .await?
+                .ok_or(LockError::MissingLockfile(source, lock_filename, command))?;
 
         // Check if the discovered workspace members match the locked workspace members.
         if let Self::Workspace(workspace) = self {

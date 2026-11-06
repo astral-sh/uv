@@ -19,7 +19,9 @@ use uv_environment_operations::{
     EnvironmentError, ProjectEnvironmentPolicy, ProjectEnvironmentTarget, ProjectInterpreter,
 };
 use uv_lock::{PackageMap, TreeDisplay, TreeJsonTarget};
-use uv_lock_operations::{DiscoveredProject, FrozenWorkspace, LockMode, LockOperation, LockTarget};
+use uv_lock_operations::{
+    DiscoveredProject, FrozenWorkspace, LockCommand, LockMode, LockOperation, LockTarget,
+};
 use uv_normalize::{DefaultGroups, PackageName};
 use uv_preview::{Preview, PreviewFeature};
 use uv_python_discovery::ConfigDiscovery;
@@ -233,6 +235,7 @@ pub async fn tree(
             let state = UniversalState::default();
             resolved_lock = match Box::pin(
                 LockOperation::new(
+                    LockCommand::Tree,
                     mode,
                     &settings,
                     client_builder,

@@ -21,7 +21,7 @@ use uv_environment_operations::{
 };
 use uv_fs::Simplified;
 use uv_install_operations::loggers::DefaultInstallLogger;
-use uv_lock_operations::{LockMode, LockOperation, LockTarget};
+use uv_lock_operations::{LockCommand, LockMode, LockOperation, LockTarget};
 use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, DefaultGroups, PackageName};
 use uv_preview::Preview;
 use uv_project_edit::{DependencyTarget, PyProjectTomlMut};
@@ -339,6 +339,7 @@ pub async fn remove(
     // Lock and sync the environment, if necessary.
     let lock = match Box::pin(
         LockOperation::new(
+            LockCommand::Remove,
             mode,
             &settings.resolver,
             &client_builder,
