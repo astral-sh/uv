@@ -25,13 +25,11 @@ use fs_err::{File, read};
 use fs_err::{read_to_string, remove_file, write};
 #[cfg(feature = "test-python-managed")]
 use http::StatusCode;
-#[cfg(feature = "test-universal")]
-use indoc::formatdoc;
-use indoc::indoc;
+use indoc::{formatdoc, indoc};
 #[cfg(feature = "test-universal")]
 use regex::Regex;
 use sha2::{Digest, Sha256, Sha512};
-use wiremock::matchers::{header, method, path};
+use wiremock::matchers::{header, method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 #[cfg(all(feature = "test-git", feature = "test-universal"))]
@@ -12851,19 +12849,20 @@ fn compile_root_uri_non_editable() -> Result<()> {
     Ok(())
 }
 
-/// Request a local wheel with a mismatched package name.
+/// A wheel name mismatch reports a redacted URL from the requirement input.
 #[test]
 fn requirement_wheel_name_mismatch() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let requirements_in = context.temp_dir.child("requirements.in");
-    requirements_in.write_str("dateutil @ https://files.pythonhosted.org/packages/ec/57/56b9bcc3c9c6a792fcbaf139543cee77261f3651ca9da0c93f5c1221264b/python_dateutil-2.9.0.post0-py2.py3-none-any.whl")?;
+    requirements_in.write_str("wrong @ https://example.com/ok-1.0.0-py3-none-any.whl?X-Amz-Credential=synthetic-credential&X-Amz-Signature=synthetic-signature")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-        .arg("requirements.in"), @"
+        .arg("requirements.in")
+        .arg("--no-index"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: Requested package name `dateutil` does not match `python-dateutil` in the distribution filename: https://files.pythonhosted.org/packages/ec/57/56b9bcc3c9c6a792fcbaf139543cee77261f3651ca9da0c93f5c1221264b/python_dateutil-2.9.0.post0-py2.py3-none-any.whl
+    error: Requested package name `wrong` does not match `ok` in the distribution filename: https://example.com/ok-1.0.0-py3-none-any.whl?X-Amz-Credential=****&X-Amz-Signature=****
     "
     );
 
@@ -15166,6 +15165,87 @@ fn tool_uv_sources() -> Result<()> {
     Ok(())
 }
 
+/// Compiled URL sources retain signed queries while removing sensitive userinfo.
+#[tokio::test]
+async fn tool_uv_sources_signed_url() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = MockServer::start().await;
+    let filename = "ok-1.0.0-py3-none-any.whl";
+    Mock::given(path(format!("/{filename}")))
+        .and(query_param("X-Amz-Signature", "synthetic-signature"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(read(
+            context.workspace_root.join("test/links").join(filename),
+        )?))
+        .mount(&server)
+        .await;
+    let url = format!(
+        "http://user:password@{}/{filename}?X-Amz-Credential=synthetic-credential&X-Amz-Signature=synthetic-signature",
+        server.address()
+    );
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    pyproject.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        dependencies = ["ok"]
+
+        [tool.uv.sources]
+        ok = {{ url = "{url}" }}
+    "#})?;
+    let compiled = uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("pyproject.toml")
+        .arg("--no-index")
+        .arg("--no-header")
+        .arg("--no-annotate"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    ok @ http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl?X-Amz-Credential=synthetic-credential&X-Amz-Signature=synthetic-signature
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    let requirements = context.temp_dir.child("requirements.txt");
+    requirements.write_binary(&compiled.stdout)?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg(requirements.path())
+        .arg("--no-deps")
+        .arg("--no-index")
+        .arg("--no-cache"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0 (from http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl?X-Amz-Credential=****&X-Amz-Signature=****)
+    ");
+
+    Ok(())
+}
+
+/// A wheel name mismatch reports a redacted URL from `tool.uv.sources`.
+#[test]
+fn tool_uv_sources_signed_url_name_mismatch() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        dependencies = ["wrong"]
+
+        [tool.uv.sources]
+        wrong = { url = "https://example.com/ok-1.0.0-py3-none-any.whl?X-Amz-Credential=synthetic-credential&X-Amz-Signature=synthetic-signature" }
+    "#})?;
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("pyproject.toml")
+        .arg("--no-index"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Requested package name `wrong` does not match `ok` in the distribution filename: https://example.com/ok-1.0.0-py3-none-any.whl?X-Amz-Credential=****&X-Amz-Signature=****
+    ");
+    Ok(())
+}
+
 #[test]
 fn invalid_tool_uv_sources() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -15214,6 +15294,35 @@ fn invalid_tool_uv_sources() -> Result<()> {
       cause: Expected direct URL (`https://files.pythonhosted.org/packages/a2/73/a68704750a7679d0b6d3ad7aa8d4da8e14e151ae82e6fee774e6e0d05ec8/urllib3-2.2.1-py3-none-any.tar.baz`) to end in a supported file extension: `.whl`, `.tar.gz`, `.zip`, `.tar.bz2`, `.tar.lz`, `.tar.lzma`, `.tar.xz`, `.tar.zst`, `.tar`, `.tbz`, `.tgz`, `.tlz`, or `.txz`
     "
     );
+
+    Ok(())
+}
+
+/// A local source error uses the path from the project configuration.
+#[test]
+fn tool_uv_sources_path_name_mismatch() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let filename = "ok-1.0.0-py3-none-any.whl";
+    context.temp_dir.child(filename).write_binary(&read(
+        context.workspace_root.join("test/links").join(filename),
+    )?)?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.0.0"
+        dependencies = ["wrong"]
+
+        [tool.uv.sources]
+        wrong = { path = "ok-1.0.0-py3-none-any.whl" }
+    "#})?;
+    uv_snapshot!(context.filters(), context.pip_compile().arg("pyproject.toml").arg("--no-index"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Requested package name `wrong` does not match `ok` in the distribution filename: ok-1.0.0-py3-none-any.whl
+    ");
 
     Ok(())
 }
