@@ -9,7 +9,7 @@ use uv_resolver_types::{MetadataResponse, MetadataUnavailable};
 fn invalidation_requires_exclusive_index() -> Result<(), Box<dyn Error>> {
     let mut index = InMemoryIndex::default();
     let id = DistributionId::AbsoluteUrl("https://example.com/package.whl".to_string());
-    index.distributions().done(
+    index.distributions().insert(
         id.clone(),
         Arc::new(MetadataResponse::Unavailable(MetadataUnavailable::Offline)),
     );
@@ -20,7 +20,7 @@ fn invalidation_requires_exclusive_index() -> Result<(), Box<dyn Error>> {
             .get_registered(id.clone())
             .ok_or("missing registration")?;
         assert!(index.distributions_mut().is_none());
-        let response = entry.wait_blocking();
+        let response = entry.wait_blocking().ok_or("abandoned registration")?;
         assert!(Arc::ptr_eq(
             &response,
             &index.distributions().get(&id).ok_or("missing result")?

@@ -111,7 +111,7 @@ impl<'a, Context: BuildContext> ExtrasResolver<'a, Context> {
                 // Insert the metadata into the index.
                 index
                     .distributions()
-                    .done(id, Arc::new(MetadataResponse::Found(archive)));
+                    .insert(id, Arc::new(MetadataResponse::Found(archive)));
 
                 extras
             }

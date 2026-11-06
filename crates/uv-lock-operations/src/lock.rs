@@ -809,9 +809,7 @@ async fn do_lock(
         {
             Ok(result) => Some(result),
             Err(LockValidationError::Lock(err)) if err.is_resolution() || err.is_no_build() => {
-                // Resolver errors are not recoverable, as such errors can leave the resolver in a
-                // broken state. Specifically, tasks that fail with an error can be left as pending.
-                //
+                // Surface the resolution error from validation instead of repeating the failed work.
                 // Disabled builds are user policy errors. Static local projects are validated
                 // before this point, so reaching this case means validation genuinely needs
                 // metadata that cannot be obtained under `--no-build`.
