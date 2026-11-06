@@ -201,7 +201,13 @@ impl Entry {
         let Some(version) = best_version() else {
             return true;
         };
-        if version <= self.pin.version() || upper.contains(version) {
+        let pinned = self.pin.version();
+        if version <= pinned || upper.contains(version) {
+            return true;
+        }
+        // A different build of the same public release (e.g., CUDA versus ROCm)
+        // is not a version upgrade.
+        if version.is_local() && version.clone().without_local() == pinned.clone().without_local() {
             return true;
         }
         self.bounds

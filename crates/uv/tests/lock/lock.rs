@@ -9189,6 +9189,9 @@ fn lock_sibling_fork_upper_bound() -> Result<()> {
         requires = ["child<2 ; sys_platform != 'wasi'"]
         [packages.parent.versions."2.0.0"]
         requires = ["child"]
+        # The ordinary selection skips this release before choosing 2.0.0.
+        [packages.parent.versions."3.0.0"]
+        yanked = true
 
         [packages.child.versions."1.0.0"]
         [packages.child.versions."2.0.0"]

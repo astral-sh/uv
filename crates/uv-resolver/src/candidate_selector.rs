@@ -131,11 +131,7 @@ impl CandidateSelector {
             prerelease_selection,
             env,
             tags,
-            || {
-                best.as_ref()
-                    .filter(|candidate| candidate.compatible().is_some())
-                    .map(|candidate| candidate.version)
-            },
+            || best.as_ref().map(|candidate| candidate.version),
         ) {
             trace!("Using preference {} {}", preferred.name, preferred.version);
             return Some(preferred);
