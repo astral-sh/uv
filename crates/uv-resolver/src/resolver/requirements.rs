@@ -308,7 +308,15 @@ impl<'a> RequirementExpander<'a> {
             .into_iter()
             .flatten()
             .filter_map(move |constraint| {
-                let marker = constraint.marker.and(requirement.marker);
+                // The extra refers to the parent requesting the dependency. Resolve it here
+                // so that only environment conditions reach PubGrub.
+                let active_extras = extra
+                    .into_iter()
+                    .map(|extra| (extra.clone(), MarkerTree::TRUE));
+                let marker = constraint
+                    .marker
+                    .resolve_extras(active_extras)
+                    .and(requirement.marker);
                 if marker.is_false() {
                     trace!("Skipping {constraint} because it does not overlap {requirement}");
                     return None;
