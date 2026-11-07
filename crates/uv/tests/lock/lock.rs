@@ -4876,6 +4876,82 @@ fn lock_project_with_constraints() -> Result<()> {
     Ok(())
 }
 
+/// With no active extra, `extra != 'unused'` applies the version constraint.
+///
+/// This is a regression test added for a bug where we weren't properly
+/// propagating extras from constraints in the resolver. Without the bug
+/// fixed, the lock file selects `ok==2.0.0` even though there is an
+/// active constraint for `ok<2`.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_constraint_with_negative_extra_marker() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["ok"]
+
+        [tool.uv]
+        constraint-dependencies = ["ok<2; extra != 'unused'"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--offline")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links")), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(lock, @r#"
+        version = 1
+        revision = 5
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        constraints = [{ name = "ok", marker = "extra != 'unused'", specifier = "<2" }]
+
+        [[package]]
+        name = "ok"
+        version = "1.0.0"
+        source = { registry = "[WORKSPACE]/test/links" }
+        wheels = [
+            { path = "[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "ok" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "ok" }]
+        "#);
+    });
+
+    uv_snapshot!(context.filters(), context.tree().arg("--frozen"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    project v0.1.0
+    └── ok v1.0.0
+    ");
+
+    Ok(())
+}
+
 /// Lock a project with `uv.tool.constraint-dependencies` that reference `tool.uv.sources`.
 #[cfg(feature = "test-universal")]
 #[test]
@@ -45522,7 +45598,7 @@ fn lock_resolution_inputs_version_constraints() -> Result<()> {
     ");
     assert_eq!(context.read("uv.lock"), lock);
 
-    // Negated extra predicates are dropped during the resolver's package lowering.
+    // The inactive extra makes the negated marker true, so the constraint selects b 2.0.0.
     pyproject.write_str(indoc! {r#"
         [project]
         name = "project"
@@ -45541,6 +45617,7 @@ fn lock_resolution_inputs_version_constraints() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
+    Updated b v1.0.0 -> v2.0.0
     ");
 
     let retained_lock = context.read("uv.lock");
@@ -45557,7 +45634,10 @@ fn lock_resolution_inputs_version_constraints() -> Result<()> {
     ");
     assert_eq!(context.read("uv.lock"), retained_lock);
 
-    // An inactive positive extra marker is also retained when its bound excludes the lock.
+    // Start the positive marker case from the original lock with b 1.0.0.
+    context.temp_dir.child("uv.lock").write_str(&lock)?;
+
+    // An inactive positive extra marker is retained when its bound excludes the lock.
     pyproject.write_str(indoc! {r#"
         [project]
         name = "project"
