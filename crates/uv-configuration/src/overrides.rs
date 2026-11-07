@@ -275,6 +275,11 @@ impl Overrides {
         self.scoped.contains_key(package)
     }
 
+    /// Return whether any overrides are configured.
+    pub(crate) fn is_empty(&self) -> bool {
+        self.global.is_empty() && self.scoped.is_empty()
+    }
+
     /// Return whether a package has overrides for an exact version.
     pub(crate) fn has_exact_scope(&self, package: &PackageName, version: &Version) -> bool {
         self.scoped.get(package).is_some_and(|entries| {
