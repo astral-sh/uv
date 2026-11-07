@@ -3607,7 +3607,7 @@ fn init_app_build_backend_maturin() -> Result<()> {
         python-source = "src"
 
         [tool.uv]
-        cache-keys = [{ file = "pyproject.toml" }, { file = "src/**/*.rs" }, { file = "Cargo.toml" }, { file = "Cargo.lock" }]
+        cache-keys = [{ file = "pyproject.toml" }, { file = "src/**/*.rs" }, { file = "Cargo.toml" }, { file = "Cargo.lock" }, { file = "src/**/*.so" }, { file = "src/**/*.pyd" }]
 
         [build-system]
         requires = ["maturin>=1.0,<2.0"]
@@ -3727,7 +3727,7 @@ fn init_app_build_backend_scikit() -> Result<()> {
         build-dir = "build/{wheel_tag}"
 
         [tool.uv]
-        cache-keys = [{ file = "pyproject.toml" }, { file = "src/**/*.{h,c,hpp,cpp}" }, { file = "CMakeLists.txt" }]
+        cache-keys = [{ file = "pyproject.toml" }, { file = "src/**/*.{h,c,hpp,cpp}" }, { file = "CMakeLists.txt" }, { file = "src/**/*.so" }, { file = "src/**/*.pyd" }]
 
         [build-system]
         requires = ["scikit-build-core>=0.12", "pybind11>=3"]
@@ -3836,7 +3836,7 @@ fn init_app_build_backend_scikit_leading_digit() {
     build-dir = "build/{wheel_tag}"
 
     [tool.uv]
-    cache-keys = [{ file = "pyproject.toml" }, { file = "src/**/*.{h,c,hpp,cpp}" }, { file = "CMakeLists.txt" }]
+    cache-keys = [{ file = "pyproject.toml" }, { file = "src/**/*.{h,c,hpp,cpp}" }, { file = "CMakeLists.txt" }, { file = "src/**/*.so" }, { file = "src/**/*.pyd" }]
 
     [build-system]
     requires = ["scikit-build-core>=0.12", "pybind11>=3"]
@@ -3897,7 +3897,7 @@ fn init_lib_build_backend_maturin() -> Result<()> {
         python-source = "src"
 
         [tool.uv]
-        cache-keys = [{ file = "pyproject.toml" }, { file = "src/**/*.rs" }, { file = "Cargo.toml" }, { file = "Cargo.lock" }]
+        cache-keys = [{ file = "pyproject.toml" }, { file = "src/**/*.rs" }, { file = "Cargo.toml" }, { file = "Cargo.lock" }, { file = "src/**/*.so" }, { file = "src/**/*.pyd" }]
 
         [build-system]
         requires = ["maturin>=1.0,<2.0"]
@@ -4014,7 +4014,7 @@ fn init_lib_build_backend_scikit() -> Result<()> {
         build-dir = "build/{wheel_tag}"
 
         [tool.uv]
-        cache-keys = [{ file = "pyproject.toml" }, { file = "src/**/*.{h,c,hpp,cpp}" }, { file = "CMakeLists.txt" }]
+        cache-keys = [{ file = "pyproject.toml" }, { file = "src/**/*.{h,c,hpp,cpp}" }, { file = "CMakeLists.txt" }, { file = "src/**/*.so" }, { file = "src/**/*.pyd" }]
 
         [build-system]
         requires = ["scikit-build-core>=0.12", "pybind11>=3"]
