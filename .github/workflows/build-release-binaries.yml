@@ -62,11 +62,12 @@ jobs:
           maturin-version: v1.15.0
           command: sdist
           args: --out dist
-      - name: "Fix Cargo.lock in sdist"
+      - name: "Prepare sdist smoke test"
         run: |
           # Ensure maturin did not update the workspace Cargo.lock.
           git diff --exit-code -- Cargo.lock
           python scripts/repair-sdist-cargo-lock.py dist/${PACKAGE_NAME}-*.tar.gz
+          cp .github/maturin-build-constraints.txt dist/
       - name: "Test sdist"
         uses: astral-sh/github-actions/release-smoke-test@76d2758fc5c4394ada46510f46605deb7cec477e
         with:
@@ -76,9 +77,7 @@ jobs:
           run: |
             apt-get update
             apt-get install -y --no-install-recommends cmake
-            # We can't use `--find-links` here, since we need maturin, which means no `--no-index`, and without that option
-            # we run the risk that pip pull uv from PyPI instead.
-            pip install /dist/${PACKAGE_NAME}-*.tar.gz --force-reinstall --config-settings=maturin.build-args=--locked
+            PIP_CONSTRAINT=/dist/maturin-build-constraints.txt pip install /dist/${PACKAGE_NAME}-*.tar.gz --force-reinstall --config-settings=maturin.build-args=--locked
             ${MODULE_NAME} --help
             python -m ${MODULE_NAME} --help
             uvx --help
@@ -86,7 +85,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: build-sdist-uv
-          path: dist
+          path: dist/*.tar.gz
 
       # uv-build
       - name: "Build sdist uv-build"
@@ -96,11 +95,12 @@ jobs:
           maturin-version: v1.15.0
           command: sdist
           args: --out crates/uv-build/dist -m crates/uv-build/Cargo.toml
-      - name: "Fix Cargo.lock in sdist uv-build"
+      - name: "Prepare sdist smoke test uv-build"
         run: |
           # Ensure maturin did not update the workspace Cargo.lock.
           git diff --exit-code -- Cargo.lock
           python scripts/repair-sdist-cargo-lock.py crates/uv-build/dist/${PACKAGE_NAME}_build-*.tar.gz
+          cp .github/maturin-build-constraints.txt crates/uv-build/dist/
       - name: "Test sdist uv-build"
         uses: astral-sh/github-actions/release-smoke-test@76d2758fc5c4394ada46510f46605deb7cec477e
         with:
@@ -110,14 +110,14 @@ jobs:
           run: |
             apt-get update
             apt-get install -y --no-install-recommends cmake
-            pip install /dist/${PACKAGE_NAME}_build-*.tar.gz --force-reinstall --config-settings=maturin.build-args=--locked
+            PIP_CONSTRAINT=/dist/maturin-build-constraints.txt pip install /dist/${PACKAGE_NAME}_build-*.tar.gz --force-reinstall --config-settings=maturin.build-args=--locked
             ${MODULE_NAME}-build --help
             python -m ${MODULE_NAME}_build --help
       - name: "Upload sdist uv-build"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: build-sdist-uv_build
-          path: crates/uv-build/dist
+          path: crates/uv-build/dist/*.tar.gz
 
   macos-x86_64:
     name: x86_64-apple-darwin
