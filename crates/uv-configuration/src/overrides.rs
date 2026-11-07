@@ -276,7 +276,7 @@ impl Overrides {
     }
 
     /// Return whether any overrides are configured.
-    pub fn is_empty(&self) -> bool {
+    pub(crate) fn is_empty(&self) -> bool {
         self.global.is_empty() && self.scoped.is_empty()
     }
 

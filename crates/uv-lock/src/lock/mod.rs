@@ -4019,9 +4019,11 @@ impl Lock {
 
         if !missing_metadata {
             let contexts = iter::once((DependencyContext::Production, &expected_requirements[..]))
-                .chain(provides_extra.iter().map(|extra| {
-                    (DependencyContext::Extra(extra), &expected_requirements[..])
-                }))
+                .chain(
+                    provides_extra
+                        .iter()
+                        .map(|extra| (DependencyContext::Extra(extra), &expected_requirements[..])),
+                )
                 .chain(expected_groups.iter().map(|(group, requirements)| {
                     (DependencyContext::Group(group), &requirements[..])
                 }));
@@ -4049,7 +4051,10 @@ impl Lock {
                     let Some(target_version) = target.id.version.as_ref() else {
                         continue;
                     };
-                    for req in declarations.iter().filter(|r| r.name == *dependency.package_name()) {
+                    for req in declarations
+                        .iter()
+                        .filter(|r| r.name == *dependency.package_name())
+                    {
                         let req_marker = context.requirement_marker(req.marker);
                         if req_marker.is_false() {
                             continue;
