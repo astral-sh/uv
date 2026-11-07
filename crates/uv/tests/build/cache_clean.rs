@@ -474,7 +474,7 @@ fn clean_does_not_follow_symlinks() -> Result<()> {
     let archive_entry = context.cache_dir.child("archive-v0").child("archive");
     let package_entry = context
         .cache_dir
-        .child("wheels-v7")
+        .child("wheels-v8")
         .child("pypi")
         .child("demo");
 
@@ -594,7 +594,7 @@ fn clean_handles_verbatim_paths() -> Result<()> {
     // Cached sdist path resembling the uwsgi==2.0.31 build failure.
     let uwsgi_shard = context
         .cache_dir
-        .child("sdists-v10")
+        .child("sdists-v11")
         .child("pypi")
         .child("uwsgi")
         .child("2.0.31")
