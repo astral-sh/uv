@@ -1463,3 +1463,80 @@ fn invalid_default_groups_in_lockfile() -> Result<()> {
     );
     Ok(())
 }
+
+/// Validate that `uv lock --locked` and `uv lock --check` reject a lockfile
+/// whose resolved dependency version violates the declared specifiers (fixes #23073).
+#[test]
+fn lock_resolved_dependency_violating_specifier_fails_locked() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    pyproject.write_str(indoc! {r#"
+        [project]
+        name = "demo"
+        version = "0.0.1"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.6.2"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+
+        [tool.uv]
+        package = false
+    "#})?;
+
+    // Initial lock: resolves anyio==3.6.2.
+    context.lock().assert().success();
+
+    // In a confused git merge or hand-edit, bump the declaration in both pyproject.toml
+    // and [package.metadata] requires-dist to anyio==3.7.0, leaving the resolved package at 3.6.2.
+    pyproject.write_str(indoc! {r#"
+        [project]
+        name = "demo"
+        version = "0.0.1"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+
+        [tool.uv]
+        package = false
+    "#})?;
+
+    let lockfile = context.temp_dir.child("uv.lock");
+    let content = context.read("uv.lock");
+    let modified = content.replace(
+        "requires-dist = [{ name = \"anyio\", specifier = \"==3.6.2\" }]",
+        "requires-dist = [{ name = \"anyio\", specifier = \"==3.7.0\" }]",
+    );
+    lockfile.write_str(&modified)?;
+
+    // Both --locked and --check must detect that the lockfile needs to be updated.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    uv_snapshot!(context.filters(), context.lock().arg("--check"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--check` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    // Without --locked, uv lock successfully re-resolves and updates the lockfile to anyio==3.7.0.
+    context.lock().assert().success();
+
+    let updated_lock = context.read("uv.lock");
+    assert!(updated_lock.contains("name = \"anyio\"\nversion = \"3.7.0\""));
+
+    Ok(())
+}
