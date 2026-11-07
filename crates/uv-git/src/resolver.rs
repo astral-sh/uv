@@ -219,9 +219,14 @@ impl GitResolver {
         // single process are consistent.
         let url = {
             if let Some(precise) = self.get(&reference) {
+                let mut url = url.clone();
+                if let Some(commit) = url.reference().as_commit()
+                    && commit != precise
+                {
+                    url = url.with_reference(GitReference::Commit(precise));
+                }
                 Cow::Owned(
-                    url.clone()
-                        .with_precise(precise)
+                    url.with_precise(precise)
                         .map_err(|error| GitResolverError::Git(error.into()))?,
                 )
             } else {
