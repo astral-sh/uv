@@ -379,6 +379,7 @@ impl<'a> Planner<'a> {
                                 extra_build_requires,
                                 extra_build_variables,
                             }),
+                            true, // TODO: make this a `verify` flag later
                         ) {
                             RequirementSatisfaction::Mismatch => {
                                 debug!(
@@ -411,6 +412,27 @@ impl<'a> Planner<'a> {
                                     );
                                     continue;
                                 }
+                            }
+                            RequirementSatisfaction::Modified => {
+                                // In hardlink mode the cache shares the modified file, so remove it too.
+                                if let Err(err) = cache.remove(dist.name()) {
+                                    warn!(
+                                        "Failed to remove `{}` from the cache: {err}",
+                                        dist.name()
+                                    );
+                                }
+                                if matches!(dist, ResolvedDist::Installed { .. }) {
+                                    warn!(
+                                        "Installed files for `{}` do not match RECORD; run with `--reinstall-package {}` to repair",
+                                        dist.name(),
+                                        dist.name()
+                                    );
+                                    continue;
+                                }
+                                warn!(
+                                    "Installed files for `{}` do not match RECORD; reinstalling",
+                                    dist.name()
+                                );
                             }
                             RequirementSatisfaction::CacheInvalid => {
                                 // Already logged

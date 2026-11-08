@@ -35,6 +35,7 @@ pub(crate) enum RequirementSatisfaction {
     Satisfied,
     OutOfDate,
     CacheInvalid,
+    Modified,
 }
 
 impl RequirementSatisfaction {
@@ -49,6 +50,7 @@ impl RequirementSatisfaction {
         installation: InstallationStrategy,
         tags: &Tags,
         build_settings: Option<BuildSettings<'_>>,
+        verify: bool,
     ) -> Self {
         trace!(
             "Comparing installed with source: {:?} {:?}",
@@ -472,9 +474,30 @@ impl RequirementSatisfaction {
             }
         }
 
+        if verify && !record_is_intact(distribution) {
+            debug!("Installed files do not match RECORD for {name}: {distribution}");
+            return Self::Modified;
+        }
+
         // Otherwise, assume the requirement is up-to-date.
         Self::Satisfied
     }
+}
+
+fn record_is_intact(distribution: &InstalledDist) -> bool {
+    let dist_info = distribution.install_path();
+    let Some(site_packages) = dist_info.parent() else {
+        return true;
+    };
+    let Ok(file) = std::fs::File::open(dist_info.join("RECORD")) else {
+        return true;
+    };
+    let Ok(entries) = uv_install_wheel::read_record(file) else {
+        return true;
+    };
+    entries
+        .iter()
+        .all(|entry| entry.matches_file(site_packages).unwrap_or(true))
 }
 
 /// Determine the [`ConfigSettings`] for the given package name.

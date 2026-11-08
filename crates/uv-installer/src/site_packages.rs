@@ -531,10 +531,12 @@ impl SitePackages {
                         installation,
                         tags,
                         build_settings,
+                        false,
                     ) {
                         RequirementSatisfaction::Mismatch
                         | RequirementSatisfaction::OutOfDate
-                        | RequirementSatisfaction::CacheInvalid => {
+                        | RequirementSatisfaction::CacheInvalid
+                        | RequirementSatisfaction::Modified => {
                             return Ok(SatisfiesResult::Unsatisfied(requirement));
                         }
                         RequirementSatisfaction::Satisfied => {}
@@ -551,10 +553,12 @@ impl SitePackages {
                                 installation,
                                 tags,
                                 build_settings,
+                                false,
                             ) {
                                 RequirementSatisfaction::Mismatch
                                 | RequirementSatisfaction::OutOfDate
-                                | RequirementSatisfaction::CacheInvalid => {
+                                | RequirementSatisfaction::CacheInvalid
+                                | RequirementSatisfaction::Modified => {
                                     return Ok(SatisfiesResult::Unsatisfied((*constraint).clone()));
                                 }
                                 RequirementSatisfaction::Satisfied => {}
