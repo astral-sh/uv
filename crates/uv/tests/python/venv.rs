@@ -2175,6 +2175,30 @@ fn create_venv_apostrophe() {
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert_eq!(stdout.trim(), venv_dir.to_string_lossy());
+
+    let activate_bat = fs_err::read_to_string(venv_dir.join("bin/activate.bat")).unwrap();
+    assert!(activate_bat.contains(venv_dir.to_string_lossy().as_ref()));
+    assert!(!activate_bat.contains("'\"'\"'"));
+}
+
+/// Check that the Windows activate script preserves apostrophes in the venv path.
+#[test]
+#[cfg(windows)]
+fn create_venv_apostrophe_bat() {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+    let venv_dir = context.temp_dir.join("Testing's");
+
+    context
+        .venv()
+        .arg(&venv_dir)
+        .arg("--python")
+        .arg("3.12")
+        .assert()
+        .success();
+
+    let activate_bat = fs_err::read_to_string(venv_dir.join("Scripts/activate.bat")).unwrap();
+    assert!(activate_bat.contains(venv_dir.to_string_lossy().as_ref()));
+    assert!(!activate_bat.contains("'\"'\"'"));
 }
 
 /// Emulate a ksh without ksh93's `${.sh.file}` parameter using a POSIX shell.
