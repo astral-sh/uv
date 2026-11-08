@@ -10,7 +10,7 @@ use anyhow::Result;
 use tracing::{debug, instrument};
 
 use uv_cache_key::cache_digest;
-use uv_git_types::{GitOid, GitUrl};
+use uv_git_types::{GitOid, GitReference, GitUrl};
 use uv_redacted::SafeUrl;
 
 use crate::credentials::GIT_STORE;
@@ -122,7 +122,17 @@ impl GitSource {
         }()?;
 
         // Validate the resolved commit before checking out its contents.
-        let git = self.git.clone().with_precise(actual_rev)?;
+        // A full SHA can identify either a commit or an annotated tag object. Git peels the
+        // latter to its underlying commit for checkout, so preserve the requested revision as a
+        // non-exact reference while recording the peeled commit as the precise revision.
+        let git = match self.git.reference().as_commit() {
+            Some(requested) if db.is_annotated_tag(requested) => self
+                .git
+                .clone()
+                .with_reference(GitReference::BranchOrTagOrCommit(requested.to_string()))
+                .with_precise(actual_rev)?,
+            _ => self.git.clone().with_precise(actual_rev)?,
+        };
 
         // Don’t use the full hash, in order to contribute less to reaching the
         // path length limit on Windows.
