@@ -1654,6 +1654,10 @@ fn python_install_default() {
         .bin_dir
         .child(format!("python{}", std::env::consts::EXE_SUFFIX));
 
+    let bin_pythonw = context
+        .bin_dir
+        .child(format!("pythonw{}", std::env::consts::EXE_SUFFIX));
+
     // Install a specific version
     uv_snapshot!(context.filters(), context.python_install().arg("3.15"), @"
     exit_code: 0 (success)
@@ -1680,6 +1684,9 @@ fn python_install_default() {
     bin_python_minor_15.assert(predicate::path::exists());
     bin_python_major.assert(predicate::path::exists());
     bin_python_default.assert(predicate::path::exists());
+    if cfg!(windows) {
+        bin_pythonw.assert(predicate::path::exists());
+    }
 
     // Uninstall
     uv_snapshot!(context.filters(), context.python_uninstall().arg("--all"), @"
@@ -1694,6 +1701,7 @@ fn python_install_default() {
     bin_python_minor_15.assert(predicate::path::missing());
     bin_python_major.assert(predicate::path::missing());
     bin_python_default.assert(predicate::path::missing());
+    bin_pythonw.assert(predicate::path::missing());
 
     // Install the latest version, i.e., a "default install"
     uv_snapshot!(context.filters(), context.python_install().arg("--default"), @"

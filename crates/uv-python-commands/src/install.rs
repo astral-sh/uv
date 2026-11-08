@@ -984,7 +984,7 @@ fn create_bin_links(
     let should_create_default_links =
         default || (is_default_install && preview.is_enabled(PreviewFeature::PythonInstallDefault));
 
-    let targets = if should_create_default_links {
+    let mut targets = if should_create_default_links {
         vec![
             installation.key().executable_name_minor(),
             installation.key().executable_name_major(),
@@ -994,14 +994,28 @@ fn create_bin_links(
         vec![installation.key().executable_name_minor()]
     };
 
+    // On Windows, a default managed CPython installation should also expose
+    // the GUI-subsystem interpreter, matching the `pythonw.exe` provided by
+    // the official installer. The existing launcher machinery already knows
+    // how to create a windowed trampoline.
+    if cfg!(windows)
+        && should_create_default_links
+        && installation.implementation() == ImplementationName::CPython
+    {
+        targets.push("pythonw.exe".to_string());
+    }
+
     let mut existing_unmanaged = Vec::new();
 
-    for target in targets {
-        let target = bin.join(target);
+    for target_name in targets {
+        let windowed = target_name == "pythonw.exe";
+        let target = bin.join(target_name);
         if upgrade && !target.try_exists().unwrap_or_default() {
             continue;
         }
-        let executable = if upgradeable {
+        let executable = if windowed {
+            installation.executable(true)
+        } else if upgradeable {
             if let Some(minor_version_link) =
                 PythonMinorVersionLink::from_installation(installation)
             {
@@ -1013,7 +1027,13 @@ fn create_bin_links(
             installation.executable(false)
         };
 
-        match create_link_to_executable(&target, PythonExecutable::console(&executable)) {
+        let python_executable = if windowed {
+            PythonExecutable::windowed(&executable)
+        } else {
+            PythonExecutable::console(&executable)
+        };
+
+        match create_link_to_executable(&target, python_executable) {
             Ok(()) => {
                 debug!(
                     "Installed executable at `{}` for {}",
@@ -1021,11 +1041,13 @@ fn create_bin_links(
                     installation.key(),
                 );
                 changelog.installed.insert(installation.key().clone());
-                changelog
-                    .installed_executables
-                    .entry(installation.key().clone())
-                    .or_default()
-                    .insert(target.clone());
+                if !windowed {
+                    changelog
+                        .installed_executables
+                        .entry(installation.key().clone())
+                        .or_default()
+                        .insert(target.clone());
+                }
             }
             Err(uv_python_managed::Error::LinkExecutable(err))
                 if err.kind() == ErrorKind::AlreadyExists =>
@@ -1165,9 +1187,13 @@ fn create_bin_links(
                         .remove(&target);
                 }
 
-                if let Err(err) =
-                    create_link_to_executable(&target, PythonExecutable::console(&executable))
-                {
+                let python_executable = if windowed {
+                    PythonExecutable::windowed(&executable)
+                } else {
+                    PythonExecutable::console(&executable)
+                };
+
+                if let Err(err) = create_link_to_executable(&target, python_executable) {
                     errors.push((
                         InstallErrorKind::Bin,
                         installation.key().clone(),
@@ -1185,11 +1211,13 @@ fn create_bin_links(
                     installation.key(),
                 );
                 changelog.installed.insert(installation.key().clone());
-                changelog
-                    .installed_executables
-                    .entry(installation.key().clone())
-                    .or_default()
-                    .insert(target.clone());
+                if !windowed {
+                    changelog
+                        .installed_executables
+                        .entry(installation.key().clone())
+                        .or_default()
+                        .insert(target.clone());
+                }
             }
             Err(err) => {
                 errors.push((
@@ -1346,7 +1374,9 @@ fn find_matching_bin_link<'a>(
         }
         let target = fs_err::canonicalize(path).ok()?;
 
-        installations.find(|installation| installation.executable(false) == target)
+        installations.find(|installation| {
+            installation.executable(false) == target || installation.executable(true) == target
+        })
     } else if cfg!(windows) {
         let launcher = Launcher::try_from_path(path).ok()??;
         if !matches!(launcher.kind, LauncherKind::Python) {
