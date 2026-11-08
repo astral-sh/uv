@@ -176,6 +176,43 @@ fn lock_preserves_noncanonical_lock() -> Result<()> {
     Ok(())
 }
 
+/// Older uv versions must not overwrite lockfiles produced by a newer revision.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_rejects_revision_downgrade() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("pyproject.toml").write_str(indoc! {
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        "#
+    })?;
+
+    context.lock().arg("--offline").assert().success();
+    let mut newer_lock = context.read("uv.lock").parse::<toml_edit::DocumentMut>()?;
+    newer_lock["revision"] = toml_edit::value(6);
+    let newer_lock = newer_lock.to_string();
+    context.temp_dir.child("uv.lock").write_str(&newer_lock)?;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {
+            r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.11"
+            "#
+        })?;
+
+    context.lock().arg("--offline").assert().failure();
+    assert_eq!(context.read("uv.lock"), newer_lock);
+    Ok(())
+}
+
 /// Equivalent dependency declarations should reuse metadata already stored in a lockfile.
 #[cfg(feature = "test-universal")]
 #[test]

@@ -60,6 +60,11 @@ pub enum LockError {
     LockMismatch(Option<Box<Lock>>, Box<Lock>, LockedSource),
 
     #[error(
+        "The lockfile at `uv.lock` uses revision {existing}, but this version of uv only writes revision {supported}; refusing to overwrite the newer lockfile"
+    )]
+    LockRevisionDowngrade { existing: u32, supported: u32 },
+
+    #[error(
         "The lockfile at `{0}` has non-canonical formatting at line {1}, but `{2}` was provided."
     )]
     LockFormat(PathBuf, usize, LockedSource),
@@ -185,6 +190,7 @@ impl From<LockError> for UvError {
     fn from(error: LockError) -> Self {
         match error {
             error @ (LockError::LockMismatch(..)
+            | LockError::LockRevisionDowngrade { .. }
             | LockError::LockFormat(..)
             | LockError::MissingLockfile(..)
             | LockError::LockWorkspaceMismatch(..)) => Self::user(error),
