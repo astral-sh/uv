@@ -5,7 +5,7 @@ use std::env::consts::EXE_SUFFIX;
 use std::ffi::{OsStr, OsString};
 use std::io;
 use std::io::{BufWriter, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use console::Term;
 use fs_err::File;
@@ -57,6 +57,26 @@ fn write_cfg(f: &mut impl Write, data: &[(String, String)]) -> io::Result<()> {
         writeln!(f, "{key} = {value}")?;
     }
     Ok(())
+}
+
+/// Create a directory tree without following a pre-existing symlink in any component.
+fn create_dir_all_without_symlink(path: &Path) -> io::Result<()> {
+    let mut current = PathBuf::new();
+    for component in path.components() {
+        current.push(component);
+        match fs_err::symlink_metadata(&current) {
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!("refusing to create virtual environment through symlink `{}`", current.display()),
+                ));
+            }
+            Ok(_) => {}
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error),
+        }
+    }
+    fs_err::create_dir_all(path)
 }
 
 /// Create a [`VirtualEnvironment`] at the given location.
@@ -249,7 +269,7 @@ pub(crate) fn create(
     let python_home = python_home.as_path();
 
     // Different names for the python interpreter
-    fs_err::create_dir_all(&scripts)?;
+    create_dir_all_without_symlink(&scripts)?;
     let executable = scripts.join(format!("python{EXE_SUFFIX}"));
 
     #[cfg(unix)]
@@ -599,7 +619,7 @@ pub(crate) fn create(
 
     // Construct the path to the `site-packages` directory.
     let site_packages = location.join(&interpreter.virtualenv().purelib);
-    fs_err::create_dir_all(&site_packages)?;
+    create_dir_all_without_symlink(&site_packages)?;
 
     // If necessary, create a symlink from `lib64` to `lib`.
     // See: https://github.com/python/cpython/blob/b228655c227b2ca298a8ffac44d14ce3d22f6faa/Lib/venv/__init__.py#L135C11-L135C16

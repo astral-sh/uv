@@ -1832,6 +1832,29 @@ fn verify_pyvenv_cfg() {
     pyvenv_cfg.assert(predicates::str::contains("relocatable").not());
 }
 
+#[cfg(unix)]
+#[test]
+fn venv_does_not_follow_symlinked_scripts_directory() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let outside = context.temp_dir.child("outside");
+    outside.create_dir_all()?;
+    context.venv.create_dir_all()?;
+    symlink(outside.path(), context.venv.child("bin").path())?;
+
+    context
+        .venv()
+        .arg(context.venv.as_os_str())
+        .arg("--allow-existing")
+        .arg("--python")
+        .arg("3.12")
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains("refusing to create virtual environment through symlink"));
+
+    outside.child("activate").assert(predicates::path::missing());
+    Ok(())
+}
+
 #[test]
 fn verify_pyvenv_cfg_relocatable() {
     let context = uv_test::test_context!("3.12");
