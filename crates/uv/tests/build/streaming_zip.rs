@@ -12,11 +12,21 @@ async fn reject_data_descriptor_conflicting_compressed_size() -> anyhow::Result<
             import sys
             import zipfile
 
-            # Writing to a pipe makes zipfile emit a data descriptor after the compressed data.
-            with zipfile.ZipFile(sys.stdout.buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+            # Python 3.12 can treat a Windows pipe as seekable. Expose only write and flush
+            # so zipfile always emits a data descriptor.
+            class StreamingOutput:
+                def write(self, data):
+                    return sys.stdout.buffer.write(data)
+
+                def flush(self):
+                    sys.stdout.buffer.flush()
+
+            with zipfile.ZipFile(StreamingOutput(), "w", zipfile.ZIP_DEFLATED) as archive:
                 archive.writestr("file.txt", b"hello")
+                entry = archive.getinfo("file.txt")
+                assert entry.flag_bits & 0x08
                 # The descriptor already records 7 bytes. Closing the archive writes the directory.
-                archive.getinfo("file.txt").compress_size = 1
+                entry.compress_size = 1
         "#})
         .assert()
         .success();
