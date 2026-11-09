@@ -1742,6 +1742,28 @@ fn non_empty_dir_exists_allow_existing() -> Result<()> {
     Ok(())
 }
 
+#[cfg(unix)]
+#[test]
+fn generated_files_do_not_follow_symlinks() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+    context.venv.child("bin").create_dir_all()?;
+
+    let outside = context.temp_dir.child("outside");
+    outside.write_str("sentinel")?;
+    symlink(outside.path(), context.venv.child("bin/activate").path())?;
+
+    let output = context
+        .venv()
+        .arg("--allow-existing")
+        .arg("--python")
+        .arg("3.12")
+        .output()?;
+    assert!(!output.status.success());
+    assert_eq!(outside.read_to_string()?, "sentinel");
+
+    Ok(())
+}
+
 /// Run `uv venv` followed by `uv venv --allow-existing`.
 #[test]
 fn create_venv_then_allow_existing() {

@@ -4,11 +4,10 @@ use std::borrow::Cow;
 use std::env::consts::EXE_SUFFIX;
 use std::ffi::{OsStr, OsString};
 use std::io;
-use std::io::{BufWriter, Write};
+use std::io::Write;
 use std::path::Path;
 
 use console::Term;
-use fs_err::File;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 
@@ -57,6 +56,23 @@ fn write_cfg(f: &mut impl Write, data: &[(String, String)]) -> io::Result<()> {
         writeln!(f, "{key} = {value}")?;
     }
     Ok(())
+}
+
+/// Write a generated file without following a pre-existing symbolic link.
+fn write_file_without_symlink(path: &Path, contents: impl AsRef<[u8]>) -> io::Result<()> {
+    match fs_err::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_symlink() => {
+            return Err(io::Error::new(
+                io::ErrorKind::AlreadyExists,
+                format!("Refusing to overwrite symbolic link at `{}`", path.display()),
+            ));
+        }
+        Ok(_) => {}
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error),
+    }
+
+    fs_err::write(path, contents)
 }
 
 /// Create a [`VirtualEnvironment`] at the given location.
@@ -212,7 +228,7 @@ pub(crate) fn create(
     cachedir::ensure_tag(&location)?;
 
     // Create a `.gitignore` file to ignore all files in the venv.
-    fs_err::write(location.join(".gitignore"), "*")?;
+    write_file_without_symlink(&location.join(".gitignore"), "*")?;
 
     let minor_version_link = PythonMinorVersionLink::from_interpreter(interpreter, upgrade_policy);
     let using_minor_version_link = minor_version_link.is_some();
@@ -536,7 +552,7 @@ pub(crate) fn create(
             .replace("{{ VIRTUAL_PROMPT }}", &virtual_prompt)
             .replace("{{ PATH_SEP }}", path_sep)
             .replace("{{ RELATIVE_SITE_PACKAGES }}", &relative_site_packages);
-        fs_err::write(scripts.join(name), activator)?;
+        write_file_without_symlink(&scripts.join(name), activator)?;
     }
 
     let mut pyvenv_cfg_data: Vec<(String, String)> = vec![
@@ -593,9 +609,9 @@ pub(crate) fn create(
         ));
     }
 
-    let mut pyvenv_cfg = BufWriter::new(File::create(location.join("pyvenv.cfg"))?);
+    let mut pyvenv_cfg = Vec::new();
     write_cfg(&mut pyvenv_cfg, &pyvenv_cfg_data)?;
-    drop(pyvenv_cfg);
+    write_file_without_symlink(&location.join("pyvenv.cfg"), pyvenv_cfg)?;
 
     // Construct the path to the `site-packages` directory.
     let site_packages = location.join(&interpreter.virtualenv().purelib);
@@ -618,8 +634,11 @@ pub(crate) fn create(
     }
 
     if install_distutils_patch(interpreter) {
-        fs_err::write(site_packages.join("_virtualenv.py"), VIRTUALENV_PATCH)?;
-        fs_err::write(site_packages.join("_virtualenv.pth"), "import _virtualenv")?;
+        write_file_without_symlink(&site_packages.join("_virtualenv.py"), VIRTUALENV_PATCH)?;
+        write_file_without_symlink(
+            &site_packages.join("_virtualenv.pth"),
+            "import _virtualenv",
+        )?;
     }
 
     Ok(VirtualEnvironment {
