@@ -1850,23 +1850,7 @@ impl Display for MarkerTreeContents {
             return write!(f, "python_version < '0'");
         }
 
-        // Write the output in DNF form.
-        let dnf = self.0.to_dnf();
-        let [conjunction] = &dnf[..] else {
-            for (index, conjunction) in dnf.iter().enumerate() {
-                if index > 0 {
-                    f.write_str(" or ")?;
-                }
-                if conjunction.len() == 1 {
-                    write!(f, "{}", conjunction.iter().format(" and "))?;
-                } else {
-                    write!(f, "({})", conjunction.iter().format(" and "))?;
-                }
-            }
-            return Ok(());
-        };
-
-        write!(f, "{}", conjunction.iter().format(" and "))
+        super::format::write_marker(self.0, f)
     }
 }
 
@@ -1892,6 +1876,7 @@ mod test {
     use std::str::FromStr;
 
     use insta::assert_snapshot;
+    use itertools::Itertools;
 
     use uv_normalize::ExtraName;
     use uv_pep440::Version;
@@ -1916,6 +1901,37 @@ mod test {
         ] {
             assert_simplifies(literal, literal);
         }
+    }
+
+    /// A product of disjunctions should write each alternative once. The
+    /// parentheses on both sides of `and` are required to recover the marker.
+    #[test]
+    fn format_shared_marker_terms() {
+        assert_simplifies(
+            "(extra == 'a' and extra == 'c') or (extra == 'b' and extra == 'c') or \
+             (extra == 'a' and extra == 'd' and extra == 'e') or (extra == 'b' and extra == 'd' and extra == 'e')",
+            "(extra == 'a' or extra == 'b') and (extra == 'c' or (extra == 'd' and extra == 'e'))",
+        );
+    }
+
+    #[test]
+    fn format_shared_condition_across_platform_keys() {
+        assert_simplifies(
+            "(python_full_version >= '3.11' and os_name == 'nt') or \
+             (python_full_version >= '3.11' and sys_platform == 'linux')",
+            "python_full_version >= '3.11' and (os_name == 'nt' or sys_platform == 'linux')",
+        );
+    }
+
+    #[test]
+    fn format_long_shared_marker_prefix() {
+        let prefix = (0..20)
+            .map(|index| format!("extra == 'e{index:02}'"))
+            .join(" and ");
+        assert_simplifies(
+            &format!("({prefix} and extra == 'x') or ({prefix} and extra == 'y')"),
+            &format!("{prefix} and (extra == 'x' or extra == 'y')"),
+        );
     }
 
     /// Every Boolean function of three extras must roundtrip to the same diagram. The cover
@@ -3444,7 +3460,7 @@ mod test {
         // `extra == 'foo'` can be true even when `extra == 'bar'`' is true.
         assert_simplifies(
             r#"extra != "foo" and (extra == "bar" or extra == "baz")"#,
-            "(extra == 'bar' and extra != 'foo') or (extra == 'baz' and extra != 'foo')",
+            "(extra == 'bar' or extra == 'baz') and extra != 'foo'",
         );
         // But here, the `sys_platform != 'foo'` can be simplified out, because
         // it is strictly disjoint with
@@ -3458,7 +3474,7 @@ mod test {
         assert_simplifies(
             r#"(extra != "bar" and (extra == "foo" or extra == "baz"))
             or ((extra != "foo" and extra != "bar") and extra == "baz")"#,
-            "(extra != 'bar' and extra == 'baz') or (extra != 'bar' and extra == 'foo')",
+            "extra != 'bar' and (extra == 'baz' or extra == 'foo')",
         );
     }
 
@@ -3676,10 +3692,8 @@ mod test {
                 or (implementation_name != 'pypy' and sys_platform == 'win32')
                 or (sys_platform == 'win32' and os_name != 'nt')
                 or (sys_platform != 'win32' and os_name == 'nt')",
-            "(implementation_name == 'pypy' and os_name != 'nt') \
-                or (implementation_name != 'pypy' and os_name == 'nt') \
-                or (implementation_name == 'pypy' and sys_platform != 'win32') \
-                or (implementation_name != 'pypy' and sys_platform == 'win32')",
+            "implementation_name == 'pypy' and (os_name != 'nt' or sys_platform != 'win32') \
+                or implementation_name != 'pypy' and (os_name == 'nt' or sys_platform == 'win32')",
         );
 
         // This is a case we can simplify fully, but it's dependent on the variable order.
@@ -3729,9 +3743,8 @@ mod test {
         assert_simplifies(
             "(os_name == 'nt' and sys_platform == 'win32') \
                 or (os_name != 'nt' and platform_version == '1' and (sys_platform == 'win32' or sys_platform == 'win64'))",
-            "(os_name != 'nt' and platform_version == '1' and sys_platform == 'win64') \
-                or (os_name == 'nt' and sys_platform == 'win32') \
-                or (platform_version == '1' and sys_platform == 'win32')",
+            "os_name != 'nt' and platform_version == '1' and sys_platform == 'win64' \
+                or (os_name == 'nt' or platform_version == '1') and sys_platform == 'win32'",
         );
 
         assert_simplifies(
