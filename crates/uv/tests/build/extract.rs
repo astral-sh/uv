@@ -4,20 +4,23 @@ use backon::{BackoffBuilder, Retryable};
 use futures::TryStreamExt;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 
-async fn unzip(url: &str) -> anyhow::Result<(), uv_extract::Error> {
+const DATA_DESCRIPTOR_ZIP: &str = "https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/0723f54ceb33a4fdc7f2eddc19635cd704d61c84/accept/data_descriptor.zip";
+
+async fn download(url: &str) -> reqwest::Response {
     let backoff = backon::ExponentialBuilder::default()
         .with_min_delay(std::time::Duration::from_millis(500))
         .with_max_times(5)
         .build();
 
-    let download = || async {
-        let response = reqwest::get(url).await?;
-        Ok::<_, reqwest::Error>(response)
-    };
+    (|| reqwest::get(url))
+        .retry(backoff)
+        .await
+        .expect("fixture download failed")
+}
 
-    let response = download.retry(backoff).await.unwrap();
-
-    let reader = response
+async fn unzip(url: &str) -> anyhow::Result<(), uv_extract::Error> {
+    let reader = download(url)
+        .await
         .bytes_stream()
         .map_err(std::io::Error::other)
         .into_async_read();
@@ -28,18 +31,8 @@ async fn unzip(url: &str) -> anyhow::Result<(), uv_extract::Error> {
 }
 
 async fn unzip_seekable(url: &str) -> anyhow::Result<(), uv_extract::Error> {
-    let backoff = backon::ExponentialBuilder::default()
-        .with_min_delay(std::time::Duration::from_millis(500))
-        .with_max_times(5)
-        .build();
-
-    let download = || async {
-        let response = reqwest::get(url).await?;
-        Ok::<_, reqwest::Error>(response)
-    };
-
-    let response = download.retry(backoff).await.unwrap();
-    let bytes = response
+    let bytes = download(url)
+        .await
         .bytes()
         .await
         .map_err(std::io::Error::other)
@@ -71,7 +64,7 @@ async fn malo_accept_data_descriptor_zip64() {
 
 #[tokio::test]
 async fn malo_accept_data_descriptor() {
-    unzip("https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/0723f54ceb33a4fdc7f2eddc19635cd704d61c84/accept/data_descriptor.zip").await.unwrap();
+    unzip(DATA_DESCRIPTOR_ZIP).await.unwrap();
     insta::assert_debug_snapshot!((), @"()");
 }
 
@@ -289,6 +282,31 @@ async fn malo_reject_data_descriptor_bad_csize() {
         expected: 8,
     }
     "#);
+}
+
+/// A shorter compressed size in the central directory makes seekable readers truncate the entry.
+#[tokio::test]
+async fn reject_data_descriptor_conflicting_compressed_size() -> anyhow::Result<()> {
+    let mut archive = download(DATA_DESCRIPTOR_ZIP).await.bytes().await?.to_vec();
+    let central_directory = archive
+        .windows(4)
+        .position(|signature| signature == b"PK\x01\x02")
+        .expect("fixture has a central directory");
+    let compressed_size = &mut archive[central_directory + 20..central_directory + 24];
+    compressed_size.copy_from_slice(&1u32.to_le_bytes());
+
+    let error = uv_extract::stream::unzip(archive.as_slice(), tempfile::tempdir()?)
+        .await
+        .unwrap_err();
+    insta::assert_debug_snapshot!(error, @r#"
+    ConflictingCompressedSizes {
+        path: "fixme",
+        offset: 0,
+        local_compressed_size: 7,
+        central_directory_compressed_size: 1,
+    }
+    "#);
+    Ok(())
 }
 
 #[tokio::test]
