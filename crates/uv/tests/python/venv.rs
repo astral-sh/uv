@@ -1833,6 +1833,34 @@ fn verify_pyvenv_cfg() {
 }
 
 #[test]
+fn pyvenv_cfg_prompt_cannot_inject_settings() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let prompt = "project\ninclude-system-site-packages = true\n#";
+
+    context
+        .venv()
+        .arg(context.venv.as_os_str())
+        .arg("--clear")
+        .arg("--python")
+        .arg("3.12")
+        .arg("--prompt")
+        .arg(prompt)
+        .assert()
+        .success();
+
+    let contents = context.read(".venv/pyvenv.cfg");
+    assert_eq!(
+        contents.matches("include-system-site-packages = ").count(),
+        1,
+        "the prompt must not create a second pyvenv.cfg setting"
+    );
+    assert!(contents.contains("include-system-site-packages = false"));
+    assert!(contents.contains("prompt = project include-system-site-packages = true #"));
+
+    Ok(())
+}
+
+#[test]
 fn verify_pyvenv_cfg_relocatable() {
     let context = uv_test::test_context!("3.12");
     let prompt = "résumé \"quoted\"\\path\n";
