@@ -359,7 +359,7 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           cache: ""
-          python-version: "3.13"
+          python-version: "3.15"
           architecture: ${{ matrix.platform.python-architecture }}
 
       - name: "Download signed executables"
@@ -414,7 +414,7 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           cache: ""
-          python-version: "3.13"
+          python-version: "3.15"
           architecture: ${{ matrix.platform.python-architecture }}
 
       - name: "Download signed executables"
