@@ -205,7 +205,7 @@ indexmap = { version = "2.5.0", default-features = false, features = ["std"] }
 indicatif = { version = "0.18.0", default-features = false, features = ["unicode-width"] }
 indoc = { version = "2.0.5", default-features = false }
 iri-string = { version = "0.7.10", default-features = false }
-itertools = { version = "0.14.0", default-features = false, features = ["use_std"] }
+itertools = { version = "0.15.0", default-features = false, features = ["use_std"] }
 jiff = { version = "0.2.0", default-features = false, features = [
   "perf-inline",
   "serde",

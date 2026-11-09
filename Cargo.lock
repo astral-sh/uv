@@ -90,7 +90,7 @@ version = "1.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "40c48f72fd53cd289104fc64099abca73db4166ad86ea0b4341abe65af83dadc"
 dependencies = [
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -101,7 +101,7 @@ checksum = "291e6a250ff86cd4a820112fb8898808a366d8f9f58ce16d1f538353ad55747d"
 dependencies = [
  "anstyle",
  "once_cell_polyfill",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -732,7 +732,7 @@ dependencies = [
  "maybe-owned",
  "rustix",
  "rustix-linux-procfs",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
  "winx",
 ]
 
@@ -1017,7 +1017,7 @@ version = "3.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "faf9468729b8cbcea668e36183cb69d317348c2e08e994829fb56ebfdfbaac34"
 dependencies = [
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1436,7 +1436,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1612,7 +1612,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2441,7 +2441,7 @@ checksum = "3640c1c38b8e4e43584d8df18be5fc6b0aa314ce6ebf51b53313d4306cca8e46"
 dependencies = [
  "hermit-abi",
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2464,6 +2464,15 @@ name = "itertools"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2b192c782037fadd9cfa75548310488aabdbf3d2da73885b31bd0abd03351285"
+dependencies = [
+ "either",
+]
+
+[[package]]
+name = "itertools"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8b4baf93f58d4425749ca49a51c50ebab072c5df6994d08fed93541c331481dc"
 dependencies = [
  "either",
 ]
@@ -2603,7 +2612,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cde48f36530cbd91b65f050101e6c056d6eb743cea2a8f0f19beef69c6742ff8"
 dependencies = [
  "scopeguard",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2843,7 +2852,7 @@ version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "536bfad37a309d62069485248eeaba1e8d9853aaf951caaeaed0585a95346f08"
 dependencies = [
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2916,7 +2925,7 @@ version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
 dependencies = [
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3602,7 +3611,7 @@ dependencies = [
  "once_cell",
  "socket2",
  "tracing",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4180,7 +4189,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4248,7 +4257,7 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4726,7 +4735,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3a766e1110788c36f4fa1c2b71b387a7815aa65f88ce0229841826633d93723e"
 dependencies = [
  "libc",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4933,7 +4942,7 @@ dependencies = [
  "getrandom 0.4.3",
  "once_cell",
  "rustix",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4943,7 +4952,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "230a1b821ccbd75b185820a1f1ff7b14d21da1e442e22c0863ea5f08771a8874"
 dependencies = [
  "rustix",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -5494,7 +5503,7 @@ checksum = "f2f6fb2847f6742cd76af783a2a2c49e9375d0a111c7bef6f71cd9e738c72d6e"
 dependencies = [
  "memoffset",
  "tempfile",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -5677,7 +5686,7 @@ dependencies = [
  "indicatif",
  "indoc",
  "insta",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "owo-colors",
  "predicates",
  "regex",
@@ -5805,7 +5814,7 @@ version = "0.0.99"
 dependencies = [
  "anyhow",
  "indicatif",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "owo-colors",
  "rustc-hash",
  "serde",
@@ -5978,7 +5987,7 @@ dependencies = [
  "indexmap",
  "indoc",
  "insta",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "regex",
  "rustc-hash",
  "schemars",
@@ -6065,7 +6074,7 @@ dependencies = [
  "fs-err",
  "indoc",
  "insta",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "owo-colors",
  "regex",
  "rustc-hash",
@@ -6211,7 +6220,7 @@ dependencies = [
  "hyper-util",
  "indoc",
  "insta",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "jiff",
  "owo-colors",
  "percent-encoding",
@@ -6355,7 +6364,7 @@ dependencies = [
  "indexmap",
  "indoc",
  "insta",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "markdown",
  "poloto",
  "pretty_assertions",
@@ -6418,7 +6427,7 @@ version = "0.0.99"
 dependencies = [
  "anyhow",
  "futures",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "rustc-hash",
  "thiserror",
  "tokio",
@@ -6534,7 +6543,7 @@ dependencies = [
  "http",
  "indoc",
  "insta",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "jiff",
  "memchr",
  "owo-colors",
@@ -6574,7 +6583,7 @@ version = "0.0.99"
 dependencies = [
  "anyhow",
  "fs-err",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "owo-colors",
  "rustc-hash",
  "tempfile",
@@ -6783,7 +6792,7 @@ dependencies = [
  "fs-err",
  "indicatif",
  "insta",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "owo-colors",
  "rustc-hash",
  "serde",
@@ -6824,7 +6833,7 @@ dependencies = [
  "data-encoding",
  "fs-err",
  "indoc",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "owo-colors",
  "pathdiff",
  "regex",
@@ -6925,7 +6934,7 @@ dependencies = [
  "indoc",
  "insta",
  "iri-string",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "jiff",
  "memchr",
  "owo-colors",
@@ -6978,7 +6987,7 @@ version = "0.0.99"
 dependencies = [
  "anyhow",
  "fs-err",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "owo-colors",
  "rustc-hash",
  "thiserror",
@@ -7118,7 +7127,7 @@ dependencies = [
  "hashbrown 0.17.1",
  "indexmap",
  "insta",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "rkyv",
  "rustc-hash",
  "schemars",
@@ -7153,7 +7162,7 @@ dependencies = [
  "anyhow",
  "fs-err",
  "futures",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "owo-colors",
  "petgraph",
  "rustc-hash",
@@ -7243,7 +7252,7 @@ name = "uv-preview"
 version = "0.0.99"
 dependencies = [
  "enumflags2",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "schemars",
  "serde",
  "thiserror",
@@ -7265,7 +7274,7 @@ dependencies = [
  "futures",
  "indicatif",
  "indoc",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "jiff",
  "owo-colors",
  "rustc-hash",
@@ -7333,7 +7342,7 @@ dependencies = [
  "anyhow",
  "glob",
  "insta",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "thiserror",
  "toml",
  "toml_edit",
@@ -7363,7 +7372,7 @@ dependencies = [
  "futures",
  "glob",
  "insta",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "reqwest",
  "rustc-hash",
  "serde",
@@ -7429,7 +7438,7 @@ dependencies = [
  "indexmap",
  "indoc",
  "insta",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "jiff",
  "petgraph",
  "regex",
@@ -7462,7 +7471,7 @@ dependencies = [
  "fs-err",
  "futures",
  "indexmap",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "owo-colors",
  "rustc-hash",
  "serde",
@@ -7503,7 +7512,7 @@ dependencies = [
  "fs-err",
  "indicatif",
  "indoc",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "owo-colors",
  "rayon",
  "regex",
@@ -7593,7 +7602,7 @@ dependencies = [
  "indexmap",
  "indoc",
  "insta",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "owo-colors",
  "reqwest",
  "same-file",
@@ -7707,7 +7716,7 @@ dependencies = [
  "fs-err",
  "indoc",
  "insta",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "memchr",
  "regex",
  "reqwest",
@@ -7737,7 +7746,7 @@ dependencies = [
  "anyhow",
  "fs-err",
  "indicatif",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "jiff",
  "owo-colors",
  "rkyv",
@@ -7783,7 +7792,7 @@ dependencies = [
  "futures",
  "hashbrown 0.17.1",
  "indexmap",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "jiff",
  "owo-colors",
  "papaya",
@@ -7972,7 +7981,7 @@ dependencies = [
  "ignore",
  "indoc",
  "insta",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "predicates",
  "regex",
  "reqwest",
@@ -8062,7 +8071,7 @@ dependencies = [
  "console",
  "fs-err",
  "futures",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "owo-colors",
  "rustc-hash",
  "self-replace",
@@ -8197,7 +8206,7 @@ version = "0.0.99"
 dependencies = [
  "console",
  "fs-err",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "owo-colors",
  "pathdiff",
  "thiserror",
@@ -8243,7 +8252,7 @@ dependencies = [
  "glob",
  "ignore",
  "insta",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "regex",
  "rustc-hash",
  "schemars",
@@ -8497,7 +8506,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
