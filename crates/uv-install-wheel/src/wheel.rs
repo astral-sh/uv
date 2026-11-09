@@ -135,10 +135,10 @@ fn format_shebang(executable: impl AsRef<Path>, os_name: &str, relocatable: bool
         // newline.
         let shebang_length = 2 + executable.len() + 1;
 
-        // If the shebang is too long, or contains spaces, wrap it in `/bin/sh`.
+        // If the shebang is too long, or contains whitespace, wrap it in `/bin/sh`.
         // Same applies for relocatable scripts (executable is relative to script dir, hence `dirname` trick)
         // (note: the Windows trampoline binaries natively support relative paths to executable)
-        if shebang_length > 127 || executable.contains(' ') || relocatable {
+        if shebang_length > 127 || executable.chars().any(char::is_whitespace) || relocatable {
             let executable = format!("'{}'", escape_posix_for_single_quotes(&executable));
             return format_shell_shebang(&executable, relocatable);
         }
@@ -1445,6 +1445,12 @@ mod test {
                 ' '''"#
             }
         );
+
+        // Tabs are also parsed as separators by the kernel and must use the shell launcher.
+        let executable = Path::new("/usr/bin/path\tto\tpython3");
+        let shebang = format_shebang(executable, os_name, false);
+        assert!(shebang.starts_with("#!/bin/sh\n"));
+        assert!(shebang.contains("'/usr/bin/path\tto\tpython3'"));
 
         // And if we want a relocatable script, we should use the `exec` trick with `dirname`.
         let executable = Path::new("python3");
