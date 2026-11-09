@@ -510,6 +510,7 @@ pub(crate) fn create(
 
         let virtual_prompt = prompt.as_deref().unwrap_or_default();
         let virtual_prompt = match *name {
+            "activate" => Cow::Owned(escape_posix_for_single_quotes(virtual_prompt).into_owned()),
             "activate.xsh" => Cow::Owned(format!(
                 r#"b"{}".decode("utf-8")"#,
                 virtual_prompt.as_bytes().escape_ascii(),
