@@ -76,6 +76,19 @@ impl<'a> ResolutionGraphBuilder<'a> {
         self.fork_markers.len()
     }
 
+    /// Include proven-empty regions in the lock's partition of supported environments.
+    /// Any completed fork can cover these regions because no installation can select them.
+    pub(crate) fn cover_empty_forks(
+        &mut self,
+        markers: UniversalMarker,
+    ) -> Result<(), ResolveError> {
+        let Some(fork) = self.fork_markers.first_mut() else {
+            return Err(ResolveError::EmptyPlatformEnvironments);
+        };
+        fork.or(markers);
+        Ok(())
+    }
+
     /// Consume a completed fork, retaining artifacts and metadata only for new nodes.
     pub(crate) fn push(&mut self, resolution: Resolution<'_>) -> Result<(), ResolveError> {
         if self.fork_markers.is_empty() {

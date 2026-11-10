@@ -36,6 +36,7 @@ use uv_normalize::PackageName;
 use uv_pep440::{MIN_VERSION, Version, VersionSpecifiers, release_specifiers_to_ranges};
 use uv_pep508::{
     MarkerEnvironment, MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString,
+    PlatformMarkerFeasibility,
 };
 use uv_platform_tags::{IncompatibleTag, TagCompatibility, Tags};
 use uv_preview::PreviewFeature;
@@ -48,7 +49,7 @@ use uv_warnings::warn_user_once;
 
 use crate::candidate_selector::{Candidate, CandidateDist, CandidateSelector};
 use crate::dependency_provider::UvDependencyProvider;
-use crate::error::{NoSolutionError, ResolveError, derivation_tree_packages};
+use crate::error::{NoSolutionError, ResolveError, derivation_tree_packages, drop_derivation_tree};
 use crate::fork_indexes::ForkIndexes;
 use crate::fork_urls::ForkUrls;
 use crate::manifest::Manifest;
@@ -408,6 +409,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             &self.git,
         );
 
+        let mut empty_forks = UniversalMarker::FALSE;
+        let mut uncertain_overlap = None;
         'FORK: while let Some(fork) = forked_states.pop() {
             let mut state = self.materialize_fork(fork, incompatibility_arena, requests)?;
             if let Some(split) = state.env.end_user_fork_display() {
@@ -425,16 +428,53 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         let result = state.pubgrub.unit_propagation(state.next);
                         match result {
                             Err(err) => {
-                                // If unit propagation failed, there is no solution.
-                                return Err(self.convert_no_solution_err(
-                                    err,
-                                    state.fork_urls,
-                                    state.fork_indexes,
-                                    &state.known_versions.0,
-                                    state.env,
-                                    self.current_environment.clone(),
-                                    &visited,
-                                ));
+                                let feasibility = state
+                                    .env
+                                    .fork_markers()
+                                    .map(MarkerTree::platform_feasibility);
+                                match feasibility {
+                                    Some(PlatformMarkerFeasibility::Empty) => {
+                                        debug!("Skipping impossible {env}", env = state.env);
+                                        if let Some(marker) = state.env.try_universal_markers() {
+                                            empty_forks.or(marker);
+                                        }
+                                    }
+                                    Some(PlatformMarkerFeasibility::Unknown(key)) => {
+                                        debug!(
+                                            "Cannot determine whether {env} is reachable",
+                                            env = state.env
+                                        );
+                                        // Another fork may have a definite conflict that explains
+                                        // the failure without asking the user to narrow their markers.
+                                        uncertain_overlap.get_or_insert_with(|| {
+                                            let packages = derivation_tree_packages(&err)
+                                                .filter(|package| !package.marker().is_true())
+                                                .filter_map(PubGrubPackage::name_no_root)
+                                                .sorted_unstable()
+                                                .dedup()
+                                                .map(|name| format!("`{name}`"))
+                                                .join(", ");
+                                            ResolveError::UncertainPlatformOverlap { key, packages }
+                                        });
+                                    }
+                                    Some(PlatformMarkerFeasibility::Possible) | None => {
+                                        return Err(self.convert_no_solution_err(
+                                            err,
+                                            state.fork_urls,
+                                            state.fork_indexes,
+                                            &state.known_versions.0,
+                                            state.env,
+                                            self.current_environment.clone(),
+                                            &visited,
+                                        ));
+                                    }
+                                }
+                                drop_derivation_tree(err);
+                                incompatibility_arena = state.pubgrub.take_incompatibility_arena();
+                                if let Some(next) = forked_states.last() {
+                                    incompatibility_arena.rewind_to(&next.state.pubgrub);
+                                }
+                                continue 'FORK;
                             }
                             Ok(conflicts) => {
                                 for (affected, incompatibility) in conflicts {
@@ -885,12 +925,18 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             }
         }
         drop(incompatibility_arena);
+        if let Some(error) = uncertain_overlap {
+            return Err(error);
+        }
 
         if resolutions.num_forks() > 1 {
             info!(
                 "Solved your requirements for {} environments",
                 resolutions.num_forks()
             );
+        }
+        if !empty_forks.is_false() {
+            resolutions.cover_empty_forks(empty_forks)?;
         }
         resolutions.finish(
             self.requirements.clone(),
