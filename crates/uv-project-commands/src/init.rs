@@ -1003,6 +1003,19 @@ fn pyproject_build_system(module_name: &str, build_backend: ProjectBuildBackend)
                 requires = ["maturin>=1.0,<2.0"]
                 build-backend = "maturin"
             "#},
+        ProjectBuildBackend::Meson => indoc::formatdoc! {r#"
+                [tool.uv]
+                cache-keys = [{{ file = "pyproject.toml" }}, {{ file = "src/**/*.{{h,c,hpp,cpp}}" }}, {{ file = "meson.build" }}]
+                no-build-isolation-package = ["{module_name}"]
+
+                [build-system]
+                requires = ["meson-python>=0.20.0"]
+                build-backend = "mesonpy"
+
+                [dependency-groups]
+                dev = ["meson-python", "ninja"]
+            "#}
+        .to_string(),
         ProjectBuildBackend::Scikit => indoc::indoc! {r#"
                 [tool.scikit-build]
                 minimum-version = "build-system.requires"
@@ -1107,6 +1120,32 @@ fn pyproject_build_backend_prerequisites(
                 )?;
             }
         }
+        ProjectBuildBackend::Meson => {
+            // Generate Cargo.toml
+            let build_file = path.join("meson.build");
+            if !build_file.try_exists()? {
+                fs_err::write(
+                    build_file,
+                    indoc::formatdoc! {r"
+                    project('{module_name}', 'c')
+
+                    py = import('python').find_installation(pure: false)
+
+                    py.extension_module(
+                      '_core',
+                      'src/_core.c',
+                      install: true,
+                      subdir: '{module_name}'
+                    )
+
+                    py.install_sources(
+                      ['src/{module_name}/__init__.py'],
+                      subdir: '{module_name}'
+                    )
+                "},
+                )?;
+            }
+        }
         ProjectBuildBackend::Scikit => {
             let install_dir = module
                 .explicit
@@ -1203,6 +1242,48 @@ fn generate_package_scripts(
                         fn hello_from_bin() -> String {{
                             "Hello from {package}!".to_string()
                         }}
+                    }}
+                "#},
+                )?;
+            }
+            // Generate .pyi file
+            let pyi_file = pkg_dir.join("_core.pyi");
+            if !pyi_file.try_exists()? {
+                fs_err::write(pyi_file, pyi_contents)?;
+            }
+            // Return python script calling binary
+            binary_call_script
+        }
+        ProjectBuildBackend::Meson => {
+            // Generate lib.rs
+            let native_src = src_dir.join("_core.c");
+            if !native_src.try_exists()? {
+                fs_err::write(
+                    native_src,
+                    indoc::formatdoc! {r#"
+                    #include <Python.h>
+
+                    static PyObject* hello_from_bin(PyObject *self)
+                    {{
+                    	return PyUnicode_FromString("Hello from {package}!");
+                    }}
+
+                    static PyMethodDef methods[] = {{
+                    	{{"hello_from_bin", (PyCFunction)hello_from_bin, METH_NOARGS, NULL}},
+                    	{{NULL, NULL, 0, NULL}},
+                    }};
+
+                    static struct PyModuleDef module = {{
+                    	PyModuleDef_HEAD_INIT,
+                    	"_core",
+                    	NULL,
+                    	-1,
+                    	methods,
+                    }};
+
+                    PyMODINIT_FUNC PyInit__core(void)
+                    {{
+                    	return PyModule_Create(&module);
                     }}
                 "#},
                 )?;
