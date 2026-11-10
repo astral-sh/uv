@@ -15,6 +15,7 @@ use uv_pep440::{Version, VersionParseError, VersionSpecifier};
 
 use super::algebra::{Edges, INTERNER, NodeId, Variable};
 use super::simplify;
+use super::version_or_string::VersionOrStringValue;
 #[cfg(test)]
 use crate::Pep508ErrorSource;
 #[cfg(test)]
@@ -267,6 +268,19 @@ impl MarkerOperator {
         }
     }
 
+    /// The interval selected by a scalar comparison, with raw `~=` falling back to equality.
+    pub(super) fn ordered_range<T: Ord + Clone>(self, value: T) -> Ranges<T> {
+        match self {
+            Self::Equal | Self::TildeEqual => Ranges::singleton(value),
+            Self::NotEqual => Ranges::singleton(value).complement(),
+            Self::LessThan => Ranges::strictly_lower_than(value),
+            Self::LessEqual => Ranges::lower_than(value),
+            Self::GreaterThan => Ranges::strictly_higher_than(value),
+            Self::GreaterEqual => Ranges::higher_than(value),
+            _ => unreachable!("containment has its own decision variable"),
+        }
+    }
+
     /// Inverts this marker operator.
     pub(crate) fn invert(self) -> Self {
         match self {
@@ -284,15 +298,16 @@ impl MarkerOperator {
         }
     }
 
-    /// Returns the marker operator and value whose union represents the given range.
+    /// Spell an interval as a single comparison or as a lower and upper bound.
     pub(crate) fn from_bounds(
         bounds: (Bound<&ArcStr>, Bound<&ArcStr>),
+        allow_equality: impl Fn(&ArcStr) -> bool,
     ) -> impl Iterator<Item = (Self, ArcStr)> {
         let (b1, b2) = match bounds {
-            (Bound::Included(v1), Bound::Included(v2)) if v1 == v2 => {
+            (Bound::Included(v1), Bound::Included(v2)) if v1 == v2 && allow_equality(v1) => {
                 (Some((Self::Equal, v1.clone())), None)
             }
-            (Bound::Excluded(v1), Bound::Excluded(v2)) if v1 == v2 => {
+            (Bound::Excluded(v1), Bound::Excluded(v2)) if v1 == v2 && allow_equality(v1) => {
                 (Some((Self::NotEqual, v1.clone())), None)
             }
             (lower, upper) => (Self::from_lower_bound(lower), Self::from_upper_bound(upper)),
@@ -915,7 +930,7 @@ impl MarkerTree {
                 })
             }
             Variable::VersionString(key) => {
-                let Edges::Version { edges: ref map } = node.children else {
+                let Edges::VersionOrString { edges: ref map } = node.children else {
                     unreachable!()
                 };
                 MarkerTreeKind::VersionString(VersionMarkerTree {
@@ -1041,39 +1056,27 @@ impl MarkerTree {
                 for (range, tree) in marker.children() {
                     let l_string = env.get_string(marker.key());
 
-                    if matches!(
-                        marker.key(),
-                        CanonicalMarkerValueString::PlatformRelease
-                            | CanonicalMarkerValueString::PlatformVersion
-                    ) && range.as_singleton().is_none()
-                        && let Some((start, end)) = range.bounding_range()
-                    {
-                        if let Bound::Included(value) | Bound::Excluded(value) = start {
-                            reporter.report(
-                                MarkerWarningKind::LexicographicComparison,
-                                format!("Comparing {l_string} and {value} lexicographically"),
-                            );
-                        }
-
-                        if let Bound::Included(value) | Bound::Excluded(value) = end {
-                            reporter.report(
-                                MarkerWarningKind::LexicographicComparison,
-                                format!("Comparing {l_string} and {value} lexicographically"),
-                            );
-                        }
-                    }
-
                     if range.contains(l_string) {
+                        if marker.key().is_version_or_string() && range.as_singleton().is_none() {
+                            report_lexical(marker.key(), l_string, reporter);
+                        }
                         return tree.evaluate_reporter_impl(env, extras, reporter);
                     }
                 }
             }
             MarkerTreeKind::VersionString(marker) => {
-                let Ok(version) = env.get_string(marker.key()).parse::<Version>() else {
-                    return false;
+                let raw = env.get_string(marker.key());
+                let value = match raw.parse::<Version>() {
+                    Ok(version) => VersionOrStringValue::Version(version),
+                    Err(_) => VersionOrStringValue::Opaque(ArcStr::from(raw)),
                 };
                 for (range, tree) in marker.edges() {
-                    if range.contains(&version) {
+                    if range.contains(&value) {
+                        if matches!(value, VersionOrStringValue::Opaque(_))
+                            && super::version_or_string::has_opaque_cutoff(range)
+                        {
+                            report_lexical(marker.key(), raw, reporter);
+                        }
                         return tree.evaluate_reporter_impl(env, extras, reporter);
                     }
                 }
@@ -1488,6 +1491,13 @@ impl MarkerTree {
     }
 }
 
+fn report_lexical(key: CanonicalMarkerValueString, value: &str, reporter: &mut impl Reporter) {
+    reporter.report(
+        MarkerWarningKind::LexicographicComparison,
+        format!("Comparing {key} value {value:?} lexicographically"),
+    );
+}
+
 impl fmt::Debug for MarkerTree {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         if self.is_true() {
@@ -1525,8 +1535,8 @@ pub enum MarkerTreeKind<'a> {
     False,
     /// A version expression.
     Version(VersionMarkerTree<'a>),
-    /// A string-valued marker interpreted as a version within a platform-specific scope.
-    VersionString(VersionMarkerTree<'a, CanonicalMarkerValueString>),
+    /// A marker with separate ranges for version values and opaque strings.
+    VersionString(VersionMarkerTree<'a, CanonicalMarkerValueString, VersionOrStringValue>),
     /// A string expression.
     String(StringMarkerTree<'a>),
     /// A string expression with the `in` operator.
@@ -1541,33 +1551,33 @@ pub enum MarkerTreeKind<'a> {
 
 /// A version marker node, such as `python_version < '3.7'`.
 #[derive(PartialEq, Eq, Clone, Debug)]
-pub struct VersionMarkerTree<'a, K = CanonicalMarkerValueVersion> {
+pub struct VersionMarkerTree<'a, K = CanonicalMarkerValueVersion, V = Version> {
     id: NodeId,
     key: K,
-    map: &'a [(Ranges<Version>, NodeId)],
+    map: &'a [(Ranges<V>, NodeId)],
 }
 
-impl<K: Copy> VersionMarkerTree<'_, K> {
+impl<K: Copy, V> VersionMarkerTree<'_, K, V> {
     /// The key for this node.
     pub fn key(&self) -> K {
         self.key
     }
 
     /// The edges of this node, corresponding to possible output ranges of the given variable.
-    pub fn edges(&self) -> impl ExactSizeIterator<Item = (&Ranges<Version>, MarkerTree)> + '_ {
+    pub fn edges(&self) -> impl ExactSizeIterator<Item = (&Ranges<V>, MarkerTree)> + '_ {
         self.map
             .iter()
             .map(|(range, node)| (range, MarkerTree(node.negate(self.id))))
     }
 }
 
-impl<K: Copy + Ord> PartialOrd for VersionMarkerTree<'_, K> {
+impl<K: Copy + Ord, V: Ord> PartialOrd for VersionMarkerTree<'_, K, V> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl<K: Copy + Ord> Ord for VersionMarkerTree<'_, K> {
+impl<K: Copy + Ord, V: Ord> Ord for VersionMarkerTree<'_, K, V> {
     fn cmp(&self, other: &Self) -> Ordering {
         self.key()
             .cmp(&other.key())
@@ -2139,6 +2149,148 @@ mod test {
             marker.negate(),
             m(&marker.negate().try_to_string().unwrap())
         );
+    }
+
+    fn assert_round_trip(marker: MarkerTree) {
+        for tree in [marker, marker.negate()] {
+            assert_eq!(m(&tree.try_to_string().unwrap()), tree);
+        }
+    }
+
+    // https://github.com/astral-sh/uv/issues/22259
+    #[test]
+    fn opaque_darwin_release() {
+        for (release, expression) in [
+            ("not-a-version", "platform_release == '24'"),
+            (
+                "3-invalid",
+                "platform_release >= '9' or platform_release < '24'",
+            ),
+        ] {
+            let env = env37()
+                .with_os_name("posix")
+                .with_sys_platform("darwin")
+                .with_platform_system("Darwin")
+                .with_platform_release(release);
+            let marker = m(expression);
+            assert!(!marker.evaluate(&env, &[]), "{expression}");
+            assert!(marker.negate().evaluate(&env, &[]), "{expression}");
+            assert_round_trip(marker);
+        }
+    }
+
+    #[test]
+    fn version_or_string_comparisons() {
+        for (actual, op, value, expected) in [
+            ("10", ">", "9", true),
+            ("10.0", "==", "10", true),
+            ("2", "==", "2rc1", false),
+            ("2rc1", "<", "2", true),
+            ("2.post1", ">", "2", true),
+            ("2+cpu", "==", "2", true),
+            ("2+cpu", ">", "2", true),
+            ("2+cpu", "<=", "2", false),
+            ("2", "<", "2+cpu", true),
+            ("2+cuda", ">", "2+cpu", true),
+            ("1.2", "==", "1.*", true),
+            ("1.*", "==", "1.*", true),
+            ("1.2.1", "~=", "1.2", true),
+            ("kernel", "~=", "kernel", true),
+            ("00", "~=", "0", false),
+            ("10.1", "~=", "9.0", false),
+            ("10.0", "in", "10", false),
+            ("9-custom", ">", "8", true),
+            ("10", "<", "kernel", true),
+            ("kernel", ">=", "kernel", true),
+            ("kernel", "<=", "linux", true),
+            ("kernel", "!=", "linux", true),
+        ] {
+            let env = env37()
+                .with_platform_release(actual)
+                .with_platform_version(actual);
+            for key in ["platform_release", "platform_version"] {
+                let expression = format!("{key} {op} '{value}'");
+                let marker = m(&expression);
+                if op == "~=" {
+                    assert_eq!(marker, m(&format!("'{value}' ~= {key}")));
+                }
+                assert_round_trip(marker);
+                assert_eq!(
+                    marker.evaluate(&env, &[]),
+                    expected,
+                    "{actual}: {expression}"
+                );
+                assert_ne!(
+                    marker.negate().evaluate(&env, &[]),
+                    expected,
+                    "{actual}: {expression}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn mixed_release_bounds() {
+        let env = env37()
+            .with_sys_platform("darwin")
+            .with_platform_release("25.0.0");
+        for expression in [
+            "platform_release > '5.0-custom' and platform_release > '9'",
+            "(sys_platform != 'darwin' and platform_release > '9') or (sys_platform == 'darwin' and platform_release > '5.0-custom')",
+        ] {
+            let marker = m(expression);
+            assert!(!marker.evaluate(&env, &[]), "{expression}");
+            assert!(marker.negate().evaluate(&env, &[]), "{expression}");
+            assert_round_trip(marker);
+        }
+
+        let env = env.with_platform_release("1.0");
+        for bound in ["1.0+local", "1.*"] {
+            let marker = m(&format!(
+                "platform_release < '{bound}' or platform_release > '{bound}'"
+            ));
+            assert!(marker.evaluate(&env, &[]), "{bound}");
+            assert_round_trip(marker);
+        }
+    }
+
+    #[test]
+    fn version_or_string_round_trips() {
+        for expression in [
+            "platform_release > '9' or (platform_release != '2.10' and extra == 'a')",
+            "(platform_release != 'v0' and platform_version == '01.*') or platform_release > '00'",
+            "platform_release < 'v2' and platform_release > '1.0.dev2' and platform_release > '1!2.0'",
+            "platform_release >= '1.0.0' and platform_release <= 'v2' and platform_release >= '1!2.0'",
+        ] {
+            assert_round_trip(m(expression));
+        }
+        let last = u64::MAX - 1;
+        for condition in [
+            format!("> '2.dev{last}'"),
+            format!("> '2rc{last}'"),
+            format!("== '2.post{last}'"),
+            format!("~= '1!2.{last}.3'"),
+            format!("== '1!2.{last}.*'"),
+        ] {
+            assert_round_trip(m(&format!("platform_release {condition}")));
+        }
+    }
+
+    #[test]
+    fn version_or_string_spelling() {
+        for literal in ["3027.0.0", "3027", "3027.0"] {
+            let tree = m(&format!("platform_release == '{literal}'"));
+            assert_eq!(
+                tree.try_to_string().as_deref(),
+                Some("platform_release == '3027'")
+            );
+        }
+        for expression in [
+            "platform_release >= '3027.0.0'",
+            "platform_release >= '9' and platform_release < '10'",
+        ] {
+            assert_eq!(m(expression).try_to_string().as_deref(), Some(expression));
+        }
     }
 
     fn env37() -> MarkerEnvironment {
@@ -2729,11 +2881,6 @@ mod test {
                 assert!(marker.evaluate(&env, &[]));
             }
         }
-
-        // `platform_release` and `platform_version` are `Version | String` fields, not pure
-        // strings. Preserve their existing ordering behavior in this change.
-        assert!(m("platform_release < '2'").evaluate(&env, &[]));
-        assert!(m("platform_version <= '2'").evaluate(&env, &[]));
     }
 
     #[test]
@@ -2862,16 +3009,6 @@ mod test {
                 Err(format!("{lines:#?}"))
             }
         });
-    }
-
-    #[test]
-    #[cfg(feature = "tracing")]
-    #[tracing_test::traced_test]
-    fn warnings5() {
-        let env = env37().with_platform_release("10");
-        let marker = MarkerTree::from_str("platform_release < '2'").unwrap();
-        assert!(marker.evaluate(&env, &[]));
-        logs_contain("Comparing 10 and 2 lexicographically");
     }
 
     #[test]
@@ -3771,6 +3908,7 @@ mod test {
         ));
 
         test_version_bounds_disjointness("python_full_version");
+        test_version_bounds_disjointness("platform_version");
 
         assert!(!is_disjoint(
             "python_full_version == '3.7.*'",
@@ -3808,9 +3946,6 @@ mod test {
             "implementation_version == '3.7.0'",
             "python_full_version == '3.7.1'"
         ));
-
-        // basic version bounds checking should still work with lexicographical comparisons
-        test_version_bounds_disjointness("platform_version");
 
         assert!(is_disjoint("os_name == 'Linux'", "os_name == 'OSX'"));
         assert!(is_disjoint("os_name <= 'Linux'", "os_name == 'OSX'"));

@@ -5,7 +5,7 @@ use arcstr::ArcStr;
 use itertools::Itertools;
 use version_ranges::Ranges;
 
-use uv_pep440::{Version, VersionSpecifier};
+use uv_pep440::{Version, VersionPattern, VersionSpecifier};
 
 use crate::marker::algebra::INTERNER;
 use crate::marker::algebra::isop::{Cover, Guard};
@@ -104,27 +104,30 @@ fn collect_guard(
         }
         MarkerTreeKind::VersionString(marker) => {
             let range = guard_range(marker.edges(), child);
-            for (lower, upper) in range.iter() {
+            for clause in super::version_or_string::comparisons(&range) {
                 let current = path.len();
-                let lower = lower.map(|version| ArcStr::from(version.to_string()));
-                let upper = upper.map(|version| ArcStr::from(version.to_string()));
-                for (operator, value) in
-                    MarkerOperator::from_bounds((lower.as_ref(), upper.as_ref()))
-                {
-                    path.push(MarkerExpression::String {
-                        key: marker.key().into(),
-                        operator,
-                        value,
-                    });
-                }
+                path.extend(
+                    clause
+                        .into_iter()
+                        .map(|(operator, value)| MarkerExpression::String {
+                            key: marker.key().into(),
+                            operator,
+                            value,
+                        }),
+                );
                 collect_cover(suffix, dnf, path);
                 path.truncate(current);
             }
         }
         MarkerTreeKind::String(marker) => {
             let range = guard_range(marker.children(), child);
-            // Detect whether the range can be simplified as an inequality.
-            if let Some(excluded) = range_inequality(&range) {
+            // A raw bound such as `1.*` would become a version wildcard if rendered as equality.
+            let allow_equality = |value: &ArcStr| {
+                !marker.key().is_version_or_string() || value.parse::<VersionPattern>().is_err()
+            };
+            if let Some(excluded) = range_inequality(&range)
+                && excluded.iter().all(|value| allow_equality(value))
+            {
                 let current = path.len();
                 for value in excluded {
                     path.push(MarkerExpression::String {
@@ -141,11 +144,11 @@ fn collect_guard(
 
             for bounds in range.iter() {
                 let current = path.len();
-                for (operator, value) in MarkerOperator::from_bounds(bounds) {
+                for (operator, value) in MarkerOperator::from_bounds(bounds, allow_equality) {
                     path.push(MarkerExpression::String {
                         key: marker.key().into(),
                         operator,
-                        value: value.clone(),
+                        value,
                     });
                 }
 

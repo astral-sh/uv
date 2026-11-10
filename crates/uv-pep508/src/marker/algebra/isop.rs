@@ -16,7 +16,7 @@ use indexmap::map::Entry;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use version_ranges::Ranges;
 
-use super::{Edges, InternerGuard, NodeId, SmallVec};
+use super::{EdgeBuilder, Edges, InternerGuard, NodeId, SmallVec, Variable};
 
 /// A shared cover whose paths are expanded only when producing the final DNF.
 #[derive(Clone)]
@@ -131,15 +131,13 @@ impl InternerGuard<'_> {
             Guard::Node(node) => node,
             Guard::Edge { node, child } => {
                 let decision = self.shared.node(node);
-                let edges = match &decision.children {
-                    Edges::Boolean { high, .. } => Edges::from_bool(high.negate(node) == child),
-                    Edges::Version { edges } => Edges::Version {
-                        edges: guard_edges(edges, node, child),
-                    },
-                    Edges::String { edges } => Edges::String {
-                        edges: guard_edges(edges, node, child),
-                    },
-                };
+                let edges = decision.children.map(node, |target| {
+                    if target == child {
+                        NodeId::TRUE
+                    } else {
+                        NodeId::FALSE
+                    }
+                });
                 self.create_node(decision.var.clone(), edges)
             }
         }
@@ -204,85 +202,72 @@ impl InternerGuard<'_> {
                     (Guard::Node(guard), lower_high, upper_high),
                 ]
             }
-            Edges::Version { .. } => {
-                let lower_edges = if let Edges::Version { edges } = &lower_node.children
-                    && lower_node.var == *variable
-                {
-                    Some(edges.as_ref())
-                } else {
-                    None
-                };
-                let upper_edges = if let Edges::Version { edges } = &upper_node.children
-                    && upper_node.var == *variable
-                {
-                    Some(edges.as_ref())
-                } else {
-                    None
-                };
-                range_cofactors(lower, lower_edges, upper, upper_edges)
-                    .into_iter()
-                    .map(|(range, lower, upper)| {
-                        if lower.is_false() {
-                            return (Guard::Node(NodeId::FALSE), lower, upper);
-                        }
-                        let guard = self.create_node(
-                            variable.clone(),
-                            Edges::Version {
-                                edges: Edges::from_range(&range),
-                            },
-                        );
-                        (Guard::Node(guard), lower, upper)
-                    })
-                    .collect()
-            }
-            Edges::String { .. } => {
-                let lower_edges = if let Edges::String { edges } = &lower_node.children
-                    && lower_node.var == *variable
-                {
-                    Some(edges.as_ref())
-                } else {
-                    None
-                };
-                let upper_edges = if let Edges::String { edges } = &upper_node.children
-                    && upper_node.var == *variable
-                {
-                    Some(edges.as_ref())
-                } else {
-                    None
-                };
-                range_cofactors(lower, lower_edges, upper, upper_edges)
-                    .into_iter()
-                    .map(|(range, lower, upper)| {
-                        if lower.is_false() {
-                            return (Guard::Node(NodeId::FALSE), lower, upper);
-                        }
-                        let guard = self.create_node(
-                            variable.clone(),
-                            Edges::String {
-                                edges: Edges::from_range(&range),
-                            },
-                        );
-                        (Guard::Node(guard), lower, upper)
-                    })
-                    .collect()
-            }
+            Edges::Version { .. } => self.range_guards(
+                variable,
+                lower,
+                upper,
+                |edges| match edges {
+                    Edges::Version { edges } => Some(edges),
+                    _ => None,
+                },
+                |range| Edges::Version {
+                    edges: Edges::from_range(range),
+                },
+            ),
+            Edges::String { .. } => self.range_guards(
+                variable,
+                lower,
+                upper,
+                |edges| match edges {
+                    Edges::String { edges } => Some(edges),
+                    _ => None,
+                },
+                |range| Edges::String {
+                    edges: Edges::from_range(range),
+                },
+            ),
+            Edges::VersionOrString { .. } => self.range_guards(
+                variable,
+                lower,
+                upper,
+                |edges| match edges {
+                    Edges::VersionOrString { edges } => Some(edges),
+                    _ => None,
+                },
+                Edges::from_version_or_string_range,
+            ),
         }
     }
-}
 
-/// Build a reduced single-variable decision for all edges leading to the selected child.
-fn guard_edges<T: Clone + Ord>(
-    edges: &[(Ranges<T>, NodeId)],
-    parent: NodeId,
-    child: NodeId,
-) -> SmallVec<(Ranges<T>, NodeId)> {
-    let range = edges
-        .iter()
-        .filter(|(_, candidate)| candidate.negate(parent) == child)
-        .flat_map(|(range, _)| range.iter())
-        .map(|(start, end)| (start.cloned(), end.cloned()))
-        .collect();
-    Edges::from_range(&range)
+    /// Partition two range decisions using the same endpoints and create their guards.
+    fn range_guards<T: Clone + Ord>(
+        &mut self,
+        variable: &Variable,
+        lower: NodeId,
+        upper: NodeId,
+        ranges: impl Fn(&Edges) -> Option<&[(Ranges<T>, NodeId)]>,
+        from_range: impl Fn(&Ranges<T>) -> EdgeBuilder,
+    ) -> SmallVec<(Guard, NodeId, NodeId)> {
+        let lower_node = self.shared.node(lower);
+        let upper_node = self.shared.node(upper);
+        let lower_edges = (lower_node.var == *variable)
+            .then(|| ranges(&lower_node.children))
+            .flatten();
+        let upper_edges = (upper_node.var == *variable)
+            .then(|| ranges(&upper_node.children))
+            .flatten();
+        range_cofactors(lower, lower_edges, upper, upper_edges)
+            .into_iter()
+            .map(|(range, lower, upper)| {
+                let guard = if lower.is_false() {
+                    NodeId::FALSE
+                } else {
+                    self.create_node(variable.clone(), from_range(&range))
+                };
+                (Guard::Node(guard), lower, upper)
+            })
+            .collect()
+    }
 }
 
 /// Intersect sorted range partitions, grouping regions with identical cofactors.
