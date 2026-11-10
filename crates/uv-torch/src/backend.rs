@@ -113,6 +113,10 @@ pub enum TorchMode {
     Cu90,
     /// Use the PyTorch index for CUDA 8.0.
     Cu80,
+    /// Use the PyTorch index for ROCm 7.14.
+    #[serde(rename = "rocm7.14")]
+    #[cfg_attr(feature = "clap", clap(name = "rocm7.14"))]
+    Rocm714,
     /// Use the PyTorch index for ROCm 7.2.
     #[serde(rename = "rocm7.2")]
     #[cfg_attr(feature = "clap", clap(name = "rocm7.2"))]
@@ -274,6 +278,7 @@ impl TorchStrategy {
             TorchMode::Cu91 => TorchBackend::Cu91,
             TorchMode::Cu90 => TorchBackend::Cu90,
             TorchMode::Cu80 => TorchBackend::Cu80,
+            TorchMode::Rocm714 => TorchBackend::Rocm714,
             TorchMode::Rocm72 => TorchBackend::Rocm72,
             TorchMode::Rocm71 => TorchBackend::Rocm71,
             TorchMode::Rocm70 => TorchBackend::Rocm70,
@@ -325,7 +330,22 @@ impl TorchStrategy {
                 | "triton-rocm"
                 | "triton-xpu"
                 | "xformers"
-        )
+        ) || (self.has_unbundled_rocm_runtime() && is_rocm_sdk_package(package_name))
+    }
+
+    /// Returns `true` if any [`TorchBackend`] this strategy can select splits the ROCm runtime
+    /// out of the `torch` wheel.
+    fn has_unbundled_rocm_runtime(&self) -> bool {
+        match self {
+            Self::Amd {
+                os: _,
+                gpu_architecture,
+            } => LINUX_AMD_GPU_DRIVERS.iter().any(|(backend, architecture)| {
+                gpu_architecture == architecture && backend.has_unbundled_rocm_runtime()
+            }),
+            Self::Backend { backend } => backend.has_unbundled_rocm_runtime(),
+            Self::Cuda { .. } | Self::Xpu { .. } => false,
+        }
     }
 
     /// Returns `true` if the given [`PackageName`] has a system dependency (e.g., CUDA or ROCm).
@@ -356,7 +376,7 @@ impl TorchStrategy {
                 | "torchtune"
                 | "torchvision"
                 | "vllm"
-        )
+        ) || (self.has_unbundled_rocm_runtime() && is_rocm_sdk_package(package_name))
     }
 
     /// Return the appropriate index URLs for the given [`TorchStrategy`].
@@ -466,6 +486,19 @@ impl TorchStrategy {
     }
 }
 
+/// Returns `true` if the given [`PackageName`] is part of the ROCm SDK distributed alongside
+/// `torch` on the ROCm indexes.
+///
+/// These are the runtime (`rocm`, `rocm-sdk-*`) and GPU kernel (`amd-*-device-gfx*`) packages that
+/// ROCm 7.14 and later split out of the `torch` wheel.
+fn is_rocm_sdk_package(package_name: &PackageName) -> bool {
+    let package_name = package_name.as_str();
+    matches!(package_name, "rocm" | "rocm-bootstrap" | "rocm-profiler")
+        || package_name.starts_with("rocm-sdk-")
+        || package_name.starts_with("amd-torch-device-")
+        || package_name.starts_with("amd-torchvision-device-")
+}
+
 /// The available backends for PyTorch.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum TorchBackend {
@@ -497,6 +530,7 @@ pub enum TorchBackend {
     Cu91,
     Cu90,
     Cu80,
+    Rocm714,
     Rocm72,
     Rocm71,
     Rocm70,
@@ -521,6 +555,69 @@ pub enum TorchBackend {
 }
 
 impl TorchBackend {
+    /// Returns `true` if the [`TorchBackend`] installs the ROCm runtime as separate packages,
+    /// rather than bundling it into the `torch` wheel.
+    ///
+    /// Starting with ROCm 7.14, the runtime and GPU kernels are split out of the `torch` wheel
+    /// into `rocm` and `rocm-sdk-*` packages, which `torch` depends on (e.g.,
+    /// `rocm[device-all,libraries]==7.14.*`). Those packages are published alongside `torch` on
+    /// the ROCm index; PyPI only holds placeholder releases at unrelated versions, so they have
+    /// to be resolved from the same index as `torch` itself.
+    fn has_unbundled_rocm_runtime(self) -> bool {
+        match self {
+            Self::Rocm714 => true,
+            Self::Cpu
+            | Self::Cu132
+            | Self::Cu130
+            | Self::Cu129
+            | Self::Cu128
+            | Self::Cu126
+            | Self::Cu125
+            | Self::Cu124
+            | Self::Cu123
+            | Self::Cu122
+            | Self::Cu121
+            | Self::Cu120
+            | Self::Cu118
+            | Self::Cu117
+            | Self::Cu116
+            | Self::Cu115
+            | Self::Cu114
+            | Self::Cu113
+            | Self::Cu112
+            | Self::Cu111
+            | Self::Cu110
+            | Self::Cu102
+            | Self::Cu101
+            | Self::Cu100
+            | Self::Cu92
+            | Self::Cu91
+            | Self::Cu90
+            | Self::Cu80
+            | Self::Rocm72
+            | Self::Rocm71
+            | Self::Rocm70
+            | Self::Rocm64
+            | Self::Rocm63
+            | Self::Rocm624
+            | Self::Rocm62
+            | Self::Rocm61
+            | Self::Rocm60
+            | Self::Rocm57
+            | Self::Rocm56
+            | Self::Rocm55
+            | Self::Rocm542
+            | Self::Rocm54
+            | Self::Rocm53
+            | Self::Rocm52
+            | Self::Rocm511
+            | Self::Rocm42
+            | Self::Rocm41
+            | Self::Rocm401
+            | Self::Xpu => false,
+        }
+    }
+
     /// Return the appropriate index URL for the given [`TorchBackend`].
     fn index_url(self) -> &'static IndexUrl {
         match self {
@@ -552,6 +649,7 @@ impl TorchBackend {
             Self::Cu91 => &PYTORCH_CU91_INDEX_URL,
             Self::Cu90 => &PYTORCH_CU90_INDEX_URL,
             Self::Cu80 => &PYTORCH_CU80_INDEX_URL,
+            Self::Rocm714 => &PYTORCH_ROCM714_INDEX_URL,
             Self::Rocm72 => &PYTORCH_ROCM72_INDEX_URL,
             Self::Rocm71 => &PYTORCH_ROCM71_INDEX_URL,
             Self::Rocm70 => &PYTORCH_ROCM70_INDEX_URL,
@@ -622,6 +720,7 @@ impl TorchBackend {
             Self::Cu91 => Some(Version::new([9, 1])),
             Self::Cu90 => Some(Version::new([9, 0])),
             Self::Cu80 => Some(Version::new([8, 0])),
+            Self::Rocm714 => None,
             Self::Rocm72 => None,
             Self::Rocm71 => None,
             Self::Rocm70 => None,
@@ -677,6 +776,7 @@ impl TorchBackend {
             Self::Cu91 => None,
             Self::Cu90 => None,
             Self::Cu80 => None,
+            Self::Rocm714 => Some(Version::new([7, 14])),
             Self::Rocm72 => Some(Version::new([7, 2])),
             Self::Rocm71 => Some(Version::new([7, 1])),
             Self::Rocm70 => Some(Version::new([7, 0])),
@@ -735,6 +835,7 @@ impl FromStr for TorchBackend {
             "cu91" => Ok(Self::Cu91),
             "cu90" => Ok(Self::Cu90),
             "cu80" => Ok(Self::Cu80),
+            "rocm7.14" => Ok(Self::Rocm714),
             "rocm7.2" => Ok(Self::Rocm72),
             "rocm7.1" => Ok(Self::Rocm71),
             "rocm7.0" => Ok(Self::Rocm70),
@@ -855,9 +956,23 @@ static WINDOWS_CUDA_VERSIONS: LazyLock<[(TorchBackend, Version); 27]> = LazyLock
 ///
 /// AMD also provides a compatibility matrix: <https://rocm.docs.amd.com/en/latest/compatibility/compatibility-matrix.html>;
 /// however, this list includes a broader array of GPUs than those in the matrix.
-static LINUX_AMD_GPU_DRIVERS: LazyLock<[(TorchBackend, AmdGpuArchitecture); 93]> =
+static LINUX_AMD_GPU_DRIVERS: LazyLock<[(TorchBackend, AmdGpuArchitecture); 112]> =
     LazyLock::new(|| {
         [
+            // ROCm 7.14
+            (TorchBackend::Rocm714, AmdGpuArchitecture::Gfx908),
+            (TorchBackend::Rocm714, AmdGpuArchitecture::Gfx90a),
+            (TorchBackend::Rocm714, AmdGpuArchitecture::Gfx942),
+            (TorchBackend::Rocm714, AmdGpuArchitecture::Gfx950),
+            (TorchBackend::Rocm714, AmdGpuArchitecture::Gfx1030),
+            (TorchBackend::Rocm714, AmdGpuArchitecture::Gfx1100),
+            (TorchBackend::Rocm714, AmdGpuArchitecture::Gfx1101),
+            (TorchBackend::Rocm714, AmdGpuArchitecture::Gfx1102),
+            (TorchBackend::Rocm714, AmdGpuArchitecture::Gfx1103),
+            (TorchBackend::Rocm714, AmdGpuArchitecture::Gfx1150),
+            (TorchBackend::Rocm714, AmdGpuArchitecture::Gfx1151),
+            (TorchBackend::Rocm714, AmdGpuArchitecture::Gfx1200),
+            (TorchBackend::Rocm714, AmdGpuArchitecture::Gfx1201),
             // ROCm 7.2
             (TorchBackend::Rocm72, AmdGpuArchitecture::Gfx900),
             (TorchBackend::Rocm72, AmdGpuArchitecture::Gfx906),
@@ -869,6 +984,7 @@ static LINUX_AMD_GPU_DRIVERS: LazyLock<[(TorchBackend, AmdGpuArchitecture); 93]>
             (TorchBackend::Rocm72, AmdGpuArchitecture::Gfx1100),
             (TorchBackend::Rocm72, AmdGpuArchitecture::Gfx1101),
             (TorchBackend::Rocm72, AmdGpuArchitecture::Gfx1102),
+            (TorchBackend::Rocm72, AmdGpuArchitecture::Gfx1103),
             (TorchBackend::Rocm72, AmdGpuArchitecture::Gfx1150),
             (TorchBackend::Rocm72, AmdGpuArchitecture::Gfx1151),
             (TorchBackend::Rocm72, AmdGpuArchitecture::Gfx1200),
@@ -884,6 +1000,9 @@ static LINUX_AMD_GPU_DRIVERS: LazyLock<[(TorchBackend, AmdGpuArchitecture); 93]>
             (TorchBackend::Rocm71, AmdGpuArchitecture::Gfx1100),
             (TorchBackend::Rocm71, AmdGpuArchitecture::Gfx1101),
             (TorchBackend::Rocm71, AmdGpuArchitecture::Gfx1102),
+            (TorchBackend::Rocm71, AmdGpuArchitecture::Gfx1103),
+            (TorchBackend::Rocm71, AmdGpuArchitecture::Gfx1150),
+            (TorchBackend::Rocm71, AmdGpuArchitecture::Gfx1151),
             (TorchBackend::Rocm71, AmdGpuArchitecture::Gfx1200),
             (TorchBackend::Rocm71, AmdGpuArchitecture::Gfx1201),
             // ROCm 7.0
@@ -897,6 +1016,8 @@ static LINUX_AMD_GPU_DRIVERS: LazyLock<[(TorchBackend, AmdGpuArchitecture); 93]>
             (TorchBackend::Rocm70, AmdGpuArchitecture::Gfx1100),
             (TorchBackend::Rocm70, AmdGpuArchitecture::Gfx1101),
             (TorchBackend::Rocm70, AmdGpuArchitecture::Gfx1102),
+            (TorchBackend::Rocm70, AmdGpuArchitecture::Gfx1150),
+            (TorchBackend::Rocm70, AmdGpuArchitecture::Gfx1151),
             (TorchBackend::Rocm70, AmdGpuArchitecture::Gfx1200),
             (TorchBackend::Rocm70, AmdGpuArchitecture::Gfx1201),
             // ROCm 6.4
@@ -1019,6 +1140,8 @@ static PYTORCH_CU90_INDEX_URL: LazyLock<IndexUrl> =
     LazyLock::new(|| IndexUrl::from_str("https://download.pytorch.org/whl/cu90").unwrap());
 static PYTORCH_CU80_INDEX_URL: LazyLock<IndexUrl> =
     LazyLock::new(|| IndexUrl::from_str("https://download.pytorch.org/whl/cu80").unwrap());
+static PYTORCH_ROCM714_INDEX_URL: LazyLock<IndexUrl> =
+    LazyLock::new(|| IndexUrl::from_str("https://download.pytorch.org/whl/rocm7.14").unwrap());
 static PYTORCH_ROCM72_INDEX_URL: LazyLock<IndexUrl> =
     LazyLock::new(|| IndexUrl::from_str("https://download.pytorch.org/whl/rocm7.2").unwrap());
 static PYTORCH_ROCM71_INDEX_URL: LazyLock<IndexUrl> =
@@ -1061,3 +1184,69 @@ static PYTORCH_ROCM401_INDEX_URL: LazyLock<IndexUrl> =
     LazyLock::new(|| IndexUrl::from_str("https://download.pytorch.org/whl/rocm4.0.1").unwrap());
 static PYTORCH_XPU_INDEX_URL: LazyLock<IndexUrl> =
     LazyLock::new(|| IndexUrl::from_str("https://download.pytorch.org/whl/xpu").unwrap());
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use uv_normalize::PackageName;
+    use uv_platform_tags::Os;
+
+    use crate::accelerator::AmdGpuArchitecture;
+    use crate::backend::{TorchBackend, TorchStrategy};
+
+    /// ROCm 7.14 depends on the ROCm runtime as separate packages, which are only published on
+    /// the ROCm index, so they have to be routed there alongside `torch`.
+    #[test]
+    fn rocm714_applies_to_sdk_packages() {
+        let strategy = TorchStrategy::Backend {
+            backend: TorchBackend::Rocm714,
+        };
+        for package_name in [
+            "torch",
+            "rocm",
+            "rocm-bootstrap",
+            "rocm-sdk-core",
+            "rocm-sdk-device-gfx942",
+            "amd-torch-device-gfx942",
+        ] {
+            let package_name = PackageName::from_str(package_name).unwrap();
+            assert!(strategy.applies_to(&package_name), "{package_name}");
+        }
+
+        for package_name in ["anyio", "rocm-unrelated", "amd-something"] {
+            let package_name = PackageName::from_str(package_name).unwrap();
+            assert!(!strategy.applies_to(&package_name), "{package_name}");
+        }
+    }
+
+    /// ROCm 7.2 and earlier bundle the runtime into the `torch` wheel, so the SDK packages must
+    /// not be routed to their indexes.
+    #[test]
+    fn rocm_sdk_packages_scoped_to_unbundled_backends() {
+        let package_name = PackageName::from_str("rocm").unwrap();
+        for backend in [
+            TorchBackend::Rocm72,
+            TorchBackend::Rocm60,
+            TorchBackend::Cpu,
+        ] {
+            let strategy = TorchStrategy::Backend { backend };
+            assert!(!strategy.applies_to(&package_name), "{backend:?}");
+        }
+    }
+
+    /// `--torch-backend=auto` reaches ROCm 7.14 through the architecture table, so the SDK
+    /// packages have to be routed for detected AMD GPUs too.
+    #[test]
+    fn rocm714_applies_to_sdk_packages_via_auto() {
+        let strategy = TorchStrategy::Amd {
+            os: Os::Manylinux {
+                major: 2,
+                minor: 28,
+            },
+            gpu_architecture: AmdGpuArchitecture::Gfx942,
+        };
+        let package_name = PackageName::from_str("rocm").unwrap();
+        assert!(strategy.applies_to(&package_name));
+    }
+}
