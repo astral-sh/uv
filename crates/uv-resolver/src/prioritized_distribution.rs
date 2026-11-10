@@ -448,12 +448,6 @@ impl PrioritizedDist {
         &self,
         metadata: &[(&IndexUrl, &VariantsJsonContent, SupportedVariantProperties)],
     ) -> impl Iterator<Item = (WheelVariantScore<'_>, usize)> {
-        let non_variant_hash =
-            self.best_wheel()
-                .and_then(|(_, compatibility)| match compatibility {
-                    WheelCompatibility::Compatible(hash, ..) => Some(*hash),
-                    WheelCompatibility::Variant(..) | WheelCompatibility::Incompatible(_) => None,
-                });
         // Prefer wheels whose advertised hash matches a required hash, followed by wheels with
         // no advertised hash, then mismatches. If no hashes are required, all wheels match.
         // The installer verifies required hashes against the downloaded wheel.
@@ -466,9 +460,6 @@ impl PrioritizedDist {
                 let WheelCompatibility::Variant(hash, priority, build_tag) = compatibility else {
                     return None;
                 };
-                if non_variant_hash.is_some_and(|non_variant_hash| non_variant_hash > *hash) {
-                    return None;
-                }
                 let label = wheel.filename.variant()?;
                 let score = metadata
                     .iter()
@@ -485,15 +476,23 @@ impl PrioritizedDist {
             })
     }
 
-    /// Select a wheel returned by [`Self::scored_variants`].
-    pub(crate) fn select_variant(&self, index: usize) -> Self {
-        let mut selected = self.clone();
-        if let WheelCompatibility::Variant(hash, priority, build_tag) = &self.0.wheels[index].1 {
-            selected.0.wheels[index].1 =
-                WheelCompatibility::Compatible(*hash, *priority, build_tag.clone());
+    /// Select a scored variant if its hash ranks at least as high as the ordinary wheel's.
+    pub(crate) fn select_variant(&self, index: usize) -> Option<Self> {
+        let (_, WheelCompatibility::Variant(hash, priority, build_tag)) =
+            self.0.wheels.get(index)?
+        else {
+            return None;
+        };
+        if let Some((_, WheelCompatibility::Compatible(ordinary_hash, ..))) = self.best_wheel()
+            && ordinary_hash > hash
+        {
+            return None;
         }
+        let mut selected = self.clone();
+        selected.0.wheels[index].1 =
+            WheelCompatibility::Compatible(*hash, *priority, build_tag.clone());
         selected.0.best_wheel_index = Some(index);
-        selected
+        Some(selected)
     }
 
     /// Insert the given built distribution into the [`PrioritizedDist`].
