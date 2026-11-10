@@ -1087,9 +1087,6 @@ jobs:
         with:
           credentials_json: "${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}"
 
-      - name: "Set up GCP SDK"
-        uses: "google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db"
-
       - name: "Get GCP Artifact Registry token"
         id: get_token
         run: |
