@@ -36,6 +36,11 @@ fn collect_cover(
                 dnf.push(path.clone());
             }
         }
+        Cover::Atom(atom) => {
+            path.push((**atom).clone());
+            dnf.push(path.clone());
+            path.pop();
+        }
         Cover::Guard(guard) => collect_guard(Guard::Node(*guard), &Cover::True, dnf, path),
         Cover::Branches(branches) => {
             for (guard, suffix) in branches.iter() {

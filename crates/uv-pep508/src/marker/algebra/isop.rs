@@ -24,6 +24,7 @@ pub(crate) enum Cover {
     False,
     True,
     Guard(NodeId),
+    Atom(Box<crate::MarkerExpression>),
     Branches(Rc<[(Guard, Self)]>),
 }
 
@@ -74,6 +75,45 @@ impl InternerGuard<'_> {
             return (lower, Cover::Guard(lower));
         }
 
+        // A printed comparison tests the original spelling on both domains.
+        // Within its branch, opaque values outside that spelling range are
+        // unreachable. Removing them recovers the simple comparison.
+        let node = self.shared.node(lower);
+        if lower == upper
+            && let Variable::String(key) = node.var
+            && key.is_version_or_string()
+            && let Edges::String { edges } = &node.children
+        {
+            if let Some(atom) = self.raw_order_atom(key, lower, edges) {
+                return (lower, Cover::Atom(Box::new(atom)));
+            }
+            let mut ranges = IndexMap::<_, Ranges<_>, FxBuildHasher>::default();
+            for (range, child) in edges {
+                let child = child.negate(lower);
+                if !child.is_false() {
+                    ranges
+                        .entry(child)
+                        .and_modify(|r| *r = r.union(range))
+                        .or_insert_with(|| range.clone());
+                }
+            }
+            let mut branches = Vec::new();
+            for (child, range) in ranges {
+                let (possible, _) = crate::marker::version_or_string::spelling_range(&range);
+                let assumption = self.create_node(
+                    Variable::VersionString(key),
+                    Edges::from_version_or_string_range(&possible),
+                );
+                let suffix = self.restrict(child, assumption);
+                if !suffix.is_false() {
+                    let (_, cover) = self.isop_cached(suffix, suffix, cache);
+                    branches.push((Guard::Edge { node: lower, child }, cover));
+                }
+            }
+            let result = (lower, Cover::Branches(branches.into()));
+            cache.insert((lower, upper), result.clone());
+            return result;
+        }
         let exact = lower == upper;
         let cofactors = self.cover_cofactors(lower, upper);
         // A clause can omit this variable only where every branch permits it.
@@ -123,6 +163,31 @@ impl InternerGuard<'_> {
         let result = (function, Cover::Branches(branches.into_values().collect()));
         cache.insert((lower, upper), result.clone());
         result
+    }
+
+    /// A single spelling cut can encode one of four ordered atoms. Match the
+    /// interned decision against those atoms before expanding its branches.
+    fn raw_order_atom(
+        &mut self,
+        key: crate::marker::lowering::CanonicalMarkerValueString,
+        parent: NodeId,
+        edges: &[(Ranges<arcstr::ArcStr>, NodeId)],
+    ) -> Option<crate::MarkerExpression> {
+        use crate::MarkerOperator::{GreaterEqual, GreaterThan, LessEqual, LessThan};
+        let [(before, _), (_, _)] = edges else {
+            return None;
+        };
+        let (Bound::Unbounded, Bound::Excluded(literal)) = before.bounding_range()? else {
+            return None;
+        };
+        let operator = [LessThan, LessEqual, GreaterThan, GreaterEqual]
+            .into_iter()
+            .find(|&op| self.raw_order(key, op, literal.clone()) == parent)?;
+        Some(crate::MarkerExpression::String {
+            key: key.into(),
+            operator,
+            value: literal.clone(),
+        })
     }
 
     /// Materialize a borrowed guard only when algebra needs its function.

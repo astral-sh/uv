@@ -83,6 +83,20 @@ pub(super) fn range(
     Some(versions.chain(strings).collect())
 }
 
+/// On a raw spelling range, the opaque values are exactly the strings in the
+/// range. A parsed version can have multiple spellings, so its raw spelling
+/// must be tested separately.
+pub(super) fn spelling_range(
+    raw: &Ranges<ArcStr>,
+) -> (Ranges<VersionOrStringValue>, Ranges<VersionOrStringValue>) {
+    let opaque = map_bounds(raw.clone(), |bound, _| {
+        bound.map(VersionOrStringValue::Opaque)
+    })
+    .intersection(&Ranges::higher_than(FIRST_OPAQUE));
+    let possible = opaque.union(&Ranges::strictly_lower_than(FIRST_OPAQUE));
+    (possible, opaque)
+}
+
 /// Recover the independent version and string ranges of a decision.
 fn split(range: &Ranges<VersionOrStringValue>) -> (Ranges<Version>, Ranges<ArcStr>) {
     let opaque = Ranges::higher_than(FIRST_OPAQUE);
@@ -157,6 +171,20 @@ pub(super) fn comparisons(range: &Ranges<VersionOrStringValue>) -> Dnf {
         return vec![vec![atom]];
     }
     let mut dnf = lexical_clauses(&opaque);
+    // Ordering against an opaque bound also consults the original spelling
+    // of parsed versions. Limit those clauses to opaque inputs explicitly.
+    if dnf
+        .iter()
+        .flatten()
+        .any(|(op, value)| numeric_range(*op, value).is_none())
+    {
+        let opaque_only = negate(&numeric_interval(Bound::Unbounded, Bound::Unbounded));
+        let mut result = product(&dnf, &opaque_only);
+        for (low, high) in versions.iter() {
+            result.extend(numeric_interval(low, high));
+        }
+        return result;
+    }
     let mut numeric = projection(&dnf, |operator, literal| {
         numeric_range(operator, literal).expect("hybrid comparison has a version specifier")
     });

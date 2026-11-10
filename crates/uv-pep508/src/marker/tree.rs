@@ -2247,6 +2247,48 @@ mod test {
     }
 
     #[test]
+    fn opaque_equality_and_raw_ordering() {
+        for key in ["platform_version", "platform_release"] {
+            let equal = m(&format!("{key} == 'kernel'"));
+            for (op, value, disjoint) in [
+                (">", "kernel", true),
+                ("<", "kernel", true),
+                (">=", "kernel", false),
+                ("<=", "kernel", false),
+                (">", "later", true),
+                ("<", "earlier", true),
+                (">", "earlier", false),
+                ("<", "later", false),
+            ] {
+                let order = m(&format!("{key} {op} '{value}'"));
+                assert_eq!(equal.is_disjoint(order), disjoint);
+                assert_eq!(order.and(equal).is_false(), disjoint);
+                if !disjoint {
+                    assert_round_trip(equal.and(order));
+                }
+                let conditional = equal.and(m("extra == 'a'"));
+                assert_eq!(order.is_disjoint(conditional), disjoint);
+            }
+            assert_eq!(
+                m(&format!("{key} >= 'kernel' and {key} <= 'kernel'")),
+                equal
+            );
+            // Parsed versions can have spellings on either side of this raw cutoff.
+            let one = m(&format!("{key} == '1'"));
+            let before = m(&format!("{key} < 'kernel'"));
+            assert!(!one.is_disjoint(before));
+            assert!(!one.is_disjoint(before.negate()));
+            for (spelling, matches) in [("1", true), ("v1", false)] {
+                let env = env37()
+                    .with_platform_version(spelling)
+                    .with_platform_release(spelling);
+                assert_eq!(one.and(before).evaluate(&env, &[]), matches);
+            }
+            assert_eq!(before.try_to_string().unwrap(), format!("{key} < 'kernel'"));
+        }
+    }
+
+    #[test]
     fn reversed_platform_compatible_release_warns() {
         let env = env37()
             .with_platform_release("2.0")

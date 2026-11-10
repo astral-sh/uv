@@ -214,6 +214,40 @@ impl InternerGuard<'_> {
         if flipped { id.not() } else { id }
     }
 
+    /// Encode ordering against an opaque literal on both possible environment types.
+    fn raw_order(
+        &mut self,
+        key: CanonicalMarkerValueString,
+        operator: MarkerOperator,
+        value: ArcStr,
+    ) -> NodeId {
+        // For parsed versions the original spelling decides the outcome.
+        // For opaque inputs the hybrid value already contains that spelling.
+        let range = operator.ordered_range(value.clone());
+        let (matching, other) = super::version_or_string::spelling_range(&range);
+        let matching = self.create_node(
+            Variable::VersionString(key),
+            Edges::from_version_or_string_range(&matching),
+        );
+        let other = self.create_node(
+            Variable::VersionString(key),
+            Edges::from_version_or_string_range(&other),
+        );
+        // A parsed version's spelling cannot equal this opaque literal.
+        // Use one cut for both inclusive and exclusive comparisons.
+        let spellings = match operator {
+            MarkerOperator::LessThan | MarkerOperator::LessEqual => {
+                Ranges::strictly_lower_than(value)
+            }
+            _ => Ranges::higher_than(value),
+        };
+        let mut edges = Edges::from_range(&spellings);
+        for (_, child) in &mut edges {
+            *child = if child.is_true() { matching } else { other };
+        }
+        self.create_node(Variable::String(key), Edges::String { edges })
+    }
+
     /// Returns a decision node for a single marker expression.
     pub(crate) fn expression(&mut self, expr: MarkerExpression) -> NodeId {
         let (var, children) = match expr {
@@ -375,6 +409,15 @@ impl InternerGuard<'_> {
                             Variable::VersionString(key),
                             Edges::from_version_or_string_range(&range),
                         );
+                    }
+                    if matches!(
+                        operator,
+                        MarkerOperator::GreaterThan
+                            | MarkerOperator::GreaterEqual
+                            | MarkerOperator::LessThan
+                            | MarkerOperator::LessEqual
+                    ) {
+                        return self.raw_order(key, operator, value);
                     }
                     // A compatible-release specifier needs two release components. If
                     // the constant is itself a version, spelling its raw fallback as
