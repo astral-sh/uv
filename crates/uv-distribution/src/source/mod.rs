@@ -298,7 +298,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         .join(dist.version.to_string()),
                 );
 
-                let url = dist.file.url.to_url()?;
+                let url = dist.file.location.to_url()?;
 
                 // If the URL is a file URL, use the local path directly.
                 if url.scheme() == "file" {
@@ -461,7 +461,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         .join(dist.version.to_string()),
                 );
 
-                let url = dist.file.url.to_url()?;
+                let url = dist.file.location.to_url()?;
 
                 // If the URL is a file URL, use the local path directly.
                 if url.scheme() == "file" {

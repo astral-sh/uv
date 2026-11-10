@@ -1468,7 +1468,7 @@ impl Identifier for File {
             .first()
             .cloned()
             .map(DistributionId::Digest)
-            .unwrap_or_else(|| self.url.distribution_id())
+            .unwrap_or_else(|| self.location.distribution_id())
     }
 
     fn resource_id(&self) -> ResourceId {
@@ -1476,7 +1476,7 @@ impl Identifier for File {
             .first()
             .cloned()
             .map(ResourceId::Digest)
-            .unwrap_or_else(|| self.url.resource_id())
+            .unwrap_or_else(|| self.location.resource_id())
     }
 }
 

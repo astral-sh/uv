@@ -11,7 +11,7 @@ use uv_client::{FlatIndexEntry, OwnedArchive, SimpleDetailMetadata, VersionFiles
 use uv_configuration::BuildOptions;
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
-    File, IndexEntryFilename, IndexUrl, MinimumLibcVersion, RegistryBuiltWheel, RegistrySourceDist,
+    IndexEntryFilename, IndexUrl, MinimumLibcVersion, RegistryBuiltWheel, RegistrySourceDist,
     RequiresPython,
 };
 use uv_normalize::PackageName;
@@ -694,7 +694,7 @@ impl VersionMapLazy {
                     (false, None)
                 };
 
-                let file = File::from_direct_index(file);
+                let file = file.assume_canonical();
 
                 // Prioritize amongst all available files.
                 let yanked = file.yanked.as_deref();
