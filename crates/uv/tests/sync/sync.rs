@@ -19866,3 +19866,106 @@ fn project_build_hashes_locked_script_run_with_no_sync() -> Result<()> {
         .assert(predicate::path::missing());
     Ok(())
 }
+
+/// Regression test for #20672: URL lookahead misses an extra activated transitively on an already-known path dependency
+#[test]
+fn sync_lookahead_transitive_extra_on_known_path_dependency() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "uv-lookahead-reproducer"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "bridge[feature]",
+            "target",
+        ]
+
+        [tool.uv]
+        package = false
+
+        [tool.uv.sources]
+        bridge = { path = "packages/bridge" }
+        target = { path = "packages/target" }
+    "#})?;
+
+    let bridge = context.temp_dir.child("packages/bridge");
+    bridge.create_dir_all()?;
+    bridge.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "bridge"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "target[feature]",
+        ]
+
+        [project.optional-dependencies]
+        feature = []
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    bridge.child("src/bridge/__init__.py").touch()?;
+
+    let target = context.temp_dir.child("packages/target");
+    target.create_dir_all()?;
+    target.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "target"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "leaf; extra == 'feature'",
+        ]
+
+        [project.optional-dependencies]
+        feature = []
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+
+        [tool.uv.sources]
+        leaf = { path = "../leaf" }
+    "#})?;
+    target.child("src/target/__init__.py").touch()?;
+
+    let leaf = context.temp_dir.child("packages/leaf");
+    leaf.create_dir_all()?;
+    leaf.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "leaf"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    leaf.child("src/leaf/__init__.py").touch()?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.sync().arg("--dry-run"), @r"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Would use project environment at: .venv
+    Resolved 4 packages in [TIME]
+    Found up-to-date lockfile at: uv.lock
+    Would download 3 packages
+    Would install 3 packages
+     + bridge @ file://[TEMP_DIR]/packages/bridge
+     + leaf @ file://[TEMP_DIR]/packages/leaf
+     + target @ file://[TEMP_DIR]/packages/target
+    ");
+
+    Ok(())
+}
