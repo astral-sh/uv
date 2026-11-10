@@ -10,8 +10,8 @@ use uv_client::{
 use uv_configuration::BuildOptions;
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
-    File, Index, IndexEntryFilename, IndexLocations, IndexUrl, MinimumLibcVersion,
-    RegistryBuiltWheel, RegistrySourceDist, VerbatimFile,
+    Index, IndexEntryFilename, IndexLocations, IndexUrl, MinimumLibcVersion, RegistryBuiltWheel,
+    RegistrySourceDist, VerbatimFile,
 };
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -139,7 +139,7 @@ impl FlatDistributions {
         index: IndexUrl,
         minimum_libc_version: Option<MinimumLibcVersion>,
     ) {
-        let file = File::from_direct_index(file);
+        let file = file.assume_canonical();
 
         // No `requires-python` here: for source distributions, we don't have that information;
         // for wheels, we read it lazily only when selected.

@@ -951,7 +951,7 @@ impl RegistryClient {
         file: &VerbatimFile,
         index: &IndexUrl,
     ) -> Result<Vec<u8>, Error> {
-        let url = file.url.to_url().map_err(ErrorKind::InvalidUrl)?;
+        let url = file.location.to_url().map_err(ErrorKind::InvalidUrl)?;
 
         if url.scheme() == "file" {
             let path = url
@@ -1045,7 +1045,11 @@ impl RegistryClient {
 
                 let wheel = wheels.best_wheel();
 
-                let url = wheel.file.url.to_url().map_err(ErrorKind::InvalidUrl)?;
+                let url = wheel
+                    .file
+                    .location
+                    .to_url()
+                    .map_err(ErrorKind::InvalidUrl)?;
                 let location = if url.scheme() == "file" {
                     let path = url
                         .to_file_path()
@@ -1665,8 +1669,8 @@ impl CachedFile {
 
 impl From<VerbatimFile> for CachedFile {
     fn from(file: VerbatimFile) -> Self {
-        let filename =
-            (file.url.raw_filename() != file.filename.as_ref()).then(|| Box::new(file.filename));
+        let filename = (file.location.raw_filename() != file.filename.as_ref())
+            .then(|| Box::new(file.filename));
         let has_size = file.size.is_some();
         let has_upload_time = file.upload_time_utc_ms.is_some();
         let dist_info_metadata = file.dist_info_metadata.is_some();
@@ -1685,7 +1689,7 @@ impl From<VerbatimFile> for CachedFile {
             upload_time_utc_ms: file.upload_time_utc_ms.unwrap_or_default(),
             has_size,
             has_upload_time,
-            url: file.url,
+            url: file.location,
             yanked: file.yanked.filter(|yanked| yanked.is_yanked()),
         }
     }
@@ -1705,7 +1709,7 @@ impl From<CachedFile> for VerbatimFile {
             requires_python: file.requires_python,
             size: file.has_size.then_some(file.size),
             upload_time_utc_ms: file.has_upload_time.then_some(file.upload_time_utc_ms),
-            url: file.url,
+            location: file.url,
             yanked: file.yanked,
         }
     }
@@ -2489,7 +2493,7 @@ mod tests {
         "#);
         let sidecar = &entries[1].1;
         assert_snapshot!(
-            sidecar.url.to_url()?,
+            sidecar.location.to_url()?,
             @"https://example.com/simple/example/metadata/1.0"
         );
         Ok(())
@@ -2523,7 +2527,7 @@ mod tests {
         "#);
         let sidecar = &entries[1].1;
         assert_snapshot!(
-            sidecar.url.to_url()?,
+            sidecar.location.to_url()?,
             @"https://example.com/simple/example/example-1.0-variants.json"
         );
         Ok(())

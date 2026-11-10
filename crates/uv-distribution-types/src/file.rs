@@ -25,8 +25,8 @@ pub enum FileConversionError {
 ///
 /// Use [`VerbatimFile`] for locations as supplied by an index.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
-#[rkyv(archive_bounds(Url::Archived: core::fmt::Debug), derive(Debug))]
-pub struct File<Url = CanonicalFileLocation> {
+#[rkyv(archive_bounds(Location::Archived: core::fmt::Debug), derive(Debug))]
+pub struct File<Location = CanonicalFileLocation> {
     /// Hashes for separately available metadata, or an empty list when no hashes were provided.
     pub dist_info_metadata: Option<HashDigests>,
     pub filename: SmallString,
@@ -38,11 +38,11 @@ pub struct File<Url = CanonicalFileLocation> {
     // comparisons in testing, we just store it as a UTC timestamp in
     // milliseconds.
     pub upload_time_utc_ms: Option<i64>,
-    pub url: Url,
+    pub location: Location,
     pub yanked: Option<Box<Yanked>>,
 }
 
-impl File<FileLocation> {
+impl VerbatimFile {
     /// `TryFrom` instead of `From` to filter out files with invalid requires python version specifiers
     pub fn try_from_pypi(
         file: uv_pypi_types::PypiFile,
@@ -58,8 +58,21 @@ impl File<FileLocation> {
                 .map_err(|err| FileConversionError::RequiresPython(err.line().clone(), err))?,
             size: file.size,
             upload_time_utc_ms: file.upload_time.map(Timestamp::as_millisecond),
-            url: FileLocation::new(file.url, base),
+            location: FileLocation::new(file.url, base),
             yanked: file.yanked,
+        })
+    }
+
+    /// Assume the location advertised for this file is its canonical location.
+    ///
+    /// Use this when the location came directly from the index uv would record in the lockfile.
+    /// A proxy for that index may advertise a different URL for the same file.
+    pub fn assume_canonical(self) -> File {
+        self.map_location(|location| match location {
+            FileLocation::RelativeUrl(base, path, _) => CanonicalFileLocation::relative(base, path),
+            FileLocation::AbsoluteUrl(url, _) => {
+                CanonicalFileLocation::AbsoluteUrl(url, PhantomData)
+            }
         })
     }
 
@@ -72,9 +85,9 @@ impl File<FileLocation> {
     }
 }
 
-impl<Url> File<Url> {
-    /// Replace the file URL while preserving the artifact metadata.
-    fn map_url<Mapped>(self, map: impl FnOnce(Url) -> Mapped) -> File<Mapped> {
+impl<Location> File<Location> {
+    /// Replace the file location while preserving the artifact metadata.
+    fn map_location<Mapped>(self, map: impl FnOnce(Location) -> Mapped) -> File<Mapped> {
         File {
             dist_info_metadata: self.dist_info_metadata,
             filename: self.filename,
@@ -82,23 +95,9 @@ impl<Url> File<Url> {
             requires_python: self.requires_python,
             size: self.size,
             upload_time_utc_ms: self.upload_time_utc_ms,
-            url: map(self.url),
+            location: map(self.location),
             yanked: self.yanked,
         }
-    }
-}
-
-impl File {
-    /// Take the artifact location advertised by an index that was queried directly.
-    ///
-    /// The index supplies the original location, so relative URLs can stay relative.
-    pub fn from_direct_index(file: VerbatimFile) -> Self {
-        file.map_url(|location| match location {
-            FileLocation::RelativeUrl(base, path, _) => CanonicalFileLocation::relative(base, path),
-            FileLocation::AbsoluteUrl(url, _) => {
-                CanonicalFileLocation::AbsoluteUrl(url, PhantomData)
-            }
-        })
     }
 }
 

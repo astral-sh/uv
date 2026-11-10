@@ -369,7 +369,7 @@ impl<'a> FlatIndexClient<'a> {
                 requires_python: None,
                 size: None,
                 upload_time_utc_ms: None,
-                url: FileLocation::absolute(UrlString::from(url)),
+                location: FileLocation::absolute(UrlString::from(url)),
                 yanked: None,
             };
 

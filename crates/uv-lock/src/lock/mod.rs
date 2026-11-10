@@ -7111,7 +7111,7 @@ impl Package {
                     requires_python: None,
                     size: sdist.size(),
                     upload_time_utc_ms: sdist.upload_time().map(Timestamp::as_millisecond),
-                    url: CanonicalFileLocation::from_lockfile(file_url.clone()),
+                    location: CanonicalFileLocation::from_lockfile(file_url.clone()),
                     yanked: None,
                 });
 
@@ -7142,7 +7142,7 @@ impl Package {
                     .as_ref()
                     .expect("version for registry source");
 
-                let file_url = match sdist {
+                let location = match sdist {
                     SourceDist::Url { url: file_url, .. } => {
                         CanonicalFileLocation::from_lockfile(file_url.clone())
                     }
@@ -7185,7 +7185,7 @@ impl Package {
                     requires_python: None,
                     size: sdist.size(),
                     upload_time_utc_ms: sdist.upload_time().map(Timestamp::as_millisecond),
-                    url: file_url,
+                    location,
                     yanked: None,
                 });
 
@@ -8615,7 +8615,7 @@ impl SourceDist {
 
         match &reg_dist.index {
             IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
-                let url = normalize_file_location(&reg_dist.file.url)
+                let url = normalize_file_location(&reg_dist.file.location)
                     .map_err(LockErrorKind::InvalidUrl)
                     .map_err(LockError::from)?;
                 let size = reg_dist.file.size;
@@ -8640,7 +8640,7 @@ impl SourceDist {
                 })?;
                 let url = reg_dist
                     .file
-                    .url
+                    .location
                     .to_url()
                     .map_err(LockErrorKind::InvalidUrl)?;
 
@@ -8668,7 +8668,7 @@ impl SourceDist {
                         },
                     }))
                 } else {
-                    let url = normalize_file_location(&reg_dist.file.url)
+                    let url = normalize_file_location(&reg_dist.file.location)
                         .map_err(LockErrorKind::InvalidUrl)
                         .map_err(LockError::from)?;
                     let size = reg_dist.file.size;
@@ -8949,7 +8949,7 @@ impl Wheel {
     ) -> Result<Self, LockError> {
         let url = match &wheel.index {
             IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
-                let url = normalize_file_location(&wheel.file.url)
+                let url = normalize_file_location(&wheel.file.location)
                     .map_err(LockErrorKind::InvalidUrl)
                     .map_err(LockError::from)?;
                 WheelWireSource::Url { url }
@@ -8958,7 +8958,11 @@ impl Wheel {
                 let index_path = path.to_file_path().map_err(|()| LockErrorKind::UrlToPath {
                     url: path.to_url().into_url(),
                 })?;
-                let wheel_url = wheel.file.url.to_url().map_err(LockErrorKind::InvalidUrl)?;
+                let wheel_url = wheel
+                    .file
+                    .location
+                    .to_url()
+                    .map_err(LockErrorKind::InvalidUrl)?;
 
                 if wheel_url.scheme() == "file" {
                     let wheel_path = wheel_url
@@ -8969,7 +8973,7 @@ impl Wheel {
                         .into_boxed_path();
                     WheelWireSource::Path { path }
                 } else {
-                    let url = normalize_file_location(&wheel.file.url)
+                    let url = normalize_file_location(&wheel.file.location)
                         .map_err(LockErrorKind::InvalidUrl)
                         .map_err(LockError::from)?;
                     WheelWireSource::Url { url }
@@ -9044,7 +9048,7 @@ impl Wheel {
 
         match source {
             RegistrySource::Url(url) => {
-                let file_location = match &self.url {
+                let location = match &self.url {
                     WheelWireSource::Url { url: file_url } => {
                         CanonicalFileLocation::from_lockfile(file_url.clone())
                     }
@@ -9063,7 +9067,7 @@ impl Wheel {
                     requires_python: None,
                     size: self.size,
                     upload_time_utc_ms: self.upload_time.map(Timestamp::as_millisecond),
-                    url: file_location,
+                    location,
                     yanked: None,
                 });
                 let index = IndexUrl::from(VerbatimUrl::from_url(
@@ -9077,7 +9081,7 @@ impl Wheel {
                 })
             }
             RegistrySource::Path(index_path) => {
-                let file_location = match &self.url {
+                let location = match &self.url {
                     WheelWireSource::Url { url: file_url } => {
                         CanonicalFileLocation::from_lockfile(file_url.clone())
                     }
@@ -9105,7 +9109,7 @@ impl Wheel {
                     requires_python: None,
                     size: self.size,
                     upload_time_utc_ms: self.upload_time.map(Timestamp::as_millisecond),
-                    url: file_location,
+                    location,
                     yanked: None,
                 });
                 let index = IndexUrl::from(

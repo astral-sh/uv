@@ -567,7 +567,7 @@ impl<'lock> PylockToml {
                         if let Some(sdist) = dist.sdist.as_ref() {
                             let url = sdist
                                 .file
-                                .url
+                                .location
                                 .to_url()
                                 .map_err(PylockTomlErrorKind::ToUrl)?;
                             package.sdist = Some(PylockTomlSdist {
@@ -663,7 +663,11 @@ impl<'lock> PylockToml {
                     let no_build = build_options.no_build_package(&dist.name);
 
                     if !no_build {
-                        let url = dist.file.url.to_url().map_err(PylockTomlErrorKind::ToUrl)?;
+                        let url = dist
+                            .file
+                            .location
+                            .to_url()
+                            .map_err(PylockTomlErrorKind::ToUrl)?;
                         package.sdist = Some(PylockTomlSdist {
                             // Optional "when the last component of path/ url would be the same value".
                             name: if url
@@ -748,7 +752,7 @@ impl<'lock> PylockToml {
             .map(|wheel| {
                 let url = wheel
                     .file
-                    .url
+                    .location
                     .to_url()
                     .map_err(PylockTomlErrorKind::ToUrl)?;
                 Ok(PylockTomlWheel {
@@ -769,7 +773,7 @@ impl<'lock> PylockToml {
                     url: Some(
                         wheel
                             .file
-                            .url
+                            .location
                             .to_url()
                             .map_err(PylockTomlErrorKind::ToUrl)?
                             .with_policy(Raw),
@@ -851,7 +855,7 @@ impl<'lock> PylockToml {
                             .map(|wheel| {
                                 let url = wheel
                                     .file
-                                    .url
+                                    .location
                                     .to_url()
                                     .map_err(PylockTomlErrorKind::ToUrl)?;
                                 Ok(PylockTomlWheel {
@@ -1006,7 +1010,7 @@ impl<'lock> PylockToml {
                 Some(SourceDist::Registry(sdist)) => {
                     let url = sdist
                         .file
-                        .url
+                        .location
                         .to_url()
                         .map_err(PylockTomlErrorKind::ToUrl)?;
                     Some(PylockTomlSdist {
@@ -1712,7 +1716,7 @@ impl PylockTomlWheel {
             requires_python: None,
             size: self.size,
             upload_time_utc_ms: self.upload_time.map(Timestamp::as_millisecond),
-            url: CanonicalFileLocation::from_lockfile(file_url),
+            location: CanonicalFileLocation::from_lockfile(file_url),
             yanked: None,
         });
 
@@ -1872,7 +1876,7 @@ impl PylockTomlSdist {
             requires_python: None,
             size: self.size,
             upload_time_utc_ms: self.upload_time.map(Timestamp::as_millisecond),
-            url: CanonicalFileLocation::from_lockfile(file_url),
+            location: CanonicalFileLocation::from_lockfile(file_url),
             yanked: None,
         });
 
