@@ -128,12 +128,10 @@ impl GitSource {
         // path length limit on Windows.
         let short_id = db.to_short_id(actual_rev)?;
 
-        // Separate checkouts with LFS pointer files from those with materialized LFS objects.
-        let checkout_digest = cache_digest(&(git.repository(), lfs_requested));
         let checkout_path = self
             .cache
             .join("checkouts")
-            .join(checkout_digest)
+            .join(git.repository().checkout_digest(lfs_requested))
             .join(short_id.as_str());
 
         // Check out `actual_rev` from the database to a scoped location on the

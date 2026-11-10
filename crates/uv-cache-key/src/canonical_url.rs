@@ -4,6 +4,7 @@ use std::hash::{Hash, Hasher};
 
 use uv_redacted::{SafeUrl, SafeUrlError};
 
+use crate::cache_digest;
 use crate::cache_key::{CacheKey, CacheKeyHasher};
 
 /// A wrapper around [`SafeUrl`] which represents a "canonical" version of an original URL.
@@ -172,6 +173,12 @@ impl GitUpstreamUrl {
         let CanonicalUrl(url) = &self.0;
         url
     }
+
+    /// Hash this upstream and the LFS setting to separate checkouts with pointer files
+    /// from those with materialized LFS objects.
+    pub fn checkout_digest(&self, lfs_enabled: bool) -> String {
+        cache_digest(&(self, lfs_enabled))
+    }
 }
 
 impl CacheKey for GitUpstreamUrl {
@@ -189,7 +196,6 @@ impl std::fmt::Display for GitUpstreamUrl {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cache_digest;
 
     #[test]
     fn user_credential_does_not_affect_cache_key() -> Result<(), SafeUrlError> {

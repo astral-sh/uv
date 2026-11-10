@@ -671,7 +671,7 @@ fn add_git_lfs() -> Result<()> {
         .child("lfs");
     let lfs_enabled = true;
     let ok_checkout_file = git_checkouts
-        .child(cache_digest(&(&repo_url, lfs_enabled)))
+        .child(repo_url.checkout_digest(lfs_enabled))
         .child("261c828.ok");
 
     uv_snapshot!(context.filters(), context.add()
