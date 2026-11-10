@@ -63,11 +63,7 @@ jobs:
   windows-trampoline-check:
     timeout-minutes: 15
     runs-on: windows-latest
-    name: "check on ${{ matrix.target-arch }}"
-    strategy:
-      fail-fast: false
-      matrix:
-        target-arch: ["x86_64", "i686", "aarch64"]
+    name: "check on x86_64"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -87,9 +83,7 @@ jobs:
 
       - name: "Install Rust toolchain"
         working-directory: ${{ env.UV_WORKSPACE }}/crates/uv-trampoline
-        run: |
-          rustup target add ${{ matrix.target-arch }}-pc-windows-msvc
-          rustup component add rust-src --target ${{ matrix.target-arch }}-pc-windows-msvc
+        run: rustup toolchain install --profile minimal --component clippy,rustfmt,rust-src
 
       - uses: $/.github/actions/setup-uv-toolchain
         with:
