@@ -185,6 +185,22 @@ impl InternerGuard<'_> {
             return if flipped { first.not() } else { first };
         }
 
+        if let (Variable::String(key), Edges::String { edges }) = (&var, &children)
+            && key.is_version_or_string()
+            && edges
+                .iter()
+                .any(|(_, child)| !child.is_true() && !child.is_false())
+        {
+            for constant in [NodeId::FALSE, NodeId::TRUE] {
+                if edges
+                    .iter()
+                    .all(|(raw, child)| self.forced_on_spellings(*key, raw, *child, constant))
+                {
+                    return if flipped { constant.not() } else { constant };
+                }
+            }
+        }
+
         // Temporary and stored nodes use the same borrowed key, regardless of their
         // range containers. Only newly interned nodes need boxed range payloads.
         let key = (&var, children.as_ref());
@@ -212,6 +228,31 @@ impl InternerGuard<'_> {
         };
 
         if flipped { id.not() } else { id }
+    }
+
+    /// Collapse a decision only if every edge that could change its outcome is
+    /// impossible for the enclosing spelling interval.
+    fn forced_on_spellings(
+        &self,
+        key: CanonicalMarkerValueString,
+        raw: &Ranges<ArcStr>,
+        child: NodeId,
+        constant: NodeId,
+    ) -> bool {
+        use super::version_or_string::feasibility::{Feasibility, check};
+        if child.is_true() || child.is_false() {
+            return child == constant;
+        }
+        let node = self.shared.node(child);
+        if node.var != Variable::VersionString(key) {
+            return false;
+        }
+        let Edges::VersionOrString { edges } = &node.children else {
+            return false;
+        };
+        edges.iter().all(|(range, target)| {
+            target.negate(child) == constant || matches!(check(raw, range), Feasibility::Empty)
+        })
     }
 
     /// Encode ordering against an opaque literal on both possible environment types.
@@ -575,6 +616,10 @@ impl InternerGuard<'_> {
             return self.and(xi, yi).is_false();
         }
 
+        if matches!(std::cmp::min(&x.var, &y.var), Variable::String(key) if key.is_version_or_string())
+        {
+            return self.and(xi, yi).is_false();
+        }
         // Perform Shannon Expansion of the higher order variable.
         match x.var.cmp(&y.var) {
             // X is higher order than Y, Y must be disjoint with every child of X.
@@ -619,6 +664,10 @@ impl InternerGuard<'_> {
 
         let (x, y) = (self.shared.node(xi), self.shared.node(yi));
 
+        if matches!(std::cmp::min(&x.var, &y.var), Variable::String(key) if key.is_version_or_string())
+        {
+            return self.and(xi, yi).is_false();
+        }
         // Perform Shannon Expansion of the higher order variable.
         match x.var.cmp(&y.var) {
             // X is higher order than Y, Y must be disjoint with every child of X.
