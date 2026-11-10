@@ -174,15 +174,42 @@ impl InternerGuard<'_> {
         edges: &[(Ranges<arcstr::ArcStr>, NodeId)],
     ) -> Option<crate::MarkerExpression> {
         use crate::MarkerOperator::{GreaterEqual, GreaterThan, LessEqual, LessThan};
-        let [(before, _), (_, _)] = edges else {
+        let [(_, left), (_, right)] = edges else {
             return None;
         };
-        let (Bound::Unbounded, Bound::Excluded(literal)) = before.bounding_range()? else {
+        let literal = [left, right].into_iter().find_map(|child| {
+            if child.is_true() || child.is_false() {
+                return None;
+            }
+            let node = self.shared.node(*child);
+            let Edges::VersionOrString { edges } = &node.children else {
+                return None;
+            };
+            if node.var != Variable::VersionString(key) {
+                return None;
+            }
+            edges
+                .iter()
+                .flat_map(|(r, _)| r.iter())
+                .flat_map(|(lo, hi)| [lo, hi])
+                .find_map(|bound| match bound {
+                    Bound::Included(super::VersionOrStringValue::Opaque(s))
+                    | Bound::Excluded(super::VersionOrStringValue::Opaque(s))
+                        if !s.is_empty() =>
+                    {
+                        Some(s.clone())
+                    }
+                    _ => None,
+                })
+        })?;
+        // Other comparisons on this field can also contribute an opaque cutoff.
+        // A parseable literal would reparse as an ordered version comparison.
+        if literal.parse::<uv_pep440::Version>().is_ok() {
             return None;
-        };
+        }
         let operator = [LessThan, LessEqual, GreaterThan, GreaterEqual]
             .into_iter()
-            .find(|&op| self.raw_order(key, op, literal.clone()) == parent)?;
+            .find(|&op| self.raw_order(key, op, &literal) == parent)?;
         Some(crate::MarkerExpression::String {
             key: key.into(),
             operator,

@@ -44408,18 +44408,30 @@ fn lock_required_environment_python_fork() -> Result<()> {
 #[cfg(feature = "test-universal")]
 #[test]
 fn lock_numeric_and_opaque_platform_version_pins() -> Result<()> {
-    lock_platform_version_pins("platform_version == '1'")
+    lock_platform_version_pins("platform_version == '1'", "platform_version == 'kernel'")
 }
 
 /// Strict ordering cannot include the opaque endpoint itself.
 #[cfg(feature = "test-universal")]
 #[test]
 fn lock_ordered_and_equal_opaque_platform_version_pins() -> Result<()> {
-    lock_platform_version_pins("platform_version > 'kernel'")
+    lock_platform_version_pins(
+        "platform_version > 'kernel'",
+        "platform_version == 'kernel'",
+    )
 }
 
 #[cfg(feature = "test-universal")]
-fn lock_platform_version_pins(first: &str) -> Result<()> {
+#[test]
+fn lock_opaque_interval_and_numeric_platform_version_pins() -> Result<()> {
+    lock_platform_version_pins(
+        "platform_version == '1'",
+        "platform_version >= 'kernel' and platform_version < 'kernelz'",
+    )
+}
+
+#[cfg(feature = "test-universal")]
+fn lock_platform_version_pins(first: &str, second: &str) -> Result<()> {
     let server = PackseServer::from_toml(indoc! {r#"
         name = "numeric-and-opaque-platform-version"
         [root]
@@ -44438,9 +44450,10 @@ fn lock_platform_version_pins(first: &str) -> Result<()> {
         name = "project"
         version = "0"
         requires-python = ">=3.12"
-        dependencies = ["a==1; {first}", "a==2; platform_version == 'kernel'"]
+        dependencies = ["a==1; {first}", "a==2; {second}"]
     "#},
-            first = first
+            first = first,
+            second = second
         ))?;
     for options in [None, Some("--locked")] {
         context
@@ -44467,10 +44480,7 @@ fn lock_platform_version_pins(first: &str) -> Result<()> {
     let output = std::str::from_utf8(&export.get_output().stdout)?;
     assert_eq!(
         output.lines().collect::<Vec<_>>(),
-        [
-            format!("a==1 ; {first}"),
-            "a==2 ; platform_version == 'kernel'".to_owned(),
-        ]
+        [format!("a==1 ; {first}"), format!("a==2 ; {second}"),]
     );
     Ok(())
 }

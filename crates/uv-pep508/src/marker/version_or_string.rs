@@ -1,4 +1,6 @@
 //! Emit PEP 508 comparisons which cover both parsed versions and opaque strings.
+pub(super) mod spelling;
+
 use std::ops::Bound;
 
 use arcstr::ArcStr;
@@ -162,6 +164,50 @@ fn opaque_range(operator: MarkerOperator, literal: &ArcStr) -> Ranges<ArcStr> {
 type Clause = Vec<Comparison>;
 type Dnf = Vec<Clause>;
 
+/// Lexical ordering on the subset of strings that parse as versions.
+pub(super) fn parsed_spellings(operator: MarkerOperator, literal: &ArcStr) -> Ranges<ArcStr> {
+    let less = matches!(
+        operator,
+        MarkerOperator::LessThan | MarkerOperator::LessEqual
+    );
+    match spelling::cut(literal) {
+        spelling::Cut::BeforeAll if less => Ranges::empty(),
+        spelling::Cut::AfterAll if !less => Ranges::empty(),
+        spelling::Cut::BeforeAll | spelling::Cut::AfterAll => Ranges::full(),
+        spelling::Cut::Before(boundary) if less => Ranges::strictly_lower_than(boundary),
+        spelling::Cut::Before(boundary) => Ranges::higher_than(boundary),
+    }
+}
+
+/// Compute the numeric projection when the lexical cuts cancel. In particular
+/// an interval entirely between two version spellings admits no version.
+fn numeric_projection(dnf: &Dnf) -> Option<Ranges<Version>> {
+    let mut groups = Vec::<(Ranges<Version>, Ranges<ArcStr>)>::new();
+    for clause in dnf {
+        let mut versions = Ranges::full();
+        let mut spellings = Ranges::full();
+        for (op, literal) in clause {
+            if let Some(numeric) = numeric_range(*op, literal) {
+                versions = versions.intersection(&numeric);
+            } else {
+                spellings = spellings.intersection(&parsed_spellings(*op, literal));
+            }
+        }
+        if !versions.is_empty() && !spellings.is_empty() {
+            if let Some((_, seen)) = groups.iter_mut().find(|(range, _)| *range == versions) {
+                *seen = seen.union(&spellings);
+            } else {
+                groups.push((versions, spellings));
+            }
+        }
+    }
+    groups
+        .into_iter()
+        .try_fold(Ranges::empty(), |result, (versions, spellings)| {
+            (spellings == Ranges::full()).then(|| result.union(&versions))
+        })
+}
+
 /// Emit the lexical projection first, then correct its numeric projection using
 /// intervals that match no opaque string. Excluding the hull of the unwanted
 /// numeric intervals bounds distribution when a marker contains many holes.
@@ -173,21 +219,14 @@ pub(super) fn comparisons(range: &Ranges<VersionOrStringValue>) -> Dnf {
     let mut dnf = lexical_clauses(&opaque);
     // Ordering against an opaque bound also consults the original spelling
     // of parsed versions. Limit those clauses to opaque inputs explicitly.
-    if dnf
-        .iter()
-        .flatten()
-        .any(|(op, value)| numeric_range(*op, value).is_none())
-    {
+    let Some(mut numeric) = numeric_projection(&dnf) else {
         let opaque_only = negate(&numeric_interval(Bound::Unbounded, Bound::Unbounded));
         let mut result = product(&dnf, &opaque_only);
         for (low, high) in versions.iter() {
             result.extend(numeric_interval(low, high));
         }
         return result;
-    }
-    let mut numeric = projection(&dnf, |operator, literal| {
-        numeric_range(operator, literal).expect("hybrid comparison has a version specifier")
-    });
+    };
     let excess = numeric.intersection(&versions.complement());
     if let Some((low, high)) = excess.bounding_range() {
         let hull = Ranges::from_range_bounds((low.cloned(), high.cloned()));
