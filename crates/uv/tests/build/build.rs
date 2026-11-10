@@ -793,12 +793,12 @@ fn build_fail() -> Result<()> {
     Building source distribution...
     Traceback (most recent call last):
       File "<string>", line 14, in <module>
-      File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 328, in get_requires_for_build_sdist
+      File "[CACHE_DIR]/builds-[VERSION]/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 328, in get_requires_for_build_sdist
         return self._get_build_requires(config_settings, requirements=[])
                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-      File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
+      File "[CACHE_DIR]/builds-[VERSION]/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
         self.run_setup()
-      File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
+      File "[CACHE_DIR]/builds-[VERSION]/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
         exec(code, locals())
       File "<string>", line 2
         from setuptools import setup
@@ -3673,7 +3673,7 @@ fn venv_included_in_sdist() -> Result<()> {
     Building source distribution...
     error: Failed to build `[TEMP_DIR]/`
       cause: Invalid tar file
-      cause: failed to unpack `[CACHE_DIR]/sdists-v10/[TMP]/project-0.1.0/.venv/bin/python`
+      cause: failed to unpack `[CACHE_DIR]/sdists-[VERSION]/[TMP]/project-0.1.0/.venv/bin/python`
       cause: symlink path `[PYTHON-3.12]` is absolute, but external symlinks are not allowed
 
     hint: The source distribution includes a virtual environment. Virtual environments must be excluded from source distributions.
@@ -3703,7 +3703,7 @@ fn venv_included_in_sdist() -> Result<()> {
     ----- stderr -----
     error: Failed to build `[TEMP_DIR]/`
       cause: Invalid tar file
-      cause: failed to unpack `[CACHE_DIR]/sdists-v10/[TMP]/project-0.1.0/.venv/bin/python`
+      cause: failed to unpack `[CACHE_DIR]/sdists-[VERSION]/[TMP]/project-0.1.0/.venv/bin/python`
       cause: symlink path `[PYTHON-3.12]` is absolute, but external symlinks are not allowed
 
     hint: The source distribution includes a virtual environment. Virtual environments must be excluded from source distributions.

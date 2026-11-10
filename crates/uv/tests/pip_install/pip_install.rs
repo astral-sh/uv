@@ -25,6 +25,7 @@ use wiremock::{
     matchers::{basic_auth, method, path},
 };
 
+use uv_cache::CacheBucket;
 use uv_extract::dirhash::{DirectoryDigest, dirhash_path};
 use uv_fs::{PortablePath, Simplified};
 use uv_install_wheel::validate_and_heal_record;
@@ -1148,29 +1149,29 @@ dependencies = ["flask==1.0.x"]
              [stderr]
              Traceback (most recent call last):
                File "<string>", line 14, in <module>
-               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
+               File "[CACHE_DIR]/builds-[VERSION]/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
                  return self._get_build_requires(config_settings, requirements=['wheel'])
                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
+               File "[CACHE_DIR]/builds-[VERSION]/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
                  self.run_setup()
-               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 487, in run_setup
+               File "[CACHE_DIR]/builds-[VERSION]/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 487, in run_setup
                  super().run_setup(setup_script=setup_script)
-               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
+               File "[CACHE_DIR]/builds-[VERSION]/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
                  exec(code, locals())
                File "<string>", line 1, in <module>
-               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/__init__.py", line 104, in setup
+               File "[CACHE_DIR]/builds-[VERSION]/[TMP]/[PYTHON-LIB]/site-packages/setuptools/__init__.py", line 104, in setup
                  return distutils.core.setup(**attrs)
                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/_distutils/core.py", line 159, in setup
+               File "[CACHE_DIR]/builds-[VERSION]/[TMP]/[PYTHON-LIB]/site-packages/setuptools/_distutils/core.py", line 159, in setup
                  dist.parse_config_files()
-               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/dist.py", line 631, in parse_config_files
+               File "[CACHE_DIR]/builds-[VERSION]/[TMP]/[PYTHON-LIB]/site-packages/setuptools/dist.py", line 631, in parse_config_files
                  pyprojecttoml.apply_configuration(self, filename, ignore_option_errors)
-               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/config/pyprojecttoml.py", line 68, in apply_configuration
+               File "[CACHE_DIR]/builds-[VERSION]/[TMP]/[PYTHON-LIB]/site-packages/setuptools/config/pyprojecttoml.py", line 68, in apply_configuration
                  config = read_configuration(filepath, True, ignore_option_errors, dist)
                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/config/pyprojecttoml.py", line 129, in read_configuration
+               File "[CACHE_DIR]/builds-[VERSION]/[TMP]/[PYTHON-LIB]/site-packages/setuptools/config/pyprojecttoml.py", line 129, in read_configuration
                  validate(subset, filepath)
-               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/config/pyprojecttoml.py", line 57, in validate
+               File "[CACHE_DIR]/builds-[VERSION]/[TMP]/[PYTHON-LIB]/site-packages/setuptools/config/pyprojecttoml.py", line 57, in validate
                  raise ValueError(f"{error}/n{summary}") from None
              ValueError: invalid pyproject.toml config: `project.dependencies[0]`.
              configuration error: `project.dependencies[0]` must be pep508
@@ -3651,7 +3652,7 @@ fn install_git_public_https_missing_branch_or_tag() {
     ----- stderr -----
     error: Failed to download and build `uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@2.0.0`
       cause: Git operation failed
-      cause: failed to clone into: [CACHE_DIR]/git-v1/db/8dab139913c4b566
+      cause: failed to clone into: [CACHE_DIR]/git-[VERSION]/db/8dab139913c4b566
       cause: failed to fetch branch or tag `2.0.0`
       cause: process didn't exit successfully: `git fetch [...]` (exit code: 128)
              --- stderr
@@ -3841,7 +3842,7 @@ fn install_git_public_https_missing_commit() {
     ----- stderr -----
     error: Failed to download and build `uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@79a935a7a1a0ad6d0bdf72dce0e16cb0a24a1b3b`
       cause: Git operation failed
-      cause: failed to clone into: [CACHE_DIR]/git-v1/db/8dab139913c4b566
+      cause: failed to clone into: [CACHE_DIR]/git-[VERSION]/db/8dab139913c4b566
       cause: failed to fetch commit `79a935a7a1a0ad6d0bdf72dce0e16cb0a24a1b3b`
       cause: process didn't exit successfully: `git fetch [...]` (exit code: 128)
              --- stderr
@@ -4044,7 +4045,7 @@ fn install_git_private_https_pat_not_authorized() {
     ----- stderr -----
     error: Failed to download and build `uv-private-pypackage @ git+https://git:****@github.com/astral-test/uv-private-pypackage`
       cause: Git operation failed
-      cause: failed to clone into: [CACHE_DIR]/git-v1/db/8401f5508e3e612d
+      cause: failed to clone into: [CACHE_DIR]/git-[VERSION]/db/8401f5508e3e612d
       cause: process didn't exit successfully: `git fetch --force --update-head-ok 'https://git:****@github.com/astral-test/uv-private-pypackage' '+HEAD:refs/remotes/origin/HEAD'` (exit status: 128)
              --- stderr
              remote: Invalid username or token. Password authentication is not supported for Git operations.
@@ -4133,7 +4134,7 @@ fn install_git_private_https_interactive() {
     ----- stderr -----
     error: Failed to download and build `uv-private-pypackage @ git+https://github.com/astral-test/uv-private-pypackage`
       cause: Git operation failed
-      cause: failed to clone into: [CACHE_DIR]/git-v1/db/8401f5508e3e612d
+      cause: failed to clone into: [CACHE_DIR]/git-[VERSION]/db/8401f5508e3e612d
       cause: process didn't exit successfully: `/usr/bin/git fetch --force --update-head-ok 'https://github.com/astral-test/uv-private-pypackage' '+HEAD:refs/remotes/origin/HEAD'` (exit status: 128)
              --- stderr
              fatal: could not read Username for 'https://github.com': terminal prompts disabled
@@ -5580,7 +5581,7 @@ fn install_git_source_respects_offline_mode() {
     ----- stderr -----
     error: Failed to download and build `uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage`
       cause: Git operation failed
-      cause: failed to clone into: [CACHE_DIR]/git-v1/db/8dab139913c4b566
+      cause: failed to clone into: [CACHE_DIR]/git-[VERSION]/db/8dab139913c4b566
       cause: Remote Git fetches are not allowed because network connectivity is disabled (i.e., with `--offline`)
     "
     );
@@ -12369,14 +12370,14 @@ fn resolve_derivation_chain() -> Result<()> {
              [stderr]
              Traceback (most recent call last):
                File "<string>", line 14, in <module>
-               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
+               File "[CACHE_DIR]/builds-[VERSION]/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
                  return self._get_build_requires(config_settings, requirements=['wheel'])
                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
+               File "[CACHE_DIR]/builds-[VERSION]/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
                  self.run_setup()
-               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 487, in run_setup
+               File "[CACHE_DIR]/builds-[VERSION]/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 487, in run_setup
                  super().run_setup(setup_script=setup_script)
-               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
+               File "[CACHE_DIR]/builds-[VERSION]/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
                  exec(code, locals())
                File "<string>", line 5, in <module>
                File "[CACHE_DIR]/[TMP]/src/ez_setup/__init__.py", line 170
@@ -19123,21 +19124,18 @@ fn handle_record_mismatches() -> Result<()> {
     );
 
     context
-        .cache_dir
-        .child("archive-v0")
+        .cache_bucket(CacheBucket::Archive)
         .child(unhealed_digest.as_str())
         .assert(predicate::path::missing());
     context
-        .cache_dir
-        .child("archive-v0")
+        .cache_bucket(CacheBucket::Archive)
         .child(healed_digest.as_str())
         .assert(predicate::path::exists());
 
     // Installation must not mutate the healed RECORD retained in the archive.
     let healed_record = extracted.join("foo-0.1.0.dist-info/RECORD");
     let cached_record = context
-        .cache_dir
-        .join("archive-v0")
+        .cache_bucket(CacheBucket::Archive)
         .join(healed_digest.as_str())
         .join("foo-0.1.0.dist-info/RECORD");
     assert_eq!(
