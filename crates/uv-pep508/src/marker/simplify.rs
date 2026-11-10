@@ -37,6 +37,16 @@ fn collect_cover(
             }
         }
         Cover::Guard(guard) => collect_guard(Guard::Node(*guard), &Cover::True, dnf, path),
+        Cover::Projected(arms) => {
+            for (clauses, suffix) in arms.iter() {
+                for clause in clauses {
+                    let current = path.len();
+                    path.extend_from_slice(clause);
+                    collect_cover(suffix, dnf, path);
+                    path.truncate(current);
+                }
+            }
+        }
         Cover::Branches(branches) => {
             for (guard, suffix) in branches.iter() {
                 collect_guard(*guard, suffix, dnf, path);
@@ -104,27 +114,40 @@ fn collect_guard(
         }
         MarkerTreeKind::VersionString(marker) => {
             let range = guard_range(marker.edges(), child);
-            for (lower, upper) in range.iter() {
+            let versions = range.intersection(super::version_or_string::parsed_values());
+            let opaque = if range
+                .bounding_range()
+                .is_some_and(|(low, _)| low == std::ops::Bound::Unbounded)
+            {
+                Ranges::full()
+            } else {
+                Ranges::empty()
+            };
+            for clause in super::version_or_string::comparisons(&versions, &opaque) {
                 let current = path.len();
-                let lower = lower.map(|version| ArcStr::from(version.to_string()));
-                let upper = upper.map(|version| ArcStr::from(version.to_string()));
-                for (operator, value) in
-                    MarkerOperator::from_bounds((lower.as_ref(), upper.as_ref()))
-                {
-                    path.push(MarkerExpression::String {
-                        key: marker.key().into(),
-                        operator,
-                        value,
-                    });
-                }
+                path.extend(
+                    clause
+                        .into_iter()
+                        .map(|(operator, value)| MarkerExpression::String {
+                            key: marker.key().into(),
+                            operator,
+                            value,
+                        }),
+                );
                 collect_cover(suffix, dnf, path);
                 path.truncate(current);
             }
         }
         MarkerTreeKind::String(marker) => {
             let range = guard_range(marker.children(), child);
+            let allow_equality = |value: &ArcStr| {
+                !marker.key().is_version_or_string()
+                    || value.parse::<uv_pep440::VersionPattern>().is_err()
+            };
             // Detect whether the range can be simplified as an inequality.
-            if let Some(excluded) = range_inequality(&range) {
+            if let Some(excluded) = range_inequality(&range)
+                && excluded.iter().all(|value| allow_equality(value))
+            {
                 let current = path.len();
                 for value in excluded {
                     path.push(MarkerExpression::String {
@@ -141,7 +164,7 @@ fn collect_guard(
 
             for bounds in range.iter() {
                 let current = path.len();
-                for (operator, value) in MarkerOperator::from_bounds(bounds) {
+                for (operator, value) in MarkerOperator::from_bounds(bounds, allow_equality) {
                     path.push(MarkerExpression::String {
                         key: marker.key().into(),
                         operator,

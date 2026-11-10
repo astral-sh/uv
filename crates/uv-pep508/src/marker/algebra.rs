@@ -129,7 +129,7 @@ impl InternerShared {
             match &node.var {
                 Variable::Extra(_) => return true,
                 Variable::String(_)
-                | Variable::VersionString(_)
+                | Variable::Platform(_, _)
                 | Variable::Version(_)
                 | Variable::In { .. }
                 | Variable::Contains { .. }
@@ -164,8 +164,120 @@ pub(crate) struct InternerGuard<'a> {
 }
 
 impl InternerGuard<'_> {
+    /// Fill spelling edges unreachable from this parsed interval with the nearest
+    /// preceding reachable child, or the first reachable child at the left boundary.
+    fn restrict_spelling(
+        &mut self,
+        key: CanonicalMarkerValueString,
+        numbers: &Ranges<Version>,
+        target: NodeId,
+    ) -> NodeId {
+        if target.is_true() || target.is_false() {
+            return target;
+        }
+        let spelling = self.shared.node(target);
+        if spelling.var != Variable::Platform(key, Projection::Spelling) {
+            return target;
+        }
+        let Edges::String { edges } = &spelling.children else {
+            unreachable!()
+        };
+        let possible =
+            |range: &Ranges<ArcStr>| super::version_or_string::may_share_spelling(numbers, range);
+        if edges.iter().all(|(range, _)| possible(range)) {
+            return target;
+        }
+        let Some((_, first)) = edges.iter().find(|(range, _)| possible(range)) else {
+            return NodeId::FALSE;
+        };
+        let mut previous = *first;
+        let mut kept = SmallVec::new();
+        for (range, child) in edges {
+            if possible(range) {
+                previous = *child;
+            }
+            if let Some((last, same)) = kept.last_mut()
+                && *same == previous
+                && can_conjoin(last, range)
+            {
+                *last = last.union(range);
+            } else {
+                kept.push((range.clone(), previous));
+            }
+        }
+        self.create_node(spelling.var.clone(), Edges::String { edges: kept })
+            .negate(target)
+    }
+
     /// Creates a decision node with the given variable and children.
     fn create_node(&mut self, var: Variable, mut children: EdgeBuilder) -> NodeId {
+        if let Variable::Platform(_, Projection::Spelling) = &var
+            && let Edges::String { edges } = &mut children
+            && !edges
+                .first()
+                .expect("complete spelling partition")
+                .0
+                .contains(&ArcStr::new())
+        {
+            // The empty string is the first spelling. Complete the artificial interval
+            // before it with the same child, including after a solver restriction.
+            let strings = Ranges::higher_than(ArcStr::new());
+            let before = strings.complement();
+            edges.retain_mut(|(range, _)| {
+                *range = if range.contains(&ArcStr::new()) {
+                    range.union(&before)
+                } else {
+                    range.intersection(&strings)
+                };
+                !range.is_empty()
+            });
+        }
+        if let Variable::Platform(key, Projection::Version) = &var
+            && let Edges::Version { edges } = &mut children
+        {
+            // Prefer the spelling decision of the missing edge when it also describes all
+            // reachable spellings of a parsed interval. Its completion outside that interval
+            // then has a stable, public spelling when the solver prints a fork.
+            let fallback = edges.first().map(|(_, target)| *target).filter(|target| {
+                if target.is_true() || target.is_false() {
+                    return false;
+                }
+                let spelling = self.shared.node(*target);
+                if spelling.var != Variable::Platform(*key, Projection::Spelling) {
+                    return false;
+                }
+                let Edges::String { edges } = &spelling.children else {
+                    unreachable!()
+                };
+                edges
+                    .iter()
+                    .flat_map(|(range, _)| range.iter())
+                    .all(|(low, high)| {
+                        [low, high].into_iter().all(|bound| match bound {
+                            Bound::Unbounded => true,
+                            Bound::Included(value) | Bound::Excluded(value) => {
+                                value.parse::<Version>().is_err()
+                            }
+                        })
+                    })
+            });
+            let mut simplified = SmallVec::new();
+            for (numbers, target) in edges.iter() {
+                let target = self.restrict_spelling(*key, numbers, *target);
+                let target = fallback
+                    .filter(|candidate| self.restrict_spelling(*key, numbers, *candidate) == target)
+                    .unwrap_or(target);
+                if let Some((previous, child)) = simplified.last_mut()
+                    && *child == target
+                    && can_conjoin(previous, numbers)
+                {
+                    *previous = previous.union(numbers);
+                } else {
+                    simplified.push((numbers.clone(), target));
+                }
+            }
+            *edges = simplified;
+        }
         let mut first = children.nodes().next().unwrap();
 
         // With a complemented edge representation, there are two ways to represent the same node:
@@ -211,6 +323,58 @@ impl InternerGuard<'_> {
         };
 
         if flipped { id.not() } else { id }
+    }
+
+    /// Lower a public comparison onto the optional version and the original spelling.
+    fn projected_comparison(
+        &mut self,
+        key: CanonicalMarkerValueString,
+        operator: MarkerOperator,
+        value: ArcStr,
+    ) -> NodeId {
+        use super::version_or_string::{numeric_range, opaque_range, parsed_values};
+
+        let versions = numeric_range(operator, &value);
+        if versions.is_none() && operator == MarkerOperator::TildeEqual {
+            let contained = self.create_node(
+                Variable::In {
+                    key,
+                    value: value.clone(),
+                },
+                Edges::from_bool(true),
+            );
+            let contains =
+                self.create_node(Variable::Contains { key, value }, Edges::from_bool(true));
+            return self.and(contained, contains);
+        }
+        let raw = self.create_node(
+            Variable::Platform(key, Projection::Spelling),
+            Edges::String {
+                edges: Edges::from_range(&opaque_range(operator, &value)),
+            },
+        );
+        let Some(versions) = versions else {
+            return raw;
+        };
+        if value.parse::<VersionPattern>().is_err() {
+            return raw;
+        }
+        let edges = Edges::from_range(&versions.intersection(parsed_values()));
+        let absent = parsed_values().complement();
+        // Assemble the three possible outcomes before interning the numeric decision.
+        // The opaque child retains the original literal, including its release padding.
+        let numeric = self.create_node(
+            Variable::Platform(key, Projection::Version),
+            Edges::Version { edges },
+        );
+        let missing = self.create_node(
+            Variable::Platform(key, Projection::Version),
+            Edges::Version {
+                edges: Edges::from_range(&absent),
+            },
+        );
+        let fallback = self.and(missing, raw);
+        self.or(numeric, fallback)
     }
 
     /// Returns a decision node for a single marker expression.
@@ -368,31 +532,13 @@ impl InternerGuard<'_> {
                     ),
                     _ => (key.into(), value),
                 };
-                let string = self.create_node(
-                    Variable::String(key),
-                    Edges::from_string(key, operator, value.clone()),
-                );
-                // Darwin kernel releases are dotted versions. Other platforms can include
-                // arbitrary text in `platform_release`, so retain string comparisons there.
-                if key == CanonicalMarkerValueString::PlatformRelease
-                    && let Some(operator) = operator.to_pep440_operator()
-                    && let Ok(pattern) = value.parse::<VersionPattern>()
-                    && let Ok(specifier) = VersionSpecifier::from_pattern(operator, pattern)
-                {
-                    let version = self.create_node(
-                        Variable::VersionString(key),
-                        Edges::from_specifier(specifier),
-                    );
-                    let darwin = self.expression(MarkerExpression::String {
-                        key: MarkerValueString::SysPlatform,
-                        operator: MarkerOperator::Equal,
-                        value: arcstr::literal!("darwin"),
-                    });
-                    let version = self.and(darwin, version);
-                    let string = self.and(darwin.not(), string);
-                    return self.or(version, string);
+                if key.is_version_or_string() {
+                    return self.projected_comparison(key, operator, value);
                 }
-                return string;
+                return self.create_node(
+                    Variable::String(key),
+                    Edges::from_string(key, operator, value),
+                );
             }
             MarkerExpression::List { pair, operator } => (
                 Variable::List(pair),
@@ -528,6 +674,11 @@ impl InternerGuard<'_> {
         // variables are given higher priority in the tree. In other words, if they're present, they
         // _must_ be at the top; and if they're not at the top, we know they aren't present in any
         // children.
+        if let (Variable::Platform(left, _), Variable::Platform(right, _)) = (&x.var, &y.var)
+            && left == right
+        {
+            return self.and(xi, yi).is_false();
+        }
         if x.var.is_conflicting_variable() && y.var.is_conflicting_variable() {
             return self.and(xi, yi).is_false();
         }
@@ -577,6 +728,11 @@ impl InternerGuard<'_> {
         let (x, y) = (self.shared.node(xi), self.shared.node(yi));
 
         // Perform Shannon Expansion of the higher order variable.
+        if let (Variable::Platform(left, _), Variable::Platform(right, _)) = (&x.var, &y.var)
+            && left == right
+        {
+            return self.and(xi, yi).is_false();
+        }
         match x.var.cmp(&y.var) {
             // X is higher order than Y, Y must be disjoint with every child of X.
             Ordering::Less => x
@@ -699,7 +855,29 @@ impl InternerGuard<'_> {
                 // Split both trees into matching ranges. Replace any ranges that are unreachable
                 // under the assumption with the first reachable child, simplifying them out of the
                 // resulting marker.
+                // The missing edge sorts before every number in the version MDD. Choose a
+                // reachable parsed release first when filling gaps between wheel baselines.
                 let mut fallback = None;
+                if let Variable::Platform(_, Projection::Version) = &value_node.var
+                    && let Edges::Version { edges: values } = &value_node.children
+                    && let Edges::Version { edges: assumptions } = &assumption_node.children
+                {
+                    'ranges: for (numbers, target) in values {
+                        let numbers =
+                            numbers.intersection(super::version_or_string::parsed_values());
+                        for (limits, allowed) in assumptions {
+                            let allowed = allowed.negate(assumption);
+                            if !allowed.is_false() && !numbers.is_disjoint(limits) {
+                                fallback = Some(self.restrict_cached(
+                                    target.negate(value),
+                                    allowed,
+                                    cache,
+                                ));
+                                break 'ranges;
+                            }
+                        }
+                    }
+                }
                 value_node.children.apply(
                     value,
                     &assumption_node.children,
@@ -724,6 +902,20 @@ impl InternerGuard<'_> {
                     |value, assumption| {
                         if assumption.is_false() {
                             fallback
+                        } else if let Variable::Platform(key, Projection::Version) = value_node.var
+                            && !assumption.is_true()
+                            && let spelling = self.shared.node(assumption)
+                            && spelling.var == Variable::Platform(key, Projection::Spelling)
+                            && spelling
+                                .children
+                                .nodes()
+                                .all(|n| n.is_true() || n.is_false())
+                        {
+                            // Fill the unreachable spelling ranges with the same fallback
+                            // used by the parsed projection of this field.
+                            let required = self.and(value, assumption);
+                            let remainder = self.and(fallback, assumption.not());
+                            self.or(required, remainder)
                         } else {
                             self.restrict_cached(value, assumption, cache)
                         }
@@ -1379,8 +1571,6 @@ impl InternerGuard<'_> {
 pub(crate) enum Variable {
     /// A string marker, such as `os_name`.
     String(CanonicalMarkerValueString),
-    /// A string-valued marker interpreted as a version within a platform-specific scope.
-    VersionString(CanonicalMarkerValueString),
     /// A version marker, such as `python_version`.
     ///
     /// This is the highest order variable as it typically contains the most complex
@@ -1409,6 +1599,16 @@ pub(crate) enum Variable {
     /// We keep extras and groups at the leaves of the tree, so when simplifying extras we can
     /// trivially remove the leaves without having to reconstruct the entire tree.
     List(CanonicalMarkerListPair),
+    /// The parsed version and the original spelling of a single environment value.
+    Platform(CanonicalMarkerValueString, Projection),
+}
+
+/// The version decision precedes the spelling decision for the same field.
+/// Its least edge also covers an environment value that does not parse.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(crate) enum Projection {
+    Version,
+    Spelling,
 }
 
 impl Variable {

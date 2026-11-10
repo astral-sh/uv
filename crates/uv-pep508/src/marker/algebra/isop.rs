@@ -16,7 +16,8 @@ use indexmap::map::Entry;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use version_ranges::Ranges;
 
-use super::{Edges, InternerGuard, NodeId, SmallVec};
+use super::{Edges, InternerGuard, NodeId, Projection, SmallVec, Variable};
+use crate::{CanonicalMarkerValueString, MarkerExpression};
 
 /// A shared cover whose paths are expanded only when producing the final DNF.
 #[derive(Clone)]
@@ -24,6 +25,7 @@ pub(crate) enum Cover {
     False,
     True,
     Guard(NodeId),
+    Projected(Rc<[(Vec<Vec<MarkerExpression>>, Self)]>),
     Branches(Rc<[(Guard, Self)]>),
 }
 
@@ -61,6 +63,23 @@ impl InternerGuard<'_> {
         );
         if let Some(result) = cache.get(&(lower, upper)) {
             return result.clone();
+        }
+        if lower != upper
+            && matches!(
+                self.shared.node(upper).var,
+                Variable::Platform(_, Projection::Version)
+            )
+        {
+            // The upper bound can exclude spellings only in a particular parsed interval.
+            // An independent spelling cofactor would lose that assumption. The lower bound
+            // itself is a valid cover of the interval.
+            return self.isop_cached(lower, lower, cache);
+        }
+        if let Variable::Platform(key, Projection::Version) = self.shared.node(lower).var {
+            let cover = self.projected_cover(lower, key, cache);
+            let result = (lower, cover);
+            cache.insert((lower, upper), result.clone());
+            return result;
         }
         // A single decision is already a cover; its range renderer merges equal branches.
         if lower == upper
@@ -123,6 +142,112 @@ impl InternerGuard<'_> {
         let result = (function, Cover::Branches(branches.into_values().collect()));
         cache.insert((lower, upper), result.clone());
         result
+    }
+
+    /// Combine the numeric edges and the missing edge's spelling tests by their common suffix.
+    fn projected_cover(
+        &mut self,
+        parent: NodeId,
+        key: CanonicalMarkerValueString,
+        cache: &mut FxHashMap<(NodeId, NodeId), (NodeId, Cover)>,
+    ) -> Cover {
+        use crate::marker::version_or_string::{comparisons, parsed_values};
+        let Edges::Version { edges } = &self.shared.node(parent).children else {
+            unreachable!("version projection has version edges")
+        };
+        let mut branches = IndexMap::<_, (Ranges<_>, Ranges<_>), FxBuildHasher>::default();
+        let fallback = edges
+            .first()
+            .expect("version edges partition the domain")
+            .1
+            .negate(parent);
+        if !fallback.is_true()
+            && !fallback.is_false()
+            && self.shared.node(fallback).var == Variable::Platform(key, Projection::Spelling)
+            && edges.iter().any(|(range, child)| {
+                child.negate(parent) == fallback && !range.is_disjoint(parsed_values())
+            })
+            && edges.iter().all(|(_, child)| {
+                let child = child.negate(parent);
+                child == fallback || child.is_true() || child.is_false()
+            })
+        {
+            // A spelling test shared with a parsed interval can be emitted directly.
+            // True intervals may also take that arm, while false intervals must exclude it.
+            let mut included = Ranges::empty();
+            let mut excluded = Ranges::empty();
+            for (range, target) in edges {
+                let target = target.negate(parent);
+                if target.is_true() {
+                    included = included.union(range);
+                }
+                if target.is_false() {
+                    excluded = excluded.union(range);
+                }
+            }
+            if !included.is_empty() {
+                branches.insert(NodeId::TRUE, (included, Ranges::empty()));
+            }
+            branches.insert(fallback, (excluded.complement(), Ranges::full()));
+        } else {
+            for (range, child) in edges {
+                let child = child.negate(parent);
+                let versions = range.intersection(parsed_values());
+                if !versions.is_empty() && !child.is_false() {
+                    let (numbers, _) = branches
+                        .entry(child)
+                        .or_insert_with(|| (Ranges::empty(), Ranges::empty()));
+                    *numbers = numbers.union(&versions);
+                }
+                if range
+                    .bounding_range()
+                    .is_none_or(|(low, _)| low != Bound::Unbounded)
+                    || child.is_false()
+                {
+                    continue;
+                }
+                if !child.is_true()
+                    && let spelling = self.shared.node(child)
+                    && spelling.var == Variable::Platform(key, Projection::Spelling)
+                    && let Edges::String { edges } = &spelling.children
+                {
+                    for (range, target) in edges {
+                        let target = target.negate(child);
+                        if !target.is_false() {
+                            let (_, strings) = branches
+                                .entry(target)
+                                .or_insert_with(|| (Ranges::empty(), Ranges::empty()));
+                            *strings = strings.union(range);
+                        }
+                    }
+                } else {
+                    branches
+                        .entry(child)
+                        .or_insert_with(|| (Ranges::empty(), Ranges::empty()))
+                        .1 = Ranges::full();
+                }
+            }
+        }
+        let arms = branches
+            .into_iter()
+            .map(|(child, (numbers, strings))| {
+                let dnf = comparisons(&numbers, &strings)
+                    .into_iter()
+                    .map(|clause| {
+                        clause
+                            .into_iter()
+                            .map(|(operator, value)| MarkerExpression::String {
+                                key: key.into(),
+                                operator,
+                                value,
+                            })
+                            .collect()
+                    })
+                    .collect();
+                (dnf, self.isop_cached(child, child, cache).1)
+            })
+            .collect();
+        Cover::Projected(arms)
     }
 
     /// Materialize a borrowed guard only when algebra needs its function.

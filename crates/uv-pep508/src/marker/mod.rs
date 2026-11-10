@@ -15,6 +15,7 @@ mod lowering;
 pub(crate) mod parse;
 mod simplify;
 mod tree;
+mod version_or_string;
 
 pub use environment::{MarkerEnvironment, MarkerEnvironmentBuilder};
 pub use lowering::{
