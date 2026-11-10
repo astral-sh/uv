@@ -102,6 +102,7 @@ impl<'a> RequirementExpander<'a> {
         };
         if !dependencies
             .iter()
+            .chain(self.modifiers.scoped_overrides_for(name, version))
             .any(|requirement| name == &requirement.name && !requirement.extras.is_empty())
         {
             // If the project doesn't define any recursive dependencies, take the fast path.
