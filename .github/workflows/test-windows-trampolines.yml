@@ -83,7 +83,9 @@ jobs:
 
       - name: "Install Rust toolchain"
         working-directory: ${{ env.UV_WORKSPACE }}/crates/uv-trampoline
-        run: rustup toolchain install --profile minimal --component clippy,rustfmt,rust-src
+        run: |
+          rustup target add x86_64-pc-windows-msvc
+          rustup component add rust-src --target x86_64-pc-windows-msvc
 
       - uses: $/.github/actions/setup-uv-toolchain
         with:
