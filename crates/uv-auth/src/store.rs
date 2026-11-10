@@ -1,6 +1,12 @@
+#[cfg(unix)]
+use std::fs::Permissions;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
 use fs_err as fs;
+#[cfg(unix)]
+use fs_err::os::unix::fs::OpenOptionsExt;
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -262,10 +268,29 @@ impl TextCredentialStore {
     /// Acquire a lock on the credentials file at the given path.
     async fn lock(path: &Path) -> Result<LockedFile, TomlCredentialError> {
         if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)?;
+            let mut builder = fs::tokio::DirBuilder::new();
+            #[cfg(unix)]
+            {
+                // Only the credentials directory needs owner-only permissions.
+                if let Some(base) = parent.parent() {
+                    fs::tokio::create_dir_all(base).await?;
+                }
+                builder.mode(0o700);
+            }
+            builder.recursive(true).create(parent).await?;
         }
-        let lock = path.with_added_extension("lock");
-        Ok(LockedFile::acquire(lock, LockedFileMode::Exclusive, "credentials store").await?)
+        let mut options = fs::OpenOptions::new();
+        #[cfg(unix)]
+        options.mode(0o600);
+        let file = options
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(path.with_added_extension("lock"))?;
+        #[cfg(unix)]
+        file.set_permissions(Permissions::from_mode(0o600))?;
+        Ok(LockedFile::lock_file(file, LockedFileMode::Exclusive, "credentials store").await?)
     }
 
     /// Read credentials from a file.
@@ -308,7 +333,7 @@ impl TextCredentialStore {
     ///
     /// Requires a [`LockedFile`] from [`TextCredentialStore::lock`] or
     /// [`TextCredentialStore::read`] to ensure exclusive access.
-    pub fn write<P: AsRef<Path>>(
+    pub async fn write<P: AsRef<Path>>(
         self,
         path: P,
         _lock: LockedFile,
@@ -324,14 +349,23 @@ impl TextCredentialStore {
 
         let toml_creds = TomlCredentials { credentials };
         let content = toml::to_string_pretty(&toml_creds)?;
-        fs::create_dir_all(
-            path.as_ref()
+        let path = path.as_ref();
+        #[cfg(unix)]
+        {
+            let parent = path
                 .parent()
-                .ok_or(TomlCredentialError::CredentialsDirError)?,
-        )?;
-
-        // TODO(zanieb): We should use an atomic write here
-        fs::write(path, content)?;
+                .ok_or(TomlCredentialError::CredentialsDirError)?;
+            // Only tighten the directory uv manages. UV_CREDENTIALS_DIR can point anywhere.
+            if parent == StateStore::from_settings(None)?.bucket(StateBucket::Credentials)
+                && fs::symlink_metadata(parent)?.is_dir()
+            {
+                fs::set_permissions(parent, Permissions::from_mode(0o700))?;
+            }
+            let permissions = Some(Permissions::from_mode(0o600));
+            uv_fs::write_atomic_with_permissions(path, content.as_bytes(), permissions).await?;
+        }
+        #[cfg(not(unix))]
+        fs::tokio::write(path, content).await?;
         Ok(())
     }
 
@@ -518,8 +552,9 @@ password = "pass2"
         store
             .write(
                 temp_output.path(),
-                TextCredentialStore::lock(temp_file.path()).await.unwrap(),
+                TextCredentialStore::lock(temp_output.path()).await.unwrap(),
             )
+            .await
             .unwrap();
 
         let content = fs::read_to_string(temp_output.path()).unwrap();

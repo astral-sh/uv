@@ -941,7 +941,7 @@ fn login_native_auth_url() {
 }
 
 #[tokio::test]
-async fn login_text_store() {
+async fn login_text_store() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&[]);
     let proxy = crate::pypi_proxy::start().await;
 
@@ -957,6 +957,21 @@ async fn login_text_store() {
     Stored credentials for public@http://[LOCALHOST]/basic-auth
     "
     );
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = context.home_dir.join("data/uv/credentials");
+        for (path, mode) in [
+            (dir.clone(), 0o700),
+            (dir.join("credentials.toml"), 0o600),
+            (dir.join("credentials.toml.lock"), 0o600),
+        ] {
+            let actual = fs_err::metadata(&path)?.permissions().mode() & 0o777;
+            assert_eq!(actual, mode, "{path:?}");
+        }
+    }
 
     // Login with a token
     uv_snapshot!(context.filters(), context.auth_login()
@@ -1058,6 +1073,8 @@ async fn login_text_store() {
     ----- stderr -----
     Stored credentials for testuser@http://[::1]:1324/
     ");
+
+    Ok(())
 }
 
 #[test]

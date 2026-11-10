@@ -68,6 +68,7 @@ pub(crate) async fn logout(
             }
             store
                 .write(TextCredentialStore::default_file()?, _lock)
+                .await
                 .with_context(|| "Failed to persist changes to credentials after removal")?;
         }
     }

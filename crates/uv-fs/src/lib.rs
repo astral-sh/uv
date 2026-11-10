@@ -508,8 +508,18 @@ pub async fn write_atomic_preserve(
     path: impl AsRef<Path>,
     data: impl AsRef<[u8]>,
 ) -> std::io::Result<()> {
-    let mut path = path.as_ref().to_path_buf();
-    let permissions = loop {
+    write_atomic_with_permissions(path.as_ref(), data.as_ref(), None).await
+}
+
+/// Like [`write_atomic_preserve`], with optional permissions that override the target's mode.
+#[cfg(feature = "tokio")]
+pub async fn write_atomic_with_permissions(
+    path: &Path,
+    data: &[u8],
+    permissions: Option<std::fs::Permissions>,
+) -> io::Result<()> {
+    let mut path = path.to_path_buf();
+    let existing_permissions = loop {
         match fs_err::tokio::symlink_metadata(&path).await {
             Ok(metadata) if metadata.file_type().is_symlink() => {
                 path = match fs_err::tokio::canonicalize(&path).await {
@@ -540,13 +550,14 @@ pub async fn write_atomic_preserve(
         }
     };
     let parent = path.parent().expect("Write path must have a parent");
+    let permissions = permissions.or(existing_permissions);
     let temp_file = tempfile_in_with_permissions(parent, permissions.clone())?;
     // Write through the open handle: the umask may prevent reopening the temporary file.
     let mut file = fs_err::tokio::File::from_std(fs_err::File::from_parts(
         temp_file.as_file().try_clone()?,
         temp_file.as_ref(),
     ));
-    file.write_all(data.as_ref()).await?;
+    file.write_all(data).await?;
     file.flush().await?;
     if let Some(permissions) = permissions {
         temp_file.as_file().set_permissions(permissions)?;
