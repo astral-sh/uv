@@ -44431,7 +44431,72 @@ fn lock_opaque_interval_and_numeric_platform_version_pins() -> Result<()> {
 }
 
 #[cfg(feature = "test-universal")]
+#[test]
+fn lock_joint_spelling_and_numeric_platform_version_pins() -> Result<()> {
+    let raw = "platform_version > '2.q' and platform_version < '2.s'";
+    let output = export_platform_version_pins("platform_version == '1'", raw)?;
+    let first = "platform_version == '1'".parse::<uv_pep508::MarkerTree>()?;
+    let second = raw.parse::<uv_pep508::MarkerTree>()?;
+    let lines = output.lines().collect::<Vec<_>>();
+    assert_eq!(lines.len(), 2);
+    let one = lines[0]
+        .strip_prefix("a==1 ; ")
+        .unwrap()
+        .parse::<uv_pep508::MarkerTree>()?;
+    let two = lines[1]
+        .strip_prefix("a==2 ; ")
+        .unwrap()
+        .parse::<uv_pep508::MarkerTree>()?;
+    let env = uv_pep508::MarkerEnvironment::try_from(uv_pep508::MarkerEnvironmentBuilder {
+        implementation_name: "cpython",
+        implementation_version: "3.12",
+        os_name: "posix",
+        platform_machine: "arm64",
+        platform_python_implementation: "CPython",
+        platform_release: "",
+        platform_system: "Darwin",
+        platform_version: "",
+        python_full_version: "3.12",
+        python_version: "3.12",
+        sys_platform: "darwin",
+    })?;
+    for value in [
+        "1",
+        "V01.0",
+        "2.rc1",
+        "2.r",
+        "2.raw-build",
+        "2.q",
+        "2.s",
+        "3",
+    ] {
+        let env = env.clone().with_platform_version(value);
+        assert_eq!(
+            one.evaluate(&env, &[]),
+            first.evaluate(&env, &[]),
+            "{value}"
+        );
+        assert_eq!(
+            two.evaluate(&env, &[]),
+            second.evaluate(&env, &[]),
+            "{value}"
+        );
+    }
+    Ok(())
+}
+
+#[cfg(feature = "test-universal")]
 fn lock_platform_version_pins(first: &str, second: &str) -> Result<()> {
+    let output = export_platform_version_pins(first, second)?;
+    assert_eq!(
+        output.lines().collect::<Vec<_>>(),
+        [format!("a==1 ; {first}"), format!("a==2 ; {second}")]
+    );
+    Ok(())
+}
+
+#[cfg(feature = "test-universal")]
+fn export_platform_version_pins(first: &str, second: &str) -> Result<String> {
     let server = PackseServer::from_toml(indoc! {r#"
         name = "numeric-and-opaque-platform-version"
         [root]
@@ -44477,12 +44542,7 @@ fn lock_platform_version_pins(first: &str, second: &str) -> Result<()> {
         ])
         .assert()
         .success();
-    let output = std::str::from_utf8(&export.get_output().stdout)?;
-    assert_eq!(
-        output.lines().collect::<Vec<_>>(),
-        [format!("a==1 ; {first}"), format!("a==2 ; {second}"),]
-    );
-    Ok(())
+    Ok(std::str::from_utf8(&export.get_output().stdout)?.to_owned())
 }
 
 /// A required Darwin release must have a compatible wheel, without removing newer wheels.
