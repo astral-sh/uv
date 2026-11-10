@@ -79,9 +79,12 @@ impl CanonicalUrl {
     }
 }
 
+/// The Git URL form used to select path normalization rules.
 #[derive(Clone, Copy)]
 enum GitUrlKind {
+    /// A full Git source URL whose path may include an `@ref` suffix.
     Source,
+    /// A Git transport URL with the revision parsed out. Any `@` in its path is literal.
     Upstream,
 }
 

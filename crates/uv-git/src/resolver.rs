@@ -327,7 +327,7 @@ pub struct ResolvedRepositoryReference {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct RepositoryReference {
-    /// The canonical identity of the Git repository.
+    /// The normalized Git repository URL used as the repository's identity.
     pub url: GitUpstreamUrl,
     /// The reference to the commit to use, which could be a branch, tag, or revision.
     pub reference: GitReference,
