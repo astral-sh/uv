@@ -271,6 +271,13 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
                 }
                 // '...' == <env key>
                 MarkerValue::MarkerEnvString(key) => {
+                    if operator == MarkerOperator::TildeEqual {
+                        reporter.report(
+                            MarkerWarningKind::LexicographicComparison,
+                            "A compatible-release comparison with the marker on the right is unsupported and will be ignored".to_string(),
+                        );
+                        return Ok(None);
+                    }
                     parse_string_expr(key, operator.invert(), l_string, reporter)
                 }
                 // `"test" in extras` or `"dev" in dependency_groups`

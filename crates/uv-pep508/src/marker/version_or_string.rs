@@ -28,11 +28,16 @@ fn numeric_range(operator: MarkerOperator, literal: &ArcStr) -> Option<Ranges<Ve
         | MarkerOperator::LessThan
         | MarkerOperator::LessEqual => operator.ordered_range(literal.parse::<Version>().ok()?),
         MarkerOperator::Equal | MarkerOperator::NotEqual | MarkerOperator::TildeEqual => {
-            let specifier = VersionSpecifier::from_pattern(
-                operator.to_pep440_operator()?,
-                literal.parse().ok()?,
-            )
-            .ok()?;
+            let Ok(pattern) = literal.parse() else {
+                // No parsed version can equal an opaque literal.
+                return Some(if operator == MarkerOperator::NotEqual {
+                    Ranges::full()
+                } else {
+                    Ranges::empty()
+                });
+            };
+            let specifier =
+                VersionSpecifier::from_pattern(operator.to_pep440_operator()?, pattern).ok()?;
             Ranges::from(specifier)
         }
         _ => return None,
@@ -43,10 +48,10 @@ fn numeric_range(operator: MarkerOperator, literal: &ArcStr) -> Option<Ranges<Ve
 /// Opaque values sort after all versions and begin at the empty string.
 const FIRST_OPAQUE: VersionOrStringValue = VersionOrStringValue::Opaque(arcstr::literal!(""));
 
-fn map_bounds<T, U: Ord>(ranges: Ranges<T>, map: impl Fn(Bound<T>) -> Bound<U>) -> Ranges<U> {
+fn map_bounds<T, U: Ord>(ranges: Ranges<T>, map: impl Fn(Bound<T>, bool) -> Bound<U>) -> Ranges<U> {
     ranges
         .into_iter()
-        .map(|(low, high)| (map(low), map(high)))
+        .map(|(low, high)| (map(low, true), map(high, false)))
         .collect()
 }
 
@@ -83,14 +88,16 @@ fn split(range: &Ranges<VersionOrStringValue>) -> (Ranges<Version>, Ranges<ArcSt
     let opaque = Ranges::higher_than(FIRST_OPAQUE);
     let versions = map_bounds(
         range.intersection(&opaque.complement()),
-        |bound| match bound {
+        |bound, _| match bound {
             Bound::Included(VersionOrStringValue::Version(v)) => Bound::Included(v),
             Bound::Excluded(VersionOrStringValue::Version(v)) => Bound::Excluded(v),
             _ => Bound::Unbounded,
         },
     );
-    let strings = map_bounds(range.intersection(&opaque), |bound| match bound {
-        Bound::Included(VersionOrStringValue::Opaque(s)) if s.is_empty() => Bound::Unbounded,
+    let strings = map_bounds(range.intersection(&opaque), |bound, lower| match bound {
+        Bound::Included(VersionOrStringValue::Opaque(s)) if lower && s.is_empty() => {
+            Bound::Unbounded
+        }
         other => other.map(|v| {
             let VersionOrStringValue::Opaque(s) = v else {
                 unreachable!()
@@ -112,7 +119,7 @@ pub(super) fn has_opaque_cutoff(range: &Ranges<VersionOrStringValue>) -> bool {
             .flat_map(|(lo, hi)| [lo, hi])
             .any(|bound| match bound {
                 Bound::Included(VersionOrStringValue::Opaque(s))
-                | Bound::Excluded(VersionOrStringValue::Opaque(s)) => !s.is_empty(),
+                | Bound::Excluded(VersionOrStringValue::Opaque(s)) => s.parse::<Version>().is_ok(),
                 _ => false,
             })
 }
@@ -214,7 +221,17 @@ fn lexical_clauses(opaque: &Ranges<ArcStr>) -> Dnf {
             holes.push((MarkerOperator::NotEqual, end.clone()));
             high = next_high;
         }
+        // The empty string starts the opaque domain. At this boundary the
+        // raw-string cutoff is exactly equality or inequality with the empty string.
         let clause = MarkerOperator::from_bounds((low, high), |_| true)
+            .map(|(op, value)| {
+                let op = match op {
+                    MarkerOperator::LessEqual if value.is_empty() => MarkerOperator::Equal,
+                    MarkerOperator::GreaterThan if value.is_empty() => MarkerOperator::NotEqual,
+                    other => other,
+                };
+                (op, value)
+            })
             .chain(holes)
             .collect();
         clauses.push(clause);

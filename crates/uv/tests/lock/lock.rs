@@ -44404,6 +44404,41 @@ fn lock_required_environment_python_fork() -> Result<()> {
     Ok(())
 }
 
+/// A numeric and an opaque platform version cannot activate both pins.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_numeric_and_opaque_platform_version_pins() -> Result<()> {
+    let server = PackseServer::from_toml(indoc! {r#"
+        name = "numeric-and-opaque-platform-version"
+        [root]
+        [expected]
+        satisfiable = true
+        [packages.a.versions."1"]
+        [packages.a.versions."2"]
+    "#})?;
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0"
+        requires-python = ">=3.12"
+        dependencies = ["a==1; platform_version == '1'", "a==2; platform_version == 'kernel'"]
+    "#})?;
+    for options in [None, Some("--locked")] {
+        context
+            .lock()
+            .arg("--index-url")
+            .arg(server.index_url())
+            .args(options)
+            .assert()
+            .success();
+    }
+    Ok(())
+}
+
 /// A required Darwin release must have a compatible wheel, without removing newer wheels.
 /// The newer version must not be selected between the baseline and its minimum Darwin release.
 #[cfg(feature = "test-universal")]

@@ -5,7 +5,7 @@ use arcstr::ArcStr;
 use itertools::Itertools;
 use version_ranges::Ranges;
 
-use uv_pep440::{Version, VersionPattern, VersionSpecifier};
+use uv_pep440::{Version, VersionSpecifier};
 
 use crate::marker::algebra::INTERNER;
 use crate::marker::algebra::isop::{Cover, Guard};
@@ -121,10 +121,9 @@ fn collect_guard(
         }
         MarkerTreeKind::String(marker) => {
             let range = guard_range(marker.children(), child);
-            // A raw bound such as `1.*` would become a version wildcard if rendered as equality.
-            let allow_equality = |value: &ArcStr| {
-                !marker.key().is_version_or_string() || value.parse::<VersionPattern>().is_err()
-            };
+            // Equality on a hybrid field reparses as a version-or-string decision.
+            // Keep raw string intervals expressed as ordered comparisons.
+            let allow_equality = |_: &ArcStr| !marker.key().is_version_or_string();
             if let Some(excluded) = range_inequality(&range)
                 && excluded.iter().all(|value| allow_equality(value))
             {

@@ -2211,9 +2211,6 @@ mod test {
             for key in ["platform_release", "platform_version"] {
                 let expression = format!("{key} {op} '{value}'");
                 let marker = m(&expression);
-                if op == "~=" {
-                    assert_eq!(marker, m(&format!("'{value}' ~= {key}")));
-                }
                 assert_round_trip(marker);
                 assert_eq!(
                     marker.evaluate(&env, &[]),
@@ -2226,6 +2223,47 @@ mod test {
                     "{actual}: {expression}"
                 );
             }
+        }
+    }
+
+    #[test]
+    fn opaque_and_numeric_equalities_are_disjoint() {
+        for key in ["platform_release", "platform_version"] {
+            let numeric = m(&format!("{key} == '1'"));
+            for value in ["kernel", ""] {
+                let opaque = m(&format!("{key} == '{value}'"));
+                assert!(numeric.is_disjoint(opaque));
+                assert_eq!(opaque.negate(), m(&format!("{key} != '{value}'")));
+                for tree in [
+                    opaque,
+                    numeric.or(opaque),
+                    opaque.negate().and(m(&format!("{key} < '9'"))),
+                ] {
+                    assert_round_trip(tree);
+                }
+                assert_round_trip(m(&format!("{key} >= '{value}' and {key} <= '{value}'")));
+            }
+        }
+    }
+
+    #[test]
+    fn reversed_platform_compatible_release_warns() {
+        let env = env37()
+            .with_platform_release("2.0")
+            .with_platform_version("2.0");
+        for key in ["platform_release", "platform_version"] {
+            let mut warnings = Vec::new();
+            let reversed = crate::marker::parse::parse_markers::<crate::VerbatimUrl>(
+                &format!("'2.3' ~= {key}"),
+                &mut |kind, _| warnings.push(kind),
+            )
+            .unwrap();
+            assert!(reversed.is_true());
+            assert!(matches!(
+                warnings.as_slice(),
+                [crate::MarkerWarningKind::LexicographicComparison]
+            ));
+            assert!(!m(&format!("{key} ~= '2.3'")).evaluate(&env, &[]));
         }
     }
 
