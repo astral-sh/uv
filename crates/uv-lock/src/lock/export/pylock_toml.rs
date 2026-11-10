@@ -1189,12 +1189,15 @@ impl<'lock> PylockToml {
                 .map(MarkerTree::contents)
                 .collect::<Option<Vec<_>>>()
         }) {
-            doc.insert(
-                "environments",
-                value(Array::from_iter(
-                    environments.iter().map(ToString::to_string),
-                )),
-            );
+            let mut array = Array::new();
+            for marker in environments {
+                array.push(
+                    marker
+                        .try_to_string()
+                        .map_err(<toml_edit::ser::Error as serde::ser::Error>::custom)?,
+                );
+            }
+            doc.insert("environments", value(array));
         }
         if let Some(ref requires_python) = self.requires_python {
             doc.insert("requires-python", value(requires_python.to_string()));
@@ -1499,7 +1502,11 @@ impl PylockTomlPackage {
         if let Some(ref version) = self.version {
             table.insert("version", value(version.to_string()));
         }
-        if let Some(marker) = self.marker.try_to_string() {
+        if let Some(marker) = self
+            .marker
+            .to_pep508()
+            .map_err(<toml_edit::ser::Error as serde::ser::Error>::custom)?
+        {
             table.insert("marker", value(marker));
         }
         if let Some(ref requires_python) = self.requires_python {
@@ -2118,4 +2125,34 @@ where
         .to_timestamp(DateTime::from_parts(date, time))
         .map_err(serde::de::Error::custom)?;
     Ok(Some(timestamp))
+}
+
+#[cfg(test)]
+mod marker_tests {
+    use super::PylockToml;
+    use uv_pep508::MarkerTree;
+
+    #[test]
+    fn unrepresentable_pylock_markers() {
+        let mut lock: PylockToml = toml::from_str(
+            "lock-version = '1.0'\ncreated-by = 'uv'\n[[packages]]\nname = 'example'",
+        )
+        .unwrap();
+        let parsed: MarkerTree = "platform_release >= '0.dev0'".parse().unwrap();
+        lock.environments = Some(vec![parsed.negate()]);
+        assert!(
+            lock.to_toml()
+                .unwrap_err()
+                .to_string()
+                .contains("as a PEP 508 marker")
+        );
+        lock.environments = None;
+        lock.packages[0].marker = parsed.negate();
+        assert!(
+            lock.to_toml()
+                .unwrap_err()
+                .to_string()
+                .contains("as a PEP 508 marker")
+        );
+    }
 }

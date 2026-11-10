@@ -643,7 +643,7 @@ pub async fn pip_compile(
                 if let Some(marker_env) = resolver_env.marker_environment() {
                     let relevant_markers =
                         resolution.marker_tree(top_level_index.distributions(), marker_env)?;
-                    if let Some(relevant_markers) = relevant_markers.contents() {
+                    if let Some(relevant_markers) = relevant_markers.to_pep508()? {
                         writeln!(
                             writer,
                             "{}",
@@ -728,6 +728,7 @@ pub async fn pip_compile(
                     include_index_annotation,
                     annotation_style,
                 )
+                .render()?
             )?;
         }
         PipCompileFormat::PylockToml => {

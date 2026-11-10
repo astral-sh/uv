@@ -15,7 +15,6 @@ use uv_configuration::{
 };
 use uv_fs::PortablePath;
 use uv_normalize::PackageName;
-use uv_pep508::MarkerTree;
 use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::HashAlgorithm;
 use uv_warnings::warn_user;
@@ -227,7 +226,7 @@ impl<'a> ComponentBuilder<'a> {
         &mut self,
         package: &'a Package,
         package_type: PackageType,
-        marker: Option<&MarkerTree>,
+        marker: Option<String>,
     ) -> Component {
         let component = self.create_component_from_package(package, package_type, marker);
         self.package_to_component_map
@@ -256,7 +255,7 @@ impl<'a> ComponentBuilder<'a> {
         &mut self,
         package: &Package,
         package_type: PackageType,
-        marker: Option<&MarkerTree>,
+        marker: Option<String>,
     ) -> Component {
         let name = Self::get_package_name(package);
         let version = Self::get_version_string(package);
@@ -277,11 +276,8 @@ impl<'a> ComponentBuilder<'a> {
             PackageType::Dependency => {}
         }
 
-        if let Some(marker_contents) = marker.and_then(|marker| marker.contents()) {
-            properties.push(Property::new(
-                "uv:package:marker",
-                marker_contents.to_string(),
-            ));
+        if let Some(marker) = marker {
+            properties.push(Property::new("uv:package:marker", marker));
         }
 
         let mut external_references = Vec::new();
@@ -426,7 +422,11 @@ pub fn from_lock<'lock>(
             } else {
                 PackageType::Dependency
             };
-            Ok(component_builder.create_component(node.package, package_type, Some(&node.marker)))
+            Ok(component_builder.create_component(
+                node.package,
+                package_type,
+                node.marker.to_pep508()?,
+            ))
         })
         .collect::<Result<Vec<_>, LockError>>()?;
 

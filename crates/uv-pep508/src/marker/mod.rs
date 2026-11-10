@@ -15,6 +15,9 @@ mod lowering;
 pub(crate) mod parse;
 mod simplify;
 mod tree;
+mod version_or_string;
+
+pub use version_or_string::VersionOrStringValue;
 
 pub use environment::{MarkerEnvironment, MarkerEnvironmentBuilder};
 pub use lowering::{
@@ -25,7 +28,7 @@ pub use tree::{
     ContainsMarkerTree, ExtraMarkerTree, ExtraOperator, InMarkerTree, MarkerExpression,
     MarkerOperator, MarkerTree, MarkerTreeContents, MarkerTreeKind, MarkerValueExtra,
     MarkerValueList, MarkerValueString, MarkerValueVersion, MarkerWarningKind, StringMarkerTree,
-    StringVersion, VersionMarkerTree,
+    StringVersion, UnrepresentableMarker, VersionMarkerTree,
 };
 
 /// `serde` helpers for [`MarkerTree`].

@@ -13,7 +13,7 @@ use uv_pep508::MarkerTree;
 use crate::resolution::{RequirementsTxtDist, ResolutionGraphNode};
 use crate::{ResolverEnvironment, ResolverOutput};
 
-/// A [`std::fmt::Display`] implementation for the resolution graph.
+/// Renders a resolution graph as requirements.txt.
 #[derive(Debug)]
 pub struct DisplayResolutionGraph<'a> {
     /// The underlying graph.
@@ -84,9 +84,11 @@ impl<'a> DisplayResolutionGraph<'a> {
     }
 }
 
-/// Write the graph in the `{name}=={version}` format of requirements.txt that pip uses.
-impl std::fmt::Display for DisplayResolutionGraph<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl DisplayResolutionGraph<'_> {
+    /// Render the selected requirements, reporting markers that PEP 508 cannot express.
+    pub fn render(&self) -> Result<String, uv_pep508::UnrepresentableMarker> {
+        use std::fmt::Write;
+        let mut out = String::new();
         // Determine the annotation sources for each package.
         let sources = if self.include_annotations {
             let mut sources = SourceAnnotations::default();
@@ -212,8 +214,8 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
         for (index, node) in nodes {
             // Display the node itself.
             let mut line = node
-                .to_requirements_txt(&self.resolution.requires_python, self.include_markers)
-                .to_string();
+                .to_requirements_txt(&self.resolution.requires_python, self.include_markers)?
+                .into_owned();
 
             // Display the distribution hashes, if any.
             let mut has_hashes = false;
@@ -304,11 +306,11 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                 // Assemble the line with the annotations and remove trailing whitespaces.
                 for line in format!("{line:24}{separator}{comment}").lines() {
                     let line = line.trim_end();
-                    writeln!(f, "{line}")?;
+                    writeln!(out, "{line}").expect("writing to a string cannot fail");
                 }
             } else {
                 // Write the line as is.
-                writeln!(f, "{line}")?;
+                writeln!(out, "{line}").expect("writing to a string cannot fail");
             }
 
             // If enabled, include indexes to indicate which index was used for each package (e.g.,
@@ -316,12 +318,13 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
             if self.include_index_annotation {
                 if let Some(index) = node.dist.index() {
                     let url = index.without_credentials();
-                    writeln!(f, "{}", format!("    # from {url}").green())?;
+                    writeln!(out, "{}", format!("    # from {url}").green())
+                        .expect("writing to a string cannot fail");
                 }
             }
         }
 
-        Ok(())
+        Ok(out)
     }
 }
 

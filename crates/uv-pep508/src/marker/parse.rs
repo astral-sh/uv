@@ -6,7 +6,7 @@ use uv_pep440::{Version, VersionPattern, VersionSpecifier};
 
 use crate::cursor::Cursor;
 use crate::marker::MarkerValueExtra;
-use crate::marker::lowering::CanonicalMarkerListPair;
+use crate::marker::lowering::{CanonicalMarkerListPair, CanonicalMarkerValueString};
 use crate::marker::tree::{ContainerOperator, MarkerValueList};
 use crate::{
     ExtraOperator, MarkerExpression, MarkerOperator, MarkerTree, MarkerValue, MarkerValueString,
@@ -228,20 +228,7 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
                 MarkerValue::QuotedString(r_string) => r_string,
             };
 
-            if operator == MarkerOperator::TildeEqual {
-                reporter.report(
-                    MarkerWarningKind::LexicographicComparison,
-                    "Can't compare strings with `~=`, will be ignored".to_string(),
-                );
-
-                return Ok(None);
-            }
-
-            Some(MarkerExpression::String {
-                key,
-                operator,
-                value,
-            })
+            parse_string_expr(key, operator, value, reporter)
         }
         // `extras in "test"` or `dependency_groups not in "dev"` are invalid.
         MarkerValue::MarkerEnvList(key) => {
@@ -284,21 +271,7 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
                 }
                 // '...' == <env key>
                 MarkerValue::MarkerEnvString(key) => {
-                    if operator == MarkerOperator::TildeEqual {
-                        reporter.report(
-                            MarkerWarningKind::LexicographicComparison,
-                            "Can't compare strings with `~=`, will be ignored".to_string(),
-                        );
-
-                        return Ok(None);
-                    }
-
-                    Some(MarkerExpression::String {
-                        key,
-                        // Invert the operator to normalize the expression order.
-                        operator: operator.invert(),
-                        value: l_string,
-                    })
+                    parse_string_expr(key, operator.invert(), l_string, reporter)
                 }
                 // `"test" in extras` or `"dev" in dependency_groups`
                 MarkerValue::MarkerEnvList(key) => {
@@ -369,6 +342,29 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
     };
 
     Ok(expr)
+}
+
+/// Creates a comparison against a string or version-or-string marker.
+fn parse_string_expr(
+    key: MarkerValueString,
+    operator: MarkerOperator,
+    value: ArcStr,
+    reporter: &mut impl Reporter,
+) -> Option<MarkerExpression> {
+    if operator == MarkerOperator::TildeEqual
+        && !CanonicalMarkerValueString::from(key).is_version_or_string()
+    {
+        reporter.report(
+            MarkerWarningKind::LexicographicComparison,
+            "Can't compare strings with `~=`, will be ignored".to_string(),
+        );
+        return None;
+    }
+    Some(MarkerExpression::String {
+        key,
+        operator,
+        value,
+    })
 }
 
 /// Creates an instance of [`MarkerExpression::VersionIn`] with the given values.
