@@ -44404,99 +44404,332 @@ fn lock_required_environment_python_fork() -> Result<()> {
     Ok(())
 }
 
-/// A numeric and an opaque platform version cannot activate both pins.
 #[cfg(feature = "test-universal")]
 #[test]
 fn lock_numeric_and_opaque_platform_version_pins() -> Result<()> {
-    lock_platform_pins(
+    let server = platform_pin_index()?;
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0"
+        requires-python = ">=3.12"
+        dependencies = ["a==1; platform_version == '1'", "a==2; platform_version == 'kernel'"]
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.export().arg("--index-url").arg(server.index_url())
+        .args(["--locked", "--no-header", "--no-hashes", "--no-annotate", "--no-emit-project"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    a==1 ; platform_version == '1'
+    a==2 ; platform_version == 'kernel'
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    assert_platform_forks(
+        &context.read("uv.lock"),
         "platform_version == '1'",
         "platform_version == 'kernel'",
-        true,
-    )
+    )?;
+    Ok(())
 }
 
-/// Strict ordering cannot include the opaque endpoint itself.
 #[cfg(feature = "test-universal")]
 #[test]
 fn lock_ordered_and_equal_opaque_platform_version_pins() -> Result<()> {
-    lock_platform_pins(
+    let server = platform_pin_index()?;
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0"
+        requires-python = ">=3.12"
+        dependencies = ["a==1; platform_version > 'kernel'", "a==2; platform_version == 'kernel'"]
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.export().arg("--index-url").arg(server.index_url())
+        .args(["--locked", "--no-header", "--no-hashes", "--no-annotate", "--no-emit-project"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    a==1 ; platform_version > 'kernel'
+    a==2 ; platform_version == 'kernel'
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    assert_platform_forks(
+        &context.read("uv.lock"),
         "platform_version > 'kernel'",
         "platform_version == 'kernel'",
-        true,
-    )
+    )?;
+    Ok(())
 }
 
 #[cfg(feature = "test-universal")]
 #[test]
 fn lock_opaque_interval_and_numeric_platform_version_pins() -> Result<()> {
-    lock_platform_pins(
+    let server = platform_pin_index()?;
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0"
+        requires-python = ">=3.12"
+        dependencies = ["a==1; platform_version == '1'", "a==2; platform_version >= 'kernel' and platform_version < 'kernelz'"]
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.export().arg("--index-url").arg(server.index_url())
+        .args(["--locked", "--no-header", "--no-hashes", "--no-annotate", "--no-emit-project"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    a==1 ; platform_version == '1'
+    a==2 ; platform_version >= 'kernel' and platform_version < 'kernelz'
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    assert_platform_forks(
+        &context.read("uv.lock"),
         "platform_version == '1'",
         "platform_version >= 'kernel' and platform_version < 'kernelz'",
-        true,
-    )
-}
-
-/// The spelling interval admits `2.rc1` but no spelling for version `1`.
-#[cfg(feature = "test-universal")]
-#[test]
-fn lock_platform_spelling_interval_pins() -> Result<()> {
-    for key in ["platform_release", "platform_version"] {
-        let interval = format!("{key} > '2.q' and {key} < '2.s'");
-        lock_platform_pins(&format!("{key} == '1'"), &interval, true)?;
-        lock_platform_pins(&format!("{key} == '2rc1'"), &interval, false)?;
-    }
+    )?;
     Ok(())
 }
 
 #[cfg(feature = "test-universal")]
-fn lock_platform_pins(first: &str, second: &str, satisfiable: bool) -> Result<()> {
-    let server = PackseServer::from_toml(indoc! {r#"
+#[test]
+fn lock_platform_version_spelling_interval_pins() -> Result<()> {
+    let server = platform_pin_index()?;
+    let context = uv_test::test_context!("3.12").with_filters(
+        server
+            .files()
+            .map(|(filename, hash)| (hash.to_owned(), format!("[SHA256:{filename}]"))),
+    );
+    context.temp_dir.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0"
+        requires-python = ">=3.12"
+        dependencies = ["a==1; platform_version == '1'", "a==2; platform_version > '2.q' and platform_version < '2.s'"]
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.export().arg("--index-url").arg(server.index_url())
+        .args(["--locked", "--no-header", "--no-hashes", "--no-annotate", "--no-emit-project"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    a==1 ; platform_version == '1'
+    a==2 ; platform_version > '2.q' and platform_version < '2.s'
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    assert_platform_forks(
+        &context.read("uv.lock"),
+        "platform_version == '1'",
+        "platform_version > '2.q' and platform_version < '2.s'",
+    )?;
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(context.read("uv.lock"), @r#"
+        version = 1
+        revision = 5
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "platform_version == '1'",
+            "platform_version > '2.q' and platform_version < '2.s'",
+            "(platform_version != '1' and platform_version <= '2.q') or (platform_version != '1' and platform_version >= '2.s')",
+        ]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "a"
+        version = "1"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "platform_version == '1'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/a-1.tar.gz", hash = "sha256:[SHA256:a-1.tar.gz]", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-1-py3-none-any.whl", hash = "sha256:[SHA256:a-1-py3-none-any.whl]", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "a"
+        version = "2"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "platform_version > '2.q' and platform_version < '2.s'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/a-2.tar.gz", hash = "sha256:[SHA256:a-2.tar.gz]", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-2-py3-none-any.whl", hash = "sha256:[SHA256:a-2-py3-none-any.whl]", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "a", version = "1", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "platform_version == '1'" },
+            { name = "a", version = "2", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "platform_version > '2.q' and platform_version < '2.s'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "a", marker = "platform_version == '1'", specifier = "==1" },
+            { name = "a", marker = "platform_version > '2.q' and platform_version < '2.s'", specifier = "==2" },
+        ]
+        "#);
+    });
+    Ok(())
+}
+
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_platform_release_spelling_interval_pins() -> Result<()> {
+    let server = platform_pin_index()?;
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0"
+        requires-python = ">=3.12"
+        dependencies = ["a==1; platform_release == '1'", "a==2; platform_release > '2.q' and platform_release < '2.s'"]
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.export().arg("--index-url").arg(server.index_url())
+        .args(["--locked", "--no-header", "--no-hashes", "--no-annotate", "--no-emit-project"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    a==1 ; platform_release == '1'
+    a==2 ; platform_release > '2.q' and platform_release < '2.s'
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    assert_platform_forks(
+        &context.read("uv.lock"),
+        "platform_release == '1'",
+        "platform_release > '2.q' and platform_release < '2.s'",
+    )?;
+    Ok(())
+}
+
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_platform_version_spelling_interval_overlap() -> Result<()> {
+    let server = platform_pin_index()?;
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0"
+        requires-python = ">=3.12"
+        dependencies = ["a==1; platform_version == '2rc1'", "a==2; platform_version > '2.q' and platform_version < '2.s'"]
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies for split (markers: platform_version == '2rc1' and platform_version > '2.q' and platform_version < '2.s')
+      cause: Because your project depends on a{platform_version == '2rc1'}==1 and a{platform_version > '2.q' and platform_version < '2.s'}==2, we can conclude that your project's requirements are unsatisfiable.
+
+    hint: The resolution failed for an environment that is not the current one, consider limiting the environments with `tool.uv.environments`.
+    ");
+    Ok(())
+}
+
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_platform_release_spelling_interval_overlap() -> Result<()> {
+    let server = platform_pin_index()?;
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0"
+        requires-python = ">=3.12"
+        dependencies = ["a==1; platform_release == '2rc1'", "a==2; platform_release > '2.q' and platform_release < '2.s'"]
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies for split (markers: platform_release == '2rc1' and platform_release > '2.q' and platform_release < '2.s')
+      cause: Because your project depends on a{platform_release == '2rc1'}==1 and a{platform_release > '2.q' and platform_release < '2.s'}==2, we can conclude that your project's requirements are unsatisfiable.
+
+    hint: The resolution failed for an environment that is not the current one, consider limiting the environments with `tool.uv.environments`.
+    ");
+    Ok(())
+}
+
+#[cfg(feature = "test-universal")]
+fn platform_pin_index() -> Result<PackseServer> {
+    Ok(PackseServer::from_toml(indoc! {r#"
         name = "numeric-and-opaque-platform-version"
         [root]
         [expected]
         satisfiable = true
         [packages.a.versions."1"]
         [packages.a.versions."2"]
-    "#})?;
-    let context = uv_test::test_context!("3.12");
-    context
-        .temp_dir
-        .child("pyproject.toml")
-        .write_str(&format!(
-            indoc! {r#"
-        [project]
-        name = "project"
-        version = "0"
-        requires-python = ">=3.12"
-        dependencies = ["a==1; {first}", "a==2; {second}"]
-    "#},
-            first = first,
-            second = second
-        ))?;
-    if !satisfiable {
-        let failure = context
-            .lock()
-            .arg("--index-url")
-            .arg(server.index_url())
-            .assert()
-            .failure();
-        let stderr = std::str::from_utf8(&failure.get_output().stderr)?;
-        assert!(stderr.contains("No solution found"), "{stderr}");
-        return Ok(());
-    }
-    for options in [None, Some("--locked")] {
-        context
-            .lock()
-            .arg("--index-url")
-            .arg(server.index_url())
-            .args(options)
-            .assert()
-            .success();
-    }
-    // Compare the serialized forks to the trees the resolver must split on,
-    // including the fork in which neither pin applies.
-    let lock = fs_err::read_to_string(context.temp_dir.child("uv.lock"))?;
-    let lock: toml::Table = toml::from_str(&lock)?;
+    "#})?)
+}
+
+/// Check all serialized forks, including the environments in which neither pin applies.
+#[cfg(feature = "test-universal")]
+fn assert_platform_forks(lock: &str, first: &str, second: &str) -> Result<()> {
+    let lock: toml::Table = toml::from_str(lock)?;
     let first_tree: uv_pep508::MarkerTree = first.parse()?;
     let second_tree: uv_pep508::MarkerTree = second.parse()?;
     let mut expected = vec![first_tree, second_tree, first_tree.or(second_tree).negate()];
@@ -44511,24 +44744,6 @@ fn lock_platform_pins(first: &str, second: &str, satisfiable: bool) -> Result<()
     for tree in expected {
         assert!(actual.contains(&tree), "missing fork {tree:?}");
     }
-    let export = context
-        .export()
-        .arg("--index-url")
-        .arg(server.index_url())
-        .args([
-            "--locked",
-            "--no-header",
-            "--no-hashes",
-            "--no-annotate",
-            "--no-emit-project",
-        ])
-        .assert()
-        .success();
-    let output = std::str::from_utf8(&export.get_output().stdout)?;
-    assert_eq!(
-        output.lines().collect::<Vec<_>>(),
-        [format!("a==1 ; {first}"), format!("a==2 ; {second}"),]
-    );
     Ok(())
 }
 
