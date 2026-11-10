@@ -17,7 +17,9 @@ use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use version_ranges::Ranges;
 
 use super::{Edges, InternerGuard, NodeId, Projection, SmallVec, Variable};
-use crate::{CanonicalMarkerValueString, MarkerExpression};
+use crate::CanonicalMarkerValueString;
+use arcstr::ArcStr;
+use uv_pep440::Version;
 
 /// A shared cover whose paths are expanded only when producing the final DNF.
 #[derive(Clone)]
@@ -25,8 +27,15 @@ pub(crate) enum Cover {
     False,
     True,
     Guard(NodeId),
-    Projected(Rc<[(Vec<Vec<MarkerExpression>>, Self)]>),
+    Projected(CanonicalMarkerValueString, Rc<[ProjectedArm]>),
     Branches(Rc<[(Guard, Self)]>),
+}
+
+/// The two guards that select a suffix of a projected platform marker.
+pub(crate) struct ProjectedArm {
+    pub(crate) versions: Ranges<Version>,
+    pub(crate) spellings: Ranges<ArcStr>,
+    pub(crate) suffix: Cover,
 }
 
 /// A single-variable condition, either interned or borrowed from an input decision.
@@ -151,7 +160,7 @@ impl InternerGuard<'_> {
         key: CanonicalMarkerValueString,
         cache: &mut FxHashMap<(NodeId, NodeId), (NodeId, Cover)>,
     ) -> Cover {
-        use crate::marker::version_or_string::{comparisons, parsed_values};
+        use crate::marker::version_or_string::parsed_values;
         let Edges::Version { edges } = &self.shared.node(parent).children else {
             unreachable!("version projection has version edges")
         };
@@ -230,24 +239,13 @@ impl InternerGuard<'_> {
         }
         let arms = branches
             .into_iter()
-            .map(|(child, (numbers, strings))| {
-                let dnf = comparisons(&numbers, &strings)
-                    .into_iter()
-                    .map(|clause| {
-                        clause
-                            .into_iter()
-                            .map(|(operator, value)| MarkerExpression::String {
-                                key: key.into(),
-                                operator,
-                                value,
-                            })
-                            .collect()
-                    })
-                    .collect();
-                (dnf, self.isop_cached(child, child, cache).1)
+            .map(|(child, (versions, spellings))| ProjectedArm {
+                versions,
+                spellings,
+                suffix: self.isop_cached(child, child, cache).1,
             })
             .collect();
-        Cover::Projected(arms)
+        Cover::Projected(key, arms)
     }
 
     /// Materialize a borrowed guard only when algebra needs its function.

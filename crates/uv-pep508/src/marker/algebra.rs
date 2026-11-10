@@ -535,10 +535,8 @@ impl InternerGuard<'_> {
                 if key.is_version_or_string() {
                     return self.projected_comparison(key, operator, value);
                 }
-                return self.create_node(
-                    Variable::String(key),
-                    Edges::from_string(key, operator, value),
-                );
+                return self
+                    .create_node(Variable::String(key), Edges::from_string(operator, value));
             }
             MarkerExpression::List { pair, operator } => (
                 Variable::List(pair),
@@ -1805,45 +1803,16 @@ impl EdgeBuilder {
     ///
     /// This function will panic for the `In` and `Contains` marker operators, which
     /// should be represented as separate boolean variables.
-    fn from_string(
-        key: CanonicalMarkerValueString,
-        operator: MarkerOperator,
-        value: ArcStr,
-    ) -> Self {
-        let range: Ranges<ArcStr> = match (key, operator) {
-            // `platform_release` and `platform_version` are `Version | String` fields. Preserve
-            // their existing lexicographic behavior here; their version-aware semantics are
-            // outside the pure string field behavior handled by this change.
-            (
-                CanonicalMarkerValueString::PlatformRelease
-                | CanonicalMarkerValueString::PlatformVersion,
-                MarkerOperator::GreaterThan,
-            ) => Ranges::strictly_higher_than(value),
-            (
-                CanonicalMarkerValueString::PlatformRelease
-                | CanonicalMarkerValueString::PlatformVersion,
-                MarkerOperator::GreaterEqual,
-            ) => Ranges::higher_than(value),
-            (
-                CanonicalMarkerValueString::PlatformRelease
-                | CanonicalMarkerValueString::PlatformVersion,
-                MarkerOperator::LessThan,
-            ) => Ranges::strictly_lower_than(value),
-            (
-                CanonicalMarkerValueString::PlatformRelease
-                | CanonicalMarkerValueString::PlatformVersion,
-                MarkerOperator::LessEqual,
-            ) => Ranges::lower_than(value),
-            (_, MarkerOperator::Equal) => Ranges::singleton(value),
-            (_, MarkerOperator::NotEqual) => Ranges::singleton(value).complement(),
+    fn from_string(operator: MarkerOperator, value: ArcStr) -> Self {
+        let range = match operator {
+            MarkerOperator::Equal => Ranges::singleton(value),
+            MarkerOperator::NotEqual => Ranges::singleton(value).complement(),
             // The marker specification defines strict ordering comparisons for string-valued
             // fields as always false, while inclusive ordering comparisons are equivalent to
             // equality.
-            (_, MarkerOperator::GreaterThan | MarkerOperator::LessThan) => Ranges::empty(),
-            (_, MarkerOperator::GreaterEqual | MarkerOperator::LessEqual) => {
-                Ranges::singleton(value)
-            }
-            (_, MarkerOperator::TildeEqual) => {
+            MarkerOperator::GreaterThan | MarkerOperator::LessThan => Ranges::empty(),
+            MarkerOperator::GreaterEqual | MarkerOperator::LessEqual => Ranges::singleton(value),
+            MarkerOperator::TildeEqual => {
                 unreachable!("string comparisons with ~= are ignored")
             }
             _ => unreachable!("`in` and `contains` are treated as boolean variables"),

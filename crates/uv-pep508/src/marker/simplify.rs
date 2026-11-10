@@ -37,12 +37,18 @@ fn collect_cover(
             }
         }
         Cover::Guard(guard) => collect_guard(Guard::Node(*guard), &Cover::True, dnf, path),
-        Cover::Projected(arms) => {
-            for (clauses, suffix) in arms.iter() {
-                for clause in clauses {
+        Cover::Projected(key, arms) => {
+            for arm in arms.iter() {
+                for clause in super::version_or_string::comparisons(&arm.versions, &arm.spellings) {
                     let current = path.len();
-                    path.extend_from_slice(clause);
-                    collect_cover(suffix, dnf, path);
+                    path.extend(clause.into_iter().map(|(operator, value)| {
+                        MarkerExpression::String {
+                            key: (*key).into(),
+                            operator,
+                            value,
+                        }
+                    }));
+                    collect_cover(&arm.suffix, dnf, path);
                     path.truncate(current);
                 }
             }
