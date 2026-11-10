@@ -23,6 +23,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import random
 import re
 from pathlib import Path
 from urllib.parse import unquote
@@ -139,6 +140,36 @@ def filter_metadata(
     return unique_filtered
 
 
+def is_retryable(e: Exception) -> bool:
+    """Whether a failed request is worth retrying: network errors, 429 and 5xx."""
+    if isinstance(e, httpx.HTTPStatusError):
+        status = e.response.status_code
+        return status == 429 or status >= 500
+    return isinstance(e, httpx.TransportError)
+
+
+async def fetch_file(client: httpx.AsyncClient, url: str, dest: Path, retries: int):
+    """Download a file to `dest`, retrying transient failures with backoff."""
+    for attempt in range(retries + 1):
+        try:
+            async with client.stream("GET", url) as response:
+                response.raise_for_status()
+                # Opening with "wb" discards any partial file from a failed attempt.
+                # ruff: ignore[ASYNC230]
+                with open(dest, "wb") as f:
+                    async for chunk in response.aiter_bytes():
+                        f.write(chunk)
+            return
+        except (httpx.TransportError, httpx.HTTPStatusError) as e:
+            if attempt == retries or not is_retryable(e):
+                raise
+            delay = min(2**attempt, 30) + random.random()
+            logger.warning(
+                f"Retrying {url} in {delay:.1f}s (retry {attempt + 1}/{retries}): {e!r}"
+            )
+            await asyncio.sleep(delay)
+
+
 async def download_file(
     client: httpx.AsyncClient,
     url: str,
@@ -146,6 +177,7 @@ async def download_file(
     expected_sha256: str | None,
     progress_bar,
     errors,
+    retries: int,
 ):
     """Download a file and verify its SHA-256 checksum if provided."""
     if dest.exists() and expected_sha256 and sha256_checksum(dest) == expected_sha256:
@@ -172,12 +204,7 @@ async def download_file(
     logger.debug(f"Downloading {url} to {dest}")
 
     try:
-        async with client.stream("GET", url) as response:
-            response.raise_for_status()
-            # ruff: ignore[ASYNC230]
-            with open(dest, "wb") as f:
-                async for chunk in response.aiter_bytes():
-                    f.write(chunk)
+        await fetch_file(client, url, dest, retries)
 
         if expected_sha256 and sha256_checksum(dest) != expected_sha256:
             error_msg = f"SHA-256 mismatch for {dest}. Deleting corrupted file."
@@ -188,9 +215,12 @@ async def download_file(
             return False
 
     except (httpx.HTTPError, OSError, ValueError) as e:
-        error_msg = f"Failed to download {url}: {e!s}"
+        # Some exceptions (e.g. httpx timeouts) have an empty message, so use repr.
+        error_msg = f"Failed to download {url}: {e!r}"
         logger.error(error_msg)
-        errors.append((url, str(e)))
+        errors.append((url, repr(e)))
+        # Don't leave a partial file behind that a later run would treat as complete.
+        dest.unlink(missing_ok=True)
         progress_bar.update(1)
         return False
 
@@ -199,10 +229,16 @@ async def download_file(
 
 
 async def download_files(
-    urls: set[tuple[str, str | None]], target: Path, max_concurrent: int
+    urls: set[tuple[str, str | None]],
+    target: Path,
+    max_concurrent: int,
+    retries: int,
+    timeout: float,
 ):
     """Download files with a limit on concurrent downloads using httpx."""
-    async with httpx.AsyncClient(follow_redirects=True) as client:
+    async with httpx.AsyncClient(
+        follow_redirects=True, timeout=httpx.Timeout(timeout)
+    ) as client:
         progress_bar = tqdm(total=len(urls), desc="Downloading", unit="file")
         sem = asyncio.Semaphore(max_concurrent)
         errors: list[tuple[str, str]] = []  # To collect errors
@@ -218,6 +254,7 @@ async def download_files(
                     sha256,
                     progress_bar,
                     errors,
+                    retries,
                 )
                 if success:
                     success_count += 1
@@ -243,6 +280,18 @@ def parse_arguments():
         type=int,
         default=20,
         help="Maximum number of simultaneous downloads.",
+    )
+    parser.add_argument(
+        "--retries",
+        type=int,
+        default=3,
+        help="Number of times to retry a download after a network or server error.",
+    )
+    parser.add_argument(
+        "--timeout",
+        type=float,
+        default=60,
+        help="Connect and read timeout in seconds for each request.",
     )
     parser.add_argument(
         "--from-all-history",
@@ -281,7 +330,9 @@ def main():
     logger.info(f"Downloading {len(urls)} files to {target}...")
     try:
         success_count, errors = asyncio.run(
-            download_files(urls, target, args.max_concurrent)
+            download_files(
+                urls, target, args.max_concurrent, args.retries, args.timeout
+            )
         )
         print(f"Successfully downloaded: {success_count} files.")
         if errors:
