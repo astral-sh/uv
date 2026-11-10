@@ -303,7 +303,7 @@ jobs:
           UV_CACHE_DIR: ${{ runner.temp }}/fix-bug/uv-cache
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          codex-version: "0.160.0"
+          codex-version: "0.162.1"
           codex-home: "${{ runner.temp }}/codex-home"
           effort: high
           codex-args: >-
