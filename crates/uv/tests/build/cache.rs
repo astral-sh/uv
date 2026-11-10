@@ -839,7 +839,7 @@ fn binary_payload_copy_fallback_uses_archive_file_store() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
-    warning: Failed to hardlink files; falling back to full copy. This may lead to degraded performance.
+    warning: Failed to hardlink files; falling back to full copy. This may lead to degraded performance during environment creation.
              If the cache and target directories are on different filesystems, hardlinking may not be supported.
              If this is intentional, set `export UV_LINK_MODE=copy` or use `--link-mode=copy` to suppress this warning.
     Installed 1 package in [TIME]
@@ -860,7 +860,7 @@ fn binary_payload_copy_fallback_uses_archive_file_store() -> Result<()> {
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
     Resolved 1 package in [TIME]
-    warning: Failed to hardlink files; falling back to full copy. This may lead to degraded performance.
+    warning: Failed to hardlink files; falling back to full copy. This may lead to degraded performance during environment creation.
              If the cache and target directories are on different filesystems, hardlinking may not be supported.
              If this is intentional, set `export UV_LINK_MODE=copy` or use `--link-mode=copy` to suppress this warning.
     Installed 1 package in [TIME]
