@@ -9,28 +9,26 @@ description:
 # Load GitHub Action Thread
 
 When given an issue instead of a run, find the related issue-triage run first. Resolve the issue
-number and search for it in the run name. Older runs used the issue title.
+number and search for it in the run name.
 
 ```bash
 repository=astral-sh/uv
 issue=20477
-issue_title="$(gh issue view "$issue" --repo "$repository" --json title --jq '.title')"
 issue_number="$(gh issue view "$issue" --repo "$repository" --json number --jq '.number')"
 
 gh run list --repo "$repository" --workflow issue-triage.yml --limit 500 \
   --json databaseId,displayTitle,event,status,conclusion,createdAt,url \
   | jaq -c --arg number "$issue_number" --arg url "https://github.com/$repository/issues/$issue_number" \
-      --arg title "$issue_title" '.[] | select(
+      '.[] | select(
         .displayTitle == "Issue context for \($number)" or
-        .displayTitle == "Issue context for \($url)" or
-        .displayTitle == $title
+        .displayTitle == "Issue context for \($url)"
       )'
 ```
 
 Confirm the issue number in the newest matching run's logs before importing the thread. An
-issue-triage run can contain both the triage and bug-reproduction threads. For renamed issues or
-manual dispatches with a different URL spelling, check recent triage runs. Also check for directly
-dispatched bug-reproduction runs.
+issue-triage run can contain both the triage and bug-reproduction threads. For older triage runs,
+use the run URL or ID. For manual dispatches with a different URL spelling, check recent triage
+runs. Also check for directly dispatched bug-reproduction runs.
 
 ```bash
 gh run list --repo "$repository" --workflow reproduce-bug.yml --limit 100 \
