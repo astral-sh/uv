@@ -4351,6 +4351,44 @@ fn lock_project_with_scoped_overrides() -> Result<()> {
     Ok(())
 }
 
+/// A scoped override can introduce a recursive extra even when the package has no self-dependency.
+/// Checking only the declared dependencies skipped expansion of `urllib3[socks]`, causing a
+/// fresh `uv lock` to panic in debug builds with `extras not flattened for urllib3`.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_project_with_scoped_override_recursive_extra() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["urllib3==2.2.1"]
+
+        [tool.uv]
+        override-dependencies = [
+            { package = { name = "urllib3", version = "2.2.1" }, dependencies = ["urllib3[socks]"] },
+        ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.tree().arg("--frozen"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    project v0.1.0
+    └── urllib3 v2.2.1
+        └── pysocks v1.7.1
+    ");
+
+    Ok(())
+}
+
 /// Reject conflicting overrides scoped to the same package version.
 #[cfg(feature = "test-universal")]
 #[test]
