@@ -93,8 +93,6 @@ impl AsRef<Path> for WheelCacheKind {
 
 #[cfg(test)]
 mod tests {
-    use insta::assert_snapshot;
-    use uv_fs::Simplified;
     use uv_redacted::SafeUrlError;
 
     use super::*;
@@ -118,16 +116,6 @@ mod tests {
         )?;
         assert_ne!(WheelCache::Url(&escaped_at).root(), suffixed_root);
         assert_ne!(WheelCache::Url(&escaped_dot).root(), suffixed_root);
-        Ok(())
-    }
-
-    #[test]
-    fn git_cache_path_uses_legacy_source_digest() -> Result<(), SafeUrlError> {
-        let source = SafeUrl::parse(
-            "git+https://github.com/PYPA/sample-namespace-packages.git@2.0.0#subdirectory=src&lfs=true",
-        )?;
-        let root = WheelCache::Git(&source, "c9929c576344ec58").root();
-        assert_snapshot!(root.portable_display(), @"git/e1494ed3a4bc2733/c9929c576344ec58");
         Ok(())
     }
 }

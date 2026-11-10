@@ -661,7 +661,7 @@ fn add_git_lfs() -> Result<()> {
     "#})?;
 
     // Gather cache locations
-    let git_cache = context.cache_dir.child("git-v1");
+    let git_cache = context.cache_dir.child("git-v2");
     let git_checkouts = git_cache.child("checkouts");
     let git_db = git_cache.child("db");
     let repo_url = GitUpstreamUrl::parse("https://github.com/astral-sh/test-lfs-repo")?;

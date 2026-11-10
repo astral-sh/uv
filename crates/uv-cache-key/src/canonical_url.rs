@@ -23,7 +23,7 @@ impl CanonicalUrl {
         }
     }
 
-    /// Retain built-wheel cache keys from the original Git source URL normalization.
+    /// Apply Git source normalization even when the URL has no `git+` prefix.
     ///
     /// The key includes the requested revision, query, and fragment, including subdirectory
     /// and LFS options. GitHub path normalization lowercases `@Release` to `@release`
@@ -84,7 +84,7 @@ enum GitUrlKind {
     Upstream,
 }
 
-/// Apply the Git path rules before percent-decoding to keep existing Git cache keys stable.
+/// Apply Git path rules before decoding escapes so `%40` cannot delimit a revision.
 fn normalize_git_path(url: &mut SafeUrl, kind: GitUrlKind) {
     // GitHub repository paths are case-insensitive. The scheme is already lowercase and
     // hierarchical paths are percent-encoded.
@@ -176,15 +176,6 @@ impl GitUpstreamUrl {
 
 impl CacheKey for GitUpstreamUrl {
     fn cache_key(&self, state: &mut CacheKeyHasher) {
-        // Version these keys to avoid shards shared by `pkg.git@tenant` and `pkg@tenant`
-        // under full-source normalization.
-        let path = self.as_url().path();
-        if path.match_indices('@').any(|(index, _)| {
-            let prefix = &path[..index];
-            !prefix.is_empty() && (!prefix.ends_with('/') || has_git_extension(prefix))
-        }) {
-            "git-upstream-v2".cache_key(state);
-        }
         self.0.cache_key(state);
     }
 }
@@ -374,10 +365,6 @@ mod tests {
             )?,
         );
 
-        // Database and checkout keys must remain compatible with existing Git caches.
-        assert_eq!(cache_digest(&upstream), "ce760c1b1e07f0c3");
-        assert_eq!(cache_digest(&(&upstream, true)), "b48641e2e61b8289");
-
         Ok(())
     }
 
@@ -395,18 +382,13 @@ mod tests {
             GitUpstreamUrl::parse("https://example.com/pkg.git%40tenant")?,
         );
 
-        let plain_digest = cache_digest(&plain);
-        let suffixed_digest = cache_digest(&suffixed);
-        assert_ne!(plain_digest, suffixed_digest);
-        assert_ne!(plain_digest, "b39bb2ec85a42ea4");
-        assert_ne!(suffixed_digest, "b39bb2ec85a42ea4");
+        assert_ne!(cache_digest(&plain), cache_digest(&suffixed));
 
         let leading = GitUpstreamUrl::parse("https://example.com/@solo")?;
         assert_eq!(
             leading,
             GitUpstreamUrl::parse("https://example.com/%40solo")?,
         );
-        assert_eq!(cache_digest(&leading), "ea0d314d3ff4bf4f");
         Ok(())
     }
 }
