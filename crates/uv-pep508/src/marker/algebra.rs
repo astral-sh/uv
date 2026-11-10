@@ -167,6 +167,32 @@ pub(crate) struct InternerGuard<'a> {
 impl InternerGuard<'_> {
     /// Creates a decision node with the given variable and children.
     fn create_node(&mut self, var: Variable, mut children: EdgeBuilder) -> NodeId {
+        // A bounded spelling interval can fix the major release. Remove numeric
+        // decisions that can only distinguish versions outside that interval.
+        if let (Variable::String(key), Edges::String { edges }) = (&var, &mut children)
+            && key.is_version_or_string()
+        {
+            let mut changed = false;
+            for (raw, child) in edges.iter_mut() {
+                if !matches!(*child, NodeId::TRUE | NodeId::FALSE)
+                    // Other variables can sit between the spelling and its parsed value.
+                    && self.shared.node(*child).var <= Variable::VersionString(*key)
+                    && let Some(possible) = super::version_or_string::spelling_prefix_values(raw)
+                {
+                    let assumption = self.create_node(
+                        Variable::VersionString(*key),
+                        Edges::from_version_or_string_range(&possible),
+                    );
+                    let restricted = self.restrict(*child, assumption);
+                    changed |= restricted != *child;
+                    *child = restricted;
+                }
+            }
+            if changed {
+                *edges = Edges::map_ranges(edges, NodeId::TRUE, std::convert::identity);
+            }
+        }
+
         let mut first = children.nodes().next().unwrap();
 
         // With a complemented edge representation, there are two ways to represent the same node:
@@ -571,7 +597,9 @@ impl InternerGuard<'_> {
         // variables are given higher priority in the tree. In other words, if they're present, they
         // _must_ be at the top; and if they're not at the top, we know they aren't present in any
         // children.
-        if x.var.is_conflicting_variable() && y.var.is_conflicting_variable() {
+        if (x.var.is_conflicting_variable() && y.var.is_conflicting_variable())
+            || matches!(std::cmp::min(&x.var, &y.var), Variable::String(key) if key.is_version_or_string())
+        {
             return self.and(xi, yi).is_false();
         }
 
@@ -618,6 +646,11 @@ impl InternerGuard<'_> {
         }
 
         let (x, y) = (self.shared.node(xi), self.shared.node(yi));
+
+        if matches!(std::cmp::min(&x.var, &y.var), Variable::String(key) if key.is_version_or_string())
+        {
+            return self.and(xi, yi).is_false();
+        }
 
         // Perform Shannon Expansion of the higher order variable.
         match x.var.cmp(&y.var) {

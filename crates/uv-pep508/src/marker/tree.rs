@@ -2288,6 +2288,69 @@ mod test {
     }
 
     #[test]
+    fn platform_spelling_interval_witness() {
+        for key in ["platform_release", "platform_version"] {
+            let inside = m(&format!("{key} > '2.q' and {key} < '2.s'"));
+            let one = m(&format!("{key} == '1'"));
+            let rc = m(&format!("{key} == '2rc1'"));
+            let no_version = m(&format!("{key} > '1e' and {key} < '1f'"));
+            assert!(one.is_disjoint(no_version));
+            assert!(one.and(no_version).is_false());
+            assert!(one.is_disjoint(inside));
+            assert!(inside.is_disjoint(one));
+            let padded = m(&format!("{key} > 'V002.q' and {key} < 'V002.s'"));
+            assert!(padded.is_disjoint(one));
+            assert!(!padded.is_disjoint(rc));
+            let epoch = m(&format!("{key} > '1!2.q' and {key} < '1!2.s'"));
+            assert!(!epoch.is_disjoint(m(&format!("{key} == '1!2rc1'"))));
+            assert!(one.and(inside).is_false());
+            assert!(!rc.is_disjoint(inside));
+            for fork in [
+                one,
+                inside,
+                one.or(inside).negate(),
+                rc.and(inside),
+                one.or(no_version).negate(),
+            ] {
+                assert_round_trip(fork);
+            }
+            for platform in ["linux", "darwin", "win32", "freebsd14"] {
+                let env = env37().with_sys_platform(platform);
+                for (raw, in_interval, is_rc) in [
+                    ("2.rc1", true, true),
+                    ("2rc1", false, true),
+                    ("2.r", true, false),
+                    ("01", false, false),
+                ] {
+                    let env = if key == "platform_release" {
+                        env.clone()
+                            .with_platform_release(raw)
+                            .with_platform_version("other")
+                    } else {
+                        env.clone()
+                            .with_platform_version(raw)
+                            .with_platform_release("other")
+                    };
+                    assert_eq!(inside.evaluate(&env, &[]), in_interval);
+                    assert_eq!(rc.evaluate(&env, &[]), is_rc);
+                    assert_eq!(rc.and(inside).evaluate(&env, &[]), in_interval && is_rc);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn platform_spelling_with_intervening_variables() {
+        for expression in [
+            "platform_version < '2.s' and platform_version == '1' and (platform_version < '2.q' or platform_release == '1')",
+            "(platform_release ~= '2.1' or platform_version < '2.q') and platform_version == '1.*' and platform_version < '2.s'",
+            "(platform_version < '2.q' or platform_version in 'kernel') and platform_version < '2.s' and platform_version == '1.*'",
+        ] {
+            assert_round_trip(m(expression));
+        }
+    }
+
+    #[test]
     fn opaque_equality_and_raw_ordering() {
         for key in ["platform_version", "platform_release"] {
             let equal = m(&format!("{key} == 'kernel'"));

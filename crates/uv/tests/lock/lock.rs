@@ -44431,15 +44431,68 @@ fn lock_opaque_interval_and_numeric_platform_version_pins() -> Result<()> {
 }
 
 #[cfg(feature = "test-universal")]
-fn lock_platform_version_pins(first: &str, second: &str) -> Result<()> {
-    let server = PackseServer::from_toml(indoc! {r#"
+#[test]
+fn lock_platform_version_spelling_interval_pins() -> Result<()> {
+    let second = "platform_version > '2.q' and platform_version < '2.s'";
+    let export = second
+        .parse::<uv_pep508::MarkerTree>()?
+        .try_to_string()
+        .unwrap();
+    check_platform_pin_exports("platform_version == '1'", second, &export)
+}
+
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_platform_release_interval_without_version_spellings() -> Result<()> {
+    lock_platform_version_pins(
+        "platform_release == '1'",
+        "platform_release > '1e' and platform_release < '1f'",
+    )
+}
+
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_platform_release_spelling_interval_overlap() -> Result<()> {
+    let server = platform_pin_index()?;
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0"
+        requires-python = ">=3.12"
+        dependencies = ["a==1; platform_release == '2rc1'", "a==2; platform_release > '2.q' and platform_release < '2.s'"]
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies for split (markers: platform_release >= '2.p~' and platform_release < '2.~' and platform_release == '2rc1')
+      cause: Because your project depends on a{platform_release == '2rc1'}==1 and a{(platform_release >= '2.p~' and platform_release < '2.~' and platform_release < '2.p~') or (platform_release >= '2.p~' and platform_release < '2.~' and platform_release >= '2.~') or (platform_release >= '2.p~' and platform_release < '2.~' and platform_release > '2.q' and platform_release < '2.s')}==2, we can conclude that your project's requirements are unsatisfiable.
+
+    hint: The resolution failed for an environment that is not the current one, consider limiting the environments with `tool.uv.environments`.
+    ");
+    Ok(())
+}
+
+#[cfg(feature = "test-universal")]
+fn platform_pin_index() -> Result<PackseServer> {
+    Ok(PackseServer::from_toml(indoc! {r#"
         name = "numeric-and-opaque-platform-version"
         [root]
         [expected]
         satisfiable = true
         [packages.a.versions."1"]
         [packages.a.versions."2"]
-    "#})?;
+    "#})?)
+}
+
+#[cfg(feature = "test-universal")]
+fn lock_platform_version_pins(first: &str, second: &str) -> Result<()> {
+    check_platform_pin_exports(first, second, second)
+}
+
+#[cfg(feature = "test-universal")]
+fn check_platform_pin_exports(first: &str, second: &str, exported_second: &str) -> Result<()> {
+    let server = platform_pin_index()?;
     let context = uv_test::test_context!("3.12");
     context
         .temp_dir
@@ -44480,8 +44533,32 @@ fn lock_platform_version_pins(first: &str, second: &str) -> Result<()> {
     let output = std::str::from_utf8(&export.get_output().stdout)?;
     assert_eq!(
         output.lines().collect::<Vec<_>>(),
-        [format!("a==1 ; {first}"), format!("a==2 ; {second}"),]
+        [
+            format!("a==1 ; {first}"),
+            format!("a==2 ; {exported_second}")
+        ]
     );
+    assert_platform_forks(&context.read("uv.lock"), first, second)
+}
+
+/// Check all serialized forks, including the environments in which neither pin applies.
+#[cfg(feature = "test-universal")]
+fn assert_platform_forks(lock: &str, first: &str, second: &str) -> Result<()> {
+    let lock: toml::Table = toml::from_str(lock)?;
+    let first_tree: uv_pep508::MarkerTree = first.parse()?;
+    let second_tree: uv_pep508::MarkerTree = second.parse()?;
+    let mut expected = vec![first_tree, second_tree, first_tree.or(second_tree).negate()];
+    expected.retain(|tree| !tree.is_false());
+    let actual = lock["resolution-markers"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|fork| fork.as_str().unwrap().parse::<uv_pep508::MarkerTree>())
+        .collect::<Result<Vec<_>, _>>()?;
+    assert_eq!(actual.len(), expected.len());
+    for tree in expected {
+        assert!(actual.contains(&tree), "missing fork {tree:?}");
+    }
     Ok(())
 }
 

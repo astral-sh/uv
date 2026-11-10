@@ -85,6 +85,40 @@ pub(super) fn range(
     Some(versions.chain(strings).collect())
 }
 
+/// Bound the parsed versions in a lexical interval whose endpoints share a complete
+/// major component. For example, every version spelling from `2.q` to `2.s` starts
+/// with `2.`, including `2.rc1`. Opaque values have their own comparisons on the child.
+pub(super) fn spelling_prefix_values(raw: &Ranges<ArcStr>) -> Option<Ranges<VersionOrStringValue>> {
+    let (
+        Bound::Included(lower) | Bound::Excluded(lower),
+        Bound::Included(upper) | Bound::Excluded(upper),
+    ) = raw.bounding_range()?
+    else {
+        return None;
+    };
+    let dot = lower.find('.')?;
+    if !upper.starts_with(&lower[..=dot]) {
+        return None;
+    }
+    let prefix = lower[..dot].trim_ascii_start();
+    let major = prefix
+        .strip_prefix(['v', 'V'])
+        .unwrap_or(prefix)
+        .parse::<u64>()
+        .ok()?;
+    // The wildcard upper bound increments the major component.
+    if major >= u64::MAX - 1 {
+        return None;
+    }
+    let versions = Ranges::from(VersionSpecifier::equals_star_version(Version::new([major])));
+    Some(
+        map_bounds(versions, |bound, _| {
+            bound.map(VersionOrStringValue::Version)
+        })
+        .union(&Ranges::higher_than(FIRST_OPAQUE)),
+    )
+}
+
 /// On a raw spelling range, the opaque values are exactly the strings in the
 /// range. A parsed version can have multiple spellings, so its raw spelling
 /// must be tested separately.
