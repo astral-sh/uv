@@ -196,8 +196,8 @@ pub struct LockedFile(fs_err::File);
 
 #[cfg(feature = "tokio")]
 impl LockedFile {
-    /// Inner implementation for [`LockedFile::acquire`].
-    async fn lock_file(
+    /// Acquire a cross-process lock using an open file.
+    pub async fn lock_file(
         file: fs_err::File,
         mode: LockedFileMode,
         resource: &str,
