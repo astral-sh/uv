@@ -7,15 +7,21 @@ pub fn shlex_posix(executable: impl AsRef<Path>) -> String {
     // Convert to a display path.
     let executable = executable.as_ref().portable_display().to_string();
 
+    shlex_posix_str(&executable).into_owned()
+}
+
+/// Quote a string, if necessary, for safe use as a single argument in a POSIX-compatible shell
+/// command.
+pub fn shlex_posix_str(value: &str) -> Cow<'_, str> {
     // Match Python's `shlex.quote` and leave only shell-safe ASCII characters unquoted.
-    if !executable.is_empty()
-        && executable
+    if !value.is_empty()
+        && value
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || b"@%+=:,./-_".contains(&byte))
     {
-        executable
+        Cow::Borrowed(value)
     } else {
-        format!("'{}'", escape_posix_for_single_quotes(&executable))
+        Cow::Owned(format!("'{}'", escape_posix_for_single_quotes(value)))
     }
 }
 
@@ -58,7 +64,21 @@ pub fn shlex_windows(executable: impl AsRef<Path>, shell: Shell) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::shlex_posix;
+    use super::{shlex_posix, shlex_posix_str};
+
+    #[test]
+    fn posix_safe_str() {
+        assert_eq!(shlex_posix_str("3.13"), "3.13");
+        assert_eq!(shlex_posix_str("==3.13"), "==3.13");
+        assert_eq!(shlex_posix_str("cpython@3.13"), "cpython@3.13");
+    }
+
+    #[test]
+    fn posix_str_with_metacharacters() {
+        assert_eq!(shlex_posix_str(">=3.13, <3.14"), "'>=3.13, <3.14'");
+        assert_eq!(shlex_posix_str("3.*"), "'3.*'");
+        assert_eq!(shlex_posix_str(""), "''");
+    }
 
     #[test]
     fn posix_safe_path() {

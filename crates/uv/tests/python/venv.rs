@@ -1524,6 +1524,37 @@ fn create_venv_unknown_python_patch() {
     context.venv.assert(predicates::path::missing());
 }
 
+/// When downloads are set to `manual`, the suggested `uv python install` command should be safe to
+/// paste into a shell, so requests containing shell metacharacters (like ranges) are quoted.
+#[test]
+fn create_venv_python_downloads_manual_hint() {
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_env(EnvVars::UV_PYTHON_PREFERENCE, "only-managed")
+        .with_env(EnvVars::UV_INTERNAL__TEST_PYTHON_MANAGED, "")
+        .with_env(EnvVars::UV_PYTHON_DOWNLOADS, "manual");
+
+    uv_snapshot!(context.filters(), context.venv().arg("--python").arg(">=3.13, <3.14"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: No interpreter found for Python >=3.13, <3.14 in managed installations
+
+    hint: A managed Python download is available for Python >=3.13, <3.14, but Python downloads are set to 'manual', use `uv python install '>=3.13, <3.14'` to install the required version
+    "
+    );
+
+    // A plain version doesn't need quoting.
+    uv_snapshot!(context.filters(), context.venv().arg("--python").arg("3.13"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: No interpreter found for Python 3.13 in managed installations
+
+    hint: A managed Python download is available for Python 3.13, but Python downloads are set to 'manual', use `uv python install 3.13` to install the required version
+    "
+    );
+
+    context.venv.assert(predicates::path::missing());
+}
+
 #[cfg(feature = "test-python-patch")]
 #[test]
 fn create_venv_python_patch() {

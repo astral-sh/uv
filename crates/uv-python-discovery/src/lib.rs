@@ -2,6 +2,7 @@
 use thiserror::Error;
 use uv_python_interpreter::PythonEnvironmentError;
 use uv_python_types::PythonRequest;
+use uv_shell::shlex_posix_str;
 
 #[cfg(test)]
 use uv_static::EnvVars;
@@ -132,7 +133,7 @@ impl std::fmt::Display for MissingPythonHint {
                     f,
                     "A managed Python download is available{}, but Python downloads are set to 'manual', use `uv python install {}` to install the required version",
                     Self::for_request(request),
-                    request.to_canonical_string(),
+                    shlex_posix_str(&request.to_canonical_string()),
                 )
             }
             Self::DownloadsNever(request) => {

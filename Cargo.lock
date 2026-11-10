@@ -7534,6 +7534,7 @@ dependencies = [
  "uv-python-types",
  "uv-scripts",
  "uv-settings",
+ "uv-shell",
  "uv-state",
  "uv-static",
  "uv-warnings",
