@@ -5,6 +5,7 @@ use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
 use indoc::indoc;
 use predicates::prelude::*;
+use uv_cache::CacheBucket;
 use uv_cache_key::cache_digest;
 use uv_fs::{LockedFile, LockedFileMode};
 use uv_python_discovery::{PYTHON_VERSION_FILENAME, PYTHON_VERSIONS_FILENAME};
@@ -510,7 +511,7 @@ fn create_centralized_project_environment() -> Result<()> {
     let target = fs_err::read_link(context.temp_dir.child(".venv").path())?;
     assert_eq!(
         target.parent(),
-        Some(context.cache_dir.child("environments-v2").path())
+        Some(context.cache_bucket(CacheBucket::Environments).path())
     );
     assert!(target.join("pyvenv.cfg").is_file());
     assert!(external.child("marker").is_file());
@@ -539,7 +540,7 @@ fn create_centralized_project_environment() -> Result<()> {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment `project-cp3.12.[X]-[HASH]`
     error: Failed to create virtual environment
-      cause: A virtual environment already exists at: [CACHE_DIR]/environments-v2/project-cp3.12.[X]-[HASH]
+      cause: A virtual environment already exists at: [CACHE_DIR]/environments-[VERSION]/project-cp3.12.[X]-[HASH]
 
     hint: Use the `--clear` flag or set `UV_VENV_CLEAR=1` to replace the existing virtual environment
     "#);
@@ -681,7 +682,7 @@ fn create_centralized_project_environment_link_failure() -> Result<()> {
             Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
             Creating virtual environment `project-cp3.12.[X]-[HASH]`
             warning: Failed to write the environment path: failed to rename file from [TEMP_DIR]/[TMP] to [VENV]/: Is a directory (os error 21)
-            Activate with: source [CACHE_DIR]/environments-v2/project-cp3.12.[X]-[HASH]/[BIN]/activate
+            Activate with: source [CACHE_DIR]/environments-[VERSION]/project-cp3.12.[X]-[HASH]/[BIN]/activate
             "#);
         },
         windows => {
@@ -691,7 +692,7 @@ fn create_centralized_project_environment_link_failure() -> Result<()> {
             Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
             Creating virtual environment `project-cp3.12.[X]-[HASH]`
             warning: Failed to create link to project environment: failed to remove directory `[VENV]/`: The directory is not empty. (os error 145)
-            Activate with: source [CACHE_DIR]/environments-v2/project-cp3.12.[X]-[HASH]/[BIN]/activate
+            Activate with: source [CACHE_DIR]/environments-[VERSION]/project-cp3.12.[X]-[HASH]/[BIN]/activate
             "#);
         },
     }

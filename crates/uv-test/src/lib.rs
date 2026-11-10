@@ -198,11 +198,15 @@ impl TestContext {
         self
     }
 
+    /// Return the directory for a cache bucket.
+    pub fn cache_bucket(&self, bucket: CacheBucket) -> ChildPath {
+        self.cache_dir.child(bucket.to_string())
+    }
+
     /// Return the sorted paths of all regular files in a cache bucket.
     pub fn cache_files(&self, bucket: CacheBucket) -> anyhow::Result<Vec<PathBuf>> {
-        let cache = Cache::from_path(self.cache_dir.path());
         let mut files = Vec::new();
-        for entry in WalkDir::new(cache.bucket(bucket)).min_depth(1) {
+        for entry in WalkDir::new(self.cache_bucket(bucket)).min_depth(1) {
             let entry = entry?;
             if entry.file_type().is_file() {
                 files.push(entry.path().to_path_buf());
@@ -1194,13 +1198,19 @@ impl TestContext {
         ));
         // Filter environment cache entry hashes
         filters.push((
-            r"environments-v(\d+)[\\/]([\w.\[\]-]+)-[a-f0-9]{16}".to_string(),
-            "environments-v$1/$2-[HASH]".to_string(),
+            r"environments-v\d+[\\/]([\w.\[\]-]+)-[a-f0-9]{16}".to_string(),
+            "environments-[VERSION]/$1-[HASH]".to_string(),
         ));
         // Filter archive hashes
         filters.push((
-            r"archive-v(\d+)[\\/][A-Za-z0-9\-\_]+".to_string(),
-            "archive-v$1/[HASH]".to_string(),
+            r"archive-v\d+[\\/][A-Za-z0-9\-\_]+".to_string(),
+            "archive-[VERSION]/[HASH]".to_string(),
+        ));
+
+        // Redact bucket versions in entry paths. Pruning tests report obsolete buckets by name.
+        filters.push((
+            r"(\[CACHE_DIR\]/[a-z-]+-)v\d+[\\/]".to_string(),
+            "$1[VERSION]/".to_string(),
         ));
 
         Self {
