@@ -125,7 +125,7 @@ jobs:
 
       - name: "Upload pending snapshots"
         if: ${{ failure() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: pending-snapshots-linux
           path: pending-snapshots/
@@ -135,7 +135,7 @@ jobs:
 
       - name: "Upload JUnit results"
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: junit-results-linux
           path: target/nextest/ci*/junit.xml
@@ -220,7 +220,7 @@ jobs:
 
       - name: "Upload pending snapshots"
         if: ${{ failure() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: pending-snapshots-macos
           path: pending-snapshots/
@@ -230,7 +230,7 @@ jobs:
 
       - name: "Upload JUnit results"
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: junit-results-macos
           path: target/nextest/ci*/junit.xml
@@ -318,7 +318,7 @@ jobs:
 
       - name: "Upload pending snapshots"
         if: ${{ failure() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: pending-snapshots-windows-${{ matrix.partition }}
           path: pending-snapshots/
@@ -328,7 +328,7 @@ jobs:
 
       - name: "Upload JUnit results"
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: junit-results-windows-${{ matrix.partition }}
           path: ${{ env.UV_WORKSPACE }}/target/nextest/ci*/junit.xml
