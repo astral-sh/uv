@@ -9,6 +9,9 @@ use serde::{Deserialize, Serialize};
 use tracing::debug;
 
 use uv_distribution_filename::VariantLabel;
+use uv_normalize::{InvalidNameError, PackageName};
+use uv_pep440::{Version, VersionParseError, VersionSpecifier};
+use version_ranges::Ranges;
 
 // TODO(konsti): Standardize on a single schema URL once the variant metadata format is finalized.
 /// The PEP 825 draft schema for variant metadata without providers.
@@ -149,6 +152,42 @@ impl VariantsJsonContent {
         }
     }
 
+    fn is_abi_dependency(&self, namespace: &VariantNamespace) -> bool {
+        let Some(VariantProvider {
+            kind: ProviderKind::Builtin { builtin },
+            ..
+        }) = self
+            .providers
+            .as_ref()
+            .and_then(|providers| providers.get(namespace))
+        else {
+            return false;
+        };
+        *builtin == BuiltinProvider::AbiDependency
+    }
+
+    /// Collect the ABI requirements for a variant.
+    ///
+    /// Returns an error if the variant is missing or any of its ABI requirements is invalid.
+    pub fn abi_dependencies(
+        &self,
+        label: &VariantLabel,
+    ) -> Result<Vec<(PackageName, Ranges<Version>)>, AbiDependencyError> {
+        let properties = self
+            .variants
+            .get(label)
+            .ok_or_else(|| AbiDependencyError::MissingVariant(label.clone()))?;
+        let mut dependencies = Vec::new();
+        for (namespace, features) in properties {
+            if self.is_abi_dependency(namespace) {
+                for (feature, values) in features {
+                    dependencies.push(abi_dependency(feature, values)?);
+                }
+            }
+        }
+        Ok(dependencies)
+    }
+
     /// Score a variant using the target's ordered compatible features and values.
     ///
     /// Returns `None` if the label is missing or any of its features is unsupported.
@@ -272,7 +311,12 @@ impl VariantsJsonContent {
                         requires,
                         plugin_api: plugin_api.as_deref(),
                     },
-                    ProviderKind::Builtin { builtin } => VariantProviderRequest::Builtin(builtin),
+                    ProviderKind::Builtin { builtin } => {
+                        VariantProviderRequest::Builtin(match builtin {
+                            BuiltinProvider::AbiDependency => "abi_dependency",
+                            BuiltinProvider::Unknown(name) => name,
+                        })
+                    }
                     ProviderKind::Static { .. } => return None,
                 };
                 Some((namespace, request))
@@ -345,8 +389,25 @@ enum ProviderKind {
         plugin_api: Option<String>,
     },
     Builtin {
-        builtin: String,
+        builtin: BuiltinProvider,
     },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(from = "String", rename_all = "snake_case")]
+enum BuiltinProvider {
+    AbiDependency,
+    #[serde(untagged)]
+    Unknown(String),
+}
+
+impl From<String> for BuiltinProvider {
+    fn from(name: String) -> Self {
+        match name.as_str() {
+            "abi_dependency" => Self::AbiDependency,
+            _ => Self::Unknown(name),
+        }
+    }
 }
 
 #[derive(Deserialize)]
@@ -519,6 +580,73 @@ impl TryFrom<VariantsJsonWire> for VariantsJsonContent {
             variants: wire.variants,
         })
     }
+}
+
+/// An error reading a variant's ABI dependency requirements.
+#[derive(Debug, thiserror::Error)]
+pub enum AbiDependencyError {
+    #[error("Variant `{0}` is missing from the variant metadata")]
+    MissingVariant(VariantLabel),
+    #[error("Invalid ABI dependency feature name: {0}")]
+    InvalidName(#[from] InvalidNameError),
+    #[error(
+        "Invalid ABI dependency feature name: `{feature}` must use the normalized \
+         distribution name `{expected}`"
+    )]
+    NonNormalizedName {
+        feature: VariantFeature,
+        expected: String,
+    },
+    #[error("Unsupported ABI dependency value `{value}` for `{name}`: {source}")]
+    InvalidVersion {
+        name: PackageName,
+        value: VariantValue,
+        #[source]
+        source: VersionParseError,
+    },
+    #[error(
+        "Unsupported ABI dependency for `{name}`: \
+         expected a canonical release prefix with one to three components: {value}"
+    )]
+    InvalidReleasePrefix {
+        name: PackageName,
+        value: VariantValue,
+    },
+}
+
+/// ABI features name a distribution and list the release prefixes it can provide.
+fn abi_dependency(
+    feature: &VariantFeature,
+    values: &[VariantValue],
+) -> Result<(PackageName, Ranges<Version>), AbiDependencyError> {
+    let name = PackageName::from_str(&feature.0)?;
+    let dist_info_name = name.as_dist_info_name();
+    if dist_info_name != feature.0.as_ref() {
+        return Err(AbiDependencyError::NonNormalizedName {
+            feature: feature.clone(),
+            expected: dist_info_name.into_owned(),
+        });
+    }
+    // The allowed version range is the union of the specified versions, as any matching
+    // version is sufficient.
+    let mut versions = Ranges::empty();
+    for value in values {
+        let version =
+            Version::from_str(&value.0).map_err(|source| AbiDependencyError::InvalidVersion {
+                name: name.clone(),
+                value: value.clone(),
+                source,
+            })?;
+        let release = version.release();
+        if release.len() > 3 || version.only_release().to_string() != value.0.as_ref() {
+            return Err(AbiDependencyError::InvalidReleasePrefix {
+                name,
+                value: value.clone(),
+            });
+        }
+        versions = versions.union(&VersionSpecifier::equals_star_version(version).into());
+    }
+    Ok((name, versions))
 }
 
 /// The schema field alone, used to identify unknown schemas when parsing fails.
