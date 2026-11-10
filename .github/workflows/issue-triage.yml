@@ -1,5 +1,6 @@
 # Analyze newly opened issues and persist their triage context.
 name: "issue-triage"
+run-name: Issue context for ${{ github.event.issue.number || inputs.issue }}
 
 on:
   issues:
