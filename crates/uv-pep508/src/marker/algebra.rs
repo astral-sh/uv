@@ -72,6 +72,7 @@ use crate::{
 };
 
 pub(super) mod isop;
+mod platform;
 
 /// The global node interner.
 pub(crate) static INTERNER: LazyLock<Interner> = LazyLock::new(Interner::default);
@@ -104,8 +105,7 @@ struct InternerState {
     /// Note that `OR` is implemented in terms of `AND`.
     cache: FxHashMap<(NodeId, NodeId), NodeId>,
 
-    /// The [`NodeId`] for the disjunction of known, mutually incompatible markers.
-    exclusions: Option<NodeId>,
+    platform: platform::Cache,
 }
 
 impl InternerShared {
@@ -199,7 +199,8 @@ impl InternerGuard<'_> {
                     var,
                     children: children.into_boxed(),
                 };
-                let id = NodeId::new(self.shared.nodes.push(node), false);
+                let flags = platform::node_flags(&node);
+                let id = NodeId::new(self.shared.nodes.push(node), flags);
                 entry.insert((hash, id));
                 id
             }
@@ -435,14 +436,6 @@ impl InternerGuard<'_> {
 
         let (x, y) = (self.shared.node(xi), self.shared.node(yi));
 
-        // Determine whether the conjunction _could_ contain a conflict.
-        //
-        // As an optimization, we only have to perform this check at the top-level, since these
-        // variables are given higher priority in the tree. In other words, if they're present, they
-        // _must_ be at the top; and if they're not at the top, we know they aren't present in any
-        // children.
-        let conflicts = x.var.is_conflicting_variable() && y.var.is_conflicting_variable();
-
         // Perform Shannon Expansion of the higher order variable.
         let (func, children) = match x.var.cmp(&y.var) {
             // X is higher order than Y, apply Y to every child of X.
@@ -465,18 +458,6 @@ impl InternerGuard<'_> {
         // Create the output node.
         let node = self.create_node(func, children);
 
-        // If the node includes known incompatibilities, map it to `false`.
-        let node = if conflicts {
-            let exclusions = self.exclusions();
-            if self.disjointness(node, exclusions.not()) {
-                NodeId::FALSE
-            } else {
-                node
-            }
-        } else {
-            node
-        };
-
         // Memoize the result of this operation.
         //
         // ADDs often contain duplicated subgraphs in distinct branches due to the restricted
@@ -487,49 +468,10 @@ impl InternerGuard<'_> {
     }
 
     /// Returns `true` if there is no environment in which both marker trees can apply,
-    /// i.e. their conjunction is always `false`.
-    pub(crate) fn is_disjoint_nontrivial(&mut self, xi: NodeId, yi: NodeId) -> bool {
-        debug_assert!(
-            xi.is_disjoint_trivial(yi).is_none(),
-            "`is_disjoint_nontrivial` requires non-trivial disjointness"
-        );
-
-        let (x, y) = (self.shared.node(xi), self.shared.node(yi));
-
-        // Determine whether the conjunction _could_ contain a conflict.
-        //
-        // As an optimization, we only have to perform this check at the top-level, since these
-        // variables are given higher priority in the tree. In other words, if they're present, they
-        // _must_ be at the top; and if they're not at the top, we know they aren't present in any
-        // children.
-        if x.var.is_conflicting_variable() && y.var.is_conflicting_variable() {
-            return self.and(xi, yi).is_false();
-        }
-
-        // Perform Shannon Expansion of the higher order variable.
-        match x.var.cmp(&y.var) {
-            // X is higher order than Y, Y must be disjoint with every child of X.
-            Ordering::Less => x
-                .children
-                .nodes()
-                .all(|x| self.disjointness(x.negate(xi), yi)),
-            // Y is higher order than X, X must be disjoint with every child of Y.
-            Ordering::Greater => y
-                .children
-                .nodes()
-                .all(|y| self.disjointness(y.negate(yi), xi)),
-            // X and Y represent the same variable, their merged edges must be unsatisfiable.
-            Ordering::Equal => x.children.is_disjoint(xi, &y.children, yi, self),
-        }
-    }
-
-    /// Returns `true` if there is no environment in which both marker trees can apply,
     /// i.e., their conjunction is always `false`.
     fn disjointness(&mut self, xi: NodeId, yi: NodeId) -> bool {
-        // NOTE(charlie): This is equivalent to `is_disjoint`, with the exception that it doesn't
-        // perform the mutually-incompatible marker check. If it did, we'd create an infinite loop,
-        // since `is_disjoint` calls `and` (when relevant variables are present) which then calls
-        // `disjointness`.
+        // This tests the two diagrams over their full domains, including impossible
+        // platform combinations. Callers can supply the valid platform domain explicitly.
 
         // `false` is disjoint with any marker.
         if xi.is_false() || yi.is_false() {
@@ -548,6 +490,11 @@ impl InternerGuard<'_> {
             return true;
         }
 
+        self.disjoint_edges(xi, yi)
+    }
+
+    /// Compare the outgoing edges of two nontrivial nodes over their full domains.
+    fn disjoint_edges(&mut self, xi: NodeId, yi: NodeId) -> bool {
         let (x, y) = (self.shared.node(xi), self.shared.node(yi));
 
         // Perform Shannon Expansion of the higher order variable.
@@ -855,7 +802,10 @@ impl InternerGuard<'_> {
                 .get(name.extra())
                 .copied()
                 .unwrap_or((NodeId::FALSE, NodeId::FALSE));
-            debug_assert!(self.and(lower, upper.not()).is_false());
+            debug_assert!({
+                let outside_upper = self.and(lower, upper.not());
+                self.canonicalize(outside_upper).is_false()
+            });
 
             if lower.is_true() {
                 self.resolve_extras_with_bounds_cached(high.negate(marker), known_extras, cache)
@@ -1092,251 +1042,6 @@ impl InternerGuard<'_> {
         // Conjunction inserts the version decision before extras and other later variables.
         self.and(i, versions)
     }
-
-    /// Check satisfiability without expanding paths, including known cross-variable exclusions.
-    pub(crate) fn is_unreachable(&mut self, marker: NodeId) -> bool {
-        let exclusions = self.exclusions();
-        self.and(marker, exclusions.not()).is_false()
-    }
-
-    /// The disjunction of known incompatible conditions.
-    ///
-    /// For example, while the marker specification and grammar do not _forbid_ it, we know that
-    /// both `sys_platform == 'win32'` and `platform_system == 'Darwin'` will never true at the
-    /// same time.
-    ///
-    /// This method thus encodes assumptions about the environment that are not guaranteed by the
-    /// PEP 508 specification alone.
-    fn exclusions(&mut self) -> NodeId {
-        /// Perform a disjunction operation between two nodes.
-        ///
-        /// This is equivalent to [`InternerGuard::or`], with the exception that it does not
-        /// incorporate knowledge from outside the marker algebra.
-        fn disjunction(
-            guard: &mut InternerGuard<'_>,
-            cache: &mut FxHashMap<(NodeId, NodeId), NodeId>,
-            xi: NodeId,
-            yi: NodeId,
-        ) -> NodeId {
-            // We take advantage of cheap negation here and implement OR in terms
-            // of it's De Morgan complement.
-            conjunction(guard, cache, xi.not(), yi.not()).not()
-        }
-
-        /// Perform a conjunction operation between two nodes.
-        ///
-        /// This is equivalent to [`InternerGuard::and`], with the exception that it does not
-        /// incorporate knowledge from outside the marker algebra.
-        fn conjunction(
-            guard: &mut InternerGuard<'_>,
-            cache: &mut FxHashMap<(NodeId, NodeId), NodeId>,
-            xi: NodeId,
-            yi: NodeId,
-        ) -> NodeId {
-            if xi.is_true() {
-                return yi;
-            }
-            if yi.is_true() {
-                return xi;
-            }
-            if xi == yi {
-                return xi;
-            }
-            if xi.is_false() || yi.is_false() {
-                return NodeId::FALSE;
-            }
-            // `X and not X` is `false` by definition.
-            if xi.not() == yi {
-                return NodeId::FALSE;
-            }
-
-            // The operation was memoized.
-            if let Some(result) = cache.get(&(xi, yi)) {
-                return *result;
-            }
-
-            let (x, y) = (guard.shared.node(xi), guard.shared.node(yi));
-
-            // Perform Shannon Expansion of the higher order variable.
-            let (func, children) = match x.var.cmp(&y.var) {
-                // X is higher order than Y, apply Y to every child of X.
-                Ordering::Less => {
-                    let children = x
-                        .children
-                        .map(xi, |node| conjunction(guard, cache, node, yi));
-                    (x.var.clone(), children)
-                }
-                // Y is higher order than X, apply X to every child of Y.
-                Ordering::Greater => {
-                    let children = y
-                        .children
-                        .map(yi, |node| conjunction(guard, cache, node, xi));
-                    (y.var.clone(), children)
-                }
-                // X and Y represent the same variable, merge their children.
-                Ordering::Equal => {
-                    let children = x
-                        .children
-                        .apply(xi, &y.children, yi, |x, y| conjunction(guard, cache, x, y));
-                    (x.var.clone(), children)
-                }
-            };
-
-            // Create the output node.
-            let node = guard.create_node(func, children);
-
-            // Memoize the result of this operation.
-            cache.insert((xi, yi), node);
-
-            node
-        }
-
-        if let Some(exclusions) = self.state.exclusions {
-            return exclusions;
-        }
-        let mut tree = NodeId::FALSE;
-        // These operations omit known-incompatibility checks, so their results must not be reused
-        // by regular marker operations.
-        let mut cache = FxHashMap::default();
-
-        // Create all nodes upfront.
-        let os_name_nt = self.expression(MarkerExpression::String {
-            key: MarkerValueString::OsName,
-            operator: MarkerOperator::Equal,
-            value: arcstr::literal!("nt"),
-        });
-        let os_name_posix = self.expression(MarkerExpression::String {
-            key: MarkerValueString::OsName,
-            operator: MarkerOperator::Equal,
-            value: arcstr::literal!("posix"),
-        });
-        let sys_platform_linux = self.expression(MarkerExpression::String {
-            key: MarkerValueString::SysPlatform,
-            operator: MarkerOperator::Equal,
-            value: arcstr::literal!("linux"),
-        });
-        let sys_platform_darwin = self.expression(MarkerExpression::String {
-            key: MarkerValueString::SysPlatform,
-            operator: MarkerOperator::Equal,
-            value: arcstr::literal!("darwin"),
-        });
-        let sys_platform_ios = self.expression(MarkerExpression::String {
-            key: MarkerValueString::SysPlatform,
-            operator: MarkerOperator::Equal,
-            value: arcstr::literal!("ios"),
-        });
-        let sys_platform_win32 = self.expression(MarkerExpression::String {
-            key: MarkerValueString::SysPlatform,
-            operator: MarkerOperator::Equal,
-            value: arcstr::literal!("win32"),
-        });
-        let platform_system_freebsd = self.expression(MarkerExpression::String {
-            key: MarkerValueString::PlatformSystem,
-            operator: MarkerOperator::Equal,
-            value: arcstr::literal!("FreeBSD"),
-        });
-        let platform_system_netbsd = self.expression(MarkerExpression::String {
-            key: MarkerValueString::PlatformSystem,
-            operator: MarkerOperator::Equal,
-            value: arcstr::literal!("NetBSD"),
-        });
-        let platform_system_openbsd = self.expression(MarkerExpression::String {
-            key: MarkerValueString::PlatformSystem,
-            operator: MarkerOperator::Equal,
-            value: arcstr::literal!("OpenBSD"),
-        });
-        let platform_system_sunos = self.expression(MarkerExpression::String {
-            key: MarkerValueString::PlatformSystem,
-            operator: MarkerOperator::Equal,
-            value: arcstr::literal!("SunOS"),
-        });
-        let platform_system_ios = self.expression(MarkerExpression::String {
-            key: MarkerValueString::PlatformSystem,
-            operator: MarkerOperator::Equal,
-            value: arcstr::literal!("iOS"),
-        });
-        let platform_system_ipados = self.expression(MarkerExpression::String {
-            key: MarkerValueString::PlatformSystem,
-            operator: MarkerOperator::Equal,
-            value: arcstr::literal!("iPadOS"),
-        });
-        let sys_platform_aix = self.expression(MarkerExpression::String {
-            key: MarkerValueString::SysPlatform,
-            operator: MarkerOperator::Equal,
-            value: arcstr::literal!("aix"),
-        });
-        let sys_platform_android = self.expression(MarkerExpression::String {
-            key: MarkerValueString::SysPlatform,
-            operator: MarkerOperator::Equal,
-            value: arcstr::literal!("android"),
-        });
-        let sys_platform_emscripten = self.expression(MarkerExpression::String {
-            key: MarkerValueString::SysPlatform,
-            operator: MarkerOperator::Equal,
-            value: arcstr::literal!("emscripten"),
-        });
-        let sys_platform_cygwin = self.expression(MarkerExpression::String {
-            key: MarkerValueString::SysPlatform,
-            operator: MarkerOperator::Equal,
-            value: arcstr::literal!("cygwin"),
-        });
-        let sys_platform_wasi = self.expression(MarkerExpression::String {
-            key: MarkerValueString::SysPlatform,
-            operator: MarkerOperator::Equal,
-            value: arcstr::literal!("wasi"),
-        });
-
-        // Pairs of `os_name` and `sys_platform` that are known to be incompatible.
-        //
-        // For example: `os_name == 'nt' and sys_platform == 'darwin'`
-        let mut pairs = vec![
-            (os_name_nt, sys_platform_linux),
-            (os_name_nt, sys_platform_darwin),
-            (os_name_nt, sys_platform_ios),
-            (os_name_posix, sys_platform_win32),
-        ];
-
-        // Pairs of `platform_system` and `sys_platform` that are known to be incompatible.
-        //
-        // For example: `platform_system == 'FreeBSD' and sys_platform == 'aix'`
-        for platform_system in [
-            platform_system_freebsd,
-            platform_system_netbsd,
-            platform_system_openbsd,
-            platform_system_sunos,
-            platform_system_ios,
-            platform_system_ipados,
-        ] {
-            for sys_platform in [
-                sys_platform_aix,
-                sys_platform_android,
-                sys_platform_emscripten,
-                sys_platform_ios,
-                sys_platform_linux,
-                sys_platform_darwin,
-                sys_platform_win32,
-                sys_platform_cygwin,
-                sys_platform_wasi,
-            ] {
-                // Some of the above pairs are actually compatible.
-                if sys_platform == sys_platform_ios
-                    && (platform_system == platform_system_ios
-                        || platform_system == platform_system_ipados)
-                {
-                    continue;
-                }
-                pairs.push((platform_system, sys_platform));
-            }
-        }
-
-        for (a, b) in pairs {
-            let a_and_b = conjunction(self, &mut cache, a, b);
-            tree = disjunction(self, &mut cache, tree, a_and_b);
-        }
-
-        self.state.exclusions = Some(tree);
-        tree
-    }
 }
 
 /// A unique variable for a decision node.
@@ -1383,20 +1088,6 @@ pub(crate) enum Variable {
     List(CanonicalMarkerListPair),
 }
 
-impl Variable {
-    /// Returns `true` if the variable is known to be involved in _at least_ one conflicting
-    /// marker pair.
-    ///
-    /// For example, `sys_platform == 'win32'` and `platform_system == 'Darwin'` are known to
-    /// never be true at the same time.
-    fn is_conflicting_variable(&self) -> bool {
-        let Self::String(marker) = self else {
-            return false;
-        };
-        marker.is_conflicting()
-    }
-}
-
 /// A decision node in an Algebraic Decision Diagram.
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
 pub(crate) struct Node {
@@ -1419,7 +1110,8 @@ impl Node {
 
 /// An ID representing a reference to a decision node in the [`Interner`].
 ///
-/// The lowest bit of the ID is used represent complemented edges.
+/// Bit zero marks a complemented edge. The next two bits cache properties of the
+/// node for [`platform`].
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub(crate) struct NodeId(usize);
 
@@ -1430,17 +1122,13 @@ impl NodeId {
     // The terminal node representing `false`, or an unsatisfiable node.
     pub(crate) const FALSE: Self = Self(1);
 
-    /// Create a new, optionally complemented, [`NodeId`] with the given index.
-    fn new(index: usize, complement: bool) -> Self {
-        // Ensure the index does not interfere with the lowest complement bit.
-        let index = (index + 1) << 1;
-        Self(index | usize::from(complement))
+    /// Create an uncomplemented ID for a newly interned node.
+    fn new(index: usize, flags: usize) -> Self {
+        Self(((index + 1) << 3) | flags)
     }
 
-    /// Returns the index of this ID, ignoring the complemented edge.
     fn index(self) -> usize {
-        // Ignore the lowest bit and bring indices back to starting at `0`.
-        (self.0 >> 1) - 1
+        (self.0 >> 3) - 1
     }
 
     /// Returns `true` if this ID represents a complemented edge.
