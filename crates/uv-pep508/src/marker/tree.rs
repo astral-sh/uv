@@ -792,6 +792,24 @@ impl MarkerTree {
         Self(INTERNER.lock().expression(expr))
     }
 
+    /// Match just this spelling of an environment value, even when other spellings parse to the same version.
+    pub fn exact_string(key: CanonicalMarkerValueString, value: ArcStr) -> Self {
+        let comparison = |operator, value| {
+            Self::expression(MarkerExpression::String {
+                key: key.into(),
+                operator,
+                value,
+            })
+        };
+        if key.is_version_or_string() && value.parse::<uv_pep440::VersionPattern>().is_ok() {
+            // Two strings contain each other exactly when they are equal.
+            comparison(MarkerOperator::In, value.clone())
+                .and(comparison(MarkerOperator::Contains, value))
+        } else {
+            comparison(MarkerOperator::Equal, value)
+        }
+    }
+
     /// Whether the marker always evaluates to `true`.
     ///
     /// If this method returns `true`, it is definitively known that the marker will
@@ -2242,6 +2260,29 @@ mod test {
                     assert_round_trip(tree);
                 }
                 assert_round_trip(m(&format!("{key} >= '{value}' and {key} <= '{value}'")));
+            }
+        }
+    }
+
+    #[test]
+    fn exact_platform_environment_spelling() {
+        for key in [
+            crate::CanonicalMarkerValueString::PlatformVersion,
+            crate::CanonicalMarkerValueString::PlatformRelease,
+        ] {
+            let guard = MarkerTree::exact_string(key, "1".into());
+            assert_round_trip(guard);
+            for (raw, matches) in [
+                ("1", true),
+                ("1.0", false),
+                ("01", false),
+                ("v1", false),
+                ("", false),
+            ] {
+                let env = env37()
+                    .with_platform_release(raw)
+                    .with_platform_version(raw);
+                assert_eq!(guard.evaluate(&env, &[]), matches);
             }
         }
     }
