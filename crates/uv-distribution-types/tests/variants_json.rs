@@ -130,7 +130,9 @@ fn parse_abi_dependency_provider() -> Result<(), Box<dyn std::error::Error>> {
         "providers": {"abi": {"builtin": "abi_dependency"}},
         "variants": {
             "valid": {"abi": {"my_runtime": ["2.8", "2.10"]}},
-            "invalid": {"abi": {"my_runtime": ["2.8", "invalid"]}}
+            "invalid": {"abi": {"my_runtime": ["2.8", "invalid"]}},
+            "noncanonical": {"abi": {"my_runtime": ["02.8"]}},
+            "too_many_components": {"abi": {"my_runtime": ["2.8.0.1"]}}
         }
     }))?;
 
@@ -149,6 +151,20 @@ fn parse_abi_dependency_provider() -> Result<(), Box<dyn std::error::Error>> {
     assert_snapshot!(
         error,
         @"Unsupported ABI dependency value `invalid` for `my-runtime`: expected version to start with a number, but no leading ASCII digits were found"
+    );
+    let error = metadata
+        .abi_dependencies(&VariantLabel::from_static("noncanonical"))
+        .expect_err("ABI release prefixes must use their canonical spelling");
+    assert_snapshot!(
+        error,
+        @"Unsupported ABI dependency for `my-runtime`: expected a canonical release prefix with one to three components: 02.8"
+    );
+    let error = metadata
+        .abi_dependencies(&VariantLabel::from_static("too_many_components"))
+        .expect_err("ABI release prefixes must have at most three components");
+    assert_snapshot!(
+        error,
+        @"Unsupported ABI dependency for `my-runtime`: expected a canonical release prefix with one to three components: 2.8.0.1"
     );
     Ok(())
 }
