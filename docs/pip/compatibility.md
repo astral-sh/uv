@@ -471,10 +471,9 @@ order when both operands parse as versions. For example, a release of `2.post1` 
 operand is opaque, strict ordering is false and inclusive ordering compares the strings for
 equality. Containment checks such as `'SMP' in platform_version` use the original strings.
 
-A universal lock or export may need the opposite of a dependency marker. For example, the
-opposite of `platform_release >= '24'` must include every opaque release, but
-`platform_release < '24'` excludes them all. uv reports an error if it cannot write a fork as
-a PEP 508 marker. See the
+A universal lock or export may need the opposite of a dependency marker. For example, the opposite
+of `platform_release >= '24'` must include every opaque release, but `platform_release < '24'`
+excludes them all. uv reports an error if it cannot write a fork as a PEP 508 marker. See the
 [marker comparison rules](https://packaging.python.org/en/latest/specifications/dependency-specifiers/#marker-comparisons).
 
 ## Package priority
