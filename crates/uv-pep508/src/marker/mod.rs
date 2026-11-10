@@ -18,6 +18,7 @@ mod tree;
 mod version_or_string;
 
 pub use version_or_string::VersionOrStringValue;
+pub use version_or_string::feasibility::PlatformMarkerFeasibility;
 
 pub use environment::{MarkerEnvironment, MarkerEnvironmentBuilder};
 pub use lowering::{

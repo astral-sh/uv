@@ -1,4 +1,5 @@
 //! Emit PEP 508 comparisons which cover both parsed versions and opaque strings.
+pub(super) mod feasibility;
 pub(super) mod spelling;
 
 use std::ops::Bound;

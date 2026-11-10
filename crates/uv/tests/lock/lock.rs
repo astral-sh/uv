@@ -44430,6 +44430,151 @@ fn lock_opaque_interval_and_numeric_platform_version_pins() -> Result<()> {
     )
 }
 
+/// The raw interval contains spellings of 2rc1, but no spelling of version 1.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_joint_spelling_and_numeric_platform_version_pins() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    write_platform_marker_wheels(&context)?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "a==1; platform_version == '1'",
+            "a==2; platform_version > '2.q' and platform_version < '2.s'",
+        ]
+
+        [tool.uv]
+        no-index = true
+        find-links = ["wheelhouse"]
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.lock().args(["--locked", "--offline"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    let output = uv_snapshot!(context.filters(), context.export().args([
+        "--locked", "--offline", "--no-header", "--no-hashes", "--no-annotate", "--no-emit-project",
+    ]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    a==1 ; (platform_version < '2.p~' and platform_version == '1') or (platform_version >= '2.~' and platform_version == '1')
+    a==2 ; (platform_version >= '2.p~' and platform_version < '2.~' and platform_version < '2.p~') or (platform_version >= '2.p~' and platform_version < '2.~' and platform_version >= '2.~') or (platform_version >= '2.p~' and platform_version < '2.~' and platform_version > '2.q' and platform_version < '2.s')
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    let raw = "platform_version > '2.q' and platform_version < '2.s'";
+    let first = "platform_version == '1'".parse::<uv_pep508::MarkerTree>()?;
+    let second = raw.parse::<uv_pep508::MarkerTree>()?;
+    let lines = std::str::from_utf8(&output.stdout)?
+        .lines()
+        .collect::<Vec<_>>();
+    assert_eq!(lines.len(), 2);
+    let one = lines[0]
+        .strip_prefix("a==1 ; ")
+        .ok_or_else(|| anyhow!("expected the first pin"))?
+        .parse::<uv_pep508::MarkerTree>()?;
+    let two = lines[1]
+        .strip_prefix("a==2 ; ")
+        .ok_or_else(|| anyhow!("expected the second pin"))?
+        .parse::<uv_pep508::MarkerTree>()?;
+    let env = uv_pep508::MarkerEnvironment::try_from(uv_pep508::MarkerEnvironmentBuilder {
+        implementation_name: "cpython",
+        implementation_version: "3.12",
+        os_name: "posix",
+        platform_machine: "arm64",
+        platform_python_implementation: "CPython",
+        platform_release: "",
+        platform_system: "Darwin",
+        platform_version: "",
+        python_full_version: "3.12",
+        python_version: "3.12",
+        sys_platform: "darwin",
+    })?;
+    for value in [
+        "1",
+        "V01.0",
+        "2.rc1",
+        "2.r",
+        "2.raw-build",
+        "2.q",
+        "2.s",
+        "3",
+    ] {
+        let env = env.clone().with_platform_version(value);
+        assert_eq!(
+            one.evaluate(&env, &[]),
+            first.evaluate(&env, &[]),
+            "{value}"
+        );
+        assert_eq!(
+            two.evaluate(&env, &[]),
+            second.evaluate(&env, &[]),
+            "{value}"
+        );
+    }
+    Ok(())
+}
+
+/// A version range with no verified spelling cannot justify dropping the conflict.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_uncertain_platform_version_pins() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    write_platform_marker_wheels(&context)?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "a==1; platform_version > '7'",
+            "a==2; platform_version > '2.q' and platform_version < '2.s'",
+        ]
+
+        [tool.uv]
+        no-index = true
+        find-links = ["wheelhouse"]
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Could not determine whether the conflicting requirements for `a` overlap on `platform_version`
+      uv could not establish whether one value satisfies both the string and version comparisons.
+
+    hint: Use compatible requirements for this split, or narrow `tool.uv.environments` to the environments you support.
+    ");
+    assert!(!context.temp_dir.child("uv.lock").path().exists());
+    Ok(())
+}
+
+/// Make both pins available to the resolver without an index.
+#[cfg(feature = "test-universal")]
+fn write_platform_marker_wheels(context: &uv_test::TestContext) -> Result<()> {
+    let wheelhouse = context.temp_dir.child("wheelhouse");
+    wheelhouse.create_dir_all()?;
+    let name = "a".parse()?;
+    for version in ["1", "2"] {
+        let (filename, wheel) = WheelBuilder::new(&name, &version.parse()?).build();
+        wheelhouse.child(filename).write_binary(&wheel)?;
+    }
+    Ok(())
+}
+
 #[cfg(feature = "test-universal")]
 fn lock_platform_version_pins(first: &str, second: &str) -> Result<()> {
     let server = PackseServer::from_toml(indoc! {r#"

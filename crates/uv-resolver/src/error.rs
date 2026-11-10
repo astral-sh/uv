@@ -16,7 +16,7 @@ use uv_distribution_types::{
 use uv_macros::DebugNoInline;
 use uv_normalize::PackageName;
 use uv_pep440::{LowerBound, Version};
-use uv_pep508::MarkerEnvironment;
+use uv_pep508::{CanonicalMarkerValueString, MarkerEnvironment};
 use uv_platform_tags::Tags;
 use uv_pypi_types::ParsedUrl;
 use uv_redacted::SafeUrl;
@@ -115,6 +115,18 @@ pub enum ResolveError {
     #[error(transparent)]
     NoSolution(#[from] Box<NoSolutionError>),
 
+    #[error(
+        "Could not determine whether the conflicting requirements{subject} overlap on `{key}`\n  uv could not establish whether one value satisfies both the string and version comparisons.",
+        subject = if packages.is_empty() { String::new() } else { format!(" for {packages}") }
+    )]
+    UncertainPlatformOverlap {
+        key: CanonicalMarkerValueString,
+        packages: String,
+    },
+
+    #[error("No supported environment satisfies the platform markers in this resolution")]
+    EmptyPlatformEnvironments,
+
     #[error("Attempted to construct an invalid version specifier")]
     InvalidVersion(#[from] uv_pep440::VersionSpecifierBuildError),
 
@@ -151,6 +163,8 @@ impl ResolveError {
             | Self::DisallowedUrl { .. }
             | Self::DistributionType(_)
             | Self::NoSolution(_)
+            | Self::UncertainPlatformOverlap { .. }
+            | Self::EmptyPlatformEnvironments
             | Self::UnhashedPackage(_)
             | Self::PackageUnavailable(_)
             | Self::ConflictMarker(_)
@@ -169,6 +183,7 @@ impl uv_errors::Hinted for ResolveError {
     fn hints(&self) -> uv_errors::Hints<'_> {
         match self {
             Self::NoSolution(no_solution) => uv_errors::Hinted::hints(no_solution.as_ref()),
+            Self::UncertainPlatformOverlap { .. } => "Use compatible requirements for this split, or narrow `tool.uv.environments` to the environments you support.".into(),
             Self::Client(error) => uv_errors::Hinted::hints(error),
             Self::Distribution(error) => uv_errors::Hinted::hints(error),
             Self::Dependencies(error, ..) => uv_errors::Hinted::hints(error.as_ref()),
