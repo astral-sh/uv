@@ -238,6 +238,12 @@ mod tests {
         identify the endpoint; authentication uses `GOOGLE_APPLICATION_CREDENTIALS` or Application
         Default Credentials.
 
+        ### `http2-keep-alive` {#http2-keep-alive}
+
+        While a request is in progress, uv sends an HTTP/2 `PING` after 15 seconds without receiving
+        data. If the peer does not acknowledge the ping within 10 seconds, uv closes the connection
+        so subsequent requests can use a new one.
+
         ### `index-by-name` {#index-by-name}
 
         The `--index` and `--default-index` options accept the names of configured package indexes

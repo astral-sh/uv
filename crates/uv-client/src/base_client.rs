@@ -28,7 +28,7 @@ use uv_distribution_types::IndexCredentialsError;
 use uv_git::GitHttpSettings;
 use uv_pep508::MarkerEnvironment;
 use uv_platform_tags::Platform;
-use uv_preview::Preview;
+use uv_preview::{Preview, PreviewFeature};
 use uv_redacted::SafeUrl;
 use uv_redacted::SafeUrlError;
 use uv_redacted::policy::SerializationPolicy;
@@ -618,6 +618,15 @@ impl<'a> BaseClientBuilder<'a> {
             .read_timeout(read_timeout)
             .connect_timeout(connect_timeout)
             .redirect(redirect_policy.reqwest_policy());
+
+        let client_builder = if self.preview.is_enabled(PreviewFeature::Http2KeepAlive) {
+            // Detect an unresponsive HTTP/2 connection before the default read timeout.
+            client_builder
+                .http2_keep_alive_interval(Duration::from_secs(15))
+                .http2_keep_alive_timeout(Duration::from_secs(10))
+        } else {
+            client_builder
+        };
 
         // If necessary, accept invalid certificates.
         let client_builder = match security {

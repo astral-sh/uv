@@ -462,6 +462,10 @@ pub enum PreviewFeature {
     BuildDependencyHashes,
     /// Enables experimental support for [wheel variants](https://peps.python.org/pep-0825/).
     WheelVariants,
+    /// While a request is in progress, uv sends an HTTP/2 `PING` after 15 seconds without receiving
+    /// data. If the peer does not acknowledge the ping within 10 seconds, uv closes the connection
+    /// so subsequent requests can use a new one.
+    Http2KeepAlive,
 }
 
 impl Display for PreviewFeature {
