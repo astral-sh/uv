@@ -250,19 +250,17 @@ mod tests {
     #[test]
     fn canonical_git_source_url() -> Result<(), SafeUrlError> {
         let canonical = |url| SafeUrl::parse(url).map(CanonicalUrl::new);
-        let repository = canonical("git+https://github.com/pypa/sample-namespace-packages.git")?;
-        let tagged = canonical("git+https://github.com/pypa/sample-namespace-packages.git@2.0.0")?;
 
         assert_eq!(
-            repository,
+            canonical("git+https://github.com/pypa/sample-namespace-packages.git")?,
             canonical("git+https://github.com/pypa/sample-namespace-packages")?,
         );
         assert_eq!(
-            tagged,
+            canonical("git+https://github.com/pypa/sample-namespace-packages.git@2.0.0")?,
             canonical("git+https://github.com/pypa/sample-namespace-packages@2.0.0")?,
         );
         assert_ne!(
-            repository,
+            canonical("git+https://github.com/pypa/sample-namespace-packages.git")?,
             canonical("git+https://github.com/pypa/sample-packages.git")?,
         );
         assert_ne!(
@@ -274,11 +272,11 @@ mod tests {
             )?,
         );
         assert_ne!(
-            repository,
+            canonical("git+https://github.com/pypa/sample-namespace-packages.git")?,
             canonical("git+https://github.com/pypa/sample-namespace-packages.git#lfs=true")?,
         );
         assert_ne!(
-            tagged,
+            canonical("git+https://github.com/pypa/sample-namespace-packages.git@2.0.0")?,
             canonical("git+https://github.com/pypa/sample-namespace-packages.git@v1.0.0")?,
         );
 
@@ -389,6 +387,13 @@ mod tests {
             leading,
             GitUpstreamUrl::parse("https://example.com/%40solo")?,
         );
+        assert_eq!(
+            GitUpstreamUrl::parse("https://example.com/pkg.git/@solo")?
+                .as_url()
+                .path(),
+            "/pkg.git/@solo",
+        );
+
         Ok(())
     }
 }
