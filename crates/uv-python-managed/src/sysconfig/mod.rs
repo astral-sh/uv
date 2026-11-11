@@ -359,6 +359,10 @@ mod tests {
                 "/usr/bin/arm-linux-gnueabihf-gcc",
                 "/usr/bin/arm-linux-gnueabihf-g++",
             ),
+            (
+                "/usr/bin/loongarch64-linux-gnu-gcc",
+                "/usr/bin/loongarch64-linux-gnu-g++",
+            ),
             ("/usr/bin/mips-linux-gnu-gcc", "/usr/bin/mips-linux-gnu-g++"),
             (
                 "/usr/bin/mipsel-linux-gnu-gcc",
@@ -371,6 +375,10 @@ mod tests {
             (
                 "/usr/bin/s390x-linux-gnu-gcc",
                 "/usr/bin/s390x-linux-gnu-g++",
+            ),
+            (
+                "/usr/bin/x86_64-linux-gnu-gcc",
+                "/usr/bin/x86_64-linux-gnu-g++",
             ),
         ] {
             let sysconfigdata = [
