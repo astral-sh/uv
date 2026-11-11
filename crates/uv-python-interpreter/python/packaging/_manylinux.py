@@ -31,22 +31,22 @@ def _is_linux_armhf(executable: str) -> bool:
     # https://static.docs.arm.com/ihi0044/g/aaelf32.pdf
     with _parse_elf(executable) as f:
         return (
-                f is not None
-                and f.capacity == EIClass.C32
-                and f.encoding == EIData.Lsb
-                and f.machine == EMachine.Arm
-                and f.flags & EF_ARM_ABIMASK == EF_ARM_ABI_VER5
-                and f.flags & EF_ARM_ABI_FLOAT_HARD == EF_ARM_ABI_FLOAT_HARD
+            f is not None
+            and f.capacity == EIClass.C32
+            and f.encoding == EIData.Lsb
+            and f.machine == EMachine.Arm
+            and f.flags & EF_ARM_ABIMASK == EF_ARM_ABI_VER5
+            and f.flags & EF_ARM_ABI_FLOAT_HARD == EF_ARM_ABI_FLOAT_HARD
         )
 
 
 def _is_linux_i686(executable: str) -> bool:
     with _parse_elf(executable) as f:
         return (
-                f is not None
-                and f.capacity == EIClass.C32
-                and f.encoding == EIData.Lsb
-                and f.machine == EMachine.I386
+            f is not None
+            and f.capacity == EIClass.C32
+            and f.encoding == EIData.Lsb
+            and f.machine == EMachine.I386
         )
 
 
@@ -263,9 +263,7 @@ def platform_tags(archs: Sequence[str]) -> Iterator[str]:
             for glibc_minor in range(glibc_max.minor, min_minor, -1):
                 glibc_version = _GLibCVersion(glibc_max.major, glibc_minor, None)
                 if _is_compatible(arch, glibc_version):
-                    yield "manylinux_{}_{}_{}".format(
-                        glibc_version.major, glibc_version.minor, arch
-                    )
+                    yield f"manylinux_{glibc_version.major}_{glibc_version.minor}_{arch}"
                     # Handle the legacy manylinux1, manylinux2010, manylinux2014 tags.
                     legacy_tag = _LEGACY_MANYLINUX_MAP.get(glibc_version[:2])
                     if legacy_tag:
