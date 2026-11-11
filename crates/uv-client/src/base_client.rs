@@ -63,6 +63,12 @@ pub const DEFAULT_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 /// timeout on the entire upload.
 pub const DEFAULT_READ_TIMEOUT_UPLOAD: Duration = Duration::from_mins(15);
 
+/// Give slow peers longer to acknowledge a ping, while detecting a dead connection promptly
+/// even with the longer read timeout used for uploads.
+fn ping_ack_timeout(read_timeout: Duration) -> Duration {
+    (read_timeout / 3).clamp(Duration::from_secs(10), Duration::from_secs(20))
+}
+
 #[derive(Debug, Error)]
 pub enum ClientBuildError {
     #[error("failed to build HTTP client")]
@@ -620,10 +626,9 @@ impl<'a> BaseClientBuilder<'a> {
             .redirect(redirect_policy.reqwest_policy());
 
         let client_builder = if self.preview.is_enabled(PreviewFeature::Http2KeepAlive) {
-            // Detect an unresponsive HTTP/2 connection before the default read timeout.
             client_builder
                 .http2_keep_alive_interval(Duration::from_secs(15))
-                .http2_keep_alive_timeout(Duration::from_secs(10))
+                .http2_keep_alive_timeout(ping_ack_timeout(read_timeout))
         } else {
             client_builder
         };
@@ -1258,6 +1263,17 @@ mod tests {
     use reqwest::{Client, Method};
     use wiremock::matchers::method;
     use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    #[test]
+    fn ping_ack_timeout_scales_with_read_timeout() {
+        for (read_timeout, expected) in [(5, 10), (30, 10), (45, 15), (60, 20), (900, 20)] {
+            assert_eq!(
+                ping_ack_timeout(Duration::from_secs(read_timeout)),
+                Duration::from_secs(expected),
+                "read timeout of {read_timeout} seconds"
+            );
+        }
+    }
 
     #[tokio::test]
     async fn cache_read_runtime_can_be_dropped_from_an_async_context() {
