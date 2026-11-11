@@ -1411,8 +1411,9 @@ impl InterpreterInfo {
             }
         };
 
-        // A replacement executable can carry an older modification time on Windows, so any
-        // timestamp difference invalidates the entry.
+        // A replacement executable can carry an older modification time if a new file was moved
+        // into place with an older timestamp (especially on Windows), so any timestamp difference
+        // invalidates the entry.
         if cached.timestamp != modified {
             trace!(
                 "Ignoring stale interpreter markers for: {}",

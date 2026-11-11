@@ -31,22 +31,22 @@ def _is_linux_armhf(executable: str) -> bool:
     # https://static.docs.arm.com/ihi0044/g/aaelf32.pdf
     with _parse_elf(executable) as f:
         return (
-            f is not None
-            and f.capacity == EIClass.C32
-            and f.encoding == EIData.Lsb
-            and f.machine == EMachine.Arm
-            and f.flags & EF_ARM_ABIMASK == EF_ARM_ABI_VER5
-            and f.flags & EF_ARM_ABI_FLOAT_HARD == EF_ARM_ABI_FLOAT_HARD
+                f is not None
+                and f.capacity == EIClass.C32
+                and f.encoding == EIData.Lsb
+                and f.machine == EMachine.Arm
+                and f.flags & EF_ARM_ABIMASK == EF_ARM_ABI_VER5
+                and f.flags & EF_ARM_ABI_FLOAT_HARD == EF_ARM_ABI_FLOAT_HARD
         )
 
 
 def _is_linux_i686(executable: str) -> bool:
     with _parse_elf(executable) as f:
         return (
-            f is not None
-            and f.capacity == EIClass.C32
-            and f.encoding == EIData.Lsb
-            and f.machine == EMachine.I386
+                f is not None
+                and f.capacity == EIClass.C32
+                and f.encoding == EIData.Lsb
+                and f.machine == EMachine.I386
         )
 
 
@@ -100,7 +100,10 @@ def _glibc_version_string_confstr() -> "str | None":
 def _get_glibc_version() -> "_GLibCVersion | None":
     """Detect the version and path of the glibc loaded by this process."""
     version_str = _glibc_version_string_confstr()
-    version = _parse_glibc_version(version_str) if version_str is not None else None
+    if version_str is not None:
+        version = _parse_glibc_version(version_str)
+    else:
+        version = None
 
     try:
         import ctypes
@@ -126,6 +129,7 @@ def _get_glibc_version() -> "_GLibCVersion | None":
     if version is None:
         return None
 
+    # Read the location of the ELF interpreter too.
     class DlInfo(ctypes.Structure):
         _fields_ = [
             ("dli_fname", ctypes.c_char_p),
@@ -183,8 +187,7 @@ def _parse_glibc_version(version_str: str) -> "_GLibCVersion | None":
 # From PEP 513, PEP 600
 def _is_compatible(arch: str, version: _GLibCVersion) -> bool:
     sys_glibc = _get_glibc_version()
-    version_numbers = (version.major, version.minor)
-    if sys_glibc is None or sys_glibc[:2] < version_numbers:
+    if sys_glibc is None or (sys_glibc.major, sys_glibc.minor) < (version.major, version.minor):
         return False
     # Check for presence of _manylinux module.
     try:
