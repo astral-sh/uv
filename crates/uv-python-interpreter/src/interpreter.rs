@@ -1530,10 +1530,10 @@ impl InterpreterInfo {
         wire: &InterpreterInfoWire,
     ) -> Result<HashMap<PathBuf, Option<Timestamp>>, io::Error> {
         let mut file_timestamps = HashMap::new();
-        record_file_timestamps(&absolute, &mut file_timestamps)?;
+        record_file_timestamps(absolute, &mut file_timestamps)?;
         if !file_timestamps.contains_key(canonical) {
             // On Windows the canonical path can come from a trampoline executable.
-            record_file_timestamps(&canonical, &mut file_timestamps)?;
+            record_file_timestamps(canonical, &mut file_timestamps)?;
         }
         if let Some(libc_path) = wire.libc_path.as_deref() {
             record_file_timestamps(libc_path, &mut file_timestamps)?;
