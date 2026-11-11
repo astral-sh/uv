@@ -1164,7 +1164,8 @@ struct InterpreterInfo {
     platform: Platform,
     metadata: InterpreterMetadata,
     /// Timestamps of the probe's file inputs, including the symlinks used to reach them.
-    file_timestamps: HashMap<PathBuf, Timestamp>,
+    /// A missing optional input is recorded as `None` so its creation invalidates the cache.
+    file_timestamps: HashMap<PathBuf, Option<Timestamp>>,
 }
 
 #[expect(clippy::struct_excessive_bools)]
@@ -1385,12 +1386,7 @@ impl InterpreterInfo {
     }
 
     /// Read a cached probe result if its file inputs are still fresh.
-    fn read_cached(
-        cache: &Cache,
-        entry: &CacheEntry,
-        executable: &Path,
-        file_timestamps: &HashMap<PathBuf, Timestamp>,
-    ) -> Option<Self> {
+    fn read_cached(cache: &Cache, entry: &CacheEntry, executable: &Path) -> Option<Self> {
         if !cache
             .freshness(entry, None, None)
             .is_ok_and(Freshness::is_fresh)
@@ -1411,29 +1407,21 @@ impl InterpreterInfo {
             }
         };
 
-        // Recheck paths discovered by the probe, including any symlinks followed from them.
-        let mut current_timestamps = Cow::Borrowed(file_timestamps);
-        for path in cached.file_timestamps.keys() {
-            if !current_timestamps.contains_key(path)
-                && let Err(err) = record_file_timestamps(path, current_timestamps.to_mut())
-            {
+        // Compare timestamps for equality. A Windows executable can be replaced by a file
+        // with an older modification time.
+        for (path, timestamp) in &cached.file_timestamps {
+            let unchanged = match fs::symlink_metadata(path) {
+                Ok(metadata) => Some(Timestamp::from_metadata(&metadata)) == *timestamp,
+                Err(err) => err.kind() == io::ErrorKind::NotFound && timestamp.is_none(),
+            };
+            if !unchanged {
                 trace!(
-                    "Ignoring cached interpreter markers for {}: could not snapshot {}: {err}",
+                    "Ignoring cached interpreter markers for {} due to changed file metadata at {}",
                     executable.user_display(),
                     path.user_display()
                 );
                 return None;
             }
-        }
-
-        // Compare both the paths and timestamps. A Windows executable can be replaced by a file
-        // with an older modification time.
-        if &cached.file_timestamps != current_timestamps.as_ref() {
-            trace!(
-                "Ignoring cached interpreter markers for {} due to changed file metadata",
-                executable.user_display()
-            );
-            return None;
         }
 
         trace!(
@@ -1474,6 +1462,9 @@ impl InterpreterInfo {
 
         let canonical = canonicalize_executable(&absolute).map_err(handle_io_error)?;
         let cache_entry = Self::cache_entry(&absolute, &canonical, cache);
+        if let Some(info) = Self::read_cached(cache, &cache_entry, executable) {
+            return Ok(info);
+        }
 
         // Snapshot the known inputs before running Python so changes during the probe
         // invalidate the result on the next lookup.
@@ -1482,9 +1473,6 @@ impl InterpreterInfo {
         if !file_timestamps.contains_key(&canonical) {
             // On Windows the canonical path can come from a trampoline executable.
             record_file_timestamps(&canonical, &mut file_timestamps).map_err(handle_io_error)?;
-        }
-        if let Some(info) = Self::read_cached(cache, &cache_entry, executable, &file_timestamps) {
-            return Ok(info);
         }
 
         // Otherwise, run the Python script.
@@ -1502,6 +1490,7 @@ impl InterpreterInfo {
             cacheable = record_file_timestamps(libc_path, &mut libc_timestamps).is_ok()
                 && libc_timestamps
                     .values()
+                    .flatten()
                     .all(|timestamp| *timestamp <= query_started_at);
             for (path, timestamp) in libc_timestamps {
                 file_timestamps.entry(path).or_insert(timestamp);
@@ -1559,7 +1548,7 @@ impl InterpreterInfo {
 /// Record the timestamp of a file and each symlink followed to reach it.
 fn record_file_timestamps(
     path: &Path,
-    timestamps: &mut HashMap<PathBuf, Timestamp>,
+    timestamps: &mut HashMap<PathBuf, Option<Timestamp>>,
 ) -> io::Result<()> {
     if !path.is_absolute() {
         return Err(io::Error::new(
@@ -1571,10 +1560,18 @@ fn record_file_timestamps(
     let mut path = Cow::Borrowed(path);
     // Bound the walk so cyclic links make the snapshot unusable.
     for _ in 0..=40 {
-        let metadata = fs::symlink_metadata(path.as_ref())?;
+        let metadata = match fs::symlink_metadata(path.as_ref()) {
+            Ok(metadata) => metadata,
+            Err(err) => {
+                if err.kind() == io::ErrorKind::NotFound {
+                    timestamps.insert(path.as_ref().to_path_buf(), None);
+                }
+                return Err(err);
+            }
+        };
         timestamps.insert(
             path.as_ref().to_path_buf(),
-            Timestamp::from_metadata(&metadata),
+            Some(Timestamp::from_metadata(&metadata)),
         );
         if !metadata.is_symlink() {
             return Ok(());
@@ -1811,7 +1808,7 @@ mod tests {
         let mut cached: InterpreterInfo = rmp_serde::from_slice(&fs::read(cache_entry.path())?)?;
         assert_eq!(
             cached.file_timestamps.get(&canonical),
-            Some(&Timestamp::from_path(&canonical)?)
+            Some(&Some(Timestamp::from_path(&canonical)?))
         );
         assert_eq!(
             cached.metadata.markers.python_version().version,
@@ -1835,7 +1832,9 @@ mod tests {
         } else {
             Timestamp::from(UNIX_EPOCH)
         };
-        cached.file_timestamps.insert(canonical.clone(), stale);
+        cached
+            .file_timestamps
+            .insert(canonical.clone(), Some(stale));
         fs::write(cache_entry.path(), rmp_serde::to_vec(&cached)?)?;
 
         let interpreter = Interpreter::query(&mocked_interpreter, &cache)?;
@@ -1854,7 +1853,7 @@ mod tests {
         let refreshed: InterpreterInfo = rmp_serde::from_slice(&fs::read(cache_entry.path())?)?;
         assert_eq!(
             refreshed.file_timestamps.get(&canonical),
-            Some(&Timestamp::from_path(&canonical)?)
+            Some(&Some(Timestamp::from_path(&canonical)?))
         );
         assert_eq!(
             refreshed.metadata.markers.python_version().version,
