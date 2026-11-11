@@ -1357,12 +1357,6 @@ impl InterpreterInfo {
     fn cache_entry(absolute: &Path, canonical: &Path, cache: &Cache) -> CacheEntry {
         let python_executable = env::var_os(EnvVars::PYTHONEXECUTABLE).map(PathBuf::from);
         let pyvenv_launcher = env::var_os(EnvVars::PYVENV_LAUNCHER).map(PathBuf::from);
-        // Relative overrides can select different pyvenv.cfg paths in different directories.
-        let resolved_launcher_paths = [&python_executable, &pyvenv_launcher].map(|path| {
-            path.as_deref()
-                .filter(|path| path.is_relative() && !path.as_os_str().is_empty())
-                .and_then(|path| std::path::absolute(path).ok())
-        });
 
         cache.entry(
             CacheBucket::Interpreter,
@@ -1389,13 +1383,7 @@ impl InterpreterInfo {
             // without changing either executable path.
             format!(
                 "{}.msgpack",
-                cache_digest(&(
-                    absolute,
-                    canonical,
-                    &python_executable,
-                    &pyvenv_launcher,
-                    resolved_launcher_paths.as_slice(),
-                ))
+                cache_digest(&(absolute, canonical, &python_executable, &pyvenv_launcher))
             ),
         )
     }
@@ -1585,7 +1573,8 @@ fn record_pyvenv_cfg_timestamps(
     // overrides can supply another executable path for that lookup.
     for executable in std::iter::once(executable).chain(launcher_paths.iter().map(PathBuf::as_path))
     {
-        for directory in executable.ancestors().skip(1).take(2) {
+        let parent_directories = executable.ancestors().skip(1);
+        for directory in parent_directories.take(2) {
             let path = directory.join("pyvenv.cfg");
             match record_file_timestamps(&path, timestamps) {
                 Ok(()) => {}
