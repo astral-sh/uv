@@ -230,6 +230,13 @@ The following dependency sources are supported by uv:
     project tables will be used. If another tool is being used for development, any metadata
     provided in the source table will need to be re-specified in the other tool's format.
 
+!!! note
+
+    The `tool.uv.sources` of [Git](#git) and [path](#path) dependencies are respected too. If such a
+    dependency pins a package to an [index](#index), the dependent project also resolves that
+    package from that index. If the dependent project pins the same package to a different index,
+    resolution will fail.
+
 ### Index
 
 To add a Python package from a specific index, use the `--index` option:
