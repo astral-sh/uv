@@ -290,6 +290,7 @@ fn pip_compile_baseline() {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             torch_backend: None,
+            torch_backend_index: None,
             cuda_driver_version: None,
             amd_gpu_architecture: None,
             build_isolation: Isolate,
@@ -688,6 +689,7 @@ fn pip_install_baseline() {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             torch_backend: None,
+            torch_backend_index: None,
             cuda_driver_version: None,
             amd_gpu_architecture: None,
             build_isolation: Isolate,
@@ -880,6 +882,7 @@ fn lock_baseline() {
             resolution: Highest,
             sources: None,
             torch_backend: None,
+            torch_backend_index: None,
             cuda_driver_version: None,
             amd_gpu_architecture: None,
             upgrade: Upgrade {
@@ -1018,6 +1021,7 @@ fn version_baseline() {
                 resolution: Highest,
                 sources: None,
                 torch_backend: None,
+                torch_backend_index: None,
                 cuda_driver_version: None,
                 amd_gpu_architecture: None,
                 upgrade: Upgrade {
@@ -1196,6 +1200,7 @@ fn tool_install_baseline() {
                 resolution: Highest,
                 sources: None,
                 torch_backend: None,
+                torch_backend_index: None,
                 cuda_driver_version: None,
                 amd_gpu_architecture: None,
                 upgrade: Upgrade {
@@ -2213,7 +2218,7 @@ fn resolve_tool() -> anyhow::Result<()> {
     +            resolution: LowestDirect,
                  sources: None,
                  torch_backend: None,
-                 cuda_driver_version: None,
+                 torch_backend_index: None,
     ...
     "
     );
@@ -5491,7 +5496,7 @@ fn build_isolation_override() -> anyhow::Result<()> {
         .arg("requirements.in")
         .arg("--no-build-isolation-package").arg("numpy"), @r#"
     ...
-             torch_backend: None,
+             torch_backend_index: None,
              cuda_driver_version: None,
              amd_gpu_architecture: None,
     -        build_isolation: SharedPackage(
@@ -5519,7 +5524,7 @@ fn build_isolation_override() -> anyhow::Result<()> {
             .arg("requirements.in")
             .arg("--no-build-isolation-package").arg("numpy"), @r#"
     ...
-             torch_backend: None,
+             torch_backend_index: None,
              cuda_driver_version: None,
              amd_gpu_architecture: None,
     -        build_isolation: Shared,
