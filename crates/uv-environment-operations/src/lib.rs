@@ -1623,6 +1623,7 @@ pub async fn resolve_environment(
         None,
         logger,
         printer,
+        false,
     )
     .await?
     .0)
@@ -2016,6 +2017,7 @@ pub async fn update_environment(
         None,
         resolve,
         printer,
+        false,
     )
     .await
     {

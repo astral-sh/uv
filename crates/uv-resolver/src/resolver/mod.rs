@@ -8,7 +8,7 @@ use std::ops::Bound;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Instant;
-use std::{mem, thread};
+use std::{mem, slice, thread};
 
 use either::Either;
 use futures::{FutureExt, StreamExt};
@@ -40,7 +40,9 @@ use uv_pep508::{
 use uv_platform_tags::{IncompatibleTag, TagCompatibility, Tags};
 use uv_preview::PreviewFeature;
 use uv_pypi_types::{ConflictItem, ConflictItemRef, ConflictKindRef, Conflicts, VerbatimParsedUrl};
-use uv_resolver_types::{PackageNodeKind, VariantsJsonMetadataError};
+use uv_resolver_types::{
+    PackageNodeKind, RootSelections, SelectionNames, VariantsJsonMetadataError,
+};
 use uv_static::EnvVars;
 use uv_torch::TorchStrategy;
 use uv_types::{BuildContext, HashStrategy, InstalledPackagesProvider};
@@ -124,6 +126,7 @@ const CONFLICT_THRESHOLD: usize = 5;
 pub struct Resolver<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider> {
     state: ResolverState<InstalledPackages>,
     provider: Provider,
+    root_selections: Option<RootSelections>,
 }
 
 /// State that is shared between the prefetcher and the PubGrub solver during
@@ -293,13 +296,18 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
             options,
             reporter: None,
         };
-        Self { state, provider }
+        Self {
+            state,
+            provider,
+            root_selections: None,
+        }
     }
 
     /// Set the [`Reporter`] to use for this installer.
     #[must_use]
     pub fn with_reporter(self, reporter: Arc<dyn Reporter>) -> Self {
         Self {
+            root_selections: self.root_selections,
             state: ResolverState {
                 reporter: Some(reporter.clone()),
                 ..self.state
@@ -310,8 +318,15 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
         }
     }
 
+    #[must_use]
+    pub fn with_root_selections(mut self, selections: Option<RootSelections>) -> Self {
+        self.root_selections = selections;
+        self
+    }
+
     /// Resolve a set of requirements into a set of pinned versions.
     pub async fn resolve(self) -> Result<ResolverOutput, ResolveError> {
+        let root_selections = self.root_selections;
         let state = Arc::new(self.state);
         let provider = Arc::new(self.provider);
 
@@ -331,7 +346,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
         thread::Builder::new()
             .name("uv-resolver".into())
             .spawn(move || {
-                let result = solver.solve(&requests);
+                let result = solver.solve(&requests, root_selections);
 
                 // This may fail if the main thread returned early due to an error.
                 let _ = tx.send(result);
@@ -350,7 +365,11 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
 
 impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackages> {
     #[instrument(skip_all)]
-    fn solve(self: Arc<Self>, requests: &MetadataRequests) -> Result<ResolverOutput, ResolveError> {
+    fn solve(
+        self: Arc<Self>,
+        requests: &MetadataRequests,
+        root_selections: Option<RootSelections>,
+    ) -> Result<ResolverOutput, ResolveError> {
         debug!(
             "Solving with installed Python version: {}",
             self.python_requirement.exact()
@@ -489,7 +508,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 start.elapsed().as_secs_f32()
                             );
 
-                            let (resolution, mut arena) = state.into_resolution();
+                            let (mut resolution, mut arena) = state.into_resolution();
                             if let Some(next) = forked_states.last() {
                                 arena.rewind_to(&next.state.pubgrub);
                             } else {
@@ -538,6 +557,59 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                     packages.len()
                                 );
                             }
+                            if let Some(selections) = &root_selections {
+                                let expander = RequirementExpander::new(
+                                    &self.constraints,
+                                    &self.modifiers,
+                                    &resolution.env,
+                                    &self.python_requirement,
+                                );
+                                // Expand requirements separately so we can keep selection marker alongside.
+                                let requirements = selections
+                                    .requirements
+                                    .iter()
+                                    .flat_map(|(requirement, selection)| {
+                                        expander
+                                            .expand(
+                                                slice::from_ref(requirement),
+                                                RequirementContext::Root,
+                                            )
+                                            .map(move |requirement| (requirement, *selection))
+                                    })
+                                    .collect::<Vec<_>>();
+                                for edge in &mut resolution.edges {
+                                    if edge.from.is_some() {
+                                        continue;
+                                    }
+                                    let (package, _) = &resolution.nodes[edge.to.0];
+                                    // Selection marker defines conditions for when the requirement will be
+                                    // active, we merge these conditions to construct the root edge conditions
+                                    let marker = requirements.iter().fold(
+                                        MarkerTree::FALSE,
+                                        |marker, (requirement, selection)| {
+                                            let activates = requirement.name == package.name
+                                                && match &package.kind {
+                                                    PackageNodeKind::Base => {
+                                                        requirement.groups.is_empty()
+                                                    }
+                                                    PackageNodeKind::Extra(extra) => {
+                                                        requirement.extras.contains(extra)
+                                                    }
+                                                    PackageNodeKind::Group(group) => {
+                                                        requirement.groups.contains(group)
+                                                    }
+                                                };
+                                            if activates {
+                                                marker.or(requirement.marker.and(*selection))
+                                            } else {
+                                                marker
+                                            }
+                                        },
+                                    );
+                                    edge.selection_marker = Some(edge.marker.and(marker));
+                                }
+                            }
+
                             resolution.trace_resolution();
                             resolutions.push(resolution)?;
                             continue 'FORK;
@@ -892,7 +964,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 resolutions.num_forks()
             );
         }
+        let selection_names = root_selections.map(|selections| SelectionNames {
+            extras: selections.extras,
+            groups: selections.groups,
+        });
         resolutions.finish(
+            selection_names,
             self.requirements.clone(),
             self.constraints.clone(),
             self.modifiers.clone(),
@@ -3537,6 +3614,7 @@ impl<'index> ForkState<'index> {
                     from,
                     to: node_indices[&(name, &kind, url, index, dependency_version)],
                     marker,
+                    selection_marker: None,
                 });
 
                 // An extra proxy requires both the extra and its base package. A group proxy
@@ -3547,6 +3625,7 @@ impl<'index> ForkState<'index> {
                         to: node_indices
                             [&(name, &PackageNodeKind::Base, url, index, dependency_version)],
                         marker,
+                        selection_marker: None,
                     });
                 }
             }
