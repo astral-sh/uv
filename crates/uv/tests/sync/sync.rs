@@ -11273,11 +11273,22 @@ fn sync_invalid_environment() -> Result<()> {
     fs_err::write(context.temp_dir.join(".venv").join("file"), b"")?;
 
     // We should never delete it
+    #[cfg(unix)]
     uv_snapshot!(context.filters(), context.sync(), @"
     exit_code: 2 (failure)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     error: Project virtual environment directory `[VENV]/` cannot be used because it is not a compatible environment but cannot be recreated because it is not a virtual environment
+    ");
+    // The Windows launcher requires pyvenv.cfg to find the base interpreter.
+    #[cfg(windows)]
+    uv_snapshot!(context.filters(), context.sync(), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Querying Python at `[VENV]/[BIN]/[PYTHON]` failed with exit status exit status: 106
+
+    [stderr]
+    No pyvenv.cfg file
     ");
 
     // Even if there's no Python executable
