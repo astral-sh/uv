@@ -308,8 +308,8 @@ fn python_find_refreshes_interpreter_after_pyvenv_cfg_removal() -> Result<()> {
 
     fs_err::remove_file(context.venv.child("pyvenv.cfg"))?;
 
-    // A fresh query reports the base prefix for the same executable, so `--system` accepts it.
-    // The cached result still identifies it as a virtual environment and would be rejected.
+    // Exploit Python being unable to tell a system interpreter from a venv without `pyvenv.cfg`.
+    // Once a fresh query sees the file is gone, the executable shows up in `uv python find --system`.
     uv_snapshot!(context.filters(), context.python_find()
         .arg("--system")
         .arg("--show-version")
