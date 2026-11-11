@@ -1162,6 +1162,9 @@ pub enum InterpreterInfoError {
     EmscriptenNotPyodide,
 }
 
+#[cfg(target_os = "macos")]
+const SYSTEM_VERSION_PLIST: &str = "/System/Library/CoreServices/SystemVersion.plist";
+
 #[derive(Debug, Deserialize, Serialize, Clone)]
 struct InterpreterInfo {
     platform: Platform,
@@ -1421,7 +1424,8 @@ impl InterpreterInfo {
         };
 
         // Compare timestamps for equality. A Windows executable can be replaced by a file
-        // with an older modification time.
+        // with an older modification time. A macOS update can activate a system snapshot whose
+        // plist was stamped before installation.
         for (path, timestamp) in &cached.file_timestamps {
             let unchanged = match fs::symlink_metadata(path) {
                 Ok(metadata) => Some(Timestamp::from_metadata(&metadata)) == *timestamp,
@@ -1607,6 +1611,10 @@ impl InterpreterInfo {
         for path in file_inputs {
             record_file_timestamps(path, &mut file_timestamps)?;
         }
+        // Python's `platform.mac_ver()` reads the product version from this plist. The cache
+        // key tracks the Darwin kernel release, which can stay the same when the plist changes.
+        #[cfg(target_os = "macos")]
+        record_file_timestamps(Path::new(SYSTEM_VERSION_PLIST), &mut file_timestamps)?;
         Ok(file_timestamps)
     }
 }
