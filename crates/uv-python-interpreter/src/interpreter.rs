@@ -1484,10 +1484,7 @@ impl InterpreterInfo {
         // The probe discovers the libc path. Skip caching if libc changed before we could
         // snapshot it, since the returned version might describe the previous library.
         if let Some(libc_path) = wire.libc_path.as_deref() {
-            let mut libc_timestamps = HashMap::new();
-            for (path, timestamp) in libc_timestamps {
-                file_timestamps.entry(path).or_insert(timestamp);
-            }
+            record_file_timestamps(libc_path, &mut file_timestamps)?;
         }
         let cpu_info = match wire.cpu_info {
             CpuProbe::Detected(info) => Some(info),
@@ -1551,7 +1548,7 @@ fn record_file_timestamps(
     }
 
     let mut path = Cow::Borrowed(path);
-    // Bound the walk so cyclic links make the snapshot unusable.
+    // Bound the walk at some number to guard against getting stuck in cyclic links.
     for _ in 0..=40 {
         let metadata = match fs::symlink_metadata(path.as_ref()) {
             Ok(metadata) => metadata,
