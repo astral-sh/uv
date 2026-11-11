@@ -5,7 +5,6 @@ linked against musl, and what musl version is used.
 """
 
 import functools
-import os
 import re
 import subprocess
 import sys
@@ -21,17 +20,12 @@ class _MuslVersion(NamedTuple):
 
 def _parse_musl_version(interpreter: str, output: bytes) -> "_MuslVersion | None":
     lines = [n for n in (n.strip() for n in output.splitlines()) if n]
-    has_musl_header = bool(lines and lines[0].startswith(b"musl"))
-    # A directory name can match the loader search heuristic without identifying musl.
-    if not has_musl_header and not re.fullmatch(
-        r"ld-musl-.+\.so\.1", os.path.basename(interpreter)
-    ):
+    if not lines or lines[0][:4] != b"musl":
         return None
-    if has_musl_header and len(lines) >= 2:
-        m = re.match(rb"Version (\d+)\.(\d+)", lines[1])
-        if m:
-            return _MuslVersion(major=int(m.group(1)), minor=int(m.group(2)))
-    raise ValueError(f"Could not read the musl version from {interpreter!r}")
+    m = re.match(rb"Version (\d+)\.(\d+)", lines[1]) if len(lines) >= 2 else None
+    if not m:
+        raise ValueError(f"Could not read the musl version from {interpreter!r}")
+    return _MuslVersion(major=int(m.group(1)), minor=int(m.group(2)))
 
 
 @functools.lru_cache()
