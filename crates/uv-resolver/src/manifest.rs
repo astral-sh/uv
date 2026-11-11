@@ -170,18 +170,12 @@ impl Manifest {
                 self.lookaheads
                     .iter()
                     .flat_map(move |lookahead| {
-                        self.modifiers
-                            .apply(
-                                DependencyModifierScope::Package(
-                                    lookahead.package(),
-                                    lookahead.version(),
-                                ),
-                                lookahead.requirements(),
-                            )
-                            .filter(move |requirement| {
+                        lookahead.effective_requirements(&self.modifiers).filter(
+                            move |requirement| {
                                 requirement
                                     .evaluate_markers(env.marker_environment(), lookahead.extras())
-                            })
+                            },
+                        )
                     })
                     .chain(
                         self.modifiers
@@ -247,18 +241,12 @@ impl Manifest {
                     .iter()
                     .filter(|lookahead| lookahead.direct())
                     .flat_map(move |lookahead| {
-                        self.modifiers
-                            .apply(
-                                DependencyModifierScope::Package(
-                                    lookahead.package(),
-                                    lookahead.version(),
-                                ),
-                                lookahead.requirements(),
-                            )
-                            .filter(move |requirement| {
+                        lookahead.effective_requirements(&self.modifiers).filter(
+                            move |requirement| {
                                 requirement
                                     .evaluate_markers(env.marker_environment(), lookahead.extras())
-                            })
+                            },
+                        )
                     })
                     .chain(
                         self.modifiers

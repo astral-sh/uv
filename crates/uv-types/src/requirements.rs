@@ -1,3 +1,6 @@
+use std::borrow::Cow;
+
+use uv_configuration::{DependencyModifierScope, DependencyModifiers};
 use uv_distribution_types::{Requirement, Resolution};
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::Version;
@@ -85,6 +88,17 @@ impl RequestedRequirements {
     /// Return the requirements that were included on the originating requirement.
     pub fn requirements(&self) -> &[Requirement] {
         &self.requirements
+    }
+
+    /// Apply the dependency modifiers scoped to the package declaring these requirements.
+    pub fn effective_requirements<'a>(
+        &'a self,
+        modifiers: &'a DependencyModifiers,
+    ) -> impl Iterator<Item = Cow<'a, Requirement>> {
+        modifiers.apply(
+            DependencyModifierScope::Package(&self.package, &self.version),
+            &self.requirements,
+        )
     }
 
     /// Return the requirements as a mutable slice.

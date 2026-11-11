@@ -142,10 +142,10 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                     } else {
                         hasher.augment_with_metadata_requirements(requirements)?
                     };
-                    for requirement in self.constraints.apply(self.modifiers.apply(
-                        DependencyModifierScope::Package(lookahead.package(), lookahead.version()),
-                        lookahead.requirements(),
-                    )) {
+                    for requirement in self
+                        .constraints
+                        .apply(lookahead.effective_requirements(self.modifiers))
+                    {
                         if !matches!(requirement.source, RequirementSource::Registry { .. })
                             && requirement
                                 .evaluate_markers(env.marker_environment(), lookahead.extras())
