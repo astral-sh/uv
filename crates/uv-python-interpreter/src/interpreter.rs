@@ -1480,18 +1480,11 @@ impl InterpreterInfo {
             "Querying interpreter executable at `{}`",
             executable.display()
         );
-        let query_started_at = Timestamp::now();
         let wire = Self::query(executable, cache)?;
-        let mut cacheable = true;
         // The probe discovers the libc path. Skip caching if libc changed before we could
         // snapshot it, since the returned version might describe the previous library.
         if let Some(libc_path) = wire.libc_path.as_deref() {
             let mut libc_timestamps = HashMap::new();
-            cacheable = record_file_timestamps(libc_path, &mut libc_timestamps).is_ok()
-                && libc_timestamps
-                    .values()
-                    .flatten()
-                    .all(|timestamp| *timestamp <= query_started_at);
             for (path, timestamp) in libc_timestamps {
                 file_timestamps.entry(path).or_insert(timestamp);
             }
@@ -1536,7 +1529,7 @@ impl InterpreterInfo {
 
         // If `executable` is a pyenv shim, a bash script that redirects to the activated
         // python executable at another path, we're not allowed to cache the interpreter info.
-        if cacheable && is_same_file(executable, &info.metadata.sys_executable).unwrap_or(false) {
+        if is_same_file(executable, &info.metadata.sys_executable).unwrap_or(false) {
             fs::create_dir_all(cache_entry.dir())?;
             write_atomic_sync(cache_entry.path(), rmp_serde::to_vec(&info)?)?;
         }
