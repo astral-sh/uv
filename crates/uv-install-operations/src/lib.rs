@@ -515,11 +515,28 @@ impl InstallationPlan {
         if let Some(compile) = compile {
             match compile {
                 BytecodeCompilation::All => {
-                    compile_bytecode(venv, concurrency, cache, printer).await?;
+                    compile_bytecode(
+                        venv,
+                        concurrency,
+                        cache,
+                        printer,
+                        client.cached_client().uncached(),
+                        preview,
+                    )
+                    .await?;
                 }
                 BytecodeCompilation::Installed => {
                     let files = python_source_files_for_installs(venv, &installs);
-                    compile_bytecode_files(files, venv, concurrency, cache, printer).await?;
+                    compile_bytecode_files(
+                        files,
+                        venv,
+                        concurrency,
+                        cache,
+                        printer,
+                        client.cached_client().uncached(),
+                        preview,
+                    )
+                    .await?;
                 }
             }
         }

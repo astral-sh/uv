@@ -4,10 +4,12 @@ use std::path::PathBuf;
 use owo_colors::OwoColorize;
 use tracing::debug;
 use uv_cache::Cache;
+use uv_client::BaseClient;
 use uv_command_support::{Printer, elapsed};
 use uv_configuration::Concurrency;
 use uv_fs::CWD;
-use uv_installer::{compile_files, compile_tree};
+use uv_installer::{compile_files, compile_serc_files, compile_serc_tree, compile_tree};
+use uv_preview::{Preview, PreviewFeature};
 use uv_python_interpreter::PythonEnvironment;
 
 use crate::Error;
@@ -21,6 +23,8 @@ pub(super) async fn compile_bytecode(
     concurrency: &Concurrency,
     cache: &Cache,
     printer: Printer,
+    client: &BaseClient,
+    preview: Preview,
 ) -> Result<(), Error> {
     let start = std::time::Instant::now();
     let mut files = 0;
@@ -33,14 +37,25 @@ pub(super) async fn compile_bytecode(
             );
             continue;
         }
-        files += compile_tree(
-            &site_packages,
-            venv.python_executable(),
-            concurrency,
-            cache.root(),
-        )
-        .await
-        .map_err(|source| Error::CompileTree {
+        let result = if preview.is_enabled(PreviewFeature::NativeBytecode) {
+            compile_serc_tree(
+                &site_packages,
+                venv.interpreter(),
+                concurrency,
+                cache,
+                client,
+            )
+            .await
+        } else {
+            compile_tree(
+                &site_packages,
+                venv.python_executable(),
+                concurrency,
+                cache.root(),
+            )
+            .await
+        };
+        files += result.map_err(|source| Error::CompileTree {
             path: site_packages,
             source,
         })?;
@@ -56,11 +71,16 @@ pub(super) async fn compile_bytecode_files(
     concurrency: &Concurrency,
     cache: &Cache,
     printer: Printer,
+    client: &BaseClient,
+    preview: Preview,
 ) -> Result<(), Error> {
     let start = std::time::Instant::now();
-    let files = compile_files(files, venv.python_executable(), concurrency, cache.root())
-        .await
-        .map_err(Error::CompileFiles)?;
+    let files = if preview.is_enabled(PreviewFeature::NativeBytecode) {
+        compile_serc_files(files, venv.interpreter(), concurrency, cache, client).await
+    } else {
+        compile_files(files, venv.python_executable(), concurrency, cache.root()).await
+    }
+    .map_err(Error::CompileFiles)?;
     if files == 0 {
         return Ok(());
     }
