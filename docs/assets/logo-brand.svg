@@ -1,0 +1,26 @@
+<svg viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+			<path d="M0 3.5C0 1.567 1.567 0 3.5 0H24.5C26.433 0 28 1.567 28 3.5V24.5C28 26.433 26.433 28 24.5 28H3.5C1.567 28 0 26.433 0 24.5V3.5Z" fill="#261230" />
+			<path
+				d="M0 3.5C0 1.567 1.567 0 3.5 0H24.5C26.433 0 28 1.567 28 3.5V24.5C28 26.433 26.433 28 24.5 28H3.5C1.567 28 0 26.433 0 24.5V3.5Z"
+				fill="url(#brand-gradient)"
+				fill-opacity="0.1"
+			/>
+			<path
+				d="M3.5 0.4375H24.5C26.1914 0.4375 27.5625 1.80863 27.5625 3.5V24.5C27.5625 26.1914 26.1914 27.5625 24.5 27.5625H3.5C1.80863 27.5625 0.4375 26.1914 0.4375 24.5V3.5C0.4375 1.80863 1.80863 0.4375 3.5 0.4375Z"
+				stroke="white"
+				stroke-opacity="0.2"
+				stroke-width="0.875"
+			/>
+			<path
+				fill-rule="evenodd"
+				clip-rule="evenodd"
+				d="M19.6699 16.273C19.6699 18.1491 18.149 19.67 16.2729 19.67L11.7269 19.67C9.85081 19.67 8.32993 18.1491 8.32993 16.273L8.32993 8.33001L13.5463 8.33001L13.5463 15.512L14.4535 15.512L14.4535 8.33001L19.6699 8.33001L19.6699 16.273Z"
+				fill="#C301F4"
+			/>
+			<defs>
+				<linearGradient id="brand-gradient" x1="14" y1="0" x2="14" y2="28" gradientUnits="userSpaceOnUse">
+					<stop stop-color="white" stop-opacity="0" />
+					<stop offset="1" stop-color="white" />
+				</linearGradient>
+			</defs>
+		</svg>
