@@ -1163,8 +1163,6 @@ pub enum InterpreterInfoError {
 struct InterpreterInfo {
     platform: Platform,
     metadata: InterpreterMetadata,
-    /// Path to the libc loaded by the queried interpreter, if available.
-    libc_path: Option<PathBuf>,
     /// Timestamps of the probe's file inputs, including the symlinks used to reach them.
     file_timestamps: HashMap<PathBuf, Timestamp>,
 }
@@ -1413,15 +1411,19 @@ impl InterpreterInfo {
             }
         };
 
+        // Recheck paths discovered by the probe, including any symlinks followed from them.
         let mut current_timestamps = Cow::Borrowed(file_timestamps);
-        if let Some(libc_path) = cached.libc_path.as_deref()
-            && record_file_timestamps(libc_path, current_timestamps.to_mut()).is_err()
-        {
-            trace!(
-                "Ignoring cached interpreter markers for {} due to stale libc metadata",
-                executable.user_display()
-            );
-            return None;
+        for path in cached.file_timestamps.keys() {
+            if !current_timestamps.contains_key(path)
+                && let Err(err) = record_file_timestamps(path, current_timestamps.to_mut())
+            {
+                trace!(
+                    "Ignoring cached interpreter markers for {}: could not snapshot {}: {err}",
+                    executable.user_display(),
+                    path.user_display()
+                );
+                return None;
+            }
         }
 
         // Compare both the paths and timestamps. A Windows executable can be replaced by a file
@@ -1540,7 +1542,6 @@ impl InterpreterInfo {
         let info = Self {
             platform: Platform::from_interpreter(wire.os, wire.arch, cpu_info),
             metadata: wire.metadata,
-            libc_path: wire.libc_path,
             file_timestamps,
         };
 
