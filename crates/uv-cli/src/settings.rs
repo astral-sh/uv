@@ -63,8 +63,8 @@ use crate::{
     PipUninstallArgs, ProjectDependencyGroupsArgs, PythonFindArgs, PythonInstallArgs,
     PythonListArgs, PythonListFormat, PythonPinArgs, PythonUninstallArgs, PythonUpgradeArgs,
     RemoveArgs, RunArgs, SyncArgs, SyncFormat, ToolAuditArgs, ToolDirArgs, ToolInstallArgs,
-    ToolListArgs, ToolRunArgs, ToolUninstallArgs, TreeArgs, TreeFormat, UpgradeArgs, VenvArgs,
-    VersionArgs, VersionBumpSpec, VersionFormat,
+    ToolListArgs, ToolRunArgs, ToolUninstallArgs, ToolUpgradeFormat, TreeArgs, TreeFormat,
+    UpgradeArgs, VenvArgs, VersionArgs, VersionBumpSpec, VersionFormat,
 };
 use crate::{
     AuthorFrom, BuildArgs, BuildOptionsArgs, CheckArgs, ExcludeNewerArgs, ExportArgs, FormatArgs,
@@ -1184,6 +1184,7 @@ pub struct ToolUpgradeSettings {
     pub install_mirrors: PythonInstallMirrors,
     pub args: ResolverInstallerOptions,
     pub filesystem: ResolverInstallerOptions,
+    pub output_format: ToolUpgradeFormat,
 }
 impl ToolUpgradeSettings {
     /// Resolve the [`ToolUpgradeSettings`] from the CLI and filesystem configuration.
@@ -1212,6 +1213,7 @@ impl ToolUpgradeSettings {
             compile_bytecode,
             sources,
             build,
+            output_format,
         } = args;
 
         if upgrade {
@@ -1265,6 +1267,7 @@ impl ToolUpgradeSettings {
                 .install_mirrors
                 .clone()
                 .combine(filesystem_install_mirrors),
+            output_format,
         })
     }
 }
