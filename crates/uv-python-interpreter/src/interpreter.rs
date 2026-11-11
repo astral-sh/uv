@@ -1412,7 +1412,8 @@ impl InterpreterInfo {
 
         // Compare timestamps for equality. A Windows executable can be replaced by a file
         // with an older modification time. A macOS update can activate a system snapshot whose
-        // plist was stamped before installation.
+        // plist was stamped before installation. Note(KS): This last one we actually observed on
+        // a real Mac.
         for (path, timestamp) in &cached.file_timestamps {
             let unchanged = match fs::symlink_metadata(path) {
                 Ok(metadata) => Some(Timestamp::from_metadata(&metadata)) == *timestamp,
