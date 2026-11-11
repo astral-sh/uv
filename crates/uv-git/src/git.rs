@@ -10,14 +10,14 @@ use cargo_util::{ProcessBuilder, ProcessError, paths};
 use owo_colors::OwoColorize;
 use tracing::{debug, instrument, warn};
 
-use uv_fs::Simplified;
+use uv_fs::{Simplified, with_retry_sync};
 use uv_git_types::{GitOid, GitReference};
 use uv_redacted::SafeUrl;
 use uv_static::EnvVars;
 use uv_warnings::warn_user_once;
 
 /// Extension for the marker beside a completed checkout.
-/// See [`GitCheckout::reset`] for why we need this.
+/// See [`GitCheckout::clone_into`] for why we need this.
 const CHECKOUT_READY_EXTENSION: &str = "ok";
 
 #[derive(Debug, thiserror::Error)]
@@ -273,11 +273,30 @@ impl GitRemote {
             Err(e) => return Err(e.into()),
         }
 
-        fs_err::create_dir_all(into)?;
-        let mut repo = GitRepository::init(into)?;
+        // Clone into a temporary directory and move it into place once it contains the revision.
+        // A Git process can keep running after the uv process that started it has exited and
+        // released the lock on this database, e.g., when uv exits on an unrelated error during the
+        // clone. Cloning in place would leave a partial database that the next uv process treats as
+        // corrupt and fails to remove while that Git process is still writing to it.
+        let Some(parent) = into.parent() else {
+            return Err(anyhow!(
+                "Git database path has no parent directory: {}",
+                into.user_display()
+            ));
+        };
+        fs_err::create_dir_all(parent)?;
+        let temp_dir = tempfile::tempdir_in(parent)?;
+        let mut repo = GitRepository::init(temp_dir.path())?;
         fetch(&mut repo, &self.url, reference, disable_ssl, offline)
             .with_context(|| format!("failed to clone into: {}", into.user_display()))?;
         let rev = repo.resolve(reference)?;
+
+        // After the rename, the temporary directory no longer exists, so dropping it is a no-op.
+        with_retry_sync(temp_dir.path(), into, "renaming", || {
+            fs_err::rename(temp_dir.path(), into)
+        })?;
+        repo.path = into.to_path_buf();
+
         let lfs_ready = with_lfs
             .then(|| {
                 fetch_lfs(&mut repo, &self.url, &rev, disable_ssl)
@@ -375,6 +394,21 @@ impl GitCheckout {
 
     /// Clone a repo for a `revision` into a local path from a `database`.
     /// This is a filesystem-to-filesystem clone.
+    ///
+    /// The checkout is prepared in a temporary directory and moved into place once it's ready, for
+    /// the same reason as new databases in [`GitRemote::checkout`].
+    ///
+    /// If we're interrupted while preparing the checkout (e.g., we die because of a signal) uv
+    /// needs to be sure to try to check out this repo again on the next go-round, so readiness is
+    /// tracked by a marker file.
+    ///
+    /// The marker sits beside the checkout with an [`.ok` extension], so tracked files cannot
+    /// collide with it. It is removed before cloning and created only after preparation succeeds.
+    /// For example, there may be the `checkouts/<repository-key>/0123456789abcdef/` contents
+    /// directory containing `checkouts/<repository-key>/0123456789abcdef/pyproject.toml`, and the
+    /// `checkouts/<repository-key>/0123456789abcdef.ok` marker file besides it.
+    ///
+    /// [`.ok` extension]: CHECKOUT_READY_EXTENSION
     fn clone_into(
         into: &Path,
         database: &GitDatabase,
@@ -396,6 +430,8 @@ impl GitCheckout {
             Err(e) => return Err(e.into()),
         }
 
+        let temp_dir = tempfile::tempdir_in(dirname)?;
+
         // Perform a local clone of the repository, which will attempt to use
         // hardlinks to set up the repository. This should speed up the clone operation
         // quite a bit if it works.
@@ -408,7 +444,7 @@ impl GitCheckout {
             // Git treats the repository as a remote origin and gets confused because we don't
             // have a HEAD checked out.
             .arg(database.repo.path.simplified_display().to_string())
-            .arg(into.simplified_display().to_string())
+            .arg(temp_dir.path().simplified_display().to_string())
             .exec_with_output();
 
         if let Err(e) = res {
@@ -419,13 +455,27 @@ impl GitCheckout {
                 .arg("clone")
                 .arg("--no-hardlinks")
                 .arg(database.repo.path.simplified_display().to_string())
-                .arg(into.simplified_display().to_string())
+                .arg(temp_dir.path().simplified_display().to_string())
                 .exec_with_output()?;
         }
 
-        let repo = GitRepository::open(into)?;
-        let checkout = Self::new(revision, repo);
+        let repo = GitRepository::open(temp_dir.path())?;
+        let mut checkout = Self::new(revision, repo);
         let lfs_ready = checkout.reset(database.lfs_ready, original_remote_url)?;
+
+        // After the rename, the temporary directory no longer exists, so dropping it is a no-op.
+        with_retry_sync(temp_dir.path(), into, "renaming", || {
+            fs_err::rename(temp_dir.path(), into)
+        })?;
+        checkout.repo.path = into.to_path_buf();
+
+        // The .ok file should be written when the reset is successful.
+        // When Git LFS is enabled, the objects must also be fetched and
+        // validated successfully as part of the corresponding db.
+        if database.lfs_ready.is_none() || lfs_ready == Some(true) {
+            paths::create(into.with_extension(CHECKOUT_READY_EXTENSION))?;
+        }
+
         Ok(checkout.with_lfs_ready(lfs_ready))
     }
 
@@ -433,7 +483,7 @@ impl GitCheckout {
     fn is_fresh(&self) -> bool {
         match self.repo.rev_parse("HEAD") {
             Ok(id) if id == self.revision => {
-                // See comments in reset() for why we check this
+                // See comments in clone_into() for why we check this
                 self.repo
                     .path
                     .with_extension(CHECKOUT_READY_EXTENSION)
@@ -455,20 +505,8 @@ impl GitCheckout {
         self
     }
 
-    /// This performs `git reset --hard` to the revision of this checkout and updates submodules,
-    /// with additional interrupt protection by a marker file.
+    /// This performs `git reset --hard` to the revision of this checkout and updates submodules.
     ///
-    /// If we're interrupted while performing any of the processes in this method (e.g., we die
-    /// because of a signal) uv needs to be sure to try to check out this
-    /// repo again on the next go-round.
-    ///
-    /// The marker sits beside the checkout with an [`.ok` extension], so tracked files cannot
-    /// collide with it. It is removed before cloning and created only after preparation succeeds.
-    /// For example, there may be the `checkouts/<repository-key>/0123456789abcdef/` contents
-    /// directory containing `checkouts/<repository-key>/0123456789abcdef/pyproject.toml`, and the
-    /// `checkouts/<repository-key>/0123456789abcdef.ok` marker file besides it.
-    ///
-    /// [`.ok` extension]: CHECKOUT_READY_EXTENSION
     /// `git reset --hard [<commit>]` can break relative submodule URLs, so we update submodules
     /// using the original remote URL.
     fn reset(&self, with_lfs: Option<bool>, original_remote_url: &SafeUrl) -> Result<Option<bool>> {
@@ -538,13 +576,6 @@ impl GitCheckout {
             Some(false) => Some(false),
             Some(true) => Some(self.repo.lfs_fsck_objects(self.revision.as_str())),
         };
-
-        // The .ok file should be written when the reset is successful.
-        // When Git LFS is enabled, the objects must also be fetched and
-        // validated successfully as part of the corresponding db.
-        if with_lfs.is_none() || lfs_validation == Some(true) {
-            paths::create(self.repo.path.with_extension(CHECKOUT_READY_EXTENSION))?;
-        }
 
         Ok(lfs_validation)
     }
