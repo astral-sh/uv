@@ -125,7 +125,7 @@ fn copy_and_hash(reader: &mut impl Read, writer: &mut impl Write) -> io::Result<
 /// executable.
 ///
 /// See: <https://github.com/pypa/pip/blob/0ad4c94be74cc24874c6feb5bb3c2152c398a18e/src/pip/_vendor/distlib/scripts.py#L136-L165>
-fn format_shebang(executable: impl AsRef<Path>, os_name: &str, relocatable: bool) -> String {
+pub fn format_shebang(executable: impl AsRef<Path>, os_name: &str, relocatable: bool) -> String {
     // Convert the executable to a simplified path.
     let executable = executable.as_ref().simplified_display().to_string();
 

@@ -1986,6 +1986,99 @@ fn run_with_overlay_interpreter() -> Result<()> {
     Ok(())
 }
 
+/// When the project interpreter path contains a space, entrypoints are written with a `/bin/sh`
+/// wrapper instead of a plain shebang. `uv run --with` must still rewrite them to use the overlay
+/// interpreter.
+#[test]
+#[cfg(unix)]
+fn run_with_overlay_interpreter_sh_wrapper() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_cache_dir("cache dir");
+
+    let project_environment = context.temp_dir.child("project environment");
+    context
+        .venv()
+        .arg(project_environment.path())
+        .assert()
+        .success();
+    let context = context.with_filtered_path(&project_environment, "PROJECT_VENV");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.8"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+
+        [project.scripts]
+        main = "foo:main"
+        "#
+    })?;
+
+    let init_py = context
+        .temp_dir
+        .child("src")
+        .child("foo")
+        .child("__init__.py");
+    init_py.write_str(indoc! { r"
+        import sys
+
+        def main():
+            print(sys.executable)
+       "
+    })?;
+
+    // The project's entrypoint should be rewritten to use the overlay interpreter.
+    uv_snapshot!(context.filters(), context.run()
+        .env(EnvVars::UV_PROJECT_ENVIRONMENT, project_environment.path())
+        .env(EnvVars::VIRTUAL_ENV, project_environment.path())
+        .arg("--with")
+        .arg("iniconfig")
+        .arg("main"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [CACHE_DIR]/builds-v0/[TMP]/bin/python
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + foo==1.0.0 (from file://[TEMP_DIR]/)
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+
+    // The space in the interpreter path causes the entrypoint to use the `/bin/sh` wrapper.
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+            assert_snapshot!(
+                context.read("project environment/bin/main"), @r#"
+            #!/bin/sh
+            '''exec' '[PROJECT_VENV]/bin/python' "$0" "$@"
+            ' '''
+            # -*- coding: utf-8 -*-
+            import sys
+            from foo import main
+            if __name__ == "__main__":
+                if sys.argv[0].endswith("-script.pyw"):
+                    sys.argv[0] = sys.argv[0][:-11]
+                elif sys.argv[0].endswith(".exe"):
+                    sys.argv[0] = sys.argv[0][:-4]
+                sys.exit(main())
+            "#
+            );
+        }
+    );
+
+    Ok(())
+}
+
 #[test]
 fn run_with_build_constraints() -> Result<()> {
     let context = uv_test::test_context!("3.9");
