@@ -1371,7 +1371,11 @@ impl MarkerTree {
     /// is always true is returned.
     #[must_use]
     pub fn without_extras(self) -> Self {
-        Self(INTERNER.lock().without_extras(self.0))
+        Self(
+            INTERNER
+                .lock()
+                .without_variables(self.0, |var| matches!(var, Variable::Extra(_))),
+        )
     }
 
     /// Replace extras with the conditions under which they are enabled.
@@ -1382,10 +1386,10 @@ impl MarkerTree {
     /// when this marker contains an `extra` expression.
     #[must_use]
     pub fn resolve_extras(self, known_extras: impl IntoIterator<Item = (ExtraName, Self)>) -> Self {
-        if self.is_true() || self.is_false() {
-            return self;
-        }
-        if !INTERNER.shared.contains_extras(self.0) {
+        if !INTERNER
+            .shared
+            .contains_variable(self.0, |var| matches!(var, Variable::Extra(_)))
+        {
             return self;
         }
         let known_extras: FxHashMap<_, _> = known_extras
@@ -1409,7 +1413,10 @@ impl MarkerTree {
         self,
         known_extras: impl IntoIterator<Item = (ExtraName, (Self, Self))>,
     ) -> (Self, Self) {
-        if self.is_true() || self.is_false() || !INTERNER.shared.contains_extras(self.0) {
+        if !INTERNER
+            .shared
+            .contains_variable(self.0, |var| matches!(var, Variable::Extra(_)))
+        {
             return (self, self);
         }
 
