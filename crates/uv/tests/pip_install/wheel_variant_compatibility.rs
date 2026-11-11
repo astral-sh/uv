@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 #[cfg(feature = "test-git")]
 use std::process::Command;
 
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 #[cfg(feature = "test-git")]
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
@@ -10,7 +10,6 @@ use indoc::indoc;
 use insta::{assert_json_snapshot, assert_snapshot};
 use serde_json::{Map, Value, json};
 use uv_distribution_types::PEP_850_SCHEMA;
-#[cfg(feature = "test-git")]
 use uv_redacted::SafeUrl;
 use uv_static::EnvVars;
 use uv_test::find_links::FindLinksServer;
@@ -94,9 +93,13 @@ fn install_local_variant_wheel() -> Result<()> {
 #[test]
 fn refresh_incompatible_variant_wheel() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    let missing_wheel = context.temp_dir.child("child-1.0-py3-none-any.whl");
+    let missing_url = SafeUrl::from_file_path(missing_wheel.path())
+        .map_err(|()| anyhow!("invalid wheel path"))?;
     let variant = null_variant().to_string();
     let (filename, wheel) = WheelBuilder::new(&"ok".parse()?, &"1.0.0".parse()?)
         .tag("py3-none-win_amd64")
+        .requires(&[format!("child @ {missing_url}").parse()?])
         .variant(&"null".parse()?, &variant)
         .build();
     let wheel_path = context.temp_dir.child(filename);
