@@ -78,6 +78,7 @@ impl Interpreter {
         let InterpreterInfo {
             platform,
             metadata: info,
+            ..
         } = InterpreterInfo::query_cached(executable, cache)?;
 
         debug_assert!(
@@ -1104,6 +1105,7 @@ enum InterpreterInfoResult {
 #[derive(Debug, Deserialize)]
 struct InterpreterInfoWire {
     os: uv_platform_tags::Os,
+    libc_path: Option<PathBuf>,
     arch: uv_platform_tags::Arch,
     cpu_info: CpuProbe,
     #[serde(flatten)]
@@ -1160,6 +1162,9 @@ pub enum InterpreterInfoError {
 struct InterpreterInfo {
     platform: Platform,
     metadata: InterpreterMetadata,
+    /// Path to the libc loaded by the queried interpreter, if available.
+    libc_path: Option<PathBuf>,
+    query_started_at: Timestamp,
 }
 
 #[expect(clippy::struct_excessive_bools)]
@@ -1379,11 +1384,63 @@ impl InterpreterInfo {
         )
     }
 
-    /// A wrapper around [`markers::query_interpreter_info`] to cache the computed markers.
-    ///
-    /// Running a Python script is (relatively) expensive, and the markers won't change
-    /// unless the Python executable changes, so we use the executable's last modified
-    /// time as a cache key.
+    /// Read a cached probe result if the executable and its libc are still fresh.
+    fn read_cached(
+        cache: &Cache,
+        entry: &CacheEntry,
+        executable: &Path,
+        modified: Timestamp,
+    ) -> Option<Self> {
+        if !cache
+            .freshness(entry, None, None)
+            .is_ok_and(Freshness::is_fresh)
+        {
+            return None;
+        }
+
+        let data = fs::read(entry.path()).ok()?;
+        let cached: CachedByTimestamp<Self> = match rmp_serde::from_slice(&data) {
+            Ok(cached) => cached,
+            Err(err) => {
+                warn!(
+                    "Broken interpreter cache entry at `{}`, removing: {err}",
+                    entry.path().user_display()
+                );
+                let _ = fs::remove_file(entry.path());
+                return None;
+            }
+        };
+
+        // A replacement executable can carry an older modification time on Windows, so any
+        // timestamp difference invalidates the entry.
+        if cached.timestamp != modified {
+            trace!(
+                "Ignoring stale interpreter markers for: {}",
+                executable.user_display()
+            );
+            return None;
+        }
+
+        if !libc_is_fresh(
+            cached.data.libc_path.as_deref(),
+            cached.data.query_started_at,
+        ) {
+            trace!(
+                "Ignoring cached interpreter markers for {} due to stale libc metadata",
+                executable.user_display()
+            );
+            return None;
+        }
+
+        trace!(
+            "Found cached interpreter info for Python {}, skipping query of: {}",
+            cached.data.metadata.markers.python_full_version(),
+            executable.user_display()
+        );
+        Some(cached.data)
+    }
+
+    /// Cache the probe result until the Python executable or its libc changes.
     fn query_cached(executable: &Path, cache: &Cache) -> Result<Self, Error> {
         let absolute = std::path::absolute(executable)?;
 
@@ -1418,37 +1475,8 @@ impl InterpreterInfo {
         // interpreter has been modified.
         let modified = Timestamp::from_path(canonical).map_err(handle_io_error)?;
 
-        // Read from the cache.
-        if cache
-            .freshness(&cache_entry, None, None)
-            .is_ok_and(Freshness::is_fresh)
-        {
-            if let Ok(data) = fs::read(cache_entry.path()) {
-                match rmp_serde::from_slice::<CachedByTimestamp<Self>>(&data) {
-                    Ok(cached) => {
-                        if cached.timestamp == modified {
-                            trace!(
-                                "Found cached interpreter info for Python {}, skipping query of: {}",
-                                cached.data.metadata.markers.python_full_version(),
-                                executable.user_display()
-                            );
-                            return Ok(cached.data);
-                        }
-
-                        trace!(
-                            "Ignoring stale interpreter markers for: {}",
-                            executable.user_display()
-                        );
-                    }
-                    Err(err) => {
-                        warn!(
-                            "Broken interpreter cache entry at `{}`, removing: {err}",
-                            cache_entry.path().user_display()
-                        );
-                        let _ = fs_err::remove_file(cache_entry.path());
-                    }
-                }
-            }
+        if let Some(info) = Self::read_cached(cache, &cache_entry, executable, modified) {
+            return Ok(info);
         }
 
         // Otherwise, run the Python script.
@@ -1456,6 +1484,9 @@ impl InterpreterInfo {
             "Querying interpreter executable at `{}`",
             executable.display()
         );
+        // Capture the cutoff before running Python so libc changes during the probe
+        // invalidate the result on the next lookup.
+        let query_started_at = Timestamp::now();
         let wire = Self::query(executable, cache)?;
         let cpu_info = match wire.cpu_info {
             CpuProbe::Detected(info) => Some(info),
@@ -1492,6 +1523,8 @@ impl InterpreterInfo {
         let info = Self {
             platform: Platform::from_interpreter(wire.os, wire.arch, cpu_info),
             metadata: wire.metadata,
+            libc_path: wire.libc_path,
+            query_started_at,
         };
 
         // If `executable` is a pyenv shim, a bash script that redirects to the activated
@@ -1509,6 +1542,35 @@ impl InterpreterInfo {
 
         Ok(info)
     }
+}
+
+/// Check the reported libc path and each target in its symlink chain.
+fn libc_is_fresh(path: Option<&Path>, query_started_at: Timestamp) -> bool {
+    let Some(path) = path else {
+        return true;
+    };
+    if !path.is_absolute() {
+        return false;
+    }
+
+    let mut path = Cow::Borrowed(path);
+    // Bound the walk so cyclic links are treated as stale.
+    for _ in 0..=40 {
+        let Ok(metadata) = fs::symlink_metadata(path.as_ref()) else {
+            return false;
+        };
+        if Timestamp::from_metadata(&metadata) > query_started_at {
+            return false;
+        }
+        if !metadata.is_symlink() {
+            return metadata.is_file();
+        }
+        let Ok(target) = fs::read_link(path.as_ref()) else {
+            return false;
+        };
+        path.to_mut().set_file_name(target);
+    }
+    false
 }
 
 /// Find the Python executable that should be considered the "base" for a virtual environment.
