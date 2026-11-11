@@ -419,7 +419,7 @@ def get_scheme(use_sysconfig_scheme: bool):
 
 
 def get_operating_system_and_architecture():
-    """Determine the Python interpreter architecture and operating system.
+    """Determine the Python interpreter operating system, architecture, and libc path.
 
     This can differ from uv's architecture and operating system. For example, Apple
     Silicon Macs can run both x86_64 and aarch64 binaries transparently.
@@ -457,6 +457,7 @@ def get_operating_system_and_architecture():
         )
         sys.exit(0)
 
+    libc_path = None
     if operating_system == "linux":
         # noinspection PyProtectedMember
         from .packaging._manylinux import _get_glibc_version
@@ -475,18 +476,20 @@ def get_operating_system_and_architecture():
         musl_version = _get_musl_version(sys.executable)
         glibc_version = _get_glibc_version()
 
-        if musl_version:
+        if musl_version is not None:
             operating_system = {
                 "name": "musllinux",
-                "major": musl_version[0],
-                "minor": musl_version[1],
+                "major": musl_version.major,
+                "minor": musl_version.minor,
             }
-        elif glibc_version != (-1, -1):
+            libc_path = musl_version.interpreter
+        elif glibc_version is not None:
             operating_system = {
                 "name": "manylinux",
-                "major": glibc_version[0],
-                "minor": glibc_version[1],
+                "major": glibc_version.major,
+                "minor": glibc_version.minor,
             }
+            libc_path = glibc_version.interpreter
         elif hasattr(sys, "getandroidapilevel"):
             # On Python <3.13, Android reports itself as "linux"
             # See `operation_system == "android"` branch for Python 3.13+ below
@@ -608,7 +611,7 @@ def get_operating_system_and_architecture():
             )
         )
         sys.exit(0)
-    return operating_system, architecture
+    return operating_system, architecture, libc_path
 
 
 def _get_cpu_info(architecture):
@@ -912,7 +915,7 @@ def main() -> None:
         "sys_platform": sys.platform,
     }
 
-    os, architecture = get_operating_system_and_architecture()
+    os, architecture, libc_path = get_operating_system_and_architecture()
 
     manylinux_compatible = False
 
@@ -920,8 +923,9 @@ def main() -> None:
         # noinspection PyProtectedMember
         from .packaging._manylinux import _get_glibc_version, _is_compatible
 
-        manylinux_compatible = _is_compatible(
-            arch=architecture, version=_get_glibc_version()
+        glibc_version = _get_glibc_version()
+        manylinux_compatible = glibc_version is not None and _is_compatible(
+            arch=architecture, version=glibc_version
         )
     elif os["name"] == "musllinux":
         manylinux_compatible = True
@@ -1001,6 +1005,7 @@ def main() -> None:
         "scheme": get_scheme(use_sysconfig_scheme),
         "virtualenv": get_virtualenv(),
         "os": os,
+        "libc_path": libc_path,
         "arch": architecture,
         "cpu_info": cpu_info,
         "manylinux_compatible": manylinux_compatible,

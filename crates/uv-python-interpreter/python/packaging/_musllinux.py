@@ -13,23 +13,26 @@ from typing import Iterator, NamedTuple, Sequence
 from ._elffile import ELFFile
 
 
-class _MuslVersion(NamedTuple):
+class _MuslInterpreter(NamedTuple):
     major: int
     minor: int
+    interpreter: str
 
 
-def _parse_musl_version(interpreter: str, output: bytes) -> "_MuslVersion | None":
+def _parse_musl_version(interpreter: str, output: bytes) -> "_MuslInterpreter | None":
     lines = [n for n in (n.strip() for n in output.splitlines()) if n]
     if not lines or lines[0][:4] != b"musl":
         return None
     m = re.match(rb"Version (\d+)\.(\d+)", lines[1]) if len(lines) >= 2 else None
     if not m:
         raise ValueError(f"Could not read the musl version from {interpreter!r}")
-    return _MuslVersion(major=int(m.group(1)), minor=int(m.group(2)))
+    return _MuslInterpreter(
+        major=int(m.group(1)), minor=int(m.group(2)), interpreter=interpreter
+    )
 
 
 @functools.lru_cache()
-def _get_musl_version(executable: str) -> "_MuslVersion | None":
+def _get_musl_version(executable: str) -> "_MuslInterpreter | None":
     """Detect currently-running musl runtime version.
 
     This is done by checking the specified executable's dynamic linking
