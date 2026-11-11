@@ -187,7 +187,8 @@ def _parse_glibc_version(version_str: str) -> "_GLibCVersion | None":
 # From PEP 513, PEP 600
 def _is_compatible(arch: str, version: _GLibCVersion) -> bool:
     sys_glibc = _get_glibc_version()
-    if sys_glibc is None or (sys_glibc.major, sys_glibc.minor) < (version.major, version.minor):
+    version_numbers = (version.major, version.minor)
+    if sys_glibc is None or (sys_glibc.major, sys_glibc.minor) < version_numbers:
         return False
     # Check for presence of _manylinux module.
     try:
