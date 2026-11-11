@@ -163,7 +163,7 @@ def _get_glibc_version() -> "_GLibCVersion | None":
             path = os.path.join(os.getcwd(), path)
         except OSError:
             return version
-    return version._replace(interpreter=path)
+    return _GLibCVersion(major=version.major, minor=version.minor, interpreter=path)
 
 
 def _parse_glibc_version(version_str: str) -> "_GLibCVersion | None":
