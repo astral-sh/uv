@@ -1466,26 +1466,15 @@ impl InterpreterInfo {
             return Ok(info);
         }
 
-        // Snapshot the known inputs before running Python so changes during the probe
-        // invalidate the result on the next lookup.
-        let mut file_timestamps = HashMap::new();
-        record_file_timestamps(&absolute, &mut file_timestamps).map_err(handle_io_error)?;
-        if !file_timestamps.contains_key(&canonical) {
-            // On Windows the canonical path can come from a trampoline executable.
-            record_file_timestamps(&canonical, &mut file_timestamps).map_err(handle_io_error)?;
-        }
-
         // Otherwise, run the Python script.
         trace!(
             "Querying interpreter executable at `{}`",
             executable.display()
         );
         let wire = Self::query(executable, cache)?;
-        // The probe discovers the libc path. Skip caching if libc changed before we could
-        // snapshot it, since the returned version might describe the previous library.
-        if let Some(libc_path) = wire.libc_path.as_deref() {
-            record_file_timestamps(libc_path, &mut file_timestamps)?;
-        }
+
+        let file_timestamps = Self::cache_file_timestamps(&absolute, &canonical, &wire)?;
+
         let cpu_info = match wire.cpu_info {
             CpuProbe::Detected(info) => Some(info),
             CpuProbe::UnsupportedArchitecture(architecture) => {
@@ -1532,6 +1521,24 @@ impl InterpreterInfo {
         }
 
         Ok(info)
+    }
+
+    /// The paths that went into the interpreter discovery and when they last changed.
+    fn cache_file_timestamps(
+        absolute: &Path,
+        canonical: &Path,
+        wire: &InterpreterInfoWire,
+    ) -> Result<HashMap<PathBuf, Option<Timestamp>>, io::Error> {
+        let mut file_timestamps = HashMap::new();
+        record_file_timestamps(&absolute, &mut file_timestamps)?;
+        if !file_timestamps.contains_key(canonical) {
+            // On Windows the canonical path can come from a trampoline executable.
+            record_file_timestamps(&canonical, &mut file_timestamps)?;
+        }
+        if let Some(libc_path) = wire.libc_path.as_deref() {
+            record_file_timestamps(libc_path, &mut file_timestamps)?;
+        }
+        Ok(file_timestamps)
     }
 }
 
