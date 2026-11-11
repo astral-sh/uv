@@ -14,7 +14,6 @@ use uv_fs::{LockedFile, LockedFileError, LockedFileMode, Simplified, cachedir, d
 use uv_normalize::PackageName;
 use uv_pypi_types::ResolutionMetadata;
 
-pub use crate::by_timestamp::CachedByTimestamp;
 #[cfg(feature = "clap")]
 pub use crate::cli::CacheArgs;
 use crate::removal::Remover;
@@ -24,7 +23,6 @@ use crate::wheel::WheelCacheKind;
 pub use archive::{ArchiveFileId, ArchiveId};
 
 mod archive;
-mod by_timestamp;
 #[cfg(feature = "clap")]
 mod cli;
 mod removal;
