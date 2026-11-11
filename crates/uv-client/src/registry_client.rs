@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use std::fmt::{self, Debug, Formatter};
+use std::fmt::{self, Debug, Display, Formatter};
 use std::io::BufReader;
 use std::path::Path;
 use std::sync::Arc;
@@ -41,7 +41,6 @@ use uv_redacted::SafeUrl;
 use uv_small_str::SmallString;
 use uv_torch::TorchStrategy;
 
-use self::registry_wheel_request::RegistryWheelRequest;
 use crate::base_client::{BaseClientBuilder, ClientBuildError, ExtraMiddleware, RedirectPolicy};
 use crate::cached_client::CacheControl;
 use crate::flat_index::FlatIndexEntry;
@@ -52,8 +51,6 @@ use crate::{
     BaseClient, CachedClient, Error, ErrorKind, FlatIndexClient, RedirectClientWithMiddleware,
     RetryState,
 };
-
-mod registry_wheel_request;
 
 /// Cache parsed core metadata and variant requirements from the same wheel.
 #[derive(Serialize, Deserialize)]
@@ -1038,19 +1035,8 @@ impl RegistryClient {
     ) -> Result<ResolutionMetadata, Error> {
         let metadata = match &built_dist {
             BuiltDist::Registry(wheels) => {
-                let wheel = wheels.best_wheel();
-
-                let request = RegistryWheelRequest::for_wheel(wheel)?;
-                if request.as_url().scheme() == "file" {
-                    let path = request
-                        .as_url()
-                        .to_file_path()
-                        .map_err(|()| ErrorKind::NonFileUrl(request.into_url()))?;
-                    Self::wheel_metadata_local(&path, &path, &wheel.filename, built_dist).await?
-                } else {
-                    self.wheel_metadata_registry(wheel, request, capabilities)
-                        .await?
-                }
+                self.wheel_metadata_registry(wheels.best_wheel(), capabilities)
+                    .await?
             }
             BuiltDist::DirectUrl(wheel) => {
                 if wheel.filename.variant().is_some() {
@@ -1126,7 +1112,7 @@ impl RegistryClient {
         path: &Path,
         metadata_path: &Path,
         filename: &WheelFilename,
-        built_dist: &BuiltDist,
+        built_dist: &impl Display,
     ) -> Result<ResolutionMetadata, Error> {
         let path = path.to_path_buf();
         let metadata_path = metadata_path.to_string_lossy().into_owned();
@@ -1144,15 +1130,22 @@ impl RegistryClient {
         .map_err(|err| ErrorKind::Io(err.into()))?
     }
 
-    /// Fetch registry wheel metadata using its prepared URL and effective index.
+    /// Read metadata from a local registry wheel or fetch it from the registry.
     async fn wheel_metadata_registry(
         &self,
         wheel: &RegistryBuiltWheel,
-        request: RegistryWheelRequest<'_>,
         capabilities: &IndexCapabilities,
     ) -> Result<ResolutionMetadata, Error> {
         let RegistryBuiltWheel { filename, file, .. } = wheel;
-        let (url, effective_index) = request.into_parts();
+        let url = file.location.to_url().map_err(ErrorKind::InvalidUrl)?;
+        let effective_index = &wheel.index;
+
+        if url.scheme() == "file" {
+            let path = url
+                .to_file_path()
+                .map_err(|()| ErrorKind::NonFileUrl(url))?;
+            return Self::wheel_metadata_local(&path, &path, filename, wheel).await;
+        }
 
         // If the metadata file is available at its own url (PEP 658), download it from there.
         if let Some(hashes) = &file.dist_info_metadata {
