@@ -213,7 +213,7 @@ fn find_uv_bin_in_ephemeral_environment() -> anyhow::Result<()> {
         .arg(TEST_SCRIPT), @"
     exit_code: 0 (success)
     ----- stdout -----
-    [CACHE_DIR]/archive-v0/[HASH]/[BIN]/uv
+    [CACHE_DIR]/archive-[VERSION]/[HASH]/[BIN]/uv
 
     ----- stderr -----
     Resolved 1 package in [TIME]

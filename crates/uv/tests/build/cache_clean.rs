@@ -12,6 +12,7 @@ use indoc::indoc;
 use std::process::Command;
 
 use uv_cache::Cache;
+use uv_cache::CacheBucket;
 #[cfg(unix)]
 use uv_fs::link::{LinkMode, LinkOptions, link_dir};
 use uv_static::EnvVars;
@@ -372,8 +373,7 @@ fn clean_package_pypi() -> Result<()> {
 
     // Assert that the `.rkyv` file is created for `iniconfig`.
     let rkyv = context
-        .cache_dir
-        .child("simple-v27")
+        .cache_bucket(CacheBucket::Simple)
         .child("pypi")
         .child("iniconfig.rkyv");
     assert!(
@@ -386,7 +386,7 @@ fn clean_package_pypi() -> Result<()> {
     ----- stderr -----
     DEBUG Searching for user configuration in: [UV_USER_CONFIG_DIR]/uv.toml
     DEBUG uv [VERSION] ([COMMIT] DATE)
-    DEBUG Removing dangling cache entry: [CACHE_DIR]/archive-v0/[ENTRY]
+    DEBUG Removing dangling cache entry: [CACHE_DIR]/archive-[VERSION]/[ENTRY]
     Removed [N] files ([SIZE])
     ");
 
@@ -438,8 +438,7 @@ fn clean_package_index() -> Result<()> {
 
     // Assert that the `.rkyv` file is created for `iniconfig`.
     let rkyv = context
-        .cache_dir
-        .child("simple-v27")
+        .cache_bucket(CacheBucket::Simple)
         .child("index")
         .child("e8208120cae3ba69")
         .child("iniconfig.rkyv");
@@ -453,7 +452,7 @@ fn clean_package_index() -> Result<()> {
     ----- stderr -----
     DEBUG Searching for user configuration in: [UV_USER_CONFIG_DIR]/uv.toml
     DEBUG uv [VERSION] ([COMMIT] DATE)
-    DEBUG Removing dangling cache entry: [CACHE_DIR]/archive-v0/[ENTRY]
+    DEBUG Removing dangling cache entry: [CACHE_DIR]/archive-[VERSION]/[ENTRY]
     Removed [N] files ([SIZE])
     ");
 
@@ -471,10 +470,9 @@ fn clean_package_index() -> Result<()> {
 fn clean_does_not_follow_symlinks() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_filtered_sizes_and_units();
     let victim_dir = context.temp_dir.child("victim");
-    let archive_entry = context.cache_dir.child("archive-v0").child("archive");
+    let archive_entry = context.cache_bucket(CacheBucket::Archive).child("archive");
     let package_entry = context
-        .cache_dir
-        .child("wheels-v7")
+        .cache_bucket(CacheBucket::Wheels)
         .child("pypi")
         .child("demo");
 
@@ -488,7 +486,7 @@ fn clean_does_not_follow_symlinks() -> Result<()> {
     fs_err::os::unix::fs::symlink(&victim_dir, package_entry.join("escape"))?;
     fs_err::os::unix::fs::symlink(&archive_entry, package_entry.join("archive"))?;
 
-    let files = context.cache_dir.child("files-v0");
+    let files = context.cache_bucket(CacheBucket::Files);
     let shard = files.child("shard");
     shard.child("orphan").write_str("orphan")?;
     shard
@@ -550,7 +548,7 @@ fn clean_does_not_follow_symlinks() -> Result<()> {
 #[test]
 fn clean_package_empty_shard_without_search_permission() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let shard = context.cache_dir.child("files-v0").child("shard");
+    let shard = context.cache_bucket(CacheBucket::Files).child("shard");
     shard.create_dir_all()?;
     fs_err::set_permissions(&shard, Permissions::from_mode(0o600))?;
 
@@ -593,8 +591,7 @@ fn clean_handles_verbatim_paths() -> Result<()> {
 
     // Cached sdist path resembling the uwsgi==2.0.31 build failure.
     let uwsgi_shard = context
-        .cache_dir
-        .child("sdists-v10")
+        .cache_bucket(CacheBucket::SourceDistributions)
         .child("pypi")
         .child("uwsgi")
         .child("2.0.31")

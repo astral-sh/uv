@@ -13,12 +13,11 @@ use predicates::prelude::predicate;
 use sha2::{Digest, Sha256};
 
 use uv_cache::CacheBucket;
-use uv_fs::PortablePath;
 #[cfg(unix)]
 use uv_fs::create_symlink;
 use uv_test::archive::generate_source_archive;
 use uv_test::package_server::PackageServer;
-use uv_test::{TestContext, get_bin, uv_snapshot};
+use uv_test::{TestContext, apply_filters, get_bin, uv_snapshot};
 
 /// A custom cache directory must configure commands and snapshot filters together.
 #[test]
@@ -471,7 +470,7 @@ fn binary_payloads_stay_in_archive_without_preview_local() -> Result<()> {
      + binary-payload==0.1.0 (from file://[TEMP_DIR]/binary_payload-0.1.0-py3-none-any.whl)
     ");
 
-    assert!(!context.cache_dir.child("files-v0").exists());
+    assert!(!context.cache_bucket(CacheBucket::Files).exists());
     let archive_files = context.cache_files(CacheBucket::Archive)?;
     let archive_binary = archive_files
         .iter()
@@ -504,7 +503,7 @@ async fn binary_payloads_stay_in_archive_without_preview_streaming() -> Result<(
      + binary-payload==0.1.0 (from http://[LOCALHOST]/binary_payload-0.1.0-py3-none-any.whl)
     ");
 
-    assert!(!context.cache_dir.child("files-v0").exists());
+    assert!(!context.cache_bucket(CacheBucket::Files).exists());
     let archive_files = context.cache_files(CacheBucket::Archive)?;
     let archive_binary = archive_files
         .iter()
@@ -535,20 +534,16 @@ fn all_files_except_record_use_archive_file_store_local_serial() -> Result<()> {
     // Identical contents still need separate executable and non-executable objects.
     let mut snapshot = String::new();
     for object in &objects {
-        writeln!(
-            snapshot,
-            "{}",
-            PortablePath::from(object.strip_prefix(context.cache_dir.path())?)
-        )?;
+        writeln!(snapshot, "{}", object.display())?;
     }
-    assert_snapshot!(snapshot, @"
-    files-v0/0c/0c8d68fa16e023b913e926be9b281c5a133c33291b3e60a54c310376f5602a45
-    files-v0/2f/2f4d468b80be8a639ba0bdcfc738be8d912c35dd686a1eb15272e8f56096358c
-    files-v0/4a/4a3f63865c29c673794f181932bc0e2c4779275f22e03a896d3d6ca3ac447332
-    files-v0/80/8043c55c494befd8bb44cf59c112ae6a944da98d04b550ff4fd055e2ebfabeb8
-    files-v0/92/920a0fbc7cd79a94ab2adabfaa8b93804bf6e3e858c454d45958cc9902554248
-    files-v0/bf/bf13d7b1c373edcb8588b94aae048664a6684f665fa4a7e8cd814360e537a049
-    files-v0/fa/fad1ac6fba02614a6ee120fbb397cd676f48c101afee95ab29d146c76df03596
+    assert_snapshot!(apply_filters(snapshot, context.filters()), @"
+    [CACHE_DIR]/files-[VERSION]/0c/0c8d68fa16e023b913e926be9b281c5a133c33291b3e60a54c310376f5602a45
+    [CACHE_DIR]/files-[VERSION]/2f/2f4d468b80be8a639ba0bdcfc738be8d912c35dd686a1eb15272e8f56096358c
+    [CACHE_DIR]/files-[VERSION]/4a/4a3f63865c29c673794f181932bc0e2c4779275f22e03a896d3d6ca3ac447332
+    [CACHE_DIR]/files-[VERSION]/80/8043c55c494befd8bb44cf59c112ae6a944da98d04b550ff4fd055e2ebfabeb8
+    [CACHE_DIR]/files-[VERSION]/92/920a0fbc7cd79a94ab2adabfaa8b93804bf6e3e858c454d45958cc9902554248
+    [CACHE_DIR]/files-[VERSION]/bf/bf13d7b1c373edcb8588b94aae048664a6684f665fa4a7e8cd814360e537a049
+    [CACHE_DIR]/files-[VERSION]/fa/fad1ac6fba02614a6ee120fbb397cd676f48c101afee95ab29d146c76df03596
     ");
     let paths = context.cache_files(CacheBucket::Archive)?;
     let shared_paths = paths
@@ -585,20 +580,16 @@ fn all_files_except_record_use_archive_file_store_local_concurrent() -> Result<(
     // Identical contents still need separate executable and non-executable objects.
     let mut snapshot = String::new();
     for object in &objects {
-        writeln!(
-            snapshot,
-            "{}",
-            PortablePath::from(object.strip_prefix(context.cache_dir.path())?)
-        )?;
+        writeln!(snapshot, "{}", object.display())?;
     }
-    assert_snapshot!(snapshot, @"
-    files-v0/0c/0c8d68fa16e023b913e926be9b281c5a133c33291b3e60a54c310376f5602a45
-    files-v0/2f/2f4d468b80be8a639ba0bdcfc738be8d912c35dd686a1eb15272e8f56096358c
-    files-v0/4a/4a3f63865c29c673794f181932bc0e2c4779275f22e03a896d3d6ca3ac447332
-    files-v0/80/8043c55c494befd8bb44cf59c112ae6a944da98d04b550ff4fd055e2ebfabeb8
-    files-v0/92/920a0fbc7cd79a94ab2adabfaa8b93804bf6e3e858c454d45958cc9902554248
-    files-v0/bf/bf13d7b1c373edcb8588b94aae048664a6684f665fa4a7e8cd814360e537a049
-    files-v0/fa/fad1ac6fba02614a6ee120fbb397cd676f48c101afee95ab29d146c76df03596
+    assert_snapshot!(apply_filters(snapshot, context.filters()), @"
+    [CACHE_DIR]/files-[VERSION]/0c/0c8d68fa16e023b913e926be9b281c5a133c33291b3e60a54c310376f5602a45
+    [CACHE_DIR]/files-[VERSION]/2f/2f4d468b80be8a639ba0bdcfc738be8d912c35dd686a1eb15272e8f56096358c
+    [CACHE_DIR]/files-[VERSION]/4a/4a3f63865c29c673794f181932bc0e2c4779275f22e03a896d3d6ca3ac447332
+    [CACHE_DIR]/files-[VERSION]/80/8043c55c494befd8bb44cf59c112ae6a944da98d04b550ff4fd055e2ebfabeb8
+    [CACHE_DIR]/files-[VERSION]/92/920a0fbc7cd79a94ab2adabfaa8b93804bf6e3e858c454d45958cc9902554248
+    [CACHE_DIR]/files-[VERSION]/bf/bf13d7b1c373edcb8588b94aae048664a6684f665fa4a7e8cd814360e537a049
+    [CACHE_DIR]/files-[VERSION]/fa/fad1ac6fba02614a6ee120fbb397cd676f48c101afee95ab29d146c76df03596
     ");
     let paths = context.cache_files(CacheBucket::Archive)?;
     let shared_paths = paths
@@ -640,20 +631,16 @@ async fn all_files_except_record_use_archive_file_store_streaming_serial() -> Re
     // Identical contents still need separate executable and non-executable objects.
     let mut snapshot = String::new();
     for object in &objects {
-        writeln!(
-            snapshot,
-            "{}",
-            PortablePath::from(object.strip_prefix(context.cache_dir.path())?)
-        )?;
+        writeln!(snapshot, "{}", object.display())?;
     }
-    assert_snapshot!(snapshot, @"
-    files-v0/0c/0c8d68fa16e023b913e926be9b281c5a133c33291b3e60a54c310376f5602a45
-    files-v0/2f/2f4d468b80be8a639ba0bdcfc738be8d912c35dd686a1eb15272e8f56096358c
-    files-v0/4a/4a3f63865c29c673794f181932bc0e2c4779275f22e03a896d3d6ca3ac447332
-    files-v0/80/8043c55c494befd8bb44cf59c112ae6a944da98d04b550ff4fd055e2ebfabeb8
-    files-v0/92/920a0fbc7cd79a94ab2adabfaa8b93804bf6e3e858c454d45958cc9902554248
-    files-v0/bf/bf13d7b1c373edcb8588b94aae048664a6684f665fa4a7e8cd814360e537a049
-    files-v0/fa/fad1ac6fba02614a6ee120fbb397cd676f48c101afee95ab29d146c76df03596
+    assert_snapshot!(apply_filters(snapshot, context.filters()), @"
+    [CACHE_DIR]/files-[VERSION]/0c/0c8d68fa16e023b913e926be9b281c5a133c33291b3e60a54c310376f5602a45
+    [CACHE_DIR]/files-[VERSION]/2f/2f4d468b80be8a639ba0bdcfc738be8d912c35dd686a1eb15272e8f56096358c
+    [CACHE_DIR]/files-[VERSION]/4a/4a3f63865c29c673794f181932bc0e2c4779275f22e03a896d3d6ca3ac447332
+    [CACHE_DIR]/files-[VERSION]/80/8043c55c494befd8bb44cf59c112ae6a944da98d04b550ff4fd055e2ebfabeb8
+    [CACHE_DIR]/files-[VERSION]/92/920a0fbc7cd79a94ab2adabfaa8b93804bf6e3e858c454d45958cc9902554248
+    [CACHE_DIR]/files-[VERSION]/bf/bf13d7b1c373edcb8588b94aae048664a6684f665fa4a7e8cd814360e537a049
+    [CACHE_DIR]/files-[VERSION]/fa/fad1ac6fba02614a6ee120fbb397cd676f48c101afee95ab29d146c76df03596
     ");
     let paths = context.cache_files(CacheBucket::Archive)?;
     let shared_paths = paths
@@ -695,20 +682,16 @@ async fn all_files_except_record_use_archive_file_store_streaming_concurrent() -
     // Identical contents still need separate executable and non-executable objects.
     let mut snapshot = String::new();
     for object in &objects {
-        writeln!(
-            snapshot,
-            "{}",
-            PortablePath::from(object.strip_prefix(context.cache_dir.path())?)
-        )?;
+        writeln!(snapshot, "{}", object.display())?;
     }
-    assert_snapshot!(snapshot, @"
-    files-v0/0c/0c8d68fa16e023b913e926be9b281c5a133c33291b3e60a54c310376f5602a45
-    files-v0/2f/2f4d468b80be8a639ba0bdcfc738be8d912c35dd686a1eb15272e8f56096358c
-    files-v0/4a/4a3f63865c29c673794f181932bc0e2c4779275f22e03a896d3d6ca3ac447332
-    files-v0/80/8043c55c494befd8bb44cf59c112ae6a944da98d04b550ff4fd055e2ebfabeb8
-    files-v0/92/920a0fbc7cd79a94ab2adabfaa8b93804bf6e3e858c454d45958cc9902554248
-    files-v0/bf/bf13d7b1c373edcb8588b94aae048664a6684f665fa4a7e8cd814360e537a049
-    files-v0/fa/fad1ac6fba02614a6ee120fbb397cd676f48c101afee95ab29d146c76df03596
+    assert_snapshot!(apply_filters(snapshot, context.filters()), @"
+    [CACHE_DIR]/files-[VERSION]/0c/0c8d68fa16e023b913e926be9b281c5a133c33291b3e60a54c310376f5602a45
+    [CACHE_DIR]/files-[VERSION]/2f/2f4d468b80be8a639ba0bdcfc738be8d912c35dd686a1eb15272e8f56096358c
+    [CACHE_DIR]/files-[VERSION]/4a/4a3f63865c29c673794f181932bc0e2c4779275f22e03a896d3d6ca3ac447332
+    [CACHE_DIR]/files-[VERSION]/80/8043c55c494befd8bb44cf59c112ae6a944da98d04b550ff4fd055e2ebfabeb8
+    [CACHE_DIR]/files-[VERSION]/92/920a0fbc7cd79a94ab2adabfaa8b93804bf6e3e858c454d45958cc9902554248
+    [CACHE_DIR]/files-[VERSION]/bf/bf13d7b1c373edcb8588b94aae048664a6684f665fa4a7e8cd814360e537a049
+    [CACHE_DIR]/files-[VERSION]/fa/fad1ac6fba02614a6ee120fbb397cd676f48c101afee95ab29d146c76df03596
     ");
     let paths = context.cache_files(CacheBucket::Archive)?;
     let shared_paths = paths
@@ -749,7 +732,7 @@ fn binary_payloads_use_archive_file_store() -> Result<()> {
     ");
 
     let objects = context.cache_files(CacheBucket::Files)?;
-    let archive = fs_err::read_dir(context.cache_dir.child("archive-v0").path())?
+    let archive = fs_err::read_dir(context.cache_bucket(CacheBucket::Archive).path())?
         .next()
         .transpose()?
         .context("missing cached archive")?

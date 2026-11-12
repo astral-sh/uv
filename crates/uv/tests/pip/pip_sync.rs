@@ -10,6 +10,7 @@ use predicates::Predicate;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
+use uv_cache::CacheBucket;
 use uv_fs::Simplified;
 use uv_redacted::SafeUrl;
 use uv_static::EnvVars;
@@ -3985,8 +3986,7 @@ fn require_hashes_wheel_url_mismatch() -> Result<()> {
 
     // A rejected wheel must not be published to the archive cache.
     context
-        .cache_dir
-        .child("archive-v0")
+        .cache_bucket(CacheBucket::Archive)
         .assert(predicates::path::missing());
 
     Ok(())
@@ -4249,8 +4249,7 @@ fn require_hashes_wheel_path_mismatch() -> Result<()> {
 
     // A rejected wheel must not be published to the archive cache.
     context
-        .cache_dir
-        .child("archive-v0")
+        .cache_bucket(CacheBucket::Archive)
         .assert(predicates::path::missing());
 
     Ok(())
@@ -5016,8 +5015,7 @@ fn index_wheel_hash_mismatch() -> Result<()> {
     ");
 
     context
-        .cache_dir
-        .child("archive-v0")
+        .cache_bucket(CacheBucket::Archive)
         .assert(predicates::path::missing());
     Ok(())
 }

@@ -1144,12 +1144,12 @@ fn tool_run_git_lfs() {
     Installed [N] packages in [TIME]
      + test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo@e282f5be233e3f1d44934164895a043fc534b8aa)
     Traceback (most recent call last):
-      File "[CACHE_DIR]/archive-v0/[HASH]/bin/test-lfs-repo-assets", line 12, in <module>
+      File "[CACHE_DIR]/archive-[VERSION]/[HASH]/bin/test-lfs-repo-assets", line 12, in <module>
         sys.exit(main_lfs())
                  ~~~~~~~~^^
-      File "[CACHE_DIR]/archive-v0/[HASH]/[PYTHON-LIB]/site-packages/test_lfs_repo/__init__.py", line 5, in main_lfs
+      File "[CACHE_DIR]/archive-[VERSION]/[HASH]/[PYTHON-LIB]/site-packages/test_lfs_repo/__init__.py", line 5, in main_lfs
         from .lfs_module import LFS_TEST
-      File "[CACHE_DIR]/archive-v0/[HASH]/[PYTHON-LIB]/site-packages/test_lfs_repo/lfs_module.py", line 1
+      File "[CACHE_DIR]/archive-[VERSION]/[HASH]/[PYTHON-LIB]/site-packages/test_lfs_repo/lfs_module.py", line 1
         version https://git-lfs.github.com/spec/v1
                 ^^^^^
     SyntaxError: invalid syntax
@@ -1169,12 +1169,12 @@ fn tool_run_git_lfs() {
     Traceback (most recent call last):
       File "<frozen runpy>", line 198, in _run_module_as_main
       File "<frozen runpy>", line 88, in _run_code
-      File "[CACHE_DIR]/archive-v0/[HASH]/Scripts/test-lfs-repo-assets/__main__.py", line 10, in <module>
+      File "[CACHE_DIR]/archive-[VERSION]/[HASH]/Scripts/test-lfs-repo-assets/__main__.py", line 10, in <module>
         sys.exit(main_lfs())
                  ~~~~~~~~^^
-      File "[CACHE_DIR]/archive-v0/[HASH]/[PYTHON-LIB]/site-packages/test_lfs_repo/__init__.py", line 5, in main_lfs
+      File "[CACHE_DIR]/archive-[VERSION]/[HASH]/[PYTHON-LIB]/site-packages/test_lfs_repo/__init__.py", line 5, in main_lfs
         from .lfs_module import LFS_TEST
-      File "[CACHE_DIR]/archive-v0/[HASH]/[PYTHON-LIB]/site-packages/test_lfs_repo/lfs_module.py", line 1
+      File "[CACHE_DIR]/archive-[VERSION]/[HASH]/[PYTHON-LIB]/site-packages/test_lfs_repo/lfs_module.py", line 1
         version https://git-lfs.github.com/spec/v1
                 ^^^^^
     SyntaxError: invalid syntax
@@ -2937,7 +2937,7 @@ fn tool_run_with_url_ending_in_py() {
     ----- stderr -----
     error: Failed to resolve `--with` requirement
       cause: Git operation failed
-      cause: failed to fetch into: [CACHE_DIR]/git-v1/db/efbd3507bcbea33c
+      cause: failed to fetch into: [CACHE_DIR]/git-[VERSION]/db/efbd3507bcbea33c
       cause: Remote Git fetches are not allowed because network connectivity is disabled (i.e., with `--offline`)
     ");
 
@@ -2949,7 +2949,7 @@ fn tool_run_with_url_ending_in_py() {
     error: Failed to resolve tool requirement
       cause: Failed to download and build `easyeda2kicad @ git+https://github.com/uPesy/easyeda2kicad.py`
       cause: Git operation failed
-      cause: failed to fetch into: [CACHE_DIR]/git-v1/db/efbd3507bcbea33c
+      cause: failed to fetch into: [CACHE_DIR]/git-[VERSION]/db/efbd3507bcbea33c
       cause: Remote Git fetches are not allowed because network connectivity is disabled (i.e., with `--offline`)
     ");
 }
@@ -2969,7 +2969,7 @@ fn tool_run_with_from_url_ending_in_py() {
     ----- stderr -----
     error: Failed to resolve `--with` requirement
       cause: Git operation failed
-      cause: failed to fetch into: [CACHE_DIR]/git-v1/db/efbd3507bcbea33c
+      cause: failed to fetch into: [CACHE_DIR]/git-[VERSION]/db/efbd3507bcbea33c
       cause: Remote Git fetches are not allowed because network connectivity is disabled (i.e., with `--offline`)
     ");
 
@@ -2983,7 +2983,7 @@ fn tool_run_with_from_url_ending_in_py() {
     error: Failed to resolve tool requirement
       cause: Failed to download and build `easyeda2kicad @ git+https://github.com/uPesy/easyeda2kicad.py`
       cause: Git operation failed
-      cause: failed to fetch into: [CACHE_DIR]/git-v1/db/efbd3507bcbea33c
+      cause: failed to fetch into: [CACHE_DIR]/git-[VERSION]/db/efbd3507bcbea33c
       cause: Remote Git fetches are not allowed because network connectivity is disabled (i.e., with `--offline`)
     ");
 }
