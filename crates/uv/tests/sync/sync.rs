@@ -13813,6 +13813,52 @@ fn sync_dry_run_and_locked() -> Result<()> {
     Ok(())
 }
 
+/// A locked dry run reports a version mismatch before planning an install.
+#[test]
+fn sync_dry_run_and_locked_version_mismatch() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    let pyproject = indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [tool.uv]
+        constraint-dependencies = ["iniconfig==2.0.0"]
+    "#};
+    pyproject_toml.write_str(pyproject)?;
+
+    context.lock().assert().success();
+
+    // Change the constraint in both manifests while leaving iniconfig locked at 2.0.0.
+    pyproject_toml.write_str(&pyproject.replace("iniconfig==2.0.0", "iniconfig<2"))?;
+    let lock = context.read("uv.lock");
+    let old_constraint = r#"constraints = [{ name = "iniconfig", specifier = "==2.0.0" }]"#;
+    assert!(lock.contains(old_constraint));
+    let lock = lock.replace(
+        old_constraint,
+        r#"constraints = [{ name = "iniconfig", specifier = "<2" }]"#,
+    );
+    context.temp_dir.child("uv.lock").write_str(&lock)?;
+
+    uv_snapshot!(context.filters(), context.sync().arg("--locked").arg("--dry-run"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Would use project environment at: .venv
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Locked `iniconfig==2.0.0` does not satisfy `<2`.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    assert_eq!(context.read("uv.lock"), lock);
+
+    Ok(())
+}
+
 #[test]
 fn sync_dry_run_and_frozen() -> Result<()> {
     let context = uv_test::test_context!("3.12");
