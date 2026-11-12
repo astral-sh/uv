@@ -78,15 +78,12 @@ _LAST_GLIBC_MINOR: "dict[int, int]" = collections.defaultdict(lambda: 50)
 class _GLibCVersion(NamedTuple):
     major: int
     minor: int
+    interpreter: "str | None"
 
 
 def _glibc_version_string_confstr() -> "str | None":
-    """
-    Primary implementation of glibc_version_string using os.confstr.
-    """
-    # os.confstr is quite a bit faster than ctypes.DLL. It's also less likely
-    # to be broken or missing. This strategy is used in the standard library
-    # platform module.
+    """Read the glibc version without requiring ctypes."""
+    # This strategy is used in the standard library platform module.
     # https://github.com/python/cpython/blob/fcf1d003bf4f0100c/Lib/platform.py#L175-L183
     try:
         # Should be a string like "glibc 2.17".
@@ -99,56 +96,77 @@ def _glibc_version_string_confstr() -> "str | None":
     return version
 
 
-def _glibc_version_string_ctypes() -> "str | None":
-    """
-    Fallback implementation of glibc_version_string using ctypes.
-    """
+@functools.lru_cache()
+def _get_glibc_version() -> "_GLibCVersion | None":
+    """Detect the version and path of the glibc loaded by this process."""
+    version_str = _glibc_version_string_confstr()
+    if version_str is not None:
+        version = _parse_glibc_version(version_str)
+    else:
+        version = None
+
     try:
         import ctypes
-    except ImportError:
-        return None
+    except (ImportError, OSError):
+        return version
 
-    # ctypes.CDLL(None) internally calls dlopen(NULL), and as the dlopen
-    # manpage says, "If filename is NULL, then the returned handle is for the
-    # main program". This way we can let the linker do the work to figure out
-    # which libc our process is actually using.
-    #
-    # We must also handle the special case where the executable is not a
-    # dynamically linked executable. This can occur when using musl libc,
-    # for example. In this situation, dlopen() will error, leading to an
-    # OSError. Interestingly, at least in the case of musl, there is no
-    # errno set on the OSError. The single string argument used to construct
-    # OSError comes from libc itself and is therefore not portable to
-    # hard code here. In any case, failure to call dlopen() means we
-    # can proceed, so we bail on our attempt.
+    # CDLL(None) calls dlopen(NULL), so we can look up symbols in the libraries
+    # loaded by this Python process. On statically linked musl builds, this
+    # can raise OSError without a useful errno or portable error string.
     try:
         process_namespace = ctypes.CDLL(None)
-    except OSError:
+        gnu_get_libc_version = process_namespace.gnu_get_libc_version
+    except (OSError, AttributeError):
+        return version
+
+    if version_str is None:
+        gnu_get_libc_version.restype = ctypes.c_char_p
+        try:
+            version_bytes = gnu_get_libc_version()
+        except PermissionError:
+            return None
+        version = _parse_glibc_version(version_bytes.decode("ascii"))
+    if version is None:
         return None
+
+    # Read the location of the ELF interpreter too.
+    class DlInfo(ctypes.Structure):
+        _fields_ = [
+            ("dli_fname", ctypes.c_char_p),
+            ("dli_fbase", ctypes.c_void_p),
+            ("dli_sname", ctypes.c_char_p),
+            ("dli_saddr", ctypes.c_void_p),
+        ]
 
     try:
-        gnu_get_libc_version = process_namespace.gnu_get_libc_version
-    except AttributeError:
-        # Symbol doesn't exist -> therefore, we are not linked to
-        # glibc.
-        return None
+        dladdr = getattr(process_namespace, "dladdr", None)
+        if dladdr is None:
+            # Before glibc 2.34, dladdr was provided by libdl.
+            dladdr = ctypes.CDLL("libdl.so.2").dladdr
+    except (OSError, AttributeError):
+        return version
+    dladdr.argtypes = (ctypes.c_void_p, ctypes.POINTER(DlInfo))
+    dladdr.restype = ctypes.c_int
 
-    # Call gnu_get_libc_version, which returns a string like "2.5"
-    gnu_get_libc_version.restype = ctypes.c_char_p
-    version_str: str = gnu_get_libc_version()
-    # py2 / py3 compatibility:
-    if not isinstance(version_str, str):
-        version_str = version_str.decode("ascii")
+    info = DlInfo()
+    try:
+        address = ctypes.cast(gnu_get_libc_version, ctypes.c_void_p)
+        found = dladdr(address, ctypes.byref(info))
+    except PermissionError:
+        return version
+    if not found or not info.dli_fname:
+        return version
 
-    return version_str
+    path = os.fsdecode(info.dli_fname)
+    if not os.path.isabs(path):
+        try:
+            path = os.path.join(os.getcwd(), path)
+        except OSError:
+            return version
+    return _GLibCVersion(major=version.major, minor=version.minor, interpreter=path)
 
 
-def _glibc_version_string() -> "str | None":
-    """Returns glibc version string, or None if not using glibc."""
-    return _glibc_version_string_confstr() or _glibc_version_string_ctypes()
-
-
-def _parse_glibc_version(version_str: str) -> _GLibCVersion:
+def _parse_glibc_version(version_str: str) -> "_GLibCVersion | None":
     """Parse glibc version.
 
     We use a regexp instead of str.split because we want to discard any
@@ -162,22 +180,15 @@ def _parse_glibc_version(version_str: str) -> _GLibCVersion:
             f"Expected glibc version with 2 components major.minor, got: {version_str}",
             RuntimeWarning,
         )
-        return _GLibCVersion(-1, -1)
-    return _GLibCVersion(int(m.group("major")), int(m.group("minor")))
-
-
-@functools.lru_cache()
-def _get_glibc_version() -> _GLibCVersion:
-    version_str = _glibc_version_string()
-    if version_str is None:
-        return _GLibCVersion(-1, -1)
-    return _parse_glibc_version(version_str)
+        return None
+    return _GLibCVersion(int(m.group("major")), int(m.group("minor")), None)
 
 
 # From PEP 513, PEP 600
 def _is_compatible(arch: str, version: _GLibCVersion) -> bool:
     sys_glibc = _get_glibc_version()
-    if sys_glibc < version:
+    version_numbers = (version.major, version.minor)
+    if sys_glibc is None or (sys_glibc.major, sys_glibc.minor) < version_numbers:
         return False
     # Check for presence of _manylinux module.
     try:
@@ -185,29 +196,29 @@ def _is_compatible(arch: str, version: _GLibCVersion) -> bool:
     except ImportError:
         return True
     if hasattr(_manylinux, "manylinux_compatible"):
-        result = _manylinux.manylinux_compatible(version[0], version[1], arch)
+        result = _manylinux.manylinux_compatible(version.major, version.minor, arch)
         if result is not None:
             return bool(result)
         return True
-    if version == _GLibCVersion(2, 5):
+    if version_numbers == (2, 5):
         if hasattr(_manylinux, "manylinux1_compatible"):
             return bool(_manylinux.manylinux1_compatible)
-    if version == _GLibCVersion(2, 12):
+    if version_numbers == (2, 12):
         if hasattr(_manylinux, "manylinux2010_compatible"):
             return bool(_manylinux.manylinux2010_compatible)
-    if version == _GLibCVersion(2, 17):
+    if version_numbers == (2, 17):
         if hasattr(_manylinux, "manylinux2014_compatible"):
             return bool(_manylinux.manylinux2014_compatible)
     return True
 
 
-_LEGACY_MANYLINUX_MAP: "dict[_GLibCVersion, str]" = {
+_LEGACY_MANYLINUX_MAP: "dict[tuple[int, int], str]" = {
     # CentOS 7 w/ glibc 2.17 (PEP 599)
-    _GLibCVersion(2, 17): "manylinux2014",
+    (2, 17): "manylinux2014",
     # CentOS 6 w/ glibc 2.12 (PEP 571)
-    _GLibCVersion(2, 12): "manylinux2010",
+    (2, 12): "manylinux2010",
     # CentOS 5 w/ glibc 2.5 (PEP 513)
-    _GLibCVersion(2, 5): "manylinux1",
+    (2, 5): "manylinux1",
 }
 
 
@@ -225,11 +236,13 @@ def platform_tags(archs: Sequence[str]) -> Iterator[str]:
     if not _have_compatible_abi(sys.executable, archs):
         return
     # Oldest glibc to be supported regardless of architecture is (2, 17).
-    too_old_glibc2 = _GLibCVersion(2, 16)
+    too_old_glibc2 = _GLibCVersion(2, 16, None)
     if set(archs) & {"x86_64", "i686"}:
         # On x86/i686 also oldest glibc to be supported is (2, 5).
-        too_old_glibc2 = _GLibCVersion(2, 4)
+        too_old_glibc2 = _GLibCVersion(2, 4, None)
     current_glibc = _get_glibc_version()
+    if current_glibc is None:
+        return
     glibc_max_list = [current_glibc]
     # We can assume compatibility across glibc major versions.
     # https://sourceware.org/bugzilla/show_bug.cgi?id=24636
@@ -239,7 +252,7 @@ def platform_tags(archs: Sequence[str]) -> Iterator[str]:
     # down to too_old_glibc2, including all intermediary versions.
     for glibc_major in range(current_glibc.major - 1, 1, -1):
         glibc_minor = _LAST_GLIBC_MINOR[glibc_major]
-        glibc_max_list.append(_GLibCVersion(glibc_major, glibc_minor))
+        glibc_max_list.append(_GLibCVersion(glibc_major, glibc_minor, None))
     for arch in archs:
         for glibc_max in glibc_max_list:
             if glibc_max.major == too_old_glibc2.major:
@@ -248,10 +261,10 @@ def platform_tags(archs: Sequence[str]) -> Iterator[str]:
                 # For other glibc major versions oldest supported is (x, 0).
                 min_minor = -1
             for glibc_minor in range(glibc_max.minor, min_minor, -1):
-                glibc_version = _GLibCVersion(glibc_max.major, glibc_minor)
+                glibc_version = _GLibCVersion(glibc_max.major, glibc_minor, None)
                 if _is_compatible(arch, glibc_version):
-                    yield "manylinux_{}_{}_{}".format(*glibc_version, arch)
+                    yield f"manylinux_{glibc_version.major}_{glibc_version.minor}_{arch}"
                     # Handle the legacy manylinux1, manylinux2010, manylinux2014 tags.
-                    legacy_tag = _LEGACY_MANYLINUX_MAP.get(glibc_version)
+                    legacy_tag = _LEGACY_MANYLINUX_MAP.get(glibc_version[:2])
                     if legacy_tag:
                         yield f"{legacy_tag}_{arch}"
