@@ -1547,8 +1547,43 @@ impl InterpreterInfo {
         // key tracks the Darwin kernel release, which can stay the same when the plist changes.
         #[cfg(target_os = "macos")]
         record_file_timestamps(Path::new(SYSTEM_VERSION_PLIST), &mut file_timestamps)?;
+        record_pyvenv_cfg_timestamps(absolute, &mut file_timestamps)?;
         Ok(file_timestamps)
     }
+}
+
+/// Snapshot the `pyvenv.cfg` files that can affect Python startup.
+///
+/// See CPython's path initialization and `site` startup for the launcher overrides
+/// and config lookup locations.
+///
+/// - <https://github.com/python/cpython/blob/v3.15.2/Modules/getpath.py#L302-L362>
+/// - <https://github.com/python/cpython/blob/v3.15.2/Lib/site.py#L967-L984>
+fn record_pyvenv_cfg_timestamps(
+    executable: &Path,
+    timestamps: &mut HashMap<PathBuf, Option<Timestamp>>,
+) -> io::Result<()> {
+    let launcher_paths = [EnvVars::PYTHONEXECUTABLE, EnvVars::PYVENV_LAUNCHER]
+        .into_iter()
+        .filter_map(env::var_os)
+        .filter(|path| !path.is_empty())
+        .map(std::path::absolute)
+        .collect::<io::Result<Vec<_>>>()?;
+    // Python can look beside the executable and one directory above it. Launcher
+    // overrides can supply another executable path for that lookup.
+    for executable in std::iter::once(executable).chain(launcher_paths.iter().map(PathBuf::as_path))
+    {
+        let parent_directories = executable.ancestors().skip(1);
+        for directory in parent_directories.take(2) {
+            let path = directory.join("pyvenv.cfg");
+            match record_file_timestamps(&path, timestamps) {
+                Ok(()) => {}
+                Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+                Err(err) => return Err(err),
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Record the timestamp of a file and each symlink followed to reach it.
