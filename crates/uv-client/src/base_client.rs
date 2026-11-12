@@ -63,8 +63,10 @@ pub const DEFAULT_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 /// timeout on the entire upload.
 pub const DEFAULT_READ_TIMEOUT_UPLOAD: Duration = Duration::from_mins(15);
 
-/// Give slow peers longer to acknowledge a ping, while detecting a dead connection promptly
-/// even with the longer read timeout used for uploads.
+/// Returns the HTTP/2 keep-alive PING acknowledgement timeout for a client read timeout.
+///
+/// Scaling with the read timeout gives slow peers longer to acknowledge a PING, while the upper
+/// bound detects a dead connection promptly even with the longer timeout used for uploads.
 fn ping_ack_timeout(read_timeout: Duration) -> Duration {
     (read_timeout / 3).clamp(Duration::from_secs(10), Duration::from_secs(20))
 }
