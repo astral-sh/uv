@@ -1,5 +1,4 @@
 mod cached_client;
-mod http2;
 mod http_util;
 mod proxy;
 mod remote_metadata;
