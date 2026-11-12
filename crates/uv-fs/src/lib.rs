@@ -977,6 +977,16 @@ pub fn read_venv_redirect(path: &Path) -> io::Result<PathBuf> {
         .or_else(|| contents.strip_suffix('\n'))
         .unwrap_or(&contents);
 
+    if line.is_empty() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "Virtual environment redirect file at `{}` is empty",
+                path.user_display()
+            ),
+        ));
+    }
+
     Ok(path.parent().unwrap_or(Path::new("")).join(line))
 }
 
@@ -1162,6 +1172,18 @@ mod tests {
         let target = tempdir.path().join("environments/default");
         fs_err::write(&path, format!("{}\n", target.display()))?;
         assert_eq!(read_venv_redirect(&path)?, target);
+        Ok(())
+    }
+
+    #[test]
+    fn read_venv_redirect_rejects_empty_path() -> io::Result<()> {
+        let tempdir = tempfile::tempdir()?;
+        let path = tempdir.path().join(".venv");
+        for contents in ["", "\n", "\r\n"] {
+            fs_err::write(&path, contents)?;
+            let error = read_venv_redirect(&path).expect_err("A redirect must contain a path");
+            assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+        }
         Ok(())
     }
 
