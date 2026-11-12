@@ -10,7 +10,7 @@ use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
     BuildInfo, BuildVariables, CachedRegistryDist, ConfigSettings, ExtraBuildRequirement,
     ExtraBuildRequires, ExtraBuildVariables, Hashed, Index, IndexFormat, IndexLocations, IndexUrl,
-    PackageConfigSettings, RegistryBuiltDist, RegistrySourceDist,
+    PackageConfigSettings, RegistryBuiltDist, RegistrySourceDist, Resolution,
 };
 use uv_fs::{directories, files};
 use uv_normalize::PackageName;
@@ -77,6 +77,7 @@ impl IndexEntry<'_> {
 /// A local index of distributions that originate from a registry, like `PyPI`.
 #[derive(Debug)]
 pub struct RegistryWheelIndex<'a> {
+    resolution: &'a Resolution,
     cache: &'a Cache,
     tags: &'a Tags,
     index_locations: &'a IndexLocations,
@@ -91,6 +92,7 @@ pub struct RegistryWheelIndex<'a> {
 impl<'a> RegistryWheelIndex<'a> {
     /// Initialize an index of registry distributions.
     pub fn new(
+        resolution: &'a Resolution,
         cache: &'a Cache,
         tags: &'a Tags,
         index_locations: &'a IndexLocations,
@@ -101,6 +103,7 @@ impl<'a> RegistryWheelIndex<'a> {
         extra_build_variables: &'a ExtraBuildVariables,
     ) -> Self {
         Self {
+            resolution,
             cache,
             tags,
             index_locations,
@@ -218,6 +221,7 @@ impl<'a> RegistryWheelIndex<'a> {
         matches: impl Fn(&IndexEntry<'_>) -> bool,
     ) -> impl Iterator<Item = &IndexEntry<'_>> {
         let target = self.tags.python_platform();
+        let resolution = self.resolution;
         self.get_impl(name)
             .iter()
             .rev()
@@ -228,6 +232,7 @@ impl<'a> RegistryWheelIndex<'a> {
                         &entry.dist.filename,
                         &entry.dist.path,
                         target,
+                        resolution,
                     )
                     .is_ok()
             })

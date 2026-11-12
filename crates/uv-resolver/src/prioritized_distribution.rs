@@ -1,6 +1,7 @@
 use std::fmt::{Display, Formatter};
 
 use arcstr::ArcStr;
+use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::debug;
 
@@ -19,15 +20,18 @@ use uv_platform_tags::{
 use uv_pypi_types::{HashDigest, Yanked};
 
 use crate::known_platform::KnownPlatform;
+use crate::pins::AbiRequirements;
+use crate::pubgrub::Range;
 use crate::resolved::ResolvedDistRef;
 
 /// A collection of distributions that have been filtered by relevance.
 #[derive(Debug, Default, Clone)]
 pub struct PrioritizedDist(Box<PrioritizedDistInner>);
 
-/// The preference for a compatible wheel variant, with higher scores preferred.
+/// A compatible wheel variant's score, ordered by hash rank, variant rank, platform tags, and
+/// build tag. Higher scores are preferred.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) struct WheelVariantScore<'a> {
+struct WheelVariantScore<'a> {
     hash: HashComparison,
     score: VariantScore,
     tag_priority: Option<TagPriority>,
@@ -406,13 +410,17 @@ pub enum IncompatibleSource {
     NotPep625Filename,
 }
 
+/// How the index's advertised hashes rank against the required hashes for a candidate file.
+///
+/// An advertised match ranks highest, followed by a missing hash, then a mismatch. uv verifies
+/// any required hashes against the downloaded file's contents.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum HashComparison {
-    /// The hash is present, but does not match the expected value.
+    /// The index advertises hashes and none match a required hash.
     Mismatched,
-    /// The hash is missing.
+    /// Hashes are required and the index advertises none.
     Missing,
-    /// The hash matches the expected value.
+    /// An advertised hash matches a required hash, or there are no required hashes.
     Matched,
 }
 
@@ -443,15 +451,15 @@ impl PrioritizedDist {
         })
     }
 
-    /// Score each compatible variant from the index that supplied its wheel.
-    pub(crate) fn scored_variants(
+    /// Return wheel indices and ABI requirements in preference order, using each wheel's index
+    /// metadata. A variant must rank at least as high as the fallback artifact on hashes.
+    pub(crate) fn ranked_variants(
         &self,
+        package: &PackageName,
         metadata: &[(&IndexUrl, &VariantsJsonContent, SupportedVariantProperties)],
-    ) -> impl Iterator<Item = (WheelVariantScore<'_>, usize)> {
-        // Prefer wheels whose advertised hash matches a required hash, followed by wheels with
-        // no advertised hash, then mismatches. If no hashes are required, all wheels match.
-        // The installer verifies required hashes against the downloaded wheel.
-        // Break ties by variant rank, platform tags, then build tag.
+        requires_python: &RequiresPython,
+        fallback_hash: Option<HashComparison>,
+    ) -> impl Iterator<Item = (usize, AbiRequirements)> {
         self.0
             .wheels
             .iter()
@@ -460,39 +468,67 @@ impl PrioritizedDist {
                 let WheelCompatibility::Variant(hash, priority, build_tag) = compatibility else {
                     return None;
                 };
+                if wheel
+                    .file
+                    .requires_python
+                    .as_ref()
+                    .is_some_and(|requirement| !requires_python.is_contained_by(requirement))
+                {
+                    return None;
+                }
                 let label = wheel.filename.variant()?;
-                let score = metadata
+                let (score, abi) = metadata
                     .iter()
                     .filter(|(source, _, _)| *source == &wheel.index)
-                    .filter_map(|(_, metadata, supported)| metadata.score_variant(label, supported))
-                    .max()?;
+                    .filter_map(|(_, metadata, supported)| {
+                        let score = metadata.score_variant(label, supported)?;
+                        let abi = metadata
+                            .abi_dependencies(label)
+                            .inspect_err(|err| debug!("Skipping wheel `{}`: {err}", wheel.filename))
+                            .ok()?;
+                        if !abi.is_empty() && &wheel.filename.name != package {
+                            return None;
+                        }
+                        Some((score, abi))
+                    })
+                    .max_by(|(a, _), (b, _)| a.cmp(b))?;
+                let abi = abi
+                    .into_iter()
+                    .map(|(name, versions)| (name, Range::from_versions(versions)))
+                    .collect();
                 let score = WheelVariantScore {
                     hash: *hash,
                     score,
                     tag_priority: *priority,
                     build_tag: build_tag.as_ref(),
                 };
-                Some((score, index))
+                Some((score, index, abi))
             })
+            .filter(|(score, _, _)| fallback_hash.is_none_or(|hash| score.hash >= hash))
+            .sorted_unstable_by(|(left, left_index, _), (right, right_index, _)| {
+                (right, right_index).cmp(&(left, left_index))
+            })
+            .map(|(_, index, abi)| (index, abi))
     }
 
-    /// Select a scored variant if its hash ranks at least as high as the ordinary wheel's.
-    pub(crate) fn select_variant(&self, index: usize) -> Option<Self> {
-        let (_, WheelCompatibility::Variant(hash, priority, build_tag)) =
-            self.0.wheels.get(index)?
-        else {
-            return None;
-        };
-        if let Some((_, WheelCompatibility::Compatible(ordinary_hash, ..))) = self.best_wheel()
-            && ordinary_hash > hash
-        {
-            return None;
-        }
+    /// Select a wheel returned by [`Self::ranked_variants`].
+    pub(crate) fn select_variant(&self, index: usize) -> Self {
         let mut selected = self.clone();
-        selected.0.wheels[index].1 =
-            WheelCompatibility::Compatible(*hash, *priority, build_tag.clone());
+        if let WheelCompatibility::Variant(hash, priority, build_tag) = &self.0.wheels[index].1 {
+            selected.0.wheels[index].1 =
+                WheelCompatibility::Compatible(*hash, *priority, build_tag.clone());
+        }
         selected.0.best_wheel_index = Some(index);
-        Some(selected)
+        selected
+    }
+
+    /// One concrete wheel, without copying every other candidate into each solver choice.
+    pub(crate) fn variant_dist(&self, index: usize) -> RegistryBuiltDist {
+        RegistryBuiltDist {
+            wheels: vec![self.0.wheels[index].0.clone()],
+            best_wheel_index: 0,
+            sdist: None,
+        }
     }
 
     /// Insert the given built distribution into the [`PrioritizedDist`].
