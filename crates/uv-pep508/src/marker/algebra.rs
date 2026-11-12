@@ -163,6 +163,12 @@ pub(crate) struct InternerGuard<'a> {
     shared: &'a InternerShared,
 }
 
+#[derive(Clone, Copy)]
+enum MarkerTransform<'a> {
+    ResolveExtras(&'a FxHashMap<ExtraName, NodeId>),
+    ScopeVariants(&'a str),
+}
+
 impl InternerGuard<'_> {
     /// Creates a decision node with the given variable and children.
     fn create_node(&mut self, var: Variable, mut children: EdgeBuilder) -> NodeId {
@@ -366,11 +372,11 @@ impl InternerGuard<'_> {
                         CanonicalMarkerValueString::SysPlatform,
                         arcstr::literal!("android"),
                     ),
-                    _ => (key.into(), value),
+                    (key, _) => (key.into(), value),
                 };
                 let string = self.create_node(
-                    Variable::String(key),
-                    Edges::from_string(key, operator, value.clone()),
+                    Variable::String(key.clone()),
+                    Edges::from_string(key.clone(), operator, value.clone()),
                 );
                 // Darwin kernel releases are dotted versions. Other platforms can include
                 // arbitrary text in `platform_release`, so retain string comparisons there.
@@ -797,14 +803,27 @@ impl InternerGuard<'_> {
         marker: NodeId,
         known_extras: &FxHashMap<ExtraName, NodeId>,
     ) -> NodeId {
-        self.resolve_extras_cached(marker, known_extras, &mut FxHashMap::default())
+        self.transform_cached(
+            marker,
+            MarkerTransform::ResolveExtras(known_extras),
+            &mut FxHashMap::default(),
+        )
+    }
+
+    /// Scope wheel variant expressions to the package whose dependencies contain them.
+    pub(crate) fn scope_variants(&mut self, marker: NodeId, base: &str) -> NodeId {
+        self.transform_cached(
+            marker,
+            MarkerTransform::ScopeVariants(base),
+            &mut FxHashMap::default(),
+        )
     }
 
     /// Transform each signed node once, retaining the sharing between decision paths.
-    fn resolve_extras_cached(
+    fn transform_cached(
         &mut self,
         marker: NodeId,
-        known_extras: &FxHashMap<ExtraName, NodeId>,
+        transform: MarkerTransform<'_>,
         cache: &mut FxHashMap<NodeId, NodeId>,
     ) -> NodeId {
         if marker.is_true() || marker.is_false() {
@@ -815,20 +834,23 @@ impl InternerGuard<'_> {
         }
 
         let node = self.shared.node(marker);
-        let result = if let (Variable::Extra(name), Edges::Boolean { high, low }) =
-            (&node.var, &node.children)
+        let result = if let (
+            MarkerTransform::ResolveExtras(known_extras),
+            Variable::Extra(name),
+            Edges::Boolean { high, low },
+        ) = (transform, &node.var, &node.children)
         {
             let condition = known_extras
                 .get(name.extra())
                 .copied()
                 .unwrap_or(NodeId::FALSE);
             if condition.is_true() {
-                self.resolve_extras_cached(high.negate(marker), known_extras, cache)
+                self.transform_cached(high.negate(marker), transform, cache)
             } else if condition.is_false() {
-                self.resolve_extras_cached(low.negate(marker), known_extras, cache)
+                self.transform_cached(low.negate(marker), transform, cache)
             } else {
-                let high = self.resolve_extras_cached(high.negate(marker), known_extras, cache);
-                let low = self.resolve_extras_cached(low.negate(marker), known_extras, cache);
+                let high = self.transform_cached(high.negate(marker), transform, cache);
+                let low = self.transform_cached(low.negate(marker), transform, cache);
                 let high = self.and(condition, high);
                 let low = self.and(condition.not(), low);
                 self.or(high, low)
@@ -836,12 +858,16 @@ impl InternerGuard<'_> {
         } else {
             let mut changed = false;
             let children = node.children.map(marker, |child| {
-                let result = self.resolve_extras_cached(child, known_extras, cache);
+                let result = self.transform_cached(child, transform, cache);
                 changed |= result != child;
                 result
             });
-            if changed {
-                self.rebuild_node(&node.var, children)
+            let variable = match transform {
+                MarkerTransform::ResolveExtras(_) => None,
+                MarkerTransform::ScopeVariants(base) => node.var.with_variant_base(base),
+            };
+            if variable.is_some() || changed {
+                self.rebuild_node(variable.as_ref().unwrap_or(&node.var), children)
             } else {
                 marker
             }
@@ -1412,6 +1438,35 @@ pub(crate) enum Variable {
 }
 
 impl Variable {
+    fn with_variant_base(&self, base: &str) -> Option<Self> {
+        match self {
+            Self::String(CanonicalMarkerValueString::VariantLabel) => Some(Self::String(
+                CanonicalMarkerValueString::VariantLabelBase(base.into()),
+            )),
+            Self::In {
+                key: CanonicalMarkerValueString::VariantLabel,
+                value,
+            } => Some(Self::In {
+                key: CanonicalMarkerValueString::VariantLabelBase(base.into()),
+                value: value.clone(),
+            }),
+            Self::Contains {
+                key: CanonicalMarkerValueString::VariantLabel,
+                value,
+            } => Some(Self::Contains {
+                key: CanonicalMarkerValueString::VariantLabelBase(base.into()),
+                value: value.clone(),
+            }),
+            Self::List(pair) => pair.with_variant_base(base).map(Self::List),
+            Self::String(_)
+            | Self::VersionString(_)
+            | Self::Version(_)
+            | Self::In { .. }
+            | Self::Contains { .. }
+            | Self::Extra(_) => None,
+        }
+    }
+
     /// Returns `true` if the variable is known to be involved in _at least_ one conflicting
     /// marker pair.
     ///

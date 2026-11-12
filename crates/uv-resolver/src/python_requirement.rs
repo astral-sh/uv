@@ -168,7 +168,7 @@ impl PythonRequirement {
     }
 
     /// Return the target version of Python.
-    pub(crate) fn target(&self) -> &RequiresPython {
+    pub fn target(&self) -> &RequiresPython {
         &self.target
     }
 

@@ -421,6 +421,18 @@ mod tests {
         ### `wheel-variants` {#wheel-variants}
 
         Enables experimental support for [wheel variants](https://peps.python.org/pep-0825/).
+        A universal `uv.lock` can contain wheels for several targets. At installation, uv selects
+        a compatible wheel and evaluates its dependency markers using that wheel's properties.
+
+        To describe the installation target explicitly, pass `--variant-target target.json`.
+        For example, `{"x86_64": [["level", ["v3", "v2", "v1"]]]}` lists compatible x86-64
+        levels in preference order. An empty object describes a target with no variant properties.
+        When `--python-platform` is set, uv does not infer the target's properties from the host.
+
+        A wheel or project cannot authorize uv to run a Python provider. To allow one, specify its
+        namespace, package and entry point with `--variant-provider`, and the index that supplies its
+        packages with `--variant-provider-index`. The provider runs with your account's permissions,
+        in a separate Python environment.
 
         ### `workspace-dir` {#workspace-dir}
 

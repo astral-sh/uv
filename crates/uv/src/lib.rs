@@ -11,7 +11,7 @@ use std::process::ExitCode;
 use std::str::FromStr;
 use std::sync::atomic::Ordering;
 
-use anyhow::{Result, anyhow, bail};
+use anyhow::{Context, Result, anyhow, bail};
 use clap::error::{ContextKind, ContextValue};
 use clap::{CommandFactory, Error, Parser};
 use futures::FutureExt;
@@ -41,6 +41,7 @@ use uv_cli::{
 use uv_client::BaseClientBuilder;
 use uv_command_support::{ExitStatus, Printer, UvError};
 use uv_configuration::{PythonUpgrade, PythonUpgradeSource, ToolRunCommand};
+use uv_distribution_types::{SupportedVariantProperties, VariantPolicy, VariantProviderOptIn};
 use uv_flags::EnvironmentFlags;
 use uv_fs::{CWD, Simplified, normalize_path};
 #[cfg(feature = "self-update")]
@@ -174,7 +175,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
     };
 
     // Load environment variables not handled by Clap.
-    let environment = EnvironmentOptions::new()?;
+    let mut environment = EnvironmentOptions::new()?;
 
     // Resolve preview flags before config discovery for decisions that affect the discovery root.
     let early_preview = settings::resolve_preview(&cli.top_level.global_args, None, &environment)?;
@@ -511,6 +512,42 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
         custom_certificate_file,
     )?;
 
+    // Only an explicit user option can authorize running a variant provider. In particular, a
+    // project cannot grant that permission by enabling the preview or through its configuration.
+    let args = &cli.top_level.global_args;
+    // Check this after clap has combined global options across subcommands. The provider index
+    // can come from the environment while the provider is named on the command line.
+    if args.variant_provider_index.is_some() && args.variant_provider.is_empty() {
+        bail!("`--variant-provider-index` requires `--variant-provider`");
+    }
+    if args.variant_target.is_some() || !args.variant_provider.is_empty() {
+        if !globals.preview.is_enabled(PreviewFeature::WheelVariants) {
+            bail!("Wheel variant options require `--preview-features wheel-variants`");
+        }
+        if args.variant_provider_index.is_none()
+            && args
+                .variant_provider
+                .iter()
+                .any(VariantProviderOptIn::permits_plugin)
+        {
+            bail!("External wheel variant providers require `--variant-provider-index`");
+        }
+        let target = if let Some(path) = &args.variant_target {
+            let contents = fs_err::read(path)?;
+            let properties: SupportedVariantProperties = serde_json::from_slice(&contents)
+                .with_context(|| format!("Failed to parse variant target `{}`", path.display()))?;
+            properties.validate()?;
+            Some(properties)
+        } else {
+            None
+        };
+        environment.variant_policy = VariantPolicy::new(
+            target,
+            args.variant_provider.clone(),
+            args.variant_provider_index.clone(),
+        );
+    }
+
     if global_initialization.needs_initialization() {
         // Set the global flags.
         uv_flags::init(EnvironmentFlags::from(&environment))
@@ -799,6 +836,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                 args.settings.torch_backend,
                 args.settings.cuda_driver_version,
                 args.settings.amd_gpu_architecture,
+                args.settings.variant_policy,
                 args.settings.dependency_metadata,
                 args.settings.keyring_provider,
                 &client_builder.subcommand(vec!["pip".to_owned(), "compile".to_owned()]),
@@ -888,6 +926,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                 args.settings.torch_backend,
                 args.settings.cuda_driver_version,
                 args.settings.amd_gpu_architecture,
+                args.settings.variant_policy,
                 args.settings.dependency_metadata,
                 args.settings.keyring_provider,
                 &client_builder.subcommand(vec!["pip".to_owned(), "sync".to_owned()]),
@@ -1049,6 +1088,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                 args.settings.torch_backend,
                 args.settings.cuda_driver_version,
                 args.settings.amd_gpu_architecture,
+                args.settings.variant_policy,
                 args.settings.dependency_metadata,
                 args.settings.keyring_provider,
                 &client_builder.subcommand(vec!["pip".to_owned(), "install".to_owned()]),
@@ -1466,6 +1506,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                 cli.top_level.global_args.project.is_some(),
                 client_builder,
                 filesystem,
+                environment,
                 cache,
                 &workspace_cache,
                 printer,
@@ -2262,6 +2303,7 @@ async fn run_project(
     explicit_project: bool,
     client_builder: BaseClientBuilder<'_>,
     filesystem: Option<FilesystemOptions>,
+    environment: EnvironmentOptions,
     cache: Cache,
     workspace_cache: &WorkspaceCache,
     printer: Printer,
@@ -2275,9 +2317,6 @@ async fn run_project(
             }
         };
     }
-
-    // Load environment variables not handled by Clap
-    let environment = EnvironmentOptions::new()?;
 
     match *project_command {
         ProjectCommand::Init(args) => {

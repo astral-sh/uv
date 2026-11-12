@@ -292,6 +292,12 @@ fn pip_compile_baseline() {
             torch_backend: None,
             cuda_driver_version: None,
             amd_gpu_architecture: None,
+            variant_policy: VariantPolicy {
+                target: None,
+                explicit_platform: false,
+                enabled: {},
+                provider_index: None,
+            },
             build_isolation: Isolate,
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
@@ -690,6 +696,12 @@ fn pip_install_baseline() {
             torch_backend: None,
             cuda_driver_version: None,
             amd_gpu_architecture: None,
+            variant_policy: VariantPolicy {
+                target: None,
+                explicit_platform: false,
+                enabled: {},
+                provider_index: None,
+            },
             build_isolation: Isolate,
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
@@ -835,6 +847,12 @@ fn lock_baseline() {
             ),
         ),
         settings: ResolverSettings {
+            variant_policy: VariantPolicy {
+                target: None,
+                explicit_platform: false,
+                enabled: {},
+                provider_index: None,
+            },
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -973,6 +991,12 @@ fn version_baseline() {
         ),
         settings: ResolverInstallerSettings {
             resolver: ResolverSettings {
+                variant_policy: VariantPolicy {
+                    target: None,
+                    explicit_platform: false,
+                    enabled: {},
+                    provider_index: None,
+                },
                 build_options: BuildOptions {
                     no_binary: None,
                     no_build: None,
@@ -1151,6 +1175,12 @@ fn tool_install_baseline() {
         },
         settings: ResolverInstallerSettings {
             resolver: ResolverSettings {
+                variant_policy: VariantPolicy {
+                    target: None,
+                    explicit_platform: false,
+                    enabled: {},
+                    provider_index: None,
+                },
                 build_options: BuildOptions {
                     no_binary: None,
                     no_build: None,
@@ -5491,9 +5521,9 @@ fn build_isolation_override() -> anyhow::Result<()> {
         .arg("requirements.in")
         .arg("--no-build-isolation-package").arg("numpy"), @r#"
     ...
-             torch_backend: None,
-             cuda_driver_version: None,
-             amd_gpu_architecture: None,
+                 enabled: {},
+                 provider_index: None,
+             },
     -        build_isolation: SharedPackage(
     -            [
     -                PackageName(
@@ -5519,9 +5549,9 @@ fn build_isolation_override() -> anyhow::Result<()> {
             .arg("requirements.in")
             .arg("--no-build-isolation-package").arg("numpy"), @r#"
     ...
-             torch_backend: None,
-             cuda_driver_version: None,
-             amd_gpu_architecture: None,
+                 enabled: {},
+                 provider_index: None,
+             },
     -        build_isolation: Shared,
     +        build_isolation: SharedPackage(
     +            [
