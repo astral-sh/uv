@@ -2004,12 +2004,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 );
                 let requirements = expander.expand(&self.requirements, RequirementContext::Root);
 
-                PubGrubDependency::from_requirements(
-                    &self.conflicts,
-                    requirements,
-                    None,
-                    Some(package),
-                )
+                PubGrubDependency::from_requirements(&self.conflicts, requirements, None)
             }
 
             PubGrubPackageInner::Package {
@@ -2225,16 +2220,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             RequirementExpander::new(&self.constraints, &self.modifiers, env, python_requirement);
         let requirements = expander.expand(requirements, context);
 
-        let dependencies = PubGrubDependency::from_requirements(
-            &self.conflicts,
-            requirements,
-            kind.group(),
-            Some(package),
-        )
-        .map(|mut dependencies| {
-            dependencies.extend(system_dependencies);
-            dependencies
-        });
+        let dependencies =
+            PubGrubDependency::from_requirements(&self.conflicts, requirements, Some((name, kind)))
+                .map(|mut dependencies| {
+                    dependencies.extend(system_dependencies);
+                    dependencies
+                });
         Dependencies::from_requirements(dependencies)
     }
 
