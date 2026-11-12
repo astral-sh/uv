@@ -6,8 +6,9 @@ use rustc_hash::FxHashSet;
 use tracing::trace;
 
 use uv_configuration::{Constraints, DependencyModifierScope, DependencyModifiers};
-use uv_distribution::{DistributionDatabase, Reporter};
+use uv_distribution::{DistributionDatabase, Reporter, supported_variant_properties};
 use uv_distribution_types::{Dist, Identifier, Requirement, RequirementSource};
+use uv_platform_tags::Tags;
 use uv_resolver::{InMemoryIndex, MetadataResponse, ResolverEnvironment};
 use uv_types::{BuildContext, HashStrategy, HashVerification, RequestedRequirements};
 
@@ -82,7 +83,9 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
     pub async fn resolve(
         self,
         env: &ResolverEnvironment,
+        tags: Option<&Tags>,
     ) -> Result<(Vec<RequestedRequirements>, HashStrategy), Error> {
+        let tags = tags.filter(|_| env.marker_environment().is_some());
         let mut results = Vec::new();
         let mut futures = FuturesUnordered::new();
         let mut seen = FxHashSet::default();
@@ -105,7 +108,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
         while !queue.is_empty() || !futures.is_empty() {
             while let Some(requirement) = queue.pop_front() {
                 if seen.insert(requirement.clone()) {
-                    futures.push(self.lookahead(requirement, hasher.clone()));
+                    futures.push(self.lookahead(requirement, hasher.clone(), tags));
                 }
             }
 
@@ -166,6 +169,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
         &self,
         requirement: Requirement,
         hasher: HashStrategy,
+        tags: Option<&Tags>,
     ) -> Result<Option<RequestedRequirements>, Error> {
         trace!("Performing lookahead for {requirement}");
 
@@ -198,7 +202,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                     .database
                     .get_or_build_wheel_metadata(&dist, hasher.metadata_policy(&dist))
                     .await
-                    .map_err(|err| Error::from_dist(dist, err))?;
+                    .map_err(|err| Error::from_dist(dist.clone(), err))?;
 
                 let metadata = archive.metadata.clone();
 
@@ -210,6 +214,40 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                 metadata
             }
         };
+
+        // Only follow dependencies from a direct variant wheel that the solver can select.
+        if let Dist::Built(wheel) = &dist
+            && let Some(label) = wheel.wheel_filename().variant()
+            && (!metadata.requires_dist.is_empty()
+                || !metadata.dependency_groups.is_empty()
+                || self.modifiers.has_scoped_package(&metadata.name))
+        {
+            let Some(tags) = tags else {
+                return Ok(None);
+            };
+            if !wheel
+                .wheel_filename()
+                .tag_compatibility(tags)
+                .is_compatible()
+            {
+                return Ok(None);
+            }
+            let Some(content) = self
+                .database
+                .get_wheel_variant_metadata(wheel, hasher.archive_policy(wheel))
+                .await
+                .map_err(|err| Error::from_dist(dist.clone(), err))?
+            else {
+                return Ok(None);
+            };
+            let supported = supported_variant_properties(&content, tags.python_platform());
+            if content
+                .unsupported_variant_properties(label, &supported)
+                .is_some()
+            {
+                return Ok(None);
+            }
+        }
 
         // Respect recursive extras by propagating the source extras to the dependencies.
         let package = metadata.name.clone();
