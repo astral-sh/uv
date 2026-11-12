@@ -569,61 +569,53 @@ impl PrioritizedDist {
 
     /// Return the highest-priority distribution for the package version, if any.
     pub(crate) fn get(&self) -> Option<CompatibleDist<'_>> {
-        let best_wheel = self.0.best_wheel_index.map(|i| &self.0.wheels[i]);
-        match (&best_wheel, &self.0.source) {
-            // If both are compatible, break ties based on the hash outcome. For example, prefer a
-            // source distribution with a matching hash over a wheel with a mismatched hash. When
-            // the outcomes are equivalent (e.g., both have a matching hash), prefer the wheel.
-            (
-                Some((wheel, WheelCompatibility::Compatible(wheel_hash, ..))),
-                Some((sdist, SourceDistCompatibility::Compatible(sdist_hash))),
-            ) => {
-                if sdist_hash > wheel_hash {
-                    Some(CompatibleDist::SourceDist {
-                        sdist,
-                        prioritized: self,
-                    })
-                } else {
-                    Some(CompatibleDist::CompatibleWheel {
-                        wheel,
-                        prioritized: self,
-                    })
+        self.get_with_hash().map(|(dist, _)| dist)
+    }
+
+    /// Return the preferred distribution and the hash rank of the file to install.
+    pub(crate) fn get_with_hash(&self) -> Option<(CompatibleDist<'_>, HashComparison)> {
+        let wheel = self.best_wheel();
+        let source =
+            self.0
+                .source
+                .as_ref()
+                .and_then(|(sdist, compatibility)| match compatibility {
+                    SourceDistCompatibility::Compatible(hash) => Some((sdist, *hash)),
+                    SourceDistCompatibility::Incompatible(_) => None,
+                });
+
+        // Prefer a compatible wheel unless the source distribution has a better hash.
+        if let Some((wheel, WheelCompatibility::Compatible(hash, ..))) = wheel
+            && source.is_none_or(|(_, source_hash)| *hash >= source_hash)
+        {
+            return Some((
+                CompatibleDist::CompatibleWheel {
+                    wheel,
+                    prioritized: self,
+                },
+                *hash,
+            ));
+        }
+
+        let (sdist, hash) = source?;
+        // An incompatible wheel can supply metadata when installing from source. Excluded
+        // wheels and variants with unchecked properties cannot serve as metadata sources.
+        let dist = match wheel {
+            Some((wheel, compatibility @ WheelCompatibility::Incompatible(_)))
+                if !compatibility.is_excluded() && wheel.filename.variant().is_none() =>
+            {
+                CompatibleDist::IncompatibleWheel {
+                    sdist,
+                    wheel,
+                    prioritized: self,
                 }
             }
-            // Prefer the highest-priority, platform-compatible wheel.
-            (Some((wheel, WheelCompatibility::Compatible(..))), _) => {
-                Some(CompatibleDist::CompatibleWheel {
-                    wheel,
-                    prioritized: self,
-                })
-            }
-            // If we have a compatible source distribution and an incompatible wheel, return the
-            // wheel. We assume that all distributions have the same metadata for a given package
-            // version. If a compatible source distribution exists, we assume we can build it, but
-            // using the wheel is faster.
-            //
-            // (If the incompatible wheel should actually be ignored entirely, fall through to
-            // using the source distribution. Variant wheels need their properties checked before
-            // they can provide metadata.)
-            (
-                Some((wheel, compatibility @ WheelCompatibility::Incompatible(_))),
-                Some((sdist, SourceDistCompatibility::Compatible(_))),
-            ) if !compatibility.is_excluded() && wheel.filename.variant().is_none() => {
-                Some(CompatibleDist::IncompatibleWheel {
-                    sdist,
-                    wheel,
-                    prioritized: self,
-                })
-            }
-            // Otherwise, if we have a source distribution, return it.
-            (.., Some((sdist, SourceDistCompatibility::Compatible(_)))) => {
-                Some(CompatibleDist::SourceDist {
-                    sdist,
-                    prioritized: self,
-                })
-            }
-            _ => None,
-        }
+            _ => CompatibleDist::SourceDist {
+                sdist,
+                prioritized: self,
+            },
+        };
+        Some((dist, hash))
     }
 
     /// Return the incompatibility for the best source distribution, if any.
