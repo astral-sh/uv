@@ -59,6 +59,8 @@ pub enum CanonicalMarkerValueString {
     PlatformVersion,
     /// `implementation_name`
     ImplementationName,
+    /// The selected wheel’s PEP 825 label.
+    VariantLabel,
 }
 
 impl CanonicalMarkerValueString {
@@ -75,6 +77,7 @@ impl CanonicalMarkerValueString {
 impl From<MarkerValueString> for CanonicalMarkerValueString {
     fn from(value: MarkerValueString) -> Self {
         match value {
+            MarkerValueString::VariantLabel => Self::VariantLabel,
             MarkerValueString::ImplementationName => Self::ImplementationName,
             MarkerValueString::OsName => Self::OsName,
             MarkerValueString::OsNameDeprecated => Self::OsName,
@@ -98,6 +101,7 @@ impl From<MarkerValueString> for CanonicalMarkerValueString {
 impl From<CanonicalMarkerValueString> for MarkerValueString {
     fn from(value: CanonicalMarkerValueString) -> Self {
         match value {
+            CanonicalMarkerValueString::VariantLabel => Self::VariantLabel,
             CanonicalMarkerValueString::ImplementationName => Self::ImplementationName,
             CanonicalMarkerValueString::OsName => Self::OsName,
             CanonicalMarkerValueString::PlatformMachine => Self::PlatformMachine,
@@ -116,6 +120,7 @@ impl Display for CanonicalMarkerValueString {
     /// Normalizes deprecated names to the proper ones
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::VariantLabel => f.write_str("variant_label"),
             Self::ImplementationName => f.write_str("implementation_name"),
             Self::OsName => f.write_str("os_name"),
             Self::PlatformMachine => f.write_str("platform_machine"),
@@ -160,15 +165,28 @@ impl Display for CanonicalMarkerValueExtra {
     }
 }
 
+/// A member of one of the PEP 825 set-valued markers.
+#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
+pub enum VariantMarkerMember {
+    /// A namespace.
+    Namespace(String),
+    /// A namespace and feature.
+    Feature(String),
+    /// A namespace, feature, and value.
+    Property(String),
+}
+
 /// A key-value pair for `<value> in <key>` or `<value> not in <key>`, where the key is a list.
 ///
-/// Used for PEP 751 markers.
+/// Used for PEP 751 lockfile markers and PEP 825 variant markers.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub enum CanonicalMarkerListPair {
     /// A valid [`ExtraName`].
     Extras(ExtraName),
     /// A valid [`GroupName`].
     DependencyGroup(GroupName),
+    /// A member of a set-valued variant marker.
+    Variant(VariantMarkerMember),
     /// For leniency, preserve invalid values.
     Arbitrary { key: MarkerValueList, value: String },
 }
@@ -177,6 +195,9 @@ impl CanonicalMarkerListPair {
     /// The key (RHS) of the marker expression.
     pub(crate) fn key(&self) -> MarkerValueList {
         match self {
+            Self::Variant(VariantMarkerMember::Namespace(_)) => MarkerValueList::VariantNamespaces,
+            Self::Variant(VariantMarkerMember::Feature(_)) => MarkerValueList::VariantFeatures,
+            Self::Variant(VariantMarkerMember::Property(_)) => MarkerValueList::VariantProperties,
             Self::Extras(_) => MarkerValueList::Extras,
             Self::DependencyGroup(_) => MarkerValueList::DependencyGroups,
             Self::Arbitrary { key, .. } => *key,
@@ -188,7 +209,12 @@ impl CanonicalMarkerListPair {
         match self {
             Self::Extras(extra) => extra.to_string(),
             Self::DependencyGroup(group) => group.to_string(),
-            Self::Arbitrary { value, .. } => value.clone(),
+            Self::Variant(
+                VariantMarkerMember::Namespace(value)
+                | VariantMarkerMember::Feature(value)
+                | VariantMarkerMember::Property(value),
+            )
+            | Self::Arbitrary { value, .. } => value.clone(),
         }
     }
 }

@@ -17,13 +17,42 @@ use super::algebra::{Edges, INTERNER, NodeId, Variable};
 use super::simplify;
 #[cfg(test)]
 use crate::Pep508ErrorSource;
-#[cfg(test)]
 use crate::cursor::Cursor;
 use crate::marker::lowering::{
     CanonicalMarkerListPair, CanonicalMarkerValueString, CanonicalMarkerValueVersion,
+    VariantMarkerMember,
 };
 use crate::marker::parse;
 use crate::{CanonicalMarkerValueExtra, MarkerEnvironment, Pep508Error, Reporter, TracingReporter};
+
+/// The label and compatible properties of one selected wheel.
+#[derive(Debug, Clone)]
+pub struct VariantMarkerEnvironment {
+    label: String,
+    members: FxHashSet<VariantMarkerMember>,
+}
+
+impl VariantMarkerEnvironment {
+    /// Create a marker environment for a variant label with no matched properties.
+    pub fn new(label: String) -> Self {
+        Self {
+            label,
+            members: FxHashSet::default(),
+        }
+    }
+
+    /// Include a supported wheel property and its namespace and feature.
+    pub fn insert(&mut self, namespace: &str, feature: &str, value: &str) {
+        self.members
+            .insert(VariantMarkerMember::Namespace(namespace.to_owned()));
+        self.members.insert(VariantMarkerMember::Feature(format!(
+            "{namespace}::{feature}"
+        )));
+        self.members.insert(VariantMarkerMember::Property(format!(
+            "{namespace}::{feature}::{value}"
+        )));
+    }
+}
 
 /// Ways in which marker evaluation can fail
 #[derive(Copy, Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
@@ -102,12 +131,15 @@ pub enum MarkerValueString {
     SysPlatform,
     /// Deprecated `sys.platform` from <https://peps.python.org/pep-0345/#environment-markers>
     SysPlatformDeprecated,
+    /// The selected wheel’s PEP 825 label.
+    VariantLabel,
 }
 
 impl Display for MarkerValueString {
     /// Normalizes deprecated names to the proper ones
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
+            Self::VariantLabel => f.write_str("variant_label"),
             Self::ImplementationName => f.write_str("implementation_name"),
             Self::OsName | Self::OsNameDeprecated => f.write_str("os_name"),
             Self::PlatformMachine | Self::PlatformMachineDeprecated => {
@@ -128,18 +160,27 @@ impl Display for MarkerValueString {
 
 /// Those markers with exclusively `in` and `not in` operators.
 ///
-/// Contains PEP 751 lockfile markers.
+/// Includes PEP 751 lockfile markers and PEP 825 variant markers.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub enum MarkerValueList {
     /// `extras`. This one is special because it's a list, and user-provided
     Extras,
     /// `dependency_groups`. This one is special because it's a list, and user-provided
     DependencyGroups,
+    /// `variant_namespaces`
+    VariantNamespaces,
+    /// `variant_features`
+    VariantFeatures,
+    /// `variant_properties`
+    VariantProperties,
 }
 
 impl Display for MarkerValueList {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
+            Self::VariantNamespaces => f.write_str("variant_namespaces"),
+            Self::VariantFeatures => f.write_str("variant_features"),
+            Self::VariantProperties => f.write_str("variant_properties"),
             Self::Extras => f.write_str("extras"),
             Self::DependencyGroups => f.write_str("dependency_groups"),
         }
@@ -198,6 +239,10 @@ impl FromStr for MarkerValue {
             "python_version" => Self::MarkerEnvVersion(MarkerValueVersion::PythonVersion),
             "sys_platform" => Self::MarkerEnvString(MarkerValueString::SysPlatform),
             "sys.platform" => Self::MarkerEnvString(MarkerValueString::SysPlatformDeprecated),
+            "variant_label" => Self::MarkerEnvString(MarkerValueString::VariantLabel),
+            "variant_namespaces" => Self::MarkerEnvList(MarkerValueList::VariantNamespaces),
+            "variant_features" => Self::MarkerEnvList(MarkerValueList::VariantFeatures),
+            "variant_properties" => Self::MarkerEnvList(MarkerValueList::VariantProperties),
             "extras" => Self::MarkerEnvList(MarkerValueList::Extras),
             "dependency_groups" => Self::MarkerEnvList(MarkerValueList::DependencyGroups),
             "extra" => Self::Extra,
@@ -503,7 +548,7 @@ pub enum MarkerExpression {
         operator: MarkerOperator,
         value: ArcStr,
     },
-    /// `'...' in <key>`, a PEP 751 expression.
+    /// Membership in a PEP 751 or PEP 825 set-valued marker.
     List {
         pair: CanonicalMarkerListPair,
         operator: ContainerOperator,
@@ -766,6 +811,20 @@ impl FromStr for MarkerTree {
 }
 
 impl MarkerTree {
+    /// Parse a marker that selects an environment before a wheel has been chosen.
+    pub fn parse_environment(input: &str) -> Result<Self, Pep508Error> {
+        let mut cursor = Cursor::new(input);
+        cursor.allow_variant_markers = false;
+        Ok(parse::parse_markers_cursor(&mut cursor, &mut TracingReporter)?.unwrap_or(Self::TRUE))
+    }
+
+    /// Deserialize an environment selector such as `packages.marker` in a pylock file.
+    pub fn deserialize_environment<'de, D: Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<Self, D::Error> {
+        Self::parse_environment(&String::deserialize(deserializer)?).map_err(de::Error::custom)
+    }
+
     /// An empty marker that always evaluates to `true`.
     pub const TRUE: Self = Self(NodeId::TRUE);
 
@@ -1099,6 +1158,7 @@ impl MarkerTree {
                     CanonicalMarkerListPair::DependencyGroup(dependency_group) => {
                         extras.dependency_groups().contains(dependency_group)
                     }
+                    CanonicalMarkerListPair::Variant(_) => false,
                     // Invalid marker expression
                     CanonicalMarkerListPair::Arbitrary { .. } => return false,
                 };
@@ -1478,6 +1538,65 @@ impl MarkerTree {
             }
         }
         imp(self, &mut f, &mut None);
+    }
+
+    /// Whether this expression depends on the selected wheel.
+    pub fn contains_variant(self) -> bool {
+        INTERNER
+            .shared
+            .contains_variable(self.0, Variable::is_variant)
+    }
+
+    /// Keep the environments in which the marker can match for some wheel variant.
+    #[must_use]
+    pub fn without_variant(self) -> Self {
+        if !self.contains_variant() {
+            return self;
+        }
+        Self(
+            INTERNER
+                .lock()
+                .without_variables(self.0, Variable::is_variant),
+        )
+    }
+
+    /// Resolve PEP 825 markers in the context of the wheel declaring the dependency.
+    #[must_use]
+    pub fn resolve_variant(self, variant: Option<&VariantMarkerEnvironment>) -> Self {
+        if !self.contains_variant() {
+            return self;
+        }
+        let label = variant.map_or("", |variant| variant.label.as_str());
+        Self(INTERNER.lock().restrict_nodes(self.0, &|node| {
+            let value = match &node.var {
+                Variable::String(CanonicalMarkerValueString::VariantLabel) => {
+                    if let Edges::String { edges } = &node.children {
+                        return edges
+                            .iter()
+                            .find(|(range, _)| range.contains(label))
+                            .map(|(_, node)| *node);
+                    }
+                    return None;
+                }
+                Variable::In {
+                    key: CanonicalMarkerValueString::VariantLabel,
+                    value,
+                } => value.contains(label),
+                Variable::Contains {
+                    key: CanonicalMarkerValueString::VariantLabel,
+                    value,
+                } => label.contains(value.as_str()),
+                Variable::List(CanonicalMarkerListPair::Variant(member)) => {
+                    variant.is_some_and(|variant| variant.members.contains(member))
+                }
+                _ => return None,
+            };
+            if let Edges::Boolean { low, high } = node.children {
+                Some(if value { high } else { low })
+            } else {
+                None
+            }
+        }))
     }
 
     fn simplify_extras_with_impl(self, is_extra: &impl Fn(&ExtraName) -> bool) -> Self {
@@ -1901,7 +2020,9 @@ mod test {
     use uv_pep440::Version;
 
     use crate::marker::{MarkerEnvironment, MarkerEnvironmentBuilder};
-    use crate::{MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString};
+    use crate::{
+        MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString, VariantMarkerEnvironment,
+    };
 
     fn parse_err(input: &str) -> String {
         MarkerTree::from_str(input).unwrap_err().to_string()
@@ -2276,6 +2397,20 @@ mod test {
             marker.negate()
         );
         assert_eq!(replacements_built.get(), 0);
+    }
+
+    /// Resolving the parent wheel leaves independent environment and extra conditions intact.
+    #[test]
+    fn resolve_variant_in_mixed_marker() {
+        let variant = VariantMarkerEnvironment::new("cuda12".to_owned());
+        let marker = m("('cuda' in variant_label and extra == 'gpu') or \
+                        (variant_label not in 'cuda12 cuda13' and sys_platform == 'linux')");
+        assert_eq!(marker.resolve_variant(Some(&variant)), m("extra == 'gpu'"));
+        let other = VariantMarkerEnvironment::new("cpu".to_owned());
+        assert_eq!(
+            marker.resolve_variant(Some(&other)),
+            m("sys_platform == 'linux'")
+        );
     }
 
     /// PEP 751 list markers do not substitute the singular `extra` variable.

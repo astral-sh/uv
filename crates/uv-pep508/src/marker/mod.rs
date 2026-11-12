@@ -25,7 +25,7 @@ pub use tree::{
     ContainsMarkerTree, ExtraMarkerTree, ExtraOperator, InMarkerTree, MarkerExpression,
     MarkerOperator, MarkerTree, MarkerTreeContents, MarkerTreeKind, MarkerValueExtra,
     MarkerValueList, MarkerValueString, MarkerValueVersion, MarkerWarningKind, StringMarkerTree,
-    StringVersion, VersionMarkerTree,
+    StringVersion, VariantMarkerEnvironment, VersionMarkerTree,
 };
 
 /// `serde` helpers for [`MarkerTree`].

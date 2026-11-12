@@ -867,3 +867,32 @@ fn streamed_variant_metadata_requires_one_dist_info_directory() -> Result<()> {
     ");
     Ok(())
 }
+
+/// A pylock package marker selects the package before the installer can choose a wheel.
+#[test]
+fn pylock_rejects_variant_marker_on_package() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("pylock.toml").write_str(indoc! {r#"
+        lock-version = "1.0"
+        created-by = "test"
+
+        [[packages]]
+        name = "ok"
+        marker = "variant_label == 'null'"
+    "#})?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--preview-features").arg("pylock")
+        .arg("-r").arg("pylock.toml"), @r#"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Not a valid `pylock.toml` file: pylock.toml
+      cause: TOML parse error at line 6, column 10
+               |
+             6 | marker = "variant_label == 'null'"
+               |          ^^^^^^^^^^^^^^^^^^^^^^^^^
+             The marker `variant_label` is only allowed in dependency specifiers
+             variant_label == 'null'
+             ^^^^^^^^^^^^^
+    "#);
+    Ok(())
+}

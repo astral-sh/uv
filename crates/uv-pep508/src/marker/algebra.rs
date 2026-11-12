@@ -609,7 +609,11 @@ impl InternerGuard<'_> {
         })
     }
 
-    fn restrict_nodes(&mut self, i: NodeId, select: &impl Fn(&Node) -> Option<NodeId>) -> NodeId {
+    pub(crate) fn restrict_nodes(
+        &mut self,
+        i: NodeId,
+        select: &impl Fn(&Node) -> Option<NodeId>,
+    ) -> NodeId {
         self.restrict_by_cached(i, select, &mut None)
     }
 
@@ -1410,6 +1414,22 @@ pub(crate) enum Variable {
 }
 
 impl Variable {
+    pub(crate) fn is_variant(&self) -> bool {
+        matches!(
+            self,
+            Self::String(CanonicalMarkerValueString::VariantLabel)
+                | Self::In {
+                    key: CanonicalMarkerValueString::VariantLabel,
+                    ..
+                }
+                | Self::Contains {
+                    key: CanonicalMarkerValueString::VariantLabel,
+                    ..
+                }
+                | Self::List(CanonicalMarkerListPair::Variant(_))
+        )
+    }
+
     /// Returns `true` if the variable is known to be involved in _at least_ one conflicting
     /// marker pair.
     ///
