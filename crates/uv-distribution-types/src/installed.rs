@@ -453,18 +453,25 @@ impl InstalledDist {
         Ok(self.metadata_cache.get().expect("metadata should be set"))
     }
 
+    /// The installed wheel's `.dist-info` directory, if it has one.
+    fn dist_info_path(&self) -> Option<&Path> {
+        match &self.kind {
+            InstalledDistKind::Registry(dist) => Some(&dist.path),
+            InstalledDistKind::Url(dist) => Some(&dist.path),
+            InstalledDistKind::EggInfoFile(_)
+            | InstalledDistKind::EggInfoDirectory(_)
+            | InstalledDistKind::LegacyEditable(_) => None,
+        }
+    }
+
     /// Return the supported wheel tags for the distribution from the `WHEEL` file, if available.
     pub fn read_tags(&self) -> Result<Option<&ExpandedTags>, InstalledDistError> {
         if let Some(tags) = self.tags_cache.get() {
             return Ok(tags.as_ref());
         }
 
-        let path = match &self.kind {
-            InstalledDistKind::Registry(dist) => &dist.path,
-            InstalledDistKind::Url(dist) => &dist.path,
-            InstalledDistKind::EggInfoFile(_) => return Ok(None),
-            InstalledDistKind::EggInfoDirectory(_) => return Ok(None),
-            InstalledDistKind::LegacyEditable(_) => return Ok(None),
+        let Some(path) = self.dist_info_path() else {
+            return Ok(None);
         };
 
         // Read the `WHEEL` file.
