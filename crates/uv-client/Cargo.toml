@@ -96,7 +96,7 @@ rcgen = { workspace = true }
 regex = { workspace = true, features = ["perf", "unicode"] }
 temp-env = { workspace = true }
 tempfile = { workspace = true }
-tokio = { workspace = true }
+tokio = { workspace = true, features = ["test-util"] }
 tokio-rustls = { workspace = true }
 tracing-test = { workspace = true }
 wiremock = { workspace = true }
