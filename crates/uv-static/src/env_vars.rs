@@ -1462,7 +1462,7 @@ impl EnvVars {
     /// Override TPU presence for the TPU wheel variant provider. The upstream provider treats
     /// `true`, `1`, and `yes` (case-insensitive) as present and any other value as absent.
     #[attr_hidden]
-    #[attr_added_in("next release")]
+    #[attr_added_in("0.13.8")]
     pub const TPU_VARIANT_PROVIDER_FORCE_PRESENT: &'static str =
         "TPU_VARIANT_PROVIDER_FORCE_PRESENT";
 
