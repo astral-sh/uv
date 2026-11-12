@@ -6283,6 +6283,46 @@ fn run_windows_legacy_scripts() -> Result<()> {
     Ok(())
 }
 
+/// Command shims on `PATH`, like the `code.cmd` installed by VS Code or the `npm.cmd` installed by
+/// Node.js, should run by their bare name, as they do from Command Prompt.
+///
+/// See: <https://github.com/astral-sh/uv/issues/12536>
+#[cfg(windows)]
+#[test]
+fn run_windows_command_shim_on_path() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let bin_dir = context.temp_dir.child("bin");
+    bin_dir
+        .child("greet.cmd")
+        .write_str("@echo off\r\necho greet.cmd %*\r\n")?;
+    bin_dir
+        .child("farewell.bat")
+        .write_str("@echo off\r\necho farewell.bat %*\r\n")?;
+
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--no-project")
+        .arg("greet")
+        .arg("hello")
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    greet.cmd hello
+    ");
+
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--no-project")
+        .arg("farewell")
+        .arg("goodbye")
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    farewell.bat goodbye
+    ");
+
+    Ok(())
+}
+
 /// If a `--with` requirement overlaps with a locked script requirement, respect the lockfile as a
 /// preference.
 ///
