@@ -2937,7 +2937,7 @@ fn tool_run_with_url_ending_in_py() {
     ----- stderr -----
     error: Failed to resolve `--with` requirement
       cause: Git operation failed
-      cause: failed to fetch into: [CACHE_DIR]/git-v1/db/efbd3507bcbea33c
+      cause: failed to fetch into: [CACHE_DIR]/git-v2/db/efbd3507bcbea33c
       cause: Remote Git fetches are not allowed because network connectivity is disabled (i.e., with `--offline`)
     ");
 
@@ -2949,7 +2949,7 @@ fn tool_run_with_url_ending_in_py() {
     error: Failed to resolve tool requirement
       cause: Failed to download and build `easyeda2kicad @ git+https://github.com/uPesy/easyeda2kicad.py`
       cause: Git operation failed
-      cause: failed to fetch into: [CACHE_DIR]/git-v1/db/efbd3507bcbea33c
+      cause: failed to fetch into: [CACHE_DIR]/git-v2/db/efbd3507bcbea33c
       cause: Remote Git fetches are not allowed because network connectivity is disabled (i.e., with `--offline`)
     ");
 }
@@ -2969,7 +2969,7 @@ fn tool_run_with_from_url_ending_in_py() {
     ----- stderr -----
     error: Failed to resolve `--with` requirement
       cause: Git operation failed
-      cause: failed to fetch into: [CACHE_DIR]/git-v1/db/efbd3507bcbea33c
+      cause: failed to fetch into: [CACHE_DIR]/git-v2/db/efbd3507bcbea33c
       cause: Remote Git fetches are not allowed because network connectivity is disabled (i.e., with `--offline`)
     ");
 
@@ -2983,7 +2983,7 @@ fn tool_run_with_from_url_ending_in_py() {
     error: Failed to resolve tool requirement
       cause: Failed to download and build `easyeda2kicad @ git+https://github.com/uPesy/easyeda2kicad.py`
       cause: Git operation failed
-      cause: failed to fetch into: [CACHE_DIR]/git-v1/db/efbd3507bcbea33c
+      cause: failed to fetch into: [CACHE_DIR]/git-v2/db/efbd3507bcbea33c
       cause: Remote Git fetches are not allowed because network connectivity is disabled (i.e., with `--offline`)
     ");
 }

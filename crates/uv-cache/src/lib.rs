@@ -1298,18 +1298,18 @@ impl CacheBucket {
         match self {
             // Note that when bumping this, you'll also need to bump it
             // in `crates/uv/tests/build/cache_prune.rs`.
-            Self::SourceDistributions => "sdists-v10",
+            Self::SourceDistributions => "sdists-v11",
             // Note that when bumping this, you'll also need to bump it
             // in `crates/uv/tests/lock/lock.rs`.
             Self::FlatIndex => "flat-index-v7",
-            Self::Git => "git-v1",
+            Self::Git => "git-v2",
             Self::Interpreter => "interpreter-v5",
             // Note that when bumping this, you'll also need to bump it
             // in `crates/uv/tests/build/cache_clean.rs`.
             Self::Simple => "simple-v27",
             // Note that when bumping this, you'll also need to bump it
             // in `crates/uv/tests/build/cache_prune.rs`.
-            Self::Wheels => "wheels-v7",
+            Self::Wheels => "wheels-v8",
             // Note that when bumping this, you'll also need to bump
             // `ARCHIVE_VERSION` in `crates/uv-cache/src/lib.rs`.
             Self::Archive => "archive-v0",

@@ -66,8 +66,8 @@ impl GitSource {
         let lfs_requested = self.git.lfs().enabled();
 
         // The path to the repo, within the Git database.
-        let ident = cache_digest(self.git.repository());
-        let db_path = self.cache.join("db").join(&ident);
+        let repository_digest = cache_digest(self.git.repository());
+        let db_path = self.cache.join("db").join(repository_digest);
 
         // Authenticate the URL, if necessary.
         let remote = if let Some(credentials) = GIT_STORE.get(self.git.repository()) {
@@ -128,19 +128,10 @@ impl GitSource {
         // path length limit on Windows.
         let short_id = db.to_short_id(actual_rev)?;
 
-        // Compute the canonical URL for the repository checkout.
-        let canonical = git.repository().clone().with_lfs(Some(lfs_requested));
-        // Recompute the checkout hash when Git LFS is enabled as we want
-        // to distinctly differentiate between LFS vs non-LFS source trees.
-        let ident = if lfs_requested {
-            cache_digest(&canonical)
-        } else {
-            ident
-        };
         let checkout_path = self
             .cache
             .join("checkouts")
-            .join(&ident)
+            .join(git.repository().checkout_digest(lfs_requested))
             .join(short_id.as_str());
 
         // Check out `actual_rev` from the database to a scoped location on the

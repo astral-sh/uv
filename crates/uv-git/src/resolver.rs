@@ -8,7 +8,7 @@ use papaya::{HashMap, ResizeMode};
 use reqwest_middleware::ClientWithMiddleware;
 use tracing::debug;
 
-use uv_cache_key::{RepositoryUrl, cache_digest};
+use uv_cache_key::{GitUpstreamUrl, cache_digest};
 use uv_fs::{LockedFile, LockedFileError, LockedFileMode};
 use uv_git_types::{GitHubRepository, GitOid, GitReference, GitUrl};
 use uv_static::EnvVars;
@@ -140,7 +140,8 @@ impl GitResolver {
         }
 
         // If the URL is a GitHub URL, attempt to resolve it via the GitHub API.
-        let Some(GitHubRepository { owner, repo }) = GitHubRepository::parse(url.repository())
+        let Some(GitHubRepository { owner, repo }) =
+            GitHubRepository::parse(url.repository().as_url())
         else {
             return Ok(None);
         };
@@ -326,8 +327,8 @@ pub struct ResolvedRepositoryReference {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct RepositoryReference {
-    /// The URL of the Git repository, with any query parameters and fragments removed.
-    pub url: RepositoryUrl,
+    /// The normalized Git repository URL used as the repository's identity.
+    pub url: GitUpstreamUrl,
     /// The reference to the commit to use, which could be a branch, tag, or revision.
     pub reference: GitReference,
 }

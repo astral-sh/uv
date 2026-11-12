@@ -15,10 +15,10 @@ pub enum WheelCache<'a> {
     Path(&'a SafeUrl),
     /// An editable dependency, which we key by URL.
     Editable(&'a SafeUrl),
-    /// A Git dependency, which we key by URL (including LFS state), SHA.
+    /// A Git dependency, keyed by the source URL (including subdirectory and LFS options) and
+    /// the resolved SHA.
     ///
-    /// Note that this variant only exists for source distributions; wheels can't be delivered
-    /// through Git.
+    /// Git dependencies provide source distributions. This variant caches the wheels built from them.
     Git(&'a SafeUrl, &'a str),
 }
 
@@ -41,7 +41,7 @@ impl WheelCache<'_> {
                 .join(cache_digest(&CanonicalUrl::new((*url).clone()))),
             Self::Git(url, sha) => WheelCacheKind::Git
                 .root()
-                .join(cache_digest(&CanonicalUrl::new((*url).clone())))
+                .join(cache_digest(&CanonicalUrl::for_git_source((*url).clone())))
                 .join(sha),
         }
     }
@@ -88,5 +88,34 @@ impl WheelCacheKind {
 impl AsRef<Path> for WheelCacheKind {
     fn as_ref(&self) -> &Path {
         self.to_str().as_ref()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use uv_redacted::SafeUrlError;
+
+    use super::*;
+
+    #[test]
+    fn direct_wheel_cache_paths_preserve_http_path_spelling() -> Result<(), SafeUrlError> {
+        let plain =
+            SafeUrl::parse("https://example.com/artifacts@channel/example-1.0-py3-none-any.whl")?;
+        let suffixed = SafeUrl::parse(
+            "https://example.com/artifacts.git@channel/example-1.0-py3-none-any.whl",
+        )?;
+        let plain_root = WheelCache::Url(&plain).root();
+        let suffixed_root = WheelCache::Url(&suffixed).root();
+        assert_ne!(plain_root, suffixed_root);
+
+        let escaped_at = SafeUrl::parse(
+            "https://example.com/artifacts.git%40channel/example-1.0-py3-none-any.whl",
+        )?;
+        let escaped_dot = SafeUrl::parse(
+            "https://example.com/artifacts%2Egit@channel/example-1.0-py3-none-any.whl",
+        )?;
+        assert_ne!(WheelCache::Url(&escaped_at).root(), suffixed_root);
+        assert_ne!(WheelCache::Url(&escaped_dot).root(), suffixed_root);
+        Ok(())
     }
 }

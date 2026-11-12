@@ -7742,6 +7742,29 @@ fn conflicting_index_urls_requirements_txt() -> Result<()> {
     Ok(())
 }
 
+/// Distinguish index URLs whose paths differ by a `.git` suffix.
+#[test]
+fn conflicting_index_urls_git_suffix() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("--index-url https://example.com/simple/")?;
+
+    let constraints_in = context.temp_dir.child("constraints.in");
+    constraints_in.write_str("--index-url https://example.com/simple.git/")?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+            .arg("requirements.in")
+            .arg("--constraint")
+            .arg("constraints.in"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Multiple index URLs specified: `https://example.com/simple/` vs. `https://example.com/simple.git/`
+    "
+    );
+
+    Ok(())
+}
+
 /// Doesn't raise an error when multiple `requirements.txt` files include matching `--index-url` flags.
 #[test]
 fn matching_index_urls_requirements_txt() -> Result<()> {
@@ -14916,7 +14939,7 @@ fn git_source_missing_tag() -> Result<()> {
     ----- stderr -----
     error: Failed to download and build `uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@missing`
       cause: Git operation failed
-      cause: failed to clone into: [CACHE_DIR]/git-v1/db/8dab139913c4b566
+      cause: failed to clone into: [CACHE_DIR]/git-v2/db/8dab139913c4b566
       cause: failed to fetch tag `missing`
       cause: process didn't exit successfully: `git fetch --force --update-head-ok 'https://github.com/astral-test/uv-public-pypackage' '+refs/tags/missing:refs/remotes/origin/tags/missing'` (exit status: 128)
              --- stderr
