@@ -17,7 +17,7 @@ use uv_distribution_types::{
     UnresolvedRequirementSpecification,
 };
 use uv_git::ResolvedRepositoryReference;
-use uv_lock::{GroupMetadata, Lock, ResolverManifest};
+use uv_lock::{GroupMetadata, Lock, LockSatisfactionError, ResolverManifest};
 use uv_normalize::PackageName;
 use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{ConflictKind, SupportedEnvironments};
@@ -837,6 +837,24 @@ async fn do_lock(
         }
     } else {
         None
+    };
+
+    // A known-invalid selection can be reported in locked mode without resolving again.
+    let existing_lock = match (mode, existing_lock) {
+        (LockMode::Locked(_, source), Some(ValidatedLock::Preferable(_, reason)))
+            if matches!(
+                &reason,
+                LockMismatchReason::Satisfaction(mismatch)
+                    if matches!(**mismatch, LockSatisfactionError::MismatchedDependencyVersion(..))
+            ) =>
+        {
+            return Err(LockError::LockDependencyMismatch(
+                target.lock_filename(),
+                source,
+                Box::new(reason),
+            ));
+        }
+        (_, existing_lock) => existing_lock,
     };
 
     match existing_lock {
