@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::VecDeque;
 use std::fmt::Write;
@@ -14,6 +15,7 @@ use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{Concurrency, IndexStrategy, KeyringProviderType};
+use uv_distribution::installed_variant_markers;
 use uv_distribution_types::{
     DependencyMetadata, Diagnostic, IndexCapabilities, IndexLocations, Name, RequiresPython,
 };
@@ -74,10 +76,21 @@ pub async fn pip_tree(
     let packages = {
         let mut packages: FxHashMap<_, Vec<_>> = FxHashMap::default();
         for package in site_packages.iter() {
-            packages
-                .entry(package.name())
-                .or_default()
-                .push(package.read_metadata()?);
+            let mut metadata = Cow::Borrowed(package.read_metadata()?);
+            let variant = installed_variant_markers(
+                package,
+                environment.interpreter().platform(),
+                metadata
+                    .requires_dist
+                    .iter()
+                    .map(|requirement| requirement.marker),
+            )?;
+            if let Some(variant) = variant {
+                for requirement in &mut metadata.to_mut().requires_dist {
+                    requirement.marker = requirement.marker.resolve_variant(Some(&variant));
+                }
+            }
+            packages.entry(package.name()).or_default().push(metadata);
         }
         packages
     };
@@ -228,7 +241,7 @@ impl<'env> DisplayDependencyGraph<'env> {
         invert: bool,
         show_version_specifiers: bool,
         markers: &ResolverMarkerEnvironment,
-        packages: &'env FxHashMap<&PackageName, Vec<&ResolutionMetadata>>,
+        packages: &'env FxHashMap<&PackageName, Vec<Cow<'_, ResolutionMetadata>>>,
         latest: &'env FxHashMap<&PackageName, Version>,
     ) -> Self {
         // Create a graph.
@@ -245,7 +258,7 @@ impl<'env> DisplayDependencyGraph<'env> {
                 continue;
             }
 
-            let index = graph.add_node(metadata);
+            let index = graph.add_node(metadata.as_ref());
             inverse
                 .entry(metadata.name.clone())
                 .or_default()

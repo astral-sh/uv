@@ -44,6 +44,8 @@ impl MarkerEnvironment {
     pub fn get_string(&self, key: CanonicalMarkerValueString) -> &str {
         match key {
             CanonicalMarkerValueString::ImplementationName => self.implementation_name(),
+            // An interpreter alone describes an ordinary wheel.
+            CanonicalMarkerValueString::VariantLabel => "",
             CanonicalMarkerValueString::OsName => self.os_name(),
             CanonicalMarkerValueString::PlatformMachine => self.platform_machine(),
             CanonicalMarkerValueString::PlatformPythonImplementation => {

@@ -18,11 +18,15 @@ use uv_pypi_types::{DirectUrl, DirectUrlError, MetadataError, read_direct_url_js
 use uv_redacted::SafeUrl;
 
 use crate::{
-    BuildInfo, DistributionMetadata, InstalledMetadata, InstalledVersion, Name, VersionOrUrlRef,
+    BuildInfo, DistributionMetadata, InstalledMetadata, InstalledVersion, Name,
+    VariantsJsonContent, VariantsJsonParseError, VersionOrUrlRef,
 };
 
 #[derive(Error, Debug)]
 pub enum InstalledDistError {
+    #[error(transparent)]
+    VariantMetadata(#[from] VariantsJsonParseError),
+
     #[error(transparent)]
     Io(#[from] std::io::Error),
 
@@ -408,6 +412,18 @@ impl InstalledDist {
         Ok(Some(build_info))
     }
 
+    /// Read the installed wheel's variant metadata, if present.
+    pub fn read_variant(&self) -> Result<Option<VariantsJsonContent>, InstalledDistError> {
+        let Some(path) = self.dist_info_path() else {
+            return Ok(None);
+        };
+        match fs::read(path.join("variant.json")) {
+            Ok(contents) => Ok(Some(VariantsJsonContent::from_slice(&contents)?)),
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(err) => Err(err.into()),
+        }
+    }
+
     /// Read the `METADATA` file from a `.dist-info` directory.
     pub fn read_metadata(&self) -> Result<&uv_pypi_types::ResolutionMetadata, InstalledDistError> {
         if let Some(metadata) = self.metadata_cache.get() {
@@ -453,18 +469,25 @@ impl InstalledDist {
         Ok(self.metadata_cache.get().expect("metadata should be set"))
     }
 
+    /// The installed wheel's `.dist-info` directory, if it has one.
+    fn dist_info_path(&self) -> Option<&Path> {
+        match &self.kind {
+            InstalledDistKind::Registry(dist) => Some(&dist.path),
+            InstalledDistKind::Url(dist) => Some(&dist.path),
+            InstalledDistKind::EggInfoFile(_)
+            | InstalledDistKind::EggInfoDirectory(_)
+            | InstalledDistKind::LegacyEditable(_) => None,
+        }
+    }
+
     /// Return the supported wheel tags for the distribution from the `WHEEL` file, if available.
     pub fn read_tags(&self) -> Result<Option<&ExpandedTags>, InstalledDistError> {
         if let Some(tags) = self.tags_cache.get() {
             return Ok(tags.as_ref());
         }
 
-        let path = match &self.kind {
-            InstalledDistKind::Registry(dist) => &dist.path,
-            InstalledDistKind::Url(dist) => &dist.path,
-            InstalledDistKind::EggInfoFile(_) => return Ok(None),
-            InstalledDistKind::EggInfoDirectory(_) => return Ok(None),
-            InstalledDistKind::LegacyEditable(_) => return Ok(None),
+        let Some(path) = self.dist_info_path() else {
+            return Ok(None);
         };
 
         // Read the `WHEEL` file.

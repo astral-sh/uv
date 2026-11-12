@@ -9,6 +9,8 @@ pub(crate) struct Cursor<'a> {
     input: &'a str,
     chars: Chars<'a>,
     pos: usize,
+    /// PEP 825 variables are scoped to the wheel declaring a dependency.
+    pub(crate) allow_variant_markers: bool,
 }
 
 impl<'a> Cursor<'a> {
@@ -18,6 +20,7 @@ impl<'a> Cursor<'a> {
             input,
             chars: input.chars(),
             pos: 0,
+            allow_variant_markers: true,
         }
     }
 
@@ -27,6 +30,7 @@ impl<'a> Cursor<'a> {
             input: self.input,
             chars: self.input[pos..].chars(),
             pos,
+            ..self
         }
     }
 

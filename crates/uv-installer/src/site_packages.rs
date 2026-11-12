@@ -11,6 +11,7 @@ use uv_configuration::{
     DependencyMode, DependencyModifierScope, DependencyModifiers, ExcludeDependency, Excludes,
     Override, Overrides,
 };
+use uv_distribution::installed_variant_markers;
 use uv_distribution_filename::EggInfoFilename;
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, Diagnostic, ExtraBuildRequires, ExtraBuildVariables,
@@ -285,9 +286,21 @@ impl SitePackages {
                     }
                 }
 
+                let variant = installed_variant_markers(
+                    distribution,
+                    tags.python_platform(),
+                    metadata
+                        .requires_dist
+                        .iter()
+                        .map(|requirement| requirement.marker),
+                )?;
                 // Verify that the dependencies are installed.
                 for dependency in &metadata.requires_dist {
-                    if !dependency.evaluate_markers(markers, &[]) {
+                    if !dependency
+                        .marker
+                        .resolve_variant(variant.as_ref())
+                        .evaluate(markers, &[])
+                    {
                         continue;
                     }
 
@@ -580,18 +593,30 @@ impl SitePackages {
                         })?)
                     };
 
-                    // Add the dependencies to the queue.
+                    // Add the dependencies to the queue, including package-scoped overrides.
                     let dependencies = metadata
                         .requires_dist
                         .iter()
                         .cloned()
                         .map(Requirement::from)
                         .collect::<Vec<_>>();
+                    let variant = installed_variant_markers(
+                        distribution,
+                        tags.python_platform(),
+                        dependencies
+                            .iter()
+                            .chain(modifiers.scoped_overrides_for(name, distribution.version()))
+                            .map(|dependency| dependency.marker),
+                    )?;
                     for dependency in modifiers.apply(
                         DependencyModifierScope::Package(name, distribution.version()),
                         &dependencies,
                     ) {
-                        if dependency.evaluate_markers(Some(markers), &requirement.extras) {
+                        if dependency
+                            .marker
+                            .resolve_variant(variant.as_ref())
+                            .evaluate(markers, &requirement.extras)
+                        {
                             let dependency = dependency.into_owned();
                             if seen.insert(dependency.clone()) {
                                 stack.push(dependency);

@@ -3,7 +3,6 @@ use std::collections::BTreeMap;
 use std::process::Command;
 
 use anyhow::{Result, anyhow};
-#[cfg(feature = "test-git")]
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use indoc::indoc;
@@ -865,5 +864,193 @@ fn streamed_variant_metadata_requires_one_dist_info_directory() -> Result<()> {
     hint: The structure of `ok` (v1.0.0) was invalid:
       Multiple .dist-info directories found: ok-1.0.0, ok-2.0.0
     ");
+    Ok(())
+}
+
+/// Only properties shared by the selected wheel and the target activate dependencies.
+/// Its ordinary dependency evaluates the same marker names in its own context.
+#[test]
+fn selected_variant_marker_dependencies() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::from_toml(indoc! {r#"
+        name = "variant-markers"
+        root = {}
+        expected.satisfiable = true
+
+        [packages.linalg.versions."1.0.0"]
+        wheel = false
+        sdist = false
+        requires = [
+            """bindings ; variant_label == 'blas' and 'blas' in variant_namespaces and \
+               'blas :: library' in variant_features and \
+               'blas::library :: openblas' in variant_properties""",
+            "mkl-runtime ; 'blas::library::mkl' in variant_properties",
+        ]
+
+        [packages.linalg.versions."1.0.0".variants]
+        namespaces = ["blas"]
+
+        [packages.linalg.versions."1.0.0".variants.providers.blas]
+        static-properties.library = ["openblas"]
+
+        [packages.linalg.versions."1.0.0".variants.wheels]
+        blas.properties = ["blas :: library :: openblas", "blas :: library :: mkl"]
+
+        [packages.bindings.versions."1.0.0"]
+        requires = ["runtime ; variant_label == '' and 'blas' not in variant_namespaces"]
+
+        [packages.runtime.versions."1.0.0"]
+    "#})?;
+
+    context
+        .temp_dir
+        .child("constraints.txt")
+        .write_str("bindings>=2 ; variant_label == 'blas'")?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--preview-features").arg("wheel-variants")
+        .arg("--index-url").arg(server.index_url())
+        .arg("--constraint").arg("constraints.txt")
+        .arg("linalg"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + bindings==1.0.0
+     + linalg==1.0.0
+     + runtime==1.0.0
+    ");
+
+    // Checking the environment must use the variant metadata installed alongside METADATA.
+    context.pip_uninstall().arg("bindings").assert().success();
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--preview-features").arg("wheel-variants")
+        .arg("--index-url").arg(server.index_url())
+        .arg("linalg"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Installed 1 package in [TIME]
+     + bindings==1.0.0
+    ");
+    Ok(())
+}
+
+/// Direct URL lookahead must follow the null variant's dependency and skip the ordinary wheel's.
+#[test]
+fn direct_wheel_variant_marker_dependencies() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let (filename, wheel) = WheelBuilder::new(&"child".parse()?, &"1.0".parse()?).build();
+    context.temp_dir.child(&filename).write_binary(&wheel)?;
+    let server = FindLinksServer::new(context.temp_dir.path());
+    let (filename, wheel) = WheelBuilder::new(&"parent".parse()?, &"1.0".parse()?)
+        .requires(&[
+            format!(
+                "child @ {}/{filename} ; variant_label == 'null'",
+                server.url()
+            )
+            .parse()?,
+            format!(
+                "absent @ {}/absent-1.0-py3-none-any.whl ; variant_label == ''",
+                server.url()
+            )
+            .parse()?,
+        ])
+        .variant(&"null".parse()?, &null_variant().to_string())
+        .build();
+    let parent = context.temp_dir.child(filename);
+    parent.write_binary(&wheel)?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--preview-features").arg("wheel-variants")
+        .arg("--no-index")
+        .arg(parent.path()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + child==1.0 (from http://[LOCALHOST]/child-1.0-py3-none-any.whl)
+     + parent==1.0 (from file://[TEMP_DIR]/parent-1.0-py3-none-any-null.whl)
+    ");
+    Ok(())
+}
+
+/// A package-scoped override can introduce the first variant marker after a wheel is installed.
+#[test]
+fn installed_variant_marker_in_scoped_override() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::from_toml(indoc! {r#"
+        name = "installed-variant-override"
+        root = {}
+        expected.satisfiable = true
+
+        [packages.parent.versions."1.0"]
+        wheel = false
+        sdist = false
+
+        [packages.parent.versions."1.0".variants]
+        namespaces = ["blas"]
+        wheels.null.properties = []
+
+        [packages.child.versions."1.0"]
+        yanked = true
+    "#})?;
+    context
+        .pip_install()
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("--index-url")
+        .arg(server.index_url())
+        .arg("parent")
+        .assert()
+        .success();
+
+    context.temp_dir.child("uv.toml").write_str(indoc! {r#"
+        [[override-dependencies]]
+        package = { name = "parent" }
+        dependencies = ["child==1.0 ; variant_label == 'null'"]
+    "#})?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--preview-features").arg("wheel-variants")
+        .arg("--index-url").arg(server.index_url())
+        .arg("parent"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + child==1.0
+    warning: `child==1.0` is yanked
+    ");
+    Ok(())
+}
+
+/// A pylock package marker selects the package before the installer can choose a wheel.
+#[test]
+fn pylock_rejects_variant_marker_on_package() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("pylock.toml").write_str(indoc! {r#"
+        lock-version = "1.0"
+        created-by = "test"
+
+        [[packages]]
+        name = "ok"
+        marker = "variant_label == 'null'"
+    "#})?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--preview-features").arg("pylock")
+        .arg("-r").arg("pylock.toml"), @r#"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Not a valid `pylock.toml` file: pylock.toml
+      cause: TOML parse error at line 6, column 10
+               |
+             6 | marker = "variant_label == 'null'"
+               |          ^^^^^^^^^^^^^^^^^^^^^^^^^
+             The marker `variant_label` is only allowed in dependency specifiers
+             variant_label == 'null'
+             ^^^^^^^^^^^^^
+    "#);
     Ok(())
 }

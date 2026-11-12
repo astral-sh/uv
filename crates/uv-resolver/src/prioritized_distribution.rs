@@ -447,7 +447,7 @@ impl PrioritizedDist {
     pub(crate) fn scored_variants(
         &self,
         metadata: &[(&IndexUrl, &VariantsJsonContent, SupportedVariantProperties)],
-    ) -> impl Iterator<Item = (WheelVariantScore<'_>, usize)> {
+    ) -> impl Iterator<Item = (WheelVariantScore<'_>, usize, usize)> {
         // Prefer wheels whose advertised hash matches a required hash, followed by wheels with
         // no advertised hash, then mismatches. If no hashes are required, all wheels match.
         // The installer verifies required hashes against the downloaded wheel.
@@ -461,10 +461,13 @@ impl PrioritizedDist {
                     return None;
                 };
                 let label = wheel.filename.variant()?;
-                let score = metadata
+                let (score, metadata_index) = metadata
                     .iter()
-                    .filter(|(source, _, _)| *source == &wheel.index)
-                    .filter_map(|(_, metadata, supported)| metadata.score_variant(label, supported))
+                    .enumerate()
+                    .filter(|(_, (source, _, _))| *source == &wheel.index)
+                    .filter_map(|(index, (_, metadata, supported))| {
+                        Some((metadata.score_variant(label, supported)?, index))
+                    })
                     .max()?;
                 let score = WheelVariantScore {
                     hash: *hash,
@@ -472,7 +475,7 @@ impl PrioritizedDist {
                     tag_priority: *priority,
                     build_tag: build_tag.as_ref(),
                 };
-                Some((score, index))
+                Some((score, index, metadata_index))
             })
     }
 

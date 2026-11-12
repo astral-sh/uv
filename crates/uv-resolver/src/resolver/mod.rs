@@ -23,7 +23,8 @@ use tracing::{Level, debug, info, instrument, trace, warn};
 
 use uv_configuration::{Constraints, DependencyModifiers, IndexStrategy};
 use uv_distribution::{
-    ArchiveMetadata, DistributionDatabase, Metadata, supported_variant_properties,
+    ArchiveMetadata, DistributionDatabase, Metadata, installed_variant_markers,
+    supported_variant_properties,
 };
 use uv_distribution_types::{
     BuiltDist, DerivationChain, Dist, DistErrorKind, Identifier, IndexCapabilities, IndexLocations,
@@ -36,6 +37,7 @@ use uv_normalize::PackageName;
 use uv_pep440::{MIN_VERSION, Version, VersionSpecifiers, release_specifiers_to_ranges};
 use uv_pep508::{
     MarkerEnvironment, MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString,
+    VariantMarkerEnvironment,
 };
 use uv_platform_tags::{IncompatibleTag, TagCompatibility, Tags};
 use uv_preview::PreviewFeature;
@@ -169,6 +171,7 @@ struct ResolverState<InstalledPackages: InstalledPackagesProvider> {
 struct WheelVariantSelection<'a> {
     /// The first distribution we can use, with variant compatibility applied.
     distribution: Option<Cow<'a, PrioritizedDist>>,
+    markers: Option<VariantMarkerEnvironment>,
     /// Why we couldn't check all the variants, even if we found a usable distribution.
     unavailable: Option<MetadataUnavailable>,
 }
@@ -1337,31 +1340,40 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             }
         }
 
-        if let Dist::Built(wheel) = dist
+        let variant_markers = if let Dist::Built(wheel) = dist
             && let Some(label) = wheel.wheel_filename().variant().cloned()
             && let Some(tags) = &self.tags
             && let Some(variant) = requests.read_wheel_variant(wheel)?
         {
-            let unavailable = match variant {
-                Ok(variant) => {
-                    let supported = supported_variant_properties(&variant, tags.python_platform());
-                    // TODO(konsti): Include the unsupported properties in the resolver error.
-                    variant
-                        .unsupported_variant_properties(&label, &supported)
-                        .map(|_| {
-                            UnavailableVersion::IncompatibleDist(IncompatibleDist::Wheel(
-                                IncompatibleWheel::Tag(IncompatibleTag::Variant),
-                            ))
-                        })
+            let variant = match variant {
+                Ok(variant) => variant,
+                Err(reason) => {
+                    let unavailable = self.record_unavailable_metadata(name, version, &reason);
+                    return Ok(Some(ResolverVersion::Unavailable(
+                        version.clone(),
+                        unavailable,
+                    )));
                 }
-                Err(reason) => Some(self.record_unavailable_metadata(name, version, &reason)),
             };
-            if let Some(reason) = unavailable {
-                return Ok(Some(ResolverVersion::Unavailable(version.clone(), reason)));
+            let supported = supported_variant_properties(&variant, tags.python_platform());
+            if variant
+                .unsupported_variant_properties(&label, &supported)
+                .is_some()
+            {
+                // TODO(konsti): Include the unsupported properties in the resolver error.
+                return Ok(Some(ResolverVersion::Unavailable(
+                    version.clone(),
+                    UnavailableVersion::IncompatibleDist(IncompatibleDist::Wheel(
+                        IncompatibleWheel::Tag(IncompatibleTag::Variant),
+                    )),
+                )));
             }
-        }
+            Some(variant.marker_environment(&label, &supported))
+        } else {
+            None
+        };
 
-        pins.insert_url(name, version, registered);
+        pins.insert_url(name, version, registered, variant_markers);
         Ok(Some(ResolverVersion::Unforked(version.clone())))
     }
 
@@ -1559,7 +1571,15 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             candidate.choice_kind(),
             filename,
         );
-        self.visit_candidate(&candidate, dist, package, name, pins, requests)?;
+        self.visit_candidate(
+            &candidate,
+            dist,
+            package,
+            name,
+            pins,
+            variant.markers,
+            requests,
+        )?;
 
         let version = candidate.version().clone();
         Ok(Some(ResolverVersion::Unforked(version)))
@@ -1618,9 +1638,15 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             // Try this index's variants, then its ordinary wheel or sdist, before moving on
             // to the next index.
             if !metadata.is_empty()
-                && let Some((_, index)) = dist.scored_variants(&metadata).max()
+                && let Some((_, index, metadata_index)) = dist.scored_variants(&metadata).max()
                 && let Some(selected) = dist.select_variant(index)
             {
+                if let Some(CompatibleDist::CompatibleWheel { wheel, .. }) = selected.get()
+                    && let Some(label) = wheel.filename.variant()
+                {
+                    let (_, content, supported) = &metadata[metadata_index];
+                    selection.markers = Some(content.marker_environment(label, supported));
+                }
                 selection.distribution = Some(Cow::Owned(selected));
                 break;
             }
@@ -1792,7 +1818,15 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 base_candidate.choice_kind(),
                 filename,
             );
-            self.visit_candidate(&base_candidate, base_dist, package, name, pins, requests)?;
+            self.visit_candidate(
+                &base_candidate,
+                base_dist,
+                package,
+                name,
+                pins,
+                None,
+                requests,
+            )?;
 
             return Ok(Some(ResolverVersion::Unforked(
                 base_candidate.version().clone(),
@@ -1837,8 +1871,16 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 .collect::<Vec<_>>()
                 .join(", ")
         );
-        self.visit_candidate(candidate, dist, package, name, pins, requests)?;
-        self.visit_candidate(&base_candidate, base_dist, package, name, pins, requests)?;
+        self.visit_candidate(candidate, dist, package, name, pins, None, requests)?;
+        self.visit_candidate(
+            &base_candidate,
+            base_dist,
+            package,
+            name,
+            pins,
+            None,
+            requests,
+        )?;
 
         let forks = vec![
             VersionFork {
@@ -1863,6 +1905,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         package: &PubGrubPackage,
         name: &PackageName,
         pins: &mut FilePins<'index>,
+        variant: Option<VariantMarkerEnvironment>,
         requests: &'index MetadataRequests,
     ) -> Result<(), ResolveError> {
         let index = match dist {
@@ -1912,7 +1955,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         } else {
             None
         };
-        pins.insert(candidate, dist, variants_json, request)
+        pins.insert(candidate, dist, variants_json, variant, request)
     }
 
     /// Check if the distribution is incompatible with the Python requirement, and if so, return
@@ -1994,6 +2037,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     &self.modifiers,
                     env,
                     python_requirement,
+                    None,
                 );
                 let requirements = expander.expand(&self.requirements, RequirementContext::Root);
 
@@ -2024,7 +2068,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     return Ok(Dependencies::Unforkable(Vec::default()));
                 }
 
-                let (registered, index) = pins
+                let pin = pins
                     .metadata(name, version)
                     .ok_or_else(|| ResolveError::UnregisteredTask(format!("{name}=={version}")))?;
 
@@ -2041,7 +2085,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 }
 
                 // Wait for the metadata to be available.
-                let response = registered.wait();
+                let response = pin.metadata.wait();
 
                 let metadata = match &*response {
                     MetadataResponse::Found(archive) => &archive.metadata,
@@ -2062,13 +2106,29 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     }
                 };
 
+                let installed_variant = if let Some(tags) = &self.tags
+                    && let Some(ResolvedDist::Installed { dist }) = pin.dist
+                {
+                    installed_variant_markers(
+                        dist,
+                        tags.python_platform(),
+                        metadata
+                            .requires_dist
+                            .iter()
+                            .chain(self.modifiers.scoped_overrides_for(name, version))
+                            .map(|requirement| requirement.marker),
+                    )?
+                } else {
+                    None
+                };
                 return Ok(self.dependencies_from_metadata(
                     package,
                     name,
                     version,
                     kind,
                     metadata,
-                    index,
+                    installed_variant.as_ref().or(pin.variant),
+                    pin.dist.and_then(ResolvedDist::index),
                     env,
                     python_requirement,
                 ));
@@ -2162,6 +2222,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         version: &Version,
         kind: &PackageNodeKind,
         metadata: &Metadata,
+        variant: Option<&VariantMarkerEnvironment>,
         index: Option<&IndexUrl>,
         env: &ResolverEnvironment,
         python_requirement: &PythonRequirement,
@@ -2214,8 +2275,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 RequirementContext::Package { name, version },
             ),
         };
-        let expander =
-            RequirementExpander::new(&self.constraints, &self.modifiers, env, python_requirement);
+        let expander = RequirementExpander::new(
+            &self.constraints,
+            &self.modifiers,
+            env,
+            python_requirement,
+            variant,
+        );
         let requirements = expander.expand(requirements, context);
 
         let dependencies = PubGrubDependency::from_requirements(

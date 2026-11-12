@@ -258,7 +258,11 @@ pub struct PylockToml {
     #[serde(deserialize_with = "deserialize_lock_version")]
     lock_version: Version,
     created_by: String,
-    #[serde(skip_serializing)]
+    #[serde(
+        skip_serializing,
+        default,
+        deserialize_with = "deserialize_environments"
+    )]
     environments: Option<Vec<MarkerTree>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub requires_python: Option<RequiresPython>,
@@ -285,6 +289,17 @@ where
     }
 
     Ok(version)
+}
+
+fn deserialize_environments<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<Vec<MarkerTree>>, D::Error> {
+    Vec::<String>::deserialize(deserializer)?
+        .iter()
+        .map(|marker| MarkerTree::parse_environment(marker))
+        .collect::<Result<Vec<_>, _>>()
+        .map(Some)
+        .map_err(serde::de::Error::custom)
 }
 
 /// Deserialize artifact [`Hashes`], warning about invalid empty tables.
@@ -331,7 +346,8 @@ pub struct PylockTomlPackage {
     #[serde(
         skip_serializing_if = "uv_pep508::marker::ser::is_empty",
         serialize_with = "uv_pep508::marker::ser::serialize",
-        default
+        default,
+        deserialize_with = "MarkerTree::deserialize_environment"
     )]
     marker: MarkerTree,
     #[serde(skip_serializing_if = "Option::is_none")]

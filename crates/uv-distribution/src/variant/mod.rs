@@ -5,12 +5,12 @@ mod x86_64;
 
 use tracing::debug;
 use uv_distribution_types::{
-    SupportedVariantFeature, SupportedVariantProperties, VariantNamespace, VariantProviderRequest,
-    VariantsJsonContent,
+    InstalledDist, InstalledDistError, SupportedVariantFeature, SupportedVariantProperties,
+    VariantNamespace, VariantProviderRequest, VariantsJsonContent,
 };
 use uv_normalize::PackageName;
 use uv_pep440::Version;
-use uv_pep508::{Requirement, VersionOrUrl};
+use uv_pep508::{MarkerTree, Requirement, VariantMarkerEnvironment, VersionOrUrl};
 use uv_platform_tags::Platform;
 use uv_pypi_types::{Identifier, ModuleName};
 
@@ -61,6 +61,27 @@ trait VendoredVariantProvider: Sync {
     fn namespace(&self) -> &VariantNamespace;
     /// Return compatible properties in preference order.
     fn properties(&self, target: &Platform) -> Option<&[SupportedVariantFeature]>;
+}
+
+/// Read an installed wheel's marker values when a dependency refers to its variant.
+pub fn installed_variant_markers(
+    dist: &InstalledDist,
+    target: &Platform,
+    mut markers: impl Iterator<Item = MarkerTree>,
+) -> Result<Option<VariantMarkerEnvironment>, crate::Error> {
+    if !markers.any(MarkerTree::contains_variant) {
+        return Ok(None);
+    }
+    let read_error =
+        |err: InstalledDistError| crate::Error::ReadInstalled(Box::new(dist.clone()), err);
+    let Some(metadata) = dist.read_variant().map_err(read_error)? else {
+        return Ok(None);
+    };
+    let label = metadata
+        .installed_label()
+        .map_err(|err| read_error(err.into()))?;
+    let supported = supported_variant_properties(&metadata, target);
+    Ok(Some(metadata.marker_environment(label, &supported)))
 }
 
 /// Collect the variant properties supported by enabled static and vendored providers.

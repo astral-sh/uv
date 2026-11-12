@@ -8,11 +8,15 @@ use rustc_hash::FxHashMap;
 use tracing::debug;
 
 use uv_cache::Cache;
-use uv_distribution_types::{DependencyMetadata, Diagnostic, Name};
+use uv_distribution::installed_variant_markers;
+use uv_distribution_types::{DependencyMetadata, Diagnostic, InstalledDist, Name};
 use uv_fs::Simplified;
 use uv_install_wheel::read_record;
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
+use uv_pep508::MarkerEnvironment;
+use uv_platform_tags::Platform;
+use uv_pypi_types::ResolutionMetadata;
 use uv_python_discovery::find_environment;
 use uv_python_types::{
     EnvironmentPreference, Prefix, PythonArchitecture, PythonPreference, PythonRequest, Target,
@@ -118,16 +122,13 @@ pub fn pip_show(
     // To prevent the need to parse metadata repeatedly when multiple packages need to be shown,
     // we parse the metadata once and collect the needed data beforehand.
     let mut requires_map = FxHashMap::default();
+    let target = environment.interpreter().platform();
     // For Requires field
     for dist in &distributions {
         if let Ok(metadata) = dist.read_metadata() {
             requires_map.insert(
                 dist.name(),
-                metadata
-                    .requires_dist
-                    .iter()
-                    .filter(|req| req.evaluate_markers(&markers, &[]))
-                    .map(|req| &req.name)
+                active_requirements(dist, metadata, target, &markers)?
                     .sorted_unstable()
                     .dedup()
                     .collect_vec(),
@@ -141,12 +142,8 @@ pub fn pip_show(
                 continue;
             }
             if let Ok(metadata) = installed.read_metadata() {
-                let requires = metadata
-                    .requires_dist
-                    .iter()
-                    .filter(|req| req.evaluate_markers(&markers, &[]))
-                    .map(|req| &req.name)
-                    .collect_vec();
+                let requires =
+                    active_requirements(installed, metadata, target, &markers)?.collect_vec();
                 if !requires.is_empty() {
                     requires_map.insert(installed.name(), requires);
                 }
@@ -240,4 +237,31 @@ pub fn pip_show(
     }
 
     Ok(ExitStatus::Success)
+}
+
+/// The dependencies displayed in the Requires and Required-by fields.
+fn active_requirements<'a>(
+    dist: &InstalledDist,
+    metadata: &'a ResolutionMetadata,
+    target: &Platform,
+    markers: &'a MarkerEnvironment,
+) -> Result<impl Iterator<Item = &'a PackageName> + use<'a>> {
+    let variant = installed_variant_markers(
+        dist,
+        target,
+        metadata
+            .requires_dist
+            .iter()
+            .map(|requirement| requirement.marker),
+    )?;
+    Ok(metadata
+        .requires_dist
+        .iter()
+        .filter(move |requirement| {
+            requirement
+                .marker
+                .resolve_variant(variant.as_ref())
+                .evaluate(markers, &[])
+        })
+        .map(|requirement| &requirement.name))
 }

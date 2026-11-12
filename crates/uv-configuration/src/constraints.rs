@@ -51,6 +51,8 @@ impl Constraints {
                 .entry(requirement.name.clone())
                 .or_default()
                 .push(Requirement {
+                    // Global constraints have no declaring wheel.
+                    marker: requirement.marker.resolve_variant(None),
                     // We add and apply constraints independent of their extras.
                     extras: Box::new([]),
                     ..requirement.clone()
