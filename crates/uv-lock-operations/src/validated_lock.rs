@@ -20,7 +20,7 @@ use uv_types::HashStrategy;
 use uv_warnings::warn_user;
 use uv_workspace::{Editability, WorkspaceMember};
 
-use crate::LockValidationError;
+use crate::{LockValidationError, LockVersionMismatch};
 
 /// Whether an existing lockfile can satisfy or guide a new resolution.
 #[derive(Debug)]
@@ -33,6 +33,8 @@ pub enum ValidatedLock {
     /// An existing lockfile was provided, and the locked versions and forks should be preferred if
     /// possible, even though the lockfile does not satisfy the workspace requirements.
     Preferable(Lock),
+    /// A locked version violates a specifier. The lock can still provide version and fork preferences.
+    VersionMismatch(Lock, LockVersionMismatch),
     /// An existing lockfile was provided, and it satisfies the workspace requirements.
     Satisfies(Lock),
 }
@@ -464,6 +466,15 @@ impl ValidatedLock {
                 }
                 Ok(Self::Preferable(lock))
             }
+            SatisfiesResult::MismatchedDependencyVersion(name, version, specifier) => {
+                debug!("Locked `{name}=={version}` does not satisfy `{specifier}`");
+                let mismatch = LockVersionMismatch {
+                    name: name.clone(),
+                    version: version.clone(),
+                    specifier,
+                };
+                Ok(Self::VersionMismatch(lock, mismatch))
+            }
             SatisfiesResult::MismatchedPackageDependencies(name, version, expected, actual) => {
                 if let Some(version) = version {
                     debug!(
@@ -532,6 +543,7 @@ impl ValidatedLock {
             Self::Unusable(lock) => lock,
             Self::Satisfies(lock) => lock,
             Self::Preferable(lock) => lock,
+            Self::VersionMismatch(lock, _) => lock,
             Self::Versions(lock) => lock,
         }
     }

@@ -19774,6 +19774,182 @@ fn check_outdated_lock() -> Result<()> {
     Ok(())
 }
 
+/// Check a locked version against a `!=` specifier even when the lockfile
+/// records matching requirement metadata.
+///
+/// Regression test for <https://github.com/astral-sh/uv/issues/12276>.
+#[cfg(feature = "test-universal")]
+#[test]
+fn check_locked_version_violates_not_equal_constraint() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    let pyproject = indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+    "#};
+    pyproject_toml.write_str(pyproject)?;
+
+    // Generate a valid lock file.
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    // Change the requirement in both files while leaving the locked version in place.
+    pyproject_toml.write_str(&pyproject.replace("iniconfig==2.0.0", "iniconfig!=2.0.0"))?;
+    let lock = context.read("uv.lock");
+    let old_requirement = r#"{ name = "iniconfig", specifier = "==2.0.0" }"#;
+    assert!(lock.contains(old_requirement));
+    let lock = lock.replacen(
+        old_requirement,
+        r#"{ name = "iniconfig", specifier = "!=2.0.0" }"#,
+        1,
+    );
+    context.temp_dir.child("uv.lock").write_str(&lock)?;
+
+    // `uv lock --check` detects that iniconfig 2.0.0 violates the `!=2.0.0` specifier.
+    uv_snapshot!(context.filters(), context.lock().arg("--check"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: The lockfile at `uv.lock` needs to be updated, but `--check` was provided.
+      cause: Locked `iniconfig==2.0.0` does not satisfy `!=2.0.0`.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    Ok(())
+}
+
+/// A merge can update the exact pin in both declarations while keeping the older
+/// package and its wheel in the lockfile.
+///
+/// Regression test for <https://github.com/astral-sh/uv/issues/23073>.
+#[cfg(feature = "test-universal")]
+#[test]
+fn check_locked_version_violates_exact_pin() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-01T00:00:00Z");
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "demo"
+        version = "0.0.1"
+        requires-python = ">=3.12"
+        dependencies = ["six==1.17.0"]
+
+        [tool.uv]
+        package = false
+        "#,
+    )?;
+    context.temp_dir.child("uv.lock").write_str(indoc! {r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2025-01-01T00:00:00Z"
+
+        [[package]]
+        name = "demo"
+        version = "0.0.1"
+        source = { virtual = "." }
+        dependencies = [{ name = "six" }]
+
+        [package.metadata]
+        requires-dist = [{ name = "six", specifier = "==1.17.0" }]
+
+        [[package]]
+        name = "six"
+        version = "1.16.0"
+        source = { registry = "https://pypi.org/simple" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/d9/5a/e7c31adbe875f2abbb91bd84cf2dc52d792b5a01506781dbcf25c91daf11/six-1.16.0-py2.py3-none-any.whl", hash = "sha256:8abb2f1d86890a2dfb989f9a77cfcfd3e47c2a354b01111771326f8aa26e0254" },
+        ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().args(["--check", "--offline"]), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: The lockfile at `uv.lock` needs to be updated, but `--check` was provided.
+      cause: Locked `six==1.16.0` does not satisfy `==1.17.0`.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    uv_snapshot!(context.filters(), context.sync().args(["--locked", "--offline"]), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Locked `six==1.16.0` does not satisfy `==1.17.0`.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    Ok(())
+}
+
+/// Regression test for <https://github.com/astral-sh/uv/issues/12276>
+///
+/// When a `uv.lock` file contains a locked version that violates a `<` upper
+/// bound specifier in `pyproject.toml`, `uv lock --check` should detect the
+/// violation.
+#[cfg(feature = "test-universal")]
+#[test]
+fn check_locked_version_violates_upper_bound_constraint() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    let pyproject = indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+    "#};
+    pyproject_toml.write_str(pyproject)?;
+
+    // Generate a valid lock file.
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    // Change the requirement in both files while leaving the locked version in place.
+    pyproject_toml.write_str(&pyproject.replace("iniconfig==2.0.0", "iniconfig<2"))?;
+    let lock = context.read("uv.lock");
+    let old_requirement = r#"{ name = "iniconfig", specifier = "==2.0.0" }"#;
+    assert!(lock.contains(old_requirement));
+    let lock = lock.replacen(
+        old_requirement,
+        r#"{ name = "iniconfig", specifier = "<2" }"#,
+        1,
+    );
+    context.temp_dir.child("uv.lock").write_str(&lock)?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--check"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: The lockfile at `uv.lock` needs to be updated, but `--check` was provided.
+      cause: Locked `iniconfig==2.0.0` does not satisfy `<2`.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Updated iniconfig v2.0.0 -> v1.1.1
+    ");
+
+    Ok(())
+}
+
 /// Checks that formatting-only changes are rejected when lockfile-format-check preview is enabled.
 #[cfg(feature = "test-universal")]
 #[test]

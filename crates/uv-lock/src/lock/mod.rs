@@ -91,6 +91,7 @@ mod map;
 mod requirements;
 mod serialize;
 mod tree;
+mod versions;
 #[cfg(test)]
 mod windows_emulation_tests;
 
@@ -4496,6 +4497,10 @@ impl Lock {
             }
         }
 
+        if let Some(mismatch) = self.check_locked_versions() {
+            return Ok(mismatch);
+        }
+
         let dependency_modifiers = if allow_missing_package_metadata {
             DependencyModifiers::new(
                 Overrides::from_entries(normalized_overrides)
@@ -6169,6 +6174,8 @@ pub enum SatisfiesResult<'lock> {
         BTreeSet<Requirement>,
         BTreeSet<Requirement>,
     ),
+    /// A locked dependency version violates a declared specifier.
+    MismatchedDependencyVersion(&'lock PackageName, &'lock Version, VersionSpecifiers),
     /// Refreshed declarations regenerate different resolved dependency edges.
     MismatchedPackageDependencies(
         &'lock PackageName,
