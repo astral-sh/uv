@@ -135,8 +135,7 @@ fn run_with_python_version() -> Result<()> {
     uv_snapshot!(context.filters(), command_with_args, @"
     exit_code: 2 (failure)
     ----- stderr -----
-    Using CPython 3.9.[X] interpreter at: [PYTHON-3.9]
-    error: The requested interpreter resolved to Python 3.9.[X], which is incompatible with the project's Python requirement: `>=3.11, <4` (from `project.requires-python`)
+    error: The requested Python version `3.9` is incompatible with the project's Python requirement: `>=3.11, <4` (from `project.requires-python`)
     ");
 
     Ok(())
@@ -3792,8 +3791,7 @@ fn run_isolated_incompatible_python() -> Result<()> {
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    Using CPython 3.9.[X] interpreter at: [PYTHON-3.9]
-    error: The Python request from `.python-version` resolved to Python 3.9.[X], which is incompatible with the project's Python requirement: `>=3.12` (from `project.requires-python`)
+    error: The Python request from `.python-version` (`3.9`) is incompatible with the project's Python requirement: `>=3.12` (from `project.requires-python`)
     Use `uv python pin` to update the `.python-version` file to a compatible version
     ");
 
@@ -3801,9 +3799,50 @@ fn run_isolated_incompatible_python() -> Result<()> {
     uv_snapshot!(context.filters(), context.run().arg("--isolated").arg("main.py"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: The Python request from `.python-version` resolved to Python 3.9.[X], which is incompatible with the project's Python requirement: `>=3.12` (from `project.requires-python`)
+    error: The Python request from `.python-version` (`3.9`) is incompatible with the project's Python requirement: `>=3.12` (from `project.requires-python`)
     Use `uv python pin` to update the `.python-version` file to a compatible version
     ");
+
+    Ok(())
+}
+
+/// An incompatible `.python-version` is rejected before downloading a Python in isolated mode.
+#[test]
+fn run_isolated_incompatible_python_not_downloaded() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]).with_managed_python_dirs();
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = []
+        "#
+        })?;
+
+    context
+        .temp_dir
+        .child(PYTHON_VERSION_FILENAME)
+        .write_str("3.9")?;
+    context
+        .temp_dir
+        .child("main.py")
+        .write_str("print('hello')\n")?;
+
+    uv_snapshot!(context.filters(), context.run().args(["--isolated", "--offline", "--python-preference", "only-managed"]).arg("main.py"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: The Python request from `.python-version` (`3.9`) is incompatible with the project's Python requirement: `>=3.12` (from `project.requires-python`)
+    Use `uv python pin` to update the `.python-version` file to a compatible version
+    ");
+
+    context
+        .temp_dir
+        .child("managed")
+        .assert(predicate::path::missing());
 
     Ok(())
 }
@@ -5690,8 +5729,7 @@ fn run_groups_requires_python_errors() -> Result<()> {
         .arg("python").arg("--version"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    error: The requested interpreter resolved to Python 3.12.[X], which is incompatible with the project's Python requirement: `>=3.13` (from `tool.uv.dependency-groups.dev.requires-python`).
+    error: The requested Python version `3.12` is incompatible with the project's Python requirement: `>=3.13` (from `tool.uv.dependency-groups.dev.requires-python`).
     ");
 
     // An isolated environment must satisfy the selected groups too.
@@ -5701,7 +5739,7 @@ fn run_groups_requires_python_errors() -> Result<()> {
         .arg("python").arg("--version"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: The requested interpreter resolved to Python 3.12.[X], which is incompatible with the project's Python requirement: `>=3.13` (from `tool.uv.dependency-groups.dev.requires-python`).
+    error: The requested Python version `3.12` is incompatible with the project's Python requirement: `>=3.13` (from `tool.uv.dependency-groups.dev.requires-python`).
     ");
 
     // Enabling foo we can't find an interpreter
@@ -5796,8 +5834,7 @@ fn run_groups_include_requires_python() -> Result<()> {
         .arg("python").arg("-c").arg("import typing_extensions"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    Using CPython 3.13.[X] interpreter at: [PYTHON-3.13]
-    error: The requested interpreter resolved to Python 3.13.[X], which is incompatible with the project's Python requirement: `==3.12.*` (from `tool.uv.dependency-groups.dev.requires-python`).
+    error: The requested Python version `3.13` is incompatible with the project's Python requirement: `==3.12.*` (from `tool.uv.dependency-groups.dev.requires-python`).
     ");
     Ok(())
 }
@@ -6474,6 +6511,42 @@ fn run_no_sync_incompatible_python() -> Result<()> {
     ----- stderr -----
     warning: Using incompatible environment (`.venv`) due to `--no-sync` (The project environment's Python version does not satisfy the request: `Python 3.9`)
     ");
+
+    Ok(())
+}
+
+/// `--no-sync` still avoids downloading an incompatible Python when no environment exists.
+#[test]
+fn run_no_sync_incompatible_python_not_downloaded() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]).with_managed_python_dirs();
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = []
+        "#
+        })?;
+    context
+        .temp_dir
+        .child(PYTHON_VERSION_FILENAME)
+        .write_str("3.9")?;
+
+    uv_snapshot!(context.filters(), context.run().args(["--no-sync", "--offline", "--python-preference", "only-managed"]).arg("python").arg("--version"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: The Python request from `.python-version` (`3.9`) is incompatible with the project's Python requirement: `>=3.12` (from `project.requires-python`)
+    Use `uv python pin` to update the `.python-version` file to a compatible version
+    ");
+
+    context
+        .temp_dir
+        .child("managed")
+        .assert(predicate::path::missing());
 
     Ok(())
 }

@@ -25,6 +25,25 @@ pub enum PythonSelectionError {
     },
 
     #[error(
+        "The requested Python version `{request}` is incompatible with the project's Python requirement: `{requires_python}`{requires_python_sources}"
+    )]
+    RequestedPythonVersionProjectIncompatibility {
+        request: String,
+        requires_python: Box<RequiresPython>,
+        requires_python_sources: Box<PythonRequirementConflicts>,
+    },
+
+    #[error(
+        "The Python request from `{python_request}` (`{request}`) is incompatible with the project's Python requirement: `{requires_python}`{requires_python_sources}\nUse `uv python pin` to update the `.python-version` file to a compatible version"
+    )]
+    DotPythonVersionRequestProjectIncompatibility {
+        python_request: String,
+        request: String,
+        requires_python: Box<RequiresPython>,
+        requires_python_sources: Box<PythonRequirementConflicts>,
+    },
+
+    #[error(
         "The resolved Python interpreter (Python {_0}) is incompatible with the project's Python requirement: `{_1}`{_2}"
     )]
     RequiresPythonProjectIncompatibility(Version, RequiresPython, Box<PythonRequirementConflicts>),
@@ -66,6 +85,8 @@ impl uv_errors::Hinted for PythonSelectionError {
             Self::Python(error) => error.hints(),
             Self::RequestedPythonProjectIncompatibility(..)
             | Self::DotPythonVersionProjectIncompatibility { .. }
+            | Self::RequestedPythonVersionProjectIncompatibility { .. }
+            | Self::DotPythonVersionRequestProjectIncompatibility { .. }
             | Self::RequiresPythonProjectIncompatibility(..)
             | Self::RequestedPythonScriptIncompatibility(..)
             | Self::DotPythonVersionScriptIncompatibility(..)

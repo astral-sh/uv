@@ -688,6 +688,20 @@ impl ProjectInterpreter {
             }
         }
 
+        // Reject requests that cannot satisfy the project before discovery or download. `--no-sync`
+        // may reuse an existing environment, so let an installed interpreter reach discovery first.
+        match policy {
+            ProjectEnvironmentPolicy::Compatible | ProjectEnvironmentPolicy::Optional => {
+                project_python.check_request()?;
+            }
+            ProjectEnvironmentPolicy::Preserve => project_python.check_request_if_missing(
+                EnvironmentPreference::OnlySystem,
+                python_preference,
+                python_arch,
+                cache,
+            )?,
+        }
+
         let reporter = PythonDownloadReporter::single(printer);
 
         // Locate the Python interpreter to use in the environment.
