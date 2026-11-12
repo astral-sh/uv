@@ -4486,6 +4486,57 @@ fn lock_project_with_scoped_override_url() -> Result<()> {
     Ok(())
 }
 
+/// An unsupported scoped override in a matching manifest does not prevent checking a lockfile
+/// without regenerating its metadata.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_check_with_scoped_override_url() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    let pyproject = indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv]
+        override-dependencies = [
+            { package = { name = "anyio" }, dependencies = ["idna==3.2"] },
+        ]
+    "#};
+    pyproject_toml.write_str(pyproject)?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    // Record the same unsupported override in the project and lockfile.
+    pyproject_toml.write_str(&pyproject.replace(
+        "idna==3.2",
+        "idna @ https://example.com/idna-3.2-py3-none-any.whl",
+    ))?;
+    let lock = context.read("uv.lock");
+    let old_override = r#"{ name = "idna", specifier = "==3.2" }"#;
+    assert!(lock.contains(old_override));
+    let lock = lock.replacen(
+        old_override,
+        r#"{ name = "idna", url = "https://example.com/idna-3.2-py3-none-any.whl" }"#,
+        1,
+    );
+    context.temp_dir.child("uv.lock").write_str(&lock)?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--check"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Lock a project with a pre-release pin from a scoped override.
 #[cfg(feature = "test-universal")]
 #[test]
@@ -19945,6 +19996,315 @@ fn check_locked_version_violates_upper_bound_constraint() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Updated iniconfig v2.0.0 -> v1.1.1
+    ");
+
+    Ok(())
+}
+
+/// Regression test for <https://github.com/astral-sh/uv/issues/12276>
+///
+/// When a `uv.lock` file contains a locked version that violates a constraint
+/// specified in `tool.uv.constraint-dependencies`, `uv lock --check` should
+/// detect the violation.
+#[cfg(feature = "test-universal")]
+#[test]
+fn check_locked_version_violates_constraint_dependencies() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    let pyproject = indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [tool.uv]
+        constraint-dependencies = ["idna==3.6"]
+    "#};
+    pyproject_toml.write_str(pyproject)?;
+
+    // Generate a valid lock file.
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    // Change the requirement in both files while leaving the locked version in place.
+    pyproject_toml.write_str(&pyproject.replace("idna==3.6", "idna<3.4"))?;
+    let lock = context.read("uv.lock");
+    let old_requirement = r#"{ name = "idna", specifier = "==3.6" }"#;
+    assert!(lock.contains(old_requirement));
+    let lock = lock.replacen(
+        old_requirement,
+        r#"{ name = "idna", specifier = "<3.4" }"#,
+        1,
+    );
+    context.temp_dir.child("uv.lock").write_str(&lock)?;
+
+    // `uv lock --check` detects that idna 3.6 violates the `<3.4` constraint dependency.
+    uv_snapshot!(context.filters(), context.lock().arg("--check"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: The lockfile at `uv.lock` needs to be updated, but `--check` was provided.
+      cause: Locked `idna==3.6` does not satisfy `<3.4`.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    Ok(())
+}
+
+/// A Git dependency can get its requirements from configured metadata even though its
+/// resolved package entry omits those declarations.
+#[cfg(all(feature = "test-universal", feature = "test-git"))]
+#[test]
+fn check_locked_version_violates_git_dependency_metadata() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    let pyproject = indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio"]
+
+        [tool.uv.sources]
+        anyio = { git = "https://github.com/agronholm/anyio", rev = "c4844254e6db0cb804c240ba07405db73d810e0b" }
+
+        [[tool.uv.dependency-metadata]]
+        name = "anyio"
+        version = "4.6.2"
+        requires-dist = ["iniconfig==2.0.0"]
+    "#};
+    pyproject_toml.write_str(pyproject)?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    // Tighten the Git package's requirement in both manifests, keeping the locked version.
+    let old_requirement = r#"requires-dist = ["iniconfig==2.0.0"]"#;
+    let new_requirement = r#"requires-dist = ["iniconfig<2"]"#;
+    pyproject_toml.write_str(&pyproject.replace(old_requirement, new_requirement))?;
+    let lock = context.read("uv.lock");
+    assert!(lock.contains(old_requirement));
+    let lock = lock.replacen(old_requirement, new_requirement, 1);
+    context.temp_dir.child("uv.lock").write_str(&lock)?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--check"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: The lockfile at `uv.lock` needs to be updated, but `--check` was provided.
+      cause: Locked `iniconfig==2.0.0` does not satisfy `<2`.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    Ok(())
+}
+
+/// A registry package's declared requirements can come from the lock manifest's
+/// `dependency-metadata` even when the package has no metadata of its own in the lock.
+#[cfg(feature = "test-universal")]
+#[test]
+fn check_locked_version_violates_static_dependency_metadata() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    let pyproject = indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [[tool.uv.dependency-metadata]]
+        name = "anyio"
+        version = "3.7.0"
+        requires-dist = ["iniconfig==2.0.0"]
+    "#};
+    pyproject_toml.write_str(pyproject)?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    // Change anyio's requirement in both manifests while leaving iniconfig locked at 2.0.0.
+    let old_requirement = r#"requires-dist = ["iniconfig==2.0.0"]"#;
+    let new_requirement = r#"requires-dist = ["iniconfig<2"]"#;
+    pyproject_toml.write_str(&pyproject.replace(old_requirement, new_requirement))?;
+    let lock = context.read("uv.lock");
+    assert!(lock.contains(old_requirement));
+    let lock = lock.replacen(old_requirement, new_requirement, 1);
+    context.temp_dir.child("uv.lock").write_str(&lock)?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--check"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: The lockfile at `uv.lock` needs to be updated, but `--check` was provided.
+      cause: Locked `iniconfig==2.0.0` does not satisfy `<2`.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    Ok(())
+}
+
+/// Test that `uv lock --check` accepts a valid lockfile when an override replaces a
+/// dependency specifier.
+#[cfg(feature = "test-universal")]
+#[test]
+fn check_locked_version_valid_override() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig<2"]
+
+        [tool.uv]
+        override-dependencies = ["iniconfig==2.0.0"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock().arg("--check"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// A version-scoped override can select `iniconfig==2.0.0` for a project that declares `iniconfig<2`.
+/// The build backend supplies the matching project version, which the lockfile omits.
+#[cfg(feature = "test-universal")]
+#[test]
+fn check_locked_version_valid_dynamic_scoped_override() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        dynamic = ["version"]
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig<2"]
+
+        [tool.uv]
+        override-dependencies = [
+            { package = { name = "project", version = "1.0.0" }, dependencies = ["iniconfig==2.0.0"] },
+        ]
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "backend"
+        "#})?;
+    context.temp_dir.child("backend.py").write_str(indoc! {r#"
+        from pathlib import Path
+
+        def prepare_metadata_for_build_editable(metadata_directory, config_settings=None):
+            dist_info = Path(metadata_directory, "project-1.0.0.dist-info")
+            dist_info.mkdir()
+            dist_info.joinpath("METADATA").write_text(
+                "Metadata-Version: 2.1\n"
+                "Name: project\n"
+                "Version: 1.0.0\n"
+                "Requires-Python: >=3.12\n"
+                "Requires-Dist: iniconfig<2\n"
+            )
+            return dist_info.name
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock().arg("--check"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Test that `uv lock --check` detects when a transitive locked version violates an override.
+#[cfg(feature = "test-universal")]
+#[test]
+fn check_locked_version_violates_transitive_override_specifier() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [tool.uv]
+        override-dependencies = ["idna==3.3"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    // Change both the project override and the lock manifest while leaving the transitive idna
+    // package at the now-forbidden version.
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [tool.uv]
+        override-dependencies = ["idna==3.2"]
+        "#,
+    )?;
+    let lock = context.read("uv.lock");
+    let old_override = r#"overrides = [{ name = "idna", specifier = "==3.3" }]"#;
+    assert!(lock.contains(old_override));
+    let lock = lock.replace(
+        old_override,
+        r#"overrides = [{ name = "idna", specifier = "==3.2" }]"#,
+    );
+    context.temp_dir.child("uv.lock").write_str(&lock)?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--check"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: The lockfile at `uv.lock` needs to be updated, but `--check` was provided.
+      cause: Locked `idna==3.3` does not satisfy `==3.2`.
+
+    hint: To update the lockfile, run `uv lock`.
     ");
 
     Ok(())
