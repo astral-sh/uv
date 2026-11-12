@@ -23,7 +23,7 @@ jobs:
   cargo-dev-generate-all:
     timeout-minutes: 10
     runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
-    name: "cargo dev generate-all"
+    name: "check generated files"
     env:
       RUSTC_BOOTSTRAP: "1"
       CARGO_UNSTABLE_CHECKSUM_FRESHNESS: "true"
@@ -40,8 +40,6 @@ jobs:
       - uses: astral-sh/github-actions/rust-workspace-cache@3c9fe5db47e144ea224b57565e3ab1ab769ef41d
         with:
           save-if: ${{ inputs.save-rust-cache == 'true' }}
-      - name: "Generate all"
-        run: cargo --locked dev generate-all --mode dry-run
       - name: "Check sysconfig mappings"
         run: cargo --locked dev generate-sysconfig-metadata --mode check
       - name: "Install Rustfmt"
@@ -49,7 +47,8 @@ jobs:
       - name: "Check Packse scenario tests"
         run: cargo --locked dev generate-scenario-tests --mode check
       - name: "Check JSON schema"
-        if: ${{ inputs.schema-changed == 'true' }}
-        run: cargo --locked dev generate-json-schema --mode check
+        env:
+          SCHEMA_MODE: ${{ inputs.schema-changed == 'true' && 'check' || 'dry-run' }}
+        run: cargo --locked dev generate-json-schema --mode "$SCHEMA_MODE" > /dev/null
       - name: "Check uv-extract dirhash test vectors"
         run: cargo --locked dev generate-dirhash-test-vectors --mode check
