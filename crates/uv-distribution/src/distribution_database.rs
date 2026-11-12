@@ -1475,7 +1475,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         let archive = pointer
             .filter(|pointer| pointer.is_up_to_date(modified))
             .map(PathArchivePointer::into_archive)
-            .filter(|archive| archive.has_digests(hashes));
+            .filter(|archive| archive.has_digests(hashes))
+            .filter(|archive| archive.exists(self.build_context.cache()));
 
         // Index hashes may replace `Generate`, but the caller still needs its SHA-256.
         let caller_hashes = hashes;
@@ -1913,6 +1914,11 @@ impl HttpArchivePointer {
         }
     }
 
+    /// Returns `true` if the archive referenced by the pointer exists in the cache.
+    pub fn exists(&self, cache: &Cache) -> bool {
+        self.archive.exists(cache)
+    }
+
     /// Return the [`Archive`] from the pointer.
     pub fn into_archive(self) -> Archive {
         self.archive
@@ -1958,6 +1964,11 @@ impl PathArchivePointer {
     /// Returns `true` if the archive is up-to-date with the given modified timestamp.
     pub fn is_up_to_date(&self, modified: Timestamp) -> bool {
         self.timestamp == modified
+    }
+
+    /// Returns `true` if the archive referenced by the pointer exists in the cache.
+    pub fn exists(&self, cache: &Cache) -> bool {
+        self.archive.exists(cache)
     }
 
     /// Return the [`Archive`] from the pointer.

@@ -480,37 +480,39 @@ impl<'a> Planner<'a> {
                     // Read the HTTP pointer.
                     match HttpArchivePointer::read_from(&cache_entry) {
                         Ok(Some(pointer)) => {
-                            let cache_info = pointer.to_cache_info();
-                            let build_info = pointer.to_build_info();
-                            let archive = pointer.into_archive();
-                            if archive.satisfies(hasher.archive_policy(dist.as_ref()))
-                                && wheel
-                                    .size
-                                    .is_none_or(|expected| archive.size == Some(expected))
-                            {
-                                let cached_dist = CachedDirectUrlDist {
-                                    filename: wheel.filename.clone(),
-                                    url: VerbatimParsedUrl {
-                                        parsed_url: wheel.to_parsed_url(),
-                                        verbatim: wheel.url.clone(),
-                                    },
-                                    hashes: archive.hashes,
-                                    cache_info,
-                                    build_info,
-                                    path: cache.archive(&archive.id).into_boxed_path(),
-                                };
-                                check_wheel_variant_compatibility(
-                                    &cached_dist.filename,
-                                    &cached_dist.path,
-                                    tags.python_platform(),
-                                )?;
-                                debug!("URL wheel requirement already cached: {cached_dist}");
-                                cached.push(CachedDist::Url(cached_dist));
-                                continue;
+                            if pointer.exists(cache) {
+                                let cache_info = pointer.to_cache_info();
+                                let build_info = pointer.to_build_info();
+                                let archive = pointer.into_archive();
+                                if archive.satisfies(hasher.archive_policy(dist.as_ref()))
+                                    && wheel
+                                        .size
+                                        .is_none_or(|expected| archive.size == Some(expected))
+                                {
+                                    let cached_dist = CachedDirectUrlDist {
+                                        filename: wheel.filename.clone(),
+                                        url: VerbatimParsedUrl {
+                                            parsed_url: wheel.to_parsed_url(),
+                                            verbatim: wheel.url.clone(),
+                                        },
+                                        hashes: archive.hashes,
+                                        cache_info,
+                                        build_info,
+                                        path: cache.archive(&archive.id).into_boxed_path(),
+                                    };
+                                    check_wheel_variant_compatibility(
+                                        &cached_dist.filename,
+                                        &cached_dist.path,
+                                        tags.python_platform(),
+                                    )?;
+                                    debug!("URL wheel requirement already cached: {cached_dist}");
+                                    cached.push(CachedDist::Url(cached_dist));
+                                    continue;
+                                }
+                                debug!(
+                                    "Cached URL wheel requirement does not match expected hashes or size for: {wheel}"
+                                );
                             }
-                            debug!(
-                                "Cached URL wheel requirement does not match expected hashes or size for: {wheel}"
-                            );
                         }
                         Ok(None) => {}
                         Err(err) => {
@@ -554,7 +556,7 @@ impl<'a> Planner<'a> {
                     match PathArchivePointer::read_from(&cache_entry) {
                         Ok(Some(pointer)) => match Timestamp::from_path(&wheel.install_path) {
                             Ok(timestamp) => {
-                                if pointer.is_up_to_date(timestamp) {
+                                if pointer.exists(cache) && pointer.is_up_to_date(timestamp) {
                                     let cache_info = pointer.to_cache_info();
                                     let build_info = pointer.to_build_info();
                                     let archive = pointer.into_archive();
