@@ -18,11 +18,15 @@ use uv_pypi_types::{DirectUrl, DirectUrlError, MetadataError, read_direct_url_js
 use uv_redacted::SafeUrl;
 
 use crate::{
-    BuildInfo, DistributionMetadata, InstalledMetadata, InstalledVersion, Name, VersionOrUrlRef,
+    BuildInfo, DistributionMetadata, InstalledMetadata, InstalledVersion, Name,
+    VariantsJsonContent, VariantsJsonParseError, VersionOrUrlRef,
 };
 
 #[derive(Error, Debug)]
 pub enum InstalledDistError {
+    #[error(transparent)]
+    VariantMetadata(#[from] VariantsJsonParseError),
+
     #[error(transparent)]
     Io(#[from] std::io::Error),
 
@@ -406,6 +410,18 @@ impl InstalledDist {
         let build_info =
             serde_json::from_reader::<BufReader<fs_err::File>, BuildInfo>(BufReader::new(file))?;
         Ok(Some(build_info))
+    }
+
+    /// Read the installed wheel's variant metadata, if present.
+    pub fn read_variant(&self) -> Result<Option<VariantsJsonContent>, InstalledDistError> {
+        let Some(path) = self.dist_info_path() else {
+            return Ok(None);
+        };
+        match fs::read(path.join("variant.json")) {
+            Ok(contents) => Ok(Some(VariantsJsonContent::from_slice(&contents)?)),
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(err) => Err(err.into()),
+        }
     }
 
     /// Read the `METADATA` file from a `.dist-info` directory.

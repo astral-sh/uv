@@ -142,7 +142,7 @@ impl Manifest {
     ///
     /// Scoped overrides are included even when their scope is not selected. Whether a scoped
     /// override applies is only known during resolution, after yanked-version policy has already
-    /// been initialized.
+    /// been initialized. At this point any variant of the declaring wheel may be selected.
     pub(crate) fn candidate_selection_requirements<'a>(
         &'a self,
         env: &'a ResolverEnvironment,
@@ -151,7 +151,14 @@ impl Manifest {
         self.requirements(env, mode).chain(
             self.modifiers
                 .scoped_overrides()
-                .map(Cow::Borrowed)
+                .map(|requirement| {
+                    let mut requirement = Cow::Borrowed(requirement);
+                    let marker = requirement.marker.without_variant();
+                    if marker != requirement.marker {
+                        requirement.to_mut().marker = marker;
+                    }
+                    requirement
+                })
                 .filter(move |requirement| {
                     requirement.evaluate_markers(env.marker_environment(), &[])
                 }),

@@ -11,7 +11,7 @@ pub use metadata::{
 };
 pub use reporter::Reporter;
 pub use source::{StaticMetadataDatabase, prune};
-pub use variant::supported_variant_properties;
+pub use variant::{installed_variant_markers, supported_variant_properties};
 
 mod archive;
 mod diagnostics;

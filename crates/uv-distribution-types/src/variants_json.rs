@@ -11,6 +11,7 @@ use tracing::debug;
 use uv_distribution_filename::VariantLabel;
 use uv_normalize::{InvalidNameError, PackageName};
 use uv_pep440::{Version, VersionParseError, VersionSpecifier};
+use uv_pep508::VariantMarkerEnvironment;
 use version_ranges::Ranges;
 
 // TODO(konsti): Standardize on a single schema URL once the variant metadata format is finalized.
@@ -24,6 +25,9 @@ const NULL_VARIANT_LABEL: VariantLabel = VariantLabel::from_static("null");
 /// An error parsing a variant metadata file.
 #[derive(Debug, thiserror::Error)]
 pub enum VariantsJsonParseError {
+    /// Installed variant metadata must describe exactly one wheel.
+    #[error("Expected installed `variant.json` to describe exactly one variant, found {0}")]
+    InstalledLabels(usize),
     /// The metadata could not be parsed and uses an unknown schema.
     #[error("Unknown variant metadata schema:\n  `{schema}`:\n    {source}")]
     UnknownSchema {
@@ -152,6 +156,14 @@ impl VariantsJsonContent {
         }
     }
 
+    /// Get the sole variant label from an installed wheel's metadata.
+    pub fn installed_label(&self) -> Result<&VariantLabel, VariantsJsonParseError> {
+        self.variants
+            .keys()
+            .exactly_one()
+            .map_err(|_| VariantsJsonParseError::InstalledLabels(self.variants.len()))
+    }
+
     fn is_abi_dependency(&self, namespace: &VariantNamespace) -> bool {
         let Some(VariantProvider {
             kind: ProviderKind::Builtin { builtin },
@@ -186,6 +198,33 @@ impl VariantsJsonContent {
             }
         }
         Ok(dependencies)
+    }
+
+    /// Build the dependency marker values from the selected wheel and the target's properties.
+    pub fn marker_environment(
+        &self,
+        label: &VariantLabel,
+        supported: &SupportedVariantProperties,
+    ) -> VariantMarkerEnvironment {
+        let mut markers = VariantMarkerEnvironment::new(label.to_string());
+        for (namespace, features) in self.variants.get(label).into_iter().flatten() {
+            let Some(supported_features) = supported.properties.get(namespace) else {
+                continue;
+            };
+            for (feature, values) in features {
+                if let Some((_, supported_values)) =
+                    supported_features.iter().find(|(name, _)| name == feature)
+                {
+                    for value in values
+                        .iter()
+                        .filter(|value| supported_values.contains(value))
+                    {
+                        markers.insert(&namespace.0, &feature.0, &value.0);
+                    }
+                }
+            }
+        }
+        markers
     }
 
     /// Score a variant using the target's ordered compatible features and values.

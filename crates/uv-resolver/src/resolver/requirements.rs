@@ -12,7 +12,7 @@ use uv_configuration::{Constraints, DependencyModifierScope, DependencyModifiers
 use uv_distribution_types::Requirement;
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::Version;
-use uv_pep508::MarkerTree;
+use uv_pep508::{MarkerTree, VariantMarkerEnvironment};
 use uv_pypi_types::ConflictItemRef;
 
 use crate::python_requirement::PythonRequirement;
@@ -66,6 +66,7 @@ pub(super) struct RequirementExpander<'a> {
     env: &'a ResolverEnvironment,
     python_requirement: &'a PythonRequirement,
     python_marker: MarkerTree,
+    variant: Option<&'a VariantMarkerEnvironment>,
 }
 
 impl<'a> RequirementExpander<'a> {
@@ -74,6 +75,7 @@ impl<'a> RequirementExpander<'a> {
         modifiers: &'a DependencyModifiers,
         env: &'a ResolverEnvironment,
         python_requirement: &'a PythonRequirement,
+        variant: Option<&'a VariantMarkerEnvironment>,
     ) -> Self {
         Self {
             constraints,
@@ -81,6 +83,7 @@ impl<'a> RequirementExpander<'a> {
             env,
             python_requirement,
             python_marker: python_requirement.to_marker_tree(),
+            variant,
         }
     }
 
@@ -226,18 +229,13 @@ impl<'a> RequirementExpander<'a> {
                 // The requirements are then separately tracked in production and optional
                 // dependencies respectively.
 
+                let marker = requirement.marker.resolve_variant(self.variant);
                 let marker = match extra {
-                    Some(extra) => requirement
-                        .marker
+                    Some(extra) => marker
                         .simplify_extras(slice::from_ref(extra))
                         .simplify_not_extras_with(|candidate| candidate != extra)
-                        .and(
-                            requirement
-                                .marker
-                                .simplify_not_extras_with(|_| true)
-                                .negate(),
-                        ),
-                    None => requirement.marker.simplify_not_extras_with(|_| true),
+                        .and(marker.simplify_not_extras_with(|_| true).negate()),
+                    None => marker.simplify_not_extras_with(|_| true),
                 };
 
                 if requirement.marker != marker {

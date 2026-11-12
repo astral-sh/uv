@@ -4,6 +4,7 @@ use uv_configuration::{DependencyModifierScope, DependencyModifiers};
 use uv_distribution_types::{Requirement, Resolution};
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::Version;
+use uv_pep508::VariantMarkerEnvironment;
 
 use crate::HashStrategy;
 
@@ -48,6 +49,8 @@ pub struct RequestedRequirements {
     extras: Box<[ExtraName]>,
     /// The set of requirements that were requested by the originating requirement.
     requirements: Box<[Requirement]>,
+    /// The variant of the direct wheel declaring these requirements.
+    variant: Option<VariantMarkerEnvironment>,
     /// Whether the dependencies were direct or transitive.
     direct: bool,
 }
@@ -60,12 +63,14 @@ impl RequestedRequirements {
         extras: Box<[ExtraName]>,
         requirements: Box<[Requirement]>,
         direct: bool,
+        variant: Option<VariantMarkerEnvironment>,
     ) -> Self {
         Self {
             package,
             version,
             extras,
             requirements,
+            variant,
             direct,
         }
     }
@@ -90,15 +95,23 @@ impl RequestedRequirements {
         &self.requirements
     }
 
-    /// Apply the dependency modifiers scoped to the package declaring these requirements.
+    /// Apply package overrides before evaluating the selected wheel's dependency markers.
     pub fn effective_requirements<'a>(
         &'a self,
         modifiers: &'a DependencyModifiers,
     ) -> impl Iterator<Item = Cow<'a, Requirement>> {
-        modifiers.apply(
-            DependencyModifierScope::Package(&self.package, &self.version),
-            &self.requirements,
-        )
+        modifiers
+            .apply(
+                DependencyModifierScope::Package(&self.package, &self.version),
+                &self.requirements,
+            )
+            .map(|mut requirement| {
+                let marker = requirement.marker.resolve_variant(self.variant.as_ref());
+                if marker != requirement.marker {
+                    requirement.to_mut().marker = marker;
+                }
+                requirement
+            })
     }
 
     /// Return the requirements as a mutable slice.
