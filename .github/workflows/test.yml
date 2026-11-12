@@ -81,7 +81,6 @@ jobs:
 
       - name: "Create btrfs filesystem"
         run: |
-          sudo apt install -y btrfs-progs
           truncate -s 1G /tmp/btrfs.img
           mkfs.btrfs /tmp/btrfs.img
           sudo mkdir /btrfs
