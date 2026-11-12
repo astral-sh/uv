@@ -21091,6 +21091,186 @@ fn check_locked_version_ignores_edge_outside_index_scope() -> Result<()> {
     Ok(())
 }
 
+/// An override for a different dependency leaves the extra's constraint on iniconfig in effect.
+#[cfg(feature = "test-universal")]
+#[test]
+fn check_locked_version_violates_constraint_for_active_extra() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    let pyproject = indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["idna"]
+
+        [project.optional-dependencies]
+        feature = ["iniconfig"]
+
+        [tool.uv]
+        override-dependencies = ["idna==3.6"]
+        constraint-dependencies = ["iniconfig==2.0.0; extra == 'feature'"]
+    "#};
+    pyproject_toml.write_str(pyproject)?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    // Change the constraint in both manifests while leaving iniconfig locked at 2.0.0.
+    pyproject_toml.write_str(&pyproject.replace("iniconfig==2.0.0", "iniconfig<2"))?;
+    let lock = context.read("uv.lock");
+    let old_constraint =
+        r#"{ name = "iniconfig", marker = "extra == 'feature'", specifier = "==2.0.0" }"#;
+    assert!(lock.contains(old_constraint));
+    let lock = lock.replace(
+        old_constraint,
+        r#"{ name = "iniconfig", marker = "extra == 'feature'", specifier = "<2" }"#,
+    );
+    context.temp_dir.child("uv.lock").write_str(&lock)?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--check"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: The lockfile at `uv.lock` needs to be updated, but `--check` was provided.
+      cause: Locked `iniconfig==2.0.0` does not satisfy `<2`.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    Ok(())
+}
+
+/// A recursive extra adds iniconfig, but the project still declares idna directly.
+/// Its production constraint applies to idna even with that extra included.
+#[cfg(feature = "test-universal")]
+#[test]
+fn check_locked_version_violates_direct_constraint_with_recursive_extra() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    let pyproject = indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["project[feature]", "idna"]
+
+        [project.optional-dependencies]
+        feature = ["iniconfig"]
+
+        [tool.uv]
+        constraint-dependencies = ["idna==3.6; extra != 'feature'"]
+    "#};
+    pyproject_toml.write_str(pyproject)?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    pyproject_toml.write_str(&pyproject.replace("idna==3.6", "idna<3"))?;
+    let lock = context.read("uv.lock");
+    let old_constraint = r#"{ name = "idna", marker = "extra != 'feature'", specifier = "==3.6" }"#;
+    assert!(lock.contains(old_constraint));
+    let lock = lock.replace(
+        old_constraint,
+        r#"{ name = "idna", marker = "extra != 'feature'", specifier = "<3" }"#,
+    );
+    context.temp_dir.child("uv.lock").write_str(&lock)?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--check"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: The lockfile at `uv.lock` needs to be updated, but `--check` was provided.
+      cause: Locked `idna==3.6` does not satisfy `<3`.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    Ok(())
+}
+
+/// Only Windows has a direct iniconfig dependency. Elsewhere the edge is inherited
+/// from the feature extra, so the non-Windows production constraint is inactive.
+#[cfg(feature = "test-universal")]
+#[test]
+fn check_locked_version_valid_recursive_extra_constraint() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["project[feature]", "iniconfig; sys_platform == 'win32'"]
+
+        [project.optional-dependencies]
+        feature = ["iniconfig"]
+
+        [tool.uv]
+        constraint-dependencies = ["iniconfig<2; extra != 'feature' and sys_platform != 'win32'"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock().arg("--check"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// The lockfile lists `b` under `a[all]` because `all` includes `a[extra-b]`.
+/// Only `extra-b` declares `b`, so its locked version of 1 satisfies the applicable override
+/// even though the override for `all` requires version 2.
+#[cfg(feature = "test-universal")]
+#[test]
+fn check_locked_version_valid_transitive_extra_override() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("extras/all-extras-required.toml");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a[all]"]
+
+        [tool.uv]
+        override-dependencies = [
+            "b==1; extra == 'extra-b'",
+            "b==2; extra == 'all'",
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock().arg("--check").arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Checks that formatting-only changes are rejected when lockfile-format-check preview is enabled.
 #[cfg(feature = "test-universal")]
 #[test]

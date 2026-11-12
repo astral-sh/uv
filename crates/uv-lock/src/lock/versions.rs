@@ -47,6 +47,25 @@ impl Lock {
 /// [`MarkerTree::FALSE`].
 type Reachability<'lock> = FxHashMap<(PackageIndex, DependencyContext<'lock>), MarkerTree>;
 
+/// Whether a dependency's location in `uv.lock` tells us which extra was active when the
+/// requirement was introduced. Each `[[package]]` entry lists its resolved dependencies in
+/// `dependencies`, by extra in `[package.optional-dependencies]`, or by group in
+/// `[package.dev-dependencies]`. Group dependencies always evaluate markers with no active extras.
+///
+/// For example, if `project` declares `project[feature]` as an ordinary dependency and `feature`
+/// requires `iniconfig`, uv can list `iniconfig` in `project`'s ordinary `dependencies`. Assuming no
+/// extra was active there would wrongly apply `iniconfig<2; extra != 'feature'` and reject
+/// a valid lock with `iniconfig==2.0.0`.
+#[derive(Clone, Copy, Debug)]
+enum ExtraProvenance {
+    /// An optional dependency list identifies the active extra. An ordinary or group list
+    /// indicates that no extra was active.
+    Known,
+    /// An ordinary or optional dependency list may include requirements inherited from an extra.
+    /// Enforce only marker conditions that hold for every choice of extras.
+    Unknown,
+}
+
 /// Detects version mismatches that can be established from the lockfile and validated resolution
 /// inputs. A mismatch requires an applicable registry specifier and a reachable locked selection.
 struct VersionChecker<'lock, 'settings> {
@@ -75,8 +94,8 @@ impl<'lock> VersionChecker<'lock, '_> {
                 .or_else(|| {
                     // No parent extra introduced this manifest root requirement, so its
                     // constraint markers are evaluated with a known empty set of extras.
-                    self.check_constraints(package, DependencyContext::Production, |constraint| {
-                        marker.and(constraint)
+                    self.check_constraints(package, |constraint| {
+                        marker.and(constraint.resolve_extras([]))
                     })
                 })
             {
@@ -90,11 +109,11 @@ impl<'lock> VersionChecker<'lock, '_> {
             for (name, &index) in &self.lock.workspace_members {
                 if self.workspace_members.contains_key(name)
                     && !self.modifiers.is_excluded(name)
-                    && let Some(mismatch) = self.check_constraints(
-                        self.lock.package(index),
-                        DependencyContext::Production,
-                        |constraint| self.workspace_member_marker(name).and(constraint),
-                    )
+                    && let Some(mismatch) =
+                        self.check_constraints(self.lock.package(index), |constraint| {
+                            self.workspace_member_marker(name)
+                                .and(constraint.resolve_extras([]))
+                        })
                 {
                     return Some(mismatch);
                 }
@@ -129,12 +148,13 @@ impl<'lock> VersionChecker<'lock, '_> {
                     .map(Requirement::from)
                     .collect::<Vec<_>>()
             });
-            let requires_dist = configured_requirements
-                .as_deref()
-                .unwrap_or(&package.metadata.requires_dist);
+            let requires_dist = configured_requirements.as_deref().or_else(|| {
+                (!package.metadata.requires_dist.is_empty())
+                    .then_some(package.metadata.requires_dist.as_ref())
+            });
             if !has_constraints
                 && !has_overrides
-                && requires_dist.is_empty()
+                && requires_dist.unwrap_or_default().is_empty()
                 && package.metadata.dependency_groups.is_empty()
             {
                 continue;
@@ -159,7 +179,9 @@ impl<'lock> VersionChecker<'lock, '_> {
                     continue;
                 }
                 let requirements: &[Requirement] = match context {
-                    DependencyContext::Production | DependencyContext::Extra(_) => requires_dist,
+                    DependencyContext::Production | DependencyContext::Extra(_) => {
+                        requires_dist.unwrap_or_default()
+                    }
                     DependencyContext::Group(group) => package
                         .metadata
                         .dependency_groups
@@ -176,11 +198,17 @@ impl<'lock> VersionChecker<'lock, '_> {
                 }
 
                 for dependency in dependencies {
-                    if let Some(mismatch) = self.check_constraints(
-                        self.lock.package(dependency.index),
-                        context,
-                        |constraint| self.edge_marker(index, context, dependency, constraint),
-                    ) {
+                    let target = self.lock.package(dependency.index);
+                    if let Some(mismatch) = self.check_constraints(target, |constraint| {
+                        let marker = self.constraint_marker(
+                            constraint,
+                            context,
+                            package,
+                            requires_dist,
+                            &target.id.name,
+                        );
+                        self.edge_marker(index, context, dependency, marker)
+                    }) {
                         return Some(mismatch);
                     }
                 }
@@ -249,7 +277,17 @@ impl<'lock> VersionChecker<'lock, '_> {
             {
                 let target = self.lock.package(dependency.index);
                 if let Some(mismatch) = self.check_requirement(target, &requirement, || {
-                    let marker = context.requirement_marker(requirement.marker);
+                    // If `pkg[all]` includes `pkg[docs]` and `docs` requires `sphinx`,
+                    // preprocessing the declarations carries the effective `sphinx` requirement
+                    // into `all`. We can then evaluate its marker for that section.
+                    // Inferring `sphinx` from the locked edge under `all` loses the link to
+                    // `docs`. Applying an override guarded by `extra == 'all'` could reject a
+                    // valid lock, so only enforce what holds regardless of the parent extra.
+                    let marker = if inferred {
+                        applicable_marker(requirement.marker, context, ExtraProvenance::Unknown)
+                    } else {
+                        context.requirement_marker(requirement.marker)
+                    };
                     self.edge_marker(index, context, dependency, marker)
                 }) {
                     return Some(mismatch);
@@ -262,17 +300,56 @@ impl<'lock> VersionChecker<'lock, '_> {
     fn check_constraints(
         &self,
         package: &'lock Package,
-        context: DependencyContext<'_>,
         marker: impl Fn(MarkerTree) -> MarkerTree,
     ) -> Option<SatisfiesResult<'lock>> {
         self.constraints
             .get(&package.id.name)?
             .iter()
             .find_map(|constraint| {
-                self.check_requirement(package, constraint, || {
-                    marker(context.requirement_marker(constraint.marker))
-                })
+                self.check_requirement(package, constraint, || marker(constraint.marker))
             })
+    }
+
+    /// Determine where this constraint applies to the dependency before flattening recursive extras.
+    fn constraint_marker(
+        &self,
+        constraint: MarkerTree,
+        context: DependencyContext<'_>,
+        parent: &Package,
+        requires_dist: Option<&[Requirement]>,
+        dependency: &PackageName,
+    ) -> MarkerTree {
+        let section_marker = applicable_marker(constraint, context, ExtraProvenance::Known);
+        let guaranteed = applicable_marker(constraint, context, ExtraProvenance::Unknown);
+        if section_marker == guaranteed {
+            return section_marker;
+        }
+        let Some(requires_dist) = requires_dist else {
+            return guaranteed;
+        };
+        let scope = match &parent.id.version {
+            Some(version) => DependencyModifierScope::Package(&parent.id.name, version),
+            None if self.modifiers.has_scoped_package(&parent.id.name) => return guaranteed,
+            None => DependencyModifierScope::Global,
+        };
+        let mut has_recursive_extra = false;
+        let mut direct_marker = MarkerTree::FALSE;
+        for requirement in self.modifiers.apply(scope, requires_dist) {
+            if requirement.name == parent.id.name && !requirement.extras.is_empty() {
+                has_recursive_extra = true;
+            }
+            if requirement.name == *dependency {
+                let marker = context.requirement_marker(requirement.marker);
+                direct_marker = direct_marker.or(with_source_conflict(marker, &requirement.source));
+            }
+        }
+        if has_recursive_extra {
+            // A recursive extra can add an edge to this section. A direct declaration still
+            // identifies the active extra wherever its own marker holds.
+            guaranteed.or(section_marker.and(direct_marker))
+        } else {
+            section_marker
+        }
     }
 
     /// Given a package in the lock file and its corresponding
@@ -290,12 +367,7 @@ impl<'lock> VersionChecker<'lock, '_> {
         let version = package.id.version.as_ref()?;
         // Only registry requirements carry a version specifier. Direct references select a URL,
         // Git source, or local path and are outside this check.
-        let RequirementSource::Registry {
-            specifier,
-            conflict,
-            ..
-        } = &requirement.source
-        else {
+        let RequirementSource::Registry { specifier, .. } = &requirement.source else {
             return None;
         };
         if specifier.contains(version) {
@@ -311,15 +383,7 @@ impl<'lock> VersionChecker<'lock, '_> {
         // return `None` for cases that are actually unreachable.
         // For example, when a marker has two different conflicts
         // activated.
-        if let Some(conflict) = conflict {
-            marker = marker.and(
-                UniversalMarker::new(
-                    MarkerTree::TRUE,
-                    ConflictMarker::from_conflict_item(conflict),
-                )
-                .combined(),
-            );
-        }
+        marker = with_source_conflict(marker, &requirement.source);
         if !self.lock.conflicts.is_empty() {
             let conflicts = ConflictMarker::from_relevant_conflicts(
                 &self.lock.conflicts,
@@ -505,5 +569,49 @@ impl<'lock> VersionChecker<'lock, '_> {
             }
         }
         reachable
+    }
+}
+
+/// Restrict an index-scoped declaration to the extra or group that activates its source.
+fn with_source_conflict(marker: MarkerTree, source: &RequirementSource) -> MarkerTree {
+    if let RequirementSource::Registry {
+        conflict: Some(conflict),
+        ..
+    } = source
+    {
+        marker.and(
+            UniversalMarker::new(
+                MarkerTree::TRUE,
+                ConflictMarker::from_conflict_item(conflict),
+            )
+            .combined(),
+        )
+    } else {
+        marker
+    }
+}
+
+/// Resolve the `extra` conditions in `marker` for a dependency stored in `context`.
+/// When `extra_provenance` is [`ExtraProvenance::Known`], an extra section activates its
+/// named extra and a production section activates none. With [`ExtraProvenance::Unknown`],
+/// keep only the environments where `marker` holds for every possible choice of extras.
+/// Dependency groups always evaluate `marker` with no active extras.
+fn applicable_marker(
+    marker: MarkerTree,
+    context: DependencyContext<'_>,
+    extra_provenance: ExtraProvenance,
+) -> MarkerTree {
+    match (context, extra_provenance) {
+        (DependencyContext::Extra(extra), ExtraProvenance::Known) => {
+            marker.resolve_extras([(extra.clone(), MarkerTree::TRUE)])
+        }
+        (DependencyContext::Group(_), _)
+        | (DependencyContext::Production, ExtraProvenance::Known) => marker.resolve_extras([]),
+        (DependencyContext::Production | DependencyContext::Extra(_), ExtraProvenance::Unknown) => {
+            // Keep the part of the marker that's guaranteed regardless of extras.
+            // Applying `without_extras()` to the negated marker finds environments where some
+            // choice of extras makes the original marker false. The final negation excludes them.
+            marker.negate().without_extras().negate()
+        }
     }
 }
