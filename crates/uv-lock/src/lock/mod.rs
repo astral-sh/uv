@@ -446,7 +446,7 @@ impl<'lock> DependencySelectionContext<'lock> {
 }
 
 /// The dependency section in which a locked edge is stored.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 enum DependencyContext<'a> {
     Production,
     Extra(&'a ExtraName),
@@ -4506,6 +4506,7 @@ impl Lock {
         // preview needs the overrides to check the resolved dependencies, so return the error below.
         if let Ok(modifiers) = &modifiers
             && let Some(mismatch) = self.check_locked_versions(
+                packages,
                 dependency_metadata,
                 Constraints::from_requirements(normalized_constraints.iter().cloned()),
                 modifiers,
