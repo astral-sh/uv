@@ -3,6 +3,40 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.13.8
+
+Released on 2026-11-12.
+
+### Python
+
+- Add CPython 3.16.0a2 ([#23211](https://github.com/astral-sh/uv/pull/23211))
+- Update managed CPython 3.11, 3.12, 3.13, 3.14, and 3.15 builds to include pip 26.3, zlib 1.4, and Expat 2.10.0 ([#23211](https://github.com/astral-sh/uv/pull/23211))
+- Update GraalPy 3.13.0 to build 25.5.5 ([#23088](https://github.com/astral-sh/uv/pull/23088))
+
+### Preview features
+
+- Install wheel variants from local paths, direct URLs, and Git repositories in platform-specific resolutions ([#22720](https://github.com/astral-sh/uv/pull/22720), [#22722](https://github.com/astral-sh/uv/pull/22722), [#22724](https://github.com/astral-sh/uv/pull/22724))
+- Detect x86-64 microarchitecture levels and AArch64 architecture versions when selecting wheel variants ([#22832](https://github.com/astral-sh/uv/pull/22832), [#22949](https://github.com/astral-sh/uv/pull/22949))
+- Detect Google TPUs up when selecting wheel variants ([#23066](https://github.com/astral-sh/uv/pull/23066), [#23121](https://github.com/astral-sh/uv/pull/23121))
+- Fix CPU detection for wheel variants on macOS with GraalPy ([#23089](https://github.com/astral-sh/uv/pull/23089))
+- Report quarantined packages in `uv audit` when index URLs differ only in redacted query values ([#23129](https://github.com/astral-sh/uv/pull/23129))
+
+### Performance
+
+- Avoid duplicate environment builds when concurrent `uvx` or `uv run --with` invocations need the same environment ([#23123](https://github.com/astral-sh/uv/pull/23123))
+
+### Bug fixes
+
+- Restrict Unix plaintext credential files to owner-only permissions ([#23209](https://github.com/astral-sh/uv/pull/23209))
+- Honor per-index `exclude-newer-package` cutoffs during resolution ([#23122](https://github.com/astral-sh/uv/pull/23122))
+- Respect negative extra markers on constraints ([#23144](https://github.com/astral-sh/uv/pull/23144))
+- Resolve dependencies of recursive extras from a scoped override ([#23210](https://github.com/astral-sh/uv/pull/23210))
+- Fix `activate.bat` for Windows virtual environments whose paths contain apostrophes ([#23152](https://github.com/astral-sh/uv/pull/23152))
+
+### Documentation
+
+- Document the shell requirement for GitLab CI job images ([#23078](https://github.com/astral-sh/uv/pull/23078))
+
 ## 0.13.7
 
 Released on 2026-11-03.
