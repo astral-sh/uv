@@ -13,6 +13,8 @@ use uv_fs::Simplified;
 use uv_install_wheel::read_record;
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
+use uv_pep508::MarkerEnvironment;
+use uv_pypi_types::ResolutionMetadata;
 use uv_python_discovery::find_environment;
 use uv_python_types::{
     EnvironmentPreference, Prefix, PythonArchitecture, PythonPreference, PythonRequest, Target,
@@ -123,11 +125,7 @@ pub fn pip_show(
         if let Ok(metadata) = dist.read_metadata() {
             requires_map.insert(
                 dist.name(),
-                metadata
-                    .requires_dist
-                    .iter()
-                    .filter(|req| req.evaluate_markers(&markers, &[]))
-                    .map(|req| &req.name)
+                active_requirements(metadata, &markers)
                     .sorted_unstable()
                     .dedup()
                     .collect_vec(),
@@ -141,12 +139,7 @@ pub fn pip_show(
                 continue;
             }
             if let Ok(metadata) = installed.read_metadata() {
-                let requires = metadata
-                    .requires_dist
-                    .iter()
-                    .filter(|req| req.evaluate_markers(&markers, &[]))
-                    .map(|req| &req.name)
-                    .collect_vec();
+                let requires = active_requirements(metadata, &markers).collect_vec();
                 if !requires.is_empty() {
                     requires_map.insert(installed.name(), requires);
                 }
@@ -240,4 +233,16 @@ pub fn pip_show(
     }
 
     Ok(ExitStatus::Success)
+}
+
+/// The dependencies displayed in the Requires and Required-by fields.
+fn active_requirements<'a>(
+    metadata: &'a ResolutionMetadata,
+    markers: &'a MarkerEnvironment,
+) -> impl Iterator<Item = &'a PackageName> {
+    metadata
+        .requires_dist
+        .iter()
+        .filter(|requirement| requirement.evaluate_markers(markers, &[]))
+        .map(|requirement| &requirement.name)
 }
