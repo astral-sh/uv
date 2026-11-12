@@ -197,7 +197,14 @@ pub async fn run_to_completion(mut handle: Child) -> anyhow::Result<ExitStatus> 
         // The following signals are ignored by default, but can be have user defined handlers.
         // Forward them to the child process for handling.
         let mut sigwinch_handle = handle_signal(SignalKind::window_change())?;
-        let mut sigpipe_handle = handle_signal(SignalKind::pipe())?;
+
+        // SIGPIPE is intentionally not forwarded to the child process. When a
+        // network connection drops while uv is writing to it (e.g., an HTTP/2
+        // timeout), uv receives SIGPIPE. Forwarding it to a just-started Python
+        // child can kill the child before it installs its own SIGPIPE handler,
+        // causing `uv run` to exit with code 141 (#21935). Since `uv run ... | foo`
+        // still works correctly (the writing child gets SIGPIPE directly), there's
+        // no meaningful loss from not forwarding.
 
         // This signal is only available on some platforms, copied from `tokio::signal::unix`
         #[cfg(any(
@@ -329,16 +336,6 @@ pub async fn run_to_completion(mut handle: Child) -> anyhow::Result<ExitStatus> 
                     // We unconditionally forward SIGWINCH to the child process.
                     debug!("Received SIGWINCH, forwarding to child at {child_pid}");
                     let _ = signal::kill(child_pid, signal::Signal::SIGWINCH);
-                }
-                _ = sigpipe_handle.recv() => {
-                    let Some(child_pid) = *ChildPid::from(&handle) else {
-                        debug!("Received SIGPIPE, but the child has already exited");
-                        continue;
-                    };
-
-                    // We unconditionally forward SIGPIPE to the child process.
-                    debug!("Received SIGPIPE, forwarding to child at {child_pid}");
-                    let _ = signal::kill(child_pid, signal::Signal::SIGPIPE);
                 }
                 _ = siginfo_handle.recv() => {
                     let Some(child_pid) = *ChildPid::from(&handle) else {
