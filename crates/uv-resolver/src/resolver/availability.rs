@@ -110,6 +110,8 @@ pub enum UnavailableVersion {
     InconsistentMetadata,
     /// The wheel has an invalid structure.
     InvalidStructure,
+    /// A package with the wrong name is on an index page.
+    PackageNameMismatch { dist_name: PackageName },
     /// The wheel metadata was not found in the cache and the network is not available.
     Offline,
     /// The source distribution has a `requires-python` requirement that is not met by the installed
@@ -127,6 +129,9 @@ impl UnavailableVersion {
             Self::InvalidMetadata => Cow::Borrowed("invalid metadata"),
             Self::InconsistentMetadata => Cow::Borrowed("inconsistent metadata"),
             Self::InvalidStructure => Cow::Borrowed("an invalid package format"),
+            Self::PackageNameMismatch {
+                dist_name: wrong_name,
+            } => format!("the wrong package name in the index page (`{wrong_name}`)").into(),
             Self::Offline => Cow::Borrowed("to be downloaded from a registry"),
             Self::RequiresPython(requires_python) => {
                 Cow::Owned(format!("Python {requires_python}"))
@@ -144,6 +149,7 @@ impl UnavailableVersion {
             Self::InvalidMetadata => format!("has {self}"),
             Self::InconsistentMetadata => format!("has {self}"),
             Self::InvalidStructure => format!("has {self}"),
+            Self::PackageNameMismatch { .. } => format!("has {self}"),
             Self::Offline => format!("needs {self}"),
             Self::RequiresPython(..) => format!("requires {self}"),
             Self::Network(..) => format!("could not be fetched from the network (`{self}`)"),
@@ -157,6 +163,7 @@ impl UnavailableVersion {
             Self::InvalidMetadata => format!("have {self}"),
             Self::InconsistentMetadata => format!("have {self}"),
             Self::InvalidStructure => format!("have {self}"),
+            Self::PackageNameMismatch { .. } => format!("have {self}"),
             Self::Offline => format!("need {self}"),
             Self::RequiresPython(..) => format!("require {self}"),
             Self::Network(..) => format!("could not be fetched from the network (`{self}`)"),
@@ -176,6 +183,7 @@ impl UnavailableVersion {
             Self::InvalidMetadata => None,
             Self::InconsistentMetadata => None,
             Self::InvalidStructure => None,
+            Self::PackageNameMismatch { .. } => None,
             Self::Offline => None,
             Self::RequiresPython(..) => None,
             Self::Network(..) => None,
