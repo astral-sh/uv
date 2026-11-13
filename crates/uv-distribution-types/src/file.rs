@@ -14,6 +14,8 @@ use uv_pypi_types::{CoreMetadata, HashDigests, Yanked};
 use uv_redacted::{SafeUrl, SafeUrlError};
 use uv_small_str::SmallString;
 
+use crate::{ProxyIndexError, ProxyRoute};
+
 /// Error converting [`uv_pypi_types::PypiFile`] to [`VerbatimFile`].
 #[derive(Debug, thiserror::Error)]
 pub enum FileConversionError {
@@ -98,6 +100,17 @@ impl<Location> File<Location> {
             location: map(self.location),
             yanked: self.yanked,
         }
+    }
+}
+
+impl File {
+    /// Translate the proxy's download URL to the upstream artifact URL.
+    pub(super) fn from_proxy_index(
+        file: VerbatimFile,
+        route: &ProxyRoute,
+    ) -> Result<Self, ProxyIndexError> {
+        let url = route.canonical_artifact_url(&file.location)?;
+        Ok(file.map_location(|_| CanonicalFileLocation::AbsoluteUrl(url.into(), PhantomData)))
     }
 }
 
