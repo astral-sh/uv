@@ -4,12 +4,14 @@ use std::fmt::{Display, Formatter};
 pub use extra_name::{DefaultExtras, ExtraName};
 pub use group_name::{DEV_DEPENDENCIES, DefaultGroups, GroupName, PipGroupName};
 pub use package_name::PackageName;
+pub use variant::{InvalidVariantComponent, VariantFeature, VariantNamespace, VariantValue};
 
 use uv_small_str::SmallString;
 
 mod extra_name;
 mod group_name;
 mod package_name;
+mod variant;
 
 /// Validate and normalize an unowned package or extra name.
 pub(crate) fn validate_and_normalize_ref(
