@@ -541,6 +541,38 @@ async fn proxy_index_implicitly_routes_pypi_without_a_second_resolution_index() 
     Ok(())
 }
 
+#[test]
+fn proxy_index_rejects_flat_pypi_default() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    pyproject.write_str(indoc::indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [[tool.uv.index]]
+        name = "pypi"
+        url = "https://pypi.org/simple/"
+        default = true
+        format = "flat"
+
+        [[tool.uv.index]]
+        name = "proxy"
+        url = "https://proxy.example.com/simple/"
+        artifact-base-url = "https://proxy.example.com/files/"
+        proxy-for = "pypi"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @r"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: The proxy index references package index `pypi`, which was not found in your configuration
+    ");
+
+    Ok(())
+}
+
 /// The proxy's cache policy overrides the cache header on PEP 658 metadata.
 #[tokio::test]
 async fn proxy_index_sidecar_uses_proxy_cache_policy() -> Result<()> {

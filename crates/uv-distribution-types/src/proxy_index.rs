@@ -485,7 +485,7 @@ fn find_canonical_index<'a>(locations: &'a IndexLocations, name: &IndexName) -> 
 
             locations
                 .default_index()
-                .filter(|index| index.url().is_pypi())
+                .filter(|index| index.format == IndexFormat::Simple && index.url().is_pypi())
         })
 }
 
