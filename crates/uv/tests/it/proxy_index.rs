@@ -258,65 +258,6 @@ fn write_frozen_lock(
     Ok(())
 }
 
-fn assert_canonical_lock(
-    lock: &str,
-    canonical_index: &str,
-    canonical_artifacts: &str,
-) -> Result<()> {
-    let lock_document: toml::Value = toml::from_str(lock)?;
-    let package = lock_document
-        .get("package")
-        .and_then(toml::Value::as_array)
-        .and_then(|packages| {
-            packages.iter().find(|package| {
-                package.get("name").and_then(toml::Value::as_str) == Some("basic-package")
-            })
-        })
-        .ok_or_else(|| anyhow!("canonical lock does not contain `basic-package`"))?;
-
-    assert_eq!(
-        package
-            .get("source")
-            .and_then(|source| source.get("registry"))
-            .and_then(toml::Value::as_str)
-            .map(|registry| registry.trim_end_matches('/')),
-        Some(canonical_index.trim_end_matches('/')),
-        "the canonical index, not the physical index, must own the locked package",
-    );
-    assert_eq!(
-        package
-            .get("wheels")
-            .and_then(toml::Value::as_array)
-            .and_then(|wheels| wheels.first())
-            .and_then(|wheel| wheel.get("url"))
-            .and_then(toml::Value::as_str),
-        Some(
-            format!(
-                "{}/{WHEEL_FILENAME}",
-                canonical_artifacts.trim_end_matches('/')
-            )
-            .as_str()
-        ),
-        "wheel URLs must be canonical before lock serialization",
-    );
-    assert_eq!(
-        package
-            .get("sdist")
-            .and_then(|source| source.get("url"))
-            .and_then(toml::Value::as_str),
-        Some(
-            format!(
-                "{}/{SOURCE_FILENAME}",
-                canonical_artifacts.trim_end_matches('/')
-            )
-            .as_str()
-        ),
-        "source URLs must be canonical before lock serialization",
-    );
-
-    Ok(())
-}
-
 async fn assert_no_origin_requests(
     canonical_index: &MockServer,
     canonical_artifacts: &MockServer,
@@ -519,14 +460,41 @@ async fn proxy_index_implicitly_routes_pypi_without_a_second_resolution_index() 
     Resolved 2 packages in [TIME]
     ");
 
-    let lock = context.read("uv.lock");
-    assert_canonical_lock(
-        &lock,
-        "https://pypi.org/simple/",
-        "https://files.pythonhosted.org/packages/",
-    )?;
-    assert!(!lock.contains(&physical_index.uri()));
-    assert!(!lock.contains(&physical_artifacts.uri()));
+    insta::with_settings!({
+        filters => [
+            (physical_index.uri().as_str(), "[PHYSICAL_INDEX]"),
+            (physical_artifacts.uri().as_str(), "[PHYSICAL_ARTIFACTS]"),
+        ],
+    }, {
+        insta::assert_snapshot!(context.read("uv.lock"), @r#"
+        version = 1
+        revision = 5
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "basic-package"
+        version = "0.1.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/basic_package-0.1.0.tar.gz", hash = "sha256:af478ff91ec60856c99a540b8df13d756513bebb65bc301fb27e0d1f974532b4", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/basic_package-0.1.0-py3-none-any.whl", hash = "sha256:7b6229db79b5800e4e98a351b5628c1c8a944533a2d428aeeaa7275a30d4ea82", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "basic-package" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "basic-package", specifier = "==0.1.0" }]
+        "#);
+    });
 
     uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     exit_code: 0 (success)
@@ -775,25 +743,43 @@ async fn proxy_index_locks_canonical_urls_without_origin_requests() -> Result<()
     Resolved 2 packages in [TIME]
     ");
 
-    let lock = context.read("uv.lock");
-    assert_canonical_lock(
-        &lock,
-        &format!("{}/simple/", canonical_index.uri()),
-        &format!("{}/packages/", canonical_artifacts.uri()),
-    )?;
-    assert!(!lock.contains(&physical_index.uri()));
-    assert!(!lock.contains(&physical_artifacts.uri()));
-    for credential in [
-        "proxy-user",
-        "proxy-password",
-        "artifact-user",
-        "artifact-password",
-    ] {
-        assert!(
-            !lock.contains(credential),
-            "physical proxy credential persisted in the lockfile: {credential}"
-        );
-    }
+    insta::with_settings!({
+        filters => [
+            (canonical_index.uri().as_str(), "[UPSTREAM_INDEX]"),
+            (canonical_artifacts.uri().as_str(), "[UPSTREAM_ARTIFACTS]"),
+            (physical_index.uri().as_str(), "[PHYSICAL_INDEX]"),
+            (physical_artifacts.uri().as_str(), "[PHYSICAL_ARTIFACTS]"),
+        ],
+    }, {
+        insta::assert_snapshot!(context.read("uv.lock"), @r#"
+        version = 1
+        revision = 5
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "basic-package"
+        version = "0.1.0"
+        source = { registry = "[UPSTREAM_INDEX]/simple/" }
+        sdist = { url = "[UPSTREAM_ARTIFACTS]/packages/basic_package-0.1.0.tar.gz", hash = "sha256:af478ff91ec60856c99a540b8df13d756513bebb65bc301fb27e0d1f974532b4", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "[UPSTREAM_ARTIFACTS]/packages/basic_package-0.1.0-py3-none-any.whl", hash = "sha256:7b6229db79b5800e4e98a351b5628c1c8a944533a2d428aeeaa7275a30d4ea82", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "basic-package" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "basic-package", specifier = "==0.1.0" }]
+        "#);
+    });
 
     uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     exit_code: 0 (success)
@@ -1096,13 +1082,14 @@ async fn proxy_index_redownloads_artifacts_when_proxy_changes() -> Result<()> {
     .write(&context)?;
     mount_artifact(&physical_artifacts_b, WHEEL_FILENAME, wheel, 1).await;
 
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--reinstall"), @"
+    // Recreate the environment while keeping the first proxy's artifacts in the cache.
+    context.reset_venv();
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Prepared 1 package in [TIME]
-    Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ basic-package==0.1.0
+     + basic-package==0.1.0
     ");
 
     assert_eq!(context.read("uv.lock"), original_lock);
@@ -1368,10 +1355,11 @@ async fn proxy_index_rejects_cached_wheel_when_hash_changes() -> Result<()> {
     .await;
     mount_artifact(&physical_artifacts, WHEEL_FILENAME, artifact, 1).await;
 
+    context.reset_venv();
     let mut filters = context.filters();
     filters.push((actual_hash.as_str(), "[COMPUTED_HASH]"));
     let mut command = context.pip_sync();
-    command.arg("requirements.txt").arg("--reinstall");
+    command.arg("requirements.txt");
 
     uv_snapshot!(filters, command, @r"
     exit_code: 1 (failure)
@@ -1471,10 +1459,11 @@ async fn proxy_index_rejects_cached_source_when_hash_changes() -> Result<()> {
     .await;
     mount_artifact(&physical_artifacts, SOURCE_ZIP_FILENAME, artifact, 1).await;
 
+    context.reset_venv();
     let mut filters = context.filters();
     filters.push((actual_hash.as_str(), "[COMPUTED_HASH]"));
     let mut command = context.pip_sync();
-    command.arg("requirements.txt").arg("--reinstall");
+    command.arg("requirements.txt");
 
     uv_snapshot!(filters, command, @r"
     exit_code: 1 (failure)
