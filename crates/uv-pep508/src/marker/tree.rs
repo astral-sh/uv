@@ -914,16 +914,6 @@ impl MarkerTree {
                     map,
                 })
             }
-            Variable::VersionString(key) => {
-                let Edges::Version { edges: ref map } = node.children else {
-                    unreachable!()
-                };
-                MarkerTreeKind::VersionString(VersionMarkerTree {
-                    id: self.0,
-                    key: *key,
-                    map,
-                })
-            }
             Variable::In { key, value } => {
                 let Edges::Boolean { low, high } = node.children else {
                     unreachable!()
@@ -1068,16 +1058,6 @@ impl MarkerTree {
                     }
                 }
             }
-            MarkerTreeKind::VersionString(marker) => {
-                let Ok(version) = env.get_string(marker.key()).parse::<Version>() else {
-                    return false;
-                };
-                for (range, tree) in marker.edges() {
-                    if range.contains(&version) {
-                        return tree.evaluate_reporter_impl(env, extras, reporter);
-                    }
-                }
-            }
             MarkerTreeKind::In(marker) => {
                 return marker
                     .edge(marker.value().contains(env.get_string(marker.key())))
@@ -1122,9 +1102,6 @@ impl MarkerTree {
             MarkerTreeKind::Version(marker) => {
                 marker.edges().any(|(_, tree)| tree.evaluate_extras(extras))
             }
-            MarkerTreeKind::VersionString(marker) => {
-                marker.edges().any(|(_, tree)| tree.evaluate_extras(extras))
-            }
             MarkerTreeKind::String(marker) => marker
                 .children()
                 .any(|(_, tree)| tree.evaluate_extras(extras)),
@@ -1149,9 +1126,6 @@ impl MarkerTree {
             MarkerTreeKind::True => true,
             MarkerTreeKind::False => false,
             MarkerTreeKind::Version(marker) => marker
-                .edges()
-                .all(|(_, tree)| tree.evaluate_only_extras(extras)),
-            MarkerTreeKind::VersionString(marker) => marker
                 .edges()
                 .all(|(_, tree)| tree.evaluate_only_extras(extras)),
             MarkerTreeKind::String(marker) => marker
@@ -1525,8 +1499,6 @@ pub enum MarkerTreeKind<'a> {
     False,
     /// A version expression.
     Version(VersionMarkerTree<'a>),
-    /// A string-valued marker interpreted as a version within a platform-specific scope.
-    VersionString(VersionMarkerTree<'a, CanonicalMarkerValueString>),
     /// A string expression.
     String(StringMarkerTree<'a>),
     /// A string expression with the `in` operator.
@@ -1541,15 +1513,15 @@ pub enum MarkerTreeKind<'a> {
 
 /// A version marker node, such as `python_version < '3.7'`.
 #[derive(PartialEq, Eq, Clone, Debug)]
-pub struct VersionMarkerTree<'a, K = CanonicalMarkerValueVersion> {
+pub struct VersionMarkerTree<'a> {
     id: NodeId,
-    key: K,
+    key: CanonicalMarkerValueVersion,
     map: &'a [(Ranges<Version>, NodeId)],
 }
 
-impl<K: Copy> VersionMarkerTree<'_, K> {
+impl VersionMarkerTree<'_> {
     /// The key for this node.
-    pub fn key(&self) -> K {
+    pub fn key(&self) -> CanonicalMarkerValueVersion {
         self.key
     }
 
@@ -1561,13 +1533,13 @@ impl<K: Copy> VersionMarkerTree<'_, K> {
     }
 }
 
-impl<K: Copy + Ord> PartialOrd for VersionMarkerTree<'_, K> {
+impl PartialOrd for VersionMarkerTree<'_> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl<K: Copy + Ord> Ord for VersionMarkerTree<'_, K> {
+impl Ord for VersionMarkerTree<'_> {
     fn cmp(&self, other: &Self) -> Ordering {
         self.key()
             .cmp(&other.key())
@@ -2050,7 +2022,7 @@ mod test {
         );
     }
 
-    /// Darwin release comparisons use version ranges, including a shared closed endpoint.
+    /// Mixed architecture and release comparisons can share a closed endpoint.
     #[test]
     fn isop_darwin_release_bounds_roundtrip() {
         let marker = m(
@@ -2119,26 +2091,16 @@ mod test {
     }
 
     #[test]
-    fn darwin_platform_release() {
-        let baseline = m("sys_platform == 'darwin' and platform_release == '24.0.0'");
-        assert!(!baseline.is_disjoint(m("platform_release >= '9.0.0'")));
-        assert!(baseline.is_disjoint(m("platform_release >= '25.0.0'")));
-        assert_eq!(
-            baseline,
-            m("sys_platform == 'darwin' and platform_release == '24'")
-        );
+    fn opaque_darwin_platform_release() {
+        let darwin = env37().with_sys_platform("darwin");
+        let opaque = darwin.clone().with_platform_release("not-a-version");
+        let marker = m("platform_release == '24'");
+        assert!(!marker.evaluate(&opaque, &[]));
+        assert!(marker.negate().evaluate(&opaque, &[]));
 
-        let env = env37()
-            .with_sys_platform("darwin")
-            .with_platform_release("24.10.0");
-        let marker = m("sys_platform == 'darwin' and platform_release >= '24.9.0'");
-        assert!(marker.evaluate(&env, &[]));
-        assert!(!marker.negate().evaluate(&env, &[]));
+        let marker = m("platform_release >= '9' or platform_release < '24'");
+        assert!(!marker.evaluate(&darwin.with_platform_release("3-invalid"), &[]));
         assert_eq!(marker, m(&marker.try_to_string().unwrap()));
-        assert_eq!(
-            marker.negate(),
-            m(&marker.negate().try_to_string().unwrap())
-        );
     }
 
     fn env37() -> MarkerEnvironment {
