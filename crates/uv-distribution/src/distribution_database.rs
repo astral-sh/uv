@@ -348,7 +348,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         match dist {
             BuiltDist::Registry(wheels) => {
                 let wheel = wheels.best_wheel();
-                let url = wheel.file.url.to_url()?;
+                let url = wheel.file.location.to_url()?;
                 let size = wheel.file.size;
 
                 // Create a cache entry for the wheel.

@@ -694,6 +694,8 @@ impl VersionMapLazy {
                     (false, None)
                 };
 
+                let file = file.assume_canonical();
+
                 // Prioritize amongst all available files.
                 let yanked = file.yanked.as_deref();
                 let hashes = file.hashes.clone();
