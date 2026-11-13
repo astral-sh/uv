@@ -637,19 +637,17 @@ impl Version {
         }
     }
 
-    /// Return the version with trailing `.0` release segments removed.
-    ///
-    /// # Panics
-    ///
-    /// When the release is all zero segments.
+    /// Remove trailing zeroes from the release, retaining one component for version zero.
     #[inline]
     #[must_use]
     pub fn without_trailing_zeros(self) -> Self {
-        let mut release = self.release().to_vec();
-        while let Some(0) = release.last() {
-            release.pop();
+        let release = self.release();
+        if release.len() == 1 || release.last() != Some(&0) {
+            return self;
         }
-        self.with_release(release)
+        let len = release.iter().rposition(|&n| n != 0).map_or(1, |i| i + 1);
+        let trimmed = release[..len].to_vec();
+        self.with_release(trimmed)
     }
 
     /// Various "increment the version" operations

@@ -9847,6 +9847,8 @@ impl std::fmt::Display for WheelTagHint {
 /// is with the caller somewhere in such cases.
 #[derive(DebugNoInline, thiserror::Error)]
 enum LockErrorKind {
+    #[error(transparent)]
+    UnrepresentableMarker(#[from] uv_pep508::UnrepresentableMarker),
     /// An error that occurs when collecting dependency-group settings.
     #[error(transparent)]
     DependencyGroups(#[from] DependencyGroupError),
@@ -10336,10 +10338,10 @@ fn simplify_dependency_marker(
 fn simplified_universal_markers(
     markers: &[UniversalMarker],
     requires_python: &RequiresPython,
-) -> Vec<String> {
+) -> Result<Vec<String>, uv_pep508::UnrepresentableMarker> {
     canonical_marker_trees(markers, requires_python)
         .into_iter()
-        .filter_map(MarkerTree::try_to_string)
+        .filter_map(|marker| marker.to_pep508().transpose())
         .collect()
 }
 

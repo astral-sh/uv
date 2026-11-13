@@ -19,6 +19,24 @@ pub(crate) fn to_dnf(tree: MarkerTree) -> Vec<Vec<MarkerExpression>> {
     let cover = INTERNER.lock().isop(tree.0);
     let mut dnf = Vec::new();
     collect_cover(&cover, &mut dnf, &mut Vec::new());
+    if dnf
+        .iter()
+        .flatten()
+        .any(|atom| matches!(atom, MarkerExpression::VersionOrStringRange { .. }))
+    {
+        let cover = INTERNER
+            .lock()
+            .decision_paths(tree.0, &mut rustc_hash::FxHashMap::default());
+        let mut paths = Vec::new();
+        collect_cover(&cover, &mut paths, &mut Vec::new());
+        if !paths
+            .iter()
+            .flatten()
+            .any(|atom| matches!(atom, MarkerExpression::VersionOrStringRange { .. }))
+        {
+            dnf = paths;
+        }
+    }
     sort(&mut dnf);
     dnf
 }
@@ -104,21 +122,26 @@ fn collect_guard(
         }
         MarkerTreeKind::VersionString(marker) => {
             let range = guard_range(marker.edges(), child);
-            for (lower, upper) in range.iter() {
-                let current = path.len();
-                let lower = lower.map(|version| ArcStr::from(version.to_string()));
-                let upper = upper.map(|version| ArcStr::from(version.to_string()));
-                for (operator, value) in
-                    MarkerOperator::from_bounds((lower.as_ref(), upper.as_ref()))
-                {
-                    path.push(MarkerExpression::String {
-                        key: marker.key().into(),
-                        operator,
-                        value,
-                    });
+            if let Some(clauses) = super::version_or_string::comparisons(&range) {
+                for clause in clauses {
+                    let current = path.len();
+                    path.extend(clause.into_iter().map(|(operator, value)| {
+                        MarkerExpression::String {
+                            key: marker.key().into(),
+                            operator,
+                            value,
+                        }
+                    }));
+                    collect_cover(suffix, dnf, path);
+                    path.truncate(current);
                 }
+            } else {
+                path.push(MarkerExpression::VersionOrStringRange {
+                    key: marker.key(),
+                    range,
+                });
                 collect_cover(suffix, dnf, path);
-                path.truncate(current);
+                path.pop();
             }
         }
         MarkerTreeKind::String(marker) => {
@@ -145,7 +168,7 @@ fn collect_guard(
                     path.push(MarkerExpression::String {
                         key: marker.key().into(),
                         operator,
-                        value: value.clone(),
+                        value,
                     });
                 }
 

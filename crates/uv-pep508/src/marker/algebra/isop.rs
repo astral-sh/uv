@@ -16,7 +16,7 @@ use indexmap::map::Entry;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use version_ranges::Ranges;
 
-use super::{Edges, InternerGuard, NodeId, SmallVec};
+use super::{EdgeBuilder, Edges, InternerGuard, NodeId, SmallVec, Variable};
 
 /// A shared cover whose paths are expanded only when producing the final DNF.
 #[derive(Clone)]
@@ -37,8 +37,51 @@ pub(crate) enum Guard {
 impl InternerGuard<'_> {
     /// Extract a cover without materializing the decision diagram's paths.
     pub(crate) fn isop(&mut self, marker: NodeId) -> Cover {
-        self.isop_cached(marker, marker, &mut FxHashMap::default())
-            .1
+        if let Some((_, cover)) = self.isop_cached(marker, marker, &mut FxHashMap::default()) {
+            return cover;
+        }
+        self.decision_paths(marker, &mut FxHashMap::default())
+    }
+
+    /// A term can also use cells whose suffix accepts everything in its own suffix.
+    /// This overlap can give an opaque-inclusive guard a writable spelling.
+    pub(crate) fn decision_paths(
+        &mut self,
+        node: NodeId,
+        cache: &mut FxHashMap<NodeId, Cover>,
+    ) -> Cover {
+        if node.is_true() {
+            return Cover::True;
+        }
+        if node.is_false() {
+            return Cover::False;
+        }
+        if let Some(cover) = cache.get(&node) {
+            return cover.clone();
+        }
+        let mut seen = FxHashSet::default();
+        let children: Vec<_> = self
+            .shared
+            .node(node)
+            .children
+            .nodes()
+            .map(|child| child.negate(node))
+            .filter(|child| !child.is_false() && seen.insert(*child))
+            .collect();
+        let mut branches = Vec::new();
+        for &child in &children {
+            let mut condition = NodeId::FALSE;
+            for &other in &children {
+                if self.and(child, other.not()).is_false() {
+                    let guard = self.guard_node(Guard::Edge { node, child: other });
+                    condition = self.or(condition, guard);
+                }
+            }
+            branches.push((Guard::Node(condition), self.decision_paths(child, cache)));
+        }
+        let cover = Cover::Branches(branches.into());
+        cache.insert(node, cover.clone());
+        cover
     }
 
     /// Return a cover and its function `I`, where `lower => I => upper`.
@@ -48,19 +91,20 @@ impl InternerGuard<'_> {
         lower: NodeId,
         upper: NodeId,
         cache: &mut FxHashMap<(NodeId, NodeId), (NodeId, Cover)>,
-    ) -> (NodeId, Cover) {
+    ) -> Option<(NodeId, Cover)> {
         if lower.is_false() {
-            return (NodeId::FALSE, Cover::False);
+            return Some((NodeId::FALSE, Cover::False));
         }
         if upper.is_true() {
-            return (NodeId::TRUE, Cover::True);
+            return Some((NodeId::TRUE, Cover::True));
         }
-        debug_assert!(
-            !upper.is_false() && !lower.is_true(),
-            "invalid ISOP interval: {lower:?}..{upper:?}"
-        );
+        // Platform exclusions can make a recursive interval invalid after cofactoring.
+        // Its original decision diagram still provides an exact cover at the root.
+        if upper.is_false() || lower.is_true() {
+            return None;
+        }
         if let Some(result) = cache.get(&(lower, upper)) {
-            return result.clone();
+            return Some(result.clone());
         }
         // A single decision is already a cover; its range renderer merges equal branches.
         if lower == upper
@@ -71,7 +115,7 @@ impl InternerGuard<'_> {
                 .nodes()
                 .all(|child| child.is_true() || child.is_false())
         {
-            return (lower, Cover::Guard(lower));
+            return Some((lower, Cover::Guard(lower)));
         }
 
         let exact = lower == upper;
@@ -87,7 +131,7 @@ impl InternerGuard<'_> {
         let mut branches = IndexMap::<_, _, FxBuildHasher>::default();
         for (guard, lower, upper) in cofactors {
             let required = self.and(lower, common_upper.not());
-            let (specific, cover) = self.isop_cached(required, upper, cache);
+            let (specific, cover) = self.isop_cached(required, upper, cache)?;
             let remaining = self.and(lower, specific.not());
             common_lower = self.or(common_lower, remaining);
             if specific.is_false() {
@@ -110,7 +154,7 @@ impl InternerGuard<'_> {
                 }
             }
         }
-        let (common, cover) = self.isop_cached(common_lower, common_upper, cache);
+        let (common, cover) = self.isop_cached(common_lower, common_upper, cache)?;
         // Equal bounds already determine the function; only its cover needs rebuilding.
         function = if exact {
             lower
@@ -122,7 +166,7 @@ impl InternerGuard<'_> {
         }
         let result = (function, Cover::Branches(branches.into_values().collect()));
         cache.insert((lower, upper), result.clone());
-        result
+        Some(result)
     }
 
     /// Materialize a borrowed guard only when algebra needs its function.
@@ -131,15 +175,13 @@ impl InternerGuard<'_> {
             Guard::Node(node) => node,
             Guard::Edge { node, child } => {
                 let decision = self.shared.node(node);
-                let edges = match &decision.children {
-                    Edges::Boolean { high, .. } => Edges::from_bool(high.negate(node) == child),
-                    Edges::Version { edges } => Edges::Version {
-                        edges: guard_edges(edges, node, child),
-                    },
-                    Edges::String { edges } => Edges::String {
-                        edges: guard_edges(edges, node, child),
-                    },
-                };
+                let edges = decision.children.map(node, |target| {
+                    if target == child {
+                        NodeId::TRUE
+                    } else {
+                        NodeId::FALSE
+                    }
+                });
                 self.create_node(decision.var.clone(), edges)
             }
         }
@@ -204,85 +246,72 @@ impl InternerGuard<'_> {
                     (Guard::Node(guard), lower_high, upper_high),
                 ]
             }
-            Edges::Version { .. } => {
-                let lower_edges = if let Edges::Version { edges } = &lower_node.children
-                    && lower_node.var == *variable
-                {
-                    Some(edges.as_ref())
-                } else {
-                    None
-                };
-                let upper_edges = if let Edges::Version { edges } = &upper_node.children
-                    && upper_node.var == *variable
-                {
-                    Some(edges.as_ref())
-                } else {
-                    None
-                };
-                range_cofactors(lower, lower_edges, upper, upper_edges)
-                    .into_iter()
-                    .map(|(range, lower, upper)| {
-                        if lower.is_false() {
-                            return (Guard::Node(NodeId::FALSE), lower, upper);
-                        }
-                        let guard = self.create_node(
-                            variable.clone(),
-                            Edges::Version {
-                                edges: Edges::from_range(&range),
-                            },
-                        );
-                        (Guard::Node(guard), lower, upper)
-                    })
-                    .collect()
-            }
-            Edges::String { .. } => {
-                let lower_edges = if let Edges::String { edges } = &lower_node.children
-                    && lower_node.var == *variable
-                {
-                    Some(edges.as_ref())
-                } else {
-                    None
-                };
-                let upper_edges = if let Edges::String { edges } = &upper_node.children
-                    && upper_node.var == *variable
-                {
-                    Some(edges.as_ref())
-                } else {
-                    None
-                };
-                range_cofactors(lower, lower_edges, upper, upper_edges)
-                    .into_iter()
-                    .map(|(range, lower, upper)| {
-                        if lower.is_false() {
-                            return (Guard::Node(NodeId::FALSE), lower, upper);
-                        }
-                        let guard = self.create_node(
-                            variable.clone(),
-                            Edges::String {
-                                edges: Edges::from_range(&range),
-                            },
-                        );
-                        (Guard::Node(guard), lower, upper)
-                    })
-                    .collect()
-            }
+            Edges::Version { .. } => self.range_guards(
+                variable,
+                lower,
+                upper,
+                |edges| match edges {
+                    Edges::Version { edges } => Some(edges),
+                    _ => None,
+                },
+                |range| Edges::Version {
+                    edges: Edges::from_range(range),
+                },
+            ),
+            Edges::String { .. } => self.range_guards(
+                variable,
+                lower,
+                upper,
+                |edges| match edges {
+                    Edges::String { edges } => Some(edges),
+                    _ => None,
+                },
+                |range| Edges::String {
+                    edges: Edges::from_range(range),
+                },
+            ),
+            Edges::VersionOrString { .. } => self.range_guards(
+                variable,
+                lower,
+                upper,
+                |edges| match edges {
+                    Edges::VersionOrString { edges } => Some(edges),
+                    _ => None,
+                },
+                Edges::from_version_or_string_range,
+            ),
         }
     }
-}
 
-/// Build a reduced single-variable decision for all edges leading to the selected child.
-fn guard_edges<T: Clone + Ord>(
-    edges: &[(Ranges<T>, NodeId)],
-    parent: NodeId,
-    child: NodeId,
-) -> SmallVec<(Ranges<T>, NodeId)> {
-    let range = edges
-        .iter()
-        .filter(|(_, candidate)| candidate.negate(parent) == child)
-        .flat_map(|(range, _)| range.iter())
-        .map(|(start, end)| (start.cloned(), end.cloned()))
-        .collect();
-    Edges::from_range(&range)
+    /// Partition two range decisions using the same endpoints and create their guards.
+    fn range_guards<T: Clone + Ord>(
+        &mut self,
+        variable: &Variable,
+        lower: NodeId,
+        upper: NodeId,
+        ranges: impl Fn(&Edges) -> Option<&[(Ranges<T>, NodeId)]>,
+        from_range: impl Fn(&Ranges<T>) -> EdgeBuilder,
+    ) -> SmallVec<(Guard, NodeId, NodeId)> {
+        let lower_node = self.shared.node(lower);
+        let upper_node = self.shared.node(upper);
+        let lower_edges = (lower_node.var == *variable)
+            .then(|| ranges(&lower_node.children))
+            .flatten();
+        let upper_edges = (upper_node.var == *variable)
+            .then(|| ranges(&upper_node.children))
+            .flatten();
+        range_cofactors(lower, lower_edges, upper, upper_edges)
+            .into_iter()
+            .map(|(range, lower, upper)| {
+                let guard = if lower.is_false() {
+                    NodeId::FALSE
+                } else {
+                    self.create_node(variable.clone(), from_range(&range))
+                };
+                (Guard::Node(guard), lower, upper)
+            })
+            .collect()
+    }
 }
 
 /// Intersect sorted range partitions, grouping regions with identical cofactors.

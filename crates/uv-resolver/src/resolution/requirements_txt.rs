@@ -5,8 +5,7 @@ use std::path::Path;
 use itertools::Itertools;
 
 use uv_distribution_types::{
-    DistributionMetadata, Name, RequiresPython, ResolvedDist, SimplifiedMarkerTree, Verbatim,
-    VersionOrUrlRef,
+    DistributionMetadata, Name, RequiresPython, ResolvedDist, Verbatim, VersionOrUrlRef,
 };
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::Version;
@@ -36,15 +35,20 @@ impl<'dist> RequirementsTxtDist<'dist> {
         &self,
         requires_python: &RequiresPython,
         include_markers: bool,
-    ) -> Cow<'_, str> {
+    ) -> Result<Cow<'_, str>, uv_pep508::UnrepresentableMarker> {
         // If the URL is editable, write it as an editable requirement.
         if self.dist.is_editable() {
             if let VersionOrUrlRef::Url(url) = self.dist.version_or_url() {
                 let given = url.verbatim();
-                return Cow::Owned(format!("-e {given}"));
+                return Ok(Cow::Owned(format!("-e {given}")));
             }
         }
 
+        let markers = if include_markers {
+            requires_python.simplify_markers(self.markers).to_pep508()?
+        } else {
+            None
+        };
         // If the URL is not _definitively_ a `file://` URL, write it as a relative path.
         if self.dist.is_local() {
             if let VersionOrUrlRef::Url(url) = self.dist.version_or_url() {
@@ -93,24 +97,17 @@ impl<'dist> RequirementsTxtDist<'dist> {
                     }
                 };
                 if let Some(given) = given {
-                    return if let Some(markers) =
-                        SimplifiedMarkerTree::new(requires_python, self.markers)
-                            .try_to_string()
-                            .filter(|_| include_markers)
-                    {
+                    return Ok(if let Some(markers) = markers {
                         Cow::Owned(format!("{given} ; {markers}"))
                     } else {
                         given
-                    };
+                    });
                 }
             }
         }
 
-        if self.extras.is_empty() {
-            if let Some(markers) = SimplifiedMarkerTree::new(requires_python, self.markers)
-                .try_to_string()
-                .filter(|_| include_markers)
-            {
+        Ok(if self.extras.is_empty() {
+            if let Some(markers) = markers {
                 Cow::Owned(format!("{} ; {}", self.dist.verbatim(), markers))
             } else {
                 self.dist.verbatim()
@@ -119,10 +116,7 @@ impl<'dist> RequirementsTxtDist<'dist> {
             let mut extras = self.extras.clone();
             extras.sort_unstable();
             extras.dedup();
-            if let Some(markers) = SimplifiedMarkerTree::new(requires_python, self.markers)
-                .try_to_string()
-                .filter(|_| include_markers)
-            {
+            if let Some(markers) = markers {
                 Cow::Owned(format!(
                     "{}[{}]{} ; {}",
                     self.name(),
@@ -138,7 +132,7 @@ impl<'dist> RequirementsTxtDist<'dist> {
                     self.version_or_url().verbatim()
                 ))
             }
-        }
+        })
     }
 
     /// Convert the [`RequirementsTxtDist`] to a comparator that can be used to sort the requirements
@@ -221,5 +215,42 @@ impl DistributionMetadata for RequirementsTxtDist<'_> {
 impl Display for RequirementsTxtDist<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         Display::fmt(&self.dist, f)
+    }
+}
+
+#[cfg(test)]
+mod marker_tests {
+    use super::*;
+    use uv_distribution_types::{InstalledDistKind, InstalledRegistryDist};
+
+    #[test]
+    fn unrepresentable_compile_marker() {
+        let version = Version::new([1]);
+        let dist = ResolvedDist::Installed {
+            dist: std::sync::Arc::new(
+                InstalledDistKind::Registry(InstalledRegistryDist {
+                    name: "example".parse().unwrap(),
+                    version: version.clone(),
+                    path: Path::new("example-1.dist-info").into(),
+                    cache_info: None,
+                    build_info: None,
+                })
+                .into(),
+            ),
+        };
+        let parsed: MarkerTree = "platform_release >= '0.dev0'".parse().unwrap();
+        let req = RequirementsTxtDist {
+            dist: &dist,
+            version: &version,
+            hashes: &[],
+            markers: parsed.negate(),
+            extras: vec![],
+        };
+        let python = RequiresPython::greater_than_equal_version(&Version::new([3, 12]));
+        assert!(req.to_requirements_txt(&python, true).is_err());
+        assert_eq!(
+            req.to_requirements_txt(&python, false).unwrap(),
+            "example==1"
+        );
     }
 }

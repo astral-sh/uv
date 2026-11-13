@@ -40,7 +40,7 @@ fn write_lock(writer: &mut LockWriter, lock: &Lock) -> Result<(), WriteError> {
     writer.key_value("requires-python", lock.requires_python.to_string())?;
 
     if !lock.fork_markers.is_empty() {
-        let markers = simplified_universal_markers(&lock.fork_markers, &lock.requires_python);
+        let markers = simplified_universal_markers(&lock.fork_markers, &lock.requires_python)?;
         if !markers.is_empty() {
             writer.key_multiline_array("resolution-markers", markers, |writer, marker| {
                 writer.value(&marker)
@@ -58,10 +58,10 @@ fn write_lock(writer: &mut LockWriter, lock: &Lock) -> Result<(), WriteError> {
             .supported_environments
             .iter()
             .copied()
-            .map(|marker| SimplifiedMarkerTree::new(&lock.requires_python, marker))
-            .filter_map(SimplifiedMarkerTree::try_to_string);
+            .map(|marker| lock.requires_python.simplify_markers(marker))
+            .filter_map(|marker| marker.to_pep508().transpose());
         writer.key_multiline_array("supported-markers", markers, |writer, marker| {
-            writer.value(&marker)
+            writer.value(&marker?)
         })?;
     }
 
@@ -70,10 +70,10 @@ fn write_lock(writer: &mut LockWriter, lock: &Lock) -> Result<(), WriteError> {
             .required_environments
             .iter()
             .copied()
-            .map(|marker| SimplifiedMarkerTree::new(&lock.requires_python, marker))
-            .filter_map(SimplifiedMarkerTree::try_to_string);
+            .map(|marker| lock.requires_python.simplify_markers(marker))
+            .filter_map(|marker| marker.to_pep508().transpose());
         writer.key_multiline_array("required-markers", markers, |writer, marker| {
-            writer.value(&marker)
+            writer.value(&marker?)
         })?;
     }
 
@@ -290,7 +290,7 @@ fn write_package(
     }
 
     if !package.fork_markers.is_empty() {
-        let markers = simplified_universal_markers(&package.fork_markers, requires_python);
+        let markers = simplified_universal_markers(&package.fork_markers, requires_python)?;
         if !markers.is_empty() {
             writer.key_multiline_array("resolution-markers", markers, |writer, marker| {
                 writer.value(&marker)
@@ -591,7 +591,7 @@ fn write_dependency_inline(
         .simplified_marker
         .as_simplified_marker_tree()
         .restrict(simplified_environment)
-        .try_to_string()
+        .to_pep508()?
     {
         writer.inline_value(&mut first, "marker", &marker)?;
     }
@@ -657,6 +657,12 @@ fn serialize_value<T: Serialize + ?Sized>(value: &T) -> Result<SerializedValue, 
 enum WriteError {
     Format,
     Serialize(toml_edit::ser::Error),
+}
+
+impl From<uv_pep508::UnrepresentableMarker> for WriteError {
+    fn from(error: uv_pep508::UnrepresentableMarker) -> Self {
+        Self::Serialize(serde::ser::Error::custom(error))
+    }
 }
 
 impl From<fmt::Error> for WriteError {
@@ -815,6 +821,19 @@ impl LockWriter {
 #[cfg(test)]
 mod tests {
     use super::{LockWriter, Value};
+
+    #[test]
+    fn unrepresentable_required_marker() {
+        let mut lock = crate::Lock::from_toml("version = 1\nrequires-python = '>=3.12'\n").unwrap();
+        let parsed: uv_pep508::MarkerTree = "platform_release >= '0.dev0'".parse().unwrap();
+        lock.required_environments.push(parsed.negate());
+        assert!(
+            lock.to_toml()
+                .unwrap_err()
+                .to_string()
+                .contains("as a PEP 508 marker")
+        );
+    }
 
     #[test]
     fn string_encoding_matches_toml_edit() {

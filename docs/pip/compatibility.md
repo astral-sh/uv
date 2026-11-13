@@ -463,6 +463,19 @@ While this is not strictly compliant with [PEP 440](https://peps.python.org/pep-
 consistent with
 [pip](https://github.com/pypa/pip/blob/24.1.1/src/pip/_internal/resolution/resolvelib/candidates.py#L540).
 
+## Platform release and version markers
+
+For `platform_release` and `platform_version`, uv evaluates `<`, `<=`, `>`, and `>=` in version
+order when both operands parse as versions. For example, a release of `2.post1` satisfies
+`platform_release > '2'`. Package version specifiers exclude that release from `>2`. If either
+operand is opaque, strict ordering is false and inclusive ordering compares the strings for
+equality. Containment checks such as `'SMP' in platform_version` use the original strings.
+
+A universal lock or export may need the opposite of a dependency marker. For example, the opposite
+of `platform_release >= '24'` must include every opaque release, but `platform_release < '24'`
+excludes them all. uv reports an error if it cannot write a fork as a PEP 508 marker. See the
+[marker comparison rules](https://packaging.python.org/en/latest/specifications/dependency-specifiers/#marker-comparisons).
+
 ## Package priority
 
 There are usually many possible solutions given a set of requirements, and a resolver must choose
