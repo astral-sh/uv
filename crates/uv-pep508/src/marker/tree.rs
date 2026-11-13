@@ -59,6 +59,8 @@ pub enum MarkerValueVersion {
     PythonFullVersion,
     /// `python_version`
     PythonVersion,
+    /// Numeric Darwin release used for macOS wheel compatibility.
+    UvMacosDarwinRelease,
 }
 
 impl Display for MarkerValueVersion {
@@ -67,6 +69,7 @@ impl Display for MarkerValueVersion {
             Self::ImplementationVersion => f.write_str("implementation_version"),
             Self::PythonFullVersion => f.write_str("python_full_version"),
             Self::PythonVersion => f.write_str("python_version"),
+            Self::UvMacosDarwinRelease => f.write_str("uv_macos_darwin_release"),
         }
     }
 }
@@ -777,6 +780,35 @@ impl MarkerTree {
         Self(INTERNER.lock().expression(expr))
     }
 
+    /// Parse a marker written in a uv lockfile. Version 1 encoded Darwin wheel
+    /// bounds as `platform_release` comparisons with platform-dependent semantics.
+    pub fn parse_lock_marker(marker: &str, legacy: bool) -> Result<Self, Pep508Error> {
+        let mode = if legacy {
+            parse::MarkerMode::LegacyWheel
+        } else {
+            parse::MarkerMode::Wheel
+        };
+        parse::parse_markers_with_mode(marker, &mut TracingReporter, mode)
+    }
+
+    /// Whether this marker depends on a numeric macOS wheel deployment target.
+    pub fn has_macos_wheel_predicate(self) -> bool {
+        INTERNER
+            .shared
+            .contains_variable(self.0, |var| *var == Variable::MacosDarwinRelease)
+    }
+
+    /// Whether this marker uses a field whose interpretation differs in version 1 locks.
+    pub fn needs_macos_wheel_lock_version(self) -> bool {
+        INTERNER.shared.contains_variable(self.0, |var| {
+            matches!(
+                var,
+                Variable::MacosDarwinRelease
+                    | Variable::String(CanonicalMarkerValueString::PlatformRelease)
+            )
+        })
+    }
+
     /// Whether the marker always evaluates to `true`.
     ///
     /// If this method returns `true`, it is definitively known that the marker will
@@ -914,13 +946,13 @@ impl MarkerTree {
                     map,
                 })
             }
-            Variable::VersionString(key) => {
+            Variable::MacosDarwinRelease => {
                 let Edges::Version { edges: ref map } = node.children else {
                     unreachable!()
                 };
-                MarkerTreeKind::VersionString(VersionMarkerTree {
+                MarkerTreeKind::MacosDarwinRelease(VersionMarkerTree {
                     id: self.0,
-                    key: *key,
+                    key: (),
                     map,
                 })
             }
@@ -1068,10 +1100,13 @@ impl MarkerTree {
                     }
                 }
             }
-            MarkerTreeKind::VersionString(marker) => {
-                let Ok(version) = env.get_string(marker.key()).parse::<Version>() else {
-                    return false;
-                };
+            MarkerTreeKind::MacosDarwinRelease(marker) => {
+                // An unknown release cannot satisfy a wheel's positive deployment target.
+                // Use the same point in the version domain when evaluating its complement.
+                let version = env.platform_release().parse::<Version>().map_or_else(
+                    |_| Version::new([0]),
+                    |version| version.only_release_trimmed(),
+                );
                 for (range, tree) in marker.edges() {
                     if range.contains(&version) {
                         return tree.evaluate_reporter_impl(env, extras, reporter);
@@ -1122,7 +1157,7 @@ impl MarkerTree {
             MarkerTreeKind::Version(marker) => {
                 marker.edges().any(|(_, tree)| tree.evaluate_extras(extras))
             }
-            MarkerTreeKind::VersionString(marker) => {
+            MarkerTreeKind::MacosDarwinRelease(marker) => {
                 marker.edges().any(|(_, tree)| tree.evaluate_extras(extras))
             }
             MarkerTreeKind::String(marker) => marker
@@ -1151,7 +1186,7 @@ impl MarkerTree {
             MarkerTreeKind::Version(marker) => marker
                 .edges()
                 .all(|(_, tree)| tree.evaluate_only_extras(extras)),
-            MarkerTreeKind::VersionString(marker) => marker
+            MarkerTreeKind::MacosDarwinRelease(marker) => marker
                 .edges()
                 .all(|(_, tree)| tree.evaluate_only_extras(extras)),
             MarkerTreeKind::String(marker) => marker
@@ -1525,8 +1560,8 @@ pub enum MarkerTreeKind<'a> {
     False,
     /// A version expression.
     Version(VersionMarkerTree<'a>),
-    /// A string-valued marker interpreted as a version within a platform-specific scope.
-    VersionString(VersionMarkerTree<'a, CanonicalMarkerValueString>),
+    /// Numeric Darwin release used for macOS wheel compatibility.
+    MacosDarwinRelease(VersionMarkerTree<'a, ()>),
     /// A string expression.
     String(StringMarkerTree<'a>),
     /// A string expression with the `in` operator.
@@ -2050,20 +2085,65 @@ mod test {
         );
     }
 
-    /// Darwin release comparisons use version ranges, including a shared closed endpoint.
     #[test]
-    fn isop_darwin_release_bounds_roundtrip() {
-        let marker = m(
-            "sys_platform == 'darwin' and ((platform_machine == 'arm64' and platform_release <= '24') or (platform_machine != 'arm64' and platform_release >= '24'))",
-        );
+    fn opaque_darwin_release_comparisons() {
+        let env = env37().with_sys_platform("darwin");
+        let opaque = env.clone().with_platform_release("not-a-version");
+        let equality = m("platform_release == '24'");
+        assert!(!equality.evaluate(&opaque, &[]));
+        assert!(equality.negate().evaluate(&opaque, &[]));
+        let numeric_tautology = m("platform_release >= '9' or platform_release < '24'");
+        assert!(!numeric_tautology.evaluate(&env.with_platform_release("3-invalid"), &[]));
         assert_eq!(
-            m(&marker.try_to_string().expect("nontrivial marker")),
+            m(&numeric_tautology.try_to_string().unwrap()),
+            numeric_tautology
+        );
+    }
+
+    #[test]
+    fn macos_wheel_predicate_roundtrip() {
+        let wheel = "uv_macos_darwin_release >= '25'";
+        let marker = MarkerTree::parse_lock_marker(wheel, false).unwrap();
+        assert!(wheel.parse::<MarkerTree>().is_err());
+        assert!(
+            MarkerTree::parse_lock_marker("uv_macos_darwin_release >= 'opaque'", false).is_err()
+        );
+        assert!(
+            format!("a; {wheel}")
+                .parse::<crate::Requirement<crate::VerbatimUrl>>()
+                .is_err()
+        );
+        assert!(marker.has_macos_wheel_predicate());
+        assert!(!m("platform_release >= '25'").has_macos_wheel_predicate());
+
+        for (release, compatible) in [
+            ("9.0.0", false),
+            ("24.10", false),
+            ("25", true),
+            ("25.0.0", true),
+            ("opaque", false),
+        ] {
+            let env = env37()
+                .with_sys_platform("darwin")
+                .with_platform_release(release);
+            assert_eq!(marker.evaluate(&env, &[]), compatible);
+            assert_eq!(marker.negate().evaluate(&env, &[]), !compatible);
+        }
+        let partition =
             marker
-        );
-        assert_eq!(
-            m(&marker.negate().try_to_string().expect("nontrivial marker")),
-            marker.negate()
-        );
+                .and(m("platform_machine == 'arm64'"))
+                .or(MarkerTree::parse_lock_marker(
+                    "uv_macos_darwin_release >= '24' and platform_machine == 'x86_64'",
+                    false,
+                )
+                .unwrap());
+        for original in [partition, partition.negate()] {
+            let written = original.try_to_string().unwrap();
+            assert_eq!(
+                MarkerTree::parse_lock_marker(&written, false).unwrap(),
+                original
+            );
+        }
     }
 
     /// Membership decisions have distinct renderers for strings, substrings, and lists.
@@ -2120,24 +2200,25 @@ mod test {
 
     #[test]
     fn darwin_platform_release() {
-        let baseline = m("sys_platform == 'darwin' and platform_release == '24.0.0'");
-        assert!(!baseline.is_disjoint(m("platform_release >= '9.0.0'")));
-        assert!(baseline.is_disjoint(m("platform_release >= '25.0.0'")));
+        let legacy = |text: &str| MarkerTree::parse_lock_marker(text, true).unwrap();
+        let baseline = legacy("sys_platform == 'darwin' and platform_release == '24.0.0'");
+        assert!(!baseline.is_disjoint(legacy("platform_release >= '9.0.0'")));
+        assert!(baseline.is_disjoint(legacy("platform_release >= '25.0.0'")));
         assert_eq!(
             baseline,
-            m("sys_platform == 'darwin' and platform_release == '24'")
+            legacy("sys_platform == 'darwin' and platform_release == '24'")
         );
 
         let env = env37()
             .with_sys_platform("darwin")
             .with_platform_release("24.10.0");
-        let marker = m("sys_platform == 'darwin' and platform_release >= '24.9.0'");
+        let marker = legacy("sys_platform == 'darwin' and platform_release >= '24.9.0'");
         assert!(marker.evaluate(&env, &[]));
         assert!(!marker.negate().evaluate(&env, &[]));
-        assert_eq!(marker, m(&marker.try_to_string().unwrap()));
+        assert_eq!(marker, legacy(&marker.try_to_string().unwrap()));
         assert_eq!(
             marker.negate(),
-            m(&marker.negate().try_to_string().unwrap())
+            legacy(&marker.negate().try_to_string().unwrap())
         );
     }
 

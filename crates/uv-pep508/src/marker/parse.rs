@@ -105,6 +105,11 @@ fn parse_marker_value<T: Pep508Url>(
                 !char.is_whitespace() && !matches!(char, '>' | '=' | '<' | '!' | '~' | ')')
             });
             let key = cursor.slice(start, len);
+            if key == "uv_macos_darwin_release" && cursor.marker_mode() != MarkerMode::Pep508 {
+                return Ok(MarkerValue::MarkerEnvVersion(
+                    MarkerValueVersion::UvMacosDarwinRelease,
+                ));
+            }
             MarkerValue::from_str(key)
                 .map_err(|_| Pep508Error {
                     message: Pep508ErrorSource::String(format!(
@@ -181,6 +186,29 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
     cursor.eat_whitespace();
     let r_value = parse_marker_value(cursor, reporter)?;
     let len = cursor.pos() - start;
+
+    let wheel_key = MarkerValue::MarkerEnvVersion(MarkerValueVersion::UvMacosDarwinRelease);
+    if l_value == wheel_key || r_value == wheel_key {
+        if l_value == wheel_key
+            && let MarkerValue::QuotedString(value) = &r_value
+            && let Some(expr) = parse_version_expr(
+                MarkerValueVersion::UvMacosDarwinRelease,
+                operator,
+                value,
+                reporter,
+            )
+        {
+            return Ok(Some(expr));
+        }
+        return Err(Pep508Error {
+            message: Pep508ErrorSource::String(
+                "Invalid macOS wheel deployment-target comparison".to_string(),
+            ),
+            start,
+            len,
+            input: cursor.to_string(),
+        });
+    }
 
     // Convert a `<marker_value> <marker_op> <marker_value>` expression into its
     // typed equivalent.
@@ -586,7 +614,35 @@ fn parse_marker_expr<T: Pep508Url>(
         cursor.next_expect_char(')', start_pos)?;
         Ok(marker)
     } else {
-        Ok(parse_marker_key_op_value(cursor, reporter)?.map(MarkerTree::expression))
+        let expression = parse_marker_key_op_value(cursor, reporter)?;
+        Ok(expression.map(|expression| {
+            if cursor.marker_mode() == MarkerMode::LegacyWheel
+                && let MarkerExpression::String {
+                    key: MarkerValueString::PlatformRelease,
+                    operator,
+                    value,
+                } = &expression
+                && let Some(operator) = operator.to_pep440_operator()
+                && let Ok(pattern) = value.parse::<VersionPattern>()
+                && let Ok(specifier) = VersionSpecifier::from_pattern(operator, pattern)
+            {
+                // Older locks and environment settings use the same spelling for
+                // a Darwin version range and a raw string comparison elsewhere.
+                let darwin = MarkerTree::expression(MarkerExpression::String {
+                    key: MarkerValueString::SysPlatform,
+                    operator: MarkerOperator::Equal,
+                    value: arcstr::literal!("darwin"),
+                });
+                let release = MarkerTree::expression(MarkerExpression::Version {
+                    key: MarkerValueVersion::UvMacosDarwinRelease,
+                    specifier,
+                });
+                return darwin
+                    .and(release)
+                    .or(darwin.negate().and(MarkerTree::expression(expression)));
+            }
+            MarkerTree::expression(expression)
+        }))
     }
 }
 
@@ -699,7 +755,24 @@ pub(crate) fn parse_markers<T: Pep508Url>(
     markers: &str,
     reporter: &mut impl Reporter,
 ) -> Result<MarkerTree, Pep508Error<T>> {
-    let mut chars = Cursor::new(markers);
+    parse_markers_with_mode(markers, reporter, MarkerMode::Pep508)
+}
+
+/// Selects the marker syntax for requirement metadata, new locks, or legacy environment bounds.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum MarkerMode {
+    #[default]
+    Pep508,
+    Wheel,
+    LegacyWheel,
+}
+
+pub(crate) fn parse_markers_with_mode<T: Pep508Url>(
+    markers: &str,
+    reporter: &mut impl Reporter,
+    mode: MarkerMode,
+) -> Result<MarkerTree, Pep508Error<T>> {
+    let mut chars = Cursor::new(markers).with_marker_mode(mode);
 
     // If the tree consisted entirely of arbitrary expressions
     // that were ignored, it evaluates to true.

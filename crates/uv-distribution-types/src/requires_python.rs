@@ -594,6 +594,11 @@ impl SimplifiedMarkerTree {
         Self(requires_python.simplify_markers(marker))
     }
 
+    /// Wrap an already-simplified marker read from the lockfile.
+    pub fn from_simplified(marker: MarkerTree) -> Self {
+        Self(marker)
+    }
+
     /// Complexifies the given markers by adding the given `requires-python` as
     /// a constraint to these simplified markers.
     pub fn into_marker(self, requires_python: &RequiresPython) -> MarkerTree {

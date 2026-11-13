@@ -229,8 +229,10 @@ impl ResolverOutput {
                         add_marker_params_from_tree(tree, set);
                     }
                 }
-                MarkerTreeKind::VersionString(marker) => {
-                    set.insert(MarkerParam::String(marker.key()));
+                MarkerTreeKind::MacosDarwinRelease(marker) => {
+                    set.insert(MarkerParam::String(
+                        CanonicalMarkerValueString::PlatformRelease,
+                    ));
                     for (_, tree) in marker.edges() {
                         add_marker_params_from_tree(tree, set);
                     }

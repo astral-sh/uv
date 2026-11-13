@@ -900,7 +900,7 @@ mod tests {
     use indoc::{formatdoc, indoc};
     use serde::Deserialize;
 
-    use super::super::{LockParseError, VERSION};
+    use super::super::{LockParseError, MACOS_WHEEL_VERSION};
     use super::{Cursor, Error, Lock, ValueDeserializer, from_str};
 
     const CANONICAL_LOCK: &str = r#"version = 1
@@ -1096,15 +1096,35 @@ version = "1.0.0"
     }
 
     #[test]
+    fn legacy_darwin_release_bound_migrates_to_the_wheel_predicate() {
+        let legacy = r#"
+version = 1
+revision = 5
+requires-python = ">=3.12"
+resolution-markers = [
+    "sys_platform == 'darwin' and platform_release >= '25'",
+    "sys_platform == 'darwin' and platform_release < '25'",
+    "sys_platform != 'darwin'",
+]
+"#;
+        let lock = Lock::from_toml(legacy).unwrap();
+        let serialized = lock.to_toml().unwrap();
+        assert!(serialized.starts_with("version = 2\n"));
+        assert!(serialized.contains("uv_macos_darwin_release >= '25'"));
+        assert_eq!(Lock::from_canonical_toml(&serialized).unwrap(), lock);
+        assert_eq!(toml::from_str::<Lock>(&serialized).unwrap(), lock);
+    }
+
+    #[test]
     fn unsupported_lock_version_is_rejected() {
-        let version = VERSION + 1;
+        let version = MACOS_WHEEL_VERSION + 1;
         let input = CANONICAL_LOCK.replacen("version = 1", &format!("version = {version}"), 1);
         let error = Lock::from_toml(&input).expect_err("unsupported lock versions are rejected");
 
         assert_matches!(
             error,
             LockParseError::UnsupportedVersion {
-                supported: VERSION,
+                supported: MACOS_WHEEL_VERSION,
                 version: actual,
             } if actual == version
         );
@@ -1112,7 +1132,7 @@ version = "1.0.0"
 
     #[test]
     fn unparsable_unsupported_lock_version_is_identified() {
-        let version = VERSION + 1;
+        let version = MACOS_WHEEL_VERSION + 1;
         let input = CANONICAL_LOCK
             .replacen("version = 1", &format!("version = {version}"), 1)
             .replacen("name = \"dependency\"", "name = false", 1);
@@ -1122,7 +1142,7 @@ version = "1.0.0"
         assert_matches!(
             error,
             LockParseError::UnparsableVersion {
-                supported: VERSION,
+                supported: MACOS_WHEEL_VERSION,
                 version: actual,
                 ..
             } if actual == version
