@@ -5715,6 +5715,7 @@ dependencies = [
  "uv-console",
  "uv-dispatch",
  "uv-distribution",
+ "uv-distribution-filename",
  "uv-distribution-types",
  "uv-environment-operations",
  "uv-errors",

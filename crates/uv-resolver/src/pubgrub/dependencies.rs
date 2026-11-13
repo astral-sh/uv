@@ -4,7 +4,7 @@ use std::iter;
 use either::Either;
 
 use uv_distribution_types::{IndexMetadata, Requirement, RequirementScope, RequirementSource};
-use uv_normalize::{GroupName, PackageName};
+use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pypi_types::{ConflictItemRef, Conflicts, VerbatimParsedUrl};
 use uv_resolver_types::PackageNodeKind;
@@ -103,6 +103,26 @@ pub(crate) struct PubGrubDependency {
 }
 
 impl PubGrubDependency {
+    /// Depend on an artifact of this release, independently of its PyPI version.
+    pub(crate) fn wheel(
+        name: &PackageName,
+        release: &Version,
+        kind: Option<PackageNodeKind>,
+        version: Range<Version>,
+    ) -> Self {
+        Self {
+            package: PubGrubPackageInner::WheelSelector {
+                name: name.clone(),
+                release: release.clone(),
+                kind,
+            }
+            .into(),
+            version,
+            parent: None,
+            source: DependencySource::Unspecified,
+        }
+    }
+
     /// Convert flattened requirements into PubGrub dependency edges.
     ///
     /// An empty range cannot retain the specifiers that produced it, so return the source
@@ -111,17 +131,11 @@ impl PubGrubDependency {
     pub(crate) fn from_requirements<'a>(
         conflicts: &Conflicts,
         requirements: impl IntoIterator<Item = Cow<'a, Requirement>>,
-        group_name: Option<&'a GroupName>,
-        parent_package: Option<&'a PubGrubPackage>,
+        parent: Option<(&'a PackageName, &'a PackageNodeKind)>,
     ) -> Result<Vec<Self>, UnsatisfiableRequirement> {
         let mut dependencies = Vec::new();
         for requirement in requirements {
-            dependencies.extend(Self::from_requirement(
-                conflicts,
-                requirement,
-                group_name,
-                parent_package,
-            )?);
+            dependencies.extend(Self::from_requirement(conflicts, requirement, parent)?);
         }
         Ok(dependencies)
     }
@@ -129,16 +143,12 @@ impl PubGrubDependency {
     fn from_requirement<'a>(
         conflicts: &Conflicts,
         requirement: Cow<'a, Requirement>,
-        group_name: Option<&'a GroupName>,
-        parent_package: Option<&'a PubGrubPackage>,
+        parent: Option<(&'a PackageName, &'a PackageNodeKind)>,
     ) -> Result<impl Iterator<Item = Self> + 'a, UnsatisfiableRequirement> {
         if let Some(requirement) = UnsatisfiableRequirement::from_requirement(&requirement) {
             return Err(requirement);
         }
 
-        let parent_name = parent_package.and_then(|package| package.name_no_root());
-        let is_normal_parent = parent_package
-            .is_some_and(|parent| parent.extra().is_none() && parent.group().is_none());
         let iter = if !requirement.extras.is_empty() {
             // This is crazy subtle, but if any of the extras in the
             // requirement are part of a declared conflict, then we
@@ -193,60 +203,32 @@ impl PubGrubDependency {
                 version,
                 source,
             } = pubgrub_requirement;
-            match &*package {
-                PubGrubPackageInner::Package { .. } => Self {
-                    package,
-                    version,
-                    parent: if is_normal_parent {
-                        parent_name.cloned()
-                    } else {
-                        None
-                    },
-                    source,
-                },
-                PubGrubPackageInner::Marker { .. } => Self {
-                    package,
-                    version,
-                    parent: if is_normal_parent {
-                        parent_name.cloned()
-                    } else {
-                        None
-                    },
-                    source,
-                },
-                PubGrubPackageInner::Extra { name, .. } => {
-                    if group_name.is_none() {
-                        debug_assert!(
-                            parent_name.is_none_or(|parent_name| parent_name != name),
-                            "extras not flattened for {name}"
-                        );
-                    }
-                    Self {
-                        package,
-                        version,
-                        parent: None,
-                        source,
-                    }
-                }
-                PubGrubPackageInner::Group { name, .. } => {
-                    if group_name.is_none() {
-                        debug_assert!(
-                            parent_name.is_none_or(|parent_name| parent_name != name),
-                            "group not flattened for {name}"
-                        );
-                    }
-                    Self {
-                        package,
-                        version,
-                        parent: None,
-                        source,
-                    }
+            let parent = match &*package {
+                PubGrubPackageInner::Package { .. } | PubGrubPackageInner::Marker { .. } => parent
+                    .filter(|(_, kind)| kind.is_base())
+                    .map(|(name, _)| name.clone()),
+                PubGrubPackageInner::Extra { name, .. }
+                | PubGrubPackageInner::Group { name, .. } => {
+                    debug_assert!(
+                        parent
+                            .is_none_or(|(parent, kind)| kind.group().is_some() || parent != name),
+                        "self-dependency on {package} was not flattened"
+                    );
+                    None
                 }
                 PubGrubPackageInner::Root(_) => unreachable!("Root package in dependencies"),
                 PubGrubPackageInner::Python(_) => {
                     unreachable!("Python package in dependencies")
                 }
-                PubGrubPackageInner::System(_) => unreachable!("System package in dependencies"),
+                PubGrubPackageInner::WheelSelector { .. } | PubGrubPackageInner::System(_) => {
+                    unreachable!("Synthetic package in requirement dependencies")
+                }
+            };
+            Self {
+                package,
+                version,
+                parent,
+                source,
             }
         }))
     }
