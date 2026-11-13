@@ -7,7 +7,7 @@ use uv_static::EnvVars;
 use uv_test::uv_snapshot;
 
 #[test]
-fn tool_uninstall() {
+fn tool_uninstall() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&["3.12"])
         .with_filtered_exe_suffix()
         .with_tool_dirs();
@@ -26,7 +26,11 @@ fn tool_uninstall() {
     Uninstalled 2 executables: black, blackd
     ");
 
-    assert!(context.temp_dir.child("tools/.lock").is_file());
+    assert!(
+        context
+            .lock_path(&context.temp_dir.join("tools/.lock"))?
+            .is_file()
+    );
 
     // After uninstalling the tool, it shouldn't be listed.
     uv_snapshot!(context.filters(), context.tool_list(), @"
@@ -51,6 +55,7 @@ fn tool_uninstall() {
      + platformdirs==4.2.0
     Installed 2 executables: black, blackd
     ");
+    Ok(())
 }
 
 /// Files beside the tools directory must survive removal of the last tool, even if no other
@@ -87,7 +92,7 @@ fn tool_uninstall_preserves_parent_files() -> Result<()> {
 
     assert_eq!(context.read("data/uv.toml"), "# User configuration\n");
     assert_eq!(context.read("data/keep.txt"), "Unrelated file\n");
-    assert!(tool_dir.child(".lock").is_file());
+    assert!(context.lock_path(&tool_dir.join(".lock"))?.is_file());
 
     Ok(())
 }
@@ -111,7 +116,7 @@ fn tool_uninstall_all_empty_preserves_parent_files() -> Result<()> {
     ");
 
     assert_eq!(context.read("data/uv.toml"), "# User configuration\n");
-    assert!(tool_dir.child(".lock").is_file());
+    assert!(context.lock_path(&tool_dir.join(".lock"))?.is_file());
 
     Ok(())
 }

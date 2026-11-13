@@ -242,8 +242,8 @@ fn prune_stale_symlink() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
-async fn prune_force() -> Result<()> {
+#[test]
+fn prune_force() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_filtered_counts();
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -274,9 +274,7 @@ async fn prune_force() -> Result<()> {
     simple.create_dir_all()?;
 
     // When locked, `--force` should proceed without blocking
-    let _cache = uv_cache::Cache::from_path(context.cache_dir.path())
-        .with_exclusive_lock()
-        .await;
+    let _cache = context.hold_lock(&context.cache_dir.join(".lock"))?;
     uv_snapshot!(context.filters(), context.prune().arg("--verbose").arg("--force"), @"
     exit_code: 0 (success)
     ----- stderr -----
