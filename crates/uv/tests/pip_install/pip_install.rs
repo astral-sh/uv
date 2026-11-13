@@ -7096,6 +7096,180 @@ fn path_name_version_change() {
     );
 }
 
+/// A literal `#` in a directory name is part of the wheel path.
+#[test]
+fn local_wheel_path_with_hash() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let directory = context.temp_dir.child("wheels#10458/bucket#sha256=cache");
+    directory.create_dir_all()?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-1.0.0-py3-none-any.whl"),
+        directory.child("ok-1.0.0-py3-none-any.whl"),
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("./wheels#10458/bucket#sha256=cache/ok-1.0.0-py3-none-any.whl"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0 (from file://[TEMP_DIR]/wheels%2310458/bucket%23sha256=cache/ok-1.0.0-py3-none-any.whl)
+    "
+    );
+
+    Ok(())
+}
+
+/// A fragment-looking directory name must not redirect the install to a sibling project.
+#[test]
+fn local_wheel_path_with_hash_mismatch() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let sibling = context.temp_dir.child("wheels");
+    sibling.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "sibling"
+        version = "1.0.0"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    sibling.child("src/sibling/__init__.py").touch()?;
+
+    let directory = context.temp_dir.child("wheels#tag=1");
+    directory.create_dir_all()?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-1.0.0-py3-none-any.whl"),
+        directory.child("ok-1.0.0-py3-none-any.whl"),
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("./wheels#tag=1/ok-1.0.0-py3-none-any.whl#sha256=0000000000000000000000000000000000000000000000000000000000000000"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Failed to read `ok @ file://[TEMP_DIR]/wheels%23tag=1/ok-1.0.0-py3-none-any.whl#sha256=0000000000000000000000000000000000000000000000000000000000000000`
+      cause: Hash mismatch for `ok @ file://[TEMP_DIR]/wheels%23tag=1/ok-1.0.0-py3-none-any.whl#sha256=0000000000000000000000000000000000000000000000000000000000000000`
+
+             Expected:
+               sha256:0000000000000000000000000000000000000000000000000000000000000000
+
+             Computed:
+               sha256:79f0b33e6ce1e09eaa1784c8eee275dfe84d215d9c65c652f07c18e85fdaac5f
+    ");
+    context.assert_not_installed("ok");
+    context.assert_not_installed("sibling");
+    Ok(())
+}
+
+/// A directory named like a checksummed requirement must not shadow its wheel.
+#[test]
+fn local_wheel_path_with_hash_ambiguity() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let wheel = "ok-1.0.0-py3-none-any.whl";
+    fs_err::copy(
+        context.workspace_root.join("test/links").join(wheel),
+        context.temp_dir.child(wheel),
+    )?;
+    let requirement = format!("{wheel}#sha256={}", "0".repeat(64));
+    context.temp_dir.child(&requirement).create_dir_all()?;
+
+    uv_snapshot!(context.filters(), context.pip_install().arg(format!("./{requirement}")), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to parse: `./ok-1.0.0-py3-none-any.whl#sha256=0000000000000000000000000000000000000000000000000000000000000000`
+      cause: Ambiguous hash in path `./ok-1.0.0-py3-none-any.whl#sha256=0000000000000000000000000000000000000000000000000000000000000000`. Use a `file:` URL with `%23` for a literal `#` and put the checksum in the URL fragment.
+             ./ok-1.0.0-py3-none-any.whl#sha256=0000000000000000000000000000000000000000000000000000000000000000
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ");
+    context.assert_not_installed("ok");
+    Ok(())
+}
+
+/// Creating a sibling project must not turn a missing wheel into a successful install.
+#[test]
+fn local_wheel_path_with_hash_missing_directory() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let outer = context.temp_dir.child("outer#one");
+    outer.create_dir_all()?;
+    let requirement = "./outer#one/wheels#typo/ok-1.0.0-py3-none-any.whl";
+    uv_snapshot!(context.filters(), context.pip_install().arg("--no-deps").arg(requirement), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Distribution not found at: file://[TEMP_DIR]/outer%23one/wheels%23typo/ok-1.0.0-py3-none-any.whl
+    ");
+
+    copy_dir_ignore(
+        context.workspace_root.join("test/packages/built-by-uv"),
+        outer.child("wheels"),
+    )?;
+    uv_snapshot!(context.filters(), context.pip_install().arg("--no-deps").arg(requirement), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Distribution not found at: file://[TEMP_DIR]/outer%23one/wheels%23typo/ok-1.0.0-py3-none-any.whl
+    ");
+    context.assert_not_installed("built_by_uv");
+    context.assert_not_installed("ok");
+    Ok(())
+}
+
+/// Reordering checksum fields must not change whether the wheel can be installed.
+#[test]
+fn local_wheel_path_with_hash_conflicting_pins() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let wheel = context
+        .workspace_root
+        .join("test/links/ok-1.0.0-py3-none-any.whl");
+    let url = SafeUrl::from_file_path(wheel).map_err(|()| anyhow!("invalid wheel path"))?;
+    let correct = "79f0b33e6ce1e09eaa1784c8eee275dfe84d215d9c65c652f07c18e85fdaac5f";
+    let wrong = "0".repeat(64);
+    let mut filters = context.filters();
+    filters.extend([(correct, "[CORRECT]"), (wrong.as_str(), "[WRONG]")]);
+
+    uv_snapshot!(filters, context.pip_install()
+        .arg("--require-hashes")
+        .arg(format!("ok @ {url}#%73ha256={correct}&sha256={wrong}")), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Conflicting archive URL hashes for `ok @ file://[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl#%73ha256=[CORRECT]&sha256=[WRONG]`: `sha256:[CORRECT]` conflicts with `sha256:[WRONG]`
+    ");
+    context.assert_not_installed("ok");
+    uv_snapshot!(filters, context.pip_install()
+        .arg("--require-hashes")
+        .arg(format!("ok @ {url}#sha256={wrong}&%73ha256={correct}")), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Conflicting archive URL hashes for `ok @ file://[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl#sha256=[WRONG]&%73ha256=[CORRECT]`: `sha256:[WRONG]` conflicts with `sha256:[CORRECT]`
+    ");
+    context.assert_not_installed("ok");
+    Ok(())
+}
+
+/// An egg name can end in an archive extension independently of any checksum.
+#[test]
+fn local_wheel_path_with_hash_egg_name() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let (filename, wheel) = WheelBuilder::new(&"demo-whl".parse()?, &"1.0.0".parse()?).build();
+    context.temp_dir.child(&filename).write_binary(&wheel)?;
+
+    uv_snapshot!(context.filters(), context.pip_install().arg(format!("./{filename}#egg=demo.whl")), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + demo-whl==1.0.0 (from file://[TEMP_DIR]/demo_whl-1.0.0-py3-none-any.whl#egg=demo.whl)
+    ");
+    Ok(())
+}
+
 /// Install from a direct path (wheel) with the same name at a different path.
 #[test]
 fn path_changes_with_same_name() -> Result<()> {

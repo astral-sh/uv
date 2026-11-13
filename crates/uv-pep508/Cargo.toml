@@ -16,6 +16,7 @@ workspace = true
 
 [dependencies]
 uv-cache-key = { workspace = true }
+uv-distribution-filename = { workspace = true, optional = true }
 uv-fs = { workspace = true }
 uv-normalize = { workspace = true }
 uv-pep440 = { workspace = true }
@@ -52,7 +53,7 @@ schemars = ["dep:schemars"]
 # relevant RFCs, even though widely supported. Pip accepts relative file URLs and paths instead of urls
 # (`foo @ ./foo-3.0.0-py3-none-any.whl`). The `non-pep508-features` controls whether these non-spec features will
 # be supported.
-non-pep508-extensions = []
+non-pep508-extensions = ["dep:uv-distribution-filename"]
 # Enable `url::Url` as a requirement URL type and direct conversion to `VerbatimUrl`.
 unsafe-url = []
 default = []
