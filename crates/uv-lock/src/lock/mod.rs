@@ -91,6 +91,7 @@ mod map;
 mod requirements;
 mod serialize;
 mod tree;
+mod versions;
 #[cfg(test)]
 mod windows_emulation_tests;
 
@@ -445,7 +446,7 @@ impl<'lock> DependencySelectionContext<'lock> {
 }
 
 /// The dependency section in which a locked edge is stored.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 enum DependencyContext<'a> {
     Production,
     Extra(&'a ExtraName),
@@ -4351,7 +4352,7 @@ impl Lock {
         let filter = ManifestFilter::from_lock(self);
         let omit_constraints = uv_preview::is_enabled(PreviewFeature::ResolutionInputs);
 
-        let normalized_constraints = {
+        let normalized_constraints: BTreeSet<_> = {
             let expected = normalizer.constraints(
                 constraints
                     .iter()
@@ -4496,12 +4497,26 @@ impl Lock {
             }
         }
 
-        let dependency_modifiers = if allow_missing_package_metadata {
-            DependencyModifiers::new(
-                Overrides::from_entries(normalized_overrides)
-                    .map_err(LockErrorKind::InvalidScopedOverride)?,
-                Excludes::from_entries(excludes.iter().cloned()),
+        let modifiers = Overrides::from_entries(normalized_overrides).map(|overrides| {
+            DependencyModifiers::new(overrides, Excludes::from_entries(excludes.iter().cloned()))
+        });
+        // Skip the version check if a package-scoped override uses an unsupported source, such as
+        // a direct URL or a named index. Standard validation can still compare the package's
+        // current requirements with those saved in the lockfile. The `lock-without-metadata`
+        // preview needs the overrides to check the resolved dependencies, so return the error below.
+        if let Ok(modifiers) = &modifiers
+            && let Some(mismatch) = self.check_locked_versions(
+                packages,
+                dependency_metadata,
+                Constraints::from_requirements(normalized_constraints.iter().cloned()),
+                modifiers,
             )
+        {
+            return Ok(mismatch);
+        }
+
+        let dependency_modifiers = if allow_missing_package_metadata {
+            modifiers.map_err(LockErrorKind::InvalidScopedOverride)?
         } else {
             DependencyModifiers::default()
         };
@@ -5074,7 +5089,8 @@ impl Lock {
     /// Apply dependency policies before flattening recursive self-requirements.
     ///
     /// Groups use only global overrides and are not flattened, but exclusions still use the
-    /// owning package's resolved version.
+    /// owning package's resolved version. When `package_version` is `None`, only global
+    /// overrides and exclusions apply in every dependency context.
     fn preprocess_requirements(
         package_name: &PackageName,
         package_version: Option<&Version>,
@@ -6169,6 +6185,8 @@ pub enum SatisfiesResult<'lock> {
         BTreeSet<Requirement>,
         BTreeSet<Requirement>,
     ),
+    /// A locked dependency version violates a declared specifier.
+    MismatchedDependencyVersion(&'lock PackageName, &'lock Version, VersionSpecifiers),
     /// Refreshed declarations regenerate different resolved dependency edges.
     MismatchedPackageDependencies(
         &'lock PackageName,

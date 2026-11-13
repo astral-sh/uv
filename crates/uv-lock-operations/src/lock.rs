@@ -835,6 +835,18 @@ async fn do_lock(
         None
     };
 
+    // For `uv lock --locked`, if we find a version mismatch, we want to
+    // bail out and report that error immediately.
+    if let LockMode::Locked(_, source) = mode
+        && let Some(ValidatedLock::VersionMismatch(_, mismatch)) = existing_lock
+    {
+        return Err(LockError::LockVersionMismatch(
+            target.lock_filename(),
+            source,
+            mismatch,
+        ));
+    }
+
     match existing_lock {
         // Resolution from the lockfile succeeded.
         Some(ValidatedLock::Satisfies(lock)) => {
@@ -847,7 +859,10 @@ async fn do_lock(
         // The lockfile did not contain enough information to obtain a resolution, fallback
         // to a fresh resolve.
         Some(
-            ValidatedLock::Unusable(_) | ValidatedLock::Versions(_) | ValidatedLock::Preferable(_),
+            ValidatedLock::Unusable(_)
+            | ValidatedLock::Versions(_)
+            | ValidatedLock::Preferable(_)
+            | ValidatedLock::VersionMismatch(..),
         )
         | None => {
             let recorder = if preview.is_enabled(PreviewFeature::ResolutionInputs) {
@@ -866,7 +881,9 @@ async fn do_lock(
             // Determine whether we can reuse the existing package versions.
             let versions_lock = existing_lock.as_ref().and_then(|lock| match &lock {
                 ValidatedLock::Satisfies(lock) => Some(lock),
-                ValidatedLock::Preferable(lock) => Some(lock),
+                ValidatedLock::Preferable(lock) | ValidatedLock::VersionMismatch(lock, _) => {
+                    Some(lock)
+                }
                 ValidatedLock::Versions(lock) => Some(lock),
                 ValidatedLock::Unusable(_) => None,
             });
@@ -886,7 +903,9 @@ async fn do_lock(
             // Determine whether we can reuse the existing package forks.
             let forks_lock = existing_lock.as_ref().and_then(|lock| match &lock {
                 ValidatedLock::Satisfies(lock) => Some(lock),
-                ValidatedLock::Preferable(lock) => Some(lock),
+                ValidatedLock::Preferable(lock) | ValidatedLock::VersionMismatch(lock, _) => {
+                    Some(lock)
+                }
                 ValidatedLock::Versions(_) => None,
                 ValidatedLock::Unusable(_) => None,
             });

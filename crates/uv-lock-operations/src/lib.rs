@@ -8,7 +8,7 @@ mod lockfile;
 mod validated_lock;
 
 pub use discovery::DiscoveredProject;
-pub use error::{LockError, LockValidationError, MissingLockfileSource};
+pub use error::{LockError, LockValidationError, LockVersionMismatch, MissingLockfileSource};
 pub use lock::{LockMode, LockOperation, LockResult};
 pub use lock_target::LockTarget;
 pub use lockfile::FrozenWorkspace;
