@@ -39,6 +39,15 @@ pub enum ProxyIndexConfigError {
         index: Box<SafeUrl>,
     },
 
+    /// A proxy index shares a URL with an ordinary index.
+    #[error("Proxy index `{proxy}` cannot use the same URL as ordinary index `{index}`")]
+    AmbiguousProxyUrl {
+        /// The proxy index URL, with credentials redacted when displayed.
+        proxy: Box<SafeUrl>,
+        /// The ordinary index URL, with credentials redacted when displayed.
+        index: Box<SafeUrl>,
+    },
+
     /// More than one proxy references the same canonical package index.
     #[error(
         "Each index can have only one proxy, but both `{first_proxy}` and `{second_proxy}` are proxies for `{index}`"
@@ -430,6 +439,17 @@ pub(crate) fn build_routes(
             });
         }
 
+        if let Some(index) = locations.index_for_url(proxy.url()).or_else(|| {
+            locations
+                .default_index()
+                .filter(|index| index.url().is_same_index(proxy.url()))
+        }) {
+            return Err(ProxyIndexConfigError::AmbiguousProxyUrl {
+                proxy: Box::new(proxy.raw_url().clone()),
+                index: Box::new(index.raw_url().clone()),
+            });
+        }
+
         let canonical_url = IndexUrlPrefix::new(canonical.url.clone())?;
         let proxy_url = IndexUrlPrefix::new(proxy.url.clone())?;
         let physical_url = proxy_url.as_index_url().url();
@@ -587,6 +607,7 @@ mod tests {
             api: Some(HeaderValue::from_static("no-cache")),
             files: Some(HeaderValue::from_static("max-age=3600")),
         });
+        let endpoint = proxy.url.clone();
 
         let locations =
             IndexLocations::new(vec![canonical_index.clone(), proxy], Vec::new(), false)?;
@@ -616,6 +637,10 @@ mod tests {
             locations
                 .request_policy(&canonical)
                 .artifact_cache_control(),
+            Some(HeaderValue::from_static("max-age=3600"))
+        );
+        assert_eq!(
+            locations.request_policy(&endpoint).artifact_cache_control(),
             Some(HeaderValue::from_static("max-age=3600"))
         );
 

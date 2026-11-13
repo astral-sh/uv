@@ -282,23 +282,14 @@ impl Deref for IndexUrl {
 pub struct IndexLocations {
     indexes: Vec<Index>,
     proxy_indexes: Vec<Arc<Index>>,
-    // A proxy and an ordinary index can share a URL. URL policy lookups use the first definition
-    // in their original declaration order, even though the definitions are stored separately.
-    index_order: Vec<IndexKind>,
     flat_index: Vec<Index>,
     no_index: bool,
     pub(crate) routes: Vec<Arc<ProxyRoute>>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum IndexKind {
-    Index,
-    Proxy,
-}
-
 #[expect(
     clippy::missing_fields_in_debug,
-    reason = "routes and index ordering are internal implementation details"
+    reason = "routes are derived from the index configuration"
 )]
 impl std::fmt::Debug for IndexLocations {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
@@ -360,10 +351,8 @@ impl IndexLocations {
     ) -> Result<Self, ProxyIndexConfigError> {
         for index in indexes {
             if index.proxy_for.is_some() {
-                self.index_order.push(IndexKind::Proxy);
                 self.proxy_indexes.push(Arc::new(index));
             } else {
-                self.index_order.push(IndexKind::Index);
                 self.indexes.push(index);
             }
         }
@@ -549,28 +538,25 @@ impl<'a> IndexLocations {
         Either::Right(non_default.into_iter().chain(default))
     }
 
-    /// Return the configured index matching the given URL.
-    fn index_for_url(&self, url: &IndexUrl) -> Option<&Index> {
-        let mut indexes = self.indexes.iter();
-        let mut proxy_indexes = self.proxy_indexes.iter().map(Arc::as_ref);
-        self.index_order
+    /// Return the first ordinary index configured with the given URL.
+    pub(super) fn index_for_url(&self, url: &IndexUrl) -> Option<&Index> {
+        self.indexes
             .iter()
-            .filter_map(|kind| match kind {
-                IndexKind::Index => indexes.next(),
-                IndexKind::Proxy => proxy_indexes.next(),
-            })
             .find(|index| index.url().is_same_index(url))
     }
 
     /// Return the HTTP request policy for an index, or the default for an unconfigured URL.
     ///
-    /// An upstream index uses its proxy's policy. When looking up an endpoint URL directly,
-    /// the first definition with that URL supplies the policy.
+    /// A proxied index uses its proxy's policy, whether looked up by its upstream or proxy URL.
     pub fn request_policy(&self, url: &IndexUrl) -> IndexRequestPolicy<'_> {
         if let Some(proxy) = self.proxy_route_for(url) {
             return proxy.request_policy();
         }
         self.index_for_url(url)
+            .or_else(|| {
+                self.proxy_indexes()
+                    .find(|index| index.url().is_same_index(url))
+            })
             .map(Index::request_policy)
             .unwrap_or_default()
     }
@@ -823,35 +809,40 @@ mod tests {
     }
 
     #[test]
-    fn url_lookup_preserves_proxy_declaration_order() -> Result<(), Box<dyn Error>> {
-        let mut proxy = configured_proxy_index(
-            "socket",
-            "https://proxy.example.com/simple/",
-            "https://proxy.example.com/files/",
+    fn ordinary_indexes_with_the_same_url_use_the_first_definition() -> Result<(), Box<dyn Error>> {
+        let first: Index = toml::from_str(
+            r#"
+            name = "first"
+            url = "https://index.example.com/simple/"
+            cache-control = { api = "no-cache" }
+            hash-algorithm = "sha256"
+            exclude-newer = false
+            "#,
         )?;
-        proxy.cache_control = Some(IndexCacheControl {
-            api: Some(HeaderValue::from_static("no-cache")),
-            files: None,
-        });
-        let ordinary = Index::from_extra_index_url(proxy.url.clone());
+        let second: Index = toml::from_str(
+            r#"
+            name = "second"
+            url = "https://index.example.com/simple"
+            cache-control = { api = "max-age=300" }
+            hash-algorithm = "sha512"
+            exclude-newer = "7 days"
+            "#,
+        )?;
+        let url = second.url.clone();
+        let locations = IndexLocations::new(vec![first, second], Vec::new(), false)?;
 
-        for (first, second) in [(proxy.clone(), ordinary.clone()), (ordinary, proxy)] {
-            for no_index in [false, true] {
-                let locations =
-                    IndexLocations::new(vec![first.clone(), second.clone()], Vec::new(), no_index)?;
-                let combined = IndexLocations::new(vec![first.clone()], Vec::new(), no_index)?
-                    .combine(vec![second.clone()], Vec::new(), false)?;
-
-                for locations in [locations, combined] {
-                    assert_eq!(
-                        locations
-                            .request_policy(first.url())
-                            .simple_api_cache_control(),
-                        first.request_policy().simple_api_cache_control(),
-                    );
-                }
-            }
-        }
+        assert_eq!(
+            locations.request_policy(&url).simple_api_cache_control(),
+            Some(HeaderValue::from_static("no-cache")),
+        );
+        assert_eq!(
+            locations.hash_algorithm_for(&url),
+            Some(HashAlgorithm::Sha256)
+        );
+        assert_eq!(
+            locations.exclude_newer_for(&url, &"demo".parse()?),
+            Some(&ExcludeNewerOverride::Disabled),
+        );
 
         Ok(())
     }

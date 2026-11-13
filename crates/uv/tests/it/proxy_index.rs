@@ -408,6 +408,36 @@ async fn proxy_index_rejects_same_named_package_index_across_configuration_files
 }
 
 #[test]
+fn proxy_index_rejects_url_shared_with_ordinary_index() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    pyproject.write_str(indoc::indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [[tool.uv.index]]
+        name = "ordinary"
+        url = "https://ordinary-user:ordinary-secret@proxy.example.com/simple"
+
+        [[tool.uv.index]]
+        name = "proxy"
+        url = "https://proxy-user:proxy-secret@proxy.example.com/simple/"
+        artifact-base-url = "https://proxy.example.com/files/"
+        proxy-for = "pypi"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @r"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Proxy index `https://proxy-user:****@proxy.example.com/simple/` cannot use the same URL as ordinary index `https://ordinary-user:****@proxy.example.com/simple`
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn proxy_index_rejects_named_proxy_in_project_sources() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let pyproject = context.temp_dir.child("pyproject.toml");
@@ -511,9 +541,9 @@ async fn proxy_index_implicitly_routes_pypi_without_a_second_resolution_index() 
     Ok(())
 }
 
-/// A proxy's PEP 658 metadata uses its policy even when an earlier ordinary index shares its URL.
+/// The proxy's cache policy overrides the cache header on PEP 658 metadata.
 #[tokio::test]
-async fn proxy_index_sidecar_cache_policy_uses_upstream_route() -> Result<()> {
+async fn proxy_index_sidecar_uses_proxy_cache_policy() -> Result<()> {
     let context = uv_test::test_context!("3.13");
     let server = MockServer::start().await;
     let server_url = server.uri();
@@ -530,17 +560,11 @@ async fn proxy_index_sidecar_cache_policy_uses_upstream_route() -> Result<()> {
         preview-features = ["proxy-index"]
 
         [[tool.uv.index]]
-        name = "ordinary"
-        url = "{server_url}/simple/"
-        explicit = true
-        cache-control = {{ api = "max-age=3600", files = "no-store" }}
-
-        [[tool.uv.index]]
         name = "proxy"
         url = "{server_url}/simple/"
         artifact-base-url = "{server_url}/files/"
         proxy-for = "pypi"
-        cache-control = {{ files = "max-age=3600" }}
+        cache-control = {{ api = "max-age=3600", files = "max-age=3600" }}
     "#})?;
     let wheel = advertised_file(
         WHEEL_FILENAME,
@@ -548,7 +572,16 @@ async fn proxy_index_sidecar_cache_policy_uses_upstream_route() -> Result<()> {
         Some(WHEEL_HASH),
     );
     mount_simple(&server, "basic-package", vec![wheel], 1).await;
-    mount_metadata(&server, WHEEL_FILENAME, WHEEL_METADATA, 1).await;
+    Mock::given(method("GET"))
+        .and(path(format!("/files/{WHEEL_FILENAME}.metadata")))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_string(WHEEL_METADATA)
+                .insert_header("cache-control", "no-store"),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
 
     uv_snapshot!(context.filters(), context.lock(), @"
     exit_code: 0 (success)
@@ -568,8 +601,7 @@ async fn proxy_index_sidecar_cache_policy_uses_upstream_route() -> Result<()> {
     Ok(())
 }
 
-/// The proxy's cache policy applies to variant metadata on another host even if a direct index
-/// shares the proxy's Simple API URL.
+/// The proxy's cache policy applies to variant metadata on another host.
 #[tokio::test]
 async fn proxy_index_variant_metadata_uses_advertised_url_and_proxy_cache_policy() -> Result<()> {
     let context = uv_test::test_context!("3.13");
@@ -585,12 +617,6 @@ async fn proxy_index_variant_metadata_uses_advertised_url_and_proxy_cache_policy
         .child("uv.toml")
         .write_str(&formatdoc! {r#"
         preview-features = ["proxy-index", "wheel-variants"]
-
-        [[index]]
-        name = "ordinary"
-        url = "{server_url}/simple/"
-        explicit = true
-        cache-control = {{ files = "no-store" }}
 
         [[index]]
         name = "proxy"
@@ -662,76 +688,6 @@ async fn proxy_index_variant_metadata_uses_advertised_url_and_proxy_cache_policy
 
     server.verify().await;
     metadata_server.verify().await;
-    Ok(())
-}
-
-/// Without PEP 658, metadata caching uses the first definition of the effective index URL.
-#[tokio::test]
-async fn proxy_index_wheel_metadata_cache_policy_uses_endpoint_order() -> Result<()> {
-    let context = uv_test::test_context!("3.13");
-    let server = MockServer::start().await;
-    let server_url = server.uri();
-
-    let pyproject = context.temp_dir.child("pyproject.toml");
-    pyproject.write_str(&formatdoc! {r#"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.13"
-        dependencies = ["basic-package==0.1.0"]
-
-        [tool.uv]
-        preview-features = ["proxy-index"]
-
-        [[tool.uv.index]]
-        name = "ordinary"
-        url = "{server_url}/simple/"
-        explicit = true
-        cache-control = {{ api = "max-age=3600", files = "no-store" }}
-
-        [[tool.uv.index]]
-        name = "proxy"
-        url = "{server_url}/simple/"
-        artifact-base-url = "{server_url}/files/"
-        proxy-for = "pypi"
-        cache-control = {{ files = "max-age=3600" }}
-    "#})?;
-    let mut wheel = advertised_file(
-        WHEEL_FILENAME,
-        &format!("{server_url}/files/{WHEEL_FILENAME}"),
-        Some(WHEEL_HASH),
-    );
-    wheel["core-metadata"] = json!(false);
-    mount_simple(&server, "basic-package", vec![wheel], 1).await;
-    Mock::given(method("HEAD"))
-        .and(path(format!("/files/{WHEEL_FILENAME}")))
-        .respond_with(ResponseTemplate::new(405))
-        .expect(2)
-        .mount(&server)
-        .await;
-    mount_artifact(
-        &server,
-        WHEEL_FILENAME,
-        fixture(&context, WHEEL_FILENAME)?,
-        2,
-    )
-    .await;
-
-    uv_snapshot!(context.filters(), context.lock(), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Resolved 2 packages in [TIME]
-    ");
-
-    // The ordinary index's no-store policy requires another wheel request for the fresh resolution.
-    fs_err::remove_file(context.temp_dir.join("uv.lock"))?;
-    uv_snapshot!(context.filters(), context.lock(), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Resolved 2 packages in [TIME]
-    ");
-
-    server.verify().await;
     Ok(())
 }
 
