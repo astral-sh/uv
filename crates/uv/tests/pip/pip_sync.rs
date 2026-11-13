@@ -3674,7 +3674,7 @@ fn require_hashes_source_no_binary() -> Result<()> {
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(
-        "a==1.0.0 --hash=sha256:957f99ff1d65ce0d7883d50f4e67ed8d4b42e76d2c2b5e62384ff0ba538647b5",
+        "a==1.0.0 --hash=sha256:b6fcc90d9bb90ce9e15d43522f038bb3fe338e6ab0260e2dd4b220d2a1872b37",
     )?;
 
     uv_snapshot!(context.pip_sync()
@@ -6342,7 +6342,7 @@ fn pep_751_validates_remote_archive_size() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to download and build `a==1.0.0`
-      cause: Size mismatch for `a==1.0.0`: expected 1 bytes, but downloaded 607 bytes
+      cause: Size mismatch for `a==1.0.0`: expected 1 bytes, but downloaded 546 bytes
     ");
 
     Ok(())
@@ -6483,7 +6483,7 @@ fn pep_751_validates_cached_registry_sdist_size() -> Result<()> {
         name = "a"
         version = "1.0.0"
         index = "{index}"
-        sdist = {{ url = "{sdist_url}", size = 607, hashes = {{ sha256 = "{hash}" }} }}
+        sdist = {{ url = "{sdist_url}", size = 546, hashes = {{ sha256 = "{hash}" }} }}
         "#,
         index = server.index_url(),
         sdist_url = server.file_url("a-1.0.0.tar.gz"),
@@ -6515,7 +6515,7 @@ fn pep_751_validates_cached_registry_sdist_size() -> Result<()> {
     context
         .temp_dir
         .child("pylock.toml")
-        .write_str(&pylock.replace("size = 607", "size = 1"))?;
+        .write_str(&pylock.replace("size = 546", "size = 1"))?;
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("--preview")
         .arg("--index-url")
@@ -6525,7 +6525,7 @@ fn pep_751_validates_cached_registry_sdist_size() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to download and build `a==1.0.0`
-      cause: Size mismatch for `a==1.0.0`: expected 1 bytes, but downloaded 607 bytes
+      cause: Size mismatch for `a==1.0.0`: expected 1 bytes, but downloaded 546 bytes
     ");
 
     Ok(())
@@ -6547,7 +6547,7 @@ fn pep_751_validates_cached_url_sdist_size() -> Result<()> {
         [[packages]]
         name = "a"
         version = "1.0.0"
-        archive = {{ url = "{sdist_url}", size = 607, hashes = {{ sha256 = "{hash}" }} }}
+        archive = {{ url = "{sdist_url}", size = 546, hashes = {{ sha256 = "{hash}" }} }}
         "#,
         sdist_url = server.file_url("a-1.0.0.tar.gz"),
     };
@@ -6576,7 +6576,7 @@ fn pep_751_validates_cached_url_sdist_size() -> Result<()> {
     context
         .temp_dir
         .child("pylock.toml")
-        .write_str(&pylock.replace("size = 607", "size = 1"))?;
+        .write_str(&pylock.replace("size = 546", "size = 1"))?;
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("--preview")
         .arg("--offline")
@@ -6584,7 +6584,7 @@ fn pep_751_validates_cached_url_sdist_size() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to download and build `a @ http://[LOCALHOST]/files/a-1.0.0.tar.gz`
-      cause: Size mismatch for `a @ http://[LOCALHOST]/files/a-1.0.0.tar.gz`: expected 1 bytes, but downloaded 607 bytes
+      cause: Size mismatch for `a @ http://[LOCALHOST]/files/a-1.0.0.tar.gz`: expected 1 bytes, but downloaded 546 bytes
     "#);
 
     Ok(())
