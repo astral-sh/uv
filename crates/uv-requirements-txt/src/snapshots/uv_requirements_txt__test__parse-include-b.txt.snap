@@ -21,6 +21,7 @@ RequirementsTxt {
                 },
             ),
             hashes: [],
+            config_settings: None,
         },
     ],
     constraints: [],
