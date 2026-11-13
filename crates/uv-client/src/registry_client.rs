@@ -2056,6 +2056,7 @@ mod tests {
     use std::str::FromStr;
 
     use http::StatusCode;
+    use http::header::{AUTHORIZATION, WWW_AUTHENTICATE};
     use insta::{assert_debug_snapshot, assert_snapshot};
     use tokio::sync::Semaphore;
     use uv_auth::AuthPolicy;
@@ -2076,7 +2077,7 @@ mod tests {
     };
     use uv_small_str::SmallString;
     use wiremock::matchers::{basic_auth, method, path, path_regex};
-    use wiremock::{Match, Mock, MockServer, Request, ResponseTemplate};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
 
     type Error = Box<dyn std::error::Error>;
 
@@ -2322,76 +2323,41 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn proxy_artifact_uses_configured_credentials_on_separate_origin() -> Result<(), Error> {
-        let username = "artifact-user";
-        let password = "artifact-password";
-        let request = request_proxy_artifact(Some((username, password))).await?;
-        assert!(
-            basic_auth(username, password).matches(&request),
-            "artifact request used incorrect credentials: {request:?}"
-        );
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn proxy_artifact_allows_unauthenticated_requests_on_separate_origin() -> Result<(), Error>
-    {
-        let request = request_proxy_artifact(None).await?;
-        assert!(
-            !request.headers.contains_key("authorization"),
-            "artifact request inherited proxy index credentials: {request:?}"
-        );
-        Ok(())
-    }
-
-    async fn request_proxy_artifact(
-        artifact_credentials: Option<(&str, &str)>,
-    ) -> Result<Request, Error> {
+    async fn proxy_artifact_does_not_retry_with_index_credentials() -> Result<(), Error> {
         let canonical_server = MockServer::start().await;
-        let physical_server = MockServer::start().await;
+        let proxy_server = MockServer::start().await;
         let artifact_server = MockServer::start().await;
         let canonical = IndexUrl::from_str(&format!("{}/simple/", canonical_server.uri()))?;
-        let canonical_artifact = SafeUrl::parse(
-            "https://files.pythonhosted.org/packages/example-1.0.0-py3-none-any.whl",
-        )?;
-
-        let mut physical_url = SafeUrl::parse(&format!("{}/simple/", physical_server.uri()))?;
-        physical_url
-            .set_username("proxy-user")
-            .map_err(|()| std::io::Error::other("physical proxy URL cannot contain a username"))?;
-        physical_url
-            .set_password(Some("proxy-password"))
-            .map_err(|()| std::io::Error::other("physical proxy URL cannot contain a password"))?;
+        let canonical_artifacts = SafeUrl::parse(&format!("{}/files/", canonical_server.uri()))?;
+        let canonical_artifact = canonical_artifacts.join("example-1.0.0-py3-none-any.whl")?;
 
         Mock::given(method("GET"))
             .and(path("/files/example-1.0.0-py3-none-any.whl"))
-            .respond_with(ResponseTemplate::new(200))
-            .expect(1)
+            .respond_with(
+                ResponseTemplate::new(StatusCode::UNAUTHORIZED)
+                    .insert_header(WWW_AUTHENTICATE, "Basic realm=\"artifact\""),
+            )
             .mount(&artifact_server)
             .await;
 
         let canonical_name = IndexName::from_str("canonical")?;
-        let mut canonical_index = Index::from_index_url(canonical.clone());
-        canonical_index.name = Some(canonical_name.clone());
-        canonical_index.artifact_base_url =
-            Some(SafeUrl::parse("https://files.pythonhosted.org/packages/")?.with_policy(Stripped));
-
-        let mut artifact_base_url = SafeUrl::parse(&format!("{}/files/", artifact_server.uri()))?;
-        if let Some((username, password)) = artifact_credentials {
-            artifact_base_url
-                .set_username(username)
-                .map_err(|()| std::io::Error::other("artifact URL cannot contain a username"))?;
-            artifact_base_url
-                .set_password(Some(password))
-                .map_err(|()| std::io::Error::other("artifact URL cannot contain a password"))?;
-        }
-
-        let mut proxy_index =
-            Index::from_extra_index_url(IndexUrl::from_str(physical_url.as_str())?);
-        proxy_index.name = Some(IndexName::from_str("proxy")?);
-        proxy_index.proxy_for = Some(canonical_name);
-        proxy_index.authenticate = AuthPolicy::Always;
-        proxy_index.artifact_base_url = Some(artifact_base_url.with_policy(Stripped));
+        let canonical_index = Index {
+            name: Some(canonical_name.clone()),
+            artifact_base_url: Some(canonical_artifacts.with_policy(Stripped)),
+            ..Index::from_index_url(canonical.clone())
+        };
+        let proxy_index = Index {
+            name: Some(IndexName::from_str("proxy")?),
+            proxy_for: Some(canonical_name),
+            authenticate: AuthPolicy::Always,
+            artifact_base_url: Some(
+                SafeUrl::parse(&format!("{}/files/", artifact_server.uri()))?.with_policy(Stripped),
+            ),
+            ..Index::from_extra_index_url(IndexUrl::from_str(&format!(
+                "http://proxy-user:proxy-password@{}/simple/",
+                proxy_server.address()
+            ))?)
+        };
 
         let locations = IndexLocations::new(vec![canonical_index, proxy_index], vec![], false)?;
         let client = RegistryClientBuilder::new(BaseClientBuilder::default(), Cache::temp()?)
@@ -2411,19 +2377,24 @@ mod tests {
             .send()
             .await?;
 
-        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
         let requests = artifact_server
             .received_requests()
             .await
             .ok_or("artifact server should record requests")?;
-        let request = requests
-            .into_iter()
-            .next()
-            .ok_or("artifact server should receive the artifact request")?;
+        assert_eq!(
+            requests.len(),
+            1,
+            "unexpected artifact requests: {requests:?}"
+        );
+        assert!(
+            !requests[0].headers.contains_key(AUTHORIZATION),
+            "artifact request inherited proxy index credentials"
+        );
 
         assert_no_requests(&canonical_server).await;
-        assert_no_requests(&physical_server).await;
-        Ok(request)
+        assert_no_requests(&proxy_server).await;
+        Ok(())
     }
 
     #[tokio::test]

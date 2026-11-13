@@ -128,98 +128,6 @@ async fn assert_authenticated_requests(
     Ok(())
 }
 
-struct ProxyConfiguration<'a> {
-    canonical_index_url: String,
-    canonical_artifact_url: String,
-    physical_index_url: String,
-    physical_artifact_url: String,
-    dependency: &'a str,
-    dependency_metadata: Option<(&'a str, &'a str)>,
-}
-
-impl ProxyConfiguration<'_> {
-    fn write(self, context: &TestContext) -> Result<()> {
-        let Self {
-            canonical_index_url,
-            canonical_artifact_url,
-            physical_index_url,
-            physical_artifact_url,
-            dependency,
-            dependency_metadata,
-        } = self;
-        let dependency_metadata =
-            dependency_metadata.map_or_else(String::new, |(name, version)| {
-                formatdoc! {r#"
-                [[tool.uv.dependency-metadata]]
-                name = "{name}"
-                version = "{version}"
-                requires-dist = []
-                "#}
-            });
-
-        context
-            .temp_dir
-            .child("pyproject.toml")
-            .write_str(&formatdoc! {r#"
-                [project]
-                name = "project"
-                version = "0.1.0"
-                requires-python = ">=3.12"
-                dependencies = ["{dependency}"]
-
-                [tool.uv]
-                preview-features = ["proxy-index"]
-
-                [[tool.uv.index]]
-                name = "canonical"
-                url = "{canonical_index_url}/simple/"
-                artifact-base-url = "{canonical_artifact_url}/packages/"
-                default = true
-
-                [[tool.uv.index]]
-                name = "socket"
-                url = "{physical_index_url}/simple/"
-                artifact-base-url = "{physical_artifact_url}/files/"
-                proxy-for = "canonical"
-
-                {dependency_metadata}
-                "#,
-            })?;
-        Ok(())
-    }
-}
-
-fn write_implicit_pypi_configuration(
-    context: &TestContext,
-    physical_index: &MockServer,
-    physical_artifacts: &MockServer,
-    dependency: &str,
-) -> Result<()> {
-    context
-        .temp_dir
-        .child("pyproject.toml")
-        .write_str(&formatdoc! {r#"
-            [project]
-            name = "project"
-            version = "0.1.0"
-            requires-python = ">=3.12"
-            dependencies = ["{dependency}"]
-
-            [tool.uv]
-            preview-features = ["proxy-index"]
-
-            [[tool.uv.index]]
-            name = "socket"
-            url = "{}/simple/"
-            artifact-base-url = "{}/files/"
-            proxy-for = "pypi"
-            "#,
-            physical_index.uri(),
-            physical_artifacts.uri(),
-        })?;
-    Ok(())
-}
-
 fn write_frozen_lock(
     context: &TestContext,
     canonical_index: &MockServer,
@@ -275,12 +183,26 @@ async fn proxy_index_rejects_duplicate_definitions_across_configuration_files() 
     let context = uv_test::test_context!("3.12");
     let physical_index = MockServer::start().await;
     let physical_artifacts = MockServer::start().await;
-    write_implicit_pypi_configuration(
-        &context,
-        &physical_index,
-        &physical_artifacts,
-        "basic-package==0.1.0",
-    )?;
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    pyproject.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["basic-package==0.1.0"]
+
+        [tool.uv]
+        preview-features = ["proxy-index"]
+
+        [[tool.uv.index]]
+        name = "socket"
+        url = "{physical_index_url}/simple/"
+        artifact-base-url = "{physical_artifact_url}/files/"
+        proxy-for = "pypi"
+    "#,
+        physical_index_url = physical_index.uri(),
+        physical_artifact_url = physical_artifacts.uri(),
+    })?;
 
     let user_config_dir = context.user_config_dir.child("uv");
     user_config_dir.create_dir_all()?;
@@ -317,12 +239,26 @@ async fn proxy_index_rejects_same_named_package_index_across_configuration_files
     let context = uv_test::test_context!("3.12");
     let physical_index = MockServer::start().await;
     let physical_artifacts = MockServer::start().await;
-    write_implicit_pypi_configuration(
-        &context,
-        &physical_index,
-        &physical_artifacts,
-        "basic-package==0.1.0",
-    )?;
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    pyproject.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["basic-package==0.1.0"]
+
+        [tool.uv]
+        preview-features = ["proxy-index"]
+
+        [[tool.uv.index]]
+        name = "socket"
+        url = "{physical_index_url}/simple/"
+        artifact-base-url = "{physical_artifact_url}/files/"
+        proxy-for = "pypi"
+    "#,
+        physical_index_url = physical_index.uri(),
+        physical_artifact_url = physical_artifacts.uri(),
+    })?;
 
     let user_config_dir = context.user_config_dir.child("uv");
     user_config_dir.create_dir_all()?;
@@ -446,12 +382,26 @@ async fn proxy_index_implicitly_routes_pypi_without_a_second_resolution_index() 
     .await;
     mount_metadata(&physical_artifacts, WHEEL_FILENAME, WHEEL_METADATA, 1).await;
     mount_artifact(&physical_artifacts, WHEEL_FILENAME, wheel, 1).await;
-    write_implicit_pypi_configuration(
-        &context,
-        &physical_index,
-        &physical_artifacts,
-        "basic-package==0.1.0",
-    )?;
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    pyproject.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["basic-package==0.1.0"]
+
+        [tool.uv]
+        preview-features = ["proxy-index"]
+
+        [[tool.uv.index]]
+        name = "socket"
+        url = "{physical_index_url}/simple/"
+        artifact-base-url = "{physical_artifact_url}/files/"
+        proxy-for = "pypi"
+    "#,
+        physical_index_url = physical_index.uri(),
+        physical_artifact_url = physical_artifacts.uri(),
+    })?;
 
     uv_snapshot!(context.filters(), context.lock().arg("--no-preview"), @"
     exit_code: 0 (success)
@@ -721,21 +671,34 @@ async fn proxy_index_locks_canonical_urls_without_origin_requests() -> Result<()
     .await;
     mount_metadata(&physical_artifacts, WHEEL_FILENAME, WHEEL_METADATA, 1).await;
     mount_artifact(&physical_artifacts, WHEEL_FILENAME, wheel, 1).await;
-    ProxyConfiguration {
-        canonical_index_url: canonical_index.uri(),
-        canonical_artifact_url: canonical_artifacts.uri(),
-        physical_index_url: format!(
-            "http://proxy-user:proxy-password@{}",
-            physical_index.address()
-        ),
-        physical_artifact_url: format!(
-            "http://artifact-user:artifact-password@{}",
-            physical_artifacts.address()
-        ),
-        dependency: "basic-package==0.1.0",
-        dependency_metadata: None,
-    }
-    .write(&context)?;
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    pyproject.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["basic-package==0.1.0"]
+
+        [tool.uv]
+        preview-features = ["proxy-index"]
+
+        [[tool.uv.index]]
+        name = "canonical"
+        url = "{canonical_index_url}/simple/"
+        artifact-base-url = "{canonical_artifact_url}/packages/"
+        default = true
+
+        [[tool.uv.index]]
+        name = "socket"
+        url = "{physical_index_url}/simple/"
+        artifact-base-url = "{physical_artifact_url}/files/"
+        proxy-for = "canonical"
+    "#,
+        canonical_index_url = canonical_index.uri(),
+        canonical_artifact_url = canonical_artifacts.uri(),
+        physical_index_url = format!("http://proxy-user:proxy-password@{}", physical_index.address()),
+        physical_artifact_url = format!("http://artifact-user:artifact-password@{}", physical_artifacts.address()),
+    })?;
 
     uv_snapshot!(context.filters(), context.lock(), @"
     exit_code: 0 (success)
@@ -812,15 +775,34 @@ async fn proxy_index_reports_unauthorized_proxy_without_origin_requests() -> Res
         .expect(1)
         .mount(&physical_index)
         .await;
-    ProxyConfiguration {
-        canonical_index_url: canonical_index.uri(),
-        canonical_artifact_url: canonical_artifacts.uri(),
-        physical_index_url: physical_index.uri(),
-        physical_artifact_url: physical_artifacts.uri(),
-        dependency: "basic-package==0.1.0",
-        dependency_metadata: None,
-    }
-    .write(&context)?;
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    pyproject.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["basic-package==0.1.0"]
+
+        [tool.uv]
+        preview-features = ["proxy-index"]
+
+        [[tool.uv.index]]
+        name = "canonical"
+        url = "{canonical_index_url}/simple/"
+        artifact-base-url = "{canonical_artifact_url}/packages/"
+        default = true
+
+        [[tool.uv.index]]
+        name = "socket"
+        url = "{physical_index_url}/simple/"
+        artifact-base-url = "{physical_artifact_url}/files/"
+        proxy-for = "canonical"
+    "#,
+        canonical_index_url = canonical_index.uri(),
+        canonical_artifact_url = canonical_artifacts.uri(),
+        physical_index_url = physical_index.uri(),
+        physical_artifact_url = physical_artifacts.uri(),
+    })?;
 
     let physical_index_url = physical_index.uri();
     let mut filters = context.filters();
@@ -857,15 +839,34 @@ async fn proxy_index_reports_forbidden_proxy_without_origin_requests() -> Result
         .expect(1)
         .mount(&physical_index)
         .await;
-    ProxyConfiguration {
-        canonical_index_url: canonical_index.uri(),
-        canonical_artifact_url: canonical_artifacts.uri(),
-        physical_index_url: physical_index.uri(),
-        physical_artifact_url: physical_artifacts.uri(),
-        dependency: "basic-package==0.1.0",
-        dependency_metadata: None,
-    }
-    .write(&context)?;
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    pyproject.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["basic-package==0.1.0"]
+
+        [tool.uv]
+        preview-features = ["proxy-index"]
+
+        [[tool.uv.index]]
+        name = "canonical"
+        url = "{canonical_index_url}/simple/"
+        artifact-base-url = "{canonical_artifact_url}/packages/"
+        default = true
+
+        [[tool.uv.index]]
+        name = "socket"
+        url = "{physical_index_url}/simple/"
+        artifact-base-url = "{physical_artifact_url}/files/"
+        proxy-for = "canonical"
+    "#,
+        canonical_index_url = canonical_index.uri(),
+        canonical_artifact_url = canonical_artifacts.uri(),
+        physical_index_url = physical_index.uri(),
+        physical_artifact_url = physical_artifacts.uri(),
+    })?;
 
     let physical_index_url = physical_index.uri();
     let mut filters = context.filters();
@@ -921,15 +922,39 @@ async fn proxy_index_routes_source_through_proxy_and_reuses_offline_cache() -> R
     )
     .await;
     mount_artifact(&physical_artifacts, filename, source, 1).await;
-    ProxyConfiguration {
-        canonical_index_url: canonical_index.uri(),
-        canonical_artifact_url: canonical_artifacts.uri(),
-        physical_index_url: physical_index.uri(),
-        physical_artifact_url: physical_artifacts.uri(),
-        dependency: "source-package==1.0.0",
-        dependency_metadata: Some(("source-package", "1.0.0")),
-    }
-    .write(&context)?;
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    pyproject.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["source-package==1.0.0"]
+
+        [tool.uv]
+        preview-features = ["proxy-index"]
+
+        [[tool.uv.index]]
+        name = "canonical"
+        url = "{canonical_index_url}/simple/"
+        artifact-base-url = "{canonical_artifact_url}/packages/"
+        default = true
+
+        [[tool.uv.index]]
+        name = "socket"
+        url = "{physical_index_url}/simple/"
+        artifact-base-url = "{physical_artifact_url}/files/"
+        proxy-for = "canonical"
+
+        [[tool.uv.dependency-metadata]]
+        name = "source-package"
+        version = "1.0.0"
+        requires-dist = []
+    "#,
+        canonical_index_url = canonical_index.uri(),
+        canonical_artifact_url = canonical_artifacts.uri(),
+        physical_index_url = physical_index.uri(),
+        physical_artifact_url = physical_artifacts.uri(),
+    })?;
 
     uv_snapshot!(context.filters(), context.lock(), @"
     exit_code: 0 (success)
@@ -987,15 +1012,34 @@ async fn proxy_index_installs_existing_locked_source_without_simple_requests() -
     let physical_artifacts = MockServer::start().await;
 
     let dependency = "source-package==1.0.0";
-    ProxyConfiguration {
-        canonical_index_url: canonical_index.uri(),
-        canonical_artifact_url: canonical_artifacts.uri(),
-        physical_index_url: physical_index.uri(),
-        physical_artifact_url: physical_artifacts.uri(),
-        dependency,
-        dependency_metadata: None,
-    }
-    .write(&context)?;
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    pyproject.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["{dependency}"]
+
+        [tool.uv]
+        preview-features = ["proxy-index"]
+
+        [[tool.uv.index]]
+        name = "canonical"
+        url = "{canonical_index_url}/simple/"
+        artifact-base-url = "{canonical_artifact_url}/packages/"
+        default = true
+
+        [[tool.uv.index]]
+        name = "socket"
+        url = "{physical_index_url}/simple/"
+        artifact-base-url = "{physical_artifact_url}/files/"
+        proxy-for = "canonical"
+    "#,
+        canonical_index_url = canonical_index.uri(),
+        canonical_artifact_url = canonical_artifacts.uri(),
+        physical_index_url = physical_index.uri(),
+        physical_artifact_url = physical_artifacts.uri(),
+    })?;
     write_frozen_lock(
         &context,
         &canonical_index,
@@ -1041,15 +1085,37 @@ async fn proxy_index_redownloads_artifacts_when_proxy_changes() -> Result<()> {
     let physical_index_b = MockServer::start().await;
     let physical_artifacts_b = MockServer::start().await;
 
-    ProxyConfiguration {
-        canonical_index_url: canonical_index.uri(),
-        canonical_artifact_url: canonical_artifacts.uri(),
-        physical_index_url: physical_index_a.uri(),
-        physical_artifact_url: physical_artifacts_a.uri(),
-        dependency: "basic-package==0.1.0",
-        dependency_metadata: None,
-    }
-    .write(&context)?;
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    let write_pyproject = |index: &MockServer, artifacts: &MockServer| {
+        pyproject.write_str(&formatdoc! {r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["basic-package==0.1.0"]
+
+            [tool.uv]
+            preview-features = ["proxy-index"]
+
+            [[tool.uv.index]]
+            name = "canonical"
+            url = "{canonical_index_url}/simple/"
+            artifact-base-url = "{canonical_artifact_url}/packages/"
+            default = true
+
+            [[tool.uv.index]]
+            name = "socket"
+            url = "{physical_index_url}/simple/"
+            artifact-base-url = "{physical_artifact_url}/files/"
+            proxy-for = "canonical"
+        "#,
+            canonical_index_url = canonical_index.uri(),
+            canonical_artifact_url = canonical_artifacts.uri(),
+            physical_index_url = index.uri(),
+            physical_artifact_url = artifacts.uri(),
+        })
+    };
+    write_pyproject(&physical_index_a, &physical_artifacts_a)?;
     write_frozen_lock(
         &context,
         &canonical_index,
@@ -1071,15 +1137,7 @@ async fn proxy_index_redownloads_artifacts_when_proxy_changes() -> Result<()> {
      + basic-package==0.1.0
     ");
 
-    ProxyConfiguration {
-        canonical_index_url: canonical_index.uri(),
-        canonical_artifact_url: canonical_artifacts.uri(),
-        physical_index_url: physical_index_b.uri(),
-        physical_artifact_url: physical_artifacts_b.uri(),
-        dependency: "basic-package==0.1.0",
-        dependency_metadata: None,
-    }
-    .write(&context)?;
+    write_pyproject(&physical_index_b, &physical_artifacts_b)?;
     mount_artifact(&physical_artifacts_b, WHEEL_FILENAME, wheel, 1).await;
 
     // Recreate the environment while keeping the first proxy's artifacts in the cache.
@@ -1108,15 +1166,34 @@ async fn proxy_index_export_rejects_missing_hash_in_frozen_lock() -> Result<()> 
     let upstream = MockServer::start().await;
     let proxy = MockServer::start().await;
 
-    ProxyConfiguration {
-        canonical_index_url: upstream.uri(),
-        canonical_artifact_url: upstream.uri(),
-        physical_index_url: proxy.uri(),
-        physical_artifact_url: proxy.uri(),
-        dependency: "basic-package==0.1.0",
-        dependency_metadata: None,
-    }
-    .write(&context)?;
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    pyproject.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["basic-package==0.1.0"]
+
+        [tool.uv]
+        preview-features = ["proxy-index"]
+
+        [[tool.uv.index]]
+        name = "canonical"
+        url = "{canonical_index_url}/simple/"
+        artifact-base-url = "{canonical_artifact_url}/packages/"
+        default = true
+
+        [[tool.uv.index]]
+        name = "socket"
+        url = "{physical_index_url}/simple/"
+        artifact-base-url = "{physical_artifact_url}/files/"
+        proxy-for = "canonical"
+    "#,
+        canonical_index_url = upstream.uri(),
+        canonical_artifact_url = upstream.uri(),
+        physical_index_url = proxy.uri(),
+        physical_artifact_url = proxy.uri(),
+    })?;
     write_frozen_lock(
         &context,
         &upstream,
@@ -1159,18 +1236,39 @@ async fn proxy_index_pip_compile_pylock_preserves_canonical_artifact_and_hash() 
         1,
     )
     .await;
-    ProxyConfiguration {
-        canonical_index_url: format!(
-            "http://canonical-user:canonical-password@{}",
-            canonical_index.address()
-        ),
-        canonical_artifact_url: canonical_artifacts.uri(),
-        physical_index_url: physical_index.uri(),
-        physical_artifact_url: physical_artifacts.uri(),
-        dependency: "basic-package==0.1.0",
-        dependency_metadata: Some(("basic-package", "0.1.0")),
-    }
-    .write(&context)?;
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    pyproject.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["basic-package==0.1.0"]
+
+        [tool.uv]
+        preview-features = ["proxy-index"]
+
+        [[tool.uv.index]]
+        name = "canonical"
+        url = "{canonical_index_url}/simple/"
+        artifact-base-url = "{canonical_artifact_url}/packages/"
+        default = true
+
+        [[tool.uv.index]]
+        name = "socket"
+        url = "{physical_index_url}/simple/"
+        artifact-base-url = "{physical_artifact_url}/files/"
+        proxy-for = "canonical"
+
+        [[tool.uv.dependency-metadata]]
+        name = "basic-package"
+        version = "0.1.0"
+        requires-dist = []
+    "#,
+        canonical_index_url = format!("http://canonical-user:canonical-password@{}", canonical_index.address()),
+        canonical_artifact_url = canonical_artifacts.uri(),
+        physical_index_url = physical_index.uri(),
+        physical_artifact_url = physical_artifacts.uri(),
+    })?;
     context
         .temp_dir
         .child("requirements.txt")
@@ -1253,15 +1351,34 @@ async fn proxy_index_pip_installs_hashless_live_artifact() -> Result<()> {
     )
     .await;
     mount_artifact(&physical_artifacts, WHEEL_FILENAME, wheel, 1).await;
-    ProxyConfiguration {
-        canonical_index_url: canonical_index.uri(),
-        canonical_artifact_url: canonical_artifacts.uri(),
-        physical_index_url: physical_index.uri(),
-        physical_artifact_url: physical_artifacts.uri(),
-        dependency: "basic-package==0.1.0",
-        dependency_metadata: None,
-    }
-    .write(&context)?;
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    pyproject.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["basic-package==0.1.0"]
+
+        [tool.uv]
+        preview-features = ["proxy-index"]
+
+        [[tool.uv.index]]
+        name = "canonical"
+        url = "{canonical_index_url}/simple/"
+        artifact-base-url = "{canonical_artifact_url}/packages/"
+        default = true
+
+        [[tool.uv.index]]
+        name = "socket"
+        url = "{physical_index_url}/simple/"
+        artifact-base-url = "{physical_artifact_url}/files/"
+        proxy-for = "canonical"
+    "#,
+        canonical_index_url = canonical_index.uri(),
+        canonical_artifact_url = canonical_artifacts.uri(),
+        physical_index_url = physical_index.uri(),
+        physical_artifact_url = physical_artifacts.uri(),
+    })?;
     context
         .temp_dir
         .child("requirements.txt")
@@ -1295,15 +1412,39 @@ async fn proxy_index_rejects_cached_wheel_when_hash_changes() -> Result<()> {
     let dependency = "basic-package==0.1.0";
     let artifact_url = format!("{}/files/{WHEEL_FILENAME}", physical_artifacts.uri());
 
-    ProxyConfiguration {
-        canonical_index_url: canonical_index.uri(),
-        canonical_artifact_url: canonical_artifacts.uri(),
-        physical_index_url: physical_index.uri(),
-        physical_artifact_url: physical_artifacts.uri(),
-        dependency,
-        dependency_metadata: Some(("basic-package", "0.1.0")),
-    }
-    .write(&context)?;
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    pyproject.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["{dependency}"]
+
+        [tool.uv]
+        preview-features = ["proxy-index"]
+
+        [[tool.uv.index]]
+        name = "canonical"
+        url = "{canonical_index_url}/simple/"
+        artifact-base-url = "{canonical_artifact_url}/packages/"
+        default = true
+
+        [[tool.uv.index]]
+        name = "socket"
+        url = "{physical_index_url}/simple/"
+        artifact-base-url = "{physical_artifact_url}/files/"
+        proxy-for = "canonical"
+
+        [[tool.uv.dependency-metadata]]
+        name = "basic-package"
+        version = "0.1.0"
+        requires-dist = []
+    "#,
+        canonical_index_url = canonical_index.uri(),
+        canonical_artifact_url = canonical_artifacts.uri(),
+        physical_index_url = physical_index.uri(),
+        physical_artifact_url = physical_artifacts.uri(),
+    })?;
     context
         .temp_dir
         .child("requirements.txt")
@@ -1393,15 +1534,39 @@ async fn proxy_index_rejects_cached_source_when_hash_changes() -> Result<()> {
     let dependency = "source-package==1.0.0";
     let artifact_url = format!("{}/files/{SOURCE_ZIP_FILENAME}", physical_artifacts.uri());
 
-    ProxyConfiguration {
-        canonical_index_url: canonical_index.uri(),
-        canonical_artifact_url: canonical_artifacts.uri(),
-        physical_index_url: physical_index.uri(),
-        physical_artifact_url: physical_artifacts.uri(),
-        dependency,
-        dependency_metadata: Some(("source-package", "1.0.0")),
-    }
-    .write(&context)?;
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    pyproject.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["{dependency}"]
+
+        [tool.uv]
+        preview-features = ["proxy-index"]
+
+        [[tool.uv.index]]
+        name = "canonical"
+        url = "{canonical_index_url}/simple/"
+        artifact-base-url = "{canonical_artifact_url}/packages/"
+        default = true
+
+        [[tool.uv.index]]
+        name = "socket"
+        url = "{physical_index_url}/simple/"
+        artifact-base-url = "{physical_artifact_url}/files/"
+        proxy-for = "canonical"
+
+        [[tool.uv.dependency-metadata]]
+        name = "source-package"
+        version = "1.0.0"
+        requires-dist = []
+    "#,
+        canonical_index_url = canonical_index.uri(),
+        canonical_artifact_url = canonical_artifacts.uri(),
+        physical_index_url = physical_index.uri(),
+        physical_artifact_url = physical_artifacts.uri(),
+    })?;
     context
         .temp_dir
         .child("requirements.txt")
@@ -1505,15 +1670,39 @@ async fn proxy_index_rejects_hashless_selected_wheel() -> Result<()> {
     )
     .await;
     let dependency = "basic-package==0.1.0";
-    ProxyConfiguration {
-        canonical_index_url: canonical_index.uri(),
-        canonical_artifact_url: canonical_artifacts.uri(),
-        physical_index_url: physical_index.uri(),
-        physical_artifact_url: physical_artifacts.uri(),
-        dependency,
-        dependency_metadata: Some(("basic-package", "0.1.0")),
-    }
-    .write(&context)?;
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    pyproject.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["{dependency}"]
+
+        [tool.uv]
+        preview-features = ["proxy-index"]
+
+        [[tool.uv.index]]
+        name = "canonical"
+        url = "{canonical_index_url}/simple/"
+        artifact-base-url = "{canonical_artifact_url}/packages/"
+        default = true
+
+        [[tool.uv.index]]
+        name = "socket"
+        url = "{physical_index_url}/simple/"
+        artifact-base-url = "{physical_artifact_url}/files/"
+        proxy-for = "canonical"
+
+        [[tool.uv.dependency-metadata]]
+        name = "basic-package"
+        version = "0.1.0"
+        requires-dist = []
+    "#,
+        canonical_index_url = canonical_index.uri(),
+        canonical_artifact_url = canonical_artifacts.uri(),
+        physical_index_url = physical_index.uri(),
+        physical_artifact_url = physical_artifacts.uri(),
+    })?;
 
     let command = context.lock();
     uv_snapshot!(context.filters(), command, @r"
@@ -1547,15 +1736,39 @@ async fn proxy_index_rejects_hashless_selected_source() -> Result<()> {
     )
     .await;
     let dependency = "source-package==1.0.0";
-    ProxyConfiguration {
-        canonical_index_url: canonical_index.uri(),
-        canonical_artifact_url: canonical_artifacts.uri(),
-        physical_index_url: physical_index.uri(),
-        physical_artifact_url: physical_artifacts.uri(),
-        dependency,
-        dependency_metadata: Some(("source-package", "1.0.0")),
-    }
-    .write(&context)?;
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    pyproject.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["{dependency}"]
+
+        [tool.uv]
+        preview-features = ["proxy-index"]
+
+        [[tool.uv.index]]
+        name = "canonical"
+        url = "{canonical_index_url}/simple/"
+        artifact-base-url = "{canonical_artifact_url}/packages/"
+        default = true
+
+        [[tool.uv.index]]
+        name = "socket"
+        url = "{physical_index_url}/simple/"
+        artifact-base-url = "{physical_artifact_url}/files/"
+        proxy-for = "canonical"
+
+        [[tool.uv.dependency-metadata]]
+        name = "source-package"
+        version = "1.0.0"
+        requires-dist = []
+    "#,
+        canonical_index_url = canonical_index.uri(),
+        canonical_artifact_url = canonical_artifacts.uri(),
+        physical_index_url = physical_index.uri(),
+        physical_artifact_url = physical_artifacts.uri(),
+    })?;
 
     let command = context.lock();
     uv_snapshot!(context.filters(), command, @r"
@@ -1592,15 +1805,34 @@ async fn proxy_index_rejects_unmapped_artifact_without_origin_fallback() -> Resu
         1,
     )
     .await;
-    ProxyConfiguration {
-        canonical_index_url: canonical_index.uri(),
-        canonical_artifact_url: canonical_artifacts.uri(),
-        physical_index_url: physical_index.uri(),
-        physical_artifact_url: physical_artifacts.uri(),
-        dependency: "basic-package==0.1.0",
-        dependency_metadata: None,
-    }
-    .write(&context)?;
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    pyproject.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["basic-package==0.1.0"]
+
+        [tool.uv]
+        preview-features = ["proxy-index"]
+
+        [[tool.uv.index]]
+        name = "canonical"
+        url = "{canonical_index_url}/simple/"
+        artifact-base-url = "{canonical_artifact_url}/packages/"
+        default = true
+
+        [[tool.uv.index]]
+        name = "socket"
+        url = "{physical_index_url}/simple/"
+        artifact-base-url = "{physical_artifact_url}/files/"
+        proxy-for = "canonical"
+    "#,
+        canonical_index_url = canonical_index.uri(),
+        canonical_artifact_url = canonical_artifacts.uri(),
+        physical_index_url = physical_index.uri(),
+        physical_artifact_url = physical_artifacts.uri(),
+    })?;
 
     let physical_artifact_url = physical_artifacts.uri();
     let unmapped_artifact_url = unmapped_artifacts.uri();
@@ -1634,15 +1866,34 @@ async fn proxy_index_does_not_cache_wheel_with_mismatched_locked_hash() -> Resul
     let physical_artifacts = MockServer::start().await;
     let dependency = "basic-package==0.1.0";
 
-    ProxyConfiguration {
-        canonical_index_url: canonical_index.uri(),
-        canonical_artifact_url: canonical_artifacts.uri(),
-        physical_index_url: physical_index.uri(),
-        physical_artifact_url: physical_artifacts.uri(),
-        dependency,
-        dependency_metadata: None,
-    }
-    .write(&context)?;
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    pyproject.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["{dependency}"]
+
+        [tool.uv]
+        preview-features = ["proxy-index"]
+
+        [[tool.uv.index]]
+        name = "canonical"
+        url = "{canonical_index_url}/simple/"
+        artifact-base-url = "{canonical_artifact_url}/packages/"
+        default = true
+
+        [[tool.uv.index]]
+        name = "socket"
+        url = "{physical_index_url}/simple/"
+        artifact-base-url = "{physical_artifact_url}/files/"
+        proxy-for = "canonical"
+    "#,
+        canonical_index_url = canonical_index.uri(),
+        canonical_artifact_url = canonical_artifacts.uri(),
+        physical_index_url = physical_index.uri(),
+        physical_artifact_url = physical_artifacts.uri(),
+    })?;
 
     write_frozen_lock(
         &context,
@@ -1720,15 +1971,34 @@ async fn proxy_index_does_not_cache_source_with_mismatched_locked_hash() -> Resu
     let physical_artifacts = MockServer::start().await;
     let dependency = "source-package==1.0.0";
 
-    ProxyConfiguration {
-        canonical_index_url: canonical_index.uri(),
-        canonical_artifact_url: canonical_artifacts.uri(),
-        physical_index_url: physical_index.uri(),
-        physical_artifact_url: physical_artifacts.uri(),
-        dependency,
-        dependency_metadata: None,
-    }
-    .write(&context)?;
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    pyproject.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["{dependency}"]
+
+        [tool.uv]
+        preview-features = ["proxy-index"]
+
+        [[tool.uv.index]]
+        name = "canonical"
+        url = "{canonical_index_url}/simple/"
+        artifact-base-url = "{canonical_artifact_url}/packages/"
+        default = true
+
+        [[tool.uv.index]]
+        name = "socket"
+        url = "{physical_index_url}/simple/"
+        artifact-base-url = "{physical_artifact_url}/files/"
+        proxy-for = "canonical"
+    "#,
+        canonical_index_url = canonical_index.uri(),
+        canonical_artifact_url = canonical_artifacts.uri(),
+        physical_index_url = physical_index.uri(),
+        physical_artifact_url = physical_artifacts.uri(),
+    })?;
 
     write_frozen_lock(
         &context,
