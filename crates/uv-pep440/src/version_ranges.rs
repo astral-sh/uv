@@ -8,8 +8,8 @@ use std::sync::LazyLock;
 use version_ranges::Ranges;
 
 use crate::{
-    LocalVersion, LocalVersionSlice, Operator, Prerelease, Version, VersionSpecifier,
-    VersionSpecifiers,
+    LocalVersion, LocalVersionSlice, Operator, Prerelease, PrereleaseKind, Version,
+    VersionSpecifier, VersionSpecifiers,
 };
 
 /// The smallest valid PEP 440 version.
@@ -68,8 +68,8 @@ pub fn canonicalize_version_ranges(ranges: &Ranges<Version>) -> Option<Ranges<Ve
             .clone()
             .into_iter()
             .filter_map(|(lower, upper)| {
-                let mut lower = canonicalize_lower_bound(lower);
-                let upper = canonicalize_upper_bound(upper);
+                let mut lower = canonicalize_bound(lower, true)?;
+                let upper = canonicalize_bound(upper, false)?;
 
                 match &lower {
                     Bound::Included(version) if version <= &*PEP440_MIN_VERSION => {
@@ -116,32 +116,80 @@ fn upper_bound_needs_canonicalization(bound: Bound<&Version>) -> bool {
     }
 }
 
-fn canonicalize_lower_bound(bound: Bound<Version>) -> Bound<Version> {
-    match bound {
-        Bound::Included(version) => {
-            sentinel_successor(&version).map_or(Bound::Included(version), Bound::Included)
-        }
-        Bound::Excluded(version) => {
-            sentinel_successor(&version).map_or(Bound::Excluded(version), Bound::Included)
-        }
-        Bound::Unbounded => Bound::Unbounded,
+fn canonicalize_bound(bound: Bound<Version>, lower: bool) -> Option<Bound<Version>> {
+    let (Bound::Included(v) | Bound::Excluded(v)) = &bound else {
+        return Some(bound);
+    };
+    let Some(cut) = sentinel_successor(v) else {
+        return Some(bound);
+    };
+    if cut.epoch() == u64::MAX {
+        return (!lower).then_some(Bound::Unbounded);
     }
+    // The final-release max sentinel sorts after every post and local release.
+    // Keep the same side of that cut as the existing encoding of `>final`.
+    Some(if Version::max(&cut).is_some() == lower {
+        Bound::Excluded(cut)
+    } else {
+        Bound::Included(cut)
+    })
 }
 
-fn canonicalize_upper_bound(bound: Bound<Version>) -> Bound<Version> {
-    match bound {
-        Bound::Included(version) => {
-            sentinel_successor(&version).map_or(Bound::Included(version), Bound::Excluded)
-        }
-        Bound::Excluded(version) => {
-            sentinel_successor(&version).map_or(Bound::Excluded(version), Bound::Excluded)
-        }
-        Bound::Unbounded => Bound::Unbounded,
-    }
-}
-
-/// Return the least real PEP 440 version above an internal sentinel boundary.
+/// Map an internal endpoint to its cut in the universe of parseable versions.
+/// A cut precedes its version, except for a final-release max sentinel.
 fn sentinel_successor(version: &Version) -> Option<Version> {
+    const LAST: u64 = u64::MAX - 1;
+    let successor = next_after_sentinel(version);
+    let v = successor.as_ref().unwrap_or(version);
+    let epoch = v.epoch();
+    if epoch == u64::MAX {
+        return Some(v.clone());
+    }
+    let release = v.release();
+    if let Some(i) = release.iter().position(|&n| n == u64::MAX) {
+        // Carry left into the release prefix, then the epoch. The first
+        // out-of-range epoch represents the end of the entire domain.
+        let next = if let Some(j) = release[..i].iter().rposition(|&n| n < LAST) {
+            Version::new(release[..j].iter().chain([&(release[j] + 1)])).with_epoch(epoch)
+        } else {
+            Version::new([0]).with_epoch(epoch + 1)
+        };
+        return Some(next.with_dev(Some(0)));
+    }
+    if v.pre().is_some_and(|p| p.number == u64::MAX) || v.post() == Some(u64::MAX) {
+        let base = v.only_release().with_epoch(epoch);
+        let Some(mut pre) = v.pre() else {
+            return Some(base.with_max(Some(0)));
+        };
+        if pre.number < LAST {
+            pre.number += 1;
+        } else {
+            pre.number = 0;
+            pre.kind = match pre.kind {
+                PrereleaseKind::Alpha => PrereleaseKind::Beta,
+                PrereleaseKind::Beta => PrereleaseKind::Rc,
+                PrereleaseKind::Rc => return Some(base),
+            };
+        }
+        return Some(base.with_pre(Some(pre)).with_dev(Some(0)));
+    }
+    if v.dev() == Some(u64::MAX) {
+        let base = v.clone().without_local().with_dev(None);
+        if v.is_pre() || v.is_post() {
+            return Some(base);
+        }
+        return Some(
+            base.with_pre(Some(Prerelease {
+                kind: PrereleaseKind::Alpha,
+                number: 0,
+            }))
+            .with_dev(Some(0)),
+        );
+    }
+    successor
+}
+
+fn next_after_sentinel(version: &Version) -> Option<Version> {
     if version.local() == LocalVersionSlice::Max {
         let version = version.clone().without_local();
         return if let Some(dev) = version.dev() {
@@ -747,6 +795,29 @@ mod tests {
         assert_eq!(range("==1.0"), range(">=1.0,<1.0.post0.dev0"));
         assert_eq!(range(">=0.dev0"), Ranges::full());
         assert_eq!(range("<0.dev0"), Ranges::empty());
+    }
+
+    #[test]
+    fn canonicalizes_reserved_successors_of_parseable_components() {
+        let last = (u64::MAX - 1).to_string();
+        let canonical = |s: &str| {
+            let original = range(&s.replace("LAST", &last));
+            canonicalize_version_ranges(&original).unwrap_or(original)
+        };
+        for (input, equivalent) in [
+            (">2.devLAST", ">=2a0.dev0"),
+            (">2aLAST", ">=2b0.dev0"),
+            (">2bLAST", ">=2rc0.dev0"),
+            (">2rcLAST", ">=2"),
+            (">2rc1.postLAST", ">=2rc2.dev0"),
+            (">2.postLAST", ">2"),
+            (">2rc1.post2.devLAST", ">=2rc1.post2"),
+            ("==1!2.LAST.*", ">=1!2.LAST.dev0,<1!3"),
+            ("==LAST.*", ">=LAST.dev0,<1!0.dev0"),
+            ("~=LAST!LAST.0", ">=LAST!LAST"),
+        ] {
+            assert_eq!(canonical(input), canonical(equivalent), "{input}");
+        }
     }
 
     #[test]
