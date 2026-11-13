@@ -21036,10 +21036,10 @@ fn check_locked_version_violates_conflict_forked_constraint_specifier() -> Resul
 }
 
 /// An extra-scoped index contributes an activation condition even without declared conflicts.
-/// An edge that excludes that extra cannot violate the scoped requirement's version specifier.
+/// A conflicting locked version can violate the specifier only where that extra is active.
 #[cfg(feature = "test-universal")]
 #[test]
-fn check_locked_version_ignores_edge_outside_index_scope() -> Result<()> {
+fn check_locked_version_respects_index_scope() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     context.temp_dir.child("pyproject.toml").write_str(
@@ -21086,6 +21086,19 @@ fn check_locked_version_ignores_edge_outside_index_scope() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
+    ");
+
+    // Activating the same edge makes 2.0.0 reachable on non-Windows, where legacy pins 1.1.1.
+    let reachable_edge = unreachable_edge.replace("extra !=", "extra ==");
+    let lock = lock.replace(unreachable_edge, &reachable_edge);
+    context.temp_dir.child("uv.lock").write_str(&lock)?;
+    uv_snapshot!(context.filters(), context.lock().arg("--check"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: The lockfile at `uv.lock` needs to be updated, but `--check` was provided.
+      cause: Locked `iniconfig==2.0.0` does not satisfy `==1.1.1`.
+
+    hint: To update the lockfile, run `uv lock`.
     ");
 
     Ok(())

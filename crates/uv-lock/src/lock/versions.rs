@@ -160,6 +160,7 @@ impl<'lock> VersionChecker<'lock, '_> {
                 continue;
             }
             let index = PackageIndex(index);
+            let mut prepared_requires_dist = None;
             for context in iter::once(DependencyContext::Production)
                 .chain(
                     package
@@ -188,9 +189,13 @@ impl<'lock> VersionChecker<'lock, '_> {
                         .get(group)
                         .map_or(&[], Box::as_ref),
                 };
-                if let Some(mismatch) =
-                    self.check_requirements(index, context, requirements, dependencies)
-                {
+                if let Some(mismatch) = self.check_requirements(
+                    index,
+                    context,
+                    requirements,
+                    dependencies,
+                    &mut prepared_requires_dist,
+                ) {
                     return Some(mismatch);
                 }
                 if !has_constraints {
@@ -223,6 +228,7 @@ impl<'lock> VersionChecker<'lock, '_> {
         context: DependencyContext<'lock>,
         requirements: &[Requirement],
         dependencies: &'lock [Dependency],
+        prepared_requires_dist: &mut Option<Vec<Requirement>>,
     ) -> Option<SatisfiesResult<'lock>> {
         let package = self.lock.package(index);
         // If this parent has package-scoped overrides or exclusions and its version is missing,
@@ -240,9 +246,18 @@ impl<'lock> VersionChecker<'lock, '_> {
         // The lock usually omits registry packages' declared requirements. Start with a bare
         // requirement for each locked dependency so a matching override can supply its specifier.
         let inferred = requirements.is_empty() && !self.lock.manifest.overrides.is_empty();
-        let inferred_requirements;
+        let preprocess = |requirements: &[Requirement]| {
+            Lock::preprocess_requirements(
+                &package.id.name,
+                package.id.version.as_ref(),
+                requirements,
+                context,
+                self.modifiers,
+            )
+        };
+        let section_requirements;
         let requirements = if inferred {
-            inferred_requirements = dependencies
+            let inferred_requirements = dependencies
                 .iter()
                 .map(|dependency| Requirement {
                     name: dependency.package_id.name.clone(),
@@ -258,17 +273,22 @@ impl<'lock> VersionChecker<'lock, '_> {
                     origin: None,
                 })
                 .collect::<Vec<_>>();
-            &inferred_requirements
+            section_requirements = preprocess(&inferred_requirements);
+            &section_requirements
+        } else if let DependencyContext::Group(_) = context {
+            section_requirements = preprocess(requirements);
+            &section_requirements
         } else {
-            requirements
+            // Production and extras share the same declarations, modifiers, and flattening.
+            prepared_requires_dist.get_or_insert_with(|| {
+                let mut requirements = preprocess(requirements);
+                if !package.optional_dependencies.is_empty() {
+                    requirements.retain(|requirement| self.may_violate_requirement(requirement));
+                }
+                requirements
+            })
         };
-        for requirement in Lock::preprocess_requirements(
-            &package.id.name,
-            package.id.version.as_ref(),
-            requirements,
-            context,
-            self.modifiers,
-        ) {
+        for requirement in requirements {
             let first = dependencies
                 .partition_point(|dependency| dependency.package_id.name < requirement.name);
             for dependency in dependencies[first..]
@@ -276,7 +296,7 @@ impl<'lock> VersionChecker<'lock, '_> {
                 .take_while(|dependency| dependency.package_id.name == requirement.name)
             {
                 let target = self.lock.package(dependency.index);
-                if let Some(mismatch) = self.check_requirement(target, &requirement, || {
+                if let Some(mismatch) = self.check_requirement(target, requirement, || {
                     // If `pkg[all]` includes `pkg[docs]` and `docs` requires `sphinx`,
                     // preprocessing the declarations carries the effective `sphinx` requirement
                     // into `all`. We can then evaluate its marker for that section.
@@ -295,6 +315,20 @@ impl<'lock> VersionChecker<'lock, '_> {
             }
         }
         None
+    }
+
+    /// A requirement satisfied by every locked version of its target can be skipped in every extra.
+    fn may_violate_requirement(&self, requirement: &Requirement) -> bool {
+        let Some(specifier) = requirement.source.version_specifiers() else {
+            return false;
+        };
+        !specifier.is_empty()
+            && self
+                .lock
+                .packages_for_name(&requirement.name)
+                .iter()
+                .filter_map(|package| package.id.version.as_ref())
+                .any(|version| !specifier.contains(version))
     }
 
     fn check_constraints(
