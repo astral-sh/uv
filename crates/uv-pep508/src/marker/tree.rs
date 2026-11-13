@@ -1387,10 +1387,10 @@ impl MarkerTree {
     /// when this marker contains an `extra` expression.
     #[must_use]
     pub fn resolve_extras(self, known_extras: impl IntoIterator<Item = (ExtraName, Self)>) -> Self {
-        if self.is_true() || self.is_false() {
-            return self;
-        }
-        if !INTERNER.shared.contains_extras(self.0) {
+        if !INTERNER
+            .shared
+            .contains_variable(self.0, |variable| matches!(variable, Variable::Extra(_)))
+        {
             return self;
         }
         let known_extras: FxHashMap<_, _> = known_extras
@@ -1414,7 +1414,10 @@ impl MarkerTree {
         self,
         known_extras: impl IntoIterator<Item = (ExtraName, (Self, Self))>,
     ) -> (Self, Self) {
-        if self.is_true() || self.is_false() || !INTERNER.shared.contains_extras(self.0) {
+        if !INTERNER
+            .shared
+            .contains_variable(self.0, |variable| matches!(variable, Variable::Extra(_)))
+        {
             return (self, self);
         }
 

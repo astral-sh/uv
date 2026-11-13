@@ -114,31 +114,28 @@ impl InternerShared {
         &self.nodes[id.index()]
     }
 
-    /// Returns whether a reachable node tests the singular `extra` variable.
+    /// Returns whether a reachable variable satisfies the predicate.
     ///
     /// Complemented references have the same variables, so shared nodes are visited once
-    /// regardless of their polarity. List-valued `extras` and `dependency_groups` are distinct.
-    pub(crate) fn contains_extras(&self, marker: NodeId) -> bool {
+    /// regardless of their polarity.
+    pub(crate) fn contains_variable(
+        &self,
+        marker: NodeId,
+        predicate: impl Fn(&Variable) -> bool,
+    ) -> bool {
+        if marker.is_true() || marker.is_false() {
+            return false;
+        }
         let mut pending = SmallVec::from_slice(&[marker]);
         let mut visited = FxHashSet::default();
         while let Some(marker) = pending.pop() {
-            if marker.is_true() || marker.is_false() {
-                continue;
-            }
             let node = self.node(marker);
-            match &node.var {
-                Variable::Extra(_) => return true,
-                Variable::String(_)
-                | Variable::VersionString(_)
-                | Variable::Version(_)
-                | Variable::In { .. }
-                | Variable::Contains { .. }
-                | Variable::List(_) => {
-                    for child in node.children.nodes() {
-                        if !child.is_true() && !child.is_false() && visited.insert(child.index()) {
-                            pending.push(child);
-                        }
-                    }
+            if predicate(&node.var) {
+                return true;
+            }
+            for child in node.children.nodes() {
+                if !child.is_true() && !child.is_false() && visited.insert(child.index()) {
+                    pending.push(child);
                 }
             }
         }
@@ -550,14 +547,24 @@ impl InternerGuard<'_> {
         i: NodeId,
         f: &impl Fn(&Variable) -> Option<bool>,
     ) -> NodeId {
-        self.restrict_by_cached(i, f, &mut None)
+        self.restrict_nodes(i, &|node| {
+            if let Edges::Boolean { high, low } = node.children {
+                f(&node.var).map(|value| if value { high } else { low })
+            } else {
+                None
+            }
+        })
+    }
+
+    fn restrict_nodes(&mut self, i: NodeId, select: &impl Fn(&Node) -> Option<NodeId>) -> NodeId {
+        self.restrict_by_cached(i, select, &mut None)
     }
 
     /// Restrict each signed node once, including unchanged shared subgraphs.
     fn restrict_by_cached(
         &mut self,
         i: NodeId,
-        f: &impl Fn(&Variable) -> Option<bool>,
+        select: &impl Fn(&Node) -> Option<NodeId>,
         cache: &mut Option<FxHashMap<NodeId, NodeId>>,
     ) -> NodeId {
         if matches!(i, NodeId::TRUE | NodeId::FALSE) {
@@ -570,11 +577,8 @@ impl InternerGuard<'_> {
         }
 
         let node = self.shared.node(i);
-        let result = if let Edges::Boolean { high, low } = node.children
-            && let Some(value) = f(&node.var)
-        {
-            let node = if value { high } else { low };
-            self.restrict_by_cached(node.negate(i), f, cache)
+        let result = if let Some(node) = select(node) {
+            self.restrict_by_cached(node.negate(i), select, cache)
         } else {
             // A single path cannot revisit a node. Start caching when traversal first branches.
             if cache.is_none() && node.children.has_multiple_nonterminal_children() {
@@ -582,7 +586,7 @@ impl InternerGuard<'_> {
             }
             let children = node
                 .children
-                .map(i, |node| self.restrict_by_cached(node, f, cache));
+                .map(i, |node| self.restrict_by_cached(node, select, cache));
             self.create_node(node.var.clone(), children)
         };
         if cache_result && let Some(cache) = cache {
