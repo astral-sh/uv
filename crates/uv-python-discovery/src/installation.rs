@@ -238,7 +238,10 @@ impl PythonInstallation {
             Ok(Err(uv_python_managed::downloads::Error::NoDownloadFound(_))) => {
                 if downloads_enabled {
                     debug!("No downloads are available for {request}");
-                    if matches!(request, PythonRequest::Default | PythonRequest::Any) {
+                    // An updated download catalog cannot supply an externally installed Imre.
+                    if matches!(request, PythonRequest::Default | PythonRequest::Any)
+                        || download_request.implementation() == Some(&ImplementationName::Imre)
+                    {
                         return Err(err);
                     }
                     return Err(err.with_hint(MissingPythonHint::RequiresUpdate));

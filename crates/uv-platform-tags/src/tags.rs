@@ -520,6 +520,7 @@ enum Implementation {
     PyPy,
     GraalPy,
     Pyston,
+    Imre,
 }
 
 impl Implementation {
@@ -535,6 +536,8 @@ impl Implementation {
             Self::GraalPy => LanguageTag::GraalPy { python_version },
             // Ex) `pyston38`
             Self::Pyston => LanguageTag::Pyston { python_version },
+            // Ex) `imre312`
+            Self::Imre => LanguageTag::Imre { python_version },
         }
     }
 
@@ -559,6 +562,8 @@ impl Implementation {
             Self::Pyston => AbiTag::Pyston {
                 implementation_version,
             },
+            // The extension ABI is versioned independently of the compiler.
+            Self::Imre => AbiTag::Imre1,
         }
     }
 
@@ -569,6 +574,7 @@ impl Implementation {
             "pypy" => Ok(Self::PyPy),
             "graalpy" => Ok(Self::GraalPy),
             "pyston" => Ok(Self::Pyston),
+            "imre" => Ok(Self::Imre),
             // Known but unsupported implementations.
             "python" => Err(TagsError::UnsupportedImplementation(name.to_string())),
             "ironpython" => Err(TagsError::UnsupportedImplementation(name.to_string())),
@@ -3075,6 +3081,47 @@ mod tests {
         assert!(debug_compatibility.is_compatible());
         assert!(non_debug_compatibility.is_compatible());
         assert!(debug_compatibility > non_debug_compatibility);
+    }
+
+    #[test]
+    fn test_system_tags_imre() {
+        let tags = Tags::from_env(
+            Platform::new(
+                Os::Manylinux {
+                    major: 2,
+                    minor: 28,
+                },
+                Arch::X86_64,
+            ),
+            (3, 12),
+            "imre",
+            (0, 1),
+            TagsOptions::default(),
+        )
+        .unwrap();
+        let imre = LanguageTag::from_str("imre312").unwrap();
+        let linux = PlatformTag::Linux { arch: Arch::X86_64 };
+        assert_eq!(tags.python_tag(), Some(imre));
+        assert_eq!(tags.abi_tag(), Some(AbiTag::Imre1));
+        let native = tags.compatibility_tag(&imre, &AbiTag::Imre1, &linux);
+        let pure = tags.compatibility_tag(
+            &LanguageTag::from_str("py3").unwrap(),
+            &AbiTag::None,
+            &PlatformTag::Any,
+        );
+        assert!(pure.is_compatible());
+        assert!(native > pure);
+        assert!(!tags.is_compatible_abi(imre, AbiTag::Abi3));
+        assert!(!tags.is_compatible_abi(LanguageTag::from_str("imre311").unwrap(), AbiTag::Imre1));
+        assert!(!tags.is_compatible_abi(
+            LanguageTag::from_str("cp312").unwrap(),
+            AbiTag::from_str("cp312").unwrap(),
+        ));
+        assert!(
+            !tags
+                .compatibility_tag(&imre, &AbiTag::Imre1, &PlatformTag::Any)
+                .is_compatible()
+        );
     }
 
     #[test]

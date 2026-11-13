@@ -399,14 +399,18 @@ impl ManagedPythonInstallation {
             }
             // PyPy uses a full version number, even on Windows.
             ImplementationName::PyPy => format!("{}.{}", self.key.major, self.key.minor),
-            // Pyodide and GraalPy do not have a version suffix.
-            ImplementationName::Pyodide => String::new(),
-            ImplementationName::GraalPy => String::new(),
+            // These implementations use an unversioned executable.
+            ImplementationName::Pyodide
+            | ImplementationName::GraalPy
+            | ImplementationName::Imre => String::new(),
         };
 
         // On Windows, the executable is just `python.exe` even for alternative variants
-        // GraalPy always uses `graalpy.exe` as the main executable
-        let variant = if self.implementation() == ImplementationName::GraalPy {
+        // GraalPy and Imre use the same executable for all variants.
+        let variant = if matches!(
+            self.implementation(),
+            ImplementationName::GraalPy | ImplementationName::Imre
+        ) {
             ""
         } else if cfg!(unix) {
             self.key.variant.executable_suffix()

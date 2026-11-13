@@ -34,6 +34,8 @@ pub enum LanguageTag {
     Pyston { python_version: (u8, u8) },
     /// Ex) `cp3`, specifically in `cp3-none-any`
     CPythonMajor { major: u8 },
+    /// Ex) `imre312`
+    Imre { python_version: (u8, u8) },
 }
 
 impl LanguageTag {
@@ -61,6 +63,9 @@ impl LanguageTag {
                 python_version: (major, minor),
             } => Some(format!("Pyston {major}.{minor}")),
             Self::CPythonMajor { major } => Some(format!("CPython {major}")),
+            Self::Imre {
+                python_version: (major, minor),
+            } => Some(format!("Imre {major}.{minor}")),
         }
     }
 }
@@ -100,6 +105,9 @@ impl std::fmt::Display for LanguageTag {
             Self::CPythonMajor { major } => {
                 write!(f, "cp{major}")
             }
+            Self::Imre {
+                python_version: (major, minor),
+            } => write!(f, "imre{major}{minor}"),
         }
     }
 }
@@ -229,6 +237,9 @@ impl FromStr for LanguageTag {
             Ok(Self::GraalPy {
                 python_version: (major, minor),
             })
+        } else if let Some(imre) = s.strip_prefix("imre") {
+            let python_version = parse_python_version(imre, "Imre", s)?;
+            Ok(Self::Imre { python_version })
         } else {
             Err(ParseLanguageTagError::UnknownFormat(s.to_string()))
         }
@@ -437,6 +448,23 @@ mod tests {
             Err(ParseLanguageTagError::InvalidMinorVersion {
                 implementation: "Pyston",
                 tag: "pyston3X".to_string()
+            })
+        );
+    }
+
+    #[test]
+    fn imre_language() {
+        let tag = LanguageTag::Imre {
+            python_version: (3, 12),
+        };
+        assert_eq!(LanguageTag::from_str("imre312"), Ok(tag));
+        assert_eq!(tag.to_string(), "imre312");
+        assert_eq!(tag.pretty().as_deref(), Some("Imre 3.12"));
+        assert_eq!(
+            LanguageTag::from_str("imre3"),
+            Err(ParseLanguageTagError::InvalidMinorVersion {
+                implementation: "Imre",
+                tag: "imre3".to_string(),
             })
         );
     }
