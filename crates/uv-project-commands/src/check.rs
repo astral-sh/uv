@@ -21,7 +21,7 @@ use uv_environment_operations::{
 };
 use uv_fs::normalize_path;
 use uv_install_operations::loggers::SummaryInstallLogger;
-use uv_lock_operations::{LockMode, LockOperation, LockTarget};
+use uv_lock_operations::{LockCommand, LockMode, LockOperation, LockTarget};
 use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, PackageName};
 use uv_preview::{Preview, PreviewFeature};
 use uv_python_discovery::ConfigDiscovery;
@@ -405,6 +405,7 @@ pub async fn check(
         };
         let result = match Box::pin(
             LockOperation::new(
+                LockCommand::Check,
                 mode,
                 &settings.resolver,
                 &client_builder,
@@ -583,6 +584,7 @@ pub async fn check(
         let selection = PackageSelection::from_args(all_packages, &package, project.project_name());
         let result = match Box::pin(
             LockOperation::new(
+                LockCommand::Check,
                 mode,
                 &settings.resolver,
                 &client_builder,

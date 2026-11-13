@@ -20,7 +20,7 @@ use uv_environment_operations::{
     ProjectEnvironmentPolicy, ProjectEnvironmentTarget, ProjectInterpreter,
 };
 use uv_lock::implicit_constraints_marker;
-use uv_lock_operations::{LockMode, LockOperation, LockResult, LockTarget};
+use uv_lock_operations::{LockCommand, LockMode, LockOperation, LockResult, LockTarget};
 use uv_normalize::PackageName;
 use uv_pep440::{Operator, Version, VersionSpecifier, VersionSpecifiers};
 use uv_pep508::{MarkerTree, Pep508ErrorSource, Requirement, VerbatimUrl, VersionOrUrl};
@@ -406,6 +406,7 @@ pub async fn upgrade(
 
     let result = match Box::pin(
         LockOperation::new(
+            LockCommand::Upgrade,
             LockMode::DryRun(&interpreter),
             &settings,
             &client_builder,
