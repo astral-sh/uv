@@ -5,7 +5,6 @@ use std::path::Path;
 use std::str::FromStr;
 use std::sync::{Arc, LazyLock, RwLock};
 
-use http::StatusCode;
 use itertools::Either;
 use rustc_hash::{FxHashMap, FxHashSet};
 use thiserror::Error;
@@ -19,7 +18,7 @@ use uv_redacted::SafeUrl;
 use uv_redacted::policy::{SerializationPolicy, Stripped};
 use uv_warnings::warn_user;
 
-use crate::{ExcludeNewerOverride, Index, IndexStatusCodeStrategy, Verbatim};
+use crate::{ExcludeNewerOverride, Index, IndexRequestPolicy, Verbatim};
 
 pub static PYPI_URL: LazyLock<SafeUrl> =
     LazyLock::new(|| SafeUrl::parse("https://pypi.org/simple").unwrap());
@@ -477,44 +476,18 @@ impl<'a> IndexLocations {
         Either::Right(non_default.into_iter().chain(default))
     }
 
-    /// Return the configured index matching the given URL.
+    /// Return the first configured index matching the given URL.
     fn index_for_url(&self, url: &IndexUrl) -> Option<&Index> {
         self.indexes
             .iter()
             .find(|index| is_same_index(index.url(), url))
     }
 
-    /// Return the [`IndexStatusCodeStrategy`] for an [`IndexUrl`].
-    pub fn status_code_strategy_for(&self, url: &IndexUrl) -> IndexStatusCodeStrategy {
-        self.index_for_url(url).map_or(
-            IndexStatusCodeStrategy::Default,
-            Index::status_code_strategy,
-        )
-    }
-
-    /// Return whether the given status code is explicitly ignored for an [`IndexUrl`].
-    pub fn ignores_error_code_for(&self, url: &IndexUrl, status_code: StatusCode) -> bool {
+    /// Return the HTTP request policy for an index, or the default for an unconfigured URL.
+    pub fn request_policy(&self, url: &IndexUrl) -> IndexRequestPolicy<'_> {
         self.index_for_url(url)
-            .is_some_and(|index| index.ignores_error_code(status_code))
-    }
-
-    /// Return the Simple API cache control header for an [`IndexUrl`], if configured.
-    pub fn simple_api_cache_control_for(&self, url: &IndexUrl) -> Option<http::HeaderValue> {
-        self.index_for_url(url)
-            .and_then(Index::simple_api_cache_control)
-    }
-
-    /// Return the artifact cache control header for an [`IndexUrl`], if configured.
-    pub fn artifact_cache_control_for(&self, url: &IndexUrl) -> Option<http::HeaderValue> {
-        self.index_for_url(url)
-            .and_then(Index::artifact_cache_control)
-    }
-
-    /// Return the explicitly configured file cache control header for an [`IndexUrl`].
-    pub fn configured_files_cache_control_for(&self, url: &IndexUrl) -> Option<http::HeaderValue> {
-        self.index_for_url(url)
-            .and_then(|index| index.cache_control.as_ref())
-            .and_then(|cache_control| cache_control.files.clone())
+            .map(Index::request_policy)
+            .unwrap_or_default()
     }
 
     /// Return the hash algorithm required for distributions resolved from a given index.
@@ -634,12 +607,11 @@ impl IndexCapabilities {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeMap;
     use std::error::Error;
 
     use super::*;
-    use crate::{IndexCacheControl, IndexFormat, IndexName};
-    use http::HeaderValue;
+    use crate::{IndexCacheControl, IndexName, IndexStatusCodeDecision, IndexStatusCodeStrategy};
+    use http::{HeaderValue, StatusCode};
 
     fn index_urls<'a>(indexes: impl IntoIterator<Item = &'a Index>) -> Vec<&'a str> {
         indexes
@@ -798,172 +770,149 @@ mod tests {
     }
 
     #[test]
-    fn test_cache_control_lookup() {
-        use std::str::FromStr;
+    fn test_cache_control_lookup() -> Result<(), Box<dyn Error>> {
+        let configured = IndexUrl::from_str("https://index1.example.com/simple")?;
+        let unconfigured = IndexUrl::from_str("https://index2.example.com/simple")?;
+        let locations = IndexLocations::new(
+            vec![
+                Index {
+                    cache_control: Some(IndexCacheControl {
+                        api: Some(HeaderValue::from_static("max-age=300")),
+                        files: Some(HeaderValue::from_static("max-age=1800")),
+                    }),
+                    ..Index::from(configured.clone())
+                },
+                Index::from(unconfigured.clone()),
+            ],
+            Vec::new(),
+            false,
+        );
 
-        use crate::IndexFormat;
-        use crate::index_name::IndexName;
-
-        let indexes = vec![
-            Index {
-                name: Some(IndexName::from_str("index1").unwrap()),
-                url: IndexUrl::from_str("https://index1.example.com/simple").unwrap(),
-                cache_control: Some(crate::IndexCacheControl {
-                    api: Some(HeaderValue::from_static("max-age=300")),
-                    files: Some(HeaderValue::from_static("max-age=1800")),
-                }),
-                explicit: false,
-                default: false,
-                origin: None,
-                format: IndexFormat::Simple,
-                publish_url: None,
-                authenticate: uv_auth::AuthPolicy::default(),
-                ignore_error_codes: None,
-                hash_algorithm: None,
-                exclude_newer: None,
-                exclude_newer_package: BTreeMap::new(),
-            },
-            Index {
-                name: Some(IndexName::from_str("index2").unwrap()),
-                url: IndexUrl::from_str("https://index2.example.com/simple").unwrap(),
-                cache_control: None,
-                explicit: false,
-                default: false,
-                origin: None,
-                format: IndexFormat::Simple,
-                publish_url: None,
-                authenticate: uv_auth::AuthPolicy::default(),
-                ignore_error_codes: None,
-                hash_algorithm: None,
-                exclude_newer: None,
-                exclude_newer_package: BTreeMap::new(),
-            },
-        ];
-
-        let index_locations = IndexLocations::new(indexes, Vec::new(), false);
-
-        let url1 = IndexUrl::from_str("https://index1.example.com/simple").unwrap();
+        let policy = locations.request_policy(&configured);
         assert_eq!(
-            index_locations.simple_api_cache_control_for(&url1),
+            policy.simple_api_cache_control(),
             Some(HeaderValue::from_static("max-age=300"))
         );
         assert_eq!(
-            index_locations.artifact_cache_control_for(&url1),
+            policy.artifact_cache_control(),
             Some(HeaderValue::from_static("max-age=1800"))
         );
 
-        let url2 = IndexUrl::from_str("https://index2.example.com/simple").unwrap();
-        assert_eq!(index_locations.simple_api_cache_control_for(&url2), None);
-        assert_eq!(index_locations.artifact_cache_control_for(&url2), None);
+        let policy = locations.request_policy(&unconfigured);
+        assert_eq!(policy.simple_api_cache_control(), None);
+        assert_eq!(policy.artifact_cache_control(), None);
 
-        let url3 = IndexUrl::from_str("https://index3.example.com/simple").unwrap();
-        assert_eq!(index_locations.simple_api_cache_control_for(&url3), None);
-        assert_eq!(index_locations.artifact_cache_control_for(&url3), None);
+        let unknown = IndexUrl::from_str("https://download.pytorch.org/whl/cu118")?;
+        let policy = locations.request_policy(&unknown);
+        assert_eq!(policy.simple_api_cache_control(), None);
+        assert_eq!(policy.artifact_cache_control(), None);
+        assert_eq!(
+            policy.status_code_strategy(),
+            IndexStatusCodeStrategy::Default
+        );
+        Ok(())
     }
 
     #[test]
-    fn test_pytorch_default_cache_control() {
-        // Test that PyTorch indexes get default cache control from the getter methods
-        let indexes = vec![Index {
-            name: Some(IndexName::from_str("pytorch").unwrap()),
-            url: IndexUrl::from_str("https://download.pytorch.org/whl/cu118").unwrap(),
-            cache_control: None, // No explicit cache control
-            explicit: false,
-            default: false,
-            origin: None,
-            format: IndexFormat::Simple,
-            publish_url: None,
-            authenticate: uv_auth::AuthPolicy::default(),
-            ignore_error_codes: None,
-            hash_algorithm: None,
-            exclude_newer: None,
-            exclude_newer_package: BTreeMap::new(),
-        }];
+    fn request_policy_distinguishes_configured_and_builtin_status_codes()
+    -> Result<(), Box<dyn Error>> {
+        let url = IndexUrl::from_str("https://download.pytorch.org/whl/cu118")?;
+        let implicit = IndexLocations::new(vec![Index::from(url.clone())], vec![], false);
+        let explicit: Index = toml::from_str(
+            r#"url = "https://download.pytorch.org/whl/cu118"
+               ignore-error-codes = [403]"#,
+        )?;
+        let explicit = IndexLocations::new(vec![explicit], vec![], false);
+        let implicit_policy = implicit.request_policy(&url);
+        let explicit_policy = explicit.request_policy(&url);
+        let capabilities = IndexCapabilities::default();
+        for policy in [implicit_policy, explicit_policy] {
+            assert_eq!(
+                policy.status_code_strategy().handle_status_code(
+                    StatusCode::FORBIDDEN,
+                    &url,
+                    &capabilities,
+                ),
+                IndexStatusCodeDecision::Ignore
+            );
+        }
+        assert!(!implicit_policy.ignores_error_code(StatusCode::FORBIDDEN));
+        assert!(explicit_policy.ignores_error_code(StatusCode::FORBIDDEN));
+        Ok(())
+    }
 
-        let index_locations = IndexLocations::new(indexes, Vec::new(), false);
-
-        let pytorch_url = IndexUrl::from_str("https://download.pytorch.org/whl/cu118").unwrap();
-
+    #[test]
+    fn empty_ignored_status_codes_override_pytorch_default() -> Result<(), Box<dyn Error>> {
+        let url = IndexUrl::from_str("https://download.pytorch.org/whl/cu118")?;
+        let index: Index = toml::from_str(
+            r#"url = "https://download.pytorch.org/whl/cu118"
+               ignore-error-codes = []"#,
+        )?;
+        let locations = IndexLocations::new(vec![index], vec![], false);
+        let policy = locations.request_policy(&url);
+        let capabilities = IndexCapabilities::default();
         assert_eq!(
-            index_locations.simple_api_cache_control_for(&pytorch_url),
-            None
+            policy.status_code_strategy().handle_status_code(
+                StatusCode::FORBIDDEN,
+                &url,
+                &capabilities,
+            ),
+            IndexStatusCodeDecision::Fail(StatusCode::FORBIDDEN)
         );
+        Ok(())
+    }
+
+    #[test]
+    fn test_pytorch_default_cache_control() -> Result<(), Box<dyn Error>> {
+        let url = IndexUrl::from_str("https://download.pytorch.org/whl/cu118")?;
+        let locations = IndexLocations::new(vec![Index::from(url.clone())], Vec::new(), false);
+        let policy = locations.request_policy(&url);
+        assert_eq!(policy.simple_api_cache_control(), None);
         assert_eq!(
-            index_locations.artifact_cache_control_for(&pytorch_url),
+            policy.artifact_cache_control(),
             Some(HeaderValue::from_static(
                 "max-age=365000000, immutable, public",
             ))
         );
+        assert_eq!(policy.configured_files_cache_control(), None);
+        Ok(())
     }
 
     #[test]
-    fn test_pytorch_user_override_cache_control() {
-        // Test that user-specified cache control overrides PyTorch defaults
-        let indexes = vec![Index {
-            name: Some(IndexName::from_str("pytorch").unwrap()),
-            url: IndexUrl::from_str("https://download.pytorch.org/whl/cu118").unwrap(),
+    fn test_pytorch_user_override_cache_control() -> Result<(), Box<dyn Error>> {
+        let url = IndexUrl::from_str("https://download.pytorch.org/whl/cu118")?;
+        let index = Index {
             cache_control: Some(IndexCacheControl {
                 api: Some(HeaderValue::from_static("no-cache")),
                 files: Some(HeaderValue::from_static("max-age=3600")),
             }),
-            explicit: false,
-            default: false,
-            origin: None,
-            format: IndexFormat::Simple,
-            publish_url: None,
-            authenticate: uv_auth::AuthPolicy::default(),
-            ignore_error_codes: None,
-            hash_algorithm: None,
-            exclude_newer: None,
-            exclude_newer_package: BTreeMap::new(),
-        }];
-
-        let index_locations = IndexLocations::new(indexes, Vec::new(), false);
-
-        let pytorch_url = IndexUrl::from_str("https://download.pytorch.org/whl/cu118").unwrap();
-
+            ..Index::from(url.clone())
+        };
+        let locations = IndexLocations::new(vec![index], Vec::new(), false);
+        let policy = locations.request_policy(&url);
         assert_eq!(
-            index_locations.simple_api_cache_control_for(&pytorch_url),
+            policy.simple_api_cache_control(),
             Some(HeaderValue::from_static("no-cache"))
         );
         assert_eq!(
-            index_locations.artifact_cache_control_for(&pytorch_url),
+            policy.artifact_cache_control(),
             Some(HeaderValue::from_static("max-age=3600"))
         );
+        Ok(())
     }
 
     #[test]
-    fn test_nvidia_default_cache_control() {
-        // Test that NVIDIA indexes get default cache control from the getter methods
-        let indexes = vec![Index {
-            name: Some(IndexName::from_str("nvidia").unwrap()),
-            url: IndexUrl::from_str("https://pypi.nvidia.com").unwrap(),
-            cache_control: None, // No explicit cache control
-            explicit: false,
-            default: false,
-            origin: None,
-            format: IndexFormat::Simple,
-            publish_url: None,
-            authenticate: uv_auth::AuthPolicy::default(),
-            ignore_error_codes: None,
-            hash_algorithm: None,
-            exclude_newer: None,
-            exclude_newer_package: BTreeMap::new(),
-        }];
-
-        let index_locations = IndexLocations::new(indexes, Vec::new(), false);
-
-        let nvidia_url = IndexUrl::from_str("https://pypi.nvidia.com").unwrap();
-
+    fn test_nvidia_default_cache_control() -> Result<(), Box<dyn Error>> {
+        let url = IndexUrl::from_str("https://pypi.nvidia.com")?;
+        let locations = IndexLocations::new(vec![Index::from(url.clone())], Vec::new(), false);
+        let policy = locations.request_policy(&url);
+        assert_eq!(policy.simple_api_cache_control(), None);
         assert_eq!(
-            index_locations.simple_api_cache_control_for(&nvidia_url),
-            None
-        );
-        assert_eq!(
-            index_locations.artifact_cache_control_for(&nvidia_url),
+            policy.artifact_cache_control(),
             Some(HeaderValue::from_static(
                 "max-age=365000000, immutable, public",
             ))
         );
+        Ok(())
     }
 }

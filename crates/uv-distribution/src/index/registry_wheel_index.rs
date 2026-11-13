@@ -121,7 +121,7 @@ impl<'a> RegistryWheelIndex<'a> {
         no_binary: bool,
     ) -> Option<&CachedRegistryDist> {
         let wheel = distribution.best_wheel();
-        let required = self
+        let hash_policy = self
             .hasher
             .archive_policy_for_package(&wheel.filename.name, &wheel.filename.version);
         self.matching(&wheel.filename.name, |entry| {
@@ -148,7 +148,7 @@ impl<'a> RegistryWheelIndex<'a> {
                     .map_or(&[][..], |source| source.file.hashes.as_slice());
                 if source_hashes.is_empty()
                     && !wheel.file.hashes.is_empty()
-                    && !required.requires_validation()
+                    && !hash_policy.requires_validation()
                 {
                     return false;
                 }
@@ -156,7 +156,7 @@ impl<'a> RegistryWheelIndex<'a> {
             } else {
                 wheel.file.hashes.as_slice()
             };
-            ArtifactHashPolicy::required(required).can_reuse(&entry.dist, index_hashes)
+            ArtifactHashPolicy::required(hash_policy).can_reuse(&entry.dist, index_hashes)
         })
         .next()
         .map(IndexEntry::dist)
