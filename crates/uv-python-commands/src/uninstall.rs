@@ -20,7 +20,8 @@ use uv_python_managed::{
     python_executable_dir,
 };
 use uv_python_types::{
-    PythonDownloadRequest, PythonInstallationKey, PythonInstallationMinorVersionKey, PythonRequest,
+    ImplementationName, PythonDownloadRequest, PythonInstallationKey,
+    PythonInstallationMinorVersionKey, PythonRequest,
 };
 
 use crate::install::format_executables;
@@ -192,6 +193,9 @@ async fn do_uninstall(
                 name == Some(&installation.key().executable_name_minor())
                     || name == Some(&installation.key().executable_name_major())
                     || name == Some(&installation.key().executable_name())
+                    || (cfg!(windows)
+                        && installation.implementation() == ImplementationName::CPython
+                        && name == Some("pythonw.exe"))
             })
         })
         .sorted()
