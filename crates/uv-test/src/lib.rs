@@ -1936,11 +1936,9 @@ impl TestContext {
 
         // We can only canonicalize paths that exist already
         if path.as_ref().exists() {
-            patterns.push(Self::path_pattern(
-                path.as_ref()
-                    .canonicalize()
-                    .expect("Failed to create canonical path"),
-            ));
+            if let Ok(canonical) = path.as_ref().canonicalize() {
+                patterns.push(Self::path_pattern(canonical));
+            }
         }
 
         // Include a non-canonicalized version

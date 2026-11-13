@@ -138,6 +138,11 @@ impl Excludes {
         self.scoped.contains_key(package)
     }
 
+    /// Return whether any exclusions are configured.
+    pub(crate) fn is_empty(&self) -> bool {
+        self.global.is_empty() && self.scoped.is_empty()
+    }
+
     /// Check if a dependency is excluded from a specific package version.
     pub(crate) fn contains_for(
         &self,

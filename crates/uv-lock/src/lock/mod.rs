@@ -4016,6 +4016,66 @@ impl Lock {
                     .collect(),
             ));
         }
+
+        if !missing_metadata {
+            let contexts = iter::once((DependencyContext::Production, &expected_requirements[..]))
+                .chain(
+                    provides_extra
+                        .iter()
+                        .map(|extra| (DependencyContext::Extra(extra), &expected_requirements[..])),
+                )
+                .chain(expected_groups.iter().map(|(group, requirements)| {
+                    (DependencyContext::Group(group), &requirements[..])
+                }));
+
+            for (context, declarations) in contexts {
+                let actual_dependencies = context.dependencies(package);
+                if actual_dependencies.is_empty() {
+                    continue;
+                }
+                let preprocessed: Vec<Requirement>;
+                let declarations: &[Requirement] = if modifiers.is_empty() {
+                    declarations
+                } else {
+                    preprocessed = Self::preprocess_requirements(
+                        &package.id.name,
+                        package_version,
+                        declarations,
+                        context,
+                        modifiers,
+                    );
+                    &preprocessed
+                };
+                for dependency in actual_dependencies {
+                    let target = self.package(dependency.index);
+                    let Some(target_version) = target.id.version.as_ref() else {
+                        continue;
+                    };
+                    for req in declarations
+                        .iter()
+                        .filter(|r| r.name == *dependency.package_name())
+                    {
+                        let req_marker = context.requirement_marker(req.marker);
+                        if req_marker.is_false() {
+                            continue;
+                        }
+                        if req_marker.is_disjoint(dependency.complexified_marker.pep508()) {
+                            continue;
+                        }
+                        if let Some(specifiers) = req.source.version_specifiers() {
+                            if !specifiers.is_empty() && !specifiers.contains(target_version) {
+                                return Ok(SatisfiesResult::MismatchedPackageDependencies(
+                                    &package.id.name,
+                                    package.id.version.as_ref(),
+                                    Vec::new(),
+                                    actual_dependencies,
+                                ));
+                            }
+                        }
+                    }
+                }
+            }
+        }
         if allow_missing_package_metadata {
             let expected_requirements = expected_requirements.into_iter().collect();
             let flattened = flattened.map(|requirements| requirements.into_iter().collect());
@@ -4496,7 +4556,10 @@ impl Lock {
             }
         }
 
-        let dependency_modifiers = if allow_missing_package_metadata {
+        let dependency_modifiers = if allow_missing_package_metadata
+            || !normalized_overrides.is_empty()
+            || !excludes.is_empty()
+        {
             DependencyModifiers::new(
                 Overrides::from_entries(normalized_overrides)
                     .map_err(LockErrorKind::InvalidScopedOverride)?,
@@ -4595,13 +4658,51 @@ impl Lock {
         }
 
         if !root_requirements.is_empty() {
-            for requirement in root_requirements {
+            for requirement in &root_requirements {
+                if let Some(specifiers) = requirement.source.version_specifiers() {
+                    if !specifiers.is_empty() {
+                        for package in self.packages_for_name(&requirement.name) {
+                            let Some(version) = package.id.version.as_ref() else {
+                                continue;
+                            };
+                            let marker = if package.fork_markers.is_empty() {
+                                requirement.marker
+                            } else {
+                                let mut combined = MarkerTree::FALSE;
+                                for fork_marker in &package.fork_markers {
+                                    combined = combined.or(fork_marker.pep508());
+                                }
+                                combined.and(requirement.marker)
+                            };
+                            if marker.is_false() || !marker.evaluate(markers, &[]) {
+                                continue;
+                            }
+                            if !specifiers.contains(version) {
+                                if !requirements.is_empty() {
+                                    return Ok(SatisfiesResult::MismatchedRequirements(
+                                        requirements.iter().cloned().collect(),
+                                        self.manifest.requirements.iter().cloned().collect(),
+                                    ));
+                                }
+                                return Ok(SatisfiesResult::MismatchedDependencyGroups(
+                                    dependency_groups
+                                        .iter()
+                                        .map(|(group, reqs)| {
+                                            (group.clone(), reqs.iter().cloned().collect())
+                                        })
+                                        .collect(),
+                                    self.manifest.dependency_groups.clone(),
+                                ));
+                            }
+                        }
+                    }
+                }
                 for package in self.packages_for_name(&requirement.name) {
                     if !package.id.source.is_source_tree() {
                         continue;
                     }
                     if allow_missing_package_metadata {
-                        if !Self::package_satisfies_requirement(package, &requirement, root)? {
+                        if !Self::package_satisfies_requirement(package, requirement, root)? {
                             continue;
                         }
                         let is_bare_registry_requirement = matches!(
@@ -11288,5 +11389,59 @@ wheels = [
                 Path::new("C:/Users/user/links").into()
             ))
         );
+    }
+
+    #[test]
+    fn resolved_dependency_violating_specifier_fails_validation() {
+        let data = r#"
+version = 1
+requires-python = ">=3.12"
+
+[[package]]
+name = "demo"
+version = "0.0.1"
+source = { virtual = "." }
+dependencies = [
+    { name = "six" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "six", specifier = "==1.17.0" }]
+
+[[package]]
+name = "six"
+version = "1.16.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/source/s/six/six-1.16.0.tar.gz" }
+"#;
+        let lock: Lock = toml::from_str(data).unwrap();
+        let demo = lock
+            .find_by_name(&PackageName::from_str("demo").unwrap())
+            .unwrap()
+            .unwrap();
+        let mut activated_extras = FxHashMap::default();
+        let mut remotes = None;
+        let mut locals = None;
+        let result = lock
+            .satisfies_requires_dist(
+                demo.metadata.requires_dist.clone(),
+                &demo.metadata.provides_extra,
+                demo.metadata.dependency_groups.clone(),
+                &DependencySources::default(),
+                &DependencyModifiers::default(),
+                None,
+                demo.id.version.as_ref(),
+                demo,
+                &mut activated_extras,
+                &mut remotes,
+                &mut locals,
+                Path::new("."),
+                false,
+            )
+            .unwrap();
+        assert!(matches!(
+            result,
+            SatisfiesResult::MismatchedPackageDependencies(..)
+        ));
     }
 }
