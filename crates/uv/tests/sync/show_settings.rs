@@ -4049,6 +4049,7 @@ fn preview_features() {
     +            BuildLazyImports,
     +            BuildDependencyHashes,
     +            WheelVariants,
+    +            Http2KeepAlive,
     +        ],
          },
          python_preference: Managed,

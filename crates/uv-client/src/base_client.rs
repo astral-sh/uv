@@ -28,7 +28,7 @@ use uv_distribution_types::IndexCredentialsError;
 use uv_git::GitHttpSettings;
 use uv_pep508::MarkerEnvironment;
 use uv_platform_tags::Platform;
-use uv_preview::Preview;
+use uv_preview::{Preview, PreviewFeature};
 use uv_redacted::SafeUrl;
 use uv_redacted::SafeUrlError;
 use uv_redacted::policy::SerializationPolicy;
@@ -62,6 +62,14 @@ pub const DEFAULT_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 /// reqwest does not support something like a read timeout for uploads, so we have to set a (large)
 /// timeout on the entire upload.
 pub const DEFAULT_READ_TIMEOUT_UPLOAD: Duration = Duration::from_mins(15);
+
+/// Returns the HTTP/2 keep-alive PING acknowledgement timeout for a client read timeout.
+///
+/// Scaling with the read timeout gives slow peers longer to acknowledge a PING, while the upper
+/// bound detects a dead connection promptly even with the longer timeout used for uploads.
+fn ping_ack_timeout(read_timeout: Duration) -> Duration {
+    (read_timeout / 3).clamp(Duration::from_secs(10), Duration::from_secs(20))
+}
 
 #[derive(Debug, Error)]
 pub enum ClientBuildError {
@@ -618,6 +626,14 @@ impl<'a> BaseClientBuilder<'a> {
             .read_timeout(read_timeout)
             .connect_timeout(connect_timeout)
             .redirect(redirect_policy.reqwest_policy());
+
+        let client_builder = if self.preview.is_enabled(PreviewFeature::Http2KeepAlive) {
+            client_builder
+                .http2_keep_alive_interval(Duration::from_secs(15))
+                .http2_keep_alive_timeout(ping_ack_timeout(read_timeout))
+        } else {
+            client_builder
+        };
 
         // If necessary, accept invalid certificates.
         let client_builder = match security {
@@ -1249,6 +1265,17 @@ mod tests {
     use reqwest::{Client, Method};
     use wiremock::matchers::method;
     use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    #[test]
+    fn ping_ack_timeout_scales_with_read_timeout() {
+        for (read_timeout, expected) in [(5, 10), (30, 10), (45, 15), (60, 20), (900, 20)] {
+            assert_eq!(
+                ping_ack_timeout(Duration::from_secs(read_timeout)),
+                Duration::from_secs(expected),
+                "read timeout of {read_timeout} seconds"
+            );
+        }
+    }
 
     #[tokio::test]
     async fn cache_read_runtime_can_be_dropped_from_an_async_context() {
