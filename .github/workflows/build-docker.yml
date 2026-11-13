@@ -4,12 +4,12 @@
 # contains the `uv` and `uvx` binaries in a scratch image, and common base images
 # with uv installed.
 #
-# On pull requests, CI builds the images when Docker-related files change.
+# On pull requests, CI builds uv from source when Docker-related files change.
 # Images are not saved unless a trusted development-image push is requested.
 #
-# Releases, including dry-runs, save the images in Depot Registry. The returned
-# artifact records their build IDs, digests, tags, and annotations for
-# `publish-docker.yml`.
+# Releases, including dry-runs, use the musl archives from the release binary
+# jobs and save the images in Depot Registry. The returned artifact records
+# their build IDs, digests, tags, and annotations for `publish-docker.yml`.
 name: "Build Docker images"
 
 on:
@@ -213,12 +213,36 @@ jobs:
             type=pep440,pattern={{ major }}.{{ minor }},value=${{ needs.docker-plan.outputs.tag }},enable=${{ needs.docker-plan.outputs.push-version == 'true' }}
             type=sha,enable=${{ inputs.push-dev }}
 
+      - name: Download musl release archives
+        if: ${{ inputs.plan != '' }}
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: build-github-archives-{x86_64,aarch64}-unknown-linux-musl
+          path: ${{ runner.temp }}/musl-archives
+          merge-multiple: true
+
+      - name: Extract release binaries for each Docker architecture
+        if: ${{ inputs.plan != '' }}
+        working-directory: ${{ runner.temp }}/musl-archives
+        run: |
+          extract_binaries() {
+            local archive="uv-$1-unknown-linux-musl"
+            local destination="$GITHUB_WORKSPACE/dist/docker/$2"
+            sha256sum --check "$archive.tar.gz.sha256"
+            mkdir -p "$destination"
+            tar -xzf "$archive.tar.gz" -C "$destination" --strip-components=1 "$archive/uv" "$archive/uvx"
+          }
+
+          extract_binaries x86_64 amd64
+          extract_binaries aarch64 arm64
+
       - name: Build and save image
         id: build
         uses: depot/build-push-action@98e78adca7817480b8185f474a400b451d74e287 # v1.18.0
         with:
           project: ${{ env.DEPOT_PROJECT_ID }}
           context: .
+          target: ${{ inputs.plan != '' && 'release' || 'source' }}
           platforms: linux/amd64,linux/arm64
           save: ${{ needs.docker-plan.outputs.save }}
           labels: ${{ steps.meta.outputs.labels }}
