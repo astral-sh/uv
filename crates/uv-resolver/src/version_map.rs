@@ -179,7 +179,7 @@ impl VersionMap {
     pub(crate) fn index(&self) -> Option<&IndexUrl> {
         match &self.inner {
             VersionMapInner::Eager(_) => None,
-            VersionMapInner::Lazy(lazy) => Some(&lazy.index_route.canonical),
+            VersionMapInner::Lazy(lazy) => Some(lazy.index_route.canonical()),
         }
     }
 
@@ -683,22 +683,21 @@ impl VersionMapLazy {
             .expect("archived version files always deserializes");
             let mut priority_dist = init.cloned().unwrap_or_default();
             for (filename, file) in files.all_entries(&self.package_name) {
-                let filename =
-                    match filename {
-                        IndexEntryFilename::DistFilename(filename) => filename,
-                        IndexEntryFilename::VariantJson(filename) => {
-                            if !priority_dist.variants_json().iter().any(|variants_json| {
-                                variants_json.index == self.index_route.canonical
-                            }) {
-                                priority_dist.insert_variants_json(RegistryVariantsJson {
-                                    filename,
-                                    file,
-                                    index: self.index_route.canonical.clone(),
-                                });
-                            }
-                            continue;
+                let filename = match filename {
+                    IndexEntryFilename::DistFilename(filename) => filename,
+                    IndexEntryFilename::VariantJson(filename) => {
+                        if !priority_dist.variants_json().iter().any(|variants_json| {
+                            &variants_json.index == self.index_route.canonical()
+                        }) {
+                            priority_dist.insert_variants_json(RegistryVariantsJson {
+                                filename,
+                                file,
+                                index: self.index_route.canonical().clone(),
+                            });
                         }
-                    };
+                        continue;
+                    }
+                };
                 // Support resolving as if it were an earlier timestamp, at least as long files have
                 // upload time information.
                 let (excluded, upload_time) = if let Some(included_version_cutoff) =
@@ -790,7 +789,7 @@ impl VersionMapLazy {
                         let dist = RegistryBuiltWheel {
                             filename,
                             file: Box::new(file),
-                            index: self.index_route.canonical.clone(),
+                            index: self.index_route.canonical().clone(),
                             size_is_authoritative: false,
                         };
                         priority_dist.insert_built(
@@ -806,7 +805,7 @@ impl VersionMapLazy {
                             version: filename.version.clone(),
                             ext: filename.extension,
                             file: Box::new(file),
-                            index: self.index_route.canonical.clone(),
+                            index: self.index_route.canonical().clone(),
                             wheels: vec![],
                             size_is_authoritative: false,
                         };

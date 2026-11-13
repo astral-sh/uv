@@ -326,12 +326,16 @@ impl ProxyRoute {
 /// Without a configured proxy, requests use the canonical index.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IndexRoute {
-    /// The original index URL recorded in the lockfile.
-    pub canonical: IndexUrl,
+    canonical: IndexUrl,
     proxy: Option<Arc<ProxyRoute>>,
 }
 
 impl IndexRoute {
+    /// Return the original index URL recorded in the lockfile.
+    pub fn canonical(&self) -> &IndexUrl {
+        &self.canonical
+    }
+
     /// Return whether this index is routed through a configured proxy.
     #[cfg(test)]
     fn is_proxy(&self) -> bool {
@@ -575,7 +579,7 @@ mod tests {
         let route = locations.route_for(&canonical);
 
         assert!(route.is_proxy());
-        assert_eq!(route.canonical, canonical);
+        assert_eq!(route.canonical(), &canonical);
         let borrowed = locations
             .proxy_route_for(&canonical)
             .ok_or("missing proxy route")?;
@@ -691,7 +695,7 @@ mod tests {
         assert!(locations.proxy_route_for(&flat).is_none());
         assert_eq!(locations.effective_url(&flat), &flat);
         assert!(!route.is_proxy());
-        assert_eq!(route.canonical, flat);
+        assert_eq!(route.canonical(), &flat);
         let artifact = url("https://flat.example.com/packages/package.whl?download=1#sha256=abc")?;
         let file = route.canonicalize_file(response_file(artifact.clone()))?;
         assert_eq!(file.location.to_url()?, artifact);
