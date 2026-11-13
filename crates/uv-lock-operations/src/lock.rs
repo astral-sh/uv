@@ -239,6 +239,11 @@ impl<'env> LockOperation<'env> {
                     Err(err) => return Err(err),
                 };
 
+                // Never let an older uv silently rewrite a lockfile produced by a newer uv.
+                // The resolver can read forward-compatible revisions, but serialization only
+                // knows how to emit the current revision and would otherwise discard newer data.
+                let existing_revision = existing.as_ref().map(Lock::revision);
+
                 let check_lockfile_contents = if self.check_lockfile_contents {
                     existing_contents
                 } else {
@@ -270,6 +275,14 @@ impl<'env> LockOperation<'env> {
                 // If the lockfile changed, write it to disk.
                 if !matches!(self.mode, LockMode::DryRun(_)) {
                     if let LockResult::Changed(_, lock) = &result {
+                        if let Some(existing_revision) = existing_revision
+                            && lock.revision() < existing_revision
+                        {
+                            return Err(LockError::LockRevisionDowngrade {
+                                existing: existing_revision,
+                                supported: lock.revision(),
+                            });
+                        }
                         target.commit(lock).await?;
                     }
                 }

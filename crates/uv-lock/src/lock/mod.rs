@@ -2953,7 +2953,7 @@ impl Lock {
     }
 
     /// Returns the lockfile revision.
-    fn revision(&self) -> u32 {
+    pub fn revision(&self) -> u32 {
         self.revision
     }
 
