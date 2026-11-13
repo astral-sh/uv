@@ -365,7 +365,7 @@ version-ranges = { version = "0.2.3", package = "astral-version-ranges", default
 walkdir = { version = "2.5.0", default-features = false }
 webpki-root-certs = { version = "1", default-features = false }
 which = { version = "8.0.0", default-features = false, features = ["real-sys"] }
-windows = { version = "0.61.0", default-features = false, features = [
+windows = { version = "0.62.0", default-features = false, features = [
   "std",
   "Win32_Devices_DeviceAndDriverInstallation",
   "Win32_Foundation",
