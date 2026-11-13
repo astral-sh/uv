@@ -2843,6 +2843,61 @@ fn init_existing_environment() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn init_existing_redirect_environment() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"]);
+
+    let child = context.temp_dir.child("foo");
+    child.create_dir_all()?;
+    context
+        .venv()
+        .current_dir(&child)
+        .arg("external")
+        .arg("--python")
+        .arg("3.12")
+        .arg("-q")
+        .assert()
+        .success();
+    child.child(".venv").write_str("external\n")?;
+
+    // Make 3.11 the only fallback.
+    let fallback_python_path = uv_test::python_path_with_versions(&context.temp_dir, &["3.11"])?;
+    context
+        .init()
+        .arg(child.as_os_str())
+        .arg("--bare")
+        .env(EnvVars::UV_PYTHON_SEARCH_PATH, fallback_python_path)
+        .assert()
+        .success();
+
+    let pyproject: toml::Value = toml::from_str(&context.read("foo/pyproject.toml"))?;
+    // 3.12 indicates that the fallback wasn't used, and interpreter discovery worked
+    assert_eq!(
+        pyproject["project"]["requires-python"].as_str(),
+        Some(">=3.12")
+    );
+    assert_eq!(
+        fs_err::read_to_string(child.child(".venv").path())?,
+        "external\n"
+    );
+    Ok(())
+}
+
+#[test]
+fn init_unusable_redirect_environment() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let child = context.temp_dir.child("foo");
+    child.create_dir_all()?;
+    child.child(".venv").write_str("missing\n")?;
+
+    uv_snapshot!(context.filters(), context.init().arg(child.as_os_str()).arg("--bare"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Initialized project `foo` at `[TEMP_DIR]/foo`
+    ");
+    Ok(())
+}
+
 /// Run `uv init`, it should ignore the Python version from a parent `.venv`
 #[test]
 fn init_existing_environment_parent() {

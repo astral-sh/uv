@@ -7,6 +7,7 @@ use serde_json::json;
 use std::process::Command;
 
 use uv_fs::Simplified;
+use uv_python_interpreter::virtualenv_python_executable;
 use uv_static::EnvVars;
 #[cfg(unix)]
 use uv_test::ReadOnlyDirectoryGuard;
@@ -631,6 +632,185 @@ fn sync_recovers_from_centralized_environment_path_file() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn sync_replaces_cached_venv_redirect_without_removing_target() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"]);
+    write_project(&context, ">=3.11", &[])?;
+    let redirect = context.temp_dir.child(".venv");
+
+    context
+        .sync()
+        .arg("--preview-features")
+        .arg("centralized-project-envs")
+        .arg("--python")
+        .arg("3.12")
+        .assert()
+        .success();
+    let cached_environment = fs_err::read_link(redirect.path())?;
+    uv_fs::remove_virtualenv(redirect.path())?;
+    redirect.write_str(&cached_environment.to_string_lossy())?;
+
+    // Selecting an incompatible interpreter leaves the cache entry in place and replaces only
+    // uv's pointer to it with a local environment.
+    uv_snapshot!(context.filters(), context.sync().arg("--python").arg("3.11"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: Using `.venv` redirect files is experimental and may change without warning. Pass `--preview-features venv-redirect-files` to disable this warning.
+    Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
+    Removed link to project environment at: .venv
+    Creating virtual environment at: .venv
+    Resolved 1 package in [TIME]
+    Checked in [TIME]
+    ");
+    assert!(uv_fs::is_virtualenv_base(redirect.path()));
+    assert!(uv_fs::is_virtualenv_base(&cached_environment));
+    let python = virtualenv_python_executable(&cached_environment);
+    uv_snapshot!(context.filters(), Command::new(python).arg("--version"), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    Python 3.12.[X]
+    "#);
+    Ok(())
+}
+
+#[test]
+fn sync_venv_redirect_file() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"]);
+    write_project(&context, ">=3.11", &[])?;
+    context
+        .venv()
+        .arg("external")
+        .arg("--python")
+        .arg("3.12")
+        .arg("-q")
+        .assert()
+        .success();
+    context.temp_dir.child("external/keep").touch()?;
+    let redirect = context.temp_dir.child(".venv");
+    redirect.write_str("external\n")?;
+
+    // uv uses the external environment and keeps the other tool's redirect file.
+    uv_snapshot!(context.filters(), context.sync(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: Using `.venv` redirect files is experimental and may change without warning. Pass `--preview-features venv-redirect-files` to disable this warning.
+    Resolved 1 package in [TIME]
+    Checked in [TIME]
+    ");
+    assert_eq!(fs_err::read_to_string(redirect.path())?, "external\n");
+    assert!(uv_fs::is_virtualenv_base(
+        context.temp_dir.child("external").path()
+    ));
+
+    // Activation of the selected environment does not produce a mismatch warning.
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--preview-features").arg("venv-redirect-files")
+        .env(EnvVars::VIRTUAL_ENV, context.temp_dir.child("external").path()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Checked in [TIME]
+    ");
+
+    // Changing interpreter rebuilds the target without replacing the redirect file.
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--preview-features").arg("venv-redirect-files")
+        .arg("--python").arg("3.11"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
+    Removed virtual environment at: external
+    Creating virtual environment at: external
+    Resolved 1 package in [TIME]
+    Checked in [TIME]
+    ");
+    assert_eq!(fs_err::read_to_string(redirect.path())?, "external\n");
+    assert_path_missing(context.temp_dir.child("external/keep"));
+    let python = if cfg!(windows) {
+        context.temp_dir.child("external/Scripts/python.exe")
+    } else {
+        context.temp_dir.child("external/bin/python")
+    };
+    uv_snapshot!(context.filters(), Command::new(python.path()).arg("--version"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    Python 3.11.[X]
+    ");
+    Ok(())
+}
+
+#[test]
+fn sync_venv_redirect_file_override() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"]);
+    write_project(&context, ">=3.11", &[])?;
+    context
+        .venv()
+        .arg("environments/external")
+        .arg("--python")
+        .arg("3.12")
+        .arg("-q")
+        .assert()
+        .success();
+    let redirect = context.temp_dir.child("environments/redirect");
+    redirect.write_str("external\n")?;
+
+    // Resolve the target from the redirect's directory, including when checking activation.
+    uv_snapshot!(context.filters(), context.sync()
+        .env(EnvVars::UV_PROJECT_ENVIRONMENT, "environments/redirect")
+        .env(EnvVars::VIRTUAL_ENV, context.temp_dir.child("environments/external").path()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: Using `.venv` redirect files is experimental and may change without warning. Pass `--preview-features venv-redirect-files` to disable this warning.
+    Resolved 1 package in [TIME]
+    Checked in [TIME]
+    ");
+
+    // An explicit override rebuilds its target even when centralized environments are enabled.
+    uv_snapshot!(context.filters(), context.sync()
+        .env(EnvVars::UV_PROJECT_ENVIRONMENT, "environments/redirect")
+        .arg("--preview-features").arg("venv-redirect-files,centralized-project-envs")
+        .arg("--python").arg("3.11"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
+    Removed virtual environment at: environments/external
+    Creating virtual environment at: environments/external
+    Resolved 1 package in [TIME]
+    Checked in [TIME]
+    ");
+    assert_eq!(fs_err::read_to_string(redirect.path())?, "external\n");
+    assert!(uv_fs::is_virtualenv_base(
+        context.temp_dir.child("environments/external").path()
+    ));
+    assert_path_missing(context.temp_dir.child(".venv"));
+    assert_path_missing(context.cache_dir.child("environments-v2"));
+    Ok(())
+}
+
+#[test]
+fn sync_invalid_venv_redirect_file() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+    write_project(&context, ">=3.12", &[])?;
+    let redirect = context.temp_dir.child(".venv");
+
+    redirect.write_str("missing\n")?;
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 1 package in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.sync().arg("--preview-features")
+        .arg("venv-redirect-files"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Project virtual environment directory `[TEMP_DIR]/missing` cannot be used because no `pyvenv.cfg` file was found
+    ");
+    assert_eq!(fs_err::read_to_string(redirect.path())?, "missing\n");
+    Ok(())
+}
+
 #[cfg(windows)]
 #[test]
 fn sync_centralized_env_replaces_existing_empty_directory() -> Result<()> {
@@ -793,6 +973,18 @@ fn sync_replaces_environment_links_without_removing_cached_targets() -> Result<(
         .success();
     // Record the cache target so the final sync can verify it remains reusable.
     let cache_target = fs_err::read_link(context.temp_dir.child(".venv").path())?;
+
+    // A compatible cache link is reused without enabling centralized environments.
+    uv_snapshot!(context.filters(), context.sync().arg("--python").arg("3.12"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Checked in [TIME]
+    ");
+    assert_eq!(
+        fs_err::read_link(context.temp_dir.child(".venv").path())?,
+        cache_target
+    );
 
     let override_environment = context.temp_dir.child("override");
     uv_fs::create_symlink(&cache_target, override_environment.path())?;

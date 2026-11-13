@@ -1625,7 +1625,6 @@ impl TestContext {
         command
             .arg("python")
             .arg("find")
-            .env(EnvVars::UV_PREVIEW, "1")
             .env(EnvVars::UV_PYTHON_INSTALL_DIR, "");
         self.add_shared_options(&mut command, false);
         command
