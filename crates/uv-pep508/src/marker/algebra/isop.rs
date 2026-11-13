@@ -16,7 +16,7 @@ use indexmap::map::Entry;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use version_ranges::Ranges;
 
-use super::{Edges, InternerGuard, NodeId, SmallVec};
+use super::{EdgeBuilder, Edges, InternerGuard, NodeId, SmallVec, Variable};
 
 /// A shared cover whose paths are expanded only when producing the final DNF.
 #[derive(Clone)]
@@ -24,6 +24,7 @@ pub(crate) enum Cover {
     False,
     True,
     Guard(NodeId),
+    Atom(Box<crate::MarkerExpression>),
     Branches(Rc<[(Guard, Self)]>),
 }
 
@@ -74,6 +75,45 @@ impl InternerGuard<'_> {
             return (lower, Cover::Guard(lower));
         }
 
+        // A printed comparison tests the original spelling on both domains.
+        // Within its branch, opaque values outside that spelling range are
+        // unreachable. Removing them recovers the simple comparison.
+        let node = self.shared.node(lower);
+        if lower == upper
+            && let Variable::String(key) = node.var
+            && key.is_version_or_string()
+            && let Edges::String { edges } = &node.children
+        {
+            if let Some(atom) = self.raw_order_atom(key, lower, edges) {
+                return (lower, Cover::Atom(Box::new(atom)));
+            }
+            let mut ranges = IndexMap::<_, Ranges<_>, FxBuildHasher>::default();
+            for (range, child) in edges {
+                let child = child.negate(lower);
+                if !child.is_false() {
+                    ranges
+                        .entry(child)
+                        .and_modify(|r| *r = r.union(range))
+                        .or_insert_with(|| range.clone());
+                }
+            }
+            let mut branches = Vec::new();
+            for (child, range) in ranges {
+                let (possible, _) = crate::marker::version_or_string::spelling_range(&range);
+                let assumption = self.create_node(
+                    Variable::VersionString(key),
+                    Edges::from_version_or_string_range(&possible),
+                );
+                let suffix = self.restrict(child, assumption);
+                if !suffix.is_false() {
+                    let (_, cover) = self.isop_cached(suffix, suffix, cache);
+                    branches.push((Guard::Edge { node: lower, child }, cover));
+                }
+            }
+            let result = (lower, Cover::Branches(branches.into()));
+            cache.insert((lower, upper), result.clone());
+            return result;
+        }
         let exact = lower == upper;
         let cofactors = self.cover_cofactors(lower, upper);
         // A clause can omit this variable only where every branch permits it.
@@ -125,21 +165,71 @@ impl InternerGuard<'_> {
         result
     }
 
+    /// A single spelling cut can encode one of four ordered atoms. Match the
+    /// interned decision against those atoms before expanding its branches.
+    fn raw_order_atom(
+        &mut self,
+        key: crate::marker::lowering::CanonicalMarkerValueString,
+        parent: NodeId,
+        edges: &[(Ranges<arcstr::ArcStr>, NodeId)],
+    ) -> Option<crate::MarkerExpression> {
+        use crate::MarkerOperator::{GreaterEqual, GreaterThan, LessEqual, LessThan};
+        let [(_, left), (_, right)] = edges else {
+            return None;
+        };
+        let literal = [left, right].into_iter().find_map(|child| {
+            if child.is_true() || child.is_false() {
+                return None;
+            }
+            let node = self.shared.node(*child);
+            let Edges::VersionOrString { edges } = &node.children else {
+                return None;
+            };
+            if node.var != Variable::VersionString(key) {
+                return None;
+            }
+            edges
+                .iter()
+                .flat_map(|(r, _)| r.iter())
+                .flat_map(|(lo, hi)| [lo, hi])
+                .find_map(|bound| match bound {
+                    Bound::Included(super::VersionOrStringValue::Opaque(s))
+                    | Bound::Excluded(super::VersionOrStringValue::Opaque(s))
+                        if !s.is_empty() =>
+                    {
+                        Some(s.clone())
+                    }
+                    _ => None,
+                })
+        })?;
+        // Other comparisons on this field can also contribute an opaque cutoff.
+        // A parseable literal would reparse as an ordered version comparison.
+        if literal.parse::<uv_pep440::Version>().is_ok() {
+            return None;
+        }
+        let operator = [LessThan, LessEqual, GreaterThan, GreaterEqual]
+            .into_iter()
+            .find(|&op| self.raw_order(key, op, &literal) == parent)?;
+        Some(crate::MarkerExpression::String {
+            key: key.into(),
+            operator,
+            value: literal.clone(),
+        })
+    }
+
     /// Materialize a borrowed guard only when algebra needs its function.
     fn guard_node(&mut self, guard: Guard) -> NodeId {
         match guard {
             Guard::Node(node) => node,
             Guard::Edge { node, child } => {
                 let decision = self.shared.node(node);
-                let edges = match &decision.children {
-                    Edges::Boolean { high, .. } => Edges::from_bool(high.negate(node) == child),
-                    Edges::Version { edges } => Edges::Version {
-                        edges: guard_edges(edges, node, child),
-                    },
-                    Edges::String { edges } => Edges::String {
-                        edges: guard_edges(edges, node, child),
-                    },
-                };
+                let edges = decision.children.map(node, |target| {
+                    if target == child {
+                        NodeId::TRUE
+                    } else {
+                        NodeId::FALSE
+                    }
+                });
                 self.create_node(decision.var.clone(), edges)
             }
         }
@@ -204,85 +294,72 @@ impl InternerGuard<'_> {
                     (Guard::Node(guard), lower_high, upper_high),
                 ]
             }
-            Edges::Version { .. } => {
-                let lower_edges = if let Edges::Version { edges } = &lower_node.children
-                    && lower_node.var == *variable
-                {
-                    Some(edges.as_ref())
-                } else {
-                    None
-                };
-                let upper_edges = if let Edges::Version { edges } = &upper_node.children
-                    && upper_node.var == *variable
-                {
-                    Some(edges.as_ref())
-                } else {
-                    None
-                };
-                range_cofactors(lower, lower_edges, upper, upper_edges)
-                    .into_iter()
-                    .map(|(range, lower, upper)| {
-                        if lower.is_false() {
-                            return (Guard::Node(NodeId::FALSE), lower, upper);
-                        }
-                        let guard = self.create_node(
-                            variable.clone(),
-                            Edges::Version {
-                                edges: Edges::from_range(&range),
-                            },
-                        );
-                        (Guard::Node(guard), lower, upper)
-                    })
-                    .collect()
-            }
-            Edges::String { .. } => {
-                let lower_edges = if let Edges::String { edges } = &lower_node.children
-                    && lower_node.var == *variable
-                {
-                    Some(edges.as_ref())
-                } else {
-                    None
-                };
-                let upper_edges = if let Edges::String { edges } = &upper_node.children
-                    && upper_node.var == *variable
-                {
-                    Some(edges.as_ref())
-                } else {
-                    None
-                };
-                range_cofactors(lower, lower_edges, upper, upper_edges)
-                    .into_iter()
-                    .map(|(range, lower, upper)| {
-                        if lower.is_false() {
-                            return (Guard::Node(NodeId::FALSE), lower, upper);
-                        }
-                        let guard = self.create_node(
-                            variable.clone(),
-                            Edges::String {
-                                edges: Edges::from_range(&range),
-                            },
-                        );
-                        (Guard::Node(guard), lower, upper)
-                    })
-                    .collect()
-            }
+            Edges::Version { .. } => self.range_guards(
+                variable,
+                lower,
+                upper,
+                |edges| match edges {
+                    Edges::Version { edges } => Some(edges),
+                    _ => None,
+                },
+                |range| Edges::Version {
+                    edges: Edges::from_range(range),
+                },
+            ),
+            Edges::String { .. } => self.range_guards(
+                variable,
+                lower,
+                upper,
+                |edges| match edges {
+                    Edges::String { edges } => Some(edges),
+                    _ => None,
+                },
+                |range| Edges::String {
+                    edges: Edges::from_range(range),
+                },
+            ),
+            Edges::VersionOrString { .. } => self.range_guards(
+                variable,
+                lower,
+                upper,
+                |edges| match edges {
+                    Edges::VersionOrString { edges } => Some(edges),
+                    _ => None,
+                },
+                Edges::from_version_or_string_range,
+            ),
         }
     }
-}
 
-/// Build a reduced single-variable decision for all edges leading to the selected child.
-fn guard_edges<T: Clone + Ord>(
-    edges: &[(Ranges<T>, NodeId)],
-    parent: NodeId,
-    child: NodeId,
-) -> SmallVec<(Ranges<T>, NodeId)> {
-    let range = edges
-        .iter()
-        .filter(|(_, candidate)| candidate.negate(parent) == child)
-        .flat_map(|(range, _)| range.iter())
-        .map(|(start, end)| (start.cloned(), end.cloned()))
-        .collect();
-    Edges::from_range(&range)
+    /// Partition two range decisions using the same endpoints and create their guards.
+    fn range_guards<T: Clone + Ord>(
+        &mut self,
+        variable: &Variable,
+        lower: NodeId,
+        upper: NodeId,
+        ranges: impl Fn(&Edges) -> Option<&[(Ranges<T>, NodeId)]>,
+        from_range: impl Fn(&Ranges<T>) -> EdgeBuilder,
+    ) -> SmallVec<(Guard, NodeId, NodeId)> {
+        let lower_node = self.shared.node(lower);
+        let upper_node = self.shared.node(upper);
+        let lower_edges = (lower_node.var == *variable)
+            .then(|| ranges(&lower_node.children))
+            .flatten();
+        let upper_edges = (upper_node.var == *variable)
+            .then(|| ranges(&upper_node.children))
+            .flatten();
+        range_cofactors(lower, lower_edges, upper, upper_edges)
+            .into_iter()
+            .map(|(range, lower, upper)| {
+                let guard = if lower.is_false() {
+                    NodeId::FALSE
+                } else {
+                    self.create_node(variable.clone(), from_range(&range))
+                };
+                (Guard::Node(guard), lower, upper)
+            })
+            .collect()
+    }
 }
 
 /// Intersect sorted range partitions, grouping regions with identical cofactors.

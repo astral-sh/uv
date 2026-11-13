@@ -62,6 +62,11 @@ pub enum CanonicalMarkerValueString {
 }
 
 impl CanonicalMarkerValueString {
+    /// Returns whether comparisons use versions when both operands can be parsed.
+    pub(super) fn is_version_or_string(self) -> bool {
+        matches!(self, Self::PlatformRelease | Self::PlatformVersion)
+    }
+
     /// Returns `true` if the marker is known to be involved in _at least_ one conflicting
     /// marker pair.
     ///

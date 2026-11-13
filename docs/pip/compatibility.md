@@ -463,6 +463,21 @@ While this is not strictly compliant with [PEP 440](https://peps.python.org/pep-
 consistent with
 [pip](https://github.com/pypa/pip/blob/24.1.1/src/pip/_internal/resolution/resolvelib/candidates.py#L540).
 
+## Platform release and version markers
+
+For `platform_release` and `platform_version`, uv evaluates `<`, `<=`, `>`, and `>=` in version
+order when both operands parse as versions. For example, a release of `2rc1` satisfies
+`platform_release < '2'`, and `2.post1` satisfies `platform_release > '2'`. If either operand is
+opaque, uv compares the original strings lexicographically. Containment checks such as
+`'SMP' in platform_version` always use the original strings.
+
+These ordered comparisons differ from the exclusive bounds in package version specifiers, where `>2`
+excludes `2.post1`. Using version order lets uv record the two sides of a resolution fork as
+`platform_release > '2'` and `platform_release <= '2'`. See the
+[marker comparison rules](https://packaging.python.org/en/latest/specifications/dependency-specifiers/#marker-comparisons)
+and the
+[exclusive version comparisons](https://packaging.python.org/en/latest/specifications/version-specifiers/#exclusive-ordered-comparison).
+
 ## Package priority
 
 There are usually many possible solutions given a set of requirements, and a resolver must choose
