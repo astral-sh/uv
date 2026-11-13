@@ -243,7 +243,7 @@
       }
     },
     "fork-strategy": {
-      "description": "The strategy to use when selecting multiple versions of a given package across Python\nversions and platforms.\n\nBy default, uv will optimize for selecting the latest version of each package for each\nsupported Python version (`requires-python`), while minimizing the number of selected\nversions across platforms.\n\nUnder `fewest`, uv will minimize the number of selected versions for each package,\npreferring older versions that are compatible with a wider range of supported Python\nversions or platforms.",
+      "description": "The strategy to use when selecting multiple versions of a given package across Python\nversions and platforms.\n\nBy default (`requires-python`), uv prefers the latest compatible version for each supported\nPython version and tries to share versions across platforms. When an upper bound on one\nplatform excludes a newer release, uv can select it elsewhere if it has a usable source\ndistribution or a `py3-none-any` wheel.\n\nUnder `fewest`, uv will minimize the number of selected versions for each package,\npreferring older versions that are compatible with a wider range of supported Python\nversions or platforms.",
       "anyOf": [
         {
           "$ref": "#/definitions/ForkStrategy"
@@ -1018,7 +1018,7 @@
           "const": "fewest"
         },
         {
-          "description": "Optimize for selecting latest supported version of each package, for each supported Python\nversion.",
+          "description": "Prefer the latest compatible version for each supported Python version. Platforms can\nselect a newer release with a source distribution or a `py3-none-any` wheel when\nan upper bound applies only to some of them.",
           "type": "string",
           "const": "requires-python"
         }
@@ -1547,7 +1547,7 @@
           }
         },
         "fork-strategy": {
-          "description": "The strategy to use when selecting multiple versions of a given package across Python\nversions and platforms.\n\nBy default, uv will optimize for selecting the latest version of each package for each\nsupported Python version (`requires-python`), while minimizing the number of selected\nversions across platforms.\n\nUnder `fewest`, uv will minimize the number of selected versions for each package,\npreferring older versions that are compatible with a wider range of supported Python\nversions or platforms.",
+          "description": "The strategy to use when selecting multiple versions of a given package across Python\nversions and platforms.\n\nBy default (`requires-python`), uv prefers the latest compatible version for each supported\nPython version and tries to share versions across platforms. When an upper bound on one\nplatform excludes a newer release, uv can select it elsewhere if it has a usable source\ndistribution or a `py3-none-any` wheel.\n\nUnder `fewest`, uv will minimize the number of selected versions for each package,\npreferring older versions that are compatible with a wider range of supported Python\nversions or platforms.",
           "anyOf": [
             {
               "$ref": "#/definitions/ForkStrategy"

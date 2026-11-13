@@ -409,9 +409,8 @@ number of selected versions and (2) selecting the latest-possible version for ea
 former leads to greater consistency across platforms, while the latter leads to use of newer package
 versions where possible.
 
-By default (`--fork-strategy requires-python`), uv will optimize for selecting the latest version of
-each package for each supported Python version, while minimizing the number of selected versions
-across platforms.
+By default (`--fork-strategy requires-python`), uv prefers the latest compatible version of each
+package for each supported Python version and tries to share versions across platforms.
 
 For example, when resolving `numpy` with a Python requirement of `>=3.8`, uv would select the
 following versions:
@@ -424,6 +423,11 @@ numpy==2.2.0 ; python_version >= "3.10"
 
 This resolution reflects the fact that NumPy 2.2.0 and later require at least Python 3.10, while
 earlier versions are compatible with Python 3.8 and 3.9.
+
+A platform-specific upper bound can also lead to multiple versions. For example, if a project
+requires `pylint<3` on macOS and `pylint>2` elsewhere, uv can select Pylint 2 on macOS and Pylint 3
+on Linux. This preference applies to the package named by the marked requirement when the newer
+release has a usable source distribution or a `py3-none-any` wheel.
 
 Under `--fork-strategy fewest`, uv will instead minimize the number of selected versions for each
 package, preferring older versions that are compatible with a wider range of supported Python

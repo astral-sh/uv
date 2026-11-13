@@ -33,7 +33,9 @@ use uv_distribution_types::{
 };
 use uv_git::GitResolver;
 use uv_normalize::PackageName;
-use uv_pep440::{MIN_VERSION, Version, VersionSpecifiers, release_specifiers_to_ranges};
+use uv_pep440::{
+    MIN_VERSION, UpperBound, Version, VersionSpecifiers, release_specifiers_to_ranges,
+};
 use uv_pep508::{
     MarkerEnvironment, MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString,
 };
@@ -53,7 +55,7 @@ use crate::fork_indexes::ForkIndexes;
 use crate::fork_urls::ForkUrls;
 use crate::manifest::Manifest;
 use crate::pins::FilePins;
-use crate::preferences::{PreferenceSource, Preferences};
+use crate::preferences::{ForkBound, Preferences};
 use crate::prioritized_distribution::{
     CompatibleDist, IncompatibleDist, IncompatibleSource, IncompatibleWheel, PrioritizedDist,
     PythonRequirementKind, RegistryVariantsJson, implied_markers,
@@ -489,7 +491,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 start.elapsed().as_secs_f32()
                             );
 
-                            let (resolution, mut arena) = state.into_resolution();
+                            let siblings = (!forked_states.is_empty()).then_some(&mut preferences);
+                            let (resolution, mut arena) =
+                                state.into_resolution(siblings, &self.options);
                             if let Some(next) = forked_states.last() {
                                 arena.rewind_to(&next.state.pubgrub);
                             } else {
@@ -497,33 +501,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 arena = IncompatibilityArena::default();
                             }
                             incompatibility_arena = arena;
-
-                            // Walk over the selected versions, and mark them as preferences. We have to
-                            // add forks back as to not override the preferences from the lockfile for
-                            // the next fork
-                            //
-                            // If we're using a resolution mode that varies based on whether a dependency is
-                            // direct or transitive, skip preferences, as we risk adding a preference from
-                            // one fork (in which it's a transitive dependency) to another fork (in which
-                            // it's direct).
-                            if matches!(
-                                self.options.resolution_mode,
-                                ResolutionMode::Lowest | ResolutionMode::Highest
-                            ) {
-                                let marker = resolution
-                                    .env
-                                    .try_universal_markers()
-                                    .unwrap_or(UniversalMarker::TRUE);
-                                for (package, version) in &resolution.nodes {
-                                    preferences.insert(
-                                        package.name.clone(),
-                                        package.index.clone(),
-                                        marker,
-                                        version.clone(),
-                                        PreferenceSource::Resolver,
-                                    );
-                                }
-                            }
 
                             if tracing::enabled!(Level::DEBUG)
                                 && let Some(env) = resolution.env.end_user_fork_display()
@@ -1421,6 +1398,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             &self.exclusions,
             index,
             env,
+            python_requirement.target(),
             self.tags.as_ref(),
         ) else {
             // Short circuit: we couldn't find _any_ versions for a package.
@@ -1535,6 +1513,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             range,
             preferences,
             env,
+            python_requirement.target(),
             pubgrub,
             pins,
             requests,
@@ -1656,6 +1635,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         range: &Range<Version>,
         preferences: &Preferences,
         env: &ResolverEnvironment,
+        requires_python: &RequiresPython,
         pubgrub: &State<UvDependencyProvider>,
         pins: &mut FilePins<'index>,
         requests: &'index MetadataRequests,
@@ -1747,6 +1727,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             &self.exclusions,
             index,
             env,
+            requires_python,
             self.tags.as_ref(),
         ) else {
             return Ok(None);
@@ -2532,6 +2513,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     &self.exclusions,
                     None,
                     &env,
+                    self.python_requirement.target(),
                     self.tags.as_ref(),
                 ) else {
                     return Ok(None);
@@ -3406,6 +3388,8 @@ impl<'index> ForkState<'index> {
 
     fn into_resolution(
         mut self,
+        sibling_preferences: Option<&mut Preferences>,
+        options: &Options,
     ) -> (
         Resolution<'index>,
         IncompatibilityArena<UvDependencyProvider>,
@@ -3455,6 +3439,18 @@ impl<'index> ForkState<'index> {
             })
             .collect();
 
+        // A package can be direct in one fork and transitive in another. Only share
+        // selections when both use the same version ordering.
+        let sibling_preferences = sibling_preferences.filter(|_| {
+            matches!(
+                options.resolution_mode,
+                ResolutionMode::Highest | ResolutionMode::Lowest
+            )
+        });
+        let mut bounds = (sibling_preferences.is_some()
+            && options.resolution_mode == ResolutionMode::Highest
+            && options.fork_strategy == ForkStrategy::RequiresPython)
+            .then(FxHashMap::<_, Vec<ForkBound>>::default);
         let edge_count: usize = solution
             .keys()
             .filter_map(|package| self.pubgrub.dependencies(*package).size_hint().1)
@@ -3532,6 +3528,16 @@ impl<'index> ForkState<'index> {
                     | PubGrubPackageInner::Python(_)
                     | PubGrubPackageInner::System(_) => continue,
                 };
+                if let Some(bounds) = &mut bounds
+                    && self_name != Some(name)
+                    && let Some((_, upper)) = dependency_range.bounding_range()
+                    && upper != Bound::Unbounded
+                {
+                    bounds.entry(name).or_default().push(ForkBound {
+                        marker,
+                        upper: UpperBound(upper.cloned()),
+                    });
+                }
                 let (url, index) = self.source(name, dependency_version);
                 edges.push(ResolutionDependencyEdge {
                     from,
@@ -3552,6 +3558,26 @@ impl<'index> ForkState<'index> {
             }
         }
 
+        if let Some(preferences) = sibling_preferences {
+            let marker = self
+                .env
+                .try_universal_markers()
+                .unwrap_or(UniversalMarker::TRUE);
+            let mut bounds = bounds.unwrap_or_default();
+            // An unconditional cap can veto an upgrade, but cannot cause one.
+            bounds.retain(|_, caps| caps.iter().any(|cap| !cap.marker.is_true()));
+            for (package, version) in &nodes {
+                preferences.insert_from_fork(
+                    package.name.clone(),
+                    package.index.clone(),
+                    marker,
+                    version.clone(),
+                    bounds
+                        .get(&package.name)
+                        .map_or_else(Box::default, |caps| caps.as_slice().into()),
+                );
+            }
+        }
         // The owned result contains no solver IDs or borrowed incompatibility records.
         let arena = self.pubgrub.take_incompatibility_arena();
         (

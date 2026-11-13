@@ -5,7 +5,7 @@ use tracing::trace;
 
 use uv_distribution_types::{IndexUrl, InstalledDist, InstalledDistKind};
 use uv_normalize::PackageName;
-use uv_pep440::{Operator, Version};
+use uv_pep440::{Operator, UpperBound, Version};
 use uv_pep508::{MarkerTree, VersionOrUrl};
 use uv_pypi_types::{HashDigest, HashDigests, HashError};
 use uv_requirements_txt::{RequirementEntry, RequirementsTxtRequirement};
@@ -165,13 +165,56 @@ pub(crate) enum PreferenceSource {
 
 #[derive(Debug, Clone)]
 pub(crate) struct Entry {
+    /// Upper bounds that contributed to a sibling fork's selection.
+    bounds: Box<[ForkBound]>,
     marker: UniversalMarker,
     index: PreferenceIndex,
     pin: Pin,
     source: PreferenceSource,
 }
 
+/// Where an upper bound on a selected package applies. The version retains the
+/// resolver's PEP 440 bounds, including local-version and prerelease sentinels.
+#[derive(Debug, Clone)]
+pub(crate) struct ForkBound {
+    pub(crate) marker: MarkerTree,
+    pub(crate) upper: UpperBound,
+}
+
 impl Entry {
+    /// Reuse the pin unless the normal candidate exceeds a bound that applies only
+    /// outside this fork. Any other applicable bound that excludes it still wins.
+    pub(crate) fn applies_in<'a>(
+        &self,
+        fork: MarkerTree,
+        best_version: impl FnOnce() -> Option<&'a Version>,
+    ) -> bool {
+        let Some(upper) = self
+            .bounds
+            .iter()
+            .filter(|bound| fork.is_disjoint(bound.marker))
+            .map(|bound| &bound.upper)
+            .min()
+        else {
+            return true;
+        };
+        let Some(version) = best_version() else {
+            return true;
+        };
+        let pinned = self.pin.version();
+        if version <= pinned || upper.contains(version) {
+            return true;
+        }
+        // A different build of the same public release (e.g., CUDA versus ROCm)
+        // is not a version upgrade.
+        if version.is_local() && version.clone().without_local() == pinned.clone().without_local() {
+            return true;
+        }
+        self.bounds
+            .iter()
+            .any(|bound| !bound.upper.contains(version) && !fork.is_disjoint(bound.marker))
+    }
+
     /// Return the [`UniversalMarker`] associated with the entry.
     pub(crate) fn marker(&self) -> &UniversalMarker {
         &self.marker
@@ -237,6 +280,7 @@ impl Preferences {
             // Flatten the list of markers into individual entries.
             if preference.fork_markers.is_empty() {
                 map.entry(preference.name).or_default().push(Entry {
+                    bounds: Box::default(),
                     marker: UniversalMarker::TRUE,
                     index: preference.index,
                     pin: Pin {
@@ -248,6 +292,7 @@ impl Preferences {
             } else {
                 for fork_marker in preference.fork_markers {
                     map.entry(preference.name.clone()).or_default().push(Entry {
+                        bounds: Box::default(),
                         marker: fork_marker,
                         index: preference.index.clone(),
                         pin: Pin {
@@ -263,20 +308,21 @@ impl Preferences {
         Self(map)
     }
 
-    /// Insert a preference at the back.
-    pub(crate) fn insert(
+    /// Share a completed fork's selection with the remaining forks.
+    pub(crate) fn insert_from_fork(
         &mut self,
         package_name: PackageName,
         index: Option<IndexUrl>,
         markers: UniversalMarker,
         pin: impl Into<Pin>,
-        source: PreferenceSource,
+        bounds: Box<[ForkBound]>,
     ) {
         self.0.entry(package_name).or_default().push(Entry {
+            bounds,
             marker: markers,
             index: PreferenceIndex::from(index),
             pin: pin.into(),
-            source,
+            source: PreferenceSource::Resolver,
         });
     }
 
@@ -359,7 +405,37 @@ impl From<Version> for Pin {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::ops::Bound;
     use std::str::FromStr;
+
+    #[test]
+    fn sibling_bounds_overlapping_the_fork() {
+        let darwin = MarkerTree::from_str("sys_platform == 'darwin'").unwrap();
+        let windows = MarkerTree::from_str("sys_platform == 'win32'").unwrap();
+        let older_python = MarkerTree::from_str("python_version < '3.13'").unwrap();
+        let two = Version::new([2]);
+        let three = Version::new([3]);
+        let entry = Entry {
+            marker: UniversalMarker::from_combined(darwin.and(older_python)),
+            index: PreferenceIndex::Implicit,
+            pin: Version::new([1]).into(),
+            source: PreferenceSource::Resolver,
+            bounds: Box::new([
+                ForkBound {
+                    marker: darwin,
+                    upper: UpperBound(Bound::Excluded(two.clone())),
+                },
+                ForkBound {
+                    marker: older_python,
+                    upper: UpperBound(Bound::Excluded(three.clone())),
+                },
+            ]),
+        };
+        // Windows escapes <2, but some Windows environments still require <3.
+        assert!(!entry.applies_in(windows, || Some(&two)));
+        assert!(entry.applies_in(windows, || Some(&three)));
+        assert!(!entry.applies_in(windows.and(older_python.negate()), || Some(&three)));
+    }
 
     /// Test that [`PreferenceIndex::matches`] correctly ignores credentials when comparing URLs.
     ///
