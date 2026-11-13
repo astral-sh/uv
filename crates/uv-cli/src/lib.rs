@@ -4838,10 +4838,12 @@ pub struct CheckArgs {
     )]
     pub package: Vec<PackageName>,
 
-    /// Run checks for the specified PEP 723 Python script, rather than the current project.
+    /// Run checks for the specified PEP 723 Python script.
     ///
-    /// If provided, uv will use the dependencies based on the script's inline metadata table, in
-    /// adherence with PEP 723.
+    /// uv uses the dependencies declared in the script's inline metadata.
+    /// By default, uv uses the script's direct `ty` dependency if it applies to the script's Python
+    /// environment. Otherwise, uv looks for a locked `ty` in the containing workspace root's
+    /// dependencies and dependency groups. Use `--no-project` to skip that lookup.
     #[arg(
         long,
         conflicts_with = "extra",
@@ -4856,7 +4858,6 @@ pub struct CheckArgs {
         conflicts_with = "no_default_groups",
         conflicts_with = "only_group",
         conflicts_with = "all_groups",
-        conflicts_with = "no_project",
         conflicts_with = "all_packages",
         conflicts_with = "package",
         value_hint = ValueHint::FilePath,

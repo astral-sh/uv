@@ -2297,10 +2297,140 @@ fn check_script() -> Result<()> {
     Ok(())
 }
 
+/// The checker's group can require a different Python version than the script.
+#[test]
+#[cfg(feature = "test-pypi")]
+fn check_script_uses_workspace_ty() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"]);
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+
+        [dependency-groups]
+        check = ["ty"]
+
+        [tool.uv.dependency-groups]
+        check = { requires-python = ">=3.12" }
+    "#})?;
+    // Lock ty to 0.0.16 so the check can distinguish the locked version from a newer release.
+    context
+        .lock()
+        .args(["--exclude-newer", "2026-02-12T00:00:00Z"])
+        .assert()
+        .success();
+
+    let script = context.temp_dir.child("scripts/example.py");
+    script.write_str(indoc! {r#"
+        # /// script
+        # requires-python = "==3.11.*"
+        # dependencies = []
+        # ///
+
+        import sys
+        from typing import Literal
+
+        version: Literal[11] = sys.version_info[1]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.check().current_dir(context.home_dir.path()).arg("--script").arg(script.path()).arg("--show-version"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Installed 1 package in [TIME]
+    Using ty 0.0.16
+    ");
+
+    assert!(!context.venv.exists());
+    Ok(())
+}
+
+#[test]
+#[cfg(feature = "test-pypi")]
+fn check_script_workspace_ty_no_project() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str("[tool.uv.workspace]\nmembers = []\n")?;
+    context.temp_dir.child("uv.lock").write_str("invalid")?;
+    let script = context.temp_dir.child("script.py");
+    script.write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = []
+        # ///
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.check().arg("--script").arg(script.path()).arg("--no-project").arg("--show-version"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    Using ty 0.0.17
+    ");
+    Ok(())
+}
+
+#[test]
+#[cfg(feature = "test-pypi")]
+fn check_script_workspace_ty_rejects_ambiguous_groups() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2026-02-15T00:00:00Z");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [dependency-groups]
+        older = ["ty==0.0.16"]
+        newer = ["ty==0.0.17"]
+
+        [tool.uv]
+        conflicts = [[{ group = "older" }, { group = "newer" }]]
+    "#})?;
+    context.lock().assert().success();
+    let script = context.temp_dir.child("script.py");
+    script.write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = []
+        # ///
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.check().arg("--script").arg(script.path()), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    error: Cannot select `ty` from workspace dependency groups `newer` and `older`. Use `TY` or `--ty-version` to select the checker.
+    ");
+    Ok(())
+}
+
 #[test]
 #[cfg(feature = "test-pypi")]
 fn check_script_respects_exclude_newer_package_for_ty_selection() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+
+    // An explicit version bypasses workspace checker discovery.
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str("[tool.uv.workspace]\nmembers = []\n")?;
+    context.temp_dir.child("uv.lock").write_str("invalid")?;
 
     let script = context.temp_dir.child("script.py");
     script.write_str(indoc! {r#"
@@ -2459,6 +2589,13 @@ fn check_respects_exclude_newer_package_for_ty_selection() -> Result<()> {
 fn check_script_uses_ty_version_from_forked_lock() -> Result<()> {
     let context =
         uv_test::test_context!("3.12").with_filter((r"ty 0\.0\.17(?: \([^)]*\))?", "ty 0.0.17"));
+
+    // An applicable script dependency bypasses workspace checker discovery.
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str("[tool.uv.workspace]\nmembers = []\n")?;
+    context.temp_dir.child("uv.lock").write_str("invalid")?;
 
     let script = context.temp_dir.child("script.py");
     script.write_str(indoc! {r#"
@@ -2644,8 +2781,9 @@ fn check_script_ty_override_precedence() -> Result<()> {
 #[test]
 #[cfg(feature = "test-pypi")]
 fn check_script_ignores_transitive_ty_for_tool_selection() -> Result<()> {
-    let context =
-        uv_test::test_context!("3.12").with_filter((r"ty 0\.0\.17(?: \([^)]*\))?", "ty 0.0.17"));
+    let context = uv_test::test_context!("3.12")
+        .with_exclude_newer("2026-02-15T00:00:00Z")
+        .with_filter((r"ty 0\.0\.17(?: \([^)]*\))?", "ty 0.0.17"));
 
     let wrapper = context.temp_dir.child("wrapper");
     wrapper.create_dir_all()?;
@@ -2663,6 +2801,22 @@ fn check_script_ignores_transitive_ty_for_tool_selection() -> Result<()> {
     let wrapper_package = wrapper.child("src").child("wrapper");
     wrapper_package.create_dir_all()?;
     wrapper_package.child("__init__.py").write_str("")?;
+
+    // Both locks contain ty, but neither the script nor the workspace root declares it.
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["wrapper"]
+
+        [tool.uv.sources]
+        wrapper = { path = "wrapper" }
+    "#})?;
+    context.lock().assert().success();
 
     let script = context.temp_dir.child("script.py");
     script.write_str(indoc! {r#"
@@ -2683,8 +2837,6 @@ fn check_script_ignores_transitive_ty_for_tool_selection() -> Result<()> {
             .check()
             .arg("--script")
             .arg(script.path())
-            .arg("--exclude-newer")
-            .arg("2026-02-15T00:00:00Z")
             .arg("--show-version"),
         @"
     exit_code: 0 (success)
