@@ -1,5 +1,3 @@
-use std::str::FromStr;
-
 use serde::ser::SerializeSeq;
 
 use uv_pep508::MarkerTree;
@@ -78,7 +76,8 @@ impl<'de> serde::Deserialize<'de> for SupportedEnvironments {
             where
                 E: serde::de::Error,
             {
-                let marker = MarkerTree::from_str(value).map_err(serde::de::Error::custom)?;
+                let marker =
+                    MarkerTree::parse_lock_marker(value, true).map_err(serde::de::Error::custom)?;
                 Ok(SupportedEnvironments(vec![marker]))
             }
 
@@ -89,7 +88,8 @@ impl<'de> serde::Deserialize<'de> for SupportedEnvironments {
                 let mut markers = Vec::new();
 
                 while let Some(elem) = seq.next_element::<String>()? {
-                    let marker = MarkerTree::from_str(&elem).map_err(serde::de::Error::custom)?;
+                    let marker = MarkerTree::parse_lock_marker(&elem, true)
+                        .map_err(serde::de::Error::custom)?;
                     markers.push(marker);
                 }
 

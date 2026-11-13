@@ -613,6 +613,18 @@ pub async fn pip_compile(
         resolution.retain_allowed_distribution_hashes(&build_options);
     }
 
+    if universal
+        && let Some((_, package)) = resolution.base_dists().find(|(_, package)| {
+            !no_emit_packages.contains(&package.name)
+                && package.marker.pep508().has_macos_wheel_predicate()
+        })
+    {
+        return Err(anyhow::anyhow!(
+            "Cannot export `{}` with a macOS wheel deployment-target predicate in a universal PEP 508 marker",
+            package.name,
+        ));
+    }
+
     // Write the resolved dependencies to the output channel.
     let mut writer = OutputWriter::new(!quiet || output_file.is_none(), output_file);
 

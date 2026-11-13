@@ -97,16 +97,21 @@ mod windows_emulation_tests;
 /// The current version of the lockfile format.
 const VERSION: u32 = 1;
 
+/// A lock using explicit numeric Darwin wheel predicates or lexical release comparisons.
+const MACOS_WHEEL_VERSION: u32 = 2;
+
 /// An error returned when parsing a lockfile.
 #[derive(Debug, thiserror::Error)]
 pub enum LockParseError {
     /// The lockfile uses an unsupported schema version.
-    #[error("unsupported lockfile schema version (v{version}, but only v{supported} is supported)")]
+    #[error(
+        "unsupported lockfile schema version (v{version}, latest supported version is v{supported})"
+    )]
     UnsupportedVersion { supported: u32, version: u32 },
 
     /// The lockfile cannot be parsed and uses an unsupported schema version.
     #[error(
-        "failed to parse lockfile using an unsupported schema version (v{version}, but only v{supported} is supported)"
+        "failed to parse lockfile using an unsupported schema version (v{version}, latest supported version is v{supported})"
     )]
     UnparsableVersion {
         supported: u32,
@@ -2648,6 +2653,7 @@ impl Lock {
             vec![],
             fork_markers,
         )?;
+        let lock = lock.with_wire_version();
         let lock = if uv_preview::is_enabled(PreviewFeature::ResolutionInputs) {
             lock.prune_constraints()
         } else {
@@ -2833,7 +2839,7 @@ impl Lock {
             .into_iter()
             .map(|marker| self.requires_python.complexify_markers(marker))
             .collect();
-        self
+        self.with_wire_version()
     }
 
     /// Record the default groups for workspace members in a revision 5 or newer lockfile.
@@ -3166,7 +3172,7 @@ impl Lock {
     pub fn configured_member_default_groups(
         &self,
     ) -> Option<impl Iterator<Item = (&PackageName, &DefaultGroups)>> {
-        ((self.version(), self.revision()) >= (VERSION, DEFAULT_GROUPS_REVISION)).then(|| {
+        (self.revision() >= DEFAULT_GROUPS_REVISION).then(|| {
             self.workspace_packages().filter_map(|package| {
                 package
                     .default_groups
@@ -3180,7 +3186,7 @@ impl Lock {
     ///
     /// Returns `None` if the lockfile predates this metadata.
     pub fn workspace_default_groups(&self) -> Option<DefaultGroups> {
-        ((self.version(), self.revision()) >= (VERSION, DEFAULT_GROUPS_REVISION)).then(|| {
+        (self.revision() >= DEFAULT_GROUPS_REVISION).then(|| {
             self.manifest
                 .default_groups
                 .clone()
@@ -3195,13 +3201,11 @@ impl Lock {
     pub fn member_group_metadata(
         &self,
     ) -> Option<impl Iterator<Item = (&PackageName, &BTreeMap<GroupName, GroupMetadata>)>> {
-        ((self.version(), self.revision()) >= (VERSION, MEMBER_GROUP_METADATA_REVISION)).then(
-            || {
-                self.workspace_packages()
-                    .filter(|package| !package.group_requires_python.is_empty())
-                    .map(|package| (&package.id.name, &package.group_requires_python))
-            },
-        )
+        (self.revision() >= MEMBER_GROUP_METADATA_REVISION).then(|| {
+            self.workspace_packages()
+                .filter(|package| !package.group_requires_python.is_empty())
+                .map(|package| (&package.id.name, &package.group_requires_python))
+        })
     }
 
     /// Return dependency group metadata for a workspace root without a `[project]` table.
@@ -3215,7 +3219,7 @@ impl Lock {
     /// A single-project lockfile's root counts as a member even when the workspace member list is
     /// omitted.
     pub fn member_default_groups(&self, name: &PackageName) -> Option<DefaultGroups> {
-        if (self.version(), self.revision()) < (VERSION, DEFAULT_GROUPS_REVISION) {
+        if self.revision() < DEFAULT_GROUPS_REVISION {
             return None;
         }
         let index = *self.workspace_members.get(name)?;
@@ -3783,10 +3787,10 @@ impl Lock {
                 Ok(lock) => lock,
                 Err(source) => {
                     if let Ok(lock) = toml::from_str::<LockVersion>(input)
-                        && lock.version() != VERSION
+                        && !matches!(lock.version(), VERSION | MACOS_WHEEL_VERSION)
                     {
                         return Err(LockParseError::UnparsableVersion {
-                            supported: VERSION,
+                            supported: MACOS_WHEEL_VERSION,
                             version: lock.version(),
                             source,
                         });
@@ -3796,14 +3800,44 @@ impl Lock {
             },
         };
 
-        if lock.version() != VERSION {
+        if !matches!(lock.version(), VERSION | MACOS_WHEEL_VERSION) {
             return Err(LockParseError::UnsupportedVersion {
-                supported: VERSION,
+                supported: MACOS_WHEEL_VERSION,
                 version: lock.version(),
             });
         }
 
         Ok(lock)
+    }
+
+    /// Use the new schema only when a marker has different semantics under version 1.
+    fn with_wire_version(mut self) -> Self {
+        if self.version != VERSION {
+            return self;
+        }
+        let needs_new_version = |marker: &MarkerTree| marker.needs_macos_wheel_lock_version();
+        if self
+            .supported_environments
+            .iter()
+            .chain(&self.required_environments)
+            .any(needs_new_version)
+            || self
+                .fork_markers
+                .iter()
+                .any(|marker| needs_new_version(&marker.combined()))
+            || self.packages.iter().any(|package| {
+                package
+                    .fork_markers
+                    .iter()
+                    .any(|marker| needs_new_version(&marker.combined()))
+                    || package.all_dependencies().any(|dep| {
+                        needs_new_version(&dep.simplified_marker.as_simplified_marker_tree())
+                    })
+            })
+        {
+            self.version = MACOS_WHEEL_VERSION;
+        }
+        self
     }
 
     /// Returns the TOML representation of this lockfile.
@@ -6484,6 +6518,24 @@ impl ResolverManifest {
     }
 }
 
+/// Read marker text before the lock version is known. Version 1 used implicit
+/// Darwin semantics, while version 2 names the wheel predicate explicitly.
+#[derive(Clone, Debug, Default, Eq, PartialEq, Ord, PartialOrd, serde::Deserialize)]
+#[serde(transparent)]
+struct LockMarker(Option<Box<str>>);
+
+impl LockMarker {
+    fn parse(self, legacy: bool) -> Result<SimplifiedMarkerTree, LockError> {
+        let marker = self
+            .0
+            .map_or(Ok(MarkerTree::TRUE), |marker| {
+                MarkerTree::parse_lock_marker(&marker, legacy)
+            })
+            .map_err(LockErrorKind::InvalidLockMarker)?;
+        Ok(SimplifiedMarkerTree::from_simplified(marker))
+    }
+}
+
 #[derive(Clone, Debug, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 struct LockWire {
@@ -6493,11 +6545,11 @@ struct LockWire {
     /// If this lockfile was built from a forking resolution with non-identical forks, store the
     /// forks in the lockfile so we can recreate them in subsequent resolutions.
     #[serde(rename = "resolution-markers", default)]
-    fork_markers: Vec<SimplifiedMarkerTree>,
+    fork_markers: Vec<LockMarker>,
     #[serde(rename = "supported-markers", default)]
-    supported_environments: Vec<SimplifiedMarkerTree>,
+    supported_environments: Vec<LockMarker>,
     #[serde(rename = "required-markers", default)]
-    required_environments: Vec<SimplifiedMarkerTree>,
+    required_environments: Vec<LockMarker>,
     #[serde(rename = "conflicts", default)]
     conflicts: Option<Conflicts>,
     /// We discard the lockfile if these options match.
@@ -6530,12 +6582,18 @@ impl TryFrom<LockWire> for Lock {
             unambiguous_package_ids.insert(dist.id.name.clone(), dist.id.clone());
         }
 
+        let legacy = wire.version == VERSION;
+        let parse_marker = |marker: LockMarker| {
+            marker
+                .parse(legacy)
+                .map(|marker| marker.into_marker(&wire.requires_python))
+        };
+
         let fork_markers = wire
             .fork_markers
             .into_iter()
-            .map(|simplified_marker| simplified_marker.into_marker(&wire.requires_python))
-            .map(UniversalMarker::from_combined)
-            .collect::<Vec<_>>();
+            .map(|marker| parse_marker(marker).map(UniversalMarker::from_combined))
+            .collect::<Result<Vec<_>, _>>()?;
         let environment = SimplifiedMarkerTree::new(
             &wire.requires_python,
             fork_markers_union(&fork_markers, &wire.requires_python),
@@ -6553,19 +6611,20 @@ impl TryFrom<LockWire> for Lock {
                     environment,
                     default,
                     &unambiguous_package_ids,
+                    legacy,
                 )
             })
             .collect::<Result<Vec<_>, _>>()?;
         let supported_environments = wire
             .supported_environments
             .into_iter()
-            .map(|simplified_marker| simplified_marker.into_marker(&wire.requires_python))
-            .collect();
+            .map(parse_marker)
+            .collect::<Result<Vec<_>, _>>()?;
         let required_environments = wire
             .required_environments
             .into_iter()
-            .map(|simplified_marker| simplified_marker.into_marker(&wire.requires_python))
-            .collect();
+            .map(parse_marker)
+            .collect::<Result<Vec<_>, _>>()?;
         let mut options_wire = wire.options;
         if options_wire.exclude_newer.exclude_newer_span.is_some() {
             options_wire.exclude_newer.exclude_newer = None;
@@ -6590,7 +6649,7 @@ impl TryFrom<LockWire> for Lock {
             fork_markers,
         )?;
 
-        Ok(lock)
+        Ok(lock.with_wire_version())
     }
 }
 
@@ -7416,7 +7475,7 @@ struct PackageWire {
     #[serde(default)]
     wheels: Vec<Wheel>,
     #[serde(default, rename = "resolution-markers")]
-    fork_markers: Vec<SimplifiedMarkerTree>,
+    fork_markers: Vec<LockMarker>,
     #[serde(default)]
     dependencies: Vec<DependencyWire>,
     #[serde(default)]
@@ -7529,6 +7588,7 @@ impl PackageWire {
         environment: SimplifiedMarkerTree,
         default: UniversalMarker,
         unambiguous_package_ids: &FxHashMap<PackageName, PackageId>,
+        legacy: bool,
     ) -> Result<Package, LockError> {
         // Consistency check
         if !uv_flags::contains(uv_flags::EnvironmentFlags::SKIP_WHEEL_FILENAME_CHECK) {
@@ -7577,6 +7637,7 @@ impl PackageWire {
                         environment,
                         default,
                         unambiguous_package_ids,
+                        legacy,
                     )
                 })
                 .collect()
@@ -7592,9 +7653,12 @@ impl PackageWire {
             fork_markers: self
                 .fork_markers
                 .into_iter()
-                .map(|simplified_marker| simplified_marker.into_marker(requires_python))
-                .map(UniversalMarker::from_combined)
-                .collect(),
+                .map(|marker| {
+                    marker.parse(legacy).map(|marker| {
+                        UniversalMarker::from_combined(marker.into_marker(requires_python))
+                    })
+                })
+                .collect::<Result<Vec<_>, _>>()?,
             dependencies: unwire_deps(self.dependencies)?,
             optional_dependencies: self
                 .optional_dependencies
@@ -9349,7 +9413,7 @@ struct DependencyWire {
     #[serde(default)]
     extra: BTreeSet<ExtraName>,
     #[serde(default)]
-    marker: SimplifiedMarkerTree,
+    marker: LockMarker,
 }
 
 impl DependencyWire {
@@ -9359,12 +9423,14 @@ impl DependencyWire {
         environment: SimplifiedMarkerTree,
         default: UniversalMarker,
         unambiguous_package_ids: &FxHashMap<PackageName, PackageId>,
+        legacy: bool,
     ) -> Result<Dependency, LockError> {
+        let marker = self.marker.parse(legacy)?;
         let (simplified_marker, complexified_marker) =
-            if self.marker.as_simplified_marker_tree().is_true() {
+            if marker.as_simplified_marker_tree().is_true() {
                 (environment, default)
             } else {
-                let mut simplified_marker = self.marker;
+                let mut simplified_marker = marker;
                 simplified_marker.and(environment);
                 let complexified_marker =
                     UniversalMarker::from_combined(simplified_marker.into_marker(requires_python));
@@ -9842,6 +9908,17 @@ impl std::fmt::Display for WheelTagHint {
 /// is with the caller somewhere in such cases.
 #[derive(DebugNoInline, thiserror::Error)]
 enum LockErrorKind {
+    #[error("Invalid marker in uv.lock")]
+    InvalidLockMarker(#[source] uv_pep508::Pep508Error),
+    #[error(
+        "Cannot export `{0}` with a macOS wheel deployment-target predicate in a universal PEP 508 marker"
+    )]
+    MacosWheelExport(PackageName),
+    #[error(
+        "Cannot export a macOS wheel deployment-target predicate in the supported environments of a PEP 751 lockfile"
+    )]
+    MacosWheelExportEnvironment,
+
     /// An error that occurs when collecting dependency-group settings.
     #[error(transparent)]
     DependencyGroups(#[from] DependencyGroupError),

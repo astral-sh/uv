@@ -805,6 +805,28 @@ impl<'lock> PylockToml {
             VirtualPackages::Exclude,
         )?;
 
+        if let Some(node) = nodes
+            .iter()
+            .find(|node| node.marker.has_macos_wheel_predicate())
+        {
+            return Err(
+                LockError::from(super::super::LockErrorKind::MacosWheelExport(
+                    node.package.name().clone(),
+                ))
+                .into(),
+            );
+        }
+        if target
+            .lock()
+            .supported_environments()
+            .iter()
+            .any(|marker| marker.has_macos_wheel_predicate())
+        {
+            return Err(
+                LockError::from(super::super::LockErrorKind::MacosWheelExportEnvironment).into(),
+            );
+        }
+
         // Sort the nodes.
         nodes.sort_unstable_by_key(|node| &node.package.id);
 

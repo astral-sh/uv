@@ -34,7 +34,7 @@ pub(crate) fn requires_python(tree: MarkerTree) -> Option<RequiresPythonRange> {
                     }
                 }
             },
-            MarkerTreeKind::VersionString(marker) => {
+            MarkerTreeKind::MacosDarwinRelease(marker) => {
                 for (_, tree) in marker.edges() {
                     collect_python_markers(tree, markers, range);
                 }
