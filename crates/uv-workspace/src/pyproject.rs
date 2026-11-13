@@ -1350,11 +1350,7 @@ impl<'de> Deserialize<'de> for Source {
             package: Option<bool>,
             index: Option<IndexName>,
             workspace: Option<WorkspaceReference>,
-            #[serde(
-                skip_serializing_if = "uv_pep508::marker::ser::is_empty",
-                serialize_with = "uv_pep508::marker::ser::serialize",
-                default
-            )]
+            #[serde(default, deserialize_with = "MarkerTree::deserialize_environment")]
             marker: MarkerTree,
             extra: Option<ExtraName>,
             group: Option<GroupName>,
