@@ -567,6 +567,13 @@ async fn do_lock(
             PreviewFeature::MinimumLibcVersion
         );
     }
+    let minimum_macos_version = target.minimum_macos_version();
+    if minimum_macos_version.is_some() && !preview.is_enabled(PreviewFeature::MinimumMacosVersion) {
+        warn_user_once!(
+            "Setting `minimum-macos-version` is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+            PreviewFeature::MinimumMacosVersion
+        );
+    }
 
     // Determine the supported Python range. If no range is defined, and warn and default to the
     // current minor version.
@@ -670,6 +677,7 @@ async fn do_lock(
         .build_options(build_options.clone())
         .artifact_environments(artifact_environments.clone())
         .minimum_libc_version(minimum_libc_version)
+        .minimum_macos_version(minimum_macos_version)
         .build();
     // Checking an existing lockfile may build metadata and install build dependencies. Verify any
     // artifacts recorded in that lockfile, including for an ordinary unlocked command.

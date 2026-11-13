@@ -450,6 +450,8 @@ pub enum PreviewFeature {
     /// with `required-environments` to require compatible wheels for the selected Linux
     /// environments without excluding wheels for newer libc versions.
     MinimumLibcVersion,
+    /// Require wheels for an oldest supported macOS release during universal resolution.
+    MinimumMacosVersion,
     /// Before a nonisolated `uv build`, uv checks that the selected environment satisfies declared,
     /// backend-reported, and transitive build requirements. This reports missing or incompatible
     /// build dependencies before building; use `--skip-dependency-check` to skip the check.

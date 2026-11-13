@@ -9,8 +9,8 @@ use uv_configuration::BuildOptions;
 use uv_distribution::{DistributionDatabase, Reporter};
 use uv_distribution_types::{
     BuiltDist, Dist, IndexCapabilities, IndexLocations, IndexMetadata, IndexMetadataRef, IndexUrl,
-    InstalledDist, MinimumLibcVersion, RequestedDist, RequiresPython, VariantsJsonContent,
-    VerbatimFile,
+    InstalledDist, MinimumLibcVersion, MinimumMacosVersion, RequestedDist, RequiresPython,
+    VariantsJsonContent, VerbatimFile,
 };
 use uv_normalize::PackageName;
 use uv_platform_tags::Tags;
@@ -111,6 +111,7 @@ pub struct DefaultResolverProvider<'a, Context: BuildContext> {
     build_options: &'a BuildOptions,
     capabilities: &'a IndexCapabilities,
     minimum_libc_version: Option<MinimumLibcVersion>,
+    minimum_macos_version: Option<MinimumMacosVersion>,
 }
 
 impl<'a, Context: BuildContext> DefaultResolverProvider<'a, Context> {
@@ -127,6 +128,7 @@ impl<'a, Context: BuildContext> DefaultResolverProvider<'a, Context> {
         build_options: &'a BuildOptions,
         capabilities: &'a IndexCapabilities,
         minimum_libc_version: Option<MinimumLibcVersion>,
+        minimum_macos_version: Option<MinimumMacosVersion>,
     ) -> Self {
         Self {
             fetcher,
@@ -145,6 +147,7 @@ impl<'a, Context: BuildContext> DefaultResolverProvider<'a, Context> {
             build_options,
             capabilities,
             minimum_libc_version,
+            minimum_macos_version,
         }
     }
 
@@ -234,6 +237,7 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
                     self.hasher,
                     self.build_options,
                     self.minimum_libc_version,
+                    self.minimum_macos_version,
                 )
             });
 
@@ -263,6 +267,7 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
                                 flat_distributions.clone(),
                                 self.build_options,
                                 self.minimum_libc_version,
+                                self.minimum_macos_version,
                             ),
                             MetadataFormat::Flat(metadata) => VersionMap::from_flat_metadata(
                                 metadata,
@@ -270,6 +275,7 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
                                 self.hasher,
                                 self.build_options,
                                 self.minimum_libc_version,
+                                self.minimum_macos_version,
                             ),
                         }
                     })

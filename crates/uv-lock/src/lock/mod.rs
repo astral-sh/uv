@@ -38,10 +38,10 @@ use uv_distribution_types::{
     DirectUrlSourceDist, DirectorySourceDist, Dist, ExcludeNewerOverride, ExcludeNewerSpan,
     ExcludeNewerValue, FirstParty, GitDirectorySourceDist, GitPathBuiltDist, GitPathSourceDist,
     HashValidation, Identifier, IndexLocations, IndexMetadata, IndexUrl, MetadataHashPolicy,
-    MinimumLibcVersion, Name, NameRequirementSpecification, PYPI_URL, PathBuiltDist,
-    PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, RemoteSource,
-    Requirement, RequirementSource, RequiresPython, ResolvedDist, SimplifiedMarkerTree,
-    StaticMetadata, ToUrlError, UrlString, VersionId,
+    MinimumLibcVersion, MinimumMacosVersion, Name, NameRequirementSpecification, PYPI_URL,
+    PathBuiltDist, PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist,
+    RemoteSource, Requirement, RequirementSource, RequiresPython, ResolvedDist,
+    SimplifiedMarkerTree, StaticMetadata, ToUrlError, UrlString, VersionId,
 };
 use uv_fs::{PortablePath, PortablePathBuf, Simplified, normalize_path, try_relative_to_if};
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
@@ -2643,6 +2643,7 @@ impl Lock {
             prerelease: resolution.options.prerelease.clone(),
             fork_strategy: resolution.options.fork_strategy,
             minimum_libc_version: resolution.options.minimum_libc_version,
+            minimum_macos_version: resolution.options.minimum_macos_version,
             exclude_newer: resolution.options.exclude_newer.clone(),
         };
         // Canonicalize the top-level fork markers to match what is persisted in
@@ -3158,6 +3159,11 @@ impl Lock {
     /// Return the selected libc implementation and minimum version.
     pub fn minimum_libc_version(&self) -> Option<MinimumLibcVersion> {
         self.options.minimum_libc_version
+    }
+
+    /// Return the minimum macOS version used to generate this lock.
+    pub fn minimum_macos_version(&self) -> Option<MinimumMacosVersion> {
+        self.options.minimum_macos_version
     }
 
     /// Returns the exclude newer setting used to generate this lock.
@@ -6306,6 +6312,8 @@ struct ResolverOptions {
     fork_strategy: ForkStrategy,
     /// The selected libc implementation and minimum version.
     minimum_libc_version: Option<MinimumLibcVersion>,
+    /// The minimum supported macOS deployment target.
+    minimum_macos_version: Option<MinimumMacosVersion>,
     /// The [`ExcludeNewer`] setting used to generate this lock.
     exclude_newer: ExcludeNewer,
 }
@@ -6325,6 +6333,8 @@ struct ResolverOptionsWire {
     fork_strategy: ForkStrategy,
     /// The selected libc implementation and minimum version.
     minimum_libc_version: Option<MinimumLibcVersion>,
+    /// The minimum supported macOS deployment target.
+    minimum_macos_version: Option<MinimumMacosVersion>,
     /// The [`ExcludeNewer`] setting used to generate this lock.
     #[serde(flatten)]
     exclude_newer: ExcludeNewerWire,
@@ -6685,6 +6695,7 @@ impl TryFrom<LockWire> for Lock {
             prerelease: options_wire.prerelease.into(),
             fork_strategy: options_wire.fork_strategy,
             minimum_libc_version: options_wire.minimum_libc_version,
+            minimum_macos_version: options_wire.minimum_macos_version,
             exclude_newer: options_wire.exclude_newer.into(),
         };
         let lock = Self::new(
