@@ -47,7 +47,7 @@ use uv_python_types::{
 };
 use uv_requirements::RequirementsSpecification;
 use uv_resolver::{FlatIndex, OptionsBuilder, Preference, ResolverOutput};
-use uv_settings::{PythonInstallMirrors, ToolOptions};
+use uv_settings::{Combine, PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
 use uv_shell::Shell;
 use uv_tool::{InstalledTools, Tool, ToolEntrypoint, entrypoint_paths};
 use uv_types::{BuildIsolation, HashStrategy, SourceTreeEditablePolicy};
@@ -55,6 +55,43 @@ use uv_warnings::warn_user_once;
 use uv_workspace::WorkspaceCache;
 
 use uv_resolve_operations::{Error as ResolveError, resolution_markers, resolution_tags};
+
+/// Merge saved tool options with current configuration.
+///
+/// When both name the same proxy route, use the current proxy settings in the receipt's position.
+pub(crate) fn combine_tool_options(
+    mut receipt: ResolverInstallerOptions,
+    mut filesystem: ResolverInstallerOptions,
+) -> ResolverInstallerOptions {
+    if let (Some(saved_indexes), Some(configured_indexes)) =
+        (&mut receipt.indexes.index, &mut filesystem.indexes.index)
+    {
+        for saved in saved_indexes
+            .iter_mut()
+            .filter(|index| index.proxy_for.is_some())
+        {
+            if let Some(position) = configured_indexes.iter().position(|configured| {
+                saved.proxy_for == configured.proxy_for
+                    && saved.name == configured.name
+                    && saved.url().without_credentials() == configured.url().without_credentials()
+                    && saved
+                        .artifact_base_url
+                        .as_ref()
+                        .map(|url| url.without_credentials())
+                        == configured
+                            .artifact_base_url
+                            .as_ref()
+                            .map(|url| url.without_credentials())
+            }) {
+                // Use the configured proxy, which may have credentials omitted from the receipt.
+                // Keep its position among the saved indexes. Any additional live declaration
+                // remains in the list and fails duplicate validation.
+                *saved = configured_indexes.remove(position);
+            }
+        }
+    }
+    receipt.combine(filesystem)
+}
 
 /// An error raised when a tool package provides no executables.
 #[derive(Debug, Error)]

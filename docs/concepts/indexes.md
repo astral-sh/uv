@@ -136,6 +136,7 @@ If artifact downloads require authentication on a different host, configure the 
 ## Pinning a package to an index
 
 A package can be pinned to a specific index by specifying the index in its `tool.uv.sources` entry.
+To pin a package to a proxied index, use the upstream index's name.
 For example, to ensure that `torch` is _always_ installed from the `pytorch` index, add the
 following to your `pyproject.toml`:
 

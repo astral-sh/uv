@@ -407,6 +407,46 @@ async fn proxy_index_rejects_same_named_package_index_across_configuration_files
     Ok(())
 }
 
+#[test]
+fn proxy_index_rejects_named_proxy_in_project_sources() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    pyproject.write_str(indoc::indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["basic-package"]
+
+        [tool.uv]
+        preview-features = ["proxy-index"]
+
+        [tool.uv.sources]
+        basic-package = { index = "mirror" }
+
+        [[tool.uv.index]]
+        name = "upstream"
+        url = "https://upstream.example.com/simple/"
+        artifact-base-url = "https://upstream.example.com/files/"
+
+        [[tool.uv.index]]
+        name = "mirror"
+        url = "https://mirror.example.com/simple/"
+        artifact-base-url = "https://mirror.example.com/files/"
+        proxy-for = "upstream"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to build `project @ file://[TEMP_DIR]/`
+      cause: Failed to parse entry: `basic-package`
+      cause: Package `basic-package` references proxy index `mirror` in `tool.uv.sources`. Use its upstream index `upstream` instead, or remove the source override
+    ");
+
+    Ok(())
+}
+
 #[tokio::test]
 async fn proxy_index_implicitly_routes_pypi_without_a_second_resolution_index() -> Result<()> {
     let context = uv_test::test_context!("3.12");
