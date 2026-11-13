@@ -230,18 +230,19 @@ impl<'env> TreeDisplay<'env> {
 
             // Identify any requirements attached to the workspace itself.
             for requirement in lock.requirements() {
+                let requirement_marker = requirement.marker.resolve_variants_false();
                 for &package_index in by_name.get(&requirement.name).into_iter().flatten() {
                     let package = lock.package(package_index);
                     // Determine whether this entry is "relevant" for the requirement, by intersecting
                     // the markers.
                     let marker = if package.fork_markers.is_empty() {
-                        requirement.marker
+                        requirement_marker
                     } else {
                         let mut combined = MarkerTree::FALSE;
                         for fork_marker in &package.fork_markers {
                             combined = combined.or(fork_marker.pep508());
                         }
-                        combined = combined.and(requirement.marker);
+                        combined = combined.and(requirement_marker);
                         combined
                     };
                     if marker.is_false() {
@@ -282,18 +283,19 @@ impl<'env> TreeDisplay<'env> {
                     continue;
                 }
                 for requirement in requirements {
+                    let requirement_marker = requirement.marker.resolve_variants_false();
                     for &package_index in by_name.get(&requirement.name).into_iter().flatten() {
                         let package = lock.package(package_index);
                         // Determine whether this entry is "relevant" for the requirement, by intersecting
                         // the markers.
                         let marker = if package.fork_markers.is_empty() {
-                            requirement.marker
+                            requirement_marker
                         } else {
                             let mut combined = MarkerTree::FALSE;
                             for fork_marker in &package.fork_markers {
                                 combined = combined.or(fork_marker.pep508());
                             }
-                            combined = combined.and(requirement.marker);
+                            combined = combined.and(requirement_marker);
                             combined
                         };
                         if marker.is_false() {

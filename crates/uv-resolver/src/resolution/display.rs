@@ -92,7 +92,10 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
             let mut sources = SourceAnnotations::default();
 
             for requirement in self.resolution.requirements.iter().filter(|requirement| {
-                requirement.evaluate_markers(self.env.marker_environment(), &[])
+                requirement
+                    .marker
+                    .resolve_variants_false()
+                    .evaluate_optional_environment(self.env.marker_environment(), &[])
             }) {
                 if let Some(origin) = &requirement.origin {
                     sources.add(

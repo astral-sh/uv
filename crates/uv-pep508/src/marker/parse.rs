@@ -1,7 +1,11 @@
 use arcstr::ArcStr;
+use itertools::Itertools;
 use smallvec::SmallVec;
 use std::str::FromStr;
-use uv_normalize::{ExtraName, GroupName};
+use std::sync::Arc;
+use uv_normalize::{
+    ExtraName, GroupName, InvalidVariantComponent, VariantFeature, VariantNamespace, VariantValue,
+};
 use uv_pep440::{Version, VersionPattern, VersionSpecifier};
 
 use crate::cursor::Cursor;
@@ -105,7 +109,7 @@ fn parse_marker_value<T: Pep508Url>(
                 !char.is_whitespace() && !matches!(char, '>' | '=' | '<' | '!' | '~' | ')')
             });
             let key = cursor.slice(start, len);
-            MarkerValue::from_str(key)
+            let value = MarkerValue::from_str(key)
                 .map_err(|_| Pep508Error {
                     message: Pep508ErrorSource::String(format!(
                         "Expected a quoted string or a valid marker name, found `{key}`"
@@ -158,7 +162,26 @@ fn parse_marker_value<T: Pep508Url>(
                         );
                     }
                     _ => {}
-                })
+                })?;
+            if !cursor.allows_variant_markers()
+                && matches!(
+                    value,
+                    MarkerValue::MarkerEnvString(MarkerValueString::VariantLabel)
+                        | MarkerValue::MarkerEnvList(
+                            MarkerValueList::VariantNamespaces
+                                | MarkerValueList::VariantFeatures
+                                | MarkerValueList::VariantProperties
+                        )
+                )
+            {
+                return Err(Pep508Error {
+                    message: Pep508ErrorSource::VariantMarkerInEnvironment(key.to_string()),
+                    start,
+                    len,
+                    input: cursor.to_string(),
+                });
+            }
+            Ok(value)
         }
     }
 }
@@ -173,6 +196,7 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
     cursor.eat_whitespace();
     let start = cursor.pos();
     let l_value = parse_marker_value(cursor, reporter)?;
+    let l_value_end = cursor.pos();
     cursor.eat_whitespace();
     // "not in" and "in" must be preceded by whitespace. We must already have matched a whitespace
     // when we're here because other `parse_marker_key` would have pulled the characters in and
@@ -313,7 +337,62 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
                                 input: cursor.to_string(),
                             }
                         })?;
+                    let invalid_component = |error: InvalidVariantComponent| Pep508Error {
+                        message: Pep508ErrorSource::String(error.to_string()),
+                        start,
+                        len: l_value_end - start,
+                        input: cursor.to_string(),
+                    };
+                    // PEP 825 ignores whitespace adjacent to the `::` separators.
                     let pair = match key {
+                        MarkerValueList::VariantNamespaces => {
+                            CanonicalMarkerListPair::VariantNamespace(
+                                VariantNamespace::from_str(&l_string).map_err(invalid_component)?,
+                            )
+                        }
+                        MarkerValueList::VariantFeatures => {
+                            let Some((namespace, feature)) = l_string.split("::").collect_tuple()
+                            else {
+                                return Err(Pep508Error {
+                                    message: Pep508ErrorSource::String(
+                                        "Expected a variant feature in the form `namespace :: feature`"
+                                            .to_string(),
+                                    ),
+                                    start,
+                                    len: l_value_end - start,
+                                    input: cursor.to_string(),
+                                });
+                            };
+                            CanonicalMarkerListPair::VariantFeature(Arc::new((
+                                VariantNamespace::from_str(namespace.trim_end())
+                                    .map_err(invalid_component)?,
+                                VariantFeature::from_str(feature.trim_start())
+                                    .map_err(invalid_component)?,
+                            )))
+                        }
+                        MarkerValueList::VariantProperties => {
+                            let Some((namespace, feature, value)) =
+                                l_string.split("::").collect_tuple()
+                            else {
+                                return Err(Pep508Error {
+                                    message: Pep508ErrorSource::String(
+                                        "Expected a variant property in the form `namespace :: feature :: value`"
+                                            .to_string(),
+                                    ),
+                                    start,
+                                    len: l_value_end - start,
+                                    input: cursor.to_string(),
+                                });
+                            };
+                            CanonicalMarkerListPair::VariantProperty(Arc::new((
+                                VariantNamespace::from_str(namespace.trim_end())
+                                    .map_err(invalid_component)?,
+                                VariantFeature::from_str(feature.trim())
+                                    .map_err(invalid_component)?,
+                                VariantValue::from_str(value.trim_start())
+                                    .map_err(invalid_component)?,
+                            )))
+                        }
                         // `'...' in extras`
                         MarkerValueList::Extras => match ExtraName::from_str(&l_string) {
                             Ok(name) => CanonicalMarkerListPair::Extras(name),

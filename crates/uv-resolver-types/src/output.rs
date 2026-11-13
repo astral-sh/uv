@@ -287,14 +287,17 @@ impl ResolverOutput {
                 DependencyModifierScope::Package(&dist.name, &dist.version),
                 archive.metadata.requires_dist.iter(),
             )) {
-                add_marker_params_from_tree(req.marker, &mut seen_marker_values);
+                add_marker_params_from_tree(
+                    req.marker.resolve_variants_false(),
+                    &mut seen_marker_values,
+                );
             }
         }
 
         // Ensure that we consider markers from direct dependencies.
-        for direct_req in self.constraints.apply(
+        for direct_req in self.constraints.apply_to_root(
             self.modifiers
-                .apply(DependencyModifierScope::Global, self.requirements.iter()),
+                .apply(DependencyModifierScope::Global, &self.requirements),
         ) {
             add_marker_params_from_tree(direct_req.marker, &mut seen_marker_values);
         }
@@ -311,6 +314,9 @@ impl ResolverOutput {
                         specifier: VersionSpecifier::equals_version(from_env.clone()),
                     }
                 }
+                // Variant labels belong to a wheel's dependencies, so they cannot describe the
+                // target environment.
+                MarkerParam::String(CanonicalMarkerValueString::VariantLabel) => continue,
                 MarkerParam::String(value_string) => {
                     let from_env = marker_env.get_string(value_string);
                     MarkerExpression::String {

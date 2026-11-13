@@ -4,8 +4,7 @@ use std::io;
 use std::path::Path;
 
 use uv_git_types::{GitLfs, GitReference};
-use uv_normalize::ExtraName;
-use uv_pep508::{MarkerEnvironment, MarkerTree, UnnamedRequirement};
+use uv_pep508::{MarkerTree, UnnamedRequirement};
 use uv_pypi_types::{HashError, Hashes, ParsedUrl};
 
 use crate::{Requirement, RequirementSource, VerbatimParsedUrl};
@@ -78,19 +77,6 @@ impl Display for UnresolvedRequirement {
 }
 
 impl UnresolvedRequirement {
-    /// Returns whether the markers apply for the given environment.
-    ///
-    /// When the environment is not given, this treats all marker expressions
-    /// that reference the environment as true. In other words, it does
-    /// environment independent expression evaluation. (Which in turn devolves
-    /// to "only evaluate marker expressions that reference an extra name.")
-    pub fn evaluate_markers(&self, env: Option<&MarkerEnvironment>, extras: &[ExtraName]) -> bool {
-        match self {
-            Self::Named(requirement) => requirement.evaluate_markers(env, extras),
-            Self::Unnamed(requirement) => requirement.evaluate_optional_environment(env, extras),
-        }
-    }
-
     /// Augment a user-provided requirement by attaching any specification data that was provided
     /// separately from the requirement itself (e.g., `--branch main`).
     #[must_use]

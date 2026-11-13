@@ -460,7 +460,7 @@ impl DependencyContext<'_> {
             Self::Production | Self::Group(_) => None,
             Self::Extra(extra) => Some(extra),
         };
-        marker.for_dependency_extra(extra)
+        marker.resolve_variants_false().for_dependency_extra(extra)
     }
 
     /// Return the conflict item selected by this extra or dependency-group node, if any.
@@ -3289,15 +3289,15 @@ impl Lock {
         requirement: &Requirement,
         package: &Package,
     ) -> Option<MarkerTree> {
+        let requirement_marker = requirement.marker.resolve_variants_false();
         let marker = if package.fork_markers.is_empty() {
-            requirement.marker
+            requirement_marker
         } else {
             let mut combined = MarkerTree::FALSE;
             for fork_marker in &package.fork_markers {
                 combined = combined.or(fork_marker.pep508());
             }
-            combined = combined.and(requirement.marker);
-            combined
+            combined.and(requirement_marker)
         };
 
         (!marker.is_false()).then(|| self.simplify_environment(marker))
@@ -3341,19 +3341,20 @@ impl Lock {
             }
             (None, production, groups)
         } else {
-            let root_applies = self.manifest.requirements.iter().any(|requirement| {
+            let applies = |requirement: &Requirement| {
                 &requirement.name == dependency_name
-                    && requirement.marker.evaluate(marker_environment, &[])
-            });
-            let group_applies =
-                self.manifest
-                    .dependency_groups
-                    .values()
-                    .flatten()
-                    .any(|requirement| {
-                        &requirement.name == dependency_name
-                            && requirement.marker.evaluate(marker_environment, &[])
-                    });
+                    && requirement
+                        .marker
+                        .resolve_variants_false()
+                        .evaluate(marker_environment, &[])
+            };
+            let root_applies = self.manifest.requirements.iter().any(applies);
+            let group_applies = self
+                .manifest
+                .dependency_groups
+                .values()
+                .flatten()
+                .any(applies);
 
             // Lock-manifest requirements and dependency groups only record requirements, not
             // resolved package IDs. Select the environment-specific package once, then preserve
@@ -3364,10 +3365,11 @@ impl Lock {
                 None
             };
             let root = package.and_then(|package| {
-                let mut applicable = self.manifest.requirements.iter().filter(|requirement| {
-                    &requirement.name == dependency_name
-                        && requirement.marker.evaluate(marker_environment, &[])
-                });
+                let mut applicable = self
+                    .manifest
+                    .requirements
+                    .iter()
+                    .filter(|requirement| applies(requirement));
                 let requirement = applicable.next()?;
                 let mut selection = SelectedDependency::from_requirement(package, requirement);
                 for requirement in applicable {
@@ -3378,10 +3380,9 @@ impl Lock {
             let mut groups = BTreeMap::new();
             if let Some(package) = package {
                 for (group, requirements) in &self.manifest.dependency_groups {
-                    let mut applicable = requirements.iter().filter(|requirement| {
-                        &requirement.name == dependency_name
-                            && requirement.marker.evaluate(marker_environment, &[])
-                    });
+                    let mut applicable = requirements
+                        .iter()
+                        .filter(|requirement| applies(requirement));
                     let Some(requirement) = applicable.next() else {
                         continue;
                     };
@@ -3600,6 +3601,9 @@ impl Lock {
 
         // Seed from requirements attached directly to the lock (e.g., PEP 723 scripts).
         for requirement in self.requirements() {
+            if requirement.marker.resolve_variants_false().is_false() {
+                continue;
+            }
             for (index, _) in self
                 .packages
                 .iter()
@@ -3625,6 +3629,9 @@ impl Lock {
                 continue;
             }
             for requirement in requirements {
+                if requirement.marker.resolve_variants_false().is_false() {
+                    continue;
+                }
                 for (index, _) in self
                     .packages
                     .iter()
@@ -4576,6 +4583,13 @@ impl Lock {
                     .iter()
                     .chain(dependency_groups.values().flatten()),
             )
+            .map(|mut requirement| {
+                let marker = requirement.marker.resolve_variants_false();
+                if marker != requirement.marker {
+                    requirement.to_mut().marker = marker;
+                }
+                requirement
+            })
             .collect::<Vec<_>>();
         let dependency_sources = if allow_missing_package_metadata {
             Box::pin(self.collect_dependency_sources(
@@ -5590,7 +5604,7 @@ impl Lock {
     /// Collect reachable direct sources without trusting stale locked edges.
     async fn collect_dependency_sources<Context: BuildContext>(
         &self,
-        mut source_requirements: BTreeSet<Requirement>,
+        source_requirements: BTreeSet<Requirement>,
         root_requirements: &[Cow<'_, Requirement>],
         dependency_metadata: &DependencyMetadata,
         dependency_modifiers: &DependencyModifiers,
@@ -5603,12 +5617,23 @@ impl Lock {
         database: &DistributionDatabase<'_, Context>,
         source_tree_metadata: &mut FxHashMap<PackageId, Option<SourceTreeRequiresDist>>,
     ) -> Result<DependencySources<'_>, LockError> {
+        // Resolve variant predicates before comparing the environments that authorize sources.
+        let resolve_variants_false = |mut requirement: Requirement| {
+            requirement.marker = requirement.marker.resolve_variants_false();
+            requirement
+        };
+        let mut source_requirements: BTreeSet<_> = source_requirements
+            .into_iter()
+            .map(resolve_variants_false)
+            .collect();
+
         // Global URL overrides authorize sources and replace competing URL constraints.
         // Scoped overrides cannot grant this privilege, and excluded packages stay inactive.
         let global_source_overrides = dependency_modifiers
             .global_overrides()
             .filter(|requirement| !matches!(requirement.source, RequirementSource::Registry { .. }))
             .cloned()
+            .map(resolve_variants_false)
             .collect::<Vec<_>>();
         if !global_source_overrides.is_empty() {
             source_requirements.retain(|requirement| {
@@ -10996,6 +11021,25 @@ mod tests {
     use uv_warnings::anstream;
 
     use super::*;
+
+    #[test]
+    fn wheel_variant_marker_in_lock_environments() {
+        let input = r#"
+version = 1
+requires-python = ">=3.12"
+supported-markers = ["variant_label == 'gpu'"]
+"#;
+        let error = Lock::from_toml(input).expect_err("variant marker in supported environments");
+        // Note(konsti): The span covers the whole TOML value. Translating the marker's span
+        // into TOML source coordinates isn't worth the added complexity.
+        insta::assert_snapshot!(error, @r#"
+        TOML parse error at line 4, column 21
+          |
+        4 | supported-markers = ["variant_label == 'gpu'"]
+          |                     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+        The marker `variant_label` is only allowed in dependency specifiers
+        "#);
+    }
 
     /// The disjunctions retain an impossible platform combination across decision branches.
     /// Removing the extra must still leave that combination unreachable.

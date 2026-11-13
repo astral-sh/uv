@@ -59,10 +59,16 @@ impl Preference {
             return Ok(None);
         }
 
+        // Discard pins disabled by variant markers even during universal resolution.
+        let marker = requirement.marker.resolve_variants_false();
+        if marker != requirement.marker && marker.is_false() {
+            return Ok(None);
+        }
+
         Ok(Some(Self {
             name: requirement.name,
             version: specifier.version().clone(),
-            marker: requirement.marker,
+            marker,
             // `requirements.txt` doesn't have fork annotations.
             fork_markers: vec![],
             // `requirements.txt` doesn't allow a requirement to specify an explicit index.

@@ -186,8 +186,8 @@ impl Manifest {
                     .chain(
                         self.modifiers
                             .apply(DependencyModifierScope::Global, &self.requirements)
-                            .filter(move |requirement| {
-                                requirement.evaluate_markers(env.marker_environment(), &[])
+                            .filter_map(move |requirement| {
+                                Self::resolve_root_marker(requirement, env)
                             }),
                     )
                     .chain(
@@ -206,9 +206,7 @@ impl Manifest {
                     .apply(DependencyModifierScope::Global, &self.requirements)
                     .chain(self.constraints.requirements().map(Cow::Borrowed))
                     .filter(|requirement| !self.modifiers.is_excluded(&requirement.name))
-                    .filter(move |requirement| {
-                        requirement.evaluate_markers(env.marker_environment(), &[])
-                    }),
+                    .filter_map(move |requirement| Self::resolve_root_marker(requirement, env)),
             ),
         }
     }
@@ -220,8 +218,22 @@ impl Manifest {
     ) -> impl Iterator<Item = Cow<'a, Requirement>> + 'a {
         self.modifiers
             .global_overrides()
-            .filter(move |requirement| requirement.evaluate_markers(env.marker_environment(), &[]))
             .map(Cow::Borrowed)
+            .filter_map(move |requirement| Self::resolve_root_marker(requirement, env))
+    }
+
+    fn resolve_root_marker<'a>(
+        mut requirement: Cow<'a, Requirement>,
+        env: &ResolverEnvironment,
+    ) -> Option<Cow<'a, Requirement>> {
+        let marker = requirement.marker.resolve_variants_false();
+        if !marker.evaluate_optional_environment(env.marker_environment(), &[]) {
+            return None;
+        }
+        if marker != requirement.marker {
+            requirement.to_mut().marker = marker;
+        }
+        Some(requirement)
     }
 
     /// Return an iterator over the names of all user-provided requirements.
@@ -263,8 +275,8 @@ impl Manifest {
                     .chain(
                         self.modifiers
                             .apply(DependencyModifierScope::Global, &self.requirements)
-                            .filter(move |requirement| {
-                                requirement.evaluate_markers(env.marker_environment(), &[])
+                            .filter_map(move |requirement| {
+                                Self::resolve_root_marker(requirement, env)
                             }),
                     ),
             ),
@@ -273,9 +285,7 @@ impl Manifest {
             DependencyMode::Direct => Either::Right(
                 self.modifiers
                     .apply(DependencyModifierScope::Global, self.requirements.iter())
-                    .filter(move |requirement| {
-                        requirement.evaluate_markers(env.marker_environment(), &[])
-                    }),
+                    .filter_map(move |requirement| Self::resolve_root_marker(requirement, env)),
             ),
         }
     }

@@ -376,7 +376,10 @@ impl BuildContext for BuildDispatch<'_> {
         let tags = self.interpreter.tags()?;
 
         let active_requirements = requirements.iter().filter(|requirement| {
-            requirement.evaluate_markers(Some(self.interpreter.markers()), &[])
+            requirement
+                .marker
+                .resolve_variants_false()
+                .evaluate(self.interpreter.markers(), &[])
         });
         let previous_hasher = hash_override;
         let hasher = match previous_hasher {
