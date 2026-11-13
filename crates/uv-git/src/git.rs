@@ -304,6 +304,20 @@ impl GitRemote {
             lfs_ready: None,
         })
     }
+
+    /// Resolve the OID of a reference or a revision from this remote.
+    pub(crate) fn ls(
+        &self,
+        reference: &GitReference,
+        locked_rev: Option<GitOid>,
+        disable_ssl: bool,
+        offline: bool,
+    ) -> Result<Option<GitOid>> {
+        if let Some(commit) = locked_rev.or_else(|| reference.as_commit()) {
+            return Ok(Some(commit));
+        }
+        ls_remote(&self.url, reference, disable_ssl, offline)
+    }
 }
 
 impl GitDatabase {
@@ -602,6 +616,58 @@ fn remote_url_root(mut url: SafeUrl) -> SafeUrl {
     url
 }
 
+/// Perform a `git ls-remote` operation to resolve a reference or revision to an OID.
+fn ls_remote(
+    remote_url: &SafeUrl,
+    reference: &GitReference,
+    disable_ssl: bool,
+    offline: bool,
+) -> Result<Option<GitOid>> {
+    debug!("Performing a Git ls-remote for: {remote_url}");
+    let mut cmd = GIT.as_ref().cloned()?;
+    cmd.env(EnvVars::GIT_TERMINAL_PROMPT, "0").arg("ls-remote");
+    if disable_ssl {
+        debug!("Disabling SSL verification for Git ls-remote via `GIT_SSL_NO_VERIFY`");
+        cmd.env(EnvVars::GIT_SSL_NO_VERIFY, "true");
+    }
+    if offline {
+        debug!("Disabling remote protocols for Git ls-remote via `GIT_ALLOW_PROTOCOL=file`");
+        cmd.env(EnvVars::GIT_ALLOW_PROTOCOL, "file");
+    }
+    let refs = match reference {
+        GitReference::Branch(name) => vec![format!("refs/heads/{name}")],
+        GitReference::Tag(name) => vec![
+            format!("refs/tags/{name}^{{}}"),
+            format!("refs/tags/{name}"),
+        ],
+        GitReference::BranchOrTag(name) | GitReference::BranchOrTagOrCommit(name) => vec![
+            format!("refs/heads/{name}"),
+            format!("refs/tags/{name}^{{}}"),
+            format!("refs/tags/{name}"),
+        ],
+        GitReference::NamedRef(name) => vec![format!("{name}^{{}}"), name.clone()],
+        GitReference::DefaultBranch => vec![String::from("HEAD")],
+        GitReference::Commit(commit) => return Ok(Some(*commit)),
+    };
+    cmd.arg("--").arg(remote_url.as_str()).args(&refs);
+    let output = cmd
+        .exec_with_output()
+        .map_err(|err| redact_git_error(err, remote_url))?;
+    let stdout = str::from_utf8(&output.stdout)?;
+    // Prefer branches over tags and peeled commits over annotated tag objects.
+    for name in refs {
+        if let Some(oid) = stdout
+            .lines()
+            .filter_map(|line| line.split_once('\t'))
+            .find_map(|(oid, reference)| (reference == name).then_some(oid))
+        {
+            return Ok(Some(oid.parse()?));
+        }
+    }
+
+    Ok(None)
+}
+
 /// Attempts to fetch the given git `reference` for a Git repository.
 ///
 /// This is the main entry for git clone/fetch. It does the following:
@@ -873,6 +939,40 @@ mod tests {
     use indoc::indoc;
 
     use super::*;
+
+    #[test]
+    fn ls_remote_peels_annotated_tags() -> Result<()> {
+        let repo = tempfile::tempdir()?;
+        let git = |args: &[&str]| -> Result<String> {
+            let output = std::process::Command::new("git")
+                .current_dir(repo.path())
+                .args(["-c", "user.name=uv", "-c", "user.email=uv@example.com"])
+                .args(args)
+                .output()?;
+            anyhow::ensure!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            Ok(String::from_utf8(output.stdout)?.trim().to_owned())
+        };
+        git(&["init", "-q"])?;
+        git(&["commit", "-q", "--allow-empty", "-m", "initial"])?;
+        git(&["tag", "-a", "v1", "-m", "release"])?;
+        let commit = git(&["rev-parse", "HEAD"])?;
+        assert_ne!(commit, git(&["rev-parse", "refs/tags/v1"])?);
+        let url = SafeUrl::from_directory_path(repo.path()).unwrap();
+        for reference in [
+            GitReference::Tag("v1".into()),
+            GitReference::NamedRef("refs/tags/v1".into()),
+        ] {
+            assert_eq!(
+                ls_remote(&url, &reference, false, true)?,
+                Some(commit.parse()?)
+            );
+        }
+        Ok(())
+    }
 
     #[test]
     fn submodule_update_config_strips_credentials_from_origin_override() {
