@@ -1269,6 +1269,13 @@ fn add_dependency(
     has_source: bool,
     raw: bool,
 ) -> Result<ArrayEdit, Error> {
+    let format_requirement = |requirement: &Requirement| {
+        if raw {
+            requirement.displayable_with_credentials().to_string()
+        } else {
+            requirement.to_string()
+        }
+    };
     let mut to_replace = find_dependencies(&req.name, Some(&req.marker), deps);
 
     match to_replace.as_slice() {
@@ -1326,11 +1333,7 @@ fn add_dependency(
                 Sort::Unsorted
             };
 
-            let req_string = if raw {
-                req.displayable_with_credentials().to_string()
-            } else {
-                req.to_string()
-            };
+            let req_string = format_requirement(req);
             let index = match sort {
                 Sort::CaseInsensitive => deps.iter().position(|dep| {
                     dep.as_str().is_some_and(|dep| {
@@ -1513,7 +1516,7 @@ fn add_dependency(
         [_] => {
             let (i, mut old_req) = to_replace.remove(0);
             update_requirement(&mut old_req, req, has_source);
-            deps.replace(i, old_req.to_string());
+            deps.replace(i, format_requirement(&old_req));
             reformat_array_multiline(deps);
             Ok(ArrayEdit::Update(i))
         }
