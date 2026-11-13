@@ -18,13 +18,13 @@ class _MuslVersion(NamedTuple):
     minor: int
 
 
-def _parse_musl_version(output: str) -> "_MuslVersion | None":
+def _parse_musl_version(interpreter: str, output: bytes) -> "_MuslVersion | None":
     lines = [n for n in (n.strip() for n in output.splitlines()) if n]
-    if len(lines) < 2 or lines[0][:4] != "musl":
+    if not lines or lines[0][:4] != b"musl":
         return None
-    m = re.match(r"Version (\d+)\.(\d+)", lines[1])
+    m = re.match(rb"Version (\d+)\.(\d+)", lines[1]) if len(lines) >= 2 else None
     if not m:
-        return None
+        raise ValueError(f"Could not read the musl version from {interpreter!r}")
     return _MuslVersion(major=int(m.group(1)), minor=int(m.group(2)))
 
 
@@ -47,8 +47,8 @@ def _get_musl_version(executable: str) -> "_MuslVersion | None":
         return None
     if ld is None or "musl" not in ld:
         return None
-    proc = subprocess.run([ld], stderr=subprocess.PIPE, text=True)
-    return _parse_musl_version(proc.stderr)
+    proc = subprocess.run([ld], stderr=subprocess.PIPE)
+    return _parse_musl_version(ld, proc.stderr)
 
 
 def platform_tags(archs: Sequence[str]) -> Iterator[str]:
