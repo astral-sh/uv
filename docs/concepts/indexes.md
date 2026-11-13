@@ -131,7 +131,7 @@ contact another host. To keep these requests on the proxy, serve the metadata th
 its URL.
 
 If artifact downloads require authentication on a different host, configure the credentials on
-`artifact-base-url`. Credentials from the proxy index are not copied to another host.
+`artifact-base-url`.
 
 ## Pinning a package to an index
 

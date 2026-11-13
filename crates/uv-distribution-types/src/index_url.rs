@@ -593,11 +593,7 @@ impl<'a> IndexLocations {
 }
 
 impl From<&IndexLocations> for uv_auth::Indexes {
-    /// Configure authentication policies and credential lookups for package indexes.
-    ///
-    /// Include proxy indexes and their artifact bases so both metadata and package downloads use
-    /// the proxy's authentication policy. Artifact bases use their own URL as the authentication
-    /// root and credential lookup URL.
+    /// Builds the authentication configuration for package indexes and their proxies.
     fn from(index_locations: &IndexLocations) -> Self {
         let indexes = index_locations
             .allowed_indexes()
@@ -612,15 +608,7 @@ impl From<&IndexLocations> for uv_auth::Indexes {
                     auth_policy: index.authenticate,
                 }
             });
-        let artifact_indexes = index_locations.proxy_indexes().filter_map(|index| {
-            index.artifact_base_url.as_ref().map(|url| AuthIndex {
-                url: url.as_url().clone(),
-                root_url: url.as_url().clone(),
-                auth_policy: index.authenticate,
-            })
-        });
-
-        Self::from_indexes(indexes.chain(artifact_indexes).map(|mut index| {
+        Self::from_indexes(indexes.map(|mut index| {
             // Credential lookups use these URLs with the username supplied separately.
             // The client caches credentials separately from these lookup URLs.
             for url in [&mut index.url, &mut index.root_url] {
