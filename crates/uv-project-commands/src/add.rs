@@ -1028,15 +1028,13 @@ fn edits(
 
         // Update the `pyproject.toml`.
         let edit = match &dependency_type {
-            DependencyType::Production => {
-                toml.add_dependency(&requirement, source.as_ref(), raw)?
-            }
-            DependencyType::Dev => toml.add_dev_dependency(&requirement, source.as_ref(), raw)?,
+            DependencyType::Production => toml.add_dependency(&requirement, source.as_ref())?,
+            DependencyType::Dev => toml.add_dev_dependency(&requirement, source.as_ref())?,
             DependencyType::Optional(extra) => {
-                toml.add_optional_dependency(extra, &requirement, source.as_ref(), raw)?
+                toml.add_optional_dependency(extra, &requirement, source.as_ref())?
             }
             DependencyType::Group(group) => {
-                toml.add_dependency_group_requirement(group, &requirement, source.as_ref(), raw)?
+                toml.add_dependency_group_requirement(group, &requirement, source.as_ref())?
             }
         };
 
