@@ -218,27 +218,7 @@ impl<'a> RequirementExpander<'a> {
         self.modifiers
             .apply(context.modifier_scope(), dependencies)
             .map(move |mut requirement| {
-                // Split the marker into production and optional components. If we have e.g.
-                // `foo; sys_platform == 'win32' or extra == 'feature'`
-                // we split it into
-                // `foo; sys_platform == 'win32'` (production) when `extra` is `None`,
-                // `foo; extra == 'feature'` (optional) when `extra` is `Some("feature")`.
-                // The requirements are then separately tracked in production and optional
-                // dependencies respectively.
-
-                let marker = match extra {
-                    Some(extra) => requirement
-                        .marker
-                        .simplify_extras(slice::from_ref(extra))
-                        .simplify_not_extras_with(|candidate| candidate != extra)
-                        .and(
-                            requirement
-                                .marker
-                                .simplify_not_extras_with(|_| true)
-                                .negate(),
-                        ),
-                    None => requirement.marker.simplify_not_extras_with(|_| true),
-                };
+                let marker = requirement.marker.for_dependency_extra(extra);
 
                 if requirement.marker != marker {
                     requirement.to_mut().marker = marker;

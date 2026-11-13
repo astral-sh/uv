@@ -6,7 +6,6 @@ use std::fmt::{Debug, Display};
 use std::io;
 use std::iter;
 use std::path::{Path, PathBuf};
-use std::slice;
 use std::str::FromStr;
 use std::sync::{Arc, LazyLock};
 
@@ -455,15 +454,11 @@ enum DependencyContext<'a> {
 impl DependencyContext<'_> {
     /// Specialize a requirement to the dependency section that can activate it.
     fn requirement_marker(self, marker: MarkerTree) -> MarkerTree {
-        let production_marker = marker.simplify_not_extras_with(|_| true);
-        match self {
-            Self::Production | Self::Group(_) => production_marker,
-            Self::Extra(extra) => marker
-                .simplify_extras(slice::from_ref(extra))
-                .simplify_not_extras_with(|candidate| candidate != extra)
-                // Production requirements already belong to the base distribution.
-                .and(production_marker.negate()),
-        }
+        let extra = match self {
+            Self::Production | Self::Group(_) => None,
+            Self::Extra(extra) => Some(extra),
+        };
+        marker.for_dependency_extra(extra)
     }
 
     /// Return the conflict item selected by this extra or dependency-group node, if any.
@@ -10624,6 +10619,8 @@ pub(crate) fn is_wheel_unreachable(
 
 #[cfg(test)]
 mod tests {
+    use std::slice;
+
     use uv_distribution_types::HashCollection;
     use uv_pep440::VersionSpecifiers;
     use uv_pep508::MarkerEnvironmentBuilder;
