@@ -18,7 +18,7 @@ pub(crate) struct ArtifactHashPolicy<'a> {
 }
 
 impl<'a> ArtifactHashPolicy<'a> {
-    pub(crate) const fn new(required: ArchiveHashPolicy<'a>, cache: ArchiveHashPolicy<'a>) -> Self {
+    const fn new(required: ArchiveHashPolicy<'a>, cache: ArchiveHashPolicy<'a>) -> Self {
         Self { required, cache }
     }
 
