@@ -1912,6 +1912,32 @@ fn verify_pyvenv_cfg_relocatable() {
     ));
 }
 
+/// Prompt values must remain literal when the POSIX activation script is sourced.
+#[test]
+#[cfg(unix)]
+fn activate_prompt_is_shell_literal() {
+    let context = uv_test::test_context!("3.12");
+    let prompt = "x$(touch PWNED)y";
+
+    context
+        .venv()
+        .arg(context.venv.as_os_str())
+        .arg("--python")
+        .arg("3.12")
+        .arg("--prompt")
+        .arg(prompt)
+        .assert()
+        .success();
+
+    let activate = context.venv.child("bin").child("activate");
+    activate.assert(predicates::str::contains(format!(
+        "VIRTUAL_ENV_PROMPT='{prompt}'"
+    )));
+    activate.assert(
+        predicates::str::contains(format!("VIRTUAL_ENV_PROMPT=\"{prompt}\"")).not(),
+    );
+}
+
 /// With `UV_VENV_RELOCATABLE=1`, the virtual environment is relocatable.
 #[test]
 fn verify_pyvenv_cfg_relocatable_env_var() {
