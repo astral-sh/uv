@@ -1,12 +1,16 @@
 use std::collections::BTreeSet;
 
 use owo_colors::OwoColorize;
+use petgraph::graph::NodeIndex;
 use petgraph::visit::EdgeRef;
 use petgraph::{Directed, Direction, Graph};
 use rustc_hash::{FxBuildHasher, FxHashMap};
 
 use uv_configuration::AnnotationStyle;
-use uv_distribution_types::{DistributionMetadata, Name, SourceAnnotation, SourceAnnotations};
+use uv_distribution_types::{
+    AmbiguousRequirementUrl, DistributionMetadata, Name, RequirementUrl, SourceAnnotation,
+    SourceAnnotations, VersionOrUrlRef,
+};
 use uv_normalize::PackageName;
 use uv_pep508::MarkerTree;
 
@@ -20,12 +24,12 @@ pub struct DisplayResolutionGraph<'a> {
     resolution: &'a ResolverOutput,
     /// The resolver marker environment, used to determine the markers that apply to each package.
     env: &'a ResolverEnvironment,
-    /// The packages to exclude from the output.
-    no_emit_packages: &'a [PackageName],
+    /// The reduced graph, including packages needed for dependency annotations.
+    graph: RequirementsTxtGraph<'a>,
+    /// The nodes to emit, in output order.
+    nodes: Vec<NodeIndex>,
     /// Whether to include hashes in the output.
     show_hashes: bool,
-    /// Whether to include extras in the output (e.g., `black[colorama]`).
-    include_extras: bool,
     /// Whether to include environment markers in the output (e.g., `black ; sys_platform == "win32"`).
     include_markers: bool,
     /// Whether to include annotations in the output, to indicate which dependency or dependencies
@@ -47,6 +51,8 @@ enum DisplayResolutionGraphNode<'dist> {
 impl<'a> DisplayResolutionGraph<'a> {
     /// Create a new [`DisplayResolutionGraph`] for the given graph.
     ///
+    /// Returns an error if stripping credentials would make an emitted URL ambiguous.
+    ///
     /// Note that this panics if any of the forks in the given resolver
     /// output contain non-empty conflicting groups. That is, when using `uv
     /// pip compile`, specifying conflicts is not supported because their
@@ -55,14 +61,14 @@ impl<'a> DisplayResolutionGraph<'a> {
     pub fn new(
         underlying: &'a ResolverOutput,
         env: &'a ResolverEnvironment,
-        no_emit_packages: &'a [PackageName],
+        no_emit_packages: &[PackageName],
         show_hashes: bool,
         include_extras: bool,
         include_markers: bool,
         include_annotations: bool,
         include_index_annotation: bool,
         annotation_style: AnnotationStyle,
-    ) -> Self {
+    ) -> Result<Self, AmbiguousRequirementUrl> {
         for fork_marker in &underlying.fork_markers {
             assert!(
                 fork_marker.conflict().is_true(),
@@ -70,17 +76,60 @@ impl<'a> DisplayResolutionGraph<'a> {
                  cannot display resolver output with conflicts in requirements.txt format",
             );
         }
-        Self {
+        // Convert a [`petgraph::graph::Graph`] based on [`ResolutionGraphNode`] to a graph based on
+        // [`DisplayResolutionGraphNode`]. In other words: converts from [`AnnotatedDist`] to
+        // [`RequirementsTxtDist`].
+        //
+        // We assign each package its propagated markers: In `requirements.txt`, we want a flat list
+        // that for each package tells us if it should be installed on the current platform, without
+        // looking at which packages depend on it.
+        let graph = underlying.graph.map(
+            |_index, node| match node {
+                ResolutionGraphNode::Root => DisplayResolutionGraphNode::Root,
+                ResolutionGraphNode::Dist(dist) => {
+                    let dist = RequirementsTxtDist::from_annotated_dist(dist);
+                    DisplayResolutionGraphNode::Dist(dist)
+                }
+            },
+            // We can drop the edge markers, while retaining their existence and direction for the
+            // annotations.
+            |_index, _edge| (),
+        );
+
+        // Reduce the graph, removing or combining extras for a given package.
+        let graph = if include_extras {
+            combine_extras(&graph)
+        } else {
+            strip_extras(&graph)
+        };
+
+        // Validate only the requirements we will write, after reducing extras and excluding packages.
+        let mut nodes = Vec::with_capacity(graph.node_count());
+        for index in graph.node_indices() {
+            let dist = &graph[index];
+            if no_emit_packages.contains(dist.name()) {
+                continue;
+            }
+            if let VersionOrUrlRef::Url(url) = dist.version_or_url() {
+                RequirementUrl::from(url).validate(dist.name())?;
+            }
+            nodes.push(index);
+        }
+
+        // Sort the nodes by name, but with editable packages first.
+        nodes.sort_unstable_by_key(|index| (graph[*index].to_comparator(), *index));
+
+        Ok(Self {
             resolution: underlying,
             env,
-            no_emit_packages,
+            graph,
+            nodes,
             show_hashes,
-            include_extras,
             include_markers,
             include_annotations,
             include_index_annotation,
             annotation_style,
-        }
+        })
     }
 }
 
@@ -164,52 +213,10 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
             SourceAnnotations::default()
         };
 
-        // Convert a [`petgraph::graph::Graph`] based on [`ResolutionGraphNode`] to a graph based on
-        // [`DisplayResolutionGraphNode`]. In other words: converts from [`AnnotatedDist`] to
-        // [`RequirementsTxtDist`].
-        //
-        // We assign each package its propagated markers: In `requirements.txt`, we want a flat list
-        // that for each package tells us if it should be installed on the current platform, without
-        // looking at which packages depend on it.
-        let graph = self.resolution.graph.map(
-            |_index, node| match node {
-                ResolutionGraphNode::Root => DisplayResolutionGraphNode::Root,
-                ResolutionGraphNode::Dist(dist) => {
-                    let dist = RequirementsTxtDist::from_annotated_dist(dist);
-                    DisplayResolutionGraphNode::Dist(dist)
-                }
-            },
-            // We can drop the edge markers, while retaining their existence and direction for the
-            // annotations.
-            |_index, _edge| (),
-        );
-
-        // Reduce the graph, removing or combining extras for a given package.
-        let graph = if self.include_extras {
-            combine_extras(&graph)
-        } else {
-            strip_extras(&graph)
-        };
-
-        // Collect all packages.
-        let mut nodes = graph
-            .node_indices()
-            .filter_map(|index| {
-                let dist = &graph[index];
-                let name = dist.name();
-                if self.no_emit_packages.contains(name) {
-                    return None;
-                }
-
-                Some((index, dist))
-            })
-            .collect::<Vec<_>>();
-
-        // Sort the nodes by name, but with editable packages first.
-        nodes.sort_unstable_by_key(|(index, node)| (node.to_comparator(), *index));
-
         // Print out the dependency graph.
-        for (index, node) in nodes {
+        let graph = &self.graph;
+        for &index in &self.nodes {
+            let node = &graph[index];
             // Display the node itself.
             let mut line = node
                 .to_requirements_txt(&self.resolution.requires_python, self.include_markers)
