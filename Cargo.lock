@@ -6139,6 +6139,7 @@ dependencies = [
  "toml",
  "tracing",
  "uv-fs",
+ "uv-git-types",
  "uv-macros",
  "walkdir",
 ]
@@ -6732,6 +6733,7 @@ dependencies = [
  "owo-colors",
  "papaya",
  "reqwest",
+ "tempfile",
  "thiserror",
  "tokio",
  "tracing",
