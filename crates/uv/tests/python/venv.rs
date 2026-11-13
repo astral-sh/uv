@@ -1832,6 +1832,29 @@ fn verify_pyvenv_cfg() {
     pyvenv_cfg.assert(predicates::str::contains("relocatable").not());
 }
 
+#[cfg(unix)]
+#[test]
+fn fish_activation_escapes_prompt_quotes() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let prompt = "x'; touch PWNED; set x '";
+
+    context
+        .venv()
+        .arg(context.venv.as_os_str())
+        .arg("--clear")
+        .arg("--python")
+        .arg("3.12")
+        .arg("--prompt")
+        .arg(prompt)
+        .assert()
+        .success();
+
+    let contents = context.read(".venv/bin/activate.fish");
+    assert!(contents.contains("VIRTUAL_ENV_PROMPT 'x\\'"));
+    assert!(!contents.contains("VIRTUAL_ENV_PROMPT 'x';"));
+    Ok(())
+}
+
 #[test]
 fn verify_pyvenv_cfg_relocatable() {
     let context = uv_test::test_context!("3.12");
