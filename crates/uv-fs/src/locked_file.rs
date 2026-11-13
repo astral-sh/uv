@@ -106,21 +106,26 @@ impl LockedFileMode {
     /// Try to lock the file and return an error if the lock is already acquired by another process
     /// and cannot be acquired immediately.
     ///
+    /// Retries on `EINTR`: `flock` (which backs [`std::fs::File::try_lock`]) can be interrupted by
+    /// a signal even in the non-blocking case, in which case it must be retried. A genuine
+    /// [`std::fs::TryLockError::WouldBlock`] is propagated unchanged.
+    ///
     /// On Android, [`std::fs::File::try_lock`] is not supported
     /// (see [rust-lang/rust#148325]), so we use [`rustix::fs::flock`] directly.
     ///
     /// [rust-lang/rust#148325]: https://github.com/rust-lang/rust/issues/148325
     #[cfg(not(target_os = "android"))]
     fn try_lock(self, file: &fs_err::File) -> Result<(), std::fs::TryLockError> {
-        match self {
-            Self::Exclusive => file.try_lock()?,
-            Self::Shared => file.try_lock_shared()?,
-        }
-        Ok(())
+        retry_try_lock_on_interrupted(|| match self {
+            Self::Exclusive => file.try_lock(),
+            Self::Shared => file.try_lock_shared(),
+        })
     }
 
     /// Try to lock the file and return an error if the lock is already acquired by another process
     /// and cannot be acquired immediately.
+    ///
+    /// Retries on `EINTR`.
     ///
     /// Android-specific implementation using [`rustix::fs::flock`] because
     /// [`std::fs::File::try_lock`] always returns `Unsupported` on Android
@@ -135,16 +140,26 @@ impl LockedFileMode {
             Self::Exclusive => rustix::fs::FlockOperation::NonBlockingLockExclusive,
             Self::Shared => rustix::fs::FlockOperation::NonBlockingLockShared,
         };
-        rustix::fs::flock(file.as_fd(), operation).map_err(|errno| {
-            if errno == rustix::io::Errno::WOULDBLOCK {
-                std::fs::TryLockError::WouldBlock
-            } else {
-                std::fs::TryLockError::Error(io::Error::from_raw_os_error(errno.raw_os_error()))
+        loop {
+            match rustix::fs::flock(file.as_fd(), operation) {
+                Ok(()) => return Ok(()),
+                Err(rustix::io::Errno::INTR) => {}
+                Err(rustix::io::Errno::WOULDBLOCK) => {
+                    return Err(std::fs::TryLockError::WouldBlock);
+                }
+                Err(errno) => {
+                    return Err(std::fs::TryLockError::Error(io::Error::from_raw_os_error(
+                        errno.raw_os_error(),
+                    )));
+                }
             }
-        })
+        }
     }
 
     /// Lock the file, blocking until the lock becomes available if necessary.
+    ///
+    /// Retries on `EINTR`: `flock` (which backs [`std::fs::File::lock`]) can be interrupted by a
+    /// signal, in which case it must be retried.
     ///
     /// On Android, [`std::fs::File::lock`] is not supported
     /// (see [rust-lang/rust#148325]), so we use [`rustix::fs::flock`] directly.
@@ -152,14 +167,15 @@ impl LockedFileMode {
     /// [rust-lang/rust#148325]: https://github.com/rust-lang/rust/issues/148325
     #[cfg(not(target_os = "android"))]
     fn lock(self, file: &fs_err::File) -> Result<(), io::Error> {
-        match self {
-            Self::Exclusive => file.lock()?,
-            Self::Shared => file.lock_shared()?,
-        }
-        Ok(())
+        retry_on_interrupted(|| match self {
+            Self::Exclusive => file.lock(),
+            Self::Shared => file.lock_shared(),
+        })
     }
 
     /// Lock the file, blocking until the lock becomes available if necessary.
+    ///
+    /// Retries on `EINTR`.
     ///
     /// Android-specific implementation using [`rustix::fs::flock`] because
     /// [`std::fs::File::lock`] always returns `Unsupported` on Android
@@ -174,8 +190,43 @@ impl LockedFileMode {
             Self::Exclusive => rustix::fs::FlockOperation::LockExclusive,
             Self::Shared => rustix::fs::FlockOperation::LockShared,
         };
-        rustix::fs::flock(file.as_fd(), operation)
-            .map_err(|errno| io::Error::from_raw_os_error(errno.raw_os_error()))
+        loop {
+            match rustix::fs::flock(file.as_fd(), operation) {
+                Ok(()) => return Ok(()),
+                Err(rustix::io::Errno::INTR) => {}
+                Err(errno) => return Err(io::Error::from_raw_os_error(errno.raw_os_error())),
+            }
+        }
+    }
+}
+
+/// Retry an I/O operation when interrupted by a signal (`EINTR`).
+#[cfg(feature = "tokio")]
+#[inline]
+fn retry_on_interrupted<T>(mut f: impl FnMut() -> io::Result<T>) -> io::Result<T> {
+    loop {
+        match f() {
+            Ok(val) => return Ok(val),
+            Err(err) if err.kind() == io::ErrorKind::Interrupted => {}
+            Err(err) => return Err(err),
+        }
+    }
+}
+
+/// Retry a non-blocking lock operation when interrupted by a signal (`EINTR`).
+///
+/// Genuine lock contention (`TryLockError::WouldBlock`) is returned immediately.
+#[cfg(feature = "tokio")]
+#[inline]
+fn retry_try_lock_on_interrupted(
+    mut f: impl FnMut() -> Result<(), std::fs::TryLockError>,
+) -> Result<(), std::fs::TryLockError> {
+    loop {
+        match f() {
+            Ok(()) => return Ok(()),
+            Err(std::fs::TryLockError::Error(err)) if err.kind() == io::ErrorKind::Interrupted => {}
+            Err(err) => return Err(err),
+        }
     }
 }
 
@@ -448,5 +499,162 @@ impl Drop for LockedFile {
                 );
             }
         }
+    }
+}
+
+#[cfg(all(test, feature = "tokio"))]
+mod tests {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    use super::*;
+
+    #[test]
+    fn retry_on_interrupted_retries_and_succeeds() -> io::Result<()> {
+        let attempts = AtomicUsize::new(0);
+        let res = retry_on_interrupted(|| {
+            let count = attempts.fetch_add(1, Ordering::SeqCst);
+            if count < 3 {
+                Err(io::Error::new(io::ErrorKind::Interrupted, "interrupted"))
+            } else {
+                Ok(42)
+            }
+        })?;
+        assert_eq!(res, 42);
+        assert_eq!(attempts.load(Ordering::SeqCst), 4);
+        Ok(())
+    }
+
+    #[test]
+    fn retry_on_interrupted_propagates_non_eintr() {
+        let attempts = AtomicUsize::new(0);
+        let res: Result<(), _> = retry_on_interrupted(|| {
+            attempts.fetch_add(1, Ordering::SeqCst);
+            Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "permission denied",
+            ))
+        });
+        assert!(matches!(
+            res,
+            Err(err) if err.kind() == io::ErrorKind::PermissionDenied
+        ));
+        assert_eq!(attempts.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn retry_try_lock_on_interrupted_retries_and_succeeds() {
+        let attempts = AtomicUsize::new(0);
+        let res = retry_try_lock_on_interrupted(|| {
+            let count = attempts.fetch_add(1, Ordering::SeqCst);
+            if count < 2 {
+                Err(std::fs::TryLockError::Error(io::Error::new(
+                    io::ErrorKind::Interrupted,
+                    "interrupted",
+                )))
+            } else {
+                Ok(())
+            }
+        });
+        assert!(res.is_ok());
+        assert_eq!(attempts.load(Ordering::SeqCst), 3);
+    }
+
+    #[test]
+    fn retry_try_lock_propagates_would_block_without_retrying() {
+        let attempts = AtomicUsize::new(0);
+        let res = retry_try_lock_on_interrupted(|| {
+            attempts.fetch_add(1, Ordering::SeqCst);
+            Err(std::fs::TryLockError::WouldBlock)
+        });
+        assert!(matches!(res, Err(std::fs::TryLockError::WouldBlock)));
+        assert_eq!(attempts.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn retry_try_lock_propagates_non_eintr_error_immediately() {
+        let attempts = AtomicUsize::new(0);
+        let res = retry_try_lock_on_interrupted(|| {
+            attempts.fetch_add(1, Ordering::SeqCst);
+            Err(std::fs::TryLockError::Error(io::Error::new(
+                io::ErrorKind::BrokenPipe,
+                "broken pipe",
+            )))
+        });
+        assert!(matches!(
+            res,
+            Err(std::fs::TryLockError::Error(err)) if err.kind() == io::ErrorKind::BrokenPipe
+        ));
+        assert_eq!(attempts.load(Ordering::SeqCst), 1);
+    }
+
+    /// A lock can be acquired, and re-acquired once dropped.
+    #[tokio::test]
+    async fn acquire_release_reacquire() -> Result<(), LockedFileError> {
+        let dir = tempfile::tempdir().map_err(LockedFileError::Io)?;
+        let path = dir.path().join("uv.lock");
+
+        let lock = LockedFile::acquire(&path, LockedFileMode::Exclusive, "resource").await?;
+        drop(lock);
+
+        let _lock = LockedFile::acquire(&path, LockedFileMode::Exclusive, "resource").await?;
+        Ok(())
+    }
+
+    /// While an exclusive lock is held, a non-blocking attempt to acquire it again returns `None`
+    /// rather than spinning forever (i.e. genuine contention is *not* mistaken for `EINTR`).
+    #[tokio::test]
+    async fn no_wait_reports_contention() -> Result<(), LockedFileError> {
+        let dir = tempfile::tempdir().map_err(LockedFileError::Io)?;
+        let path = dir.path().join("uv.lock");
+
+        let _held = LockedFile::acquire(&path, LockedFileMode::Exclusive, "resource").await?;
+        assert!(
+            LockedFile::acquire_no_wait(&path, LockedFileMode::Exclusive, "resource").is_none(),
+            "non-blocking acquire must report contention while the lock is held"
+        );
+        Ok(())
+    }
+
+    /// Multiple shared locks can be held simultaneously.
+    #[tokio::test]
+    async fn shared_locks_coexist() -> Result<(), LockedFileError> {
+        let dir = tempfile::tempdir().map_err(LockedFileError::Io)?;
+        let path = dir.path().join("uv.lock");
+
+        let _a = LockedFile::acquire(&path, LockedFileMode::Shared, "resource").await?;
+        let second = LockedFile::acquire_no_wait(&path, LockedFileMode::Shared, "resource");
+        assert!(
+            second.is_some(),
+            "a second shared lock should be acquirable"
+        );
+        Ok(())
+    }
+
+    /// An exclusive lock blocks a shared lock acquisition attempt.
+    #[tokio::test]
+    async fn exclusive_blocks_shared() -> Result<(), LockedFileError> {
+        let dir = tempfile::tempdir().map_err(LockedFileError::Io)?;
+        let path = dir.path().join("uv.lock");
+
+        let _held = LockedFile::acquire(&path, LockedFileMode::Exclusive, "resource").await?;
+        assert!(
+            LockedFile::acquire_no_wait(&path, LockedFileMode::Shared, "resource").is_none(),
+            "non-blocking shared acquire must report contention while exclusive lock is held"
+        );
+        Ok(())
+    }
+
+    /// A shared lock blocks an exclusive lock acquisition attempt.
+    #[tokio::test]
+    async fn shared_blocks_exclusive() -> Result<(), LockedFileError> {
+        let dir = tempfile::tempdir().map_err(LockedFileError::Io)?;
+        let path = dir.path().join("uv.lock");
+
+        let _held = LockedFile::acquire(&path, LockedFileMode::Shared, "resource").await?;
+        assert!(
+            LockedFile::acquire_no_wait(&path, LockedFileMode::Exclusive, "resource").is_none(),
+            "non-blocking exclusive acquire must report contention while shared lock is held"
+        );
+        Ok(())
     }
 }
