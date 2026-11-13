@@ -42,14 +42,14 @@ use uv_metadata::read_archive_metadata;
 use uv_normalize::PackageName;
 use uv_pep440::{Version, release_specifiers_to_ranges};
 use uv_platform_tags::Tags;
-use uv_pypi_types::{HashAlgorithm, HashDigest, HashDigests, PyProjectToml, ResolutionMetadata};
+use uv_pypi_types::{HashDigest, HashDigests, PyProjectToml, ResolutionMetadata};
 use uv_redacted::SafeUrl;
 use uv_types::{BuildContext, BuildKey, BuildStack, SourceBuildTrait};
 use uv_workspace::pyproject::ToolUvSources;
 
 use crate::distribution_database::ManagedClient;
 use crate::error::Error;
-use crate::hash::ArtifactHashPolicy;
+use crate::hash::{ArtifactHashPolicy, HTTP_DEFAULT_HASH_ALGORITHMS};
 use crate::metadata::{ArchiveMetadata, GitWorkspaceMember, Metadata};
 use crate::source::built_wheel_metadata::{BuiltWheelFile, BuiltWheelMetadata};
 use crate::source::revision::Revision;
@@ -330,7 +330,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     None,
                     dist.ext,
                     tags,
-                    hashes.into(),
+                    ArtifactHashPolicy::required(hashes),
                     client,
                 )
                 .boxed_local()
@@ -351,7 +351,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     dist.subdirectory.as_deref(),
                     dist.ext,
                     tags,
-                    hashes.into(),
+                    ArtifactHashPolicy::required(hashes),
                     client,
                 )
                 .boxed_local()
@@ -408,7 +408,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     resource.subdirectory,
                     resource.ext,
                     tags,
-                    hashes.into(),
+                    ArtifactHashPolicy::required(hashes),
                     client,
                 )
                 .boxed_local()
@@ -491,7 +491,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     &cache_shard,
                     None,
                     dist.ext,
-                    hashes.into(),
+                    ArtifactHashPolicy::required(hashes),
                     client,
                 )
                 .boxed_local()
@@ -511,7 +511,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     &cache_shard,
                     dist.subdirectory.as_deref(),
                     dist.ext,
-                    hashes.into(),
+                    ArtifactHashPolicy::required(hashes),
                     client,
                 )
                 .boxed_local()
@@ -566,7 +566,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     &cache_shard,
                     resource.subdirectory,
                     resource.ext,
-                    hashes.into(),
+                    ArtifactHashPolicy::required(hashes),
                     client,
                 )
                 .boxed_local()
@@ -1346,7 +1346,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // we use an exact timestamp.
         if let Some(pointer) = LocalRevisionPointer::read_from(&revision_entry)?
             && *pointer.cache_info() == cache_info
-            && ArtifactHashPolicy::from(hashes)
+            && ArtifactHashPolicy::required(hashes)
                 .can_reuse(pointer.revision(), source_index_hashes(source))
         {
             return Ok(pointer);
@@ -2845,7 +2845,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             self.build_context.cache(),
             self.build_context.tar_backend(),
             ArchiveValidation {
-                extra_algorithms: &[HashAlgorithm::Sha256],
+                extra_algorithms: &HTTP_DEFAULT_HASH_ALGORITHMS,
                 hash_policy,
                 existing_hashes,
                 expected_size,
@@ -2879,7 +2879,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             self.build_context.tar_backend(),
             ArchiveValidation {
                 extra_algorithms: &[],
-                hash_policy: hash_policy.into(),
+                hash_policy: ArtifactHashPolicy::required(hash_policy),
                 existing_hashes,
                 expected_size: None,
             },

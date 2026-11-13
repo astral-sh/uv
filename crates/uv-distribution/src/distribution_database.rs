@@ -38,7 +38,7 @@ use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_platform_tags::Tags;
 use uv_preview::PreviewFeature;
-use uv_pypi_types::{HashAlgorithm, HashDigest, HashDigests, PyProjectToml, ResolutionMetadata};
+use uv_pypi_types::{HashDigest, HashDigests, PyProjectToml, ResolutionMetadata};
 use uv_python_types::PythonVariant;
 use uv_redacted::SafeUrl;
 use uv_threads::initialize_rayon_once;
@@ -48,7 +48,7 @@ use crate::archive::Archive;
 use crate::download::{check_wheel_variant_compatibility, read_extracted_wheel_variant};
 use crate::error::PythonVersion;
 use crate::extracted_wheel::{ExtractedWheel, HashedWheel, WheelExtractor};
-use crate::hash::{ArtifactHashPolicy, DownloadHashVerifier};
+use crate::hash::{ArtifactHashPolicy, DownloadHashVerifier, HTTP_DEFAULT_HASH_ALGORITHMS};
 use crate::metadata::{ArchiveMetadata, Metadata};
 use crate::source::SourceDistributionBuilder;
 use crate::{
@@ -371,7 +371,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         size,
                         &wheel_entry,
                         dist,
-                        hashes.into(),
+                        ArtifactHashPolicy::required(hashes),
                     )
                     .await
                 {
@@ -410,7 +410,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                                 size,
                                 &wheel_entry,
                                 dist,
-                                hashes.into(),
+                                ArtifactHashPolicy::required(hashes),
                             )
                             .await?;
 
@@ -448,7 +448,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         wheel.size,
                         &wheel_entry,
                         dist,
-                        hashes.into(),
+                        ArtifactHashPolicy::required(hashes),
                     )
                     .await
                 {
@@ -487,7 +487,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                                 wheel.size,
                                 &wheel_entry,
                                 dist,
-                                hashes.into(),
+                                ArtifactHashPolicy::required(hashes),
                             )
                             .await?;
                         Ok(LocalWheel {
@@ -872,7 +872,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     .into_async_read();
 
                 // Create a hasher for each hash algorithm.
-                let algorithms = verifier.algorithms([HashAlgorithm::Sha256]);
+                let algorithms = verifier.algorithms(HTTP_DEFAULT_HASH_ALGORITHMS);
                 let mut hashers = algorithms.into_iter().map(Hasher::from).collect::<Vec<_>>();
                 let mut hasher = uv_extract::hash::HashReader::new(reader.compat(), &mut hashers);
 
@@ -1182,7 +1182,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             )
         });
 
-        let algorithms = verifier.algorithms([HashAlgorithm::Sha256]);
+        let algorithms = verifier.algorithms(HTTP_DEFAULT_HASH_ALGORITHMS);
 
         // Download the wheel to a temporary file.
         let temp_file =
@@ -1458,7 +1458,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         let pointer = PathArchivePointer::read_from(&pointer_entry)?;
 
         let index_hashes = wheel_index_hashes(dist);
-        let hash_policy = ArtifactHashPolicy::from(hashes);
+        let hash_policy = ArtifactHashPolicy::required(hashes);
 
         // Extract the archive from the pointer.
         let archive = pointer

@@ -5,30 +5,32 @@ use uv_pypi_types::{HashAlgorithm, HashDigest};
 
 use crate::Error;
 
+/// Hash algorithms to compute for every HTTP archive.
+pub(crate) const HTTP_DEFAULT_HASH_ALGORITHMS: [HashAlgorithm; 1] = [HashAlgorithm::Sha256];
+
 /// Hash requirements for downloading and caching a wheel or source distribution.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct ArtifactHashPolicy<'a> {
-    /// Hashes the caller requires on the returned artifact.
+    /// The caller's hash policy for the returned artifact.
     required: ArchiveHashPolicy<'a>,
-    /// Hashes downloaded or cached bytes must match before entering the cache.
-    cache_verification: ArchiveHashPolicy<'a>,
+    /// Additional hash checks for admitting or reusing an archive in the cache.
+    cache: ArchiveHashPolicy<'a>,
 }
 
 impl<'a> ArtifactHashPolicy<'a> {
-    pub(crate) const fn new(
-        required: ArchiveHashPolicy<'a>,
-        cache_verification: ArchiveHashPolicy<'a>,
-    ) -> Self {
-        Self {
-            required,
-            cache_verification,
-        }
+    pub(crate) const fn new(required: ArchiveHashPolicy<'a>, cache: ArchiveHashPolicy<'a>) -> Self {
+        Self { required, cache }
+    }
+
+    /// Use the caller's policy with the standard index hash fallback.
+    pub(crate) const fn required(required: ArchiveHashPolicy<'a>) -> Self {
+        Self::new(required, ArchiveHashPolicy::None)
     }
 
     /// A cache hit must match the applicable index and cache hashes and record the caller's algorithms.
     pub(crate) fn can_reuse(self, artifact: &impl Hashed, index_hashes: &'a [HashDigest]) -> bool {
         artifact.satisfies(self.index_fallback(index_hashes))
-            && artifact.satisfies(self.cache_verification)
+            && artifact.satisfies(self.cache)
             && artifact.has_digests(self.required)
     }
 
@@ -43,27 +45,17 @@ impl<'a> ArtifactHashPolicy<'a> {
 
     pub(crate) fn for_download(self, index_hashes: &'a [HashDigest]) -> DownloadHashVerifier<'a> {
         DownloadHashVerifier {
-            checks: [
-                self.index_fallback(index_hashes),
-                self.cache_verification,
-                self.required,
-            ],
+            checks: [self.index_fallback(index_hashes), self.cache, self.required],
         }
     }
 
     /// Use the selected index file's hashes when neither policy specifies digests.
     fn index_fallback(self, index_hashes: &'a [HashDigest]) -> ArchiveHashPolicy<'a> {
-        if self.cache_verification.requires_validation() || self.required.requires_validation() {
+        if self.cache.requires_validation() || self.required.requires_validation() {
             ArchiveHashPolicy::None
         } else {
             ArchiveHashPolicy::None.with_index_hashes(index_hashes)
         }
-    }
-}
-
-impl<'a> From<ArchiveHashPolicy<'a>> for ArtifactHashPolicy<'a> {
-    fn from(required: ArchiveHashPolicy<'a>) -> Self {
-        Self::new(required, ArchiveHashPolicy::None)
     }
 }
 
@@ -122,12 +114,12 @@ mod tests {
     fn cache_reuse_checks_index_hashes_unless_explicit_hashes_take_precedence() {
         let advertised = [HashDigest::Sha256(Digest::from_bytes([0xaa; 32]))];
         let cached_hashes = vec![HashDigest::Sha256(Digest::from_bytes([0xbb; 32]))];
-        let direct = ArtifactHashPolicy::from(ArchiveHashPolicy::None);
+        let direct = ArtifactHashPolicy::required(ArchiveHashPolicy::None);
         assert!(direct.can_reuse(&cached_hashes, &cached_hashes));
         assert!(!direct.can_reuse(&cached_hashes, &advertised));
         assert!(!direct.can_reuse(&Vec::new(), &advertised));
 
-        let caller = ArtifactHashPolicy::from(ArchiveHashPolicy::Any(&advertised));
+        let caller = ArtifactHashPolicy::required(ArchiveHashPolicy::Any(&advertised));
         assert!(caller.can_reuse(&cached_hashes, &advertised));
         assert!(caller.verify_required("archive", &cached_hashes).is_err());
 
@@ -151,7 +143,7 @@ mod tests {
         )
         .for_download(&[]);
         assert_eq!(
-            verifier.algorithms([HashAlgorithm::Sha256]),
+            verifier.algorithms(HTTP_DEFAULT_HASH_ALGORITHMS),
             vec![HashAlgorithm::Sha256, HashAlgorithm::Sha512]
         );
 

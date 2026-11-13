@@ -156,7 +156,7 @@ impl<'a> RegistryWheelIndex<'a> {
             } else {
                 wheel.file.hashes.as_slice()
             };
-            ArtifactHashPolicy::from(required).can_reuse(&entry.dist, index_hashes)
+            ArtifactHashPolicy::required(required).can_reuse(&entry.dist, index_hashes)
         })
         .next()
         .map(IndexEntry::dist)
@@ -191,7 +191,8 @@ impl<'a> RegistryWheelIndex<'a> {
                 );
                 return false;
             }
-            ArtifactHashPolicy::from(required).can_reuse(&entry.dist, source.file.hashes.as_slice())
+            ArtifactHashPolicy::required(required)
+                .can_reuse(&entry.dist, source.file.hashes.as_slice())
         })
         .next()
         .map(IndexEntry::dist)

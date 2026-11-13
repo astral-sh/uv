@@ -161,7 +161,7 @@ mod tests {
 
     const NO_VALIDATION: ArchiveValidation<'static> = ArchiveValidation {
         extra_algorithms: &[],
-        hash_policy: ArtifactHashPolicy::new(ArchiveHashPolicy::None, ArchiveHashPolicy::None),
+        hash_policy: ArtifactHashPolicy::required(ArchiveHashPolicy::None),
         existing_hashes: &[],
         expected_size: None,
     };
@@ -223,7 +223,7 @@ mod tests {
                 ..NO_VALIDATION
             },
             ArchiveValidation {
-                hash_policy: ArchiveHashPolicy::Generate.into(),
+                hash_policy: ArtifactHashPolicy::required(ArchiveHashPolicy::Generate),
                 ..NO_VALIDATION
             },
             ArchiveValidation {
@@ -279,7 +279,7 @@ mod tests {
             &cache,
             &bytes[..],
             ArchiveValidation {
-                hash_policy: ArchiveHashPolicy::All(&[wrong_hash]).into(),
+                hash_policy: ArtifactHashPolicy::required(ArchiveHashPolicy::All(&[wrong_hash])),
                 ..NO_VALIDATION
             },
         )

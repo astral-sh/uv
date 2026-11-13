@@ -556,7 +556,8 @@ fn published_wheel_wins_over_stale_source_build() -> Result<()> {
     Ok(())
 }
 
-/// A local HTML index can change its wheel hash without changing the wheel's timestamp.
+/// Reject a cached wheel when the `--find-links` listing advertises a different
+/// hash for it, even if the file on disk still matches the cached digest.
 #[test]
 fn cached_index_wheel_hash() -> Result<()> {
     let context = uv_test::test_context!("3.12");
