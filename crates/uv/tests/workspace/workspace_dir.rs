@@ -196,6 +196,8 @@ fn workspace_metadata_no_project() {
     exit_code: 2 (failure)
     ----- stderr -----
     error: No `pyproject.toml` found in current directory or any parent directory
+
+    hint: To create a project, run `uv init`
     "
     );
 }
