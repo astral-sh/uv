@@ -69,6 +69,12 @@ impl ValidatedLock {
         preview: Preview,
         printer: Printer,
     ) -> Result<Self, LockValidationError> {
+        if lock.needs_platform_release_migration() {
+            // Regenerate the markers, keeping both version preferences and the hash
+            // verification that the caller derived from the original lock.
+            return Ok(Self::Versions(lock));
+        }
+
         // Perform checks in a deliberate order, such that the most extreme conditions are tested
         // first (i.e., every check that returns `Self::Unusable`, followed by every check that
         // returns `Self::Versions`, followed by every check that returns `Self::Preferable`, and

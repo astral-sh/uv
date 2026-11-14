@@ -120,7 +120,10 @@ pub enum LockParseError {
     #[error(
         "This lockfile may contain normalized `platform_release` comparisons; run `uv lock` to regenerate it"
     )]
-    AmbiguousPlatformRelease,
+    AmbiguousPlatformRelease {
+        /// Keep artifact hashes and version preferences for the replacement resolution.
+        lock: Box<Lock>,
+    },
 
     /// The lockfile is not valid TOML or cannot be deserialized.
     #[error(transparent)]
@@ -320,8 +323,7 @@ pub(crate) struct HashedDist {
     hashes: HashDigests,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize)]
-#[serde(try_from = "LockWire")]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Lock {
     /// The (major) version of the lockfile format.
     ///
@@ -3791,7 +3793,9 @@ impl Lock {
     /// Use [`Self::from_toml`] when reading lockfiles that might not use uv's
     /// canonical format.
     pub fn from_canonical_toml(input: &str) -> Result<Self, CanonicalLockError> {
-        deserialize::from_str(input)
+        deserialize::from_str(input)?
+            .check_platform_release_compatibility()
+            .map_err(|err| CanonicalLockError::Deserialize(err.to_string()))
     }
 
     /// Parses a lockfile, using the canonical fast path when possible.
@@ -3800,9 +3804,11 @@ impl Lock {
     /// TOML parser, preserving its compatibility and error reporting. Lockfiles
     /// that use an unsupported schema version are rejected.
     pub fn from_toml(input: &str) -> Result<Self, LockParseError> {
-        let lock = match Self::from_canonical_toml(input) {
+        let lock = match deserialize::from_str(input) {
             Ok(lock) => lock,
-            Err(_) => match toml::from_str(input) {
+            Err(_) => match toml::from_str::<LockWire>(input)
+                .and_then(|wire| Self::try_from(wire).map_err(serde::de::Error::custom))
+            {
                 Ok(lock) => lock,
                 Err(source) => {
                     if let Ok(lock) = toml::from_str::<LockVersion>(input)
@@ -3828,13 +3834,23 @@ impl Lock {
 
         // Revisions 0–2 predate Darwin-specific comparison. From revision 6 on,
         // the writer preserves string bounds. Only the intervening locks are ambiguous.
-        if (3..PLATFORM_RELEASE_REVISION).contains(&lock.revision())
-            && lock.compares_platform_release()
-        {
-            return Err(LockParseError::AmbiguousPlatformRelease);
-        }
+        lock.check_platform_release_compatibility()
+    }
 
-        Ok(lock)
+    /// Whether the writing revision could have discarded a Darwin release bound.
+    pub fn needs_platform_release_migration(&self) -> bool {
+        (3..PLATFORM_RELEASE_REVISION).contains(&self.revision())
+            && self.compares_platform_release()
+    }
+
+    fn check_platform_release_compatibility(self) -> Result<Self, LockParseError> {
+        if self.needs_platform_release_migration() {
+            Err(LockParseError::AmbiguousPlatformRelease {
+                lock: Box::new(self),
+            })
+        } else {
+            Ok(self)
+        }
     }
 
     /// Check marker expressions, not rendered TOML: quoted mentions of `platform_release`
@@ -6592,6 +6608,15 @@ struct LockWire {
     manifest: ResolverManifest,
     #[serde(rename = "package", alias = "distribution", default)]
     packages: Vec<PackageWire>,
+}
+
+impl<'de> serde::Deserialize<'de> for Lock {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let lock = Self::try_from(LockWire::deserialize(deserializer)?)
+            .map_err(serde::de::Error::custom)?;
+        lock.check_platform_release_compatibility()
+            .map_err(serde::de::Error::custom)
+    }
 }
 
 impl TryFrom<LockWire> for Lock {

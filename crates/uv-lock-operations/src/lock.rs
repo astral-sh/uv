@@ -231,16 +231,20 @@ impl<'env> LockOperation<'env> {
                         (Some(existing), Some(existing_contents))
                     }
                     Ok(None) => (None, None),
-                    Err(err @ LockError::AmbiguousPlatformRelease(_)) => {
+                    Err(LockError::AmbiguousPlatformRelease(
+                        uv_lock::LockParseError::AmbiguousPlatformRelease { lock },
+                    )) => {
                         // The cached package metadata can have lost the same spelling as the lock.
                         // Refresh it for this migration without invalidating any other project.
-                        warn_user!("{err}");
+                        warn_user!(
+                            "Refreshing package metadata to recover the original `platform_release` comparisons"
+                        );
                         cache = Some(
                             self.cache
                                 .clone()
                                 .with_refresh(Refresh::from_args(Some(true), vec![])),
                         );
-                        (None, None)
+                        (Some(*lock), None)
                     }
                     Err(LockError::Lock(err)) => {
                         warn_user!(

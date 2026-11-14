@@ -179,7 +179,7 @@ impl From<LockParseError> for LockError {
                 version,
                 source,
             } => Self::UnparsableLockVersion(supported, version, source),
-            error @ LockParseError::AmbiguousPlatformRelease => {
+            error @ LockParseError::AmbiguousPlatformRelease { .. } => {
                 Self::AmbiguousPlatformRelease(error)
             }
             LockParseError::Toml(source) => Self::UvLockParse(source),

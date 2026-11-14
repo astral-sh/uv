@@ -48812,3 +48812,53 @@ fn lock_migrates_normalized_darwin_release() -> Result<()> {
         .success();
     Ok(())
 }
+
+/// Migration must still authenticate a pinned archive before running its build backend.
+#[cfg(feature = "test-universal")]
+#[tokio::test]
+async fn lock_platform_release_migration_verifies_hash_before_build() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let filename = "demo_pkg-1.0.0.tar.gz";
+    let sentinel = context.temp_dir.child("backend-executed");
+
+    let name = "demo-pkg".parse()?;
+    let server = PackageServer::new(&name).await;
+    let archive_url = server.file_url(filename);
+    let version = "1.0.0".parse()?;
+    let trusted_archive = generate_source_archive(&name, &version, "", None)?;
+    let replacement_archive = generate_source_archive(&name, &version, "", Some(sentinel.path()))?;
+    server.serve(filename, &trusted_archive, None).await;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["demo-pkg @ {archive_url}", "demo-pkg @ {archive_url} ; platform_release == '24.0.0'"]
+        "#})?;
+
+    context.lock().arg("--no-cache").assert().success();
+    let expected = context.read("uv.lock");
+    let old = expected
+        .replace("revision = 6", "revision = 5")
+        .replace("platform_release == '24.0.0'", "platform_release == '24'");
+    assert_ne!(old, expected);
+    context.temp_dir.child("uv.lock").write_str(&old)?;
+    server.serve(filename, &replacement_archive, None).await;
+
+    context
+        .lock()
+        .arg("--no-cache")
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains("Hash mismatch"));
+    assert!(
+        !sentinel.exists(),
+        "the replacement build backend ran before its hash was checked"
+    );
+    assert_eq!(old, context.read("uv.lock"));
+    Ok(())
+}
