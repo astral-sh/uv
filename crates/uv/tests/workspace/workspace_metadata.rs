@@ -3417,6 +3417,8 @@ fn workspace_metadata_no_project() {
     ----- stderr -----
     warning: The `uv workspace metadata` command is experimental and may change without warning. Pass `--preview-features workspace-metadata` to disable this warning.
     error: No `pyproject.toml` found in current directory or any parent directory
+
+    hint: To create a project, run `uv init`
     "
     );
 }
