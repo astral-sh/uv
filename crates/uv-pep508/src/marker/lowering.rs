@@ -61,17 +61,6 @@ pub enum CanonicalMarkerValueString {
     ImplementationName,
 }
 
-impl CanonicalMarkerValueString {
-    /// Returns `true` if the marker is known to be involved in _at least_ one conflicting
-    /// marker pair.
-    ///
-    /// For example, `sys_platform == 'win32'` and `platform_system == 'Darwin'` are known to
-    /// never be true at the same time.
-    pub(crate) fn is_conflicting(self) -> bool {
-        self <= Self::PlatformSystem
-    }
-}
-
 impl From<MarkerValueString> for CanonicalMarkerValueString {
     fn from(value: MarkerValueString) -> Self {
         match value {
