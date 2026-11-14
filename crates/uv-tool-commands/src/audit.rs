@@ -183,7 +183,7 @@ pub async fn audit(
                 );
                 continue;
             }
-            Err(LockParseError::Toml(error)) => {
+            Err(error) => {
                 if explicit_tool {
                     bail!(
                         "Failed to parse the lockfile for tool `{name}` at `{}`: {error}",

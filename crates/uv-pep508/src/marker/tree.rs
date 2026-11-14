@@ -882,6 +882,14 @@ impl MarkerTree {
         self.contents().map(|contents| contents.to_string())
     }
 
+    /// Whether the marker tests the given string key in an ordered or equality comparison.
+    pub fn compares_string(self, key: CanonicalMarkerValueString) -> bool {
+        INTERNER.shared.contains_variable(
+            self.0,
+            |var| matches!(var, Variable::String(other) if *other == key),
+        )
+    }
+
     /// Returns the underlying [`MarkerTreeKind`] of the root node.
     pub fn kind(self) -> MarkerTreeKind<'static> {
         if self.is_true() {
@@ -1359,7 +1367,10 @@ impl MarkerTree {
         if self.is_true() || self.is_false() {
             return self;
         }
-        if !INTERNER.shared.contains_extras(self.0) {
+        if !INTERNER
+            .shared
+            .contains_variable(self.0, |var| matches!(var, Variable::Extra(_)))
+        {
             return self;
         }
         let known_extras: FxHashMap<_, _> = known_extras
@@ -1383,7 +1394,12 @@ impl MarkerTree {
         self,
         known_extras: impl IntoIterator<Item = (ExtraName, (Self, Self))>,
     ) -> (Self, Self) {
-        if self.is_true() || self.is_false() || !INTERNER.shared.contains_extras(self.0) {
+        if self.is_true()
+            || self.is_false()
+            || !INTERNER
+                .shared
+                .contains_variable(self.0, |var| matches!(var, Variable::Extra(_)))
+        {
             return (self, self);
         }
 

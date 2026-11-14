@@ -225,11 +225,23 @@ impl<'env> LockOperation<'env> {
             }
             LockMode::Write(interpreter) | LockMode::DryRun(interpreter) => {
                 // Read the existing lockfile.
+                let mut cache = None;
                 let (existing, existing_contents) = match target.read_with_contents().await {
                     Ok(Some((existing, existing_contents))) => {
                         (Some(existing), Some(existing_contents))
                     }
                     Ok(None) => (None, None),
+                    Err(err @ LockError::AmbiguousPlatformRelease(_)) => {
+                        // The cached package metadata can have lost the same spelling as the lock.
+                        // Refresh it for this migration without invalidating any other project.
+                        warn_user!("{err}");
+                        cache = Some(
+                            self.cache
+                                .clone()
+                                .with_refresh(Refresh::from_args(Some(true), vec![])),
+                        );
+                        (None, None)
+                    }
                     Err(LockError::Lock(err)) => {
                         warn_user!(
                             "Failed to read existing lockfile; ignoring locked requirements: {err}"
@@ -260,7 +272,7 @@ impl<'env> LockOperation<'env> {
                     self.state,
                     self.logger,
                     self.concurrency,
-                    self.cache,
+                    cache.as_ref().unwrap_or(self.cache),
                     self.workspace_cache,
                     self.printer,
                     self.preview,

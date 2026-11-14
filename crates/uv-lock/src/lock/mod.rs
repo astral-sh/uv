@@ -50,7 +50,8 @@ use uv_macros::DebugNoInline;
 use uv_normalize::{DEV_DEPENDENCIES, DefaultGroups, ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::{
-    MarkerEnvironment, MarkerTree, Scheme, VerbatimUrl, VerbatimUrlError, split_scheme,
+    CanonicalMarkerValueString, MarkerEnvironment, MarkerTree, Scheme, VerbatimUrl,
+    VerbatimUrlError, split_scheme,
 };
 use uv_platform_tags::{
     AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagCompatibility, TagPriority, Tags,
@@ -115,12 +116,18 @@ pub enum LockParseError {
         source: toml::de::Error,
     },
 
+    /// The original spelling of Darwin release markers cannot be recovered from this revision.
+    #[error(
+        "This lockfile may contain normalized `platform_release` comparisons; run `uv lock` to regenerate it"
+    )]
+    AmbiguousPlatformRelease,
+
     /// The lockfile is not valid TOML or cannot be deserialized.
     #[error(transparent)]
     Toml(#[from] toml::de::Error),
 }
 
-/// The current revision of the lockfile format.
+/// The default revision when writing a lockfile.
 ///
 /// Version 1 revisions:
 /// - 0: The original format; a missing `revision` is read as 0.
@@ -129,7 +136,13 @@ pub enum LockParseError {
 /// - 3: Record package-specific `exclude-newer` values.
 /// - 4: Support omitting package declaration metadata and record empty extras and groups.
 /// - 5: Record default groups and dependency group metadata for workspace members and roots.
+/// - 6: Preserve the spelling of comparisons against Darwin's platform release. Accepting both
+///   revisions lets locks without these rare markers keep their existing bytes.
 const REVISION: u32 = 5;
+
+/// Only locks with release comparisons need this revision; a pre-revert writer could have
+/// shortened e.g. `24.0.0` to `24`, and there is no way to recover the spelling from the lock.
+const PLATFORM_RELEASE_REVISION: u32 = 6;
 
 /// The first lockfile revision that records default groups for workspace members and roots.
 const DEFAULT_GROUPS_REVISION: u32 = 5;
@@ -2653,11 +2666,15 @@ impl Lock {
         } else {
             lock
         };
-        Ok(if metadata_free {
+        let mut lock = if metadata_free {
             lock.without_package_metadata()
         } else {
             lock
-        })
+        };
+        if lock.compares_platform_release() {
+            lock.revision = PLATFORM_RELEASE_REVISION;
+        }
+        Ok(lock)
     }
 
     /// Initialize a [`Lock`] from a list of [`Package`] entries.
@@ -2829,6 +2846,12 @@ impl Lock {
     /// Record the required platforms that were used to generate this lock.
     #[must_use]
     pub fn with_required_environments(mut self, required_environments: Vec<MarkerTree>) -> Self {
+        if required_environments
+            .iter()
+            .any(|marker| marker.compares_string(CanonicalMarkerValueString::PlatformRelease))
+        {
+            self.revision = self.revision.max(PLATFORM_RELEASE_REVISION);
+        }
         self.required_environments = required_environments
             .into_iter()
             .map(|marker| self.requires_python.complexify_markers(marker))
@@ -3803,7 +3826,69 @@ impl Lock {
             });
         }
 
+        // Revisions 0–2 predate Darwin-specific comparison. From revision 6 on,
+        // the writer preserves string bounds. Only the intervening locks are ambiguous.
+        if (3..PLATFORM_RELEASE_REVISION).contains(&lock.revision())
+            && lock.compares_platform_release()
+        {
+            return Err(LockParseError::AmbiguousPlatformRelease);
+        }
+
         Ok(lock)
+    }
+
+    /// Check marker expressions, not rendered TOML: quoted mentions of `platform_release`
+    /// (such as a dependency name) do not make a lockfile ambiguous.
+    fn compares_platform_release(&self) -> bool {
+        let compares = |marker: MarkerTree| {
+            marker.compares_string(CanonicalMarkerValueString::PlatformRelease)
+        };
+        let manifest = &self.manifest;
+        self.supported_environments
+            .iter()
+            .chain(&self.required_environments)
+            .copied()
+            .any(compares)
+            || self
+                .fork_markers
+                .iter()
+                .any(|marker| compares(marker.combined()))
+            || manifest
+                .requirements
+                .iter()
+                .chain(&manifest.constraints)
+                .chain(manifest.dependency_groups.values().flatten())
+                .chain(
+                    manifest
+                        .build_constraints
+                        .iter()
+                        .map(|constraint| &constraint.requirement),
+                )
+                .chain(manifest.overrides.iter().flat_map(|entry| match entry {
+                    Override::Package(overrides) => overrides.dependencies.as_ref(),
+                    Override::Requirement(requirement) => std::slice::from_ref(requirement),
+                }))
+                .any(|requirement| compares(requirement.marker))
+            || manifest
+                .dependency_metadata
+                .iter()
+                .flat_map(|metadata| &metadata.requires_dist)
+                .any(|requirement| compares(requirement.marker))
+            || self.packages.iter().any(|package| {
+                package
+                    .fork_markers
+                    .iter()
+                    .any(|marker| compares(marker.combined()))
+                    || package
+                        .all_dependencies()
+                        .any(|dependency| compares(dependency.complexified_marker.combined()))
+                    || package
+                        .metadata
+                        .requires_dist
+                        .iter()
+                        .chain(package.metadata.dependency_groups.values().flatten())
+                        .any(|requirement| compares(requirement.marker))
+            })
     }
 
     /// Returns the TOML representation of this lockfile.

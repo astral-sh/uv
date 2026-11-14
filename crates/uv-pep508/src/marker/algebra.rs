@@ -114,11 +114,13 @@ impl InternerShared {
         &self.nodes[id.index()]
     }
 
-    /// Returns whether a reachable node tests the singular `extra` variable.
-    ///
-    /// Complemented references have the same variables, so shared nodes are visited once
-    /// regardless of their polarity. List-valued `extras` and `dependency_groups` are distinct.
-    pub(crate) fn contains_extras(&self, marker: NodeId) -> bool {
+    /// Check the variables that occur in a marker. A node and its complement
+    /// refer to the same variables, so only visit that subgraph once.
+    pub(crate) fn contains_variable(
+        &self,
+        marker: NodeId,
+        predicate: impl Fn(&Variable) -> bool,
+    ) -> bool {
         let mut pending = SmallVec::from_slice(&[marker]);
         let mut visited = FxHashSet::default();
         while let Some(marker) = pending.pop() {
@@ -126,18 +128,12 @@ impl InternerShared {
                 continue;
             }
             let node = self.node(marker);
-            match &node.var {
-                Variable::Extra(_) => return true,
-                Variable::String(_)
-                | Variable::Version(_)
-                | Variable::In { .. }
-                | Variable::Contains { .. }
-                | Variable::List(_) => {
-                    for child in node.children.nodes() {
-                        if !child.is_true() && !child.is_false() && visited.insert(child.index()) {
-                            pending.push(child);
-                        }
-                    }
+            if predicate(&node.var) {
+                return true;
+            }
+            for child in node.children.nodes() {
+                if !child.is_true() && !child.is_false() && visited.insert(child.index()) {
+                    pending.push(child);
                 }
             }
         }

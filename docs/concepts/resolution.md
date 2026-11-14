@@ -951,6 +951,12 @@ The `revision` field of the lockfile is used to track backwards compatible chang
 For example, adding a new field to distributions. Changes to the revision will not cause older
 versions of uv to error.
 
+Older copies of uv.lock (revisions 3 through 5) can lose information about Darwin release
+comparisons. For example, they may record both `platform_release == '24.0.0'` and
+`platform_release == '24'` as `platform_release == '24'`. If your lockfile contains such a
+comparison, run `uv lock` before using `--locked` or `--frozen`. uv fetches the original metadata to
+recover the comparison and writes revision 6. Other lockfiles do not need this migration.
+
 ## Learn more
 
 For more details about the internals of the resolver, see the

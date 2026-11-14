@@ -48747,3 +48747,68 @@ fn lock_resolution_inputs_package_prerelease_constraint() -> Result<()> {
 
     Ok(())
 }
+
+/// A registry package's metadata is not normally checked again when reusing a lock.
+/// Old locks could have shortened a Darwin release from "24.0.0" to "24".
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_migrates_normalized_darwin_release() -> Result<()> {
+    let server = PackseServer::from_toml(indoc! {r#"
+        name = "normalized-darwin-release"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.a.versions."1.0.0"]
+        requires = ["b ; sys_platform == 'darwin' and platform_release == '24.0.0'"]
+
+        [packages.b.versions."1.0.0"]
+    "#})?;
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a"]
+    "#})?;
+    context
+        .lock()
+        .arg("--index-url")
+        .arg(server.index_url())
+        .assert()
+        .success();
+    let expected = context.read("uv.lock");
+    assert!(expected.contains("platform_release == '24.0.0'"));
+    let old = expected
+        .replace("revision = 6", "revision = 5")
+        .replace("platform_release == '24.0.0'", "platform_release == '24'");
+    assert_ne!(expected, old);
+    context.temp_dir.child("uv.lock").write_str(&old)?;
+
+    uv_snapshot!(context.filters(), context.export().arg("--frozen"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: This lockfile may contain normalized `platform_release` comparisons; run `uv lock` to regenerate it
+    ");
+    context
+        .lock()
+        .arg("--index-url")
+        .arg(server.index_url())
+        .assert()
+        .success();
+    assert_eq!(expected, context.read("uv.lock"));
+    context
+        .lock()
+        .arg("--check")
+        .arg("--index-url")
+        .arg(server.index_url())
+        .assert()
+        .success();
+    Ok(())
+}
