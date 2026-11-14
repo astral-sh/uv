@@ -318,6 +318,10 @@ mod tests {
         with `required-environments` to require compatible wheels for the selected Linux
         environments without excluding wheels for newer libc versions.
 
+        ### `minimum-macos-version` {#minimum-macos-version}
+
+        Require wheels for an oldest supported macOS release during universal resolution.
+
         ### `missing-exclude-newer-package-lock` {#missing-exclude-newer-package-lock}
 
         uv omits `exclude-newer-package` entries from the lockfile when the corresponding packages
