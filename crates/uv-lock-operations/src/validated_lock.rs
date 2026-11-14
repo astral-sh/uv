@@ -91,6 +91,27 @@ impl ValidatedLock {
             );
             return Ok(Self::Unusable(lock));
         }
+        // Stored cutoffs can belong to packages considered during backtracking. New cutoffs for
+        // packages outside the lock take effect when another change triggers resolution.
+        let exclude_newer = lock.filter_exclude_newer(options.exclude_newer.clone());
+        if let Some(change) = lock.exclude_newer().compare(&exclude_newer) {
+            // If a relative value is used, we won't invalidate on every tick of the clock unless
+            // the span duration changed or some other operation causes a new resolution
+            if !change.is_relative_timestamp_change() {
+                let _ = writeln!(
+                    printer.stderr(),
+                    "Resolving despite existing lockfile due to {change}",
+                );
+                // A changed cutoff can preserve forks, unless those forks themselves
+                // were written with the old Darwin release semantics.
+                return Ok(if lock.needs_platform_release_migration() {
+                    Self::Versions(lock)
+                } else {
+                    Self::Preferable(lock)
+                });
+            }
+        }
+
         if upgrade.is_all() {
             // If the user specified `--upgrade`, then we can't use the existing lockfile.
             //
@@ -105,21 +126,6 @@ impl ValidatedLock {
             // Regenerate the markers, keeping both version preferences and the hash
             // verification that the caller derived from the original lock.
             return Ok(Self::Versions(lock));
-        }
-
-        // Stored cutoffs can belong to packages considered during backtracking. New cutoffs for
-        // packages outside the lock take effect when another change triggers resolution.
-        let exclude_newer = lock.filter_exclude_newer(options.exclude_newer.clone());
-        if let Some(change) = lock.exclude_newer().compare(&exclude_newer) {
-            // If a relative value is used, we won't invalidate on every tick of the clock unless
-            // the span duration changed or some other operation causes a new resolution
-            if !change.is_relative_timestamp_change() {
-                let _ = writeln!(
-                    printer.stderr(),
-                    "Resolving despite existing lockfile due to {change}",
-                );
-                return Ok(Self::Preferable(lock));
-            }
         }
 
         // NOTE: It's important that this appears before any possible path that
