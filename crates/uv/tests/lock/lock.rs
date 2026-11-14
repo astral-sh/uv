@@ -48827,6 +48827,11 @@ async fn lock_platform_release_migration_verifies_hash_before_build() -> Result<
     let version = "1.0.0".parse()?;
     let trusted_archive = generate_source_archive(&name, &version, "", None)?;
     let replacement_archive = generate_source_archive(&name, &version, "", Some(sentinel.path()))?;
+    let trusted_digest = hex::encode(Sha256::digest(&trusted_archive));
+    let replacement_digest = hex::encode(Sha256::digest(&replacement_archive));
+    let context = context
+        .with_filter((trusted_digest, "[TRUSTED_HASH]"))
+        .with_filter((replacement_digest, "[REPLACEMENT_HASH]"));
     server.serve(filename, &trusted_archive, None).await;
 
     context
@@ -48849,16 +48854,73 @@ async fn lock_platform_release_migration_verifies_hash_before_build() -> Result<
     context.temp_dir.child("uv.lock").write_str(&old)?;
     server.serve(filename, &replacement_archive, None).await;
 
-    context
-        .lock()
-        .arg("--no-cache")
-        .assert()
-        .failure()
-        .stderr(predicates::str::contains("Hash mismatch"));
+    uv_snapshot!(context.filters(), context.lock().arg("--no-cache"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    warning: Refreshing package metadata to recover the original `platform_release` comparisons
+    error: Failed to download and build `demo-pkg @ http://[LOCALHOST]/demo_pkg-1.0.0.tar.gz`
+      cause: Hash mismatch for `demo-pkg @ http://[LOCALHOST]/demo_pkg-1.0.0.tar.gz`
+
+             Expected:
+               sha256:[TRUSTED_HASH]
+
+             Computed:
+               sha256:[REPLACEMENT_HASH]
+    ");
     assert!(
         !sentinel.exists(),
         "the replacement build backend ran before its hash was checked"
     );
     assert_eq!(old, context.read("uv.lock"));
+    Ok(())
+}
+
+/// A policy change invalidates version preferences even when the old markers also need migration.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_platform_release_migration_respects_resolution_mode() -> Result<()> {
+    let server = PackseServer::from_toml(indoc! {r#"
+        name = "change-resolution-with-legacy-release"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.a.versions."1.0.0"]
+        [packages.a.versions."2.0.0"]
+    "#})?;
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["a ; platform_release == '24.0.0'"]
+    "#})?;
+    context
+        .lock()
+        .arg("--index-url")
+        .arg(server.index_url())
+        .assert()
+        .success();
+    let old = context
+        .read("uv.lock")
+        .replace("revision = 6", "revision = 5")
+        .replace("platform_release == '24.0.0'", "platform_release == '24'");
+    context.temp_dir.child("uv.lock").write_str(&old)?;
+    uv_snapshot!(context.filters(), context.lock().args(["--index-url", &server.index_url(), "--resolution", "lowest"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: Refreshing package metadata to recover the original `platform_release` comparisons
+    Ignoring existing lockfile due to change in resolution mode: `highest` vs. `lowest`
+    warning: The direct dependency `a` is unpinned. Consider setting a lower bound when using `--resolution lowest` or `--resolution lowest-direct` to avoid using outdated versions.
+    Resolved 2 packages in [TIME]
+    warning: The transitive dependency `a` is unpinned. Consider setting a lower bound with a constraint when using `--resolution lowest` to avoid using outdated versions.
+    Updated a v2.0.0 -> v1.0.0
+    ");
     Ok(())
 }

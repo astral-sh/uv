@@ -69,12 +69,6 @@ impl ValidatedLock {
         preview: Preview,
         printer: Printer,
     ) -> Result<Self, LockValidationError> {
-        if lock.needs_platform_release_migration() {
-            // Regenerate the markers, keeping both version preferences and the hash
-            // verification that the caller derived from the original lock.
-            return Ok(Self::Versions(lock));
-        }
-
         // Perform checks in a deliberate order, such that the most extreme conditions are tested
         // first (i.e., every check that returns `Self::Unusable`, followed by every check that
         // returns `Self::Versions`, followed by every check that returns `Self::Preferable`, and
@@ -97,6 +91,22 @@ impl ValidatedLock {
             );
             return Ok(Self::Unusable(lock));
         }
+        if upgrade.is_all() {
+            // If the user specified `--upgrade`, then we can't use the existing lockfile.
+            //
+            // If the user is upgrading a subset of packages, we handle it below, after some checks
+            // regarding fork markers. In particular, we'd like to return `Preferable` here, but we
+            // shouldn't if the fork markers cannot be reused.
+            debug!("Ignoring existing lockfile due to `--upgrade`");
+            return Ok(Self::Unusable(lock));
+        }
+
+        if lock.needs_platform_release_migration() {
+            // Regenerate the markers, keeping both version preferences and the hash
+            // verification that the caller derived from the original lock.
+            return Ok(Self::Versions(lock));
+        }
+
         // Stored cutoffs can belong to packages considered during backtracking. New cutoffs for
         // packages outside the lock take effect when another change triggers resolution.
         let exclude_newer = lock.filter_exclude_newer(options.exclude_newer.clone());
@@ -110,16 +120,6 @@ impl ValidatedLock {
                 );
                 return Ok(Self::Preferable(lock));
             }
-        }
-
-        if upgrade.is_all() {
-            // If the user specified `--upgrade`, then we can't use the existing lockfile.
-            //
-            // If the user is upgrading a subset of packages, we handle it below, after some checks
-            // regarding fork markers. In particular, we'd like to return `Preferable` here, but we
-            // shouldn't if the fork markers cannot be reused.
-            debug!("Ignoring existing lockfile due to `--upgrade`");
-            return Ok(Self::Unusable(lock));
         }
 
         // NOTE: It's important that this appears before any possible path that
