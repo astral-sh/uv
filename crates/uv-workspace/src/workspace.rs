@@ -2719,6 +2719,7 @@ mod tests {
                       "environments": null,
                       "required-environments": null,
                       "minimum-libc-version": null,
+                      "minimum-macos-version": null,
                       "conflicts": null,
                       "build-backend": null
                     }
@@ -2821,6 +2822,7 @@ mod tests {
                       "environments": null,
                       "required-environments": null,
                       "minimum-libc-version": null,
+                      "minimum-macos-version": null,
                       "conflicts": null,
                       "build-backend": null
                     }
@@ -3254,6 +3256,7 @@ mod tests {
                       "environments": null,
                       "required-environments": null,
                       "minimum-libc-version": null,
+                      "minimum-macos-version": null,
                       "conflicts": null,
                       "build-backend": null
                     }
@@ -3365,6 +3368,7 @@ mod tests {
                       "environments": null,
                       "required-environments": null,
                       "minimum-libc-version": null,
+                      "minimum-macos-version": null,
                       "conflicts": null,
                       "build-backend": null
                     }
@@ -3489,6 +3493,7 @@ mod tests {
                       "environments": null,
                       "required-environments": null,
                       "minimum-libc-version": null,
+                      "minimum-macos-version": null,
                       "conflicts": null,
                       "build-backend": null
                     }
@@ -3587,6 +3592,7 @@ mod tests {
                       "environments": null,
                       "required-environments": null,
                       "minimum-libc-version": null,
+                      "minimum-macos-version": null,
                       "conflicts": null,
                       "build-backend": null
                     }
