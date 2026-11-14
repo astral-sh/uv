@@ -1,21 +1,22 @@
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 
+use uv_platform_tags::{Arch, BinaryFormat, PlatformTag, compatible_macos_tags};
+
 /// The oldest required macOS release, expressed as a deployment target.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct MinimumMacosVersion(u16, u16);
 
 impl MinimumMacosVersion {
-    /// Whether this floor supports a wheel's deployment target on the given architecture.
-    pub fn supports(self, major: u16, minor: u16, arm64: bool) -> bool {
-        let target = Self::normalized(major, minor);
-        // A universal2 wheel can target macOS 10.x on Intel, but its ARM slice starts at 11.
-        let target = if arm64 {
-            target.max(Self(11, 0))
-        } else {
-            target
+    /// Whether this wheel can be installed at the configured floor on `machine`.
+    pub fn supports(self, tag: &PlatformTag, machine: BinaryFormat) -> bool {
+        let arch = match machine {
+            BinaryFormat::X86_64 => Arch::X86_64,
+            // No ARM Mac runs 10.x, even if a universal2 wheel advertises a 10.x target.
+            BinaryFormat::Arm64 if self.0 >= 11 => Arch::Aarch64,
+            _ => return false,
         };
-        target <= self
+        compatible_macos_tags(self.0, self.1, arch).any(|candidate| &candidate == tag)
     }
 
     fn normalized(major: u16, minor: u16) -> Self {

@@ -5,7 +5,7 @@ pub use platform::{Arch, CpuInfo, CpuidLeaf, Os, Platform, PlatformError};
 pub use platform_tag::{ParsePlatformTagError, ParseReleaseArchError, PlatformTag, ReleaseArch};
 pub use tags::{
     BinaryFormat, CompressedTags, IncompatibleTag, TagCompatibility, TagPriority, Tags, TagsError,
-    TagsOptions,
+    TagsOptions, compatible_macos_tags,
 };
 
 mod abi_tag;

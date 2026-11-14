@@ -14,9 +14,7 @@ use uv_distribution_types::{
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
 use uv_pep508::{MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString};
-use uv_platform_tags::{
-    AbiTag, BinaryFormat, IncompatibleTag, LanguageTag, PlatformTag, TagPriority, Tags,
-};
+use uv_platform_tags::{AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagPriority, Tags};
 use uv_pypi_types::{HashDigest, Yanked};
 
 use crate::known_platform::KnownPlatform;
@@ -1087,11 +1085,7 @@ fn implied_platform_markers<'a>(
             }
 
             // macOS
-            PlatformTag::Macos {
-                major,
-                minor,
-                binary_format,
-            } => {
+            PlatformTag::Macos { binary_format, .. } => {
                 let mut tag_marker = MarkerTree::expression(MarkerExpression::String {
                     key: MarkerValueString::SysPlatform,
                     operator: MarkerOperator::Equal,
@@ -1101,9 +1095,9 @@ fn implied_platform_markers<'a>(
                 // Extract the architecture from the end of the tag.
                 let mut arch_marker = MarkerTree::FALSE;
                 for arch in binary_format.platform_machine() {
-                    if minimum_macos_version.is_some_and(|floor| {
-                        !floor.supports(*major, *minor, *arch == BinaryFormat::Arm64)
-                    }) {
+                    if minimum_macos_version
+                        .is_some_and(|floor| !floor.supports(platform_tag, *arch))
+                    {
                         continue;
                     }
                     let architecture = MarkerTree::expression(MarkerExpression::String {

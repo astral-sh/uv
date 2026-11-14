@@ -249,3 +249,54 @@ fn minimum_macos_version_python_fork() -> Result<()> {
 
     Ok(())
 }
+
+/// The installer accepts only minor-zero tags from macOS 11 onwards. A 14.1 wheel
+/// must not satisfy a 15.0 floor even though its deployment target is lower.
+#[test]
+fn minimum_macos_version_rejects_unsupported_minor_tag() -> Result<()> {
+    let server = PackseServer::from_toml(indoc! {r#"
+        name = "minimum-macos-minor-tag"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.a.versions."1"]
+        sdist = false
+        wheel_tags = ["py3-none-macosx_14_0_arm64"]
+
+        [packages.a.versions."2"]
+        sdist = false
+        wheel_tags = ["py3-none-macosx_14_1_arm64"]
+    "#})?;
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0"
+        requires-python = ">=3.12"
+        dependencies = ["a"]
+
+        [tool.uv]
+        preview-features = ["minimum-macos-version"]
+        required-environments = ["sys_platform == 'darwin' and platform_machine == 'arm64'"]
+        minimum-macos-version = "15.0"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.export().args(["--frozen", "--no-header", "--no-hashes", "--no-annotate"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    a==1
+    ");
+
+    Ok(())
+}
