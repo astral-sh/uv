@@ -201,6 +201,15 @@ impl FilesystemOptions {
                 return Ok(Some(Self(options)));
             }
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+            // A `pyproject.toml` that is a directory rather than a file is not a
+            // usable configuration source. Warn and keep searching parent
+            // directories instead of failing the whole command (see #14584).
+            Err(_) if path.is_dir() => {
+                warn_user!(
+                    "Ignoring `{}` during settings discovery: expected a file, but found a directory",
+                    path.user_display().cyan()
+                );
+            }
             Err(err) => return Err(err.into()),
         }
 
@@ -1192,5 +1201,28 @@ impl From<&EnvironmentOptions> for EnvironmentFlags {
             flags.insert(Self::HIDE_BUILD_OUTPUT);
         }
         flags
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A `pyproject.toml` that is a directory rather than a file must not make
+    /// settings discovery fail fatally; it is skipped and the walk continues
+    /// (see <https://github.com/astral-sh/uv/issues/14584>).
+    #[test]
+    fn find_skips_pyproject_toml_that_is_a_directory() {
+        let base =
+            std::env::temp_dir().join(format!("uv_settings_dir_pyproject_{}", std::process::id()));
+        let project = base.join("project");
+        // Create `<project>/pyproject.toml` as a DIRECTORY, not a file.
+        fs_err::create_dir_all(project.join("pyproject.toml")).unwrap();
+        let result = FilesystemOptions::find(&project);
+        let _ = fs_err::remove_dir_all(&base);
+        assert!(
+            result.is_ok(),
+            "a directory `pyproject.toml` must be skipped, not fatal: {result:?}"
+        );
     }
 }
