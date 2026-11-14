@@ -629,77 +629,13 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<PlatformTag>, PlatformErro
             platform_tags.push(PlatformTag::Linux { arch });
             platform_tags
         }
-        (Os::Macos { major, minor }, Arch::X86_64) => {
-            // Source: https://github.com/pypa/packaging/blob/fd4f11139d1c884a637be8aa26bb60a31fbc9411/packaging/tags.py#L346
-            let mut platform_tags = vec![];
-            match major {
-                10 => {
-                    // Prior to Mac OS 11, each yearly release of Mac OS bumped the "minor" version
-                    // number. The major version was always 10.
-                    for minor in (4..=*minor).rev() {
-                        for binary_format in BinaryFormat::from_arch(arch) {
-                            platform_tags.push(PlatformTag::Macos {
-                                major: 10,
-                                minor,
-                                binary_format: *binary_format,
-                            });
-                        }
-                    }
-                }
-                value if *value >= 11 => {
-                    // Starting with Mac OS 11, each yearly release bumps the major version number.
-                    // The minor versions are now the midyear updates.
-                    for major in (11..=*major).rev() {
-                        for binary_format in BinaryFormat::from_arch(arch) {
-                            platform_tags.push(PlatformTag::Macos {
-                                major,
-                                minor: 0,
-                                binary_format: *binary_format,
-                            });
-                        }
-                    }
-                    // The "universal2" binary format can have a macOS version earlier than 11.0
-                    // when the x86_64 part of the binary supports that version of macOS.
-                    for minor in (4..=16).rev() {
-                        for binary_format in BinaryFormat::from_arch(arch) {
-                            platform_tags.push(PlatformTag::Macos {
-                                major: 10,
-                                minor,
-                                binary_format: *binary_format,
-                            });
-                        }
-                    }
-                }
-                _ => {
-                    return Err(PlatformError::OsVersionDetectionError(format!(
-                        "Unsupported macOS version: {major}",
-                    )));
-                }
-            }
-            platform_tags
+        (Os::Macos { major, .. }, Arch::X86_64) if *major < 10 => {
+            return Err(PlatformError::OsVersionDetectionError(format!(
+                "Unsupported macOS version: {major}"
+            )));
         }
-        (Os::Macos { major, .. }, Arch::Aarch64) => {
-            // Source: https://github.com/pypa/packaging/blob/fd4f11139d1c884a637be8aa26bb60a31fbc9411/packaging/tags.py#L346
-            let mut platform_tags = vec![];
-            // Starting with Mac OS 11, each yearly release bumps the major version number.
-            // The minor versions are now the midyear updates.
-            for major in (11..=*major).rev() {
-                for binary_format in BinaryFormat::from_arch(arch) {
-                    platform_tags.push(PlatformTag::Macos {
-                        major,
-                        minor: 0,
-                        binary_format: *binary_format,
-                    });
-                }
-            }
-            // The "universal2" binary format can have a macOS version earlier than 11.0
-            // when the x86_64 part of the binary supports that version of macOS.
-            platform_tags.extend((4..=16).rev().map(|minor| PlatformTag::Macos {
-                major: 10,
-                minor,
-                binary_format: BinaryFormat::Universal2,
-            }));
-            platform_tags
+        (Os::Macos { major, minor }, Arch::X86_64 | Arch::Aarch64) => {
+            compatible_macos_tags(*major, *minor, arch).collect()
         }
         (Os::Windows, Arch::X86) => {
             vec![PlatformTag::Win32]
@@ -907,6 +843,57 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<PlatformTag>, PlatformErro
     Ok(platform_tags)
 }
 
+/// Yield installable macOS wheel tags in descending priority.
+///
+/// See <https://github.com/pypa/packaging/blob/fd4f11139d1c884a637be8aa26bb60a31fbc9411/packaging/tags.py#L346>.
+pub fn compatible_macos_tags(
+    major: u16,
+    minor: u16,
+    arch: Arch,
+) -> impl Iterator<Item = PlatformTag> {
+    let formats: &[BinaryFormat] = match arch {
+        Arch::Aarch64 => &[BinaryFormat::Arm64, BinaryFormat::Universal2],
+        Arch::X86_64 => &[
+            BinaryFormat::X86_64,
+            BinaryFormat::Intel,
+            BinaryFormat::Fat64,
+            BinaryFormat::Fat32,
+            BinaryFormat::Universal2,
+            BinaryFormat::Universal,
+        ],
+        _ => &[],
+    };
+
+    // From macOS 11 on, only the major release has a wheel tag.
+    let modern = (11..=major).rev().flat_map(move |major| {
+        formats
+            .iter()
+            .map(move |&binary_format| PlatformTag::Macos {
+                major,
+                minor: 0,
+                binary_format,
+            })
+    });
+
+    // Only universal2 wheels tagged 10.x carry an ARM slice. The tag's minor
+    // version describes the Intel slice's minimum rather than the ARM slice's.
+    let (last_minor, legacy_formats) = match arch {
+        Arch::Aarch64 => (16, &[BinaryFormat::Universal2][..]),
+        _ if major >= 11 => (16, formats),
+        _ if major == 10 => (minor, formats),
+        _ => (0, formats),
+    };
+    modern.chain((4..=last_minor).rev().flat_map(move |minor| {
+        legacy_formats
+            .iter()
+            .map(move |&binary_format| PlatformTag::Macos {
+                major: 10,
+                minor,
+                binary_format,
+            })
+    }))
+}
+
 #[derive(
     Debug,
     Copy,
@@ -963,37 +950,9 @@ impl FromStr for BinaryFormat {
 }
 
 impl BinaryFormat {
-    /// Determine the appropriate binary formats for a macOS version.
-    ///
-    /// See: <https://github.com/pypa/packaging/blob/fd4f11139d1c884a637be8aa26bb60a31fbc9411/packaging/tags.py#L314>
-    fn from_arch(arch: Arch) -> &'static [Self] {
-        match arch {
-            Arch::Aarch64 => &[Self::Arm64, Self::Universal2],
-            Arch::Powerpc64 => &[Self::Ppc64, Self::Fat64, Self::Universal],
-            Arch::Powerpc => &[Self::Ppc, Self::Fat32, Self::Fat, Self::Universal],
-            Arch::X86 => &[
-                Self::I386,
-                Self::Intel,
-                Self::Fat32,
-                Self::Fat,
-                Self::Universal,
-            ],
-            Arch::X86_64 => &[
-                Self::X86_64,
-                Self::Intel,
-                Self::Fat64,
-                Self::Fat32,
-                Self::Universal2,
-                Self::Universal,
-            ],
-            _ => unreachable!(),
-        }
-    }
-
     /// Return the supported `platform_machine` tags for the binary format.
     ///
-    /// This is roughly the inverse of the above: given a binary format, which `platform_machine`
-    /// tags are supported?
+    /// A universal wheel can cover multiple machines.
     pub fn platform_machine(&self) -> &'static [Self] {
         match self {
             Self::Arm64 => &[Self::Arm64],
