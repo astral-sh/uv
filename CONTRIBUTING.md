@@ -24,7 +24,8 @@ issues with these labels.
 Please do not open pull requests for new features without prior discussion. While we appreciate
 exploration of new features, we will almost always close these pull requests immediately. Adding a
 new feature to uv creates a long-term maintenance burden and requires strong consensus from the uv
-team before it is appropriate to begin work on an implementation.
+team before it is appropriate to begin work on an implementation. For feature requests like
+`uv export` flags, please open a discussion first to align on the design.
 
 ## Use of AI
 
