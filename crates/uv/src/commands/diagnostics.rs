@@ -58,6 +58,7 @@ pub(crate) fn hints_for_error(err: &anyhow::Error) -> Hints<'static> {
         collect_hint::<uv_requirements_txt::MakeEditableError>(cause, &mut hints);
         collect_hint::<uv_python_interpreter::InterpreterError>(cause, &mut hints);
         collect_hint::<uv_workspace::pyproject::SourceError>(cause, &mut hints);
+        collect_hint::<uv_workspace::WorkspaceError>(cause, &mut hints);
         collect_hint::<uv_distribution::LoweringError>(cause, &mut hints);
         collect_hint::<uv_virtualenv::Error>(cause, &mut hints);
         collect_hint::<uv_client::Error>(cause, &mut hints);
