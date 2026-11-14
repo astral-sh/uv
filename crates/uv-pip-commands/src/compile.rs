@@ -22,8 +22,8 @@ use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExtraBuildVariables, HashCollection, Index, IndexLocations,
-    MinimumLibcVersion, NameRequirementSpecification, Origin, PackageConfigSettings, Requirement,
-    RequiresPython, Verbatim,
+    MinimumLibcVersion, MinimumMacosVersion, NameRequirementSpecification, Origin,
+    PackageConfigSettings, Requirement, RequiresPython, Verbatim,
 };
 use uv_fs::{CWD, Simplified};
 use uv_git::ResolvedRepositoryReference;
@@ -79,6 +79,7 @@ pub async fn pip_compile(
     environments: SupportedEnvironments,
     required_environments: SupportedEnvironments,
     minimum_libc_version: Option<MinimumLibcVersion>,
+    minimum_macos_version: Option<MinimumMacosVersion>,
     extras: ExtrasSpecification,
     groups: GroupsSpecification,
     output_file: Option<&Path>,
@@ -551,6 +552,15 @@ pub async fn pip_compile(
             PreviewFeature::MinimumLibcVersion
         );
     }
+    if universal
+        && minimum_macos_version.is_some()
+        && !preview.is_enabled(PreviewFeature::MinimumMacosVersion)
+    {
+        warn_user_once!(
+            "Setting `minimum-macos-version` is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+            PreviewFeature::MinimumMacosVersion
+        );
+    }
 
     let options = OptionsBuilder::new()
         .resolution_mode(resolution_mode)
@@ -564,6 +574,11 @@ pub async fn pip_compile(
         .artifact_environments(artifact_environments)
         .minimum_libc_version(if universal {
             minimum_libc_version
+        } else {
+            None
+        })
+        .minimum_macos_version(if universal {
+            minimum_macos_version
         } else {
             None
         })

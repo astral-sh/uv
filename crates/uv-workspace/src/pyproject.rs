@@ -21,7 +21,8 @@ use tracing::instrument;
 use uv_build_backend::BuildBackendSettings;
 use uv_configuration::{ExcludeDependency, GitLfsSetting, Override};
 use uv_distribution_types::{
-    Index, IndexName, MinimumLibcVersion, NameRequirementSpecification, RequirementSource,
+    Index, IndexName, MinimumLibcVersion, MinimumMacosVersion, NameRequirementSpecification,
+    RequirementSource,
 };
 use uv_fs::{PortablePathBuf, try_relative_to_if};
 use uv_macros::{DeserializeUntagged, OptionsMetadata};
@@ -755,6 +756,25 @@ pub struct ToolUv {
         "#
     )]
     pub(crate) minimum_libc_version: Option<MinimumLibcVersion>,
+
+    /// The oldest macOS version to support in `required-environments`.
+    ///
+    /// During universal resolution, a macOS wheel must support this version to count as
+    /// coverage. uv retains newer wheels for the selected package version so installation
+    /// can select the best wheel for the current machine.
+    ///
+    /// This setting is in preview and applies to `uv lock` and `uv pip compile --universal`.
+    #[option(
+        default = "None",
+        value_type = "str",
+        example = r#"
+            preview-features = ["minimum-macos-version"]
+            required-environments = ["sys_platform == 'darwin'"]
+            minimum-macos-version = "14.0"
+        "#
+    )]
+    #[cfg_attr(feature = "schemars", schemars(with = "Option<String>"))]
+    pub(crate) minimum_macos_version: Option<MinimumMacosVersion>,
 
     /// Declare collections of extras or dependency groups that are conflicting
     /// (i.e., mutually exclusive).

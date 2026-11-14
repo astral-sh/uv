@@ -11,8 +11,8 @@ use uv_client::{FlatIndexEntry, OwnedArchive, SimpleDetailMetadata, VersionFiles
 use uv_configuration::BuildOptions;
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
-    IndexEntryFilename, IndexUrl, MinimumLibcVersion, RegistryBuiltWheel, RegistrySourceDist,
-    RequiresPython,
+    IndexEntryFilename, IndexUrl, MinimumLibcVersion, MinimumMacosVersion, RegistryBuiltWheel,
+    RegistrySourceDist, RequiresPython,
 };
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -60,6 +60,7 @@ impl VersionMap {
         flat_index: Option<FlatDistributions>,
         build_options: &BuildOptions,
         minimum_libc_version: Option<MinimumLibcVersion>,
+        minimum_macos_version: Option<MinimumMacosVersion>,
     ) -> Self {
         let mut local = false;
         let mut entries = Vec::with_capacity(simple_metadata.iter().size_hint().0);
@@ -114,6 +115,7 @@ impl VersionMap {
                 included_version_cutoff,
                 available_version_cutoff,
                 minimum_libc_version,
+                minimum_macos_version,
             }),
         }
     }
@@ -125,6 +127,7 @@ impl VersionMap {
         hasher: &HashStrategy,
         build_options: &BuildOptions,
         minimum_libc_version: Option<MinimumLibcVersion>,
+        minimum_macos_version: Option<MinimumMacosVersion>,
     ) -> Self {
         FlatDistributions::from_entries(
             flat_metadata,
@@ -132,6 +135,7 @@ impl VersionMap {
             hasher,
             build_options,
             minimum_libc_version,
+            minimum_macos_version,
         )
         .into()
     }
@@ -511,6 +515,7 @@ struct VersionMapLazy {
     requires_python: RequiresPython,
     /// The libc baselines required during universal resolution.
     minimum_libc_version: Option<MinimumLibcVersion>,
+    minimum_macos_version: Option<MinimumMacosVersion>,
 }
 
 impl VersionMapLazy {
@@ -721,6 +726,7 @@ impl VersionMapLazy {
                             hashes,
                             compatibility,
                             self.minimum_libc_version,
+                            self.minimum_macos_version,
                         );
                     }
                     DistFilename::SourceDistFilename(filename) => {

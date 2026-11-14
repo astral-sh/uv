@@ -14,8 +14,8 @@ use uv_configuration::{
 };
 use uv_distribution::LoweredRequirement;
 use uv_distribution_types::{
-    Index, IndexLocations, MinimumLibcVersion, NameRequirementSpecification, Requirement,
-    RequiresPython,
+    Index, IndexLocations, MinimumLibcVersion, MinimumMacosVersion, NameRequirementSpecification,
+    Requirement, RequiresPython,
 };
 use uv_lock::Lock;
 use uv_normalize::{GroupName, PackageName};
@@ -265,6 +265,14 @@ impl<'lock> LockTarget<'lock> {
     pub(crate) fn minimum_libc_version(self) -> Option<MinimumLibcVersion> {
         match self {
             Self::Workspace(workspace) => workspace.minimum_libc_version(),
+            Self::Script(_) => None,
+        }
+    }
+
+    /// Returns the minimum supported macOS version.
+    pub(crate) fn minimum_macos_version(self) -> Option<MinimumMacosVersion> {
+        match self {
+            Self::Workspace(workspace) => workspace.minimum_macos_version(),
             Self::Script(_) => None,
         }
     }

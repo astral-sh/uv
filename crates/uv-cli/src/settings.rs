@@ -29,8 +29,8 @@ use uv_configuration::{
 };
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExcludeNewerOverride, ExtraBuildVariables, Index,
-    IndexLocations, IndexUrl, MinimumLibcVersion, NameRequirementSpecification,
-    PackageConfigSettings, Requirement,
+    IndexLocations, IndexUrl, MinimumLibcVersion, MinimumMacosVersion,
+    NameRequirementSpecification, PackageConfigSettings, Requirement,
 };
 use uv_install_wheel::LinkMode;
 use uv_normalize::{ExtraName, PackageName, PipGroupName};
@@ -3367,6 +3367,7 @@ pub struct PipCompileSettings {
     pub environments: SupportedEnvironments,
     pub required_environments: SupportedEnvironments,
     pub minimum_libc_version: Option<MinimumLibcVersion>,
+    pub minimum_macos_version: Option<MinimumMacosVersion>,
     pub refresh: Refresh,
     pub settings: PipSettings,
 }
@@ -3500,6 +3501,9 @@ impl PipCompileSettings {
         let minimum_libc_version = filesystem
             .as_ref()
             .and_then(|configuration| configuration.minimum_libc_version);
+        let minimum_macos_version = filesystem
+            .as_ref()
+            .and_then(|configuration| configuration.minimum_macos_version);
 
         Ok(Self {
             format,
@@ -3527,6 +3531,7 @@ impl PipCompileSettings {
             environments,
             required_environments,
             minimum_libc_version,
+            minimum_macos_version,
             refresh: Refresh::try_from(refresh)?,
             settings: PipSettings::combine(
                 PipOptions {

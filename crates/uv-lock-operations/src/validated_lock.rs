@@ -205,6 +205,15 @@ impl ValidatedLock {
             );
             return Ok(Self::Versions(lock));
         }
+        // A different macOS floor can change which versions cover the required platforms.
+        if lock.minimum_macos_version() != options.minimum_macos_version {
+            debug!(
+                "Resolving despite existing lockfile due to change in minimum macOS version: {:?} vs. {:?}",
+                lock.minimum_macos_version(),
+                options.minimum_macos_version,
+            );
+            return Ok(Self::Versions(lock));
+        }
 
         // If the conflicting group config has changed, we have to perform a clean resolution.
         if conflicts != lock.conflicts() {
