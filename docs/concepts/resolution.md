@@ -216,21 +216,6 @@ required-environments = [
 ]
 ```
 
-To require a macOS release, use its
-[Darwin kernel version](<https://en.wikipedia.org/wiki/Darwin_(operating_system)#Darwin_20_onwards>)
-in `platform_release`. For example, macOS 15 uses Darwin 24:
-
-```toml title="pyproject.toml"
-[tool.uv]
-required-environments = [
-    "sys_platform == 'darwin' and platform_machine == 'arm64' and platform_release == '24.0.0'"
-]
-```
-
-Use `==` to require coverage at the baseline. A range like `>= '24.0.0'` can be satisfied by a wheel
-that only supports a newer release. Wheels targeting newer releases are still retained in the
-lockfile.
-
 ### Minimum libc version
 
 !!! note
@@ -965,6 +950,12 @@ other words, lockfiles may only be rejected across minor releases.
 The `revision` field of the lockfile is used to track backwards compatible changes to the lockfile.
 For example, adding a new field to distributions. Changes to the revision will not cause older
 versions of uv to error.
+
+Older copies of uv.lock (revisions 3 through 5) can lose information about Darwin release
+comparisons. For example, they may record both `platform_release == '24.0.0'` and
+`platform_release == '24'` as `platform_release == '24'`. If your lockfile contains such a
+comparison, run `uv lock` before using `--locked` or `--frozen`. uv fetches the original metadata to
+recover the comparison and writes revision 6. Other lockfiles do not need this migration.
 
 ## Learn more
 

@@ -536,7 +536,7 @@ pub async fn install(
             environment.environment().interpreter()
         });
     let mut existing_tool_lock = if tool_locks {
-        if let Some(lock) = ToolLock::read(&tool_dir) {
+        if let Some(lock) = ToolLock::read(&tool_dir)? {
             match Box::pin(lock.validate(
                 &requirements,
                 &receipt_constraints,

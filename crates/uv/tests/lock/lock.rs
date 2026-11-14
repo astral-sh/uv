@@ -44442,263 +44442,6 @@ fn lock_required_environment_python_fork() -> Result<()> {
     Ok(())
 }
 
-/// A required Darwin release must have a compatible wheel, without removing newer wheels.
-/// The newer version must not be selected between the baseline and its minimum Darwin release.
-#[cfg(feature = "test-universal")]
-#[test]
-fn lock_required_environment_macos_release() -> Result<()> {
-    let server = PackseServer::from_toml(indoc! {r#"
-        name = "required-environment-macos-release"
-
-        [root]
-
-        [expected]
-        satisfiable = true
-
-        [packages.a.versions."1.0.0"]
-        sdist = false
-        wheel_tags = ["py3-none-macosx_14_0_arm64", "py3-none-macosx_26_0_arm64"]
-
-        [packages.a.versions."2.0.0"]
-        sdist = false
-        wheel_tags = ["py3-none-macosx_26_0_arm64"]
-    "#})?;
-    let context = uv_test::test_context!("3.12").with_filters(
-        server
-            .files()
-            .map(|(filename, hash)| (hash.to_owned(), format!("[SHA256:{filename}]"))),
-    );
-    let pyproject = indoc! {r#"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-        dependencies = ["a"]
-
-        [tool.uv]
-        environments = ["sys_platform == 'darwin' and platform_machine == 'arm64'"]
-        required-environments = ["sys_platform == 'darwin' and platform_machine == 'arm64' and platform_release == '24.0.0'"]
-    "#};
-    context
-        .temp_dir
-        .child("pyproject.toml")
-        .write_str(pyproject)?;
-
-    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Resolved 3 packages in [TIME]
-    ");
-    let lock = context.read("uv.lock");
-    insta::with_settings!({ filters => context.filters() }, {
-        assert_snapshot!(lock, @r#"
-        version = 1
-        revision = 5
-        requires-python = ">=3.12"
-        resolution-markers = [
-            "platform_machine == 'arm64' and platform_release >= '25' and sys_platform == 'darwin'",
-            "platform_machine == 'arm64' and platform_release < '25' and sys_platform == 'darwin'",
-        ]
-        supported-markers = [
-            "platform_machine == 'arm64' and sys_platform == 'darwin'",
-        ]
-        required-markers = [
-            "platform_machine == 'arm64' and platform_release == '24' and sys_platform == 'darwin'",
-        ]
-
-        [options]
-        exclude-newer = "2024-03-25T00:00:00Z"
-
-        [[package]]
-        name = "a"
-        version = "1.0.0"
-        source = { registry = "http://[LOCALHOST]/simple/" }
-        resolution-markers = [
-            "platform_machine == 'arm64' and platform_release < '25' and sys_platform == 'darwin'",
-        ]
-        wheels = [
-            { url = "http://[LOCALHOST]/files/a-1.0.0-py3-none-macosx_14_0_arm64.whl", hash = "sha256:[SHA256:a-1.0.0-py3-none-macosx_14_0_arm64.whl]", upload-time = "2024-03-24T00:00:00Z" },
-            { url = "http://[LOCALHOST]/files/a-1.0.0-py3-none-macosx_26_0_arm64.whl", hash = "sha256:[SHA256:a-1.0.0-py3-none-macosx_26_0_arm64.whl]", upload-time = "2024-03-24T00:00:00Z" },
-        ]
-
-        [[package]]
-        name = "a"
-        version = "2.0.0"
-        source = { registry = "http://[LOCALHOST]/simple/" }
-        resolution-markers = [
-            "platform_machine == 'arm64' and platform_release >= '25' and sys_platform == 'darwin'",
-        ]
-        wheels = [
-            { url = "http://[LOCALHOST]/files/a-2.0.0-py3-none-macosx_26_0_arm64.whl", hash = "sha256:[SHA256:a-2.0.0-py3-none-macosx_26_0_arm64.whl]", upload-time = "2024-03-24T00:00:00Z" },
-        ]
-
-        [[package]]
-        name = "project"
-        version = "0.1.0"
-        source = { virtual = "." }
-        dependencies = [
-            { name = "a", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "platform_release < '25'" },
-            { name = "a", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "platform_release >= '25'" },
-        ]
-
-        [package.metadata]
-        requires-dist = [{ name = "a" }]
-        "#);
-    });
-
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--index-url").arg(server.index_url()), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Resolved 3 packages in [TIME]
-    ");
-
-    // A direct wheel with a newer deployment target cannot satisfy the same baseline.
-    context
-        .temp_dir
-        .child("pyproject.toml")
-        .write_str(&pyproject.replace(
-            "dependencies = [\"a\"]",
-            &format!(
-                "dependencies = [\"a @ {}\"]",
-                server.file_url("a-2.0.0-py3-none-macosx_26_0_arm64.whl")
-            ),
-        ))?;
-    let filters: Vec<_> = context
-        .filters()
-        .into_iter()
-        .chain([(
-            r"\nhint: The resolution failed for an environment that is not the current one[^\n]*",
-            "",
-        )])
-        .collect();
-    uv_snapshot!(filters, context.lock().arg("--index-url").arg(server.index_url()), @"
-    exit_code: 1 (failure)
-    ----- stderr -----
-    error: No solution found when resolving dependencies for split (markers: python_full_version >= '3.12' and platform_machine == 'arm64' and platform_release < '25' and sys_platform == 'darwin')
-      cause: Because only a==2.0.0 is available and a==2.0.0 has no `platform_machine == 'arm64' and sys_platform == 'darwin'`-compatible wheels, we can conclude that all versions of a cannot be used.
-             And because your project depends on a, we can conclude that your project's requirements are unsatisfiable.
-    ");
-    Ok(())
-}
-
-/// Wheels for another Python version must not determine the Darwin release split in this fork.
-#[cfg(feature = "test-universal")]
-#[test]
-fn lock_required_environment_macos_release_python_fork() -> Result<()> {
-    let server = PackseServer::from_toml(indoc! {r#"
-        name = "required-environment-macos-release-python-fork"
-
-        [root]
-
-        [expected]
-        satisfiable = true
-
-        [packages.a.versions."1.0.0"]
-        sdist = false
-        wheel_tags = ["cp312-cp312-macosx_14_0_arm64", "cp313-cp313-macosx_14_0_arm64"]
-
-        [packages.a.versions."2.0.0"]
-        sdist = false
-        wheel_tags = ["cp312-cp312-macosx_14_0_arm64", "cp313-cp313-macosx_26_0_arm64"]
-    "#})?;
-    let context = uv_test::test_context!("3.12").with_filters(
-        server
-            .files()
-            .map(|(filename, hash)| (hash.to_owned(), format!("[SHA256:{filename}]"))),
-    );
-    context
-        .temp_dir
-        .child("pyproject.toml")
-        .write_str(indoc! {r#"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.12,<3.14"
-        dependencies = ["a"]
-
-        [tool.uv]
-        environments = [
-            "sys_platform == 'darwin' and platform_machine == 'arm64' and python_version < '3.13'",
-            "sys_platform == 'darwin' and platform_machine == 'arm64' and python_version >= '3.13'",
-        ]
-        required-environments = ["sys_platform == 'darwin' and platform_machine == 'arm64' and platform_release == '24.0.0'"]
-    "#})?;
-
-    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Resolved 3 packages in [TIME]
-    ");
-
-    insta::with_settings!({ filters => context.filters() }, {
-        assert_snapshot!(context.read("uv.lock"), @r#"
-        version = 1
-        revision = 5
-        requires-python = ">=3.12, <3.14"
-        resolution-markers = [
-            "python_full_version >= '3.13' and platform_machine == 'arm64' and platform_release >= '25' and sys_platform == 'darwin'",
-            "python_full_version >= '3.13' and platform_machine == 'arm64' and platform_release < '25' and sys_platform == 'darwin'",
-            "python_full_version < '3.13' and platform_machine == 'arm64' and sys_platform == 'darwin'",
-        ]
-        supported-markers = [
-            "python_full_version < '3.13' and platform_machine == 'arm64' and sys_platform == 'darwin'",
-            "python_full_version >= '3.13' and platform_machine == 'arm64' and sys_platform == 'darwin'",
-        ]
-        required-markers = [
-            "platform_machine == 'arm64' and platform_release == '24' and sys_platform == 'darwin'",
-        ]
-
-        [options]
-        exclude-newer = "2024-03-25T00:00:00Z"
-
-        [[package]]
-        name = "a"
-        version = "1.0.0"
-        source = { registry = "http://[LOCALHOST]/simple/" }
-        resolution-markers = [
-            "python_full_version >= '3.13' and platform_machine == 'arm64' and platform_release < '25' and sys_platform == 'darwin'",
-        ]
-        wheels = [
-            { url = "http://[LOCALHOST]/files/a-1.0.0-cp312-cp312-macosx_14_0_arm64.whl", hash = "sha256:[SHA256:a-1.0.0-cp312-cp312-macosx_14_0_arm64.whl]", upload-time = "2024-03-24T00:00:00Z" },
-            { url = "http://[LOCALHOST]/files/a-1.0.0-cp313-cp313-macosx_14_0_arm64.whl", hash = "sha256:[SHA256:a-1.0.0-cp313-cp313-macosx_14_0_arm64.whl]", upload-time = "2024-03-24T00:00:00Z" },
-        ]
-
-        [[package]]
-        name = "a"
-        version = "2.0.0"
-        source = { registry = "http://[LOCALHOST]/simple/" }
-        resolution-markers = [
-            "python_full_version >= '3.13' and platform_machine == 'arm64' and platform_release >= '25' and sys_platform == 'darwin'",
-            "python_full_version < '3.13' and platform_machine == 'arm64' and sys_platform == 'darwin'",
-        ]
-        wheels = [
-            { url = "http://[LOCALHOST]/files/a-2.0.0-cp312-cp312-macosx_14_0_arm64.whl", hash = "sha256:[SHA256:a-2.0.0-cp312-cp312-macosx_14_0_arm64.whl]", upload-time = "2024-03-24T00:00:00Z" },
-            { url = "http://[LOCALHOST]/files/a-2.0.0-cp313-cp313-macosx_26_0_arm64.whl", hash = "sha256:[SHA256:a-2.0.0-cp313-cp313-macosx_26_0_arm64.whl]", upload-time = "2024-03-24T00:00:00Z" },
-        ]
-
-        [[package]]
-        name = "project"
-        version = "0.1.0"
-        source = { virtual = "." }
-        dependencies = [
-            { name = "a", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "python_full_version >= '3.13' and platform_release < '25'" },
-            { name = "a", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "python_full_version < '3.13' or platform_release >= '25'" },
-        ]
-
-        [package.metadata]
-        requires-dist = [{ name = "a" }]
-        "#);
-    });
-
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--index-url").arg(server.index_url()), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Resolved 3 packages in [TIME]
-    ");
-
-    Ok(())
-}
-
 /// Generic Python wheel tags cover later minor versions on required platforms.
 #[cfg(feature = "test-universal")]
 #[test]
@@ -49002,5 +48745,182 @@ fn lock_resolution_inputs_package_prerelease_constraint() -> Result<()> {
     ");
     assert_eq!(context.read("uv.lock"), lock);
 
+    Ok(())
+}
+
+/// A registry package's metadata is not normally checked again when reusing a lock.
+/// Old locks could have shortened a Darwin release from "24.0.0" to "24".
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_migrates_normalized_darwin_release() -> Result<()> {
+    let server = PackseServer::from_toml(indoc! {r#"
+        name = "normalized-darwin-release"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.a.versions."1.0.0"]
+        requires = ["b ; sys_platform == 'darwin' and platform_release == '24.0.0'"]
+
+        [packages.b.versions."1.0.0"]
+    "#})?;
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a"]
+    "#})?;
+    context
+        .lock()
+        .arg("--index-url")
+        .arg(server.index_url())
+        .assert()
+        .success();
+    let expected = context.read("uv.lock");
+    assert!(expected.contains("platform_release == '24.0.0'"));
+    let old = expected
+        .replace("revision = 6", "revision = 5")
+        .replace("platform_release == '24.0.0'", "platform_release == '24'");
+    assert_ne!(expected, old);
+    context.temp_dir.child("uv.lock").write_str(&old)?;
+
+    uv_snapshot!(context.filters(), context.export().arg("--frozen"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: This lockfile may contain normalized `platform_release` comparisons; run `uv lock` to regenerate it
+    ");
+    context
+        .lock()
+        .arg("--index-url")
+        .arg(server.index_url())
+        .assert()
+        .success();
+    assert_eq!(expected, context.read("uv.lock"));
+    context
+        .lock()
+        .arg("--check")
+        .arg("--index-url")
+        .arg(server.index_url())
+        .assert()
+        .success();
+    Ok(())
+}
+
+/// Migration must still authenticate a pinned archive before running its build backend.
+#[cfg(feature = "test-universal")]
+#[tokio::test]
+async fn lock_platform_release_migration_verifies_hash_before_build() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let filename = "demo_pkg-1.0.0.tar.gz";
+    let sentinel = context.temp_dir.child("backend-executed");
+
+    let name = "demo-pkg".parse()?;
+    let server = PackageServer::new(&name).await;
+    let archive_url = server.file_url(filename);
+    let version = "1.0.0".parse()?;
+    let trusted_archive = generate_source_archive(&name, &version, "", None)?;
+    let replacement_archive = generate_source_archive(&name, &version, "", Some(sentinel.path()))?;
+    let trusted_digest = hex::encode(Sha256::digest(&trusted_archive));
+    let replacement_digest = hex::encode(Sha256::digest(&replacement_archive));
+    let context = context
+        .with_filter((trusted_digest, "[TRUSTED_HASH]"))
+        .with_filter((replacement_digest, "[REPLACEMENT_HASH]"));
+    server.serve(filename, &trusted_archive, None).await;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["demo-pkg @ {archive_url}", "demo-pkg @ {archive_url} ; platform_release == '24.0.0'"]
+        "#})?;
+
+    context.lock().arg("--no-cache").assert().success();
+    let expected = context.read("uv.lock");
+    let old = expected
+        .replace("revision = 6", "revision = 5")
+        .replace("platform_release == '24.0.0'", "platform_release == '24'");
+    assert_ne!(old, expected);
+    context.temp_dir.child("uv.lock").write_str(&old)?;
+    server.serve(filename, &replacement_archive, None).await;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--no-cache"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    warning: Refreshing package metadata to recover the original `platform_release` comparisons
+    error: Failed to download and build `demo-pkg @ http://[LOCALHOST]/demo_pkg-1.0.0.tar.gz`
+      cause: Hash mismatch for `demo-pkg @ http://[LOCALHOST]/demo_pkg-1.0.0.tar.gz`
+
+             Expected:
+               sha256:[TRUSTED_HASH]
+
+             Computed:
+               sha256:[REPLACEMENT_HASH]
+    ");
+    assert!(
+        !sentinel.exists(),
+        "the replacement build backend ran before its hash was checked"
+    );
+    assert_eq!(old, context.read("uv.lock"));
+    Ok(())
+}
+
+/// A policy change invalidates version preferences even when the old markers also need migration.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_platform_release_migration_respects_resolution_mode() -> Result<()> {
+    let server = PackseServer::from_toml(indoc! {r#"
+        name = "change-resolution-with-legacy-release"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.a.versions."1.0.0"]
+        [packages.a.versions."2.0.0"]
+    "#})?;
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["a ; platform_release == '24.0.0'"]
+    "#})?;
+    context
+        .lock()
+        .arg("--index-url")
+        .arg(server.index_url())
+        .assert()
+        .success();
+    let old = context
+        .read("uv.lock")
+        .replace("revision = 6", "revision = 5")
+        .replace("platform_release == '24.0.0'", "platform_release == '24'");
+    context.temp_dir.child("uv.lock").write_str(&old)?;
+    uv_snapshot!(context.filters(), context.lock().args(["--index-url", &server.index_url(), "--resolution", "lowest"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: Refreshing package metadata to recover the original `platform_release` comparisons
+    Ignoring existing lockfile due to change in resolution mode: `highest` vs. `lowest`
+    warning: The direct dependency `a` is unpinned. Consider setting a lower bound when using `--resolution lowest` or `--resolution lowest-direct` to avoid using outdated versions.
+    Resolved 2 packages in [TIME]
+    warning: The transitive dependency `a` is unpinned. Consider setting a lower bound with a constraint when using `--resolution lowest` to avoid using outdated versions.
+    Updated a v2.0.0 -> v1.0.0
+    ");
     Ok(())
 }

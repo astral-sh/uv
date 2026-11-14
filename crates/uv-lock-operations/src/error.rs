@@ -101,6 +101,9 @@ pub enum LockError {
     #[error("Failed to parse `uv.lock`")]
     UvLockParse(#[source] toml::de::Error),
 
+    #[error(transparent)]
+    AmbiguousPlatformRelease(LockParseError),
+
     #[error("Group `{0}` is not defined in the project's `dependency-groups` table")]
     MissingGroupProject(GroupName),
 
@@ -176,6 +179,9 @@ impl From<LockParseError> for LockError {
                 version,
                 source,
             } => Self::UnparsableLockVersion(supported, version, source),
+            error @ LockParseError::AmbiguousPlatformRelease { .. } => {
+                Self::AmbiguousPlatformRelease(error)
+            }
             LockParseError::Toml(source) => Self::UvLockParse(source),
         }
     }
@@ -195,6 +201,7 @@ impl From<LockError> for UvError {
             | LockError::OverlappingMarkers(..)
             | LockError::DisjointEnvironment(..)
             | LockError::EmptyEnvironment
+            | LockError::AmbiguousPlatformRelease(_)
             | LockError::UvLockParse(_)
             | LockError::MissingGroupProject(_)
             | LockError::MissingGroupProjects(_)
@@ -241,6 +248,7 @@ impl Hinted for LockError {
             | Self::LockSerialization(_)
             | Self::DisjointEnvironment(..)
             | Self::EmptyEnvironment
+            | Self::AmbiguousPlatformRelease(_)
             | Self::UvLockParse(_)
             | Self::MissingGroupProject(_)
             | Self::MissingGroupProjects(_)

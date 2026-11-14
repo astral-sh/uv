@@ -102,7 +102,13 @@ impl ValidatedLock {
                     printer.stderr(),
                     "Resolving despite existing lockfile due to {change}",
                 );
-                return Ok(Self::Preferable(lock));
+                // A changed cutoff can preserve forks, unless those forks themselves
+                // were written with the old Darwin release semantics.
+                return Ok(if lock.needs_platform_release_migration() {
+                    Self::Versions(lock)
+                } else {
+                    Self::Preferable(lock)
+                });
             }
         }
 
@@ -114,6 +120,12 @@ impl ValidatedLock {
             // shouldn't if the fork markers cannot be reused.
             debug!("Ignoring existing lockfile due to `--upgrade`");
             return Ok(Self::Unusable(lock));
+        }
+
+        if lock.needs_platform_release_migration() {
+            // Regenerate the markers, keeping both version preferences and the hash
+            // verification that the caller derived from the original lock.
+            return Ok(Self::Versions(lock));
         }
 
         // NOTE: It's important that this appears before any possible path that

@@ -50,7 +50,8 @@ use uv_macros::DebugNoInline;
 use uv_normalize::{DEV_DEPENDENCIES, DefaultGroups, ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::{
-    MarkerEnvironment, MarkerTree, Scheme, VerbatimUrl, VerbatimUrlError, split_scheme,
+    CanonicalMarkerValueString, MarkerEnvironment, MarkerTree, Scheme, VerbatimUrl,
+    VerbatimUrlError, split_scheme,
 };
 use uv_platform_tags::{
     AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagCompatibility, TagPriority, Tags,
@@ -115,12 +116,21 @@ pub enum LockParseError {
         source: toml::de::Error,
     },
 
+    /// The original spelling of Darwin release markers cannot be recovered from this revision.
+    #[error(
+        "This lockfile may contain normalized `platform_release` comparisons; run `uv lock` to regenerate it"
+    )]
+    AmbiguousPlatformRelease {
+        /// Keep artifact hashes and version preferences for the replacement resolution.
+        lock: Box<Lock>,
+    },
+
     /// The lockfile is not valid TOML or cannot be deserialized.
     #[error(transparent)]
     Toml(#[from] toml::de::Error),
 }
 
-/// The current revision of the lockfile format.
+/// The default revision when writing a lockfile.
 ///
 /// Version 1 revisions:
 /// - 0: The original format; a missing `revision` is read as 0.
@@ -129,7 +139,13 @@ pub enum LockParseError {
 /// - 3: Record package-specific `exclude-newer` values.
 /// - 4: Support omitting package declaration metadata and record empty extras and groups.
 /// - 5: Record default groups and dependency group metadata for workspace members and roots.
+/// - 6: Preserve the spelling of comparisons against Darwin's platform release. Accepting both
+///   revisions lets locks without these rare markers keep their existing bytes.
 const REVISION: u32 = 5;
+
+/// Only locks with release comparisons need this revision; a pre-revert writer could have
+/// shortened e.g. `24.0.0` to `24`, and there is no way to recover the spelling from the lock.
+const PLATFORM_RELEASE_REVISION: u32 = 6;
 
 /// The first lockfile revision that records default groups for workspace members and roots.
 const DEFAULT_GROUPS_REVISION: u32 = 5;
@@ -307,8 +323,7 @@ pub(crate) struct HashedDist {
     hashes: HashDigests,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize)]
-#[serde(try_from = "LockWire")]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Lock {
     /// The (major) version of the lockfile format.
     ///
@@ -2653,11 +2668,15 @@ impl Lock {
         } else {
             lock
         };
-        Ok(if metadata_free {
+        let mut lock = if metadata_free {
             lock.without_package_metadata()
         } else {
             lock
-        })
+        };
+        if lock.compares_platform_release() {
+            lock.revision = PLATFORM_RELEASE_REVISION;
+        }
+        Ok(lock)
     }
 
     /// Initialize a [`Lock`] from a list of [`Package`] entries.
@@ -2829,6 +2848,12 @@ impl Lock {
     /// Record the required platforms that were used to generate this lock.
     #[must_use]
     pub fn with_required_environments(mut self, required_environments: Vec<MarkerTree>) -> Self {
+        if required_environments
+            .iter()
+            .any(|marker| marker.compares_string(CanonicalMarkerValueString::PlatformRelease))
+        {
+            self.revision = self.revision.max(PLATFORM_RELEASE_REVISION);
+        }
         self.required_environments = required_environments
             .into_iter()
             .map(|marker| self.requires_python.complexify_markers(marker))
@@ -3768,7 +3793,9 @@ impl Lock {
     /// Use [`Self::from_toml`] when reading lockfiles that might not use uv's
     /// canonical format.
     pub fn from_canonical_toml(input: &str) -> Result<Self, CanonicalLockError> {
-        deserialize::from_str(input)
+        deserialize::from_str(input)?
+            .check_platform_release_compatibility()
+            .map_err(|err| CanonicalLockError::Deserialize(err.to_string()))
     }
 
     /// Parses a lockfile, using the canonical fast path when possible.
@@ -3777,9 +3804,11 @@ impl Lock {
     /// TOML parser, preserving its compatibility and error reporting. Lockfiles
     /// that use an unsupported schema version are rejected.
     pub fn from_toml(input: &str) -> Result<Self, LockParseError> {
-        let lock = match Self::from_canonical_toml(input) {
+        let lock = match deserialize::from_str(input) {
             Ok(lock) => lock,
-            Err(_) => match toml::from_str(input) {
+            Err(_) => match toml::from_str::<LockWire>(input)
+                .and_then(|wire| Self::try_from(wire).map_err(serde::de::Error::custom))
+            {
                 Ok(lock) => lock,
                 Err(source) => {
                     if let Ok(lock) = toml::from_str::<LockVersion>(input)
@@ -3803,7 +3832,79 @@ impl Lock {
             });
         }
 
-        Ok(lock)
+        // Revisions 0–2 predate Darwin-specific comparison. From revision 6 on,
+        // the writer preserves string bounds. Only the intervening locks are ambiguous.
+        lock.check_platform_release_compatibility()
+    }
+
+    /// Whether the writing revision could have discarded a Darwin release bound.
+    pub fn needs_platform_release_migration(&self) -> bool {
+        (3..PLATFORM_RELEASE_REVISION).contains(&self.revision())
+            && self.compares_platform_release()
+    }
+
+    fn check_platform_release_compatibility(self) -> Result<Self, LockParseError> {
+        if self.needs_platform_release_migration() {
+            Err(LockParseError::AmbiguousPlatformRelease {
+                lock: Box::new(self),
+            })
+        } else {
+            Ok(self)
+        }
+    }
+
+    /// Check marker expressions, not rendered TOML: quoted mentions of `platform_release`
+    /// (such as a dependency name) do not make a lockfile ambiguous.
+    fn compares_platform_release(&self) -> bool {
+        let compares = |marker: MarkerTree| {
+            marker.compares_string(CanonicalMarkerValueString::PlatformRelease)
+        };
+        let manifest = &self.manifest;
+        self.supported_environments
+            .iter()
+            .chain(&self.required_environments)
+            .copied()
+            .any(compares)
+            || self
+                .fork_markers
+                .iter()
+                .any(|marker| compares(marker.combined()))
+            || manifest
+                .requirements
+                .iter()
+                .chain(&manifest.constraints)
+                .chain(manifest.dependency_groups.values().flatten())
+                .chain(
+                    manifest
+                        .build_constraints
+                        .iter()
+                        .map(|constraint| &constraint.requirement),
+                )
+                .chain(manifest.overrides.iter().flat_map(|entry| match entry {
+                    Override::Package(overrides) => overrides.dependencies.as_ref(),
+                    Override::Requirement(requirement) => std::slice::from_ref(requirement),
+                }))
+                .any(|requirement| compares(requirement.marker))
+            || manifest
+                .dependency_metadata
+                .iter()
+                .flat_map(|metadata| &metadata.requires_dist)
+                .any(|requirement| compares(requirement.marker))
+            || self.packages.iter().any(|package| {
+                package
+                    .fork_markers
+                    .iter()
+                    .any(|marker| compares(marker.combined()))
+                    || package
+                        .all_dependencies()
+                        .any(|dependency| compares(dependency.complexified_marker.combined()))
+                    || package
+                        .metadata
+                        .requires_dist
+                        .iter()
+                        .chain(package.metadata.dependency_groups.values().flatten())
+                        .any(|requirement| compares(requirement.marker))
+            })
     }
 
     /// Returns the TOML representation of this lockfile.
@@ -6507,6 +6608,15 @@ struct LockWire {
     manifest: ResolverManifest,
     #[serde(rename = "package", alias = "distribution", default)]
     packages: Vec<PackageWire>,
+}
+
+impl<'de> serde::Deserialize<'de> for Lock {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let lock = Self::try_from(LockWire::deserialize(deserializer)?)
+            .map_err(serde::de::Error::custom)?;
+        lock.check_platform_release_compatibility()
+            .map_err(serde::de::Error::custom)
+    }
 }
 
 impl TryFrom<LockWire> for Lock {

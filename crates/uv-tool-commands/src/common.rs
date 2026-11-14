@@ -31,7 +31,7 @@ use uv_fs::replace_symlink;
 use uv_fs::{CWD, Simplified};
 use uv_git::GitResolver;
 use uv_installer::SitePackages;
-use uv_lock::{Installable, Lock, ResolverManifest};
+use uv_lock::{Installable, Lock, LockParseError, ResolverManifest};
 use uv_normalize::{DefaultExtras, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
 use uv_preview::Preview;
@@ -358,14 +358,21 @@ impl ToolLock {
     }
 
     /// Read the lock for a tool, if one has been generated.
-    pub(super) fn read(directory: &Path) -> Option<Self> {
+    pub(super) fn read(directory: &Path) -> anyhow::Result<Option<Self>> {
         let path = directory.join("uv.lock");
-        match fs_err::read_to_string(&path) {
+        Ok(match fs_err::read_to_string(&path) {
             Ok(contents) => match Lock::from_toml(&contents) {
                 Ok(lock) => Some(Self {
                     root: directory.to_path_buf(),
                     lock,
                 }),
+                Err(LockParseError::AmbiguousPlatformRelease { .. }) => {
+                    // Treating this as a missing lock would also drop its trusted hashes.
+                    bail!(
+                        "Cannot verify the original `platform_release` comparisons in tool lock at `{}`; refusing to reinstall without its locked hashes",
+                        path.user_display()
+                    );
+                }
                 Err(err) => {
                     debug!(
                         "Ignoring invalid tool lock at `{}`: {err}",
@@ -382,7 +389,7 @@ impl ToolLock {
                 );
                 None
             }
-        }
+        })
     }
 
     /// Write or remove the lock for a tool.

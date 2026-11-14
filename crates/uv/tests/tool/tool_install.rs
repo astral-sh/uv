@@ -6593,3 +6593,41 @@ fn tool_install_with_build_hashes() -> Result<()> {
     }
     Ok(())
 }
+
+/// Reinstalling a tool cannot ignore its old lock and silently lose the recorded hashes.
+#[test]
+fn tool_install_rejects_ambiguous_platform_release() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_tool_dirs();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let wheel = context
+        .workspace_root
+        .join("test/links/simple_launcher-0.1.0-py3-none-any.whl");
+
+    context
+        .tool_install()
+        .arg(&wheel)
+        .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    let lock_path = tool_dir.child("simple-launcher").child("uv.lock");
+    let lock = context.read(&lock_path);
+    let old = lock.replace(
+        "requires-python = ",
+        "required-markers = [\"platform_release == '24'\"]\nrequires-python = ",
+    );
+    assert_ne!(old, lock);
+    lock_path.write_str(&old)?;
+
+    uv_snapshot!(context.filters(), context.tool_install().arg(&wheel).arg("--force")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Cannot verify the original `platform_release` comparisons in tool lock at `tools/simple-launcher/uv.lock`; refusing to reinstall without its locked hashes
+    ");
+    assert_eq!(old, context.read(&lock_path));
+    Ok(())
+}

@@ -59,7 +59,7 @@ use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use version_ranges::Ranges;
 
 use uv_normalize::ExtraName;
-use uv_pep440::{Operator, Version, VersionPattern, VersionSpecifier, release_specifier_to_range};
+use uv_pep440::{Operator, Version, VersionSpecifier, release_specifier_to_range};
 
 use crate::marker::MarkerValueExtra;
 use crate::marker::lowering::{
@@ -114,11 +114,13 @@ impl InternerShared {
         &self.nodes[id.index()]
     }
 
-    /// Returns whether a reachable node tests the singular `extra` variable.
-    ///
-    /// Complemented references have the same variables, so shared nodes are visited once
-    /// regardless of their polarity. List-valued `extras` and `dependency_groups` are distinct.
-    pub(crate) fn contains_extras(&self, marker: NodeId) -> bool {
+    /// Check the variables that occur in a marker. A node and its complement
+    /// refer to the same variables, so only visit that subgraph once.
+    pub(crate) fn contains_variable(
+        &self,
+        marker: NodeId,
+        predicate: impl Fn(&Variable) -> bool,
+    ) -> bool {
         let mut pending = SmallVec::from_slice(&[marker]);
         let mut visited = FxHashSet::default();
         while let Some(marker) = pending.pop() {
@@ -126,19 +128,12 @@ impl InternerShared {
                 continue;
             }
             let node = self.node(marker);
-            match &node.var {
-                Variable::Extra(_) => return true,
-                Variable::String(_)
-                | Variable::VersionString(_)
-                | Variable::Version(_)
-                | Variable::In { .. }
-                | Variable::Contains { .. }
-                | Variable::List(_) => {
-                    for child in node.children.nodes() {
-                        if !child.is_true() && !child.is_false() && visited.insert(child.index()) {
-                            pending.push(child);
-                        }
-                    }
+            if predicate(&node.var) {
+                return true;
+            }
+            for child in node.children.nodes() {
+                if !child.is_true() && !child.is_false() && visited.insert(child.index()) {
+                    pending.push(child);
                 }
             }
         }
@@ -368,31 +363,10 @@ impl InternerGuard<'_> {
                     ),
                     _ => (key.into(), value),
                 };
-                let string = self.create_node(
+                return self.create_node(
                     Variable::String(key),
-                    Edges::from_string(key, operator, value.clone()),
+                    Edges::from_string(key, operator, value),
                 );
-                // Darwin kernel releases are dotted versions. Other platforms can include
-                // arbitrary text in `platform_release`, so retain string comparisons there.
-                if key == CanonicalMarkerValueString::PlatformRelease
-                    && let Some(operator) = operator.to_pep440_operator()
-                    && let Ok(pattern) = value.parse::<VersionPattern>()
-                    && let Ok(specifier) = VersionSpecifier::from_pattern(operator, pattern)
-                {
-                    let version = self.create_node(
-                        Variable::VersionString(key),
-                        Edges::from_specifier(specifier),
-                    );
-                    let darwin = self.expression(MarkerExpression::String {
-                        key: MarkerValueString::SysPlatform,
-                        operator: MarkerOperator::Equal,
-                        value: arcstr::literal!("darwin"),
-                    });
-                    let version = self.and(darwin, version);
-                    let string = self.and(darwin.not(), string);
-                    return self.or(version, string);
-                }
-                return string;
             }
             MarkerExpression::List { pair, operator } => (
                 Variable::List(pair),
@@ -1379,8 +1353,6 @@ impl InternerGuard<'_> {
 pub(crate) enum Variable {
     /// A string marker, such as `os_name`.
     String(CanonicalMarkerValueString),
-    /// A string-valued marker interpreted as a version within a platform-specific scope.
-    VersionString(CanonicalMarkerValueString),
     /// A version marker, such as `python_version`.
     ///
     /// This is the highest order variable as it typically contains the most complex
