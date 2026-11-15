@@ -3384,6 +3384,16 @@ pub struct RunArgs {
     #[arg(long, value_parser = clap::builder::BoolishValueParser::new())]
     pub no_sync: bool,
 
+    /// Watch for changes and re-run the command automatically.
+    ///
+    /// uv watches the target script file and re-runs the command whenever it changes. If the
+    /// command is already running when a change is detected, it is terminated and restarted. Press
+    /// `Ctrl-C` to stop watching.
+    ///
+    /// This option is currently only supported when running a Python script.
+    #[arg(long)]
+    pub watch: bool,
+
     /// Assert that the `uv.lock` will remain unchanged [env: UV_LOCKED=]
     ///
     /// Requires that the lockfile is up-to-date. If the lockfile is missing or

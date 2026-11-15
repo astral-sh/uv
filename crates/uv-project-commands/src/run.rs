@@ -97,6 +97,7 @@ pub async fn run(
     frozen: Option<FrozenSource>,
     active: ActiveEnvironment,
     no_sync: bool,
+    watch: bool,
     isolated: bool,
     all_packages: bool,
     package: Option<PackageName>,
@@ -135,6 +136,18 @@ pub async fn run(
             max: max_recursion_depth,
         }
         .into());
+    }
+
+    // Validate `--watch` up front, before any interpreter discovery or syncing, so we fail fast
+    // instead of doing expensive setup for a command we can't watch.
+    if watch
+        && command
+            .as_ref()
+            .is_none_or(|command| command.watch_target().is_none())
+    {
+        bail!(
+            "`--watch` is only supported when running a Python script (e.g., `uv run --watch app.py`)"
+        );
     }
 
     // These cases seem quite complex because (in theory) they should change the "current package".
@@ -1189,8 +1202,6 @@ pub async fn run(
     };
 
     debug!("Running `{command}`");
-    let mut process = command.as_command(interpreter);
-    process.envs(env_file_environment);
 
     // Construct the `PATH` environment variable.
     let new_path = std::env::join_paths(
@@ -1216,18 +1227,6 @@ pub async fn run(
                     .flat_map(std::env::split_paths),
             ),
     )?;
-    process.env(EnvVars::PATH, new_path);
-
-    // Increment recursion depth counter.
-    process.env(
-        EnvVars::UV_RUN_RECURSION_DEPTH,
-        (recursion_depth + 1).to_string(),
-    );
-
-    // Ensure `VIRTUAL_ENV` is set.
-    if interpreter.is_virtualenv() {
-        process.env(EnvVars::VIRTUAL_ENV, interpreter.sys_prefix().as_os_str());
-    }
 
     #[cfg(unix)]
     if let Some(limit) = run_rlimit_nofile {
@@ -1239,14 +1238,132 @@ pub async fn run(
         })?;
     }
 
-    // Spawn and wait for completion
-    // Standard input, output, and error streams are all inherited
+    // Build a fresh child command with the resolved environment applied. In `--watch` mode this
+    // runs once per iteration; otherwise exactly once.
+    //
+    // Standard input, output, and error streams are all inherited.
+    let build_process = || {
+        let mut process = command.as_command(interpreter);
+        process.envs(
+            env_file_environment
+                .iter()
+                .map(|(k, v)| (k.as_str(), v.as_str())),
+        );
+        process.env(EnvVars::PATH, &new_path);
+        process.env(
+            EnvVars::UV_RUN_RECURSION_DEPTH,
+            (recursion_depth + 1).to_string(),
+        );
+        if interpreter.is_virtualenv() {
+            process.env(EnvVars::VIRTUAL_ENV, interpreter.sys_prefix().as_os_str());
+        }
+        process
+    };
+
+    if watch {
+        let Some(watch_target) = command.watch_target() else {
+            bail!(
+                "`--watch` is only supported when running a Python script; `{}` has no file to watch",
+                command.display_executable()
+            );
+        };
+        let executable = command.display_executable().into_owned();
+        return run_watch(&build_process, watch_target, &executable, printer).await;
+    }
+
+    // Spawn and wait for completion.
     // TODO(zanieb): Throw a nicer error message if the command is not found
-    let handle = process
+    let handle = build_process()
         .spawn()
         .with_context(|| format!("Failed to spawn: {}", command.display_executable()))?;
 
     run_to_completion(handle).await
+}
+
+/// Run a command in `--watch` mode: run it, then re-run whenever `watch_target` changes.
+///
+/// The child process keeps running until the target file changes, at which point it is terminated
+/// and a new run is started. Press `Ctrl-C` to stop watching. This is a first implementation that
+/// watches only the target script file; watching a project's dependencies is left for follow-up.
+async fn run_watch<F>(
+    build_process: &F,
+    watch_target: &Path,
+    executable: &str,
+    printer: Printer,
+) -> anyhow::Result<ExitStatus>
+where
+    F: Fn() -> Command,
+{
+    writeln!(
+        printer.stderr(),
+        "Watching `{}` for changes (press Ctrl-C to stop)",
+        watch_target.simplified_display()
+    )?;
+
+    // Baseline signature of the target file, so a change made before the first run isn't missed.
+    let mut last_signature = file_signature(watch_target);
+
+    loop {
+        let mut handle = build_process()
+            .spawn()
+            .with_context(|| format!("Failed to spawn: {executable}"))?;
+
+        // Wait for a change (or `Ctrl-C`). The child keeps running until then.
+        let restart = wait_for_change(watch_target, &mut last_signature).await;
+
+        // Terminate the current run (a no-op if it already exited) before restarting or exiting.
+        if let Err(err) = handle.kill().await {
+            debug!("Failed to terminate watched process: {err}");
+        }
+
+        if !restart {
+            break;
+        }
+
+        writeln!(
+            printer.stderr(),
+            "Change detected; restarting `{executable}`"
+        )?;
+    }
+
+    Ok(ExitStatus::Success)
+}
+
+/// The change-detection signature of a file: its modification time and length.
+///
+/// `None` if the file can't be read (e.g., it was temporarily removed during a save); a transition
+/// to or from `None` still counts as a change.
+fn file_signature(path: &Path) -> Option<(std::time::SystemTime, u64)> {
+    let metadata = fs_err::metadata(path).ok()?;
+    Some((metadata.modified().ok()?, metadata.len()))
+}
+
+/// Poll `path` until its [`file_signature`] changes, or until `Ctrl-C` is pressed.
+///
+/// Returns `true` if the command should be re-run (the file changed), or `false` if watching should
+/// stop (the user pressed `Ctrl-C`). `last_signature` is updated to the new value on a change.
+///
+// ponytail: 250ms mtime polling, not an OS file-watcher. Keeps the fork PR dependency-free (CI
+// rejects new external crates from forks); swap in `notify` if sub-poll latency ever matters.
+async fn wait_for_change(
+    path: &Path,
+    last_signature: &mut Option<(std::time::SystemTime, u64)>,
+) -> bool {
+    let poll = async {
+        loop {
+            tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+            let current = file_signature(path);
+            if current != *last_signature {
+                *last_signature = current;
+                return;
+            }
+        }
+    };
+
+    tokio::select! {
+        () = poll => true,
+        _ = tokio::signal::ctrl_c() => false,
+    }
 }
 
 /// Add the parent environments' site packages to an ephemeral environment.
@@ -1803,6 +1920,26 @@ impl RunCommand {
         // The parent is `Some("")` for bare filenames.
         parent.filter(|parent| !parent.as_os_str().is_empty())
     }
+
+    /// The local file to watch in `--watch` mode, if any.
+    ///
+    /// Only script targets have a single file to watch. Modules, packages, remote scripts, and
+    /// external commands have no obvious file, so `--watch` is unsupported for them.
+    fn watch_target(&self) -> Option<&Path> {
+        match self {
+            Self::PythonScript(target, _)
+            | Self::PythonGuiScript(target, _)
+            | Self::PythonZipapp(target, _) => Some(target),
+            Self::Python(_)
+            | Self::PythonModule(..)
+            | Self::PythonPackage(..)
+            | Self::PythonStdin(..)
+            | Self::PythonGuiStdin(..)
+            | Self::PythonRemote(..)
+            | Self::External(..)
+            | Self::Empty => None,
+        }
+    }
 }
 
 impl std::fmt::Display for RunCommand {
@@ -2100,5 +2237,40 @@ impl uv_errors::Hinted for RecursionLimitError {
             "uv run".green(),
             "--script".green(),
         ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use super::RunCommand;
+
+    #[test]
+    fn watch_target_is_set_for_script_commands_only() {
+        // Script-like commands expose the file to watch in `--watch` mode.
+        assert_eq!(
+            RunCommand::PythonScript("app.py".into(), vec![]).watch_target(),
+            Some(Path::new("app.py"))
+        );
+        assert_eq!(
+            RunCommand::PythonGuiScript("gui.pyw".into(), vec![]).watch_target(),
+            Some(Path::new("gui.pyw"))
+        );
+        assert_eq!(
+            RunCommand::PythonZipapp("app.pyz".into(), vec![]).watch_target(),
+            Some(Path::new("app.pyz"))
+        );
+
+        // Commands without a single file to watch return `None`, so `--watch` is rejected for them.
+        assert_eq!(
+            RunCommand::PythonModule("http.server".into(), vec![]).watch_target(),
+            None
+        );
+        assert_eq!(
+            RunCommand::External("ruff".into(), vec![]).watch_target(),
+            None
+        );
+        assert_eq!(RunCommand::Empty.watch_target(), None);
     }
 }
