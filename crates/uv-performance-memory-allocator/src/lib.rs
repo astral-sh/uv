@@ -7,12 +7,10 @@
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 #[cfg(all(
-    not(any(
-        target_os = "windows",
-        target_os = "openbsd",
-        target_os = "freebsd",
-        target_os = "haiku"
-    )),
+    not(target_os = "windows"),
+    not(target_os = "openbsd"),
+    not(target_os = "freebsd"),
+    not(target_os = "haiku"),
     any(
         target_arch = "x86_64",
         target_arch = "aarch64",

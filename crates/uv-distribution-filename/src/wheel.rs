@@ -387,7 +387,7 @@ impl WheelFilename {
 fn parse_large_tag_component<T: FromStr>(
     component: &str,
     filename: &str,
-    platform: bool,
+    allow_haiku_tilde: bool,
 ) -> Result<TagSet<T>, WheelFilenameError> {
     if component.is_empty() {
         return Err(invalid_tag_component(filename));
@@ -395,7 +395,7 @@ fn parse_large_tag_component<T: FromStr>(
 
     let mut tags = TagSet::new();
     for tag in MemchrSplitter::split(component, b'.') {
-        let allow_tilde = platform && tag.starts_with("haiku_");
+        let allow_tilde = allow_haiku_tilde && tag.starts_with("haiku_");
         if tag.is_empty()
             || !tag
                 .bytes()
@@ -570,6 +570,10 @@ mod tests {
         let err = WheelFilename::from_str("foo-1.2.3-py3-none-freebsd_13_x86/64.whl").unwrap_err();
         insta::assert_snapshot!(err, @r#"The wheel filename `foo-1.2.3-py3-none-freebsd_13_x86/64.whl` is invalid: Tag components must contain only ASCII letters, digits, underscores, and periods"#);
 
+        let err =
+            WheelFilename::from_str("foo-1.2.3-cp314-cp314-haiku_r1~beta6_x86/64.whl").unwrap_err();
+        insta::assert_snapshot!(err, @r#"The wheel filename `foo-1.2.3-cp314-cp314-haiku_r1~beta6_x86/64.whl` is invalid: Tag components must contain only ASCII letters, digits, underscores, and periods"#);
+
         let err = WheelFilename::from_str("foo-1.2.3-py3-none-unknown tag.whl").unwrap_err();
         insta::assert_snapshot!(err, @r#"The wheel filename `foo-1.2.3-py3-none-unknown tag.whl` is invalid: Tag components must contain only ASCII letters, digits, underscores, and periods"#);
 
@@ -582,17 +586,16 @@ mod tests {
 
     #[test]
     fn haiku_beta_wheel_tags() -> Result<(), Box<dyn Error>> {
-        let tag = "haiku_r1~beta6_x86_64".parse::<PlatformTag>()?;
-        for filename in [
-            "foo-1.2.3-cp314-cp314-haiku_r1~beta6_x86_64.whl",
-            "foo-1.2.3-1-cp314-cp314-haiku_r1~beta6_x86_64.whl",
-        ] {
-            let wheel = WheelFilename::from_str(filename)?;
-            assert_eq!(wheel.platform_tags(), std::slice::from_ref(&tag));
-        }
-        assert!(
-            WheelFilename::from_str("foo-1.2.3-cp314-cp314-haiku_r1~beta6_x86/64.whl").is_err()
-        );
+        let platform_tag = PlatformTag::from_str("haiku_r1~beta6_x86_64")?;
+        let platform_tags = std::slice::from_ref(&platform_tag);
+
+        let wheel = WheelFilename::from_str("foo-1.2.3-cp314-cp314-haiku_r1~beta6_x86_64.whl")?;
+        assert_eq!(wheel.platform_tags(), platform_tags);
+
+        // A build tag forces the general filename parser.
+        let wheel = WheelFilename::from_str("foo-1.2.3-1-cp314-cp314-haiku_r1~beta6_x86_64.whl")?;
+        assert_eq!(wheel.platform_tags(), platform_tags);
+
         Ok(())
     }
 

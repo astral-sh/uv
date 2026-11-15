@@ -1234,6 +1234,16 @@ mod tests {
     }
 
     #[test]
+    fn haiku_platform() {
+        assert_eq!(
+            PlatformTag::from_str("haiku_r1~beta6_x86_64")
+                .as_ref()
+                .map(ToString::to_string),
+            Ok("haiku_r1~beta6_x86_64".to_string()),
+        );
+    }
+
+    #[test]
     fn illumos_platform() {
         assert_eq!(
             PlatformTag::from_str("illumos_5_11_x86_64")
@@ -1263,6 +1273,12 @@ mod tests {
 
     #[test]
     fn invalid_characters_platform() {
+        assert_eq!(
+            PlatformTag::from_str("freebsd_13~release_amd64"),
+            Err(ParsePlatformTagError::InvalidCharacters {
+                tag: "freebsd_13~release_amd64".to_string(),
+            }),
+        );
         assert_eq!(
             PlatformTag::from_str("freebsd_13_x86/64"),
             Err(ParsePlatformTagError::InvalidCharacters {

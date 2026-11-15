@@ -1,10 +1,14 @@
 use std::fmt::Display;
 use std::io;
+#[cfg(all(feature = "tokio", any(target_os = "android", target_os = "haiku")))]
+use std::os::fd::AsFd;
 use std::path::PathBuf;
 use std::time::Duration;
 #[cfg(feature = "tokio")]
 use std::{convert::Into, env, path::Path, sync::LazyLock};
 
+#[cfg(all(feature = "tokio", any(target_os = "android", target_os = "haiku")))]
+use rustix::fs::{FlockOperation, flock};
 use thiserror::Error;
 #[cfg(feature = "tokio")]
 use tracing::{debug, error, info, trace, warn};
@@ -125,13 +129,11 @@ impl LockedFileMode {
     /// Use the platform's `flock` when Rust's file-locking API is unavailable.
     #[cfg(any(target_os = "android", target_os = "haiku"))]
     fn try_lock(self, file: &fs_err::File) -> Result<(), std::fs::TryLockError> {
-        use std::os::fd::AsFd;
-
         let operation = match self {
-            Self::Exclusive => rustix::fs::FlockOperation::NonBlockingLockExclusive,
-            Self::Shared => rustix::fs::FlockOperation::NonBlockingLockShared,
+            Self::Exclusive => FlockOperation::NonBlockingLockExclusive,
+            Self::Shared => FlockOperation::NonBlockingLockShared,
         };
-        rustix::fs::flock(file.as_fd(), operation).map_err(|errno| {
+        flock(file.as_fd(), operation).map_err(|errno| {
             if errno == rustix::io::Errno::WOULDBLOCK {
                 std::fs::TryLockError::WouldBlock
             } else {
@@ -160,13 +162,11 @@ impl LockedFileMode {
     /// Use the platform's `flock` when Rust's file-locking API is unavailable.
     #[cfg(any(target_os = "android", target_os = "haiku"))]
     fn lock(self, file: &fs_err::File) -> Result<(), io::Error> {
-        use std::os::fd::AsFd;
-
         let operation = match self {
-            Self::Exclusive => rustix::fs::FlockOperation::LockExclusive,
-            Self::Shared => rustix::fs::FlockOperation::LockShared,
+            Self::Exclusive => FlockOperation::LockExclusive,
+            Self::Shared => FlockOperation::LockShared,
         };
-        rustix::fs::flock(file.as_fd(), operation)
+        flock(file.as_fd(), operation)
             .map_err(|errno| io::Error::from_raw_os_error(errno.raw_os_error()))
     }
 }
@@ -330,24 +330,19 @@ impl LockedFile {
         match file.persist_noclobber(path.as_ref()) {
             Ok(file) => Ok(fs_err::File::from_parts(file, path.as_ref())),
             Err(err) => {
+                let errno = Errno::from_io_error(&err.error);
                 if err.error.kind() == std::io::ErrorKind::AlreadyExists {
                     fs_err::OpenOptions::new()
                         .read(true)
                         .write(true)
                         .open(path.as_ref())
                         .map_err(Into::into)
-                } else if matches!(
-                    Errno::from_io_error(&err.error),
-                    Some(Errno::NOTSUP | Errno::INVAL)
-                ) || (cfg!(target_os = "haiku")
-                    && Errno::from_io_error(&err.error) == Some(Errno::PERM))
+                } else if matches!(errno, Some(Errno::NOTSUP | Errno::INVAL))
+                    || (cfg!(target_os = "haiku") && errno == Some(Errno::PERM))
                 {
-                    // Fallback in case `persist_noclobber`, which uses `renameat2` or
-                    // `renameatx_np` under the hood, is not supported by the FS. Linux reports this
-                    // with `EINVAL` and MacOS with `ENOTSUP`. For these reasons and many others,
-                    // there isn't an ErrorKind we can use here, and in fact on MacOS `ENOTSUP` gets
-                    // mapped to `ErrorKind::Other`. On Haiku's BFS, the hard-link fallback
-                    // used by `persist_noclobber` reports `EPERM`.
+                    // Fall back when the filesystem does not support `persist_noclobber`.
+                    // Linux's `renameat2` reports `EINVAL`, macOS's `renameatx_np` reports
+                    // `ENOTSUP`, and the hard-link fallback reports `EPERM` on Haiku's BFS.
 
                     // There is a race here where another process has just created the file, and we
                     // try to open it and get permission errors because the other process hasn't set
@@ -410,9 +405,7 @@ impl LockedFile {
     /// Use the platform's `flock` when Rust's file-locking API is unavailable.
     #[cfg(any(target_os = "android", target_os = "haiku"))]
     fn unlock(&self) -> Result<(), io::Error> {
-        use std::os::fd::AsFd;
-
-        rustix::fs::flock(self.0.as_fd(), rustix::fs::FlockOperation::Unlock)
+        flock(self.0.as_fd(), FlockOperation::Unlock)
             .map_err(|errno| io::Error::from_raw_os_error(errno.raw_os_error()))
     }
 }
@@ -444,12 +437,14 @@ impl Drop for LockedFile {
 
 #[cfg(all(test, feature = "tokio", target_os = "haiku"))]
 mod tests {
+    use std::io;
+
     use super::{LockedFile, LockedFileMode};
 
     #[test]
-    fn haiku_file_lock_contention_and_release() -> std::io::Result<()> {
-        let directory = tempfile::tempdir()?;
-        let path = directory.path().join("lock");
+    fn haiku_file_lock_contention_and_release() -> io::Result<()> {
+        let tempdir = tempfile::tempdir()?;
+        let path = tempdir.path().join("lock");
 
         let first = LockedFile::acquire_no_wait(&path, LockedFileMode::Shared, "test");
         let second = LockedFile::acquire_no_wait(&path, LockedFileMode::Shared, "test");

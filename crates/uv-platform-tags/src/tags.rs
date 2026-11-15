@@ -1614,12 +1614,12 @@ mod tests {
             Arch::X86_64,
         ))
         .unwrap();
-
-        let name = "haiku_r1~beta6_x86_64";
-        assert_eq!(tags.len(), 1);
-        assert_eq!(tags[0].to_string(), name);
-        assert_eq!(name.parse::<PlatformTag>(), Ok(tags[0].clone()));
-        assert!("freebsd_13~release_amd64".parse::<PlatformTag>().is_err());
+        let tags = tags.iter().map(ToString::to_string).collect::<Vec<_>>();
+        assert_debug_snapshot!(tags, @r#"
+        [
+            "haiku_r1~beta6_x86_64",
+        ]
+        "#);
     }
 
     #[test]
