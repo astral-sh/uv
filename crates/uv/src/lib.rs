@@ -714,7 +714,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
             args.compat_args.validate()?;
 
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = PipCompileSettings::resolve(args, filesystem, environment)?;
+            let args = PipCompileSettings::resolve(args, filesystem, &environment)?;
             show_settings!(args);
 
             // Check for conflicts between offline and refresh.
@@ -797,6 +797,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                 args.settings.index_locations,
                 args.settings.index_strategy,
                 args.settings.torch_backend,
+                args.settings.torch_backend_index,
                 args.settings.cuda_driver_version,
                 args.settings.amd_gpu_architecture,
                 args.settings.dependency_metadata,
@@ -837,7 +838,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
             args.compat_args.validate()?;
 
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = PipSyncSettings::resolve(args, filesystem, environment)?;
+            let args = PipSyncSettings::resolve(args, filesystem, &environment)?;
             show_settings!(args);
 
             // Check for conflicts between offline and refresh.
@@ -886,6 +887,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                 args.settings.index_locations,
                 args.settings.index_strategy,
                 args.settings.torch_backend,
+                args.settings.torch_backend_index,
                 args.settings.cuda_driver_version,
                 args.settings.amd_gpu_architecture,
                 args.settings.dependency_metadata,
@@ -930,7 +932,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
             args.compat_args.validate()?;
 
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let mut args = PipInstallSettings::resolve(args, filesystem, environment)?;
+            let mut args = PipInstallSettings::resolve(args, filesystem, &environment)?;
             show_settings!(args);
 
             let mut requirements = Vec::with_capacity(
@@ -1047,6 +1049,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                 args.settings.index_locations,
                 args.settings.index_strategy,
                 args.settings.torch_backend,
+                args.settings.torch_backend_index,
                 args.settings.cuda_driver_version,
                 args.settings.amd_gpu_architecture,
                 args.settings.dependency_metadata,
@@ -1096,7 +1099,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
             args.compat_args.validate()?;
 
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = PipUninstallSettings::resolve(args, filesystem, environment)?;
+            let args = PipUninstallSettings::resolve(args, filesystem, &environment)?;
             show_settings!(args);
 
             // Initialize the cache.
@@ -1133,7 +1136,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
             ..
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = PipFreezeSettings::resolve(args, filesystem, environment)?;
+            let args = PipFreezeSettings::resolve(args, filesystem, &environment)?;
             show_settings!(args);
 
             // Initialize the cache.
@@ -1161,7 +1164,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
             args.compat_args.validate()?;
 
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = PipListSettings::resolve(args, filesystem, environment)?;
+            let args = PipListSettings::resolve(args, filesystem, &environment)?;
             show_settings!(args);
 
             // Initialize the cache.
@@ -1196,7 +1199,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
             ..
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = PipShowSettings::resolve(args, filesystem, environment)?;
+            let args = PipShowSettings::resolve(args, filesystem, &environment)?;
             show_settings!(args);
 
             // Initialize the cache.
@@ -1221,7 +1224,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
             ..
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = PipTreeSettings::resolve(args, filesystem, environment)?;
+            let args = PipTreeSettings::resolve(args, filesystem, &environment)?;
             show_settings!(args);
 
             // Initialize the cache.
@@ -1257,7 +1260,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
             ..
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = PipCheckSettings::resolve(args, filesystem, environment)?;
+            let args = PipCheckSettings::resolve(args, filesystem, &environment)?;
             show_settings!(args);
 
             // Initialize the cache.
@@ -1383,7 +1386,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
             }
 
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::VenvSettings::resolve(args, filesystem, environment)?;
+            let args = settings::VenvSettings::resolve(args, filesystem, &environment)?;
             show_settings!(args);
 
             // Check for conflicts between offline and refresh.

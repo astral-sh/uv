@@ -1531,6 +1531,7 @@ pub async fn resolve_environment(
         build_options,
         sources,
         torch_backend,
+        torch_backend_index,
         cuda_driver_version,
         amd_gpu_architecture,
     } = settings;
@@ -1587,6 +1588,7 @@ pub async fn resolve_environment(
                     .os(),
                 cuda_driver_version.clone(),
                 *amd_gpu_architecture,
+                torch_backend_index.as_ref(),
             )
         })
         .transpose()?;
@@ -1939,6 +1941,7 @@ pub async fn update_environment(
                 resolution,
                 sources,
                 torch_backend,
+                torch_backend_index,
                 cuda_driver_version,
                 amd_gpu_architecture,
                 upgrade,
@@ -2028,6 +2031,7 @@ pub async fn update_environment(
                     .os(),
                 cuda_driver_version.clone(),
                 *amd_gpu_architecture,
+                torch_backend_index.as_ref(),
             )
         })
         .transpose()?;
