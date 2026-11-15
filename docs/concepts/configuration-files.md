@@ -97,6 +97,15 @@ The `--env-file` flag can be provided multiple times, with subsequent files over
 defined in previous files. To provide multiple files via the `UV_ENV_FILE` environment variable,
 separate the paths with a space (e.g., `UV_ENV_FILE="/path/to/file1 /path/to/file2"`).
 
+The dotenv parser used by uv differs from `python-dotenv` in a few cases:
+
+- Values that contain spaces must be quoted, for example `MY_VAR="hello world"`. Unquoted values
+  with spaces are not loaded.
+- A `$` starts variable substitution. To use a literal `$`, enclose the value in single quotes.
+- A variable name in a substitution can contain letters and digits, but not underscores. `$FOO_BAR`
+  is read as `$FOO` followed by `_BAR`. Use `${FOO_BAR}` to substitute a variable whose name
+  contains an underscore.
+
 To disable dotenv loading (e.g., to override `UV_ENV_FILE` or the `--env-file` command-line
 argument), set the `UV_NO_ENV_FILE` environment variable to `1`, or pass the `--no-env-file` flag to
 `uv run`.
