@@ -31,9 +31,20 @@ impl FromStr for ReleaseArch {
     type Err = ParseReleaseArchError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if s.bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
-        {
+        Self::parse(s, false)
+    }
+}
+
+impl ReleaseArch {
+    pub(crate) fn parse_haiku(s: &str) -> Result<Self, ParseReleaseArchError> {
+        // Python preserves the tilde in pre-release versions such as R1~beta6.
+        Self::parse(s, true)
+    }
+
+    fn parse(s: &str, allow_tilde: bool) -> Result<Self, ParseReleaseArchError> {
+        if s.bytes().all(|byte| {
+            byte.is_ascii_alphanumeric() || byte == b'_' || (allow_tilde && byte == b'~')
+        }) {
             Ok(Self(SmallString::from(s.to_ascii_lowercase())))
         } else {
             Err(ParseReleaseArchError)
@@ -107,7 +118,7 @@ pub enum PlatformTag {
     OpenBsd { release_arch: ReleaseArch },
     /// Ex) `dragonfly_6_x86_64`
     Dragonfly { release_arch: ReleaseArch },
-    /// Ex) `haiku_1_x86_64`
+    /// Ex) `haiku_r1~beta6_x86_64`
     Haiku { release_arch: ReleaseArch },
     /// Ex) `illumos_5_11_x86_64`
     Illumos { release_arch: ReleaseArch },
@@ -787,7 +798,7 @@ impl FromStr for PlatformTag {
         }
 
         if let Some(rest) = s.strip_prefix("haiku_") {
-            // Ex) haiku_1_x86_64
+            // Ex) haiku_r1~beta6_x86_64
             if rest.is_empty() {
                 return Err(ParsePlatformTagError::InvalidFormat {
                     platform: "haiku",
@@ -795,8 +806,7 @@ impl FromStr for PlatformTag {
                 });
             }
             return Ok(Self::Haiku {
-                release_arch: rest
-                    .parse::<ReleaseArch>()
+                release_arch: ReleaseArch::parse_haiku(rest)
                     .map_err(|_| ParsePlatformTagError::InvalidCharacters { tag: s.to_string() })?,
             });
         }
@@ -956,7 +966,7 @@ impl FromStr for PlatformTag {
 }
 
 #[derive(Debug, Clone, Copy, thiserror::Error, PartialEq, Eq)]
-#[error("release and architecture must contain only ASCII letters, digits, and underscores")]
+#[error("release and architecture contain unsupported characters")]
 pub struct ParseReleaseArchError;
 
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
@@ -973,7 +983,7 @@ pub enum ParsePlatformTagError {
     InvalidArch { platform: &'static str, tag: String },
     #[error("Invalid API level in {platform} platform tag: {tag}")]
     InvalidApiLevel { platform: &'static str, tag: String },
-    #[error("Platform tag must contain only ASCII letters, digits, and underscores: {tag}")]
+    #[error("Platform tag contains unsupported characters: {tag}")]
     InvalidCharacters { tag: String },
 }
 
