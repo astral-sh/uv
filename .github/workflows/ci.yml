@@ -26,7 +26,7 @@ jobs:
   check-cargo-vet:
     name: "check | crates"
     needs: plan
-    uses: astral-sh/github-actions/.github/workflows/cargo-vet.yml@8d42129d24fb11f758d6c1f79abc7e30a67157a0
+    uses: astral-sh/github-actions/.github/workflows/cargo-vet.yml@67dc9ee1ddc113eccd8116e7b949fb6cdcd89889 # 2026.11.16.0
     with:
       runner: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
       workspaces: ${{ needs.plan.outputs.cargo-vet-workspaces }}
@@ -48,7 +48,7 @@ jobs:
     if: ${{ github.event_name == 'pull_request' && github.repository == 'astral-sh/uv' && github.event.pull_request.head.repo.full_name == github.repository && needs.plan.outputs.review-security == 'true' }}
     # N.B. despite setting this, Depot jobs allow cache writes directly through the API
     cache-mode: read
-    uses: astral-sh/github-actions/.github/workflows/pull-request-security-review.yml@f11dbff15181b71f2cc5e8487b1ac7d7bb03ea7d
+    uses: astral-sh/github-actions/.github/workflows/pull-request-security-review.yml@67dc9ee1ddc113eccd8116e7b949fb6cdcd89889 # 2026.11.16.0
     with:
       runner: depot-ubuntu-24.04-16
       helper-runner: github-ubuntu-24.04-x86_64-4
@@ -147,7 +147,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/github-actions/cargo-cooldowns@4d0d0b9f3efeb82c92183f4423e395b81c3fcf5e
+      - uses: astral-sh/github-actions/cargo-cooldowns@67dc9ee1ddc113eccd8116e7b949fb6cdcd89889 # 2026.11.16.0
         with:
           policy: .github/cargo-cooldowns.toml
 

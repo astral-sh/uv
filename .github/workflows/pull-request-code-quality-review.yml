@@ -139,7 +139,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: astral-sh/github-actions
-          ref: 3c57a5dba8ad854a97e8b9fbf454286a7574e677
+          ref: 67dc9ee1ddc113eccd8116e7b949fb6cdcd89889 # 2026.11.16.0
           sparse-checkout: pull-request-review
           persist-credentials: false
 
@@ -170,13 +170,13 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: astral-sh/github-actions
-          ref: 3c57a5dba8ad854a97e8b9fbf454286a7574e677
+          ref: 67dc9ee1ddc113eccd8116e7b949fb6cdcd89889 # 2026.11.16.0
           sparse-checkout: pull-request-review
           persist-credentials: false
 
       - name: "Get repository token"
         id: token
-        uses: astral-sh/github-actions/simple-token-service@eb81cf4d13127c3f9539f621c17e4c65327636c8
+        uses: astral-sh/github-actions/simple-token-service@67dc9ee1ddc113eccd8116e7b949fb6cdcd89889 # 2026.11.16.0
         with:
           exchange-url: ${{ secrets.STS_API_URL }}/exchange
           audience: ${{ secrets.STS_API_URL }}
