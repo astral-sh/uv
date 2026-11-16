@@ -1237,10 +1237,7 @@ impl VersionSmall {
     #[inline]
     #[expect(clippy::unused_self)]
     fn set_epoch(&mut self, value: u64) -> bool {
-        if value != 0 {
-            return false;
-        }
-        true
+        value == 0
     }
 
     #[inline]

@@ -491,11 +491,7 @@ impl RequiresPython {
 
                 // Ex) If the wheel bound is `3.12`, then it doesn't match `<=3.10.`.
                 let wheel_bound = UpperBound(Bound::Included(Version::new([3, u64::from(*minor)])));
-                if wheel_bound > self.range.upper().major_minor() {
-                    return false;
-                }
-
-                true
+                wheel_bound <= self.range.upper().major_minor()
             } else {
                 // Unknown tags are allowed.
                 true

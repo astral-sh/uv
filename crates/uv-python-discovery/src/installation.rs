@@ -79,10 +79,7 @@ impl PythonInstallation {
             );
             return false;
         }
-        if !self.satisfies_preference(&preference) {
-            return false;
-        }
-        true
+        self.satisfies_preference(&preference)
     }
 
     /// Find an installed [`PythonInstallation`].

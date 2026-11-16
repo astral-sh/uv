@@ -1503,18 +1503,13 @@ fn requests_prerelease(range: &Range<Version>) -> bool {
             return true;
         }
 
-        let is_pre2 = match end {
+        match end {
             Bound::Included(version) => version.any_prerelease(),
             Bound::Excluded(version) => {
                 version.any_prerelease() && !is_compatible_release_upper_bound(version)
             }
             Bound::Unbounded => false,
-        };
-        if is_pre2 {
-            return true;
         }
-
-        false
     })
 }
 

@@ -89,6 +89,3 @@ dev = ["dep:tracing-durations-export"]
 performance = ["performance-memory-allocator"]
 performance-memory-allocator = ["dep:uv-performance-memory-allocator"]
 render = ["poloto", "resvg", "tagu"]
-
-[package.metadata.cargo-shear]
-ignored = ["uv-performance-memory-allocator"]

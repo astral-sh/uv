@@ -1,3 +1,7 @@
+// Keep the allocator crate linked so its global allocator is installed.
+#[cfg(feature = "performance-memory-allocator")]
+extern crate uv_performance_memory_allocator;
+
 use std::env;
 use std::path::PathBuf;
 use std::process::ExitCode;

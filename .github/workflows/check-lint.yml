@@ -17,7 +17,7 @@ env:
   CARGO_NET_RETRY: 10
   CARGO_TERM_COLOR: always
   # renovate: datasource=github-releases depName=astral-sh/hawk
-  HAWK_VERSION: 0.1.17
+  HAWK_VERSION: 0.1.18
   RUSTUP_MAX_RETRIES: 10
   UV_LOCKED: 1
   UV_PYTHON_DOWNLOADS_JSON_URL: ${{ github.workspace }}/crates/uv-python-managed/download-metadata.json
@@ -116,7 +116,7 @@ jobs:
       - name: "Install Rust toolchain"
         run: rustup component add clippy
 
-      - uses: astral-sh/github-actions/rust-workspace-cache@67dc9ee1ddc113eccd8116e7b949fb6cdcd89889 # 2026.11.16.0
+      - uses: astral-sh/github-actions/rust-workspace-cache@ef53ab30bbd14faedc62386d46ea70d6798a9fcf
         with:
           save-if: ${{ inputs.save-rust-cache == 'true' }}
       - name: "Clippy"
@@ -148,7 +148,7 @@ jobs:
       - name: "Install Rust toolchain"
         run: rustup component add clippy
 
-      - uses: astral-sh/github-actions/rust-workspace-cache@67dc9ee1ddc113eccd8116e7b949fb6cdcd89889 # 2026.11.16.0
+      - uses: astral-sh/github-actions/rust-workspace-cache@ef53ab30bbd14faedc62386d46ea70d6798a9fcf
         with:
           workspace: ${{ env.UV_WORKSPACE }}
           save-if: ${{ inputs.save-rust-cache == 'true' }}
@@ -187,7 +187,7 @@ jobs:
     if: ${{ inputs.code-changed == 'true' || github.ref == 'refs/heads/main' }}
     runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     env:
-      RUSTUP_TOOLCHAIN: "1.99.0"
+      RUSTUP_TOOLCHAIN: "1.100.0"
       RUSTC_BOOTSTRAP: "1"
       CARGO_UNSTABLE_CHECKSUM_FRESHNESS: "true"
     steps:
@@ -196,7 +196,7 @@ jobs:
           persist-credentials: false
       - name: Install Rust toolchain
         run: rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal
-      - uses: astral-sh/github-actions/rust-workspace-cache@67dc9ee1ddc113eccd8116e7b949fb6cdcd89889 # 2026.11.16.0
+      - uses: astral-sh/github-actions/rust-workspace-cache@ef53ab30bbd14faedc62386d46ea70d6798a9fcf
         with:
           target-directory: target/hawk
           extra-target-directory: hawk-fragments
