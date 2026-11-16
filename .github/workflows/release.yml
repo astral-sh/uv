@@ -139,6 +139,7 @@ jobs:
     uses: $/.github/workflows/sign-release-binaries.yml
     with:
       plan: ${{ needs.plan.outputs.val }}
+      dry-run: ${{ inputs.dry-run }}
     secrets: inherit
     permissions:
       contents: read
