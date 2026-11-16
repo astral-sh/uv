@@ -107,7 +107,10 @@ pub enum ProxyIndexError {
 
 /// A URL that is safe to use as a reversible route prefix.
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct UrlPrefix(SafeUrl);
+struct UrlPrefix {
+    url: SafeUrl,
+    path_end: usize,
+}
 
 impl UrlPrefix {
     fn new(url: SafeUrl) -> Result<Self, ProxyIndexConfigError> {
@@ -145,19 +148,24 @@ impl UrlPrefix {
             }
         }
 
-        Ok(Self(url))
+        let path_end = url.path().trim_end_matches('/').len();
+        Ok(Self { url, path_end })
     }
 
     fn as_url(&self) -> &SafeUrl {
-        &self.0
+        &self.url
+    }
+
+    fn path(&self) -> &str {
+        &self.url.path()[..self.path_end]
     }
 
     fn path_suffix<'a>(&self, url: &'a SafeUrl) -> Option<&'a str> {
-        if RealmRef::from(url) != RealmRef::from(&self.0) {
+        if RealmRef::from(url) != RealmRef::from(&self.url) {
             return None;
         }
 
-        uv_auth::strip_path_prefix(self.0.path().trim_end_matches('/'), url.path())
+        uv_auth::strip_path_prefix(self.path(), url.path())
     }
 }
 
@@ -185,7 +193,7 @@ impl CanonicalArtifactUrlPrefix {
         let prefix = UrlPrefix::new(url)?;
         if !prefix.as_url().username().is_empty() || prefix.as_url().password().is_some() {
             return Err(ProxyIndexConfigError::InvalidMapping {
-                url: Box::new(prefix.0),
+                url: Box::new(prefix.url),
                 reason: "canonical URL prefixes cannot contain credentials",
             });
         }
@@ -233,7 +241,7 @@ impl ArtifactUrlMapping {
         };
 
         let mut rewritten = target.as_url().clone();
-        let target_path = target.as_url().path().trim_end_matches('/');
+        let target_path = target.path();
         if suffix.is_empty() {
             if prefix.as_url().path().ends_with('/') && !target.as_url().path().ends_with('/') {
                 rewritten.set_path(&format!("{target_path}/"));
