@@ -15,6 +15,7 @@ use windows::Win32::Foundation::{HANDLE, WAIT_OBJECT_0};
 use windows::Win32::System::Threading::{
     CREATE_NO_WINDOW, GetExitCodeProcess, INFINITE, WaitForSingleObject,
 };
+use windows::Win32::UI::WindowsAndMessaging::{ASFW_ANY, AllowSetForegroundWindow};
 
 use crate::job::JobError;
 use crate::{Job, install_ctrl_handler};
@@ -44,6 +45,20 @@ impl<'a> SupervisedChild<'a> {
     fn raw_handle(&self) -> HANDLE {
         HANDLE(self.handle.as_raw_handle())
     }
+}
+
+/// Allows the processes this process starts to bring their windows to the foreground.
+///
+/// Windows only lets a process take the foreground if it was given permission, e.g., by
+/// `start` in a batch script. That permission is not inherited by child processes, so a GUI
+/// application launched through a wrapper like `uvw run gui.py` (which spawns `uv`, which in
+/// turn spawns Python) would otherwise open its window behind other windows.
+///
+/// This has no effect if the current process is not allowed to take the foreground itself.
+#[allow(unsafe_code)]
+pub fn allow_set_foreground_window() {
+    // SAFETY: `AllowSetForegroundWindow` has no memory safety preconditions.
+    let _ = unsafe { AllowSetForegroundWindow(ASFW_ANY) };
 }
 
 /// Spawns a child process using Job Objects to ensure proper cleanup.

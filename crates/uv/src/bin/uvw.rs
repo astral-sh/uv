@@ -12,7 +12,10 @@ fn exec_spawn(cmd: &mut Command) -> std::io::Result<Infallible> {
             let err = cmd.exec();
             Err(err)
         },
-        windows => uv_windows::spawn_child(cmd, true),
+        windows => {
+            uv_windows::allow_set_foreground_window();
+            uv_windows::spawn_child(cmd, true)
+        },
     }
 }
 
