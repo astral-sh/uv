@@ -19,27 +19,6 @@ use super::{
     implicit_constraints_marker, marker_is_unreachable,
 };
 
-impl Lock {
-    /// Check that resolved versions satisfy the declarations available in the lockfile.
-    pub(super) fn check_locked_versions(
-        &self,
-        workspace_members: &BTreeMap<PackageName, WorkspaceMember>,
-        dependency_metadata: &DependencyMetadata,
-        constraints: Constraints,
-        modifiers: &DependencyModifiers,
-    ) -> Option<LockSatisfactionError> {
-        VersionChecker {
-            lock: self,
-            workspace_members,
-            dependency_metadata,
-            constraints,
-            modifiers,
-            reachability: OnceCell::new(),
-        }
-        .check()
-    }
-}
-
 /// The union of path markers from workspace members and manifest roots to each locked package's
 /// production, extra, or group section.
 ///
@@ -68,7 +47,7 @@ enum ExtraProvenance {
 
 /// Detects version mismatches that can be established from the lockfile and validated resolution
 /// inputs. A mismatch requires an applicable registry specifier and a reachable locked selection.
-struct VersionChecker<'lock, 'settings> {
+pub(super) struct VersionChecker<'lock, 'settings> {
     /// Supplies the exact locked selections and any recorded dependency declarations.
     lock: &'lock Lock,
     /// Workspace members of the target being validated. A script can depend on an editable
@@ -85,8 +64,27 @@ struct VersionChecker<'lock, 'settings> {
     reachability: OnceCell<Reachability<'lock>>,
 }
 
-impl<'lock> VersionChecker<'lock, '_> {
-    fn check(&self) -> Option<LockSatisfactionError> {
+impl<'lock, 'settings> VersionChecker<'lock, 'settings> {
+    /// Check that resolved versions satisfy the declarations available in the lockfile.
+    pub(super) fn check(
+        lock: &'lock Lock,
+        workspace_members: &'settings BTreeMap<PackageName, WorkspaceMember>,
+        dependency_metadata: &'settings DependencyMetadata,
+        constraints: Constraints,
+        modifiers: &'settings DependencyModifiers,
+    ) -> Option<LockSatisfactionError> {
+        Self {
+            lock,
+            workspace_members,
+            dependency_metadata,
+            constraints,
+            modifiers,
+            reachability: OnceCell::new(),
+        }
+        .find_mismatch()
+    }
+
+    fn find_mismatch(&self) -> Option<LockSatisfactionError> {
         for (requirement, index, marker) in self.root_selections() {
             let package = self.lock.package(index);
             if let Some(mismatch) = self
@@ -230,6 +228,12 @@ impl<'lock> VersionChecker<'lock, '_> {
         dependencies: &'lock [Dependency],
         prepared_requires_dist: &mut Option<Vec<Requirement>>,
     ) -> Option<LockSatisfactionError> {
+        // `partition_point` and `take_while` below rely on `Lock::new` sorting dependencies
+        // by package name. Otherwise, the search could silently skip a matching edge.
+        assert!(
+            dependencies.is_sorted_by(|left, right| left.package_id.name <= right.package_id.name)
+        );
+
         let package = self.lock.package(index);
         // If this parent has package-scoped overrides or exclusions and its version is missing,
         // skip its production and optional requirements. For example, we can't tell whether an

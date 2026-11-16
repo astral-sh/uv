@@ -83,6 +83,7 @@ pub use crate::lock::map::PackageMap;
 pub use crate::lock::tree::{TreeDisplay, TreeJsonTarget};
 
 use self::requirements::{RequirementNormalizer, normalize_collection, normalize_requirement};
+use self::versions::VersionChecker;
 
 mod deserialize;
 pub(crate) mod export;
@@ -4572,7 +4573,8 @@ impl Lock {
         // current requirements with those saved in the lockfile. The `lock-without-metadata`
         // preview needs the overrides to check the resolved dependencies, so return the error below.
         if let Ok(modifiers) = &modifiers
-            && let Some(mismatch) = self.check_locked_versions(
+            && let Some(mismatch) = VersionChecker::check(
+                self,
                 packages,
                 dependency_metadata,
                 Constraints::from_requirements(normalized_constraints.iter().cloned()),
