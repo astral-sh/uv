@@ -27,7 +27,7 @@ if [[ "$(uname)" == "Darwin" && -n "${UV_TEST_CODESIGN_IDENTITY:-}" ]]; then
 
   while IFS= read -r -d '' bin; do
     targets+=("$bin")
-  done < <(find target/debug/deps -type f -perm +111 ! -name "*.d" ! -name "*.dylib" -print0 2>/dev/null || true)
+  done < <(find target/debug/deps -type f -perm +111 ! -name "*.d" ! -name "*.dylib" -print0 2>/dev/null)
 
   # Cargo 1.100 places test executables in build/<package>/<hash>/out.
   while IFS= read -r -d '' bin; do
@@ -36,7 +36,7 @@ if [[ "$(uname)" == "Darwin" && -n "${UV_TEST_CODESIGN_IDENTITY:-}" ]]; then
       targets+=("$bin")
     fi
   done < <(find target/debug/build -path 'target/debug/build/*/*/out/*' -type f \
-    -perm +111 -print0 2>/dev/null || true)
+    -perm +111 -print0 2>/dev/null)
 
   if [[ ${#targets[@]} -gt 0 ]]; then
     "$SCRIPT_DIR/codesign-macos.sh" "$UV_TEST_CODESIGN_IDENTITY" "${targets[@]}"
