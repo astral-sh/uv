@@ -965,6 +965,7 @@ fn sync_lock_flags_override_environment() -> Result<()> {
     warning: Ignoring `UV_FROZEN` because `--locked` was provided
     Resolved 1 package in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Package `project` has version `0.2.0`, but the lockfile records `0.1.0`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -1036,6 +1037,7 @@ fn sync_no_lock_flags_override_environment() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `UV_LOCKED=1` was provided.
+      cause: Package `project` has version `0.2.0`, but the lockfile records `0.1.0`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -1376,6 +1378,7 @@ fn locked() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Requirements for `project==0.1.0` changed from `anyio==3.7` to `iniconfig`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -1385,6 +1388,7 @@ fn locked() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Requirements for `project==0.1.0` changed from `anyio==3.7` to `iniconfig`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -1878,6 +1882,7 @@ fn sync_json() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Requirements for `project==0.1.0` changed from `iniconfig` to `iniconfig<2`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -13801,6 +13806,7 @@ fn sync_dry_run_and_locked() -> Result<()> {
     Would install 1 package
      + iniconfig==2.0.0
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Requirements for `project==0.1.0` changed from `anyio==3.7` to `iniconfig`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -14139,6 +14145,7 @@ fn sync_locked_script() -> Result<()> {
     Using script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
     Resolved 4 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Requirements differ; added: iniconfig
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -14238,6 +14245,7 @@ fn sync_locked_script() -> Result<()> {
     warning: Resolving despite existing lockfile due to fork markers being disjoint with `requires-python`: `python_full_version >= '3.11'` vs `python_full_version >= '3.8' and python_full_version < '3.11'`
     Resolved 6 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Locked forks do not cover the required Python versions
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -15002,6 +15010,7 @@ fn sync_build_constraints() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Build constraints changed from `setuptools<78` to `setuptools<77`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -15548,7 +15557,7 @@ dependencies = [
         .arg("--upgrade"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolving despite existing lockfile due to addition of exclude newer `2022-09-04T00:00:00Z` for package `tqdm`
+    Resolving despite existing lockfile: Exclude-newer cutoff set to `2022-09-04T00:00:00Z` for package `tqdm`
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Uninstalled [N] packages in [TIME]
@@ -15626,7 +15635,7 @@ exclude-newer-package = { tqdm = "2022-09-04T00:00:00Z" }
         .arg("--upgrade"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolving despite existing lockfile due to addition of exclude newer `2022-09-04T00:00:00Z` for package `tqdm`
+    Resolving despite existing lockfile: Exclude-newer cutoff set to `2022-09-04T00:00:00Z` for package `tqdm`
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Uninstalled [N] packages in [TIME]
@@ -18985,6 +18994,7 @@ fn project_build_hashes_lock_and_sync() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Build constraints changed from `build-dependency==1.0.0 (sha256:[BUILD_HASH])` to `build-dependency==1.0.0 (sha256:0000000000000000000000000000000000000000000000000000000000000000)`
 
     hint: To update the lockfile, run `uv lock`.
     ");

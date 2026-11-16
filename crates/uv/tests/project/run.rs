@@ -1240,6 +1240,7 @@ fn run_pep723_script_lock() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Requirements changed from `iniconfig` to `anyio`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -2669,6 +2670,7 @@ fn run_locked() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Requirements for `project==0.1.0` changed from `anyio==3.7` to `iniconfig`
 
     hint: To update the lockfile, run `uv lock`.
     ");

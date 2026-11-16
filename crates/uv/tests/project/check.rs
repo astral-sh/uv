@@ -1577,6 +1577,7 @@ fn check_no_sync_locked_rejects_stale_lock_without_update() -> Result<()> {
     ----- stderr -----
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Requirements for `project==0.1.0` changed from `a==1` to `a==2`
 
     hint: To update the lockfile, run `uv lock`.
     "
@@ -2432,7 +2433,7 @@ fn check_respects_exclude_newer_package_for_ty_selection() -> Result<()> {
     All checks passed!
 
     ----- stderr -----
-    Resolving despite existing lockfile due to removal of exclude newer for package `ty`
+    Resolving despite existing lockfile: Exclude-newer override removed for package `ty`
     Using ty 0.0.16
     ");
 

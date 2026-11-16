@@ -338,6 +338,7 @@ fn lock_equivalent_requirements() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Requirements for `project==0.1.0` changed from `ok>=2, <3` to `ok>=2, <2.5`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -515,6 +516,7 @@ fn lock_equivalent_manifest_inputs() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Build constraints differ; added: `a>=2, <3`; removed: `a<3`, `a>=1`, `a>=2`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -524,6 +526,7 @@ fn lock_equivalent_manifest_inputs() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Build constraints differ; added: `a>=2, <3`; removed: `a<3`, `a>=1`, `a>=2`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -4906,6 +4909,7 @@ fn lock_project_with_excludes() -> Result<()> {
     ----- stderr -----
     Resolved 8 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Dependency exclusions changed from `werkzeug` to `jinja2`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -6068,6 +6072,7 @@ fn lock_conflicting_project_basic1() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Resolved dependencies for `project==0.1.0` differ; changed: sortedcontainers==2.3.0
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -12733,6 +12738,7 @@ fn lock_new_extras() -> Result<()> {
     ----- stderr -----
     Resolved 7 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Resolved dependencies for `project==0.1.0` differ; removed: requests==2.31.0
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -12850,6 +12856,7 @@ fn lock_metadata_free_new_extra_marker() -> Result<()> {
     ----- stderr -----
     Resolved 4 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Resolved dependencies for `project==0.1.0` differ; added: psycopg[binary]==1.0.0
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -12957,6 +12964,7 @@ fn lock_invalid_hash() -> Result<()> {
     ----- stderr -----
     Resolved 4 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Workspace member `project` is expected to be virtual
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -13810,6 +13818,7 @@ fn lock_prerelease_package_configuration() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Pre-release policy changed
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -18314,6 +18323,7 @@ fn lock_sources_url_offline_validates_transitive_source_tree() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--check` was provided.
+      cause: Package `anyio` has version `0.2.0`, but the lockfile records `0.1.0`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -19840,6 +19850,7 @@ fn check_outdated_lock() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--check` was provided.
+      cause: Workspace member `project` is missing from the lockfile
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -19851,6 +19862,7 @@ fn check_outdated_lock() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--check` was provided.
+      cause: Workspace member `project` is missing from the lockfile
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -19952,9 +19964,10 @@ fn lock_reuses_newer_exclude_newer_timestamp() -> Result<()> {
         .arg("--check"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    Resolving despite existing lockfile due to change of exclude newer timestamp from `2024-03-25T00:00:00Z` to `2024-03-24T00:00:00Z`
+    Resolving despite existing lockfile: Exclude-newer timestamp changed from `2024-03-25T00:00:00Z` to `2024-03-24T00:00:00Z`
     Resolved 1 package in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--check` was provided.
+      cause: Exclude-newer timestamp changed from `2024-03-25T00:00:00Z` to `2024-03-24T00:00:00Z`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -20060,9 +20073,10 @@ fn lock_check_allows_relaxed_exclude_newer_package() -> Result<()> {
         .arg("--check"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    Resolving despite existing lockfile due to change of exclude newer timestamp from `2024-03-25T00:00:00Z` to `2024-03-24T00:00:00Z` for package `project`
+    Resolving despite existing lockfile: Exclude-newer timestamp changed from `2024-03-25T00:00:00Z` to `2024-03-24T00:00:00Z` for package `project`
     Resolved 1 package in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--check` was provided.
+      cause: Exclude-newer timestamp changed from `2024-03-25T00:00:00Z` to `2024-03-24T00:00:00Z` for package `project`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -20566,6 +20580,7 @@ fn lock_remove_member() -> Result<()> {
     ----- stderr -----
     Resolved 5 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Requirements for `project==0.1.0` differ; removed: leaf @ file://[TEMP_DIR]/leaf
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -20664,6 +20679,7 @@ fn lock_remove_member() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Workspace members differ; removed: `leaf`, `project`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -20800,6 +20816,7 @@ fn lock_add_member_with_build_system() -> Result<()> {
     ----- stderr -----
     Resolved 5 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Workspace members differ; added: `leaf`, `project`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -20993,6 +21010,7 @@ fn lock_add_member_without_build_system() -> Result<()> {
     ----- stderr -----
     Resolved 5 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Workspace members differ; added: `leaf`, `project`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -21119,6 +21137,7 @@ fn lock_add_member_without_build_system() -> Result<()> {
     ----- stderr -----
     Resolved 5 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Workspace member `leaf` is no longer virtual
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -21333,6 +21352,7 @@ fn lock_redundant_add_member() -> Result<()> {
     ----- stderr -----
     Resolved 4 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Requirements for `project==0.1.0` differ; added: idna
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -21522,6 +21542,7 @@ fn lock_new_constraints() -> Result<()> {
     ----- stderr -----
     Resolved 4 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Constraints differ; added: anyio<4.3
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -21723,6 +21744,7 @@ fn lock_remove_member_non_project() -> Result<()> {
     warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
     Resolved in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Workspace members differ; removed: leaf
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -21845,6 +21867,7 @@ fn lock_rename_project() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Workspace member `renamed` is missing from the lockfile
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -22216,6 +22239,7 @@ fn lock_without_metadata_conflicting_group_with_extra_and_different_specifiers()
     ----- stderr -----
     Resolved 3 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Resolved dependencies for `project==0.1.0` differ; added: `httpx==1.0.0`; changed: httpx[http2]==1.0.0
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -22459,6 +22483,7 @@ fn lock_metadata_free_frozen_empty_extra() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Provided extras for `provider==1.0.0` differ; added: empty
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -22502,6 +22527,7 @@ fn lock_metadata_free_frozen_empty_extra() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Dependency group `empty` was added to `provider==1.0.0`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -22566,6 +22592,7 @@ fn lock_removed_empty_extra() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Provided extras for `project==0.1.0` differ; removed: empty
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -22579,6 +22606,7 @@ fn lock_removed_empty_extra() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Provided extras for `project==0.1.0` differ; removed: empty
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -22677,6 +22705,7 @@ fn lock_regenerates_dependencies_without_metadata() -> Result<()> {
     ----- stderr -----
     Resolved 9 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Resolved dependencies for `project==0.1.0` differ; changed: anyio==4.4.0
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -22711,6 +22740,7 @@ fn lock_regenerates_dependencies_without_metadata() -> Result<()> {
     ----- stderr -----
     Resolved 9 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Resolved dependencies for `project==0.1.0` differ; removed: `httpx[http2]==1.0.0`, `six==1.0.0`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -22729,6 +22759,7 @@ fn lock_regenerates_dependencies_without_metadata() -> Result<()> {
     ----- stderr -----
     Resolved 9 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Resolved dependencies for `project==0.1.0` differ; removed: `httpx[http2]==1.0.0`, `six==1.0.0`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -22744,6 +22775,7 @@ fn lock_regenerates_dependencies_without_metadata() -> Result<()> {
     ----- stderr -----
     Resolved 8 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--check` was provided.
+      cause: Resolved dependencies for `project==0.1.0` differ; removed: urllib3==1.0.0
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -23018,6 +23050,7 @@ fn lock_metadata_free_nested_group_conditional_registry_constraint() -> Result<(
     ----- stderr -----
     Resolved 3 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Resolved dependencies for `project==1.0.0` differ; changed: ok[second]==1.0.0
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -23066,6 +23099,7 @@ fn lock_metadata_free_nested_group_conditional_registry_constraint() -> Result<(
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Constraints changed from `ok==1 ; sys_platform == 'win32'` to `ok==2 ; sys_platform == 'win32'`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -23237,6 +23271,7 @@ fn lock_regenerates_dynamic_version_scoped_override() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Resolved dependencies for `provider` differ; removed: anyio==4.4.0
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -23464,6 +23499,7 @@ fn lock_regenerates_activated_empty_extra() -> Result<()> {
     ----- stderr -----
     Resolved 4 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Resolved dependencies for `dependency==1.0.0` differ
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -24702,6 +24738,7 @@ fn lock_metadata_free_overridden_recursive_extra_source() -> Result<()> {
     ----- stderr -----
     Resolved 4 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Resolved dependencies for `project==0.1.0` differ; removed: six==1.0.0
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -25229,6 +25266,7 @@ fn lock_regenerates_marker_specific_requested_extras() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Resolved dependencies for `project==0.1.0` differ; changed: httpx[http2]==1.0.0
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -26136,6 +26174,7 @@ fn lock_constrained_environment() -> Result<()> {
     ----- stderr -----
     Resolved 8 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Supported environments changed
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -27601,6 +27640,7 @@ fn lock_add_empty_dependency_group() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Dependency group `empty` was added to `project==0.1.0`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -27676,6 +27716,7 @@ fn lock_add_empty_dependency_group() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Dependency group `empty` was removed from `project==0.1.0`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -36047,6 +36088,7 @@ fn lock_dynamic_to_static() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Package `project` is expected to have a static version
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -36172,6 +36214,7 @@ fn lock_static_to_dynamic() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Package `project` is expected to have a dynamic version
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -36268,6 +36311,7 @@ fn lock_bump_static_version() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Package `project` has version `0.2.0`, but the lockfile records `0.1.0`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -38291,6 +38335,7 @@ fn lock_script() -> Result<()> {
     ----- stderr -----
     Resolved 4 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Requirements differ; added: iniconfig
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -40847,6 +40892,7 @@ fn lock_empty_extra() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Provided extras for `project==0.1.0` differ; added: foo
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -40879,6 +40925,7 @@ fn lock_empty_extra() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Provided extras for `project==0.1.0` differ; added: bar
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -41969,6 +42016,7 @@ fn lock_trailing_slash_find_links() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: The index for locked package `packaging==23.2` is no longer configured: <https://pypi.org/simple/packaging>
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -42408,9 +42456,10 @@ fn lock_exclude_newer_package_absent() -> Result<()> {
         .arg("idna=2022-04-04T12:00:00Z"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    Resolving despite existing lockfile due to remove exclude newer exclusion (now `2022-04-04T12:00:00Z`) for package `idna`
+    Resolving despite existing lockfile: Exclude-newer re-enabled (now `2022-04-04T12:00:00Z`) for package `idna`
     Resolved 1 package in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Exclude-newer re-enabled (now `2022-04-04T12:00:00Z`) for package `idna`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -42422,9 +42471,10 @@ fn lock_exclude_newer_package_absent() -> Result<()> {
         .arg("--locked"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    Resolving despite existing lockfile due to removal of exclude newer for package `idna`
+    Resolving despite existing lockfile: Exclude-newer override removed for package `idna`
     Resolved 1 package in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Exclude-newer override removed for package `idna`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -42454,9 +42504,10 @@ fn lock_exclude_newer_package_absent() -> Result<()> {
         .arg("idna=2022-04-04T12:00:00Z"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    Resolving despite existing lockfile due to removal of global exclude newer
+    Resolving despite existing lockfile: Global exclude-newer cutoff removed
     Resolved 1 package in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Global exclude-newer cutoff removed
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -42970,7 +43021,7 @@ async fn lock_exclude_newer_index_package_timestamp() -> Result<()> {
         .arg("iniconfig=2022-01-01T00:00:00Z"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    Resolving despite existing lockfile due to addition of exclude newer `2022-01-01T00:00:00Z` for package `iniconfig`
+    Resolving despite existing lockfile: Exclude-newer cutoff set to `2022-01-01T00:00:00Z` for package `iniconfig`
     error: No solution found when resolving dependencies
       cause: Because iniconfig==2.0.0 was published after the exclude newer time and your project depends on iniconfig==2.0.0, we can conclude that your project's requirements are unsatisfiable.
     ");
@@ -45300,6 +45351,7 @@ fn lock_no_locked() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--check` was provided.
+      cause: Package `project` has version `0.3.0`, but the lockfile records `0.2.0`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -45400,6 +45452,7 @@ fn lock_check_overrides_frozen_environment() -> Result<()> {
     warning: Ignoring `UV_FROZEN` because `--check` was provided
     Resolved 1 package in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--check` was provided.
+      cause: Package `project` has version `0.2.0`, but the lockfile records `0.1.0`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -45842,6 +45895,7 @@ fn lock_resolution_inputs_version_constraints() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Constraints changed from `b>=2 ; extra == 'inactive'` to `b>=2`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -46125,6 +46179,7 @@ fn lock_resolution_inputs_extra_constraints() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Constraints differ; added: b>=2 ; extra == 'feature'
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -46204,6 +46259,7 @@ fn lock_resolution_inputs_recursive_extra_constraints() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Constraints differ; added: b<2 ; extra == 'sub'
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -46566,6 +46622,7 @@ fn lock_resolution_inputs_constraint_markers() -> Result<()> {
     ----- stderr -----
     Resolved 4 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Constraints differ; added: `b<2 ; sys_platform != 'linux'`, `b>=2 ; sys_platform == 'linux'`; removed: `b<2 ; sys_platform == 'linux'`, `b>=2 ; sys_platform != 'linux'`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -46802,6 +46859,7 @@ fn lock_resolution_inputs_source_constraints() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Constraints differ; removed: b @ http://[LOCALHOST]/files/b-1.0.0-py3-none-any.whl
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -46997,6 +47055,7 @@ fn lock_resolution_inputs_prerelease_constraints() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Constraints differ; removed: b==1a1
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -47024,6 +47083,7 @@ fn lock_resolution_inputs_prerelease_constraints() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Constraints differ; removed: b==1a1
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -47483,6 +47543,7 @@ fn lock_resolution_inputs_shadowed_override() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Dependency overrides changed from `child==9` to `child==8`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -47571,6 +47632,7 @@ fn lock_resolution_inputs_new_exclusion() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Dependency exclusions differ; added: child
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -47688,6 +47750,7 @@ fn lock_resolution_inputs_empty_scopes() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Dependency overrides changed from `project: []` to `project: child>=1`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -47982,6 +48045,7 @@ fn lock_resolution_inputs_metadata_declarations() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Configured dependency metadata entries changed from `anyio==3.6.0` to `anyio==3.5.0`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -48016,6 +48080,7 @@ fn lock_resolution_inputs_metadata_declarations() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Configured dependency metadata entries differ; changed: anyio
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -48083,6 +48148,7 @@ fn lock_resolution_inputs_candidate_policy_override() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Dependency `numpy` is no longer excluded from `absent`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -48109,6 +48175,7 @@ fn lock_resolution_inputs_candidate_policy_override() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Dependency overrides changed from `absent: numpy==2.4rc1` to `absent: unrelated==1`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -48414,6 +48481,7 @@ fn lock_resolution_inputs_backtracking() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Dependency overrides changed from `discarded: leaf==1` to `discarded: leaf>=1`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -48447,6 +48515,7 @@ fn lock_resolution_inputs_backtracking() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Dependency `unrelated` is no longer excluded from `discarded`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -48480,6 +48549,7 @@ fn lock_resolution_inputs_backtracking() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Configured dependency metadata entries differ; changed: discarded==1.0.0
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -48516,6 +48586,7 @@ fn lock_resolution_inputs_backtracking() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Configured dependency metadata entries differ; added: a==1.0.0
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -48547,9 +48618,10 @@ fn lock_resolution_inputs_backtracking() -> Result<()> {
         .arg(server.index_url()), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    Resolving despite existing lockfile due to change of exclude newer timestamp from `2025-01-01T00:00:00Z` to `2024-03-25T00:00:00Z` for package `discarded`
+    Resolving despite existing lockfile: Exclude-newer timestamp changed from `2025-01-01T00:00:00Z` to `2024-03-25T00:00:00Z` for package `discarded`
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Exclude-newer timestamp changed from `2025-01-01T00:00:00Z` to `2024-03-25T00:00:00Z` for package `discarded`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -48709,6 +48781,7 @@ fn lock_resolution_inputs_metadata_unknown_version() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Configured dependency metadata entries changed from `child==2.0` to `child==3.0`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -49000,6 +49073,7 @@ fn lock_resolution_inputs_package_prerelease_constraint() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Constraints differ; removed: b==2a1
 
     hint: To update the lockfile, run `uv lock`.
     ");

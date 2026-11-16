@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::error::Error;
-use std::fmt::{Debug, Display};
+use std::fmt::{Debug, Display, Write as _};
 use std::io;
 use std::iter;
 use std::path::{Path, PathBuf};
@@ -4315,7 +4315,15 @@ impl Lock {
         // Validate that the member sources have not changed (e.g., that they've switched from
         // virtual to non-virtual or vice versa).
         for (name, member) in packages {
-            let source = self.find_by_name(name).ok().flatten();
+            let source = match self.find_by_name(name) {
+                Ok(Some(package)) => Some(package),
+                Ok(None) => {
+                    return Ok(LockSatisfaction::Mismatch(
+                        LockSatisfactionError::MissingRoot(name.clone()),
+                    ));
+                }
+                Err(_) => None,
+            };
 
             // Determine whether the member was required by any other member.
             let value = required_members.get(name);
@@ -6167,71 +6175,113 @@ pub enum LockSatisfaction {
 }
 
 /// A reason why the lockfile does not satisfy the workspace requirements.
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum LockSatisfactionError {
     /// The lockfile uses a different set of workspace members.
+    #[error("Workspace members {}", set_difference(.0, .1))]
     MismatchedMembers(BTreeSet<PackageName>, BTreeSet<PackageName>),
     /// The lockfile records different default groups for workspace members.
+    #[error("Default groups differ for workspace members: {}", changed_keys(.0, .1))]
     MismatchedMemberDefaultGroups(
         BTreeMap<PackageName, DefaultGroups>,
         BTreeMap<PackageName, DefaultGroups>,
     ),
     /// The lockfile records different dependency group metadata for the workspace root.
+    #[error("Workspace dependency group metadata differs for: {}", changed_keys(.0, .1))]
     MismatchedWorkspaceGroupMetadata(
         BTreeMap<GroupName, GroupMetadata>,
         BTreeMap<GroupName, GroupMetadata>,
     ),
     /// The lockfile records different default groups for a non-project workspace root.
+    #[error(
+        "Workspace default groups changed from {} to {}",
+        default_groups(.1),
+        default_groups(.0),
+    )]
     MismatchedWorkspaceDefaultGroups(DefaultGroups, DefaultGroups),
     /// The lockfile records different dependency group metadata.
+    #[error("Dependency group metadata differs for workspace members: {}", changed_keys(.0, .1))]
     MismatchedMemberGroupMetadata(
         BTreeMap<PackageName, BTreeMap<GroupName, GroupMetadata>>,
         BTreeMap<PackageName, BTreeMap<GroupName, GroupMetadata>>,
     ),
     /// A workspace member should be virtual.
+    #[error("Workspace member `{name}` is expected to be virtual", name = .0.cyan())]
     ExpectedVirtual(PackageName),
     /// A workspace member should no longer be virtual.
+    #[error("Workspace member `{name}` is no longer virtual", name = .0.cyan())]
     UnexpectedVirtual(PackageName),
     /// A workspace member should be editable.
+    #[error("Workspace member `{name}` is expected to be editable", name = .0.cyan())]
     ExpectedEditable(PackageName),
     /// A workspace member should no longer be editable.
+    #[error("Workspace member `{name}` is no longer editable", name = .0.cyan())]
     UnexpectedEditable(PackageName),
     /// A source tree should have a static version.
+    #[error("Package `{name}` is expected to have a static version", name = .0.cyan())]
     ExpectedStaticVersion(PackageName),
     /// A source tree should have a dynamic version.
+    #[error("Package `{name}` is expected to have a dynamic version", name = .0.cyan())]
     ExpectedDynamicVersion(PackageName),
     /// A workspace member has a different version.
+    #[error(
+        "Package `{name}` has version `{current}`, but the lockfile records `{locked}`",
+        name = .0.cyan(), current = .2.cyan(), locked = .1.cyan(),
+    )]
     MismatchedVersion(PackageName, Version, Version),
     /// The lockfile uses a different set of requirements.
+    #[error("Requirements {}", set_difference(.0, .1))]
     MismatchedRequirements(BTreeSet<Requirement>, BTreeSet<Requirement>),
     /// The lockfile uses a different set of constraints.
+    #[error("Constraints {}", set_difference(.0, .1))]
     MismatchedConstraints(BTreeSet<Requirement>, BTreeSet<Requirement>),
     /// The lockfile uses a different set of overrides.
+    #[error("Dependency overrides {}", override_difference(.0, .1))]
     MismatchedOverrides(
         BTreeSet<Override<Requirement>>,
         BTreeSet<Override<Requirement>>,
     ),
     /// The lockfile uses a different set of excludes.
+    #[error("{}", exclusion_difference(.0, .1))]
     MismatchedExcludes(BTreeSet<ExcludeDependency>, BTreeSet<ExcludeDependency>),
     /// The lockfile uses a different set of build constraints.
+    #[error("Build constraints {}", build_constraint_difference(.0, .1))]
     MismatchedBuildConstraints(
         BTreeSet<NameRequirementSpecification>,
         BTreeSet<NameRequirementSpecification>,
     ),
     /// The lockfile uses a different set of dependency groups.
+    #[error("{}", dependency_group_changes(None, .0, .1))]
     MismatchedDependencyGroups(
         BTreeMap<GroupName, BTreeSet<Requirement>>,
         BTreeMap<GroupName, BTreeSet<Requirement>>,
     ),
     /// The lockfile uses different static metadata.
+    #[error("Configured dependency metadata entries {}", metadata_difference(.0, .1))]
     MismatchedStaticMetadata(BTreeSet<StaticMetadata>, BTreeSet<StaticMetadata>),
     /// The lockfile is missing a workspace member.
+    #[error("Workspace member `{name}` is missing from the lockfile", name = .0.cyan())]
     MissingRoot(PackageName),
     /// The lockfile referenced a remote index that was not provided
+    #[error(
+        "The index for locked package `{package}` is no longer configured: {index}",
+        package = package_label(.0, Some(.1)).cyan(),
+        index = remote_index_label(.2).cyan(),
+    )]
     MissingRemoteIndex(PackageName, Version, UrlString),
     /// The lockfile referenced a local index that was not provided
+    #[error(
+        "The index for locked package `{package}` is no longer configured: {index}",
+        package = package_label(.0, Some(.1)).cyan(),
+        index = .2.simplified_display().cyan(),
+    )]
     MissingLocalIndex(PackageName, Version, PathBuf),
     /// A package in the lockfile contains different `requires-dist` metadata than expected.
+    #[error(
+        "Requirements for `{}` {}",
+        package_label(.0, .1.as_ref()).cyan(),
+        set_difference(.2, .3),
+    )]
     MismatchedPackageRequirements(
         PackageName,
         Option<Version>,
@@ -6239,6 +6289,11 @@ pub enum LockSatisfactionError {
         BTreeSet<Requirement>,
     ),
     /// Refreshed declarations regenerate different resolved dependency edges.
+    #[error(
+        "Resolved dependencies for `{}` {}",
+        package_label(.0, .1.as_ref()).cyan(),
+        dependency_difference(.2, .3),
+    )]
     MismatchedPackageDependencies(
         PackageName,
         Option<Version>,
@@ -6246,6 +6301,11 @@ pub enum LockSatisfactionError {
         Vec<Dependency>,
     ),
     /// A package in the lockfile contains different `provides-extra` metadata than expected.
+    #[error(
+        "Provided extras for `{}` {}",
+        package_label(.0, .1.as_ref()).cyan(),
+        set_difference(.2, .3),
+    )]
     MismatchedPackageProvidesExtra(
         PackageName,
         Option<Version>,
@@ -6253,6 +6313,7 @@ pub enum LockSatisfactionError {
         BTreeSet<ExtraName>,
     ),
     /// A package in the lockfile contains different `dependency-groups` metadata than expected.
+    #[error("{}", dependency_group_changes(Some(&package_label(.0, .1.as_ref())), .2, .3))]
     MismatchedPackageDependencyGroups(
         PackageName,
         Option<Version>,
@@ -6260,7 +6321,232 @@ pub enum LockSatisfactionError {
         BTreeMap<GroupName, BTreeSet<Requirement>>,
     ),
     /// The lockfile is missing a version.
+    #[error("Package `{name}` is missing a locked version", name = .0.cyan())]
     MissingVersion(PackageName),
+}
+
+fn override_difference(
+    requested: &BTreeSet<Override<Requirement>>,
+    locked: &BTreeSet<Override<Requirement>>,
+) -> String {
+    formatted_set_difference(requested, locked, |item| match item {
+        Override::Requirement(requirement) => requirement.to_string(),
+        Override::Package(package) if package.dependencies.is_empty() => {
+            format!("{}: []", package.package.name())
+        }
+        Override::Package(package) => format!(
+            "{}: {}",
+            package.package.name(),
+            package
+                .dependencies
+                .iter()
+                .map(ToString::to_string)
+                .join(", ")
+        ),
+    })
+}
+
+fn exclusion_difference(
+    requested: &BTreeSet<ExcludeDependency>,
+    locked: &BTreeSet<ExcludeDependency>,
+) -> String {
+    if let (Ok(ExcludeDependency::Package(new)), Ok(ExcludeDependency::Package(old))) = (
+        requested.difference(locked).exactly_one(),
+        locked.difference(requested).exactly_one(),
+    ) && (new.package(), new.version()) == (old.package(), old.version())
+    {
+        let parent = package_label(new.package(), new.version());
+        let new = new.dependencies().iter().collect::<BTreeSet<_>>();
+        let old = old.dependencies().iter().collect::<BTreeSet<_>>();
+        if let Ok(name) = new.symmetric_difference(&old).exactly_one() {
+            let when = if new.contains(name) {
+                "now"
+            } else {
+                "no longer"
+            };
+            return format!(
+                "Dependency `{}` is {when} excluded from `{}`",
+                name.cyan(),
+                parent.cyan()
+            );
+        }
+        return format!(
+            "Dependency exclusions for `{}` {}",
+            parent.cyan(),
+            set_difference(&new, &old)
+        );
+    }
+
+    let difference = formatted_set_difference(requested, locked, |item| match item {
+        ExcludeDependency::Dependency(name) => name.to_string(),
+        ExcludeDependency::Package(package) => format!(
+            "{}: [{}]",
+            package_label(package.package(), package.version()),
+            package.dependencies().iter().join(", ")
+        ),
+    });
+    format!("Dependency exclusions {difference}")
+}
+
+fn build_constraint_difference(
+    requested: &BTreeSet<NameRequirementSpecification>,
+    locked: &BTreeSet<NameRequirementSpecification>,
+) -> String {
+    formatted_set_difference(requested, locked, |item| {
+        if item.hashes.is_empty() {
+            item.requirement.to_string()
+        } else {
+            format!("{} ({})", item.requirement, item.hashes.join(", "))
+        }
+    })
+}
+
+fn metadata_difference(
+    requested: &BTreeSet<StaticMetadata>,
+    locked: &BTreeSet<StaticMetadata>,
+) -> String {
+    formatted_set_difference(requested, locked, |item| {
+        package_label(&item.name, item.version.as_ref())
+    })
+}
+
+fn dependency_difference(requested: &[Dependency], locked: &[Dependency]) -> String {
+    set_difference(&requested.iter().collect(), &locked.iter().collect())
+}
+
+fn set_difference<T: Ord + Display>(requested: &BTreeSet<T>, locked: &BTreeSet<T>) -> String {
+    formatted_set_difference(requested, locked, ToString::to_string)
+}
+
+fn formatted_set_difference<T: Ord>(
+    requested: &BTreeSet<T>,
+    locked: &BTreeSet<T>,
+    format: impl Fn(&T) -> String,
+) -> String {
+    let added = requested
+        .difference(locked)
+        .map(&format)
+        .collect::<BTreeSet<_>>();
+    let removed = locked
+        .difference(requested)
+        .map(format)
+        .collect::<BTreeSet<_>>();
+    if let (Some(current), Some(previous)) = (
+        added.iter().exactly_one().ok(),
+        removed.iter().exactly_one().ok(),
+    ) && current != previous
+    {
+        return format!("changed from `{}` to `{}`", previous.cyan(), current.cyan());
+    }
+
+    let changed = added.intersection(&removed).collect::<Vec<_>>();
+    let mut message = String::from("differ");
+    let differences = [
+        ("added", added.difference(&removed).collect::<Vec<_>>()),
+        ("removed", removed.difference(&added).collect()),
+        ("changed", changed),
+    ];
+    let mut differences = differences
+        .into_iter()
+        .filter(|(_, items)| !items.is_empty())
+        .peekable();
+    while let Some((description, items)) = differences.next() {
+        let _ = write!(
+            message,
+            "; {description}: {}",
+            format_mismatch_values(
+                items.into_iter().map(String::as_str),
+                differences.peek().is_none()
+            )
+        );
+    }
+    message
+}
+
+/// Describe each group change relative to the lockfile, including groups added or removed
+/// without any dependencies.
+fn dependency_group_changes<V: PartialEq>(
+    package: Option<&str>,
+    requested: &BTreeMap<GroupName, V>,
+    locked: &BTreeMap<GroupName, V>,
+) -> String {
+    requested
+        .keys()
+        .merge(locked.keys())
+        .dedup()
+        .filter_map(|group| {
+            let (change, preposition) = match (requested.get(group), locked.get(group)) {
+                (Some(_), None) => ("was added", "to"),
+                (None, Some(_)) => ("was removed", "from"),
+                (Some(new), Some(old)) if new != old => ("changed", "in"),
+                (Some(_), Some(_)) | (None, None) => return None,
+            };
+            let mut message = format!("Dependency group `{}` {change}", group.cyan());
+            if let Some(package) = package {
+                let _ = write!(message, " {preposition} `{}`", package.cyan());
+            }
+            Some(message)
+        })
+        .join("\n")
+}
+
+fn changed_keys<K: Ord + Display, V: PartialEq>(
+    requested: &BTreeMap<K, V>,
+    locked: &BTreeMap<K, V>,
+) -> String {
+    let keys = requested
+        .keys()
+        .chain(locked.keys())
+        .filter(|key| requested.get(*key) != locked.get(*key))
+        .map(ToString::to_string)
+        .collect::<BTreeSet<_>>();
+    format_mismatch_values(keys.iter().map(String::as_str), true)
+}
+
+/// Format the literals following a colon in a lock mismatch diagnostic.
+///
+/// CLI style omits backticks for a single value at the end of a message. Keep
+/// them when more text follows, for multiple values, or to expose trailing whitespace.
+fn format_mismatch_values<'a>(values: impl Iterator<Item = &'a str>, ends_message: bool) -> String {
+    let values = values.collect::<Vec<_>>();
+    if ends_message
+        && let [value] = values.as_slice()
+        && value.trim_end() == *value
+    {
+        value.cyan().to_string()
+    } else {
+        values
+            .into_iter()
+            .map(|value| format!("`{}`", value.cyan()))
+            .join(", ")
+    }
+}
+
+fn default_groups(groups: &DefaultGroups) -> String {
+    match groups {
+        DefaultGroups::All => "all groups".to_string(),
+        DefaultGroups::List(groups) => match groups.as_slice() {
+            [] => "no groups".to_string(),
+            [group] => format!("the `{}` group", group.cyan()),
+            groups => format!(
+                "the groups {}",
+                groups
+                    .iter()
+                    .map(|group| format!("`{}`", group.cyan()))
+                    .join(", ")
+            ),
+        },
+    }
+}
+
+fn remote_index_label(index: &UrlString) -> String {
+    index
+        .to_url()
+        .map_or_else(|_| "invalid URL".to_string(), |url| format!("<{url}>"))
+}
+
+fn package_label(name: &PackageName, version: Option<&Version>) -> String {
+    version.map_or_else(|| name.to_string(), |version| format!("{name}=={version}"))
 }
 
 /// We discard the lockfile if these options match.

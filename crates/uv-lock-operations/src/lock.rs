@@ -36,7 +36,10 @@ use uv_warnings::{warn_user, warn_user_once, warn_user_with_chain};
 use uv_workspace::WorkspaceCache;
 
 use crate::lock_target::find_lock_format_error;
-use crate::{LockError, LockTarget, LockValidationError, MissingLockfileSource, ValidatedLock};
+use crate::{
+    LockError, LockMismatchReason, LockTarget, LockValidationError, MissingLockfileSource,
+    ValidatedLock,
+};
 
 /// The result of running a lock operation.
 #[derive(Debug, Clone)]
@@ -191,7 +194,7 @@ impl<'env> LockOperation<'env> {
                 };
 
                 // Perform the lock operation, but don't write the lockfile to disk.
-                let result = Box::pin(do_lock(
+                let (result, reason) = Box::pin(do_lock(
                     target,
                     interpreter,
                     Some(existing),
@@ -218,6 +221,7 @@ impl<'env> LockOperation<'env> {
                         prev.map(Box::new),
                         Box::new(cur),
                         lock_source,
+                        reason.map(Box::new),
                     ));
                 }
 
@@ -246,7 +250,7 @@ impl<'env> LockOperation<'env> {
                 };
 
                 // Perform the lock operation.
-                let result = Box::pin(do_lock(
+                let (result, _) = Box::pin(do_lock(
                     target,
                     interpreter,
                     existing,
@@ -299,7 +303,7 @@ async fn do_lock(
     workspace_cache: &WorkspaceCache,
     printer: Printer,
     preview: Preview,
-) -> Result<LockResult, LockError> {
+) -> Result<(LockResult, Option<LockMismatchReason>), LockError> {
     let start = std::time::Instant::now();
 
     // Extract the project settings.
@@ -841,7 +845,7 @@ async fn do_lock(
             // Print the success message after completing resolution.
             logger.on_complete(lock.len(), start, printer)?;
 
-            Ok(LockResult::Unchanged(lock))
+            Ok((LockResult::Unchanged(lock), None))
         }
 
         // The lockfile did not contain enough information to obtain a resolution, fallback
@@ -994,7 +998,10 @@ async fn do_lock(
             )
             .relative_to(target.install_path())?;
 
-            let previous = existing_lock.map(ValidatedLock::into_lock);
+            let (previous, reason) = existing_lock.map_or((None, None), |lock| {
+                let (lock, reason) = lock.into_parts();
+                (Some(lock), reason)
+            });
             let lock = Lock::from_resolution(
                 &resolution,
                 manifest,
@@ -1036,9 +1043,9 @@ async fn do_lock(
             };
 
             if unchanged {
-                Ok(LockResult::Unchanged(lock))
+                Ok((LockResult::Unchanged(lock), None))
             } else {
-                Ok(LockResult::Changed(previous, lock))
+                Ok((LockResult::Changed(previous, lock), reason))
             }
         }
     }
