@@ -285,6 +285,45 @@ async fn proxy_index_rejects_same_named_package_index_across_configuration_files
 }
 
 #[test]
+fn proxy_index_rejects_url_shared_by_two_proxies() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    pyproject.write_str(indoc::indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [[tool.uv.index]]
+        name = "private"
+        url = "https://private.example.com/simple/"
+        artifact-base-url = "https://private.example.com/files/"
+
+        [[tool.uv.index]]
+        name = "pypi-proxy"
+        url = "https://proxy.example.com/simple"
+        artifact-base-url = "https://proxy.example.com/files/"
+        proxy-for = "pypi"
+        cache-control = { api = "max-age=3600" }
+
+        [[tool.uv.index]]
+        name = "private-proxy"
+        url = "https://user:secret@proxy.example.com/simple/"
+        artifact-base-url = "https://proxy.example.com/files/"
+        proxy-for = "private"
+        cache-control = { api = "no-cache" }
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @r"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Proxy index URL `https://user:****@proxy.example.com/simple/` is ambiguous: it is configured as a proxy for both `https://pypi.org/simple` and `https://private.example.com/simple/`
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn proxy_index_rejects_url_shared_with_ordinary_index() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let pyproject = context.temp_dir.child("pyproject.toml");

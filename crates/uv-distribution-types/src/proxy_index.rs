@@ -47,6 +47,19 @@ pub enum ProxyIndexConfigError {
         index: Box<SafeUrl>,
     },
 
+    /// Two upstream indexes use the same proxy endpoint.
+    #[error(
+        "Proxy index URL `{url}` is ambiguous: it is configured as a proxy for both `{first_index}` and `{second_index}`"
+    )]
+    AmbiguousProxyEndpoint {
+        /// The shared proxy index URL.
+        url: Box<SafeUrl>,
+        /// The first upstream index URL.
+        first_index: Box<SafeUrl>,
+        /// The second upstream index URL.
+        second_index: Box<SafeUrl>,
+    },
+
     /// More than one proxy references the same canonical package index.
     #[error(
         "Each index can have only one proxy, but both `{first_proxy}` and `{second_proxy}` are proxies for `{index}`"
@@ -286,7 +299,7 @@ impl ProxyRoute {
         self.url.as_index_url()
     }
 
-    /// The request policy belongs to the matching proxy definition, even when URLs are shared.
+    /// Return the request policy for this proxy definition.
     pub(super) fn request_policy(&self) -> IndexRequestPolicy<'_> {
         self.definition.request_policy()
     }
@@ -426,6 +439,17 @@ pub(crate) fn build_routes(
                 name: name.clone(),
                 proxy: Box::new(proxy.raw_url().clone()),
                 index: Box::new(index.clone()),
+            });
+        }
+
+        if let Some(route) = routes
+            .iter()
+            .find(|route| route.effective_url().is_same_index(proxy.url()))
+        {
+            return Err(ProxyIndexConfigError::AmbiguousProxyEndpoint {
+                url: Box::new(proxy.raw_url().clone()),
+                first_index: Box::new(route.canonical.as_index_url().url().clone()),
+                second_index: Box::new(canonical.raw_url().clone()),
             });
         }
 
