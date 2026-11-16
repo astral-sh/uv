@@ -1776,7 +1776,7 @@ async fn tool_upgrade_reconciles_saved_proxy_with_configuration() -> Result<()> 
     let uv_toml = context.temp_dir.child("uv.toml");
     let proxy = format!(
         indoc! {r#"
-            [[index]]
+            [[proxy-index]]
             name = "receipt-proxy"
             url = "http://proxy-user:proxy-secret@{}/simple"
             artifact-base-url = "{}"

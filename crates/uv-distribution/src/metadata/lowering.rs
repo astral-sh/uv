@@ -10,8 +10,8 @@ use uv_auth::CredentialsCache;
 use uv_cache::Cache;
 use uv_distribution_filename::DistExtension;
 use uv_distribution_types::{
-    Index, IndexCredentialsError, IndexLocations, IndexMetadata, IndexName, Origin, Requirement,
-    RequirementScope, RequirementSource,
+    Index, IndexCredentialsError, IndexLocations, IndexMetadata, IndexName, Origin, ProxyIndex,
+    Requirement, RequirementScope, RequirementSource,
 };
 use uv_fs::{Simplified, normalize_absolute_path, normalize_path};
 use uv_git_types::{GitLfs, GitReference, GitUrl, GitUrlParseError};
@@ -251,10 +251,18 @@ impl LoweredRequirement {
                                     })
                                 }
                             });
+                            let project_proxies = workspace
+                                .packages()
+                                .values()
+                                .filter(|member| member.root() == project_dir)
+                                .filter_map(|member| member.pyproject_toml().tool.as_ref())
+                                .filter_map(|tool| tool.uv.as_ref())
+                                .flat_map(|uv| uv.proxy_index.iter().flatten());
                             let source = registry_source(
                                 requirement,
                                 index,
                                 project_indexes.iter().chain(workspace.indexes()),
+                                project_proxies,
                                 locations,
                                 conflict,
                                 credentials_cache,
@@ -420,6 +428,7 @@ impl LoweredRequirement {
                                 requirement,
                                 index,
                                 indexes.iter(),
+                                std::iter::empty(),
                                 locations,
                                 None,
                                 credentials_cache,
@@ -551,7 +560,7 @@ pub enum LoweringError {
         hint: Option<String>,
     },
     #[error(
-        "Package `{package}` references proxy index `{index}` in `tool.uv.sources`. Use its upstream index `{upstream}` instead, or remove the source override"
+        "Package `{package}` references proxy index `{index}` in `tool.uv.sources`. Use its upstream index `{upstream}` instead"
     )]
     ProxyIndexSource {
         package: PackageName,
@@ -765,12 +774,11 @@ fn url_source(
 }
 
 /// Convert a registry source into a [`RequirementSource`].
-///
-/// CLI indexes take precedence over indexes declared in project or script metadata.
 fn registry_source<'a>(
     requirement: &uv_pep508::Requirement<VerbatimParsedUrl>,
     name: IndexName,
     declared_indexes: impl Iterator<Item = &'a Index>,
+    declared_proxies: impl Iterator<Item = &'a ProxyIndex>,
     locations: &'a IndexLocations,
     conflict: Option<ConflictItem>,
     credentials_cache: &CredentialsCache,
@@ -781,6 +789,20 @@ fn registry_source<'a>(
         .chain(declared_indexes)
         .find(|index| index.name.as_ref() == Some(&name))
     else {
+        let upstream = locations
+            .proxy_target(&name)
+            .into_iter()
+            .chain(declared_proxies.filter_map(|proxy| {
+                (proxy.name.as_ref() == Some(&name)).then_some(&proxy.proxy_for)
+            }))
+            .next();
+        if let Some(upstream) = upstream {
+            return Err(LoweringError::ProxyIndexSource {
+                package: requirement.name.clone(),
+                index: name,
+                upstream: upstream.clone(),
+            });
+        }
         let hint = missing_index_hint(locations, &name);
         return Err(LoweringError::MissingIndex {
             package: requirement.name.clone(),
@@ -788,13 +810,6 @@ fn registry_source<'a>(
             hint,
         });
     };
-    if let Some(upstream) = &index.proxy_for {
-        return Err(LoweringError::ProxyIndexSource {
-            package: requirement.name.clone(),
-            index: name,
-            upstream: upstream.clone(),
-        });
-    }
     if let Some(credentials) = index.credentials()? {
         credentials_cache.store_credentials(index.raw_url(), credentials);
     }

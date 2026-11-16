@@ -21,7 +21,8 @@ use tracing::instrument;
 use uv_build_backend::BuildBackendSettings;
 use uv_configuration::{ExcludeDependency, GitLfsSetting, Override};
 use uv_distribution_types::{
-    Index, IndexName, MinimumLibcVersion, NameRequirementSpecification, RequirementSource,
+    Index, IndexName, MinimumLibcVersion, NameRequirementSpecification, ProxyIndex,
+    RequirementSource,
 };
 use uv_fs::{PortablePathBuf, try_relative_to_if};
 use uv_macros::{DeserializeUntagged, OptionsMetadata};
@@ -423,19 +424,6 @@ pub struct ToolUv {
     /// If an index is marked as `default = true`, it will be moved to the end of the prioritized list, such that it is
     /// given the lowest priority when resolving packages. Additionally, marking an index as default will disable the
     /// PyPI default index.
-    ///
-    /// An index can proxy another named index with `proxy-for`. Set `artifact-base-url` to the
-    /// URL prefix where the proxy serves package files. uv downloads from the proxy without
-    /// changing the original index or package URLs recorded in lockfiles. Use
-    /// `proxy-for = "pypi"` to proxy PyPI without configuring it separately:
-    ///
-    /// ```toml
-    /// [[tool.uv.index]]
-    /// name = "socket"
-    /// url = "https://proxy.example.com/simple/"
-    /// artifact-base-url = "https://proxy.example.com/files/"
-    /// proxy-for = "pypi"
-    /// ```
     #[option(
         default = "[]",
         value_type = "dict",
@@ -447,6 +435,24 @@ pub struct ToolUv {
     )]
     #[serde(deserialize_with = "deserialize_index_vec", default)]
     pub index: Option<Vec<Index>>,
+
+    /// The proxy indexes to use when resolving and downloading packages.
+    ///
+    /// `proxy-for` names the upstream index, `url` sets the proxy's Simple API URL, and
+    /// `artifact-base-url` sets its package download URL prefix. uv records upstream URLs in
+    /// lockfiles. Use `proxy-for = "pypi"` for the default PyPI index.
+    #[option(
+        default = "[]",
+        value_type = "dict",
+        example = r#"
+            [[tool.uv.proxy-index]]
+            name = "socket"
+            url = "https://proxy.example.com/simple/"
+            artifact-base-url = "https://proxy.example.com/files/"
+            proxy-for = "pypi"
+        "#
+    )]
+    pub proxy_index: Option<Vec<ProxyIndex>>,
 
     /// The workspace definition for the project, if any.
     #[option_group]

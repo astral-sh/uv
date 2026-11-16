@@ -67,14 +67,14 @@ This is useful when a local policy requires some contributors to use a registry 
 published packages, while others use the upstream index directly. Configuring the relationship
 between the proxy and upstream index lets both groups share a lockfile without changing its URLs.
 
-To configure a proxy index, add a `[[tool.uv.index]]` entry with `proxy-for` set to the upstream
-index's name. The proxy's `url` tells uv where to look up packages, and its `artifact-base-url`
-tells uv where to download them.
+To configure a proxy index, add a `[[tool.uv.proxy-index]]` entry with `proxy-for` set to the
+upstream index's name. The proxy's `url` tells uv where to look up packages, and its
+`artifact-base-url` tells uv where to download them. In `uv.toml`, use `[[proxy-index]]` instead.
 
 For example, to configure a proxy for PyPI:
 
 ```toml
-[[tool.uv.index]]
+[[tool.uv.proxy-index]]
 name = "pypi-proxy"
 url = "https://proxy.example.com/simple/"
 artifact-base-url = "https://proxy.example.com/files/"
@@ -104,7 +104,7 @@ name = "private"
 url = "https://packages.example.com/simple/"
 artifact-base-url = "https://downloads.example.com/packages/"
 
-[[tool.uv.index]]
+[[tool.uv.proxy-index]]
 name = "private-proxy"
 url = "https://proxy.example.com/simple/"
 artifact-base-url = "https://proxy.example.com/files/"

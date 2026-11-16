@@ -19,7 +19,8 @@ use uv_redacted::policy::{SerializationPolicy, Stripped};
 use uv_warnings::warn_user;
 
 use crate::{
-    ExcludeNewerOverride, Index, IndexRequestPolicy, ProxyIndexConfigError, ProxyRoute, Verbatim,
+    ExcludeNewerOverride, Index, IndexName, IndexRequestPolicy, ProxyIndex, ProxyIndexConfigError,
+    ProxyRoute, Verbatim,
 };
 
 pub static PYPI_URL: LazyLock<SafeUrl> =
@@ -281,11 +282,44 @@ impl Deref for IndexUrl {
 #[derive(Default, Clone, PartialEq, Eq)]
 pub struct IndexLocations {
     indexes: Vec<Index>,
-    proxy_indexes: Vec<Arc<Index>>,
+    proxy_indexes: Vec<ProxyIndexDefinition>,
     flat_index: Vec<Index>,
     no_index: bool,
     /// Validated routes from upstream indexes to their configured proxies.
     pub(crate) routes: Vec<Arc<ProxyRoute>>,
+}
+
+/// A proxy endpoint and the upstream index it serves.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct ProxyIndexDefinition {
+    pub(super) index: Arc<Index>,
+    pub(super) proxy_for: IndexName,
+    pub(super) artifact_base_url: SafeUrl<Stripped>,
+}
+
+impl From<ProxyIndex> for ProxyIndexDefinition {
+    fn from(proxy: ProxyIndex) -> Self {
+        let ProxyIndex {
+            name,
+            url,
+            proxy_for,
+            artifact_base_url,
+            authenticate,
+            ignore_error_codes,
+            cache_control,
+        } = proxy;
+        Self {
+            index: Arc::new(Index {
+                name,
+                authenticate,
+                ignore_error_codes,
+                cache_control,
+                ..Index::from_extra_index_url(url)
+            }),
+            proxy_for,
+            artifact_base_url,
+        }
+    }
 }
 
 #[expect(
@@ -310,10 +344,18 @@ impl IndexLocations {
     /// Determine the index URLs to use for fetching packages.
     pub fn new(
         indexes: Vec<Index>,
+        proxy_indexes: Vec<ProxyIndex>,
         flat_index: Vec<Index>,
         no_index: bool,
     ) -> Result<Self, ProxyIndexConfigError> {
-        Self::default().combine(indexes, flat_index, no_index)
+        Self {
+            proxy_indexes: proxy_indexes
+                .into_iter()
+                .map(ProxyIndexDefinition::from)
+                .collect(),
+            ..Self::default()
+        }
+        .combine(indexes, flat_index, no_index)
     }
 
     /// Return configured package indexes in declaration order, excluding proxy indexes.
@@ -331,11 +373,18 @@ impl IndexLocations {
     /// Proxy indexes are not separate package sources. They provide request URLs and
     /// authentication for their original indexes.
     pub fn proxy_indexes(&self) -> impl Iterator<Item = &Index> {
-        self.proxy_definitions().map(Arc::as_ref)
+        self.proxy_definitions().map(|proxy| proxy.index.as_ref())
     }
 
-    pub(super) fn proxy_definitions(&self) -> impl Iterator<Item = &Arc<Index>> {
+    pub(super) fn proxy_definitions(&self) -> impl Iterator<Item = &ProxyIndexDefinition> {
         self.proxy_indexes.iter().filter(|_| !self.no_index)
+    }
+
+    /// Return the upstream index named by a proxy configuration.
+    pub fn proxy_target(&self, name: &IndexName) -> Option<&IndexName> {
+        self.proxy_definitions()
+            .find(|proxy| proxy.index.name.as_ref() == Some(name))
+            .map(|proxy| &proxy.proxy_for)
     }
 
     /// Combine a set of index locations.
@@ -350,13 +399,7 @@ impl IndexLocations {
         flat_index: Vec<Index>,
         no_index: bool,
     ) -> Result<Self, ProxyIndexConfigError> {
-        for index in indexes {
-            if index.proxy_for.is_some() {
-                self.proxy_indexes.push(Arc::new(index));
-            } else {
-                self.indexes.push(index);
-            }
-        }
+        self.indexes.extend(indexes);
         self.flat_index.extend(flat_index);
         self.no_index |= no_index;
         self.routes = if self.no_index || self.proxy_indexes.is_empty() {
@@ -451,9 +494,7 @@ impl<'a> IndexLocations {
 
     /// Return an iterator over the flat [`Index`] entries.
     pub fn flat_indexes(&'a self) -> impl DoubleEndedIterator<Item = &'a Index> + 'a {
-        self.flat_index
-            .iter()
-            .filter(|index| index.proxy_for.is_none())
+        self.flat_index.iter()
     }
 
     /// Return the `--no-index` flag.
@@ -550,13 +591,12 @@ impl<'a> IndexLocations {
     ///
     /// A proxied index uses its proxy's policy, whether looked up by its upstream or proxy URL.
     pub fn request_policy(&self, url: &IndexUrl) -> IndexRequestPolicy<'_> {
-        if let Some(proxy) = self.proxy_route_for(url) {
-            return proxy.request_policy();
-        }
-        self.index_for_url(url)
+        self.proxy_route_for(url)
+            .map(ProxyRoute::index)
+            .or_else(|| self.index_for_url(url))
             .or_else(|| {
                 self.proxy_indexes()
-                    .find(|index| index.url().is_same_index(url))
+                    .find(|proxy| proxy.url().is_same_index(url))
             })
             .map(Index::request_policy)
             .unwrap_or_default()
@@ -582,28 +622,27 @@ impl<'a> IndexLocations {
 impl From<&IndexLocations> for uv_auth::Indexes {
     /// Builds the authentication configuration for package indexes and their proxies.
     fn from(index_locations: &IndexLocations) -> Self {
-        let indexes = index_locations
-            .allowed_indexes()
-            .into_iter()
-            .chain(index_locations.proxy_indexes())
-            .map(|index| {
-                let url = index.raw_url().clone();
-                let root_url = index.root_url().unwrap_or_else(|| url.clone());
-                AuthIndex {
-                    url,
-                    root_url,
-                    auth_policy: index.authenticate,
-                }
-            });
-        Self::from_indexes(indexes.map(|mut index| {
-            // Credential lookups use these URLs with the username supplied separately.
-            // The client caches credentials separately from these lookup URLs.
-            for url in [&mut index.url, &mut index.root_url] {
-                url.set_username("").ok();
-                url.set_password(None).ok();
-            }
-            index
-        }))
+        Self::from_indexes(
+            index_locations
+                .allowed_indexes()
+                .into_iter()
+                .chain(index_locations.proxy_indexes())
+                .map(|index| {
+                    let url = index.raw_url();
+                    let mut index = AuthIndex {
+                        url: url.clone(),
+                        root_url: index.root_url().unwrap_or_else(|| url.clone()),
+                        auth_policy: index.authenticate,
+                    };
+                    // Credential lookups use these URLs with the username supplied separately.
+                    // The client caches credentials separately from these lookup URLs.
+                    for url in [&mut index.url, &mut index.root_url] {
+                        url.set_username("").ok();
+                        url.set_password(None).ok();
+                    }
+                    index
+                }),
+        )
     }
 }
 
@@ -707,7 +746,7 @@ mod tests {
     fn proxy_indexes_are_excluded_from_resolution_iterators() -> Result<(), Box<dyn Error>> {
         let proxy = pypi_proxy()?;
         let physical_url = proxy.url.clone();
-        let locations = IndexLocations::new(vec![proxy], Vec::new(), false)?;
+        let locations = IndexLocations::new(Vec::new(), vec![proxy], Vec::new(), false)?;
 
         assert_eq!(locations.configured_indexes().count(), 0);
         assert_eq!(locations.proxy_indexes().count(), 1);
@@ -760,7 +799,10 @@ mod tests {
             ["https://ordinary.example.com/simple/"]
         );
         assert_eq!(
-            index_urls(locations.proxy_indexes()),
+            locations
+                .proxy_indexes()
+                .map(|proxy| proxy.raw_url().as_str())
+                .collect::<Vec<_>>(),
             [physical_url.as_str()]
         );
         assert_eq!(locations.proxy_routes().count(), 1);
@@ -771,7 +813,7 @@ mod tests {
     #[test]
     fn no_index_suppresses_all_proxy_configuration() -> Result<(), Box<dyn Error>> {
         let proxy = pypi_proxy()?;
-        let locations = IndexLocations::new(vec![proxy], Vec::new(), false)?.combine(
+        let locations = IndexLocations::new(Vec::new(), vec![proxy], Vec::new(), false)?.combine(
             Vec::new(),
             Vec::new(),
             true,
@@ -809,7 +851,7 @@ mod tests {
             "#,
         )?;
         let url = second.url.clone();
-        let locations = IndexLocations::new(vec![first, second], Vec::new(), false)?;
+        let locations = IndexLocations::new(vec![first, second], Vec::new(), Vec::new(), false)?;
 
         assert_eq!(
             locations.request_policy(&url).simple_api_cache_control(),
@@ -875,6 +917,7 @@ mod tests {
         let locations = IndexLocations::new(
             vec![first, shadowed, explicit, shadowed_implicit, default],
             vec![],
+            vec![],
             false,
         )?;
 
@@ -918,7 +961,7 @@ mod tests {
         let first = Index::from_str("https://first.example.com/simple")?;
         let repeated = Index::from_str("https://first.example.com/simple")?;
         let last = Index::from_str("https://last.example.com/simple")?;
-        let locations = IndexLocations::new(vec![first, repeated, last], vec![], false)?;
+        let locations = IndexLocations::new(vec![first, repeated, last], vec![], vec![], false)?;
         let expected = [
             "https://first.example.com/simple",
             "https://first.example.com/simple",
@@ -945,7 +988,7 @@ mod tests {
         let first = Index::from_str("shared=https://first.example.com/simple")?;
         let mut shadowed = Index::from_str("shared=https://shadowed.example.com/simple")?;
         shadowed.default = true;
-        let locations = IndexLocations::new(vec![first, shadowed], vec![], false)?;
+        let locations = IndexLocations::new(vec![first, shadowed], vec![], vec![], false)?;
 
         assert_eq!(
             index_urls(locations.default_index()),
@@ -970,7 +1013,7 @@ mod tests {
         let mut second = Index::from(url);
         second.name = Some(IndexName::from_str("second").unwrap());
         second.default = true;
-        let locations = IndexLocations::new(vec![first, second], Vec::new(), false)?;
+        let locations = IndexLocations::new(vec![first, second], Vec::new(), Vec::new(), false)?;
 
         assert_eq!(locations.indexes().count(), 2);
         assert_eq!(locations.fetch_indexes().count(), 1);
@@ -992,6 +1035,7 @@ mod tests {
                 },
                 Index::from(unconfigured.clone()),
             ],
+            Vec::new(),
             Vec::new(),
             false,
         )?;
@@ -1025,12 +1069,12 @@ mod tests {
     fn request_policy_distinguishes_configured_and_builtin_status_codes()
     -> Result<(), Box<dyn Error>> {
         let url = IndexUrl::from_str("https://download.pytorch.org/whl/cu118")?;
-        let implicit = IndexLocations::new(vec![Index::from(url.clone())], vec![], false)?;
+        let implicit = IndexLocations::new(vec![Index::from(url.clone())], vec![], vec![], false)?;
         let explicit: Index = toml::from_str(
             r#"url = "https://download.pytorch.org/whl/cu118"
                ignore-error-codes = [403]"#,
         )?;
-        let explicit = IndexLocations::new(vec![explicit], vec![], false)?;
+        let explicit = IndexLocations::new(vec![explicit], vec![], vec![], false)?;
         let implicit_policy = implicit.request_policy(&url);
         let explicit_policy = explicit.request_policy(&url);
         let capabilities = IndexCapabilities::default();
@@ -1056,7 +1100,7 @@ mod tests {
             r#"url = "https://download.pytorch.org/whl/cu118"
                ignore-error-codes = []"#,
         )?;
-        let locations = IndexLocations::new(vec![index], vec![], false)?;
+        let locations = IndexLocations::new(vec![index], vec![], vec![], false)?;
         let policy = locations.request_policy(&url);
         let capabilities = IndexCapabilities::default();
         assert_eq!(
@@ -1073,7 +1117,12 @@ mod tests {
     #[test]
     fn test_pytorch_default_cache_control() -> Result<(), Box<dyn Error>> {
         let url = IndexUrl::from_str("https://download.pytorch.org/whl/cu118")?;
-        let locations = IndexLocations::new(vec![Index::from(url.clone())], Vec::new(), false)?;
+        let locations = IndexLocations::new(
+            vec![Index::from(url.clone())],
+            Vec::new(),
+            Vec::new(),
+            false,
+        )?;
         let policy = locations.request_policy(&url);
         assert_eq!(policy.simple_api_cache_control(), None);
         assert_eq!(
@@ -1096,7 +1145,7 @@ mod tests {
             }),
             ..Index::from(url.clone())
         };
-        let locations = IndexLocations::new(vec![index], Vec::new(), false)?;
+        let locations = IndexLocations::new(vec![index], Vec::new(), Vec::new(), false)?;
         let policy = locations.request_policy(&url);
         assert_eq!(
             policy.simple_api_cache_control(),
@@ -1112,7 +1161,12 @@ mod tests {
     #[test]
     fn test_nvidia_default_cache_control() -> Result<(), Box<dyn Error>> {
         let url = IndexUrl::from_str("https://pypi.nvidia.com")?;
-        let locations = IndexLocations::new(vec![Index::from(url.clone())], Vec::new(), false)?;
+        let locations = IndexLocations::new(
+            vec![Index::from(url.clone())],
+            Vec::new(),
+            Vec::new(),
+            false,
+        )?;
         let policy = locations.request_policy(&url);
         assert_eq!(policy.simple_api_cache_control(), None);
         assert_eq!(

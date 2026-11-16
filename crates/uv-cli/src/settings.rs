@@ -1314,6 +1314,7 @@ impl ToolListSettings {
         let filesystem = ResolverInstallerOptions {
             indexes: IndexOptions {
                 index: top_level.index,
+                proxy_index: top_level.proxy_index,
                 ..IndexOptions::default()
             },
             exclude_newer: top_level.exclude_newer,
@@ -4645,6 +4646,7 @@ impl PipSettings {
             target,
             prefix,
             index,
+            proxy_index,
             index_url,
             extra_index_url,
             no_index,
@@ -4707,6 +4709,7 @@ impl PipSettings {
 
         let ResolverInstallerSchema {
             index: top_level_index,
+            proxy_index: top_level_proxy_index,
             index_url: top_level_index_url,
             extra_index_url: top_level_extra_index_url,
             no_index: top_level_no_index,
@@ -4747,6 +4750,7 @@ impl PipSettings {
         //
         // For example, prefer `tool.uv.pip.index-url` over `tool.uv.index-url`.
         let index = index.combine(top_level_index);
+        let proxy_index = proxy_index.combine(top_level_proxy_index);
         let no_index = no_index.combine(top_level_no_index);
         let index_url = index_url.combine(top_level_index_url);
         let extra_index_url = extra_index_url.combine(top_level_extra_index_url);
@@ -4803,6 +4807,7 @@ impl PipSettings {
                     .chain(extra_index_url.into_iter().flatten().map(Index::from))
                     .chain(index_url.into_iter().map(Index::from))
                     .collect(),
+                args.proxy_index.combine(proxy_index).unwrap_or_default(),
                 args.find_links
                     .combine(find_links)
                     .into_iter()
@@ -5062,6 +5067,7 @@ impl PublishSettings {
         let ResolverInstallerSchema {
             keyring_provider,
             index,
+            proxy_index,
             extra_index_url,
             index_url,
             ..
@@ -5101,6 +5107,7 @@ impl PublishSettings {
                     .chain(extra_index_url.into_iter().flatten().map(Index::from))
                     .chain(index_url.into_iter().map(Index::from))
                     .collect(),
+                proxy_index.unwrap_or_default(),
                 Vec::new(),
                 false,
             )?,
@@ -5201,6 +5208,7 @@ fn parse_failure(name: &str, expected: &str) -> ! {
 #[cfg(test)]
 mod tests {
     use uv_auth::AuthPolicy;
+    use uv_distribution_types::ProxyIndex;
 
     use crate::{IndexArgs, RegistryClientArgs};
 
@@ -5211,11 +5219,13 @@ mod tests {
         proxy_for: &str,
         url: &str,
         artifact_base_url: &str,
-    ) -> anyhow::Result<Index> {
-        let mut index = Index::from_extra_index_url(IndexUrl::parse(url, None)?);
+    ) -> anyhow::Result<ProxyIndex> {
+        let mut index = ProxyIndex::new(
+            IndexUrl::parse(url, None)?,
+            proxy_for.parse()?,
+            SafeUrl::parse(artifact_base_url)?.with_policy(Stripped),
+        );
         index.name = Some(name.parse()?);
-        index.proxy_for = Some(proxy_for.parse()?);
-        index.artifact_base_url = Some(SafeUrl::parse(artifact_base_url)?.with_policy(Stripped));
         Ok(index)
     }
 
@@ -5229,7 +5239,7 @@ mod tests {
         )?;
         let options = ResolverInstallerOptions {
             indexes: IndexOptions {
-                index: Some(vec![proxy]),
+                proxy_index: Some(vec![proxy]),
                 ..IndexOptions::default()
             },
             ..ResolverInstallerOptions::default()
@@ -5240,14 +5250,11 @@ mod tests {
         let encoded = toml::to_string(&wire)?;
 
         insta::assert_snapshot!(encoded, @r#"
-        [[index]]
+        [[proxy-index]]
         name = "socket"
         url = "https://proxy.example.com/simple/"
-        artifact-base-url = "https://proxy.example.com/files/"
         proxy-for = "pypi"
-        explicit = false
-        default = false
-        format = "simple"
+        artifact-base-url = "https://proxy.example.com/files/"
         authenticate = "always"
         "#);
 
@@ -5261,7 +5268,7 @@ mod tests {
         )?;
         expected.authenticate = AuthPolicy::Always;
 
-        assert_eq!(restored.indexes.index, Some(vec![expected]));
+        assert_eq!(restored.indexes.proxy_index, Some(vec![expected]));
         Ok(())
     }
 

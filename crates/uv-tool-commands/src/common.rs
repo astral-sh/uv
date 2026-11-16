@@ -63,30 +63,22 @@ pub(crate) fn combine_tool_options(
     mut receipt: ResolverInstallerOptions,
     mut filesystem: ResolverInstallerOptions,
 ) -> ResolverInstallerOptions {
-    if let (Some(saved_indexes), Some(configured_indexes)) =
-        (&mut receipt.indexes.index, &mut filesystem.indexes.index)
-    {
-        for saved in saved_indexes
-            .iter_mut()
-            .filter(|index| index.proxy_for.is_some())
-        {
-            if let Some(position) = configured_indexes.iter().position(|configured| {
+    if let (Some(saved_proxies), Some(configured_proxies)) = (
+        &mut receipt.indexes.proxy_index,
+        &mut filesystem.indexes.proxy_index,
+    ) {
+        for saved in saved_proxies.iter_mut() {
+            if let Some(position) = configured_proxies.iter().position(|configured| {
                 saved.proxy_for == configured.proxy_for
                     && saved.name == configured.name
-                    && saved.url().without_credentials() == configured.url().without_credentials()
-                    && saved
-                        .artifact_base_url
-                        .as_ref()
-                        .map(|url| url.without_credentials())
-                        == configured
-                            .artifact_base_url
-                            .as_ref()
-                            .map(|url| url.without_credentials())
+                    && saved.url.without_credentials() == configured.url.without_credentials()
+                    && saved.artifact_base_url.without_credentials()
+                        == configured.artifact_base_url.without_credentials()
             }) {
                 // Use the configured proxy, which may have credentials omitted from the receipt.
-                // Keep its position among the saved indexes. Any additional live declaration
+                // Keep its position among the saved proxies. Any additional live declaration
                 // remains in the list and fails duplicate validation.
-                *saved = configured_indexes.remove(position);
+                *saved = configured_proxies.remove(position);
             }
         }
     }

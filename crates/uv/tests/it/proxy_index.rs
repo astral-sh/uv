@@ -194,7 +194,7 @@ async fn proxy_index_rejects_duplicate_definitions_across_configuration_files() 
         [tool.uv]
         preview-features = ["proxy-index"]
 
-        [[tool.uv.index]]
+        [[tool.uv.proxy-index]]
         name = "socket"
         url = "{physical_index_url}/simple/"
         artifact-base-url = "{physical_artifact_url}/files/"
@@ -209,7 +209,7 @@ async fn proxy_index_rejects_duplicate_definitions_across_configuration_files() 
     user_config_dir
         .child("uv.toml")
         .write_str(indoc::indoc! {r#"
-            [[index]]
+            [[proxy-index]]
             name = "socket"
             url = "https://other-user:other-secret@other-proxy.example.com/simple/"
             artifact-base-url = "https://other-proxy.example.com/files/"
@@ -250,7 +250,7 @@ async fn proxy_index_rejects_same_named_package_index_across_configuration_files
         [tool.uv]
         preview-features = ["proxy-index"]
 
-        [[tool.uv.index]]
+        [[tool.uv.proxy-index]]
         name = "socket"
         url = "{physical_index_url}/simple/"
         artifact-base-url = "{physical_artifact_url}/files/"
@@ -299,14 +299,14 @@ fn proxy_index_rejects_url_shared_by_two_proxies() -> Result<()> {
         url = "https://private.example.com/simple/"
         artifact-base-url = "https://private.example.com/files/"
 
-        [[tool.uv.index]]
+        [[tool.uv.proxy-index]]
         name = "pypi-proxy"
         url = "https://proxy.example.com/simple"
         artifact-base-url = "https://proxy.example.com/files/"
         proxy-for = "pypi"
         cache-control = { api = "max-age=3600" }
 
-        [[tool.uv.index]]
+        [[tool.uv.proxy-index]]
         name = "private-proxy"
         url = "https://user:secret@proxy.example.com/simple/"
         artifact-base-url = "https://proxy.example.com/files/"
@@ -337,7 +337,7 @@ fn proxy_index_rejects_url_shared_with_ordinary_index() -> Result<()> {
         name = "ordinary"
         url = "https://ordinary-user:ordinary-secret@proxy.example.com/simple"
 
-        [[tool.uv.index]]
+        [[tool.uv.proxy-index]]
         name = "proxy"
         url = "https://proxy-user:proxy-secret@proxy.example.com/simple/"
         artifact-base-url = "https://proxy.example.com/files/"
@@ -375,7 +375,7 @@ fn proxy_index_rejects_named_proxy_in_project_sources() -> Result<()> {
         url = "https://upstream.example.com/simple/"
         artifact-base-url = "https://upstream.example.com/files/"
 
-        [[tool.uv.index]]
+        [[tool.uv.proxy-index]]
         name = "mirror"
         url = "https://mirror.example.com/simple/"
         artifact-base-url = "https://mirror.example.com/files/"
@@ -387,7 +387,7 @@ fn proxy_index_rejects_named_proxy_in_project_sources() -> Result<()> {
     ----- stderr -----
     error: Failed to build `project @ file://[TEMP_DIR]/`
       cause: Failed to parse entry: `basic-package`
-      cause: Package `basic-package` references proxy index `mirror` in `tool.uv.sources`. Use its upstream index `upstream` instead, or remove the source override
+      cause: Package `basic-package` references proxy index `mirror` in `tool.uv.sources`. Use its upstream index `upstream` instead
     ");
 
     Ok(())
@@ -432,7 +432,7 @@ async fn proxy_index_implicitly_routes_pypi_without_a_second_resolution_index() 
         [tool.uv]
         preview-features = ["proxy-index"]
 
-        [[tool.uv.index]]
+        [[tool.uv.proxy-index]]
         name = "socket"
         url = "{physical_index_url}/simple/"
         artifact-base-url = "{physical_artifact_url}/files/"
@@ -514,7 +514,7 @@ fn proxy_index_rejects_flat_pypi_default() -> Result<()> {
         default = true
         format = "flat"
 
-        [[tool.uv.index]]
+        [[tool.uv.proxy-index]]
         name = "proxy"
         url = "https://proxy.example.com/simple/"
         artifact-base-url = "https://proxy.example.com/files/"
@@ -548,7 +548,7 @@ async fn proxy_index_sidecar_uses_proxy_cache_policy() -> Result<()> {
         [tool.uv]
         preview-features = ["proxy-index"]
 
-        [[tool.uv.index]]
+        [[tool.uv.proxy-index]]
         name = "proxy"
         url = "{server_url}/simple/"
         artifact-base-url = "{server_url}/files/"
@@ -607,7 +607,7 @@ async fn proxy_index_variant_metadata_uses_advertised_url_and_proxy_cache_policy
         .write_str(&formatdoc! {r#"
         preview-features = ["proxy-index", "wheel-variants"]
 
-        [[index]]
+        [[proxy-index]]
         name = "proxy"
         url = "{server_url}/simple/"
         artifact-base-url = "{server_url}/files/"
@@ -727,7 +727,7 @@ async fn proxy_index_locks_canonical_urls_without_origin_requests() -> Result<()
         artifact-base-url = "{canonical_artifact_url}/packages/"
         default = true
 
-        [[tool.uv.index]]
+        [[tool.uv.proxy-index]]
         name = "socket"
         url = "{physical_index_url}/simple/"
         artifact-base-url = "{physical_artifact_url}/files/"
@@ -831,7 +831,7 @@ async fn proxy_index_reports_unauthorized_proxy_without_origin_requests() -> Res
         artifact-base-url = "{canonical_artifact_url}/packages/"
         default = true
 
-        [[tool.uv.index]]
+        [[tool.uv.proxy-index]]
         name = "socket"
         url = "{physical_index_url}/simple/"
         artifact-base-url = "{physical_artifact_url}/files/"
@@ -895,7 +895,7 @@ async fn proxy_index_reports_forbidden_proxy_without_origin_requests() -> Result
         artifact-base-url = "{canonical_artifact_url}/packages/"
         default = true
 
-        [[tool.uv.index]]
+        [[tool.uv.proxy-index]]
         name = "socket"
         url = "{physical_index_url}/simple/"
         artifact-base-url = "{physical_artifact_url}/files/"
@@ -978,7 +978,7 @@ async fn proxy_index_routes_source_through_proxy_and_reuses_offline_cache() -> R
         artifact-base-url = "{canonical_artifact_url}/packages/"
         default = true
 
-        [[tool.uv.index]]
+        [[tool.uv.proxy-index]]
         name = "socket"
         url = "{physical_index_url}/simple/"
         artifact-base-url = "{physical_artifact_url}/files/"
@@ -1068,7 +1068,7 @@ async fn proxy_index_installs_existing_locked_source_without_simple_requests() -
         artifact-base-url = "{canonical_artifact_url}/packages/"
         default = true
 
-        [[tool.uv.index]]
+        [[tool.uv.proxy-index]]
         name = "socket"
         url = "{physical_index_url}/simple/"
         artifact-base-url = "{physical_artifact_url}/files/"
@@ -1142,7 +1142,7 @@ async fn proxy_index_redownloads_artifacts_when_proxy_changes() -> Result<()> {
             artifact-base-url = "{canonical_artifact_url}/packages/"
             default = true
 
-            [[tool.uv.index]]
+            [[tool.uv.proxy-index]]
             name = "socket"
             url = "{physical_index_url}/simple/"
             artifact-base-url = "{physical_artifact_url}/files/"
@@ -1222,7 +1222,7 @@ async fn proxy_index_export_rejects_missing_hash_in_frozen_lock() -> Result<()> 
         artifact-base-url = "{canonical_artifact_url}/packages/"
         default = true
 
-        [[tool.uv.index]]
+        [[tool.uv.proxy-index]]
         name = "socket"
         url = "{physical_index_url}/simple/"
         artifact-base-url = "{physical_artifact_url}/files/"
@@ -1292,7 +1292,7 @@ async fn proxy_index_pip_compile_pylock_preserves_canonical_artifact_and_hash() 
         artifact-base-url = "{canonical_artifact_url}/packages/"
         default = true
 
-        [[tool.uv.index]]
+        [[tool.uv.proxy-index]]
         name = "socket"
         url = "{physical_index_url}/simple/"
         artifact-base-url = "{physical_artifact_url}/files/"
@@ -1407,7 +1407,7 @@ async fn proxy_index_pip_installs_hashless_live_artifact() -> Result<()> {
         artifact-base-url = "{canonical_artifact_url}/packages/"
         default = true
 
-        [[tool.uv.index]]
+        [[tool.uv.proxy-index]]
         name = "socket"
         url = "{physical_index_url}/simple/"
         artifact-base-url = "{physical_artifact_url}/files/"
@@ -1468,7 +1468,7 @@ async fn proxy_index_rejects_cached_wheel_when_hash_changes() -> Result<()> {
         artifact-base-url = "{canonical_artifact_url}/packages/"
         default = true
 
-        [[tool.uv.index]]
+        [[tool.uv.proxy-index]]
         name = "socket"
         url = "{physical_index_url}/simple/"
         artifact-base-url = "{physical_artifact_url}/files/"
@@ -1590,7 +1590,7 @@ async fn proxy_index_rejects_cached_source_when_hash_changes() -> Result<()> {
         artifact-base-url = "{canonical_artifact_url}/packages/"
         default = true
 
-        [[tool.uv.index]]
+        [[tool.uv.proxy-index]]
         name = "socket"
         url = "{physical_index_url}/simple/"
         artifact-base-url = "{physical_artifact_url}/files/"
@@ -1726,7 +1726,7 @@ async fn proxy_index_rejects_hashless_selected_wheel() -> Result<()> {
         artifact-base-url = "{canonical_artifact_url}/packages/"
         default = true
 
-        [[tool.uv.index]]
+        [[tool.uv.proxy-index]]
         name = "socket"
         url = "{physical_index_url}/simple/"
         artifact-base-url = "{physical_artifact_url}/files/"
@@ -1792,7 +1792,7 @@ async fn proxy_index_rejects_hashless_selected_source() -> Result<()> {
         artifact-base-url = "{canonical_artifact_url}/packages/"
         default = true
 
-        [[tool.uv.index]]
+        [[tool.uv.proxy-index]]
         name = "socket"
         url = "{physical_index_url}/simple/"
         artifact-base-url = "{physical_artifact_url}/files/"
@@ -1861,7 +1861,7 @@ async fn proxy_index_rejects_unmapped_artifact_without_origin_fallback() -> Resu
         artifact-base-url = "{canonical_artifact_url}/packages/"
         default = true
 
-        [[tool.uv.index]]
+        [[tool.uv.proxy-index]]
         name = "socket"
         url = "{physical_index_url}/simple/"
         artifact-base-url = "{physical_artifact_url}/files/"
@@ -1922,7 +1922,7 @@ async fn proxy_index_does_not_cache_wheel_with_mismatched_locked_hash() -> Resul
         artifact-base-url = "{canonical_artifact_url}/packages/"
         default = true
 
-        [[tool.uv.index]]
+        [[tool.uv.proxy-index]]
         name = "socket"
         url = "{physical_index_url}/simple/"
         artifact-base-url = "{physical_artifact_url}/files/"
@@ -2027,7 +2027,7 @@ async fn proxy_index_does_not_cache_source_with_mismatched_locked_hash() -> Resu
         artifact-base-url = "{canonical_artifact_url}/packages/"
         default = true
 
-        [[tool.uv.index]]
+        [[tool.uv.proxy-index]]
         name = "socket"
         url = "{physical_index_url}/simple/"
         artifact-base-url = "{physical_artifact_url}/files/"

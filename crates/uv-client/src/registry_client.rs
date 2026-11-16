@@ -24,7 +24,7 @@ use uv_configuration::IndexStrategy;
 use uv_configuration::KeyringProviderType;
 use uv_distribution_filename::{DistFilename, DistFilenameError, WheelFilename};
 use uv_distribution_types::{
-    BuiltDist, DirectUrlBuiltDist, FileLocation, IndexCapabilities, IndexEntryFilename,
+    BuiltDist, DirectUrlBuiltDist, FileLocation, Index, IndexCapabilities, IndexEntryFilename,
     IndexFormat, IndexLocations, IndexMetadataRef, IndexStatusCodeDecision,
     IndexStatusCodeStrategy, IndexUrl, Name, RegistryBuiltWheel, VariantsJsonContent, VerbatimFile,
 };
@@ -184,37 +184,37 @@ impl<'a> RegistryClientBuilder<'a> {
         for index in self
             .index_locations
             .known_indexes()
-            .chain(self.index_locations.proxy_indexes())
+            .filter(|index| self.index_locations.proxy_route_for(index.url()).is_none())
         {
-            if self.index_locations.proxy_route_for(index.url()).is_some() {
-                continue;
-            }
-
-            if let Some(credentials) = index.credentials()? {
-                trace!(
-                    "Read credentials for index `{}`",
-                    index
-                        .name
-                        .as_ref()
-                        .map(ToString::to_string)
-                        .unwrap_or_else(|| index.url.to_string())
-                );
-                if let Some(root_url) = index.root_url() {
-                    self.base_client_builder
-                        .store_credentials(&root_url, credentials.clone());
-                }
-                self.base_client_builder
-                    .store_credentials(index.raw_url(), credentials);
-            }
-
-            if index.proxy_for.is_some()
-                && let Some(artifact_base_url) = &index.artifact_base_url
-            {
-                self.base_client_builder
-                    .store_credentials_from_url(artifact_base_url.as_url())?;
-            }
+            self.cache_credentials_for_index(index)?;
         }
 
+        for proxy in self.index_locations.proxy_routes() {
+            self.cache_credentials_for_index(proxy.index())?;
+            self.base_client_builder
+                .store_credentials_from_url(proxy.artifact_base_url())?;
+        }
+
+        Ok(())
+    }
+
+    fn cache_credentials_for_index(&self, index: &Index) -> Result<(), ClientBuildError> {
+        if let Some(credentials) = index.credentials()? {
+            trace!(
+                "Read credentials for index `{}`",
+                index
+                    .name
+                    .as_ref()
+                    .map(ToString::to_string)
+                    .unwrap_or_else(|| index.url().to_string())
+            );
+            if let Some(root_url) = index.root_url() {
+                self.base_client_builder
+                    .store_credentials(&root_url, credentials.clone());
+            }
+            self.base_client_builder
+                .store_credentials(index.raw_url(), credentials);
+        }
         Ok(())
     }
 
@@ -2079,7 +2079,7 @@ mod tests {
     use uv_cache::Cache;
     use uv_distribution_types::{
         CanonicalFileLocation, FileLocation, Index, IndexCapabilities, IndexFormat, IndexLocations,
-        IndexMetadataRef, IndexName, IndexUrl, ToUrlError, VariantsJsonFilename,
+        IndexMetadataRef, IndexName, IndexUrl, ProxyIndex, ToUrlError, VariantsJsonFilename,
     };
     use uv_small_str::SmallString;
     use wiremock::matchers::{basic_auth, method, path, path_regex};
@@ -2107,7 +2107,7 @@ mod tests {
     fn no_index_client(flat_indexes: Vec<Index>) -> Result<RegistryClient, Error> {
         Ok(
             RegistryClientBuilder::new(BaseClientBuilder::default(), Cache::temp()?)
-                .index_locations(IndexLocations::new(vec![], flat_indexes, true)?)
+                .index_locations(IndexLocations::new(vec![], vec![], flat_indexes, true)?)
                 .build()?,
         )
     }
@@ -2158,20 +2158,18 @@ mod tests {
             artifact_base_url: Some(canonical.url().join("../files/")?.with_policy(Stripped)),
             ..Index::from_index_url(canonical.clone())
         };
-        let proxy_index = Index {
+        let proxy_index = ProxyIndex {
             name: Some(IndexName::from_str("proxy")?),
-            proxy_for: Some(canonical_name),
-            artifact_base_url: Some(
+            ..ProxyIndex::new(
+                IndexUrl::from_str(&format!("{}/simple/", proxy_server.uri()))?,
+                canonical_name,
                 SafeUrl::parse(&format!("{}/files/", proxy_server.uri()))?.with_policy(Stripped),
-            ),
-            ..Index::from_extra_index_url(IndexUrl::from_str(&format!(
-                "{}/simple/",
-                proxy_server.uri()
-            ))?)
+            )
         };
 
         Ok(IndexLocations::new(
-            vec![canonical_index, proxy_index],
+            vec![canonical_index],
+            vec![proxy_index],
             vec![],
             false,
         )?)
@@ -2233,7 +2231,7 @@ mod tests {
             BaseClientBuilder::default().connectivity(Connectivity::Offline),
             Cache::temp()?,
         )
-        .index_locations(IndexLocations::new(vec![], vec![flat_index], true)?)
+        .index_locations(IndexLocations::new(vec![], vec![], vec![flat_index], true)?)
         .torch_backend(Some(TorchStrategy::Backend {
             backend: TorchBackend::Cpu,
         }))
@@ -2352,20 +2350,21 @@ mod tests {
             artifact_base_url: Some(canonical_artifacts.with_policy(Stripped)),
             ..Index::from_index_url(canonical.clone())
         };
-        let proxy_index = Index {
+        let proxy_index = ProxyIndex {
             name: Some(IndexName::from_str("proxy")?),
-            proxy_for: Some(canonical_name),
             authenticate: AuthPolicy::Always,
-            artifact_base_url: Some(
+            ..ProxyIndex::new(
+                IndexUrl::from_str(&format!(
+                    "http://proxy-user:proxy-password@{}/simple/",
+                    proxy_server.address()
+                ))?,
+                canonical_name,
                 SafeUrl::parse(&format!("{}/files/", artifact_server.uri()))?.with_policy(Stripped),
-            ),
-            ..Index::from_extra_index_url(IndexUrl::from_str(&format!(
-                "http://proxy-user:proxy-password@{}/simple/",
-                proxy_server.address()
-            ))?)
+            )
         };
 
-        let locations = IndexLocations::new(vec![canonical_index, proxy_index], vec![], false)?;
+        let locations =
+            IndexLocations::new(vec![canonical_index], vec![proxy_index], vec![], false)?;
         let client = RegistryClientBuilder::new(BaseClientBuilder::default(), Cache::temp()?)
             .index_locations(locations)
             .build()?;

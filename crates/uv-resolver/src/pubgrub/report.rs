@@ -1416,6 +1416,9 @@ impl PubGrubReportFormatter<'_> {
             }
             if index_capabilities.forbidden(&index) {
                 hints.insert(PubGrubHint::ForbiddenIndex {
+                    is_proxy: index_locations
+                        .proxy_routes()
+                        .any(|route| route.effective_url() == &index),
                     index,
                     any_successful_response,
                 });
@@ -1728,6 +1731,8 @@ pub enum PubGrubHint {
         index: IndexUrl,
         // excluded from `PartialEq` and `Hash`
         any_successful_response: bool,
+        // excluded from `PartialEq` and `Hash`
+        is_proxy: bool,
     },
     /// None of the available wheels for a package have a compatible Python language tag (e.g.,
     /// `cp310` in `cp310-abi3-manylinux_2_17_x86_64.whl`).
@@ -2279,11 +2284,17 @@ impl std::fmt::Display for PubGrubHint {
             Self::ForbiddenIndex {
                 index,
                 any_successful_response,
+                is_proxy,
             } => {
                 if *any_successful_response {
+                    let entry = if *is_proxy {
+                        "[[tool.uv.proxy-index]]"
+                    } else {
+                        "[[tool.uv.index]]"
+                    };
                     write!(
                         f,
-                        "An index ({}) returned a {} error, but uv received a successful response from another request to the index. If the failing package is not present on this index, consider adding `ignore-error-codes = [403]` to the index's `[[tool.uv.index]]` entry to continue searching across indexes.",
+                        "An index ({}) returned a {} error, but uv received a successful response from another request to the index. If the failing package is not present on this index, consider adding `ignore-error-codes = [403]` to the index's `{entry}` entry to continue searching across indexes.",
                         index.without_credentials().cyan(),
                         "403 Forbidden".red(),
                     )
@@ -2899,7 +2910,7 @@ mod tests {
     use std::str::FromStr;
 
     use pubgrub::{DefaultStringReporter, Reporter};
-    use uv_distribution_types::{IndexName, IndexStatusCodeStrategy, RequiresPython};
+    use uv_distribution_types::{IndexName, IndexStatusCodeStrategy, ProxyIndex, RequiresPython};
     use uv_pep508::{MarkerEnvironment, MarkerEnvironmentBuilder};
     use uv_redacted::SafeUrl;
     use uv_redacted::policy::Stripped;
@@ -2981,15 +2992,15 @@ mod tests {
         index.artifact_base_url =
             Some(SafeUrl::parse("https://canonical.example.com/packages/")?.with_policy(Stripped));
 
-        let mut proxy = Index::from_extra_index_url(physical.clone());
-        proxy.name = Some(IndexName::from_str("proxy")?);
-        proxy.proxy_for = Some(name);
-        proxy.artifact_base_url = Some(
+        let mut proxy = ProxyIndex::new(
+            physical.clone(),
+            name,
             SafeUrl::parse("https://proxy-user:proxy-secret@proxy.example.com/files/")?
                 .with_policy(Stripped),
         );
+        proxy.name = Some(IndexName::from_str("proxy")?);
 
-        let index_locations = IndexLocations::new(vec![index, proxy], Vec::new(), false)?;
+        let index_locations = IndexLocations::new(vec![index], vec![proxy], Vec::new(), false)?;
 
         let index_capabilities = IndexCapabilities::default();
         let _ = IndexStatusCodeStrategy::Default.handle_status_code(
@@ -3033,6 +3044,11 @@ mod tests {
             assert!(!rendered.contains("canonical-secret"));
             assert!(!rendered.contains("proxy-user"));
             assert!(!rendered.contains("proxy-secret"));
+            if let PubGrubHint::ForbiddenIndex { .. } = hint {
+                insta::with_settings!({ filters => [(r"\x1b\[[0-9;]*m", "")] }, {
+                    insta::assert_snapshot!(rendered, @"An index (https://proxy.example.com/simple) returned a 403 Forbidden error, but uv received a successful response from another request to the index. If the failing package is not present on this index, consider adding `ignore-error-codes = [403]` to the index's `[[tool.uv.proxy-index]]` entry to continue searching across indexes.");
+                });
+            }
         }
 
         let hints = hints
@@ -3046,6 +3062,7 @@ mod tests {
                 PubGrubHint::ForbiddenIndex {
                     index,
                     any_successful_response,
+                    is_proxy: _,
                 } => Ok((
                     "forbidden",
                     index.without_credentials().to_string(),
@@ -3079,13 +3096,14 @@ mod tests {
     fn proxy_authentication_hints_respect_no_index() -> Result<(), Box<dyn std::error::Error>> {
         let physical = IndexUrl::from_str("https://proxy.example.com/simple")?;
 
-        let mut proxy = Index::from_extra_index_url(physical.clone());
+        let mut proxy = ProxyIndex::new(
+            physical.clone(),
+            IndexName::from_str("pypi")?,
+            SafeUrl::parse("https://proxy.example.com/files/")?.with_policy(Stripped),
+        );
         proxy.name = Some(IndexName::from_str("proxy")?);
-        proxy.proxy_for = Some(IndexName::from_str("pypi")?);
-        proxy.artifact_base_url =
-            Some(SafeUrl::parse("https://proxy.example.com/files/")?.with_policy(Stripped));
 
-        let index_locations = IndexLocations::new(vec![proxy], Vec::new(), true)?;
+        let index_locations = IndexLocations::new(Vec::new(), vec![proxy], Vec::new(), true)?;
         let index_capabilities = IndexCapabilities::default();
         let _ = IndexStatusCodeStrategy::Default.handle_status_code(
             StatusCode::UNAUTHORIZED,
