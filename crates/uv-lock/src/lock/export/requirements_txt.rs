@@ -21,7 +21,7 @@ use crate::{Installable, LockError};
 /// An export of a [`Lock`] that renders in `requirements.txt` format.
 #[derive(Debug)]
 pub struct RequirementsTxtExport<'lock> {
-    nodes: Vec<ExportableRequirement<'lock>>,
+    nodes: Vec<ExportableRequirement<'lock, Option<String>>>,
     hashes: bool,
     editable: Option<EditableMode>,
 }
@@ -53,6 +53,16 @@ impl<'lock> RequirementsTxtExport<'lock> {
             RequirementComparator::from(a.package).cmp(&RequirementComparator::from(b.package))
         });
 
+        let nodes = nodes
+            .into_iter()
+            .map(|node| {
+                Ok(ExportableRequirement {
+                    marker: node.marker.to_pep508()?,
+                    package: node.package,
+                    dependents: node.dependents,
+                })
+            })
+            .collect::<Result<_, LockError>>()?;
         Ok(Self {
             nodes,
             hashes,
@@ -164,8 +174,8 @@ impl std::fmt::Display for RequirementsTxtExport<'_> {
                 }
             }
 
-            if let Some(contents) = marker.contents() {
-                write!(f, " ; {contents}")?;
+            if let Some(marker) = marker {
+                write!(f, " ; {marker}")?;
             }
 
             if self.hashes {

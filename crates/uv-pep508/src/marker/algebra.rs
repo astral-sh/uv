@@ -67,6 +67,7 @@ use crate::marker::lowering::{
     CanonicalMarkerValueVersion,
 };
 use crate::marker::tree::ContainerOperator;
+use crate::marker::version_or_string::VersionOrStringValue;
 use crate::{
     ExtraOperator, MarkerExpression, MarkerOperator, MarkerValueString, MarkerValueVersion,
 };
@@ -218,6 +219,10 @@ impl InternerGuard<'_> {
         let (var, children) = match expr {
             // A variable representing the output of a version key. Edges correspond
             // to disjoint version ranges.
+            MarkerExpression::VersionOrStringRange { key, range } => (
+                Variable::VersionString(key),
+                Edges::from_version_or_string_range(&range),
+            ),
             MarkerExpression::Version { key, specifier } => match key {
                 MarkerValueVersion::ImplementationVersion => (
                     Variable::Version(CanonicalMarkerValueVersion::ImplementationVersion),
@@ -368,31 +373,35 @@ impl InternerGuard<'_> {
                     ),
                     _ => (key.into(), value),
                 };
-                let string = self.create_node(
-                    Variable::String(key),
-                    Edges::from_string(key, operator, value.clone()),
-                );
-                // Darwin kernel releases are dotted versions. Other platforms can include
-                // arbitrary text in `platform_release`, so retain string comparisons there.
-                if key == CanonicalMarkerValueString::PlatformRelease
-                    && let Some(operator) = operator.to_pep440_operator()
-                    && let Ok(pattern) = value.parse::<VersionPattern>()
-                    && let Ok(specifier) = VersionSpecifier::from_pattern(operator, pattern)
-                {
-                    let version = self.create_node(
-                        Variable::VersionString(key),
-                        Edges::from_specifier(specifier),
-                    );
-                    let darwin = self.expression(MarkerExpression::String {
-                        key: MarkerValueString::SysPlatform,
-                        operator: MarkerOperator::Equal,
-                        value: arcstr::literal!("darwin"),
-                    });
-                    let version = self.and(darwin, version);
-                    let string = self.and(darwin.not(), string);
-                    return self.or(version, string);
+                if key.is_version_or_string() {
+                    if let Some(range) = super::version_or_string::range(operator, &value) {
+                        return self.create_node(
+                            Variable::VersionString(key),
+                            Edges::from_version_or_string_range(&range),
+                        );
+                    }
+                    // A compatible-release specifier needs two release components. If
+                    // the constant is itself a version, spelling its raw fallback as
+                    // equality would reinterpret it. Mutual containment tests raw equality.
+                    if operator == MarkerOperator::TildeEqual
+                        && value.parse::<VersionPattern>().is_ok()
+                    {
+                        let contained = self.create_node(
+                            Variable::In {
+                                key,
+                                value: value.clone(),
+                            },
+                            Edges::from_bool(true),
+                        );
+                        let contains = self
+                            .create_node(Variable::Contains { key, value }, Edges::from_bool(true));
+                        return self.and(contained, contains);
+                    }
                 }
-                return string;
+                return self.create_node(
+                    Variable::String(key),
+                    Edges::from_string(key, operator, value),
+                );
             }
             MarkerExpression::List { pair, operator } => (
                 Variable::List(pair),
@@ -955,40 +964,36 @@ impl InternerGuard<'_> {
                 self.or(high, low)
             }
             Edges::Version { edges } => {
-                let mut result = NodeId::FALSE;
-                for (range, child) in edges {
-                    if child.is_false() {
-                        continue;
-                    }
-                    let condition = self.create_node(
-                        variable.clone(),
-                        Edges::Version {
-                            edges: Edges::from_range(&range),
-                        },
-                    );
-                    let branch = self.and(condition, child);
-                    result = self.or(result, branch);
-                }
-                result
+                self.rebuild_ranges(variable, edges, |range| Edges::Version {
+                    edges: Edges::from_range(range),
+                })
             }
             Edges::String { edges } => {
-                let mut result = NodeId::FALSE;
-                for (range, child) in edges {
-                    if child.is_false() {
-                        continue;
-                    }
-                    let condition = self.create_node(
-                        variable.clone(),
-                        Edges::String {
-                            edges: Edges::from_range(&range),
-                        },
-                    );
-                    let branch = self.and(condition, child);
-                    result = self.or(result, branch);
-                }
-                result
+                self.rebuild_ranges(variable, edges, |range| Edges::String {
+                    edges: Edges::from_range(range),
+                })
+            }
+            Edges::VersionOrString { edges } => {
+                self.rebuild_ranges(variable, edges, Edges::from_version_or_string_range)
             }
         }
+    }
+
+    fn rebuild_ranges<T: Ord + Clone>(
+        &mut self,
+        variable: &Variable,
+        edges: impl IntoIterator<Item = (Ranges<T>, NodeId)>,
+        from_range: impl Fn(&Ranges<T>) -> EdgeBuilder,
+    ) -> NodeId {
+        let mut result = NodeId::FALSE;
+        for (range, child) in edges {
+            if !child.is_false() {
+                let condition = self.create_node(variable.clone(), from_range(&range));
+                let branch = self.and(condition, child);
+                result = self.or(result, branch);
+            }
+        }
+        result
     }
 
     /// Returns a new tree where the only nodes remaining are `extra` nodes.
@@ -1379,8 +1384,6 @@ impl InternerGuard<'_> {
 pub(crate) enum Variable {
     /// A string marker, such as `os_name`.
     String(CanonicalMarkerValueString),
-    /// A string-valued marker interpreted as a version within a platform-specific scope.
-    VersionString(CanonicalMarkerValueString),
     /// A version marker, such as `python_version`.
     ///
     /// This is the highest order variable as it typically contains the most complex
@@ -1400,15 +1403,18 @@ pub(crate) enum Variable {
     },
     /// A variable representing the existence or absence of a given extra.
     ///
-    /// We keep extras at the leaves of the tree, so when simplifying extras we can
+    /// We put extras after ordinary environment keys, so when simplifying extras we can
     /// trivially remove the leaves without having to reconstruct the entire tree.
     Extra(CanonicalMarkerValueExtra),
     /// A variable representing whether a `<value> in <key>` or `<value> not in <key>`
     /// expression, where the key is a list.
     ///
-    /// We keep extras and groups at the leaves of the tree, so when simplifying extras we can
+    /// We put groups after ordinary environment keys, so when simplifying extras we can
     /// trivially remove the leaves without having to reconstruct the entire tree.
     List(CanonicalMarkerListPair),
+    /// A field compared as a version or opaque string. Keep it last so that a path can
+    /// express its release bounds after the other environment markers have been fixed.
+    VersionString(CanonicalMarkerValueString),
 }
 
 impl Variable {
@@ -1548,29 +1554,49 @@ type SmallVec<T> = smallvec::SmallVec<[T; 5]>;
 pub(crate) enum Edges<
     VersionEdges = Box<[(Ranges<Version>, NodeId)]>,
     StringEdges = Box<[(Ranges<ArcStr>, NodeId)]>,
+    HybridEdges = Box<[(Ranges<VersionOrStringValue>, NodeId)]>,
 > {
     // The edges of a version variable, representing a disjoint set of ranges that cover
     // the output space.
     //
     // Invariant: All ranges are simple, meaning they can be represented by a bounded
     // interval without gaps. Additionally, there are at least two edges in the set.
-    Version { edges: VersionEdges },
+    Version {
+        edges: VersionEdges,
+    },
     // The edges of a string variable, representing a disjoint set of ranges that cover
     // the output space.
     //
     // Invariant: All ranges are simple, meaning they can be represented by a bounded
     // interval without gaps. Additionally, there are at least two edges in the set.
-    String { edges: StringEdges },
+    String {
+        edges: StringEdges,
+    },
+    /// The edges of a field that may contain either an opaque string or a version.
+    VersionOrString {
+        edges: HybridEdges,
+    },
     // The edges of a boolean variable, representing the values `true` (the `high` child)
     // and `false` (the `low` child).
-    Boolean { high: NodeId, low: NodeId },
+    Boolean {
+        high: NodeId,
+        low: NodeId,
+    },
 }
 
 /// Temporary edges whose range buffers are boxed only when the interner inserts a new node.
-type EdgeBuilder = Edges<SmallVec<(Ranges<Version>, NodeId)>, SmallVec<(Ranges<ArcStr>, NodeId)>>;
+type EdgeBuilder = Edges<
+    SmallVec<(Ranges<Version>, NodeId)>,
+    SmallVec<(Ranges<ArcStr>, NodeId)>,
+    Vec<(Ranges<VersionOrStringValue>, NodeId)>,
+>;
 
 /// The common borrowed representation used for hashing and comparing edge containers.
-type EdgesRef<'a> = Edges<&'a [(Ranges<Version>, NodeId)], &'a [(Ranges<ArcStr>, NodeId)]>;
+type EdgesRef<'a> = Edges<
+    &'a [(Ranges<Version>, NodeId)],
+    &'a [(Ranges<ArcStr>, NodeId)],
+    &'a [(Ranges<VersionOrStringValue>, NodeId)],
+>;
 
 impl EdgeBuilder {
     /// Box the range buffers for a newly interned node.
@@ -1582,7 +1608,17 @@ impl EdgeBuilder {
             Self::String { edges } => Edges::String {
                 edges: edges.into_boxed_slice(),
             },
+            Self::VersionOrString { edges } => Edges::VersionOrString {
+                edges: edges.into_boxed_slice(),
+            },
             Self::Boolean { high, low } => Edges::Boolean { high, low },
+        }
+    }
+
+    /// Construct a decision on a field that accepts both versions and opaque strings.
+    fn from_version_or_string_range(range: &Ranges<VersionOrStringValue>) -> Self {
+        Self::VersionOrString {
+            edges: Self::from_range(range).into_vec(),
         }
     }
 
@@ -1610,43 +1646,18 @@ impl EdgeBuilder {
         operator: MarkerOperator,
         value: ArcStr,
     ) -> Self {
-        let range: Ranges<ArcStr> = match (key, operator) {
-            // `platform_release` and `platform_version` are `Version | String` fields. Preserve
-            // their existing lexicographic behavior here; their version-aware semantics are
-            // outside the pure string field behavior handled by this change.
-            (
-                CanonicalMarkerValueString::PlatformRelease
-                | CanonicalMarkerValueString::PlatformVersion,
-                MarkerOperator::GreaterThan,
-            ) => Ranges::strictly_higher_than(value),
-            (
-                CanonicalMarkerValueString::PlatformRelease
-                | CanonicalMarkerValueString::PlatformVersion,
-                MarkerOperator::GreaterEqual,
-            ) => Ranges::higher_than(value),
-            (
-                CanonicalMarkerValueString::PlatformRelease
-                | CanonicalMarkerValueString::PlatformVersion,
-                MarkerOperator::LessThan,
-            ) => Ranges::strictly_lower_than(value),
-            (
-                CanonicalMarkerValueString::PlatformRelease
-                | CanonicalMarkerValueString::PlatformVersion,
-                MarkerOperator::LessEqual,
-            ) => Ranges::lower_than(value),
-            (_, MarkerOperator::Equal) => Ranges::singleton(value),
-            (_, MarkerOperator::NotEqual) => Ranges::singleton(value).complement(),
-            // The marker specification defines strict ordering comparisons for string-valued
-            // fields as always false, while inclusive ordering comparisons are equivalent to
-            // equality.
-            (_, MarkerOperator::GreaterThan | MarkerOperator::LessThan) => Ranges::empty(),
-            (_, MarkerOperator::GreaterEqual | MarkerOperator::LessEqual) => {
+        let range = match operator {
+            MarkerOperator::GreaterThan | MarkerOperator::LessThan
+                if !key.is_version_or_string() =>
+            {
+                Ranges::empty()
+            }
+            MarkerOperator::GreaterEqual | MarkerOperator::LessEqual
+                if !key.is_version_or_string() =>
+            {
                 Ranges::singleton(value)
             }
-            (_, MarkerOperator::TildeEqual) => {
-                unreachable!("string comparisons with ~= are ignored")
-            }
-            _ => unreachable!("`in` and `contains` are treated as boolean variables"),
+            _ => operator.ordered_range(value),
         };
 
         Self::String {
@@ -1764,6 +1775,12 @@ impl Edges {
             (Self::String { edges }, Self::String { edges: right_edges }) => Edges::String {
                 edges: Self::apply_ranges(edges, parent, right_edges, right_parent, apply),
             },
+            (Self::VersionOrString { edges }, Self::VersionOrString { edges: right_edges }) => {
+                Edges::VersionOrString {
+                    edges: Self::apply_ranges(edges, parent, right_edges, right_parent, apply)
+                        .into_vec(),
+                }
+            }
             // For boolean variables, we simply merge the low and high edges.
             (
                 Self::Boolean { high, low },
@@ -1863,6 +1880,9 @@ impl Edges {
             (Self::String { edges }, Self::String { edges: right_edges }) => {
                 Self::is_disjoint_ranges(edges, parent, right_edges, right_parent, interner)
             }
+            (Self::VersionOrString { edges }, Self::VersionOrString { edges: right_edges }) => {
+                Self::is_disjoint_ranges(edges, parent, right_edges, right_parent, interner)
+            }
             // For boolean variables, we simply check the low and high edges.
             (
                 Self::Boolean { high, low },
@@ -1919,6 +1939,9 @@ impl Edges {
             Self::String { edges: map } => Edges::String {
                 edges: Self::map_ranges(map, parent, f),
             },
+            Self::VersionOrString { edges: map } => Edges::VersionOrString {
+                edges: Self::map_ranges(map, parent, f).into_vec(),
+            },
             Self::Boolean { high, low } => Edges::Boolean {
                 low: f(low.negate(parent)),
                 high: f(high.negate(parent)),
@@ -1952,10 +1975,11 @@ impl Edges {
     }
 }
 
-impl<VersionEdges, StringEdges> Edges<VersionEdges, StringEdges>
+impl<VersionEdges, StringEdges, HybridEdges> Edges<VersionEdges, StringEdges, HybridEdges>
 where
     VersionEdges: AsRef<[(Ranges<Version>, NodeId)]>,
     StringEdges: AsRef<[(Ranges<ArcStr>, NodeId)]>,
+    HybridEdges: AsRef<[(Ranges<VersionOrStringValue>, NodeId)]>,
 {
     /// Borrow a common key for temporary and stored edge containers.
     fn as_ref(&self) -> EdgesRef<'_> {
@@ -1964,6 +1988,9 @@ where
                 edges: edges.as_ref(),
             },
             Self::String { edges } => Edges::String {
+                edges: edges.as_ref(),
+            },
+            Self::VersionOrString { edges } => Edges::VersionOrString {
                 edges: edges.as_ref(),
             },
             Self::Boolean { high, low } => Edges::Boolean {
@@ -1982,7 +2009,10 @@ where
             Self::String { edges: map } => {
                 Either::Left(Either::Right(map.as_ref().iter().map(|(_, node)| *node)))
             }
-            Self::Boolean { high, low } => Either::Right([*high, *low].into_iter()),
+            Self::VersionOrString { edges } => {
+                Either::Right(Either::Left(edges.as_ref().iter().map(|(_, node)| *node)))
+            }
+            Self::Boolean { high, low } => Either::Right(Either::Right([*high, *low].into_iter())),
         }
     }
 
@@ -1995,10 +2025,11 @@ where
     }
 }
 
-impl<VersionEdges, StringEdges> Edges<VersionEdges, StringEdges>
+impl<VersionEdges, StringEdges, HybridEdges> Edges<VersionEdges, StringEdges, HybridEdges>
 where
     VersionEdges: AsMut<[(Ranges<Version>, NodeId)]>,
     StringEdges: AsMut<[(Ranges<ArcStr>, NodeId)]>,
+    HybridEdges: AsMut<[(Ranges<VersionOrStringValue>, NodeId)]>,
 {
     // Returns the complement of this [`Edges`], reusing its range buffers.
     fn not(mut self) -> Self {
@@ -2009,6 +2040,11 @@ where
                 }
             }
             Self::String { edges } => {
+                for (_, node) in edges.as_mut() {
+                    *node = node.not();
+                }
+            }
+            Self::VersionOrString { edges } => {
                 for (_, node) in edges.as_mut() {
                     *node = node.not();
                 }

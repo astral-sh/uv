@@ -40,7 +40,8 @@ pub use crate::marker::{
     ContainsMarkerTree, ExtraMarkerTree, ExtraOperator, InMarkerTree, MarkerEnvironment,
     MarkerEnvironmentBuilder, MarkerExpression, MarkerOperator, MarkerTree, MarkerTreeContents,
     MarkerTreeKind, MarkerValueExtra, MarkerValueList, MarkerValueString, MarkerValueVersion,
-    MarkerWarningKind, StringMarkerTree, StringVersion, VersionMarkerTree,
+    MarkerWarningKind, StringMarkerTree, StringVersion, UnrepresentableMarker, VersionMarkerTree,
+    VersionOrStringValue,
 };
 pub use crate::origin::RequirementOrigin;
 #[cfg(feature = "non-pep508-extensions")]
@@ -158,13 +159,13 @@ impl<T: Pep508Url> Requirement<T> {
 
     /// Returns a [`Display`] implementation that doesn't mask credentials.
     pub fn displayable_with_credentials(&self) -> impl Display {
-        std::fmt::from_fn(|f| fmt_requirement(self, f, true))
+        std::fmt::from_fn(|f| fmt_requirement(self, f, true, self.marker.contents().as_ref()))
     }
 }
 
 impl<T: Pep508Url + Display> Display for Requirement<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        fmt_requirement(self, f, false)
+        fmt_requirement(self, f, false, self.marker.contents().as_ref())
     }
 }
 
@@ -172,6 +173,7 @@ fn fmt_requirement<T: Pep508Url + Display>(
     requirement: &Requirement<T>,
     f: &mut Formatter<'_>,
     display_credentials: bool,
+    marker: Option<&impl Display>,
 ) -> std::fmt::Result {
     write!(f, "{}", requirement.name)?;
     if !requirement.extras.is_empty() {
@@ -192,7 +194,7 @@ fn fmt_requirement<T: Pep508Url + Display>(
             }
         }
     }
-    if let Some(marker) = requirement.marker.contents() {
+    if let Some(marker) = marker {
         write!(f, " ; {marker}")?;
     }
     Ok(())
@@ -231,7 +233,10 @@ impl<T: Pep508Url> Serialize for Requirement<T> {
     where
         S: Serializer,
     {
-        serializer.collect_str(self)
+        let marker = self.marker.to_pep508().map_err(serde::ser::Error::custom)?;
+        serializer.collect_str(&std::fmt::from_fn(|f| {
+            fmt_requirement(self, f, false, marker.as_ref())
+        }))
     }
 }
 

@@ -791,7 +791,8 @@ impl<'env> TreeDisplay<'env> {
 
     /// Serialize the displayed dependency graph as JSON.
     pub fn to_json(&self, target: TreeJsonTarget<'_>) -> Result<String, serde_json::Error> {
-        serde_json::to_string_pretty(&JsonGraph::new(self, target))
+        let graph = JsonGraph::new(self, target).map_err(serde::ser::Error::custom)?;
+        serde_json::to_string_pretty(&graph)
     }
 
     /// Return the packages and edges reachable from the displayed roots within the requested
@@ -1048,7 +1049,10 @@ struct JsonGraph {
 }
 
 impl JsonGraph {
-    fn new(tree: &TreeDisplay<'_>, target: TreeJsonTarget<'_>) -> Self {
+    fn new(
+        tree: &TreeDisplay<'_>,
+        target: TreeJsonTarget<'_>,
+    ) -> Result<Self, uv_pep508::UnrepresentableMarker> {
         let traversal = tree.json_traversal();
         let workspace_root = PortablePathBuf::from(target.root());
         let mut builder = JsonGraphBuilder::new(tree, workspace_root.clone());
@@ -1065,10 +1069,10 @@ impl JsonGraph {
             .edge_references()
             .filter(|edge| traversal.edges.contains(&edge.id()))
         {
-            builder.add_package_edge(edge.source(), edge.target(), edge.weight());
+            builder.add_package_edge(edge.source(), edge.target(), edge.weight())?;
         }
 
-        builder.add_target_edges(target, &traversal);
+        builder.add_target_edges(target, &traversal)?;
         let (script, workspace) = match target {
             TreeJsonTarget::Script(path) => {
                 let path = PortablePathBuf::from(path);
@@ -1085,7 +1089,7 @@ impl JsonGraph {
         let members = builder.members(target);
         let resolution = builder.finish();
 
-        Self {
+        Ok(Self {
             schema: JsonSchema {
                 version: JsonSchemaVersion::Preview,
             },
@@ -1096,7 +1100,7 @@ impl JsonGraph {
             inverted: tree.invert,
             members,
             resolution,
-        }
+        })
     }
 }
 
@@ -1191,7 +1195,12 @@ impl<'tree, 'env> JsonGraphBuilder<'tree, 'env> {
             .collect()
     }
 
-    fn add_package_edge(&mut self, source: NodeIndex, target: NodeIndex, edge: &Edge<'env>) {
+    fn add_package_edge(
+        &mut self,
+        source: NodeIndex,
+        target: NodeIndex,
+        edge: &Edge<'env>,
+    ) -> Result<(), uv_pep508::UnrepresentableMarker> {
         let (source, target) = if self.tree.invert {
             (target, source)
         } else {
@@ -1200,7 +1209,7 @@ impl<'tree, 'env> JsonGraphBuilder<'tree, 'env> {
         let (Node::Package(source), Node::Package(target)) =
             (&self.tree.graph[source], &self.tree.graph[target])
         else {
-            return;
+            return Ok(());
         };
         let (source, target) = (*source, *target);
 
@@ -1209,13 +1218,18 @@ impl<'tree, 'env> JsonGraphBuilder<'tree, 'env> {
             Edge::Optional(extra, ..) => self.ensure_extra(source, extra),
             Edge::Dev(group, ..) => self.ensure_group(source, group),
         };
-        let marker = self.marker(edge);
+        let marker = self.marker(edge)?;
         for target in self.dependency_targets(target, edge.extras()) {
             self.add_link(source.clone(), target, JsonLink::Dependency(marker.clone()));
         }
+        Ok(())
     }
 
-    fn add_target_edges(&mut self, target: TreeJsonTarget<'_>, traversal: &JsonTraversal) {
+    fn add_target_edges(
+        &mut self,
+        target: TreeJsonTarget<'_>,
+        traversal: &JsonTraversal,
+    ) -> Result<(), uv_pep508::UnrepresentableMarker> {
         // Forward edges from the synthetic root establish the target's depth-zero packages, so
         // they are retained even though they are not part of `traversal.edges`. Inverted target
         // edges must have been reached while traversing the reversed graph.
@@ -1242,7 +1256,7 @@ impl<'tree, 'env> JsonGraphBuilder<'tree, 'env> {
             TreeJsonTarget::Script(path) => {
                 let script = self.ensure_script(path);
                 for (package, edge) in edges {
-                    let marker = self.marker(edge);
+                    let marker = self.marker(edge)?;
                     for package in self.dependency_targets(package, edge.extras()) {
                         self.add_link(
                             script.clone(),
@@ -1259,20 +1273,21 @@ impl<'tree, 'env> JsonGraphBuilder<'tree, 'env> {
                         continue;
                     };
                     let group = self.ensure_workspace_group(group);
-                    let marker = self.marker(edge);
+                    let marker = self.marker(edge)?;
                     for package in self.dependency_targets(package, edge.extras()) {
                         self.add_link(group.clone(), package, JsonLink::Dependency(marker.clone()));
                     }
                 }
             }
         }
+        Ok(())
     }
 
-    fn marker(&self, edge: &Edge<'_>) -> Option<String> {
+    fn marker(&self, edge: &Edge<'_>) -> Result<Option<String>, uv_pep508::UnrepresentableMarker> {
         self.tree
             .lock
             .simplify_environment(edge.marker().pep508())
-            .try_to_string()
+            .to_pep508()
     }
 
     fn add_link(&mut self, source: String, target: String, link: JsonLink) {

@@ -42,11 +42,11 @@ enum VirtualPackages {
 
 /// A flat requirement, with its associated marker.
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct ExportableRequirement<'lock> {
+struct ExportableRequirement<'lock, Marker = MarkerTree> {
     /// The [`Package`] associated with the requirement.
     package: &'lock Package,
     /// The marker that must be satisfied to install the package.
-    marker: MarkerTree,
+    marker: Marker,
     /// The list of packages that depend on this package.
     dependents: Vec<&'lock Package>,
 }

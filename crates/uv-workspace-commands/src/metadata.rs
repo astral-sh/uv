@@ -209,7 +209,7 @@ pub async fn metadata(
             lock,
         },
     };
-    let mut export = metadata_for_target(install_target, output_version);
+    let mut export = metadata_for_target(install_target, output_version)?;
     let environment = if sync.is_some() {
         Some(match &source {
             MetadataSource::Manifest(LockTarget::Workspace(workspace)) => {
@@ -323,7 +323,7 @@ pub async fn metadata(
 fn metadata_for_target(
     target: InstallTarget<'_>,
     output_version: MetadataOutputVersion,
-) -> Metadata {
+) -> Result<Metadata, uv_lock::LockError> {
     match target {
         InstallTarget::Project {
             workspace, lock, ..

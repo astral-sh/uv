@@ -412,10 +412,10 @@ impl MetadataNode {
         workspace_root: &PortablePathBuf,
         dependency: &Dependency,
         parent_reachability: MarkerTree,
-    ) {
+    ) -> Result<(), uv_pep508::UnrepresentableMarker> {
         let mut marker = dependency.simplified_marker.as_simplified_marker_tree();
         marker = marker.and(parent_reachability);
-        let marker = marker.try_to_string();
+        let marker = marker.to_pep508()?;
         let extras = dependency.extra();
         if extras.is_empty() {
             let id = MetadataNodeId::from_package_id(
@@ -427,7 +427,7 @@ impl MetadataNode {
                 id: id.to_flat(),
                 marker,
             });
-            return;
+            return Ok(());
         }
         for extra in extras {
             let id = MetadataNodeId::from_package_id(
@@ -440,6 +440,7 @@ impl MetadataNode {
                 marker: marker.clone(),
             });
         }
+        Ok(())
     }
 
     pub(crate) fn add_resolution_dependency(
@@ -505,7 +506,7 @@ fn root_dependencies<'lock>(
     workspace_root: &PortablePathBuf,
     lock: &'lock Lock,
     requirements: impl IntoIterator<Item = &'lock Requirement>,
-) -> Vec<MetadataDependency> {
+) -> Result<Vec<MetadataDependency>, uv_pep508::UnrepresentableMarker> {
     let mut dependencies = Vec::new();
 
     // Root requirements retain names, extras, and markers rather than resolved package IDs. Match
@@ -520,7 +521,7 @@ fn root_dependencies<'lock>(
                 continue;
             };
 
-            let marker = marker.try_to_string();
+            let marker = marker.to_pep508()?;
             let mut has_extra_node = false;
             for extra in requirement
                 .extras
@@ -553,7 +554,7 @@ fn root_dependencies<'lock>(
         }
     }
 
-    dependencies
+    Ok(dependencies)
 }
 
 /// Determine the standalone reachability marker for every package-derived metadata node.
@@ -1323,7 +1324,7 @@ impl Metadata {
         workspace_root: &Path,
         lock: &Lock,
         output_version: MetadataOutputVersion,
-    ) -> Self {
+    ) -> Result<Self, LockError> {
         Self::from_lock_target(
             MetadataTarget::Workspace(workspace_root),
             lock,
@@ -1336,7 +1337,7 @@ impl Metadata {
         script_path: &Path,
         lock: &Lock,
         output_version: MetadataOutputVersion,
-    ) -> Self {
+    ) -> Result<Self, LockError> {
         Self::from_lock_target(MetadataTarget::Script(script_path), lock, output_version)
     }
 
@@ -1344,7 +1345,7 @@ impl Metadata {
         target: MetadataTarget<'_>,
         lock: &Lock,
         output_version: MetadataOutputVersion,
-    ) -> Self {
+    ) -> Result<Self, LockError> {
         let mut resolve = BTreeMap::new();
         let workspace_root = PortablePathBuf::from(target.workspace_root());
         let workspace_packages = lock.packages().iter().filter(|package| match target {
@@ -1371,7 +1372,7 @@ impl Metadata {
 
             // Direct dependencies go on the package node
             for dependency in &lock_package.dependencies {
-                meta_package.add_dependency(&workspace_root, dependency, package_reachability);
+                meta_package.add_dependency(&workspace_root, dependency, package_reachability)?;
             }
 
             // Extras get their own nodes
@@ -1391,7 +1392,7 @@ impl Metadata {
                     marker: None,
                 });
                 for dependency in dependencies {
-                    meta_extra.add_dependency(&workspace_root, dependency, extra_reachability);
+                    meta_extra.add_dependency(&workspace_root, dependency, extra_reachability)?;
                 }
 
                 meta_package.optional_dependencies.push(MetadataExtra {
@@ -1415,7 +1416,7 @@ impl Metadata {
                     .unwrap_or(MarkerTree::FALSE);
                 // Groups *do not* depend on the base package, so don't add that
                 for dependency in dependencies {
-                    meta_group.add_dependency(&workspace_root, dependency, group_reachability);
+                    meta_group.add_dependency(&workspace_root, dependency, group_reachability)?;
                 }
 
                 meta_package.dependency_groups.push(MetadataGroup {
@@ -1440,7 +1441,7 @@ impl Metadata {
             let path = PortablePathBuf::from(path);
             let node = MetadataNode::from_script(
                 path.clone(),
-                root_dependencies(&workspace_root, lock, lock.requirements()),
+                root_dependencies(&workspace_root, lock, lock.requirements())?,
             );
             let id = node.id.to_flat();
             resolve.insert(id.clone(), node);
@@ -1457,7 +1458,7 @@ impl Metadata {
                     let node = MetadataNode::from_workspace_group(
                         workspace_root.clone(),
                         group.clone(),
-                        root_dependencies(&workspace_root, lock, requirements),
+                        root_dependencies(&workspace_root, lock, requirements)?,
                     );
                     let id = node.id.to_flat();
                     resolve.insert(id.clone(), node);
@@ -1475,7 +1476,7 @@ impl Metadata {
         };
         let conflicts = MetadataConflicts::from_conflicts(&members, &resolve, &lock.conflicts);
 
-        Self {
+        Ok(Self {
             schema: SchemaReport {
                 version: output_version,
             },
@@ -1488,7 +1489,7 @@ impl Metadata {
             requires_python: lock.requires_python.clone(),
             members,
             resolution: resolve,
-        }
+        })
     }
 
     pub fn package_node_id(

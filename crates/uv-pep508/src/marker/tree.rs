@@ -15,15 +15,16 @@ use uv_pep440::{Version, VersionParseError, VersionSpecifier};
 
 use super::algebra::{Edges, INTERNER, NodeId, Variable};
 use super::simplify;
-#[cfg(test)]
-use crate::Pep508ErrorSource;
+use super::version_or_string::VersionOrStringValue;
 #[cfg(test)]
 use crate::cursor::Cursor;
 use crate::marker::lowering::{
     CanonicalMarkerListPair, CanonicalMarkerValueString, CanonicalMarkerValueVersion,
 };
 use crate::marker::parse;
-use crate::{CanonicalMarkerValueExtra, MarkerEnvironment, Pep508Error, Reporter, TracingReporter};
+use crate::{CanonicalMarkerValueExtra, MarkerEnvironment, Pep508Error, TracingReporter};
+#[cfg(test)]
+use crate::{Pep508ErrorSource, Reporter};
 
 /// Ways in which marker evaluation can fail
 #[derive(Copy, Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
@@ -267,6 +268,19 @@ impl MarkerOperator {
         }
     }
 
+    /// The interval selected by a scalar comparison, with raw `~=` falling back to equality.
+    pub(super) fn ordered_range<T: Ord + Clone>(self, value: T) -> Ranges<T> {
+        match self {
+            Self::Equal | Self::TildeEqual => Ranges::singleton(value),
+            Self::NotEqual => Ranges::singleton(value).complement(),
+            Self::LessThan => Ranges::strictly_lower_than(value),
+            Self::LessEqual => Ranges::lower_than(value),
+            Self::GreaterThan => Ranges::strictly_higher_than(value),
+            Self::GreaterEqual => Ranges::higher_than(value),
+            _ => unreachable!("containment has its own decision variable"),
+        }
+    }
+
     /// Inverts this marker operator.
     pub(crate) fn invert(self) -> Self {
         match self {
@@ -495,6 +509,11 @@ pub enum MarkerExpression {
         versions: Vec<Version>,
         operator: ContainerOperator,
     },
+    /// An algebraic guard on a version-or-string field without a known PEP 508 spelling.
+    VersionOrStringRange {
+        key: CanonicalMarkerValueString,
+        range: Ranges<VersionOrStringValue>,
+    },
     /// An string marker comparison, e.g. `sys_platform == '...'`.
     ///
     /// Inverted string expressions, e.g `'...' == sys_platform`, are also normalized to this form.
@@ -626,6 +645,7 @@ impl MarkerExpression {
     /// Return the kind of this marker expression.
     pub(crate) fn kind(&self) -> MarkerExpressionKind {
         match self {
+            Self::VersionOrStringRange { key, .. } => MarkerExpressionKind::String((*key).into()),
             Self::Version { key, .. } => MarkerExpressionKind::Version(*key),
             Self::VersionIn { key, .. } => MarkerExpressionKind::VersionIn(*key),
             Self::String { key, .. } => MarkerExpressionKind::String(*key),
@@ -638,6 +658,9 @@ impl MarkerExpression {
 impl Display for MarkerExpression {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
+            Self::VersionOrStringRange { key, range } => {
+                write!(f, "<{key} in {range:?}>")
+            }
             Self::Version { key, specifier } => {
                 let (op, version) = (specifier.operator(), specifier.version());
                 if op == &uv_pep440::Operator::EqualStar || op == &uv_pep440::Operator::NotEqualStar
@@ -882,6 +905,13 @@ impl MarkerTree {
         self.contents().map(|contents| contents.to_string())
     }
 
+    /// Format this marker for storage in a PEP 508 field. A tautology needs no marker.
+    pub fn to_pep508(self) -> Result<Option<String>, UnrepresentableMarker> {
+        self.contents()
+            .map(|contents| contents.try_to_string())
+            .transpose()
+    }
+
     /// Returns the underlying [`MarkerTreeKind`] of the root node.
     pub fn kind(self) -> MarkerTreeKind<'static> {
         if self.is_true() {
@@ -915,7 +945,7 @@ impl MarkerTree {
                 })
             }
             Variable::VersionString(key) => {
-                let Edges::Version { edges: ref map } = node.children else {
+                let Edges::VersionOrString { edges: ref map } = node.children else {
                     unreachable!()
                 };
                 MarkerTreeKind::VersionString(VersionMarkerTree {
@@ -976,11 +1006,7 @@ impl MarkerTree {
 
     /// Does this marker apply in the given environment?
     pub fn evaluate(self, env: &MarkerEnvironment, extras: &[ExtraName]) -> bool {
-        self.evaluate_reporter_impl(
-            env,
-            ExtrasEnvironment::from_extras(extras),
-            &mut TracingReporter,
-        )
+        self.evaluate_impl(env, ExtrasEnvironment::from_extras(extras))
     }
 
     /// Evaluate a marker in the context of a PEP 751 lockfile, which exposes several additional
@@ -992,11 +1018,7 @@ impl MarkerTree {
         extras: &[ExtraName],
         groups: &[GroupName],
     ) -> bool {
-        self.evaluate_reporter_impl(
-            env,
-            ExtrasEnvironment::from_pep751(extras, groups),
-            &mut TracingReporter,
-        )
+        self.evaluate_impl(env, ExtrasEnvironment::from_pep751(extras, groups))
     }
 
     /// Evaluates this marker tree against an optional environment and a
@@ -1013,27 +1035,18 @@ impl MarkerTree {
     ) -> bool {
         match env {
             None => self.evaluate_extras(extras),
-            Some(env) => self.evaluate_reporter_impl(
-                env,
-                ExtrasEnvironment::from_extras(extras),
-                &mut TracingReporter,
-            ),
+            Some(env) => self.evaluate_impl(env, ExtrasEnvironment::from_extras(extras)),
         }
     }
 
-    fn evaluate_reporter_impl(
-        self,
-        env: &MarkerEnvironment,
-        extras: ExtrasEnvironment,
-        reporter: &mut impl Reporter,
-    ) -> bool {
+    fn evaluate_impl(self, env: &MarkerEnvironment, extras: ExtrasEnvironment) -> bool {
         match self.kind() {
             MarkerTreeKind::True => return true,
             MarkerTreeKind::False => return false,
             MarkerTreeKind::Version(marker) => {
                 for (range, tree) in marker.edges() {
                     if range.contains(env.get_version(marker.key())) {
-                        return tree.evaluate_reporter_impl(env, extras, reporter);
+                        return tree.evaluate_impl(env, extras);
                     }
                 }
             }
@@ -1041,57 +1054,37 @@ impl MarkerTree {
                 for (range, tree) in marker.children() {
                     let l_string = env.get_string(marker.key());
 
-                    if matches!(
-                        marker.key(),
-                        CanonicalMarkerValueString::PlatformRelease
-                            | CanonicalMarkerValueString::PlatformVersion
-                    ) && range.as_singleton().is_none()
-                        && let Some((start, end)) = range.bounding_range()
-                    {
-                        if let Bound::Included(value) | Bound::Excluded(value) = start {
-                            reporter.report(
-                                MarkerWarningKind::LexicographicComparison,
-                                format!("Comparing {l_string} and {value} lexicographically"),
-                            );
-                        }
-
-                        if let Bound::Included(value) | Bound::Excluded(value) = end {
-                            reporter.report(
-                                MarkerWarningKind::LexicographicComparison,
-                                format!("Comparing {l_string} and {value} lexicographically"),
-                            );
-                        }
-                    }
-
                     if range.contains(l_string) {
-                        return tree.evaluate_reporter_impl(env, extras, reporter);
+                        return tree.evaluate_impl(env, extras);
                     }
                 }
             }
             MarkerTreeKind::VersionString(marker) => {
-                let Ok(version) = env.get_string(marker.key()).parse::<Version>() else {
-                    return false;
+                let raw = env.get_string(marker.key());
+                let value = match raw.parse::<Version>() {
+                    Ok(version) => VersionOrStringValue::Version(version),
+                    Err(_) => VersionOrStringValue::Opaque(ArcStr::from(raw)),
                 };
                 for (range, tree) in marker.edges() {
-                    if range.contains(&version) {
-                        return tree.evaluate_reporter_impl(env, extras, reporter);
+                    if range.contains(&value) {
+                        return tree.evaluate_impl(env, extras);
                     }
                 }
             }
             MarkerTreeKind::In(marker) => {
                 return marker
                     .edge(marker.value().contains(env.get_string(marker.key())))
-                    .evaluate_reporter_impl(env, extras, reporter);
+                    .evaluate_impl(env, extras);
             }
             MarkerTreeKind::Contains(marker) => {
                 return marker
                     .edge(env.get_string(marker.key()).contains(marker.value()))
-                    .evaluate_reporter_impl(env, extras, reporter);
+                    .evaluate_impl(env, extras);
             }
             MarkerTreeKind::Extra(marker) => {
                 return marker
                     .edge(extras.extra().contains(marker.name().extra()))
-                    .evaluate_reporter_impl(env, extras, reporter);
+                    .evaluate_impl(env, extras);
             }
             MarkerTreeKind::List(marker) => {
                 let edge = match marker.pair() {
@@ -1103,9 +1096,7 @@ impl MarkerTree {
                     CanonicalMarkerListPair::Arbitrary { .. } => return false,
                 };
 
-                return marker
-                    .edge(edge)
-                    .evaluate_reporter_impl(env, extras, reporter);
+                return marker.edge(edge).evaluate_impl(env, extras);
             }
         }
 
@@ -1525,8 +1516,8 @@ pub enum MarkerTreeKind<'a> {
     False,
     /// A version expression.
     Version(VersionMarkerTree<'a>),
-    /// A string-valued marker interpreted as a version within a platform-specific scope.
-    VersionString(VersionMarkerTree<'a, CanonicalMarkerValueString>),
+    /// A marker with separate ranges for version values and opaque strings.
+    VersionString(VersionMarkerTree<'a, CanonicalMarkerValueString, VersionOrStringValue>),
     /// A string expression.
     String(StringMarkerTree<'a>),
     /// A string expression with the `in` operator.
@@ -1541,33 +1532,33 @@ pub enum MarkerTreeKind<'a> {
 
 /// A version marker node, such as `python_version < '3.7'`.
 #[derive(PartialEq, Eq, Clone, Debug)]
-pub struct VersionMarkerTree<'a, K = CanonicalMarkerValueVersion> {
+pub struct VersionMarkerTree<'a, K = CanonicalMarkerValueVersion, V = Version> {
     id: NodeId,
     key: K,
-    map: &'a [(Ranges<Version>, NodeId)],
+    map: &'a [(Ranges<V>, NodeId)],
 }
 
-impl<K: Copy> VersionMarkerTree<'_, K> {
+impl<K: Copy, V> VersionMarkerTree<'_, K, V> {
     /// The key for this node.
     pub fn key(&self) -> K {
         self.key
     }
 
     /// The edges of this node, corresponding to possible output ranges of the given variable.
-    pub fn edges(&self) -> impl ExactSizeIterator<Item = (&Ranges<Version>, MarkerTree)> + '_ {
+    pub fn edges(&self) -> impl ExactSizeIterator<Item = (&Ranges<V>, MarkerTree)> + '_ {
         self.map
             .iter()
             .map(|(range, node)| (range, MarkerTree(node.negate(self.id))))
     }
 }
 
-impl<K: Copy + Ord> PartialOrd for VersionMarkerTree<'_, K> {
+impl<K: Copy + Ord, V: Ord> PartialOrd for VersionMarkerTree<'_, K, V> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl<K: Copy + Ord> Ord for VersionMarkerTree<'_, K> {
+impl<K: Copy + Ord, V: Ord> Ord for VersionMarkerTree<'_, K, V> {
     fn cmp(&self, other: &Self) -> Ordering {
         self.key()
             .cmp(&other.key())
@@ -1807,6 +1798,13 @@ impl Ord for ExtraMarkerTree<'_> {
     }
 }
 
+/// A synthesized marker for which uv could not produce an exact PEP 508 spelling.
+#[derive(Copy, Clone, Debug, thiserror::Error)]
+#[error(
+    "could not serialize the comparison of version and opaque values for `{0}` as a PEP 508 marker"
+)]
+pub struct UnrepresentableMarker(pub(super) CanonicalMarkerValueString);
+
 /// A marker tree that contains at least one expression.
 ///
 /// See [`MarkerTree::contents`] for details.
@@ -1836,35 +1834,51 @@ impl Serialize for MarkerTreeContents {
     where
         S: Serializer,
     {
-        serializer.serialize_str(&self.to_string())
+        serializer.serialize_str(&self.try_to_string().map_err(serde::ser::Error::custom)?)
+    }
+}
+
+impl MarkerTreeContents {
+    /// Produce a PEP 508 marker or report a guard that the grammar cannot express.
+    pub fn try_to_string(&self) -> Result<String, UnrepresentableMarker> {
+        if self.0.is_false() {
+            return Ok("python_version < '0'".to_owned());
+        }
+        let dnf = self.0.to_dnf();
+        for expression in dnf.iter().flatten() {
+            if let MarkerExpression::VersionOrStringRange { key, .. } = expression {
+                return Err(UnrepresentableMarker(*key));
+            }
+        }
+        Ok(fmt::from_fn(|f| write_dnf(f, &dnf)).to_string())
     }
 }
 
 impl Display for MarkerTreeContents {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        // Normalize all `false` expressions to the same trivially false expression.
         if self.0.is_false() {
-            return write!(f, "python_version < '0'");
+            return f.write_str("python_version < '0'");
         }
-
-        // Write the output in DNF form.
-        let dnf = self.0.to_dnf();
-        let [conjunction] = &dnf[..] else {
-            for (index, conjunction) in dnf.iter().enumerate() {
-                if index > 0 {
-                    f.write_str(" or ")?;
-                }
-                if conjunction.len() == 1 {
-                    write!(f, "{}", conjunction.iter().format(" and "))?;
-                } else {
-                    write!(f, "({})", conjunction.iter().format(" and "))?;
-                }
-            }
-            return Ok(());
-        };
-
-        write!(f, "{}", conjunction.iter().format(" and "))
+        write_dnf(f, &self.0.to_dnf())
     }
+}
+
+fn write_dnf(f: &mut Formatter<'_>, dnf: &[Vec<MarkerExpression>]) -> fmt::Result {
+    let [conjunction] = dnf else {
+        for (index, conjunction) in dnf.iter().enumerate() {
+            if index > 0 {
+                f.write_str(" or ")?;
+            }
+            if conjunction.len() == 1 {
+                write!(f, "{}", conjunction.iter().format(" and "))?;
+            } else {
+                write!(f, "({})", conjunction.iter().format(" and "))?;
+            }
+        }
+        return Ok(());
+    };
+
+    write!(f, "{}", conjunction.iter().format(" and "))
 }
 
 #[cfg(feature = "schemars")]
@@ -2060,10 +2074,7 @@ mod test {
             m(&marker.try_to_string().expect("nontrivial marker")),
             marker
         );
-        assert_eq!(
-            m(&marker.negate().try_to_string().expect("nontrivial marker")),
-            marker.negate()
-        );
+        assert!(marker.negate().to_pep508().is_err());
     }
 
     /// Membership decisions have distinct renderers for strings, substrings, and lists.
@@ -2135,10 +2146,207 @@ mod test {
         assert!(marker.evaluate(&env, &[]));
         assert!(!marker.negate().evaluate(&env, &[]));
         assert_eq!(marker, m(&marker.try_to_string().unwrap()));
+        assert!(marker.negate().to_pep508().is_err());
+    }
+
+    fn assert_round_trip(marker: MarkerTree) {
+        let printed = marker.to_pep508().unwrap();
+        let parsed = printed.as_deref().map(m).unwrap_or(MarkerTree::TRUE);
+        assert_eq!(parsed, marker);
+    }
+
+    // https://github.com/astral-sh/uv/issues/22259
+    #[test]
+    fn opaque_darwin_release() {
+        for (release, expression, complement_representable) in [
+            ("not-a-version", "platform_release == '24'", true),
+            (
+                "3-invalid",
+                "platform_release >= '9' or platform_release < '24'",
+                false,
+            ),
+        ] {
+            let env = env37()
+                .with_os_name("posix")
+                .with_sys_platform("darwin")
+                .with_platform_system("Darwin")
+                .with_platform_release(release);
+            let marker = m(expression);
+            assert!(!marker.evaluate(&env, &[]), "{expression}");
+            assert!(marker.negate().evaluate(&env, &[]), "{expression}");
+            assert_round_trip(marker);
+            if complement_representable {
+                assert_round_trip(marker.negate());
+            } else {
+                assert!(marker.negate().to_pep508().is_err());
+            }
+        }
+    }
+
+    #[test]
+    fn version_or_string_comparisons() {
+        for (actual, op, value, expected) in [
+            ("10", ">", "9", true),
+            ("10.0", "==", "10", true),
+            ("2", "==", "2rc1", false),
+            ("2rc1", "<", "2", true),
+            ("2.post1", ">", "2", true),
+            ("2+cpu", "==", "2", true),
+            ("2+cpu", ">", "2", true),
+            ("2+cpu", "<=", "2", false),
+            ("2", "<", "2+cpu", true),
+            ("2+cuda", ">", "2+cpu", true),
+            ("1.2", "==", "1.*", true),
+            ("1.*", "==", "1.*", true),
+            ("1.2.1", "~=", "1.2", true),
+            ("kernel", "~=", "kernel", true),
+            ("00", "~=", "0", false),
+            ("10.1", "~=", "9.0", false),
+            ("10.0", "in", "10", false),
+            ("9-custom", ">", "8", false),
+            ("9-custom", ">=", "8", false),
+            ("10", "<", "kernel", false),
+            ("10", "<=", "kernel", false),
+            ("kernel", ">=", "kernel", true),
+            ("kernel", "<=", "kernel", true),
+            ("kernel", "<=", "linux", false),
+            ("kernel", "!=", "linux", true),
+        ] {
+            let env = env37()
+                .with_platform_release(actual)
+                .with_platform_version(actual);
+            for key in ["platform_release", "platform_version"] {
+                let expression = format!("{key} {op} '{value}'");
+                let marker = m(&expression);
+                let reverse = match op {
+                    "<" => ">",
+                    ">" => "<",
+                    "<=" => ">=",
+                    ">=" => "<=",
+                    _ => op,
+                };
+                if op != "in" {
+                    assert_eq!(marker, m(&format!("'{value}' {reverse} {key}")));
+                }
+                assert_round_trip(marker);
+                assert_eq!(
+                    marker.evaluate(&env, &[]),
+                    expected,
+                    "{actual}: {expression}"
+                );
+                assert_ne!(
+                    marker.negate().evaluate(&env, &[]),
+                    expected,
+                    "{actual}: {expression}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn mixed_release_bounds() {
+        let env = env37()
+            .with_sys_platform("darwin")
+            .with_platform_release("25.0.0");
+        for expression in [
+            "platform_release > '5.0-custom' and platform_release > '9'",
+            "(sys_platform != 'darwin' and platform_release > '9') or (sys_platform == 'darwin' and platform_release > '5.0-custom')",
+        ] {
+            let marker = m(expression);
+            assert!(!marker.evaluate(&env, &[]), "{expression}");
+            assert!(marker.negate().evaluate(&env, &[]), "{expression}");
+            assert_round_trip(marker);
+        }
+
+        let env = env.with_platform_release("1.0");
+        for bound in ["1.0+local", "1.*"] {
+            let marker = m(&format!(
+                "platform_release < '{bound}' or platform_release > '{bound}'"
+            ));
+            assert_eq!(marker.evaluate(&env, &[]), bound == "1.0+local", "{bound}");
+            assert_round_trip(marker);
+        }
+    }
+
+    #[test]
+    fn version_or_string_round_trips() {
+        for expression in [
+            "platform_release > '9' or (platform_release != '2.10' and extra == 'a')",
+            "(platform_release != 'v0' and platform_version == '01.*') or platform_release > '00'",
+            "platform_release < 'v2' and platform_release > '1.0.dev2' and platform_release > '1!2.0'",
+            "platform_release >= '1.0.0' and platform_release <= 'v2' and platform_release >= '1!2.0'",
+        ] {
+            assert_round_trip(m(expression));
+        }
+        let last = u64::MAX - 1;
+        for condition in [
+            format!("> '2.dev{last}'"),
+            format!("> '2rc{last}'"),
+            format!("== '2.post{last}'"),
+            format!("~= '1!2.{last}.3'"),
+            format!("== '1!2.{last}.*'"),
+        ] {
+            assert_round_trip(m(&format!("platform_release {condition}")));
+        }
+    }
+
+    #[test]
+    fn opaque_complement() {
+        for key in ["platform_release", "platform_version"] {
+            let parses_as_version = m(&format!("{key} >= '0.dev0'"));
+            let opaque = env37()
+                .with_platform_release("vendor")
+                .with_platform_version("vendor");
+            let version = env37()
+                .with_platform_release("1!0")
+                .with_platform_version("1!0");
+            assert!(parses_as_version.evaluate(&version, &[]));
+            assert!(!parses_as_version.evaluate(&opaque, &[]));
+            assert!(parses_as_version.negate().evaluate(&opaque, &[]));
+            assert!(parses_as_version.negate().to_pep508().is_err());
+            assert_round_trip(parses_as_version);
+
+            let wildcard = m(&format!("{key} == '1.*'"));
+            let literal = m(&format!("{key} >= '1.*'"));
+            assert_ne!(wildcard, literal);
+            for (actual, matches_wildcard, matches_literal) in [
+                ("1.2", true, false),
+                ("1.*", true, true),
+                ("other", false, false),
+            ] {
+                let env = env37()
+                    .with_platform_release(actual)
+                    .with_platform_version(actual);
+                assert_eq!(wildcard.evaluate(&env, &[]), matches_wildcard);
+                assert_eq!(literal.evaluate(&env, &[]), matches_literal);
+            }
+            for expression in [
+                format!("{key} == ''"),
+                format!("{key} == '1.*'"),
+                format!("{key} >= '1.*'"),
+                format!("{key} == 'vendor' or {key} == '1'"),
+            ] {
+                let marker = m(&expression);
+                assert_round_trip(marker);
+                assert_round_trip(marker.negate());
+            }
+        }
+    }
+
+    #[test]
+    fn version_or_string_spelling() {
+        for literal in ["3027.0.0", "3027", "3027.0"] {
+            let tree = m(&format!("platform_release == '{literal}'"));
+            assert_eq!(
+                tree.try_to_string().as_deref(),
+                Some("platform_release == '3027'")
+            );
+        }
         assert_eq!(
-            marker.negate(),
-            m(&marker.negate().try_to_string().unwrap())
+            m("platform_release >= '3027.0.0'").try_to_string(),
+            m("platform_release >= '3027'").try_to_string()
         );
+        assert_round_trip(m("platform_release >= '9' and platform_release < '10'"));
     }
 
     fn env37() -> MarkerEnvironment {
@@ -2729,11 +2937,6 @@ mod test {
                 assert!(marker.evaluate(&env, &[]));
             }
         }
-
-        // `platform_release` and `platform_version` are `Version | String` fields, not pure
-        // strings. Preserve their existing ordering behavior in this change.
-        assert!(m("platform_release < '2'").evaluate(&env, &[]));
-        assert!(m("platform_version <= '2'").evaluate(&env, &[]));
     }
 
     #[test]
@@ -2862,16 +3065,6 @@ mod test {
                 Err(format!("{lines:#?}"))
             }
         });
-    }
-
-    #[test]
-    #[cfg(feature = "tracing")]
-    #[tracing_test::traced_test]
-    fn warnings5() {
-        let env = env37().with_platform_release("10");
-        let marker = MarkerTree::from_str("platform_release < '2'").unwrap();
-        assert!(marker.evaluate(&env, &[]));
-        logs_contain("Comparing 10 and 2 lexicographically");
     }
 
     #[test]
@@ -3771,6 +3964,7 @@ mod test {
         ));
 
         test_version_bounds_disjointness("python_full_version");
+        test_version_bounds_disjointness("platform_version");
 
         assert!(!is_disjoint(
             "python_full_version == '3.7.*'",
@@ -3808,9 +4002,6 @@ mod test {
             "implementation_version == '3.7.0'",
             "python_full_version == '3.7.1'"
         ));
-
-        // basic version bounds checking should still work with lexicographical comparisons
-        test_version_bounds_disjointness("platform_version");
 
         assert!(is_disjoint("os_name == 'Linux'", "os_name == 'OSX'"));
         assert!(is_disjoint("os_name <= 'Linux'", "os_name == 'OSX'"));
