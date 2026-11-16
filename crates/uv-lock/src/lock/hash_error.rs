@@ -16,7 +16,7 @@ impl LockHashError {
         expected: bool,
     ) -> Self {
         Self(LockHashErrorKind::SourceRequirement {
-            id,
+            id: Box::new(id),
             artifact_type,
             expected,
         })
@@ -39,7 +39,7 @@ impl LockHashError {
 enum LockHashErrorKind {
     #[error("Since the package `{id}` comes from a {source} dependency, a hash was {expected} but one was not found for {artifact_type}", id = id.cyan(), source = id.source.name(), expected = if *expected { "expected" } else { "not expected" })]
     SourceRequirement {
-        id: PackageId,
+        id: Box<PackageId>,
         artifact_type: &'static str,
         expected: bool,
     },
