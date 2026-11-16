@@ -3098,7 +3098,7 @@ mod tests {
 
         let mut proxy = ProxyIndex::new(
             physical.clone(),
-            IndexName::from_str("pypi")?,
+            IndexName::from_str("upstream")?,
             SafeUrl::parse("https://proxy.example.com/files/")?.with_policy(Stripped),
         );
         proxy.name = Some(IndexName::from_str("proxy")?);

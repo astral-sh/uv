@@ -74,6 +74,11 @@ upstream index's name. The proxy's `url` tells uv where to look up packages, and
 For example, to configure a proxy for PyPI:
 
 ```toml
+[[tool.uv.index]]
+name = "pypi"
+url = "https://pypi.org/simple/"
+default = true
+
 [[tool.uv.proxy-index]]
 name = "pypi-proxy"
 url = "https://proxy.example.com/simple/"
@@ -83,8 +88,7 @@ proxy-for = "pypi"
 
 !!! note
 
-    PyPI does not need to be configured separately. uv uses `https://pypi.org/simple/` as its index URL
-    and `https://files.pythonhosted.org/packages/` as its package download URL prefix.
+    PyPI's package download URL prefix defaults to `https://files.pythonhosted.org/packages/`.
 
 uv records the upstream index and package download URLs in `uv.lock`. When installing from an
 existing `uv.lock`, uv translates these package URLs to proxy URLs without querying the proxy's

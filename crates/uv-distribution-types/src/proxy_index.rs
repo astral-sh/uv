@@ -382,11 +382,14 @@ pub(crate) fn build_routes(
         let proxy = configured.index.as_ref();
         let canonical_name = &configured.proxy_for;
 
-        let canonical = find_canonical_index(locations, canonical_name).ok_or_else(|| {
-            ProxyIndexConfigError::MissingCanonicalIndex {
+        let canonical = locations
+            .configured_indexes()
+            .find(|index| {
+                index.format == IndexFormat::Simple && index.name.as_ref() == Some(canonical_name)
+            })
+            .ok_or_else(|| ProxyIndexConfigError::MissingCanonicalIndex {
                 name: canonical_name.clone(),
-            }
-        })?;
+            })?;
 
         if let Some(route) = routes.iter().find(|route| {
             route
@@ -448,21 +451,6 @@ pub(crate) fn build_routes(
     }
 
     Ok(routes)
-}
-
-fn find_canonical_index<'a>(locations: &'a IndexLocations, name: &IndexName) -> Option<&'a Index> {
-    locations
-        .configured_indexes()
-        .find(|index| index.format == IndexFormat::Simple && index.name.as_ref() == Some(name))
-        .or_else(|| {
-            if name.as_ref() != "pypi" {
-                return None;
-            }
-
-            locations
-                .default_index()
-                .filter(|index| index.format == IndexFormat::Simple && index.url().is_pypi())
-        })
 }
 
 fn artifact_base(index: &Index) -> Result<SafeUrl, ProxyIndexConfigError> {
@@ -553,13 +541,28 @@ pub(crate) mod tests {
         )
     }
 
-    fn pypi_locations(proxy: ProxyIndex) -> Result<IndexLocations, ProxyIndexConfigError> {
-        IndexLocations::new(Vec::new(), vec![proxy], Vec::new(), false)
+    pub(crate) fn pypi_index() -> Result<Index, Box<dyn std::error::Error>> {
+        let mut index = Index::from_index_url(index_url("https://pypi.org/simple/")?);
+        index.name = Some("pypi".parse()?);
+        Ok(index)
+    }
+
+    fn pypi_locations(proxy: ProxyIndex) -> Result<IndexLocations, Box<dyn std::error::Error>> {
+        Ok(IndexLocations::new(
+            vec![pypi_index()?],
+            vec![proxy],
+            Vec::new(),
+            false,
+        )?)
     }
 
     #[test]
-    fn proxy_simple_route_maps_implicit_pypi() -> TestResult {
-        let locations = pypi_locations(pypi_proxy()?)?;
+    fn proxy_simple_route_maps_configured_pypi() -> TestResult {
+        let mut index = pypi_index()?;
+        index.name = Some("pypi-upstream".parse()?);
+        let mut proxy = pypi_proxy()?;
+        proxy.proxy_for = "pypi-upstream".parse()?;
+        let locations = IndexLocations::new(vec![index], vec![proxy], Vec::new(), false)?;
         let canonical = index_url("https://caller:secret@pypi.org/simple/")?;
         let route = locations.route_for(&canonical);
 
@@ -574,7 +577,7 @@ pub(crate) mod tests {
         );
         assert_eq!(
             borrowed.canonical.as_index_url(),
-            &index_url("https://pypi.org/simple")?
+            &index_url("https://pypi.org/simple/")?
         );
         assert_eq!(locations.proxy_routes().count(), 1);
         Ok(())
@@ -584,6 +587,7 @@ pub(crate) mod tests {
     fn proxy_route_uses_physical_request_policy() -> TestResult {
         let canonical = index_url("https://pypi.org/simple")?;
         let mut canonical_index = Index::from_index_url(canonical.clone());
+        canonical_index.name = Some("pypi".parse()?);
         canonical_index.ignore_error_codes =
             Some(vec![serde_json::from_value(serde_json::json!(403))?]);
         canonical_index.cache_control = Some(crate::IndexCacheControl {
@@ -679,7 +683,7 @@ pub(crate) mod tests {
     fn proxy_flat_index_keeps_identity_route() -> TestResult {
         let flat = index_url("https://flat.example.com/packages/")?;
         let locations = IndexLocations::new(
-            Vec::new(),
+            vec![pypi_index()?],
             vec![pypi_proxy()?],
             vec![Index::from_find_links(flat.clone())],
             false,
@@ -821,7 +825,7 @@ pub(crate) mod tests {
                 "pypi",
             )?;
             assert!(matches!(
-                IndexLocations::new(Vec::new(), vec![first, second], Vec::new(), false),
+                IndexLocations::new(vec![pypi_index()?], vec![first, second], Vec::new(), false),
                 Err(ProxyIndexConfigError::DuplicateCanonicalIndex { .. })
             ));
         }
@@ -833,7 +837,7 @@ pub(crate) mod tests {
     fn proxy_index_rejects_duplicate_index_names() -> TestResult {
         let ordinary = named_index("socket", "https://ordinary.example.com/simple/", None)?;
         assert!(matches!(
-            IndexLocations::new(vec![ordinary], vec![pypi_proxy()?], Vec::new(), false),
+            IndexLocations::new(vec![pypi_index()?, ordinary], vec![pypi_proxy()?], Vec::new(), false),
             Err(ProxyIndexConfigError::DuplicateIndexName { name, proxy, index })
                 if name.as_ref() == "socket"
                     && proxy.as_str() == "https://proxy.example.com/simple/"
@@ -852,7 +856,7 @@ pub(crate) mod tests {
             "upstream",
         )?;
         assert!(matches!(
-            IndexLocations::new(vec![canonical], vec![pypi_proxy()?, duplicate], vec![], false),
+            IndexLocations::new(vec![pypi_index()?, canonical], vec![pypi_proxy()?, duplicate], vec![], false),
             Err(ProxyIndexConfigError::DuplicateIndexName { name, proxy, index })
                 if name.as_ref() == "socket"
                     && proxy.as_str() == "https://other-proxy.example.com/simple/"
@@ -887,10 +891,13 @@ pub(crate) mod tests {
         )?;
 
         for (locations, expected_name) in [
-            (pypi_locations(unknown_proxy), "missing"),
+            (
+                IndexLocations::new(vec![pypi_index()?], vec![unknown_proxy], Vec::new(), false),
+                "missing",
+            ),
             (
                 IndexLocations::new(
-                    Vec::new(),
+                    vec![pypi_index()?],
                     vec![pypi_proxy()?, chained_proxy],
                     Vec::new(),
                     false,
@@ -980,7 +987,7 @@ pub(crate) mod tests {
 
             assert!(
                 matches!(
-                    pypi_locations(proxy),
+                    IndexLocations::new(vec![pypi_index()?], vec![proxy], Vec::new(), false),
                     Err(ProxyIndexConfigError::InvalidMapping { .. })
                 ),
                 "unsafe proxy URL was accepted: {physical}"
@@ -1001,7 +1008,7 @@ pub(crate) mod tests {
 
             assert!(
                 matches!(
-                    pypi_locations(proxy),
+                    IndexLocations::new(vec![pypi_index()?], vec![proxy], Vec::new(), false),
                     Err(ProxyIndexConfigError::InvalidMapping { .. })
                 ),
                 "unsafe proxy artifact base was accepted: {artifact}"

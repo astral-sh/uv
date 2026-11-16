@@ -194,6 +194,11 @@ async fn proxy_index_rejects_duplicate_definitions_across_configuration_files() 
         [tool.uv]
         preview-features = ["proxy-index"]
 
+        [[tool.uv.index]]
+        name = "pypi"
+        url = "https://pypi.org/simple"
+        default = true
+
         [[tool.uv.proxy-index]]
         name = "socket"
         url = "{physical_index_url}/simple/"
@@ -250,6 +255,11 @@ async fn proxy_index_rejects_same_named_package_index_across_configuration_files
         [tool.uv]
         preview-features = ["proxy-index"]
 
+        [[tool.uv.index]]
+        name = "pypi"
+        url = "https://pypi.org/simple"
+        default = true
+
         [[tool.uv.proxy-index]]
         name = "socket"
         url = "{physical_index_url}/simple/"
@@ -295,6 +305,11 @@ fn proxy_index_rejects_url_shared_by_two_proxies() -> Result<()> {
         requires-python = ">=3.12"
 
         [[tool.uv.index]]
+        name = "pypi"
+        url = "https://pypi.org/simple"
+        default = true
+
+        [[tool.uv.index]]
         name = "private"
         url = "https://private.example.com/simple/"
         artifact-base-url = "https://private.example.com/files/"
@@ -332,6 +347,11 @@ fn proxy_index_rejects_url_shared_with_ordinary_index() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
+
+        [[tool.uv.index]]
+        name = "pypi"
+        url = "https://pypi.org/simple"
+        default = true
 
         [[tool.uv.index]]
         name = "ordinary"
@@ -394,7 +414,7 @@ fn proxy_index_rejects_named_proxy_in_project_sources() -> Result<()> {
 }
 
 #[tokio::test]
-async fn proxy_index_implicitly_routes_pypi_without_a_second_resolution_index() -> Result<()> {
+async fn proxy_index_routes_explicit_pypi_without_a_second_resolution_index() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let wheel = fixture(&context, WHEEL_FILENAME)?;
     let source = fixture(&context, SOURCE_FILENAME)?;
@@ -431,6 +451,11 @@ async fn proxy_index_implicitly_routes_pypi_without_a_second_resolution_index() 
 
         [tool.uv]
         preview-features = ["proxy-index"]
+
+        [[tool.uv.index]]
+        name = "pypi"
+        url = "https://pypi.org/simple"
+        default = true
 
         [[tool.uv.proxy-index]]
         name = "socket"
@@ -499,7 +524,7 @@ async fn proxy_index_implicitly_routes_pypi_without_a_second_resolution_index() 
 }
 
 #[test]
-fn proxy_index_rejects_flat_pypi_default() -> Result<()> {
+fn proxy_index_requires_explicit_upstream() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let pyproject = context.temp_dir.child("pyproject.toml");
     pyproject.write_str(indoc::indoc! {r#"
@@ -507,12 +532,6 @@ fn proxy_index_rejects_flat_pypi_default() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-
-        [[tool.uv.index]]
-        name = "pypi"
-        url = "https://pypi.org/simple/"
-        default = true
-        format = "flat"
 
         [[tool.uv.proxy-index]]
         name = "proxy"
@@ -547,6 +566,11 @@ async fn proxy_index_sidecar_uses_proxy_cache_policy() -> Result<()> {
 
         [tool.uv]
         preview-features = ["proxy-index"]
+
+        [[tool.uv.index]]
+        name = "pypi"
+        url = "https://pypi.org/simple"
+        default = true
 
         [[tool.uv.proxy-index]]
         name = "proxy"
@@ -606,6 +630,11 @@ async fn proxy_index_variant_metadata_uses_advertised_url_and_proxy_cache_policy
         .child("uv.toml")
         .write_str(&formatdoc! {r#"
         preview-features = ["proxy-index", "wheel-variants"]
+
+        [[index]]
+        name = "pypi"
+        url = "https://pypi.org/simple"
+        default = true
 
         [[proxy-index]]
         name = "proxy"

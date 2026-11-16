@@ -350,7 +350,7 @@ pub struct ProxyIndex {
     pub name: Option<IndexName>,
     /// The proxy's Simple API endpoint.
     pub url: IndexUrl,
-    /// The upstream index's name. Use `pypi` for uv's default PyPI index.
+    /// The upstream index's name.
     pub proxy_for: IndexName,
     /// The URL prefix under which the proxy serves package files.
     pub artifact_base_url: SafeUrl<Stripped>,
@@ -991,7 +991,10 @@ mod tests {
             index.artifact_base_url.as_url().as_str(),
             "https://proxy.example.com/files/project:build@nightly/"
         );
-        IndexLocations::new(Vec::new(), vec![index], Vec::new(), false)?;
+        let mut upstream =
+            Index::from_index_url(IndexUrl::parse("https://pypi.org/simple/", None)?);
+        upstream.name = Some("pypi".parse()?);
+        IndexLocations::new(vec![upstream], vec![index], Vec::new(), false)?;
 
         Ok(())
     }

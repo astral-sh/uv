@@ -5231,6 +5231,8 @@ mod tests {
 
     #[test]
     fn proxy_indexes_do_not_persist_physical_credentials_in_tool_receipts() -> anyhow::Result<()> {
+        let mut upstream = Index::from_index_url(IndexUrl::parse("https://pypi.org/simple", None)?);
+        upstream.name = Some("pypi".parse()?);
         let proxy = proxy_index(
             "socket",
             "pypi",
@@ -5239,6 +5241,7 @@ mod tests {
         )?;
         let options = ResolverInstallerOptions {
             indexes: IndexOptions {
+                index: Some(vec![upstream]),
                 proxy_index: Some(vec![proxy]),
                 ..IndexOptions::default()
             },
@@ -5250,6 +5253,14 @@ mod tests {
         let encoded = toml::to_string(&wire)?;
 
         insta::assert_snapshot!(encoded, @r#"
+        [[index]]
+        name = "pypi"
+        url = "https://pypi.org/simple"
+        explicit = false
+        default = true
+        format = "simple"
+        authenticate = "auto"
+
         [[proxy-index]]
         name = "socket"
         url = "https://proxy.example.com/simple/"

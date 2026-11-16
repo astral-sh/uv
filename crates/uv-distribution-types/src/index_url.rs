@@ -731,7 +731,7 @@ mod tests {
     use std::error::Error;
 
     use super::*;
-    use crate::proxy_index::tests::pypi_proxy;
+    use crate::proxy_index::tests::{pypi_index, pypi_proxy};
     use crate::{IndexCacheControl, IndexName, IndexStatusCodeDecision, IndexStatusCodeStrategy};
     use http::{HeaderValue, StatusCode};
 
@@ -746,13 +746,15 @@ mod tests {
     fn proxy_indexes_are_excluded_from_resolution_iterators() -> Result<(), Box<dyn Error>> {
         let proxy = pypi_proxy()?;
         let physical_url = proxy.url.clone();
-        let locations = IndexLocations::new(Vec::new(), vec![proxy], Vec::new(), false)?;
+        let upstream = pypi_index()?;
+        let upstream_url = upstream.raw_url().clone();
+        let locations = IndexLocations::new(vec![upstream], vec![proxy], Vec::new(), false)?;
 
-        assert_eq!(locations.configured_indexes().count(), 0);
+        assert_eq!(locations.configured_indexes().count(), 1);
         assert_eq!(locations.proxy_indexes().count(), 1);
         assert_eq!(
             locations.default_index().map(Index::raw_url),
-            Some(&*PYPI_URL)
+            Some(&upstream_url)
         );
         assert!(locations.indexes().all(|index| index.url != physical_url));
         assert!(
@@ -796,7 +798,10 @@ mod tests {
         let locations = locations.combine(vec![ordinary], Vec::new(), false)?;
         assert_eq!(
             index_urls(locations.simple_indexes()),
-            ["https://ordinary.example.com/simple/"]
+            [
+                "https://pypi.org/simple/",
+                "https://ordinary.example.com/simple/"
+            ]
         );
         assert_eq!(
             locations
@@ -813,11 +818,8 @@ mod tests {
     #[test]
     fn no_index_suppresses_all_proxy_configuration() -> Result<(), Box<dyn Error>> {
         let proxy = pypi_proxy()?;
-        let locations = IndexLocations::new(Vec::new(), vec![proxy], Vec::new(), false)?.combine(
-            Vec::new(),
-            Vec::new(),
-            true,
-        )?;
+        let locations = IndexLocations::new(vec![pypi_index()?], vec![proxy], Vec::new(), false)?
+            .combine(Vec::new(), Vec::new(), true)?;
 
         assert!(locations.default_index().is_none());
         assert_eq!(locations.configured_indexes().count(), 0);

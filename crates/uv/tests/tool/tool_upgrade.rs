@@ -1774,6 +1774,12 @@ async fn tool_upgrade_reconciles_saved_proxy_with_configuration() -> Result<()> 
     .await;
 
     let uv_toml = context.temp_dir.child("uv.toml");
+    let upstream = indoc! {r#"
+        [[index]]
+        name = "pypi"
+        url = "https://pypi.org/simple"
+        default = true
+    "#};
     let proxy = format!(
         indoc! {r#"
             [[proxy-index]]
@@ -1785,7 +1791,7 @@ async fn tool_upgrade_reconciles_saved_proxy_with_configuration() -> Result<()> 
         server.mock_server().address(),
         server.file_url(""),
     );
-    uv_toml.write_str(&proxy)?;
+    uv_toml.write_str(&format!("{upstream}\n{proxy}"))?;
 
     context
         .tool_install()
@@ -1811,7 +1817,7 @@ async fn tool_upgrade_reconciles_saved_proxy_with_configuration() -> Result<()> 
     ");
 
     // Only the saved copy is reconciled; both live declarations must still be validated.
-    uv_toml.write_str(&format!("{proxy}\n{proxy}"))?;
+    uv_toml.write_str(&format!("{upstream}\n{proxy}\n{proxy}"))?;
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("simple-launcher")
         .arg("--config-file")

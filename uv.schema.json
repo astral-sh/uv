@@ -474,7 +474,7 @@
       ]
     },
     "proxy-index": {
-      "description": "The proxy indexes to use when resolving and downloading packages.\n\n`proxy-for` names the upstream index, `url` sets the proxy's Simple API URL, and\n`artifact-base-url` sets its package download URL prefix. uv records upstream URLs in\nlockfiles. Use `proxy-for = \"pypi\"` for the default PyPI index.",
+      "description": "The proxy indexes to use when resolving and downloading packages.\n\n`proxy-for` names a configured upstream index, `url` sets the proxy's Simple API URL, and\n`artifact-base-url` sets its package download URL prefix. uv records upstream URLs in\nlockfiles.",
       "type": ["array", "null"],
       "items": {
         "$ref": "#/definitions/ProxyIndex"
@@ -2001,7 +2001,7 @@
           ]
         },
         "proxy-for": {
-          "description": "The upstream index's name. Use `pypi` for uv's default PyPI index.",
+          "description": "The upstream index's name.",
           "allOf": [
             {
               "$ref": "#/definitions/IndexName"

@@ -438,13 +438,18 @@ pub struct ToolUv {
 
     /// The proxy indexes to use when resolving and downloading packages.
     ///
-    /// `proxy-for` names the upstream index, `url` sets the proxy's Simple API URL, and
+    /// `proxy-for` names a configured upstream index, `url` sets the proxy's Simple API URL, and
     /// `artifact-base-url` sets its package download URL prefix. uv records upstream URLs in
-    /// lockfiles. Use `proxy-for = "pypi"` for the default PyPI index.
+    /// lockfiles.
     #[option(
         default = "[]",
         value_type = "dict",
         example = r#"
+            [[tool.uv.index]]
+            name = "pypi"
+            url = "https://pypi.org/simple/"
+            default = true
+
             [[tool.uv.proxy-index]]
             name = "socket"
             url = "https://proxy.example.com/simple/"
