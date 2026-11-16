@@ -1801,7 +1801,7 @@ impl RunCommand {
             | Self::Empty => None,
         };
         // The parent is `Some("")` for bare filenames.
-        parent.filter(|parent| !parent.as_os_str().is_empty())
+        parent.filter(|parent| !parent.is_empty())
     }
 }
 

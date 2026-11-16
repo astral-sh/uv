@@ -226,7 +226,7 @@ fn canonical_path_to_symlink(symlink_path: &Path) -> Result<PathBuf, DirhashErro
     };
     let parent = symlink_path
         .parent()
-        .filter(|parent| !parent.as_os_str().is_empty())
+        .filter(|parent| !parent.is_empty())
         .unwrap_or(Path::new("."));
     Ok(fs_err::canonicalize(parent)?.join(filename))
 }

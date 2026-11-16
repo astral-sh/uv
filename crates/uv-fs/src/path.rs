@@ -321,7 +321,7 @@ pub fn normalize_path_under(path: impl AsRef<Path>, root: impl AsRef<Path>) -> O
     let path = normalize_path(path.as_ref()).into_owned();
     let root = normalize_path(root.as_ref());
 
-    if root.as_os_str().is_empty() || path.as_path() == root.as_ref() {
+    if root.is_empty() || path.as_path() == root.as_ref() {
         None
     } else {
         path.starts_with(root.as_ref()).then_some(path)

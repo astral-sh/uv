@@ -780,10 +780,10 @@ fn try_hardlink_file(src: &Path, dst: &Path) -> io::Result<()> {
                 "Hit link limit for `{}`, creating a fresh copy",
                 src.display()
             );
-            let mut parent = src.parent().unwrap_or(Path::new("."));
-            if parent.as_os_str().is_empty() {
-                parent = Path::new(".");
-            }
+            let parent = src
+                .parent()
+                .filter(|parent| !parent.is_empty())
+                .unwrap_or(Path::new("."));
             let temp = tempfile::NamedTempFile::new_in(parent)?;
             // This is a benign race. It can effectively lead to the destination being an
             // independent copy.

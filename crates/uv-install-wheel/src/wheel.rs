@@ -214,8 +214,7 @@ pub fn reserved_script_name(name: &str) -> Option<&str> {
             .iter()
             .any(|prefix| {
                 normalized_name
-                    .strip_prefix(prefix)
-                    .and_then(|minor| minor.strip_suffix('t'))
+                    .strip_circumfix(*prefix, 't')
                     .is_some_and(|minor| minor.parse::<u8>().is_ok())
             }))
     .then_some(normalized_name)
