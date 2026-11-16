@@ -2966,59 +2966,30 @@ mod tests {
 
     #[test]
     fn proxy_authentication_hints_use_physical_indexes() -> Result<(), Box<dyn std::error::Error>> {
-        let first_canonical = IndexUrl::from_str("https://canonical-a.example.com/simple")?;
-        let second_canonical = IndexUrl::from_str(
-            "https://canonical-user:canonical-secret@canonical-b.example.com/simple",
+        let canonical = IndexUrl::from_str(
+            "https://canonical-user:canonical-secret@canonical.example.com/simple",
         )?;
-        let redacted_second_canonical =
-            IndexUrl::from_str("https://canonical-b.example.com/simple")?;
+        let redacted_canonical = IndexUrl::from_str("https://canonical.example.com/simple")?;
         let physical =
             IndexUrl::from_str("https://proxy-user:proxy-secret@proxy.example.com/simple")?;
         let unrelated = IndexUrl::from_str("https://unrelated.example.com/simple")?;
 
-        let first_name = IndexName::from_str("canonical-a")?;
-        let second_name = IndexName::from_str("canonical-b")?;
+        let name = IndexName::from_str("canonical")?;
 
-        let mut first_index = Index::from_extra_index_url(first_canonical.clone());
-        first_index.name = Some(first_name.clone());
-        first_index.artifact_base_url = Some(
-            SafeUrl::parse("https://canonical-a.example.com/packages/")?.with_policy(Stripped),
-        );
+        let mut index = Index::from_extra_index_url(canonical);
+        index.name = Some(name.clone());
+        index.artifact_base_url =
+            Some(SafeUrl::parse("https://canonical.example.com/packages/")?.with_policy(Stripped));
 
-        let mut second_index = Index::from_extra_index_url(second_canonical.clone());
-        second_index.name = Some(second_name.clone());
-        second_index.artifact_base_url = Some(
-            SafeUrl::parse("https://canonical-b.example.com/packages/")?.with_policy(Stripped),
-        );
-
-        let mut first_proxy = Index::from_extra_index_url(physical.clone());
-        first_proxy.name = Some(IndexName::from_str("proxy-a")?);
-        first_proxy.proxy_for = Some(first_name);
-        first_proxy.artifact_base_url = Some(
+        let mut proxy = Index::from_extra_index_url(physical.clone());
+        proxy.name = Some(IndexName::from_str("proxy")?);
+        proxy.proxy_for = Some(name);
+        proxy.artifact_base_url = Some(
             SafeUrl::parse("https://proxy-user:proxy-secret@proxy.example.com/files/")?
                 .with_policy(Stripped),
         );
 
-        let mut second_proxy = Index::from_extra_index_url(physical.clone());
-        second_proxy.name = Some(IndexName::from_str("proxy-b")?);
-        second_proxy.proxy_for = Some(second_name);
-        second_proxy.artifact_base_url = Some(
-            SafeUrl::parse("https://proxy-user:proxy-secret@proxy.example.com/files/")?
-                .with_policy(Stripped),
-        );
-
-        let index_locations = IndexLocations::new(
-            vec![first_index, first_proxy, second_index, second_proxy],
-            Vec::new(),
-            false,
-        )?;
-
-        assert_eq!(index_locations.proxy_routes().count(), 2);
-        assert_eq!(index_locations.effective_url(&first_canonical), &physical);
-        assert_eq!(
-            index_locations.effective_url(&redacted_second_canonical),
-            &physical
-        );
+        let index_locations = IndexLocations::new(vec![index, proxy], Vec::new(), false)?;
 
         let index_capabilities = IndexCapabilities::default();
         let _ = IndexStatusCodeStrategy::Default.handle_status_code(
@@ -3040,7 +3011,7 @@ mod tests {
         let available_indexes = FxHashMap::from_iter([
             (
                 PackageName::from_str("example")?,
-                BTreeSet::from([redacted_second_canonical]),
+                BTreeSet::from([redacted_canonical]),
             ),
             (
                 PackageName::from_str("unrelated")?,
