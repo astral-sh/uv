@@ -839,25 +839,22 @@ async fn do_lock(
         None
     };
 
-    // A known-invalid selection can be reported in locked mode without resolving again.
-    let existing_lock = match (mode, existing_lock) {
-        (LockMode::Locked(_, source), Some(ValidatedLock::Preferable(_, reason)))
-            if matches!(
-                &reason,
-                LockMismatchReason::Satisfaction(mismatch)
-                    if matches!(**mismatch, LockSatisfactionError::MismatchedDependencyVersion(..))
-            ) =>
+    match existing_lock {
+        // A known-invalid selection can be reported in locked mode without resolving again.
+        Some(ValidatedLock::Preferable(_, LockMismatchReason::Satisfaction(mismatch)))
+            if let LockMode::Locked(_, source) = mode
+                && matches!(
+                    *mismatch,
+                    LockSatisfactionError::MismatchedDependencyVersion(..)
+                        | LockSatisfactionError::ConflictingDependencySelections(..)
+                ) =>
         {
-            return Err(LockError::LockDependencyMismatch(
+            Err(LockError::LockDependencyMismatch(
                 target.lock_filename(),
                 source,
-                Box::new(reason),
-            ));
+                mismatch,
+            ))
         }
-        (_, existing_lock) => existing_lock,
-    };
-
-    match existing_lock {
         // Resolution from the lockfile succeeded.
         Some(ValidatedLock::Satisfies(lock)) => {
             // Print the success message after completing resolution.

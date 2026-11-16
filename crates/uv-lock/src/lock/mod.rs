@@ -6339,6 +6339,9 @@ pub enum LockSatisfactionError {
         .2.cyan(),
     )]
     MismatchedDependencyVersion(PackageName, Version, VersionSpecifiers),
+    /// Two locked packages with the same name can be selected together.
+    #[error("{0}")]
+    ConflictingDependencySelections(Box<DependencySelectionConflict>),
     /// Refreshed declarations regenerate different resolved dependency edges.
     #[error(
         "Resolved dependencies for `{}` {}",
@@ -6374,6 +6377,32 @@ pub enum LockSatisfactionError {
     /// The lockfile is missing a version.
     #[error("Package `{name}` is missing a locked version", name = .0.cyan())]
     MissingVersion(PackageName),
+}
+
+/// Two distinct locked packages with the same name that can be selected together.
+pub struct DependencySelectionConflict {
+    first: PackageId,
+    second: PackageId,
+}
+
+impl Display for DependencySelectionConflict {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Locked packages `{}` and `{}` can be selected together.",
+            selection_label(&self.first).cyan(),
+            selection_label(&self.second).cyan(),
+        )
+    }
+}
+
+impl Debug for DependencySelectionConflict {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DependencySelectionConflict")
+            .field("first", &selection_label(&self.first))
+            .field("second", &selection_label(&self.second))
+            .finish()
+    }
 }
 
 fn override_difference(
@@ -6598,6 +6627,27 @@ fn remote_index_label(index: &UrlString) -> String {
 
 fn package_label(name: &PackageName, version: Option<&Version>) -> String {
     version.map_or_else(|| name.to_string(), |version| format!("{name}=={version}"))
+}
+
+/// Use [`SafeUrl`]'s credential redaction and omit URL queries from conflict diagnostics.
+fn selection_label(id: &PackageId) -> String {
+    let url = match &id.source {
+        Source::Registry(RegistrySource::Url(url))
+        | Source::Direct(url, _)
+        | Source::Git(url, _) => url,
+        Source::Registry(RegistrySource::Path(_))
+        | Source::Path(_)
+        | Source::Directory(_)
+        | Source::Editable(_)
+        | Source::Virtual(_) => return id.to_string(),
+    };
+    let name = package_label(&id.name, id.version.as_ref());
+    let kind = id.source.name();
+    let Ok(mut url) = url.to_url() else {
+        return format!("{name} @ {kind}");
+    };
+    url.set_query(None);
+    format!("{name} @ {kind}+{url}")
 }
 
 /// We discard the lockfile if these options match.
@@ -11067,6 +11117,51 @@ mod tests {
             let expr = format!("{}", anstream::adapter::strip_str(&expr));
             insta::assert_snapshot!(expr, @$snapshot);
         }};
+    }
+
+    /// Two sources can have the same diagnostic label after their URL queries are removed.
+    #[test]
+    fn selection_conflict_retains_distinct_sources() -> Result<(), Box<dyn Error>> {
+        let lock: Lock = toml::from_str(
+            r#"
+version = 1
+revision = 5
+requires-python = ">=3.12"
+
+[manifest]
+requirements = [{ name = "demo" }]
+
+[[package]]
+name = "demo"
+version = "1.0.0"
+source = { registry = "https://example.org/simple?token=one" }
+
+[[package]]
+name = "demo"
+version = "1.0.0"
+source = { registry = "https://example.org/simple?token=two" }
+"#,
+        )?;
+        let Some(LockSatisfactionError::ConflictingDependencySelections(conflict)) =
+            VersionChecker::check(
+                &lock,
+                &BTreeMap::new(),
+                &DependencyMetadata::default(),
+                Constraints::default(),
+                &DependencyModifiers::default(),
+            )
+        else {
+            return Err("expected conflicting selections".into());
+        };
+        assert_ne!(conflict.first.source, conflict.second.source);
+        assert_stripped_snapshot!(conflict, @"Locked packages `demo==1.0.0 @ registry+https://example.org/simple` and `demo==1.0.0 @ registry+https://example.org/simple` can be selected together.");
+        insta::assert_debug_snapshot!(conflict, @r#"
+        DependencySelectionConflict {
+            first: "demo==1.0.0 @ registry+https://example.org/simple",
+            second: "demo==1.0.0 @ registry+https://example.org/simple",
+        }
+        "#);
+        Ok(())
     }
 
     fn marker_environment() -> MarkerEnvironment {
