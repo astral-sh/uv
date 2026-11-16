@@ -357,49 +357,40 @@ impl ValidatedLock {
                             expected, actual
                         );
                     }
-                    LockSatisfactionError::MismatchedEditable(name, expected) => {
-                        if *expected {
-                            debug!(
-                                "Resolving despite existing lockfile due to mismatched source: `{name}` (expected: `editable`)"
-                            );
-                        } else {
-                            debug!(
-                                "Resolving despite existing lockfile due to mismatched source: `{name}` (unexpected: `editable`)"
-                            );
-                        }
+                    LockSatisfactionError::ExpectedEditable(name) => {
+                        debug!(
+                            "Resolving despite existing lockfile due to mismatched source: `{name}` (expected: `editable`)"
+                        );
                     }
-                    LockSatisfactionError::MismatchedVirtual(name, expected) => {
-                        if *expected {
-                            debug!(
-                                "Resolving despite existing lockfile due to mismatched source: `{name}` (expected: `virtual`)"
-                            );
-                        } else {
-                            debug!(
-                                "Resolving despite existing lockfile due to mismatched source: `{name}` (unexpected: `virtual`)"
-                            );
-                        }
+                    LockSatisfactionError::UnexpectedEditable(name) => {
+                        debug!(
+                            "Resolving despite existing lockfile due to mismatched source: `{name}` (unexpected: `editable`)"
+                        );
                     }
-                    LockSatisfactionError::MismatchedDynamic(name, expected) => {
-                        if *expected {
-                            debug!(
-                                "Resolving despite existing lockfile due to static version: `{name}` (expected a dynamic version)"
-                            );
-                        } else {
-                            debug!(
-                                "Resolving despite existing lockfile due to dynamic version: `{name}` (expected a static version)"
-                            );
-                        }
+                    LockSatisfactionError::ExpectedVirtual(name) => {
+                        debug!(
+                            "Resolving despite existing lockfile due to mismatched source: `{name}` (expected: `virtual`)"
+                        );
+                    }
+                    LockSatisfactionError::UnexpectedVirtual(name) => {
+                        debug!(
+                            "Resolving despite existing lockfile due to mismatched source: `{name}` (unexpected: `virtual`)"
+                        );
+                    }
+                    LockSatisfactionError::ExpectedStaticVersion(name) => {
+                        debug!(
+                            "Resolving despite existing lockfile due to static version: `{name}` (expected a dynamic version)"
+                        );
+                    }
+                    LockSatisfactionError::ExpectedDynamicVersion(name) => {
+                        debug!(
+                            "Resolving despite existing lockfile due to dynamic version: `{name}` (expected a static version)"
+                        );
                     }
                     LockSatisfactionError::MismatchedVersion(name, expected, actual) => {
-                        if let Some(actual) = actual {
-                            debug!(
-                                "Resolving despite existing lockfile due to mismatched version: `{name}` (expected: `{expected}`, found: `{actual}`)"
-                            );
-                        } else {
-                            debug!(
-                                "Resolving despite existing lockfile due to mismatched version: `{name}` (expected: `{expected}`)"
-                            );
-                        }
+                        debug!(
+                            "Resolving despite existing lockfile due to mismatched version: `{name}` (expected: `{expected}`, found: `{actual}`)"
+                        );
                     }
                     LockSatisfactionError::MismatchedRequirements(expected, actual) => {
                         debug!(

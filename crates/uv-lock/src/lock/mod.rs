@@ -4327,9 +4327,11 @@ impl Lock {
             let actual_virtual =
                 source.map(|package| matches!(package.id.source, Source::Virtual(..)));
             if actual_virtual != Some(expected_virtual) {
-                return Ok(LockSatisfaction::Mismatch(
-                    LockSatisfactionError::MismatchedVirtual(name.clone(), expected_virtual),
-                ));
+                return Ok(LockSatisfaction::Mismatch(if expected_virtual {
+                    LockSatisfactionError::ExpectedVirtual(name.clone())
+                } else {
+                    LockSatisfactionError::UnexpectedVirtual(name.clone())
+                }));
             }
 
             // Verify that the member is editable (or not).
@@ -4341,9 +4343,11 @@ impl Lock {
             let actual_editable =
                 source.map(|package| matches!(package.id.source, Source::Editable(..)));
             if actual_editable != Some(expected_editable) {
-                return Ok(LockSatisfaction::Mismatch(
-                    LockSatisfactionError::MismatchedEditable(name.clone(), expected_editable),
-                ));
+                return Ok(LockSatisfaction::Mismatch(if expected_editable {
+                    LockSatisfactionError::ExpectedEditable(name.clone())
+                } else {
+                    LockSatisfactionError::UnexpectedEditable(name.clone())
+                }));
             }
         }
 
@@ -4783,10 +4787,7 @@ impl Lock {
                     // no longer contain a version.
                     if metadata.dynamic {
                         return Ok(LockSatisfaction::Mismatch(
-                            LockSatisfactionError::MismatchedDynamic(
-                                package.id.name.clone(),
-                                false,
-                            ),
+                            LockSatisfactionError::ExpectedDynamicVersion(package.id.name.clone()),
                         ));
                     }
 
@@ -4797,7 +4798,7 @@ impl Lock {
                                 LockSatisfactionError::MismatchedVersion(
                                     package.id.name.clone(),
                                     version.clone(),
-                                    Some(static_version),
+                                    static_version,
                                 ),
                             ));
                         }
@@ -4856,10 +4857,7 @@ impl Lock {
                     // case, we'd expect the version to be omitted).
                     if package.id.source.is_source_tree() && metadata.dynamic {
                         return Ok(LockSatisfaction::Mismatch(
-                            LockSatisfactionError::MismatchedDynamic(
-                                package.id.name.clone(),
-                                false,
-                            ),
+                            LockSatisfactionError::ExpectedDynamicVersion(package.id.name.clone()),
                         ));
                     }
 
@@ -4869,7 +4867,7 @@ impl Lock {
                             LockSatisfactionError::MismatchedVersion(
                                 package.id.name.clone(),
                                 version.clone(),
-                                Some(metadata.version.clone()),
+                                metadata.version.clone(),
                             ),
                         ));
                     }
@@ -5003,7 +5001,7 @@ impl Lock {
                     // Validate that the package is still dynamic.
                     if !metadata.dynamic {
                         return Ok(LockSatisfaction::Mismatch(
-                            LockSatisfactionError::MismatchedDynamic(package.id.name.clone(), true),
+                            LockSatisfactionError::ExpectedStaticVersion(package.id.name.clone()),
                         ));
                     }
 
@@ -6168,7 +6166,7 @@ pub enum LockSatisfaction {
     Mismatch(LockSatisfactionError),
 }
 
-/// A reason why a lockfile does not satisfy a set of requirements.
+/// A reason why the lockfile does not satisfy the workspace requirements.
 #[derive(Debug)]
 pub enum LockSatisfactionError {
     /// The lockfile uses a different set of workspace members.
@@ -6190,14 +6188,20 @@ pub enum LockSatisfactionError {
         BTreeMap<PackageName, BTreeMap<GroupName, GroupMetadata>>,
         BTreeMap<PackageName, BTreeMap<GroupName, GroupMetadata>>,
     ),
-    /// A workspace member switched from virtual to non-virtual or vice versa.
-    MismatchedVirtual(PackageName, bool),
-    /// A workspace member switched from editable to non-editable or vice versa.
-    MismatchedEditable(PackageName, bool),
-    /// A source tree switched from dynamic to non-dynamic or vice versa.
-    MismatchedDynamic(PackageName, bool),
-    /// The lockfile uses a different set of version for its workspace members.
-    MismatchedVersion(PackageName, Version, Option<Version>),
+    /// A workspace member should be virtual.
+    ExpectedVirtual(PackageName),
+    /// A workspace member should no longer be virtual.
+    UnexpectedVirtual(PackageName),
+    /// A workspace member should be editable.
+    ExpectedEditable(PackageName),
+    /// A workspace member should no longer be editable.
+    UnexpectedEditable(PackageName),
+    /// A source tree should have a static version.
+    ExpectedStaticVersion(PackageName),
+    /// A source tree should have a dynamic version.
+    ExpectedDynamicVersion(PackageName),
+    /// A workspace member has a different version.
+    MismatchedVersion(PackageName, Version, Version),
     /// The lockfile uses a different set of requirements.
     MismatchedRequirements(BTreeSet<Requirement>, BTreeSet<Requirement>),
     /// The lockfile uses a different set of constraints.
