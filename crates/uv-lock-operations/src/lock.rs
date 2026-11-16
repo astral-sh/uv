@@ -847,7 +847,9 @@ async fn do_lock(
         // The lockfile did not contain enough information to obtain a resolution, fallback
         // to a fresh resolve.
         Some(
-            ValidatedLock::Unusable(_) | ValidatedLock::Versions(_) | ValidatedLock::Preferable(_),
+            ValidatedLock::Unusable(..)
+            | ValidatedLock::Versions(..)
+            | ValidatedLock::Preferable(..),
         )
         | None => {
             let recorder = if preview.is_enabled(PreviewFeature::ResolutionInputs) {
@@ -866,9 +868,9 @@ async fn do_lock(
             // Determine whether we can reuse the existing package versions.
             let versions_lock = existing_lock.as_ref().and_then(|lock| match &lock {
                 ValidatedLock::Satisfies(lock) => Some(lock),
-                ValidatedLock::Preferable(lock) => Some(lock),
-                ValidatedLock::Versions(lock) => Some(lock),
-                ValidatedLock::Unusable(_) => None,
+                ValidatedLock::Preferable(lock, _) => Some(lock),
+                ValidatedLock::Versions(lock, _) => Some(lock),
+                ValidatedLock::Unusable(..) => None,
             });
 
             // If an existing lockfile exists, build up a set of preferences.
@@ -886,9 +888,9 @@ async fn do_lock(
             // Determine whether we can reuse the existing package forks.
             let forks_lock = existing_lock.as_ref().and_then(|lock| match &lock {
                 ValidatedLock::Satisfies(lock) => Some(lock),
-                ValidatedLock::Preferable(lock) => Some(lock),
-                ValidatedLock::Versions(_) => None,
-                ValidatedLock::Unusable(_) => None,
+                ValidatedLock::Preferable(lock, _) => Some(lock),
+                ValidatedLock::Versions(..) => None,
+                ValidatedLock::Unusable(..) => None,
             });
 
             // When we run the same resolution from the lockfile again, we could get a different result the

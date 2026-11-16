@@ -6,10 +6,13 @@ use std::path::PathBuf;
 
 use uv_client::{ClientBuildError, FlatIndexError};
 use uv_command_support::UvError;
+use uv_configuration::{ExcludeNewerChange, ForkStrategy, ResolutionMode};
 use uv_distribution::{LoweringError, MetadataError};
-use uv_distribution_types::{ExtraBuildRequiresError, IndexCredentialsError, IndexUrlError};
+use uv_distribution_types::{
+    ExtraBuildRequiresError, IndexCredentialsError, IndexUrlError, RequiresPython,
+};
 use uv_errors::{Hinted, Hints};
-use uv_lock::{Lock, LockError as LockDataError, LockParseError};
+use uv_lock::{Lock, LockError as LockDataError, LockParseError, LockSatisfactionError};
 use uv_macros::DebugNoInline;
 use uv_normalize::{GroupName, PackageName};
 use uv_pep440::VersionSpecifiers;
@@ -51,6 +54,35 @@ impl From<FrozenSource> for MissingLockfileSource {
     fn from(source: FrozenSource) -> Self {
         Self::Frozen(source)
     }
+}
+
+/// A validation mismatch that can explain a changed lockfile.
+#[derive(Debug)]
+pub enum LockMismatchReason {
+    Upgrade,
+    Refresh,
+    ResolutionMode {
+        locked: ResolutionMode,
+        requested: ResolutionMode,
+    },
+    ForkStrategy {
+        locked: ForkStrategy,
+        requested: ForkStrategy,
+    },
+    ExcludeNewer(ExcludeNewerChange),
+    ForkEnvironmentCoverage,
+    ForkPythonCoverage,
+    SupportedEnvironments,
+    RequiredEnvironments,
+    MinimumLibcVersion,
+    Conflicts,
+    RequiresPython {
+        locked: RequiresPython,
+        requested: RequiresPython,
+    },
+    Prerelease,
+    HashAlgorithms,
+    Satisfaction(Box<LockSatisfactionError>),
 }
 
 /// A failure while reading, validating, or resolving a lockfile.
