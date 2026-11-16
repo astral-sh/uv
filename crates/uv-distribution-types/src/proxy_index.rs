@@ -141,26 +141,6 @@ impl UrlPrefix {
             });
         }
 
-        for segment in url.path().split('/') {
-            let Ok(decoded) = percent_encoding::percent_decode_str(segment).decode_utf8() else {
-                return Err(ProxyIndexConfigError::InvalidMapping {
-                    url: Box::new(url),
-                    reason: "index and artifact base URLs must contain valid UTF-8 path segments",
-                });
-            };
-
-            if matches!(decoded.as_ref(), "." | "..")
-                || decoded.contains('/')
-                || decoded.contains('\\')
-                || decoded.contains('\0')
-            {
-                return Err(ProxyIndexConfigError::InvalidMapping {
-                    url: Box::new(url),
-                    reason: "index and artifact base URLs cannot contain path traversal or encoded separators",
-                });
-            }
-        }
-
         let path_end = url.path().trim_end_matches('/').len();
         Ok(Self { url, path_end })
     }
@@ -713,8 +693,11 @@ mod tests {
     }
 
     #[test]
-    fn proxy_artifact_mapping_preserves_encoded_suffix_and_query() -> TestResult {
-        let locations = pypi_locations(pypi_proxy()?)?;
+    fn proxy_artifact_mapping_preserves_encoded_path_and_query() -> TestResult {
+        let mut proxy = pypi_proxy()?;
+        proxy.artifact_base_url =
+            Some(url("https://proxy.example.com/files%2Fprivate/")?.with_policy(Stripped));
+        let locations = pypi_locations(proxy)?;
         let route = locations
             .proxy_route_for(&index_url("https://pypi.org/simple/")?)
             .ok_or("missing proxy route")?;
@@ -722,7 +705,7 @@ mod tests {
             "https://files.pythonhosted.org/packages/example%20project/package%2B1.whl?download=1#sha256=abc",
         )?;
         let expected = url(
-            "https://proxy.example.com/files/example%20project/package%2B1.whl?download=1#sha256=abc",
+            "https://proxy.example.com/files%2Fprivate/example%20project/package%2B1.whl?download=1#sha256=abc",
         )?;
 
         let canonical = locked_location(canonical);
@@ -1005,8 +988,6 @@ mod tests {
             "file:///proxy/simple/",
             "https://proxy.example.com/simple/?download=1",
             "https://proxy.example.com/simple/#fragment",
-            "https://proxy.example.com/simple%2fprivate/",
-            "https://proxy.example.com/simple%5cprivate/",
         ] {
             let proxy = named_index("socket", physical, None, Some("pypi"))?;
 
@@ -1023,8 +1004,6 @@ mod tests {
             "ftp://proxy.example.com/files/",
             "https://proxy.example.com/files/?download=1",
             "https://proxy.example.com/files/#fragment",
-            "https://proxy.example.com/files%2fprivate/",
-            "https://proxy.example.com/files%5cprivate/",
         ] {
             let proxy = named_index(
                 "socket",

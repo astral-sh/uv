@@ -903,9 +903,8 @@ mod tests {
 
     use super::*;
     use http::HeaderValue;
-    use indoc::formatdoc;
 
-    use crate::{IndexLocations, ProxyIndexConfigError};
+    use crate::IndexLocations;
 
     #[test]
     fn test_proxy_index_serialization_redacts_artifact_credentials()
@@ -994,37 +993,6 @@ mod tests {
             Some("https://proxy.example.com/files/project:build@nightly/")
         );
         IndexLocations::new(vec![index], Vec::new(), false)?;
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_index_rejects_unsafe_normalized_artifact_base_paths()
-    -> Result<(), Box<dyn std::error::Error>> {
-        for path in [
-            "files%2fprivate/",
-            "files%2Fprivate/",
-            "files%5cprivate/",
-            "files%5Cprivate/",
-        ] {
-            let configuration = formatdoc!(
-                r#"
-                name = "socket"
-                url = "https://proxy.example.com/simple/"
-                artifact-base-url = "https://proxy.example.com/{path}"
-                proxy-for = "pypi"
-                "#
-            );
-
-            let index: Index = toml::from_str(&configuration)?;
-            assert!(
-                matches!(
-                    IndexLocations::new(vec![index], Vec::new(), false),
-                    Err(ProxyIndexConfigError::InvalidMapping { .. })
-                ),
-                "unsafe artifact base was accepted: {path}"
-            );
-        }
 
         Ok(())
     }
