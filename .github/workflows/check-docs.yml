@@ -31,7 +31,7 @@ jobs:
       - name: "Install Rust toolchain"
         run: rustup toolchain install --profile minimal
 
-      - uses: astral-sh/github-actions/rust-workspace-cache@ef53ab30bbd14faedc62386d46ea70d6798a9fcf
+      - uses: astral-sh/github-actions/rust-workspace-cache@61a5a2c7e0df1c0caf46fe5d1e74a4cb8a7205f8 # 2026.11.16.1
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: "Generate reference documentation"

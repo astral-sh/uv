@@ -116,7 +116,7 @@ jobs:
       - name: "Install Rust toolchain"
         run: rustup component add clippy
 
-      - uses: astral-sh/github-actions/rust-workspace-cache@ef53ab30bbd14faedc62386d46ea70d6798a9fcf
+      - uses: astral-sh/github-actions/rust-workspace-cache@61a5a2c7e0df1c0caf46fe5d1e74a4cb8a7205f8 # 2026.11.16.1
         with:
           save-if: ${{ inputs.save-rust-cache == 'true' }}
       - name: "Clippy"
@@ -148,7 +148,7 @@ jobs:
       - name: "Install Rust toolchain"
         run: rustup component add clippy
 
-      - uses: astral-sh/github-actions/rust-workspace-cache@ef53ab30bbd14faedc62386d46ea70d6798a9fcf
+      - uses: astral-sh/github-actions/rust-workspace-cache@61a5a2c7e0df1c0caf46fe5d1e74a4cb8a7205f8 # 2026.11.16.1
         with:
           workspace: ${{ env.UV_WORKSPACE }}
           save-if: ${{ inputs.save-rust-cache == 'true' }}
@@ -196,7 +196,7 @@ jobs:
           persist-credentials: false
       - name: Install Rust toolchain
         run: rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal
-      - uses: astral-sh/github-actions/rust-workspace-cache@ef53ab30bbd14faedc62386d46ea70d6798a9fcf
+      - uses: astral-sh/github-actions/rust-workspace-cache@61a5a2c7e0df1c0caf46fe5d1e74a4cb8a7205f8 # 2026.11.16.1
         with:
           target-directory: target/hawk
           extra-target-directory: hawk-fragments
