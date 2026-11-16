@@ -550,12 +550,8 @@ enum RegistryFileCandidate {
 impl RegistryFileCandidate {
     fn is_compatible(&self) -> bool {
         match self {
-            Self::Wheel(_, compatibility) => {
-                matches!(compatibility, WheelCompatibility::Compatible(..))
-            }
-            Self::Source(_, compatibility) => {
-                matches!(compatibility, SourceDistCompatibility::Compatible(..))
-            }
+            Self::Wheel(_, compatibility) => compatibility.is_compatible(),
+            Self::Source(_, compatibility) => compatibility.is_compatible(),
         }
     }
 }

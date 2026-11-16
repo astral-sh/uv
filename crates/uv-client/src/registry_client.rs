@@ -179,23 +179,8 @@ impl<'a> RegistryClientBuilder<'a> {
         self.build_inner(Some(existing))
     }
 
-    fn build_inner(
-        self,
-        existing: Option<&BaseClient>,
-    ) -> Result<RegistryClient, ClientBuildError> {
-        if self.index_locations.proxy_indexes().next().is_some()
-            && !self
-                .base_client_builder
-                .preview()
-                .is_enabled(PreviewFeature::ProxyIndex)
-        {
-            warn_user_once!(
-                "Proxy indexes are experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
-                PreviewFeature::ProxyIndex
-            );
-        }
-
-        // Cache explicitly configured credentials for indexes and proxy artifact hosts.
+    /// Cache explicitly configured credentials for indexes and proxy artifact hosts.
+    fn cache_index_credentials(&self) -> Result<(), ClientBuildError> {
         for index in self
             .index_locations
             .known_indexes()
@@ -229,6 +214,27 @@ impl<'a> RegistryClientBuilder<'a> {
                     .store_credentials_from_url(artifact_base_url.as_url())?;
             }
         }
+
+        Ok(())
+    }
+
+    fn build_inner(
+        self,
+        existing: Option<&BaseClient>,
+    ) -> Result<RegistryClient, ClientBuildError> {
+        if self.index_locations.proxy_indexes().next().is_some()
+            && !self
+                .base_client_builder
+                .preview()
+                .is_enabled(PreviewFeature::ProxyIndex)
+        {
+            warn_user_once!(
+                "Proxy indexes are experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+                PreviewFeature::ProxyIndex
+            );
+        }
+
+        self.cache_index_credentials()?;
 
         // Wrap in any relevant middleware and handle connectivity.
         let builder = self

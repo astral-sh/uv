@@ -284,6 +284,7 @@ pub struct IndexLocations {
     proxy_indexes: Vec<Arc<Index>>,
     flat_index: Vec<Index>,
     no_index: bool,
+    /// Validated routes from upstream indexes to their configured proxies.
     pub(crate) routes: Vec<Arc<ProxyRoute>>,
 }
 
