@@ -1,6 +1,6 @@
 pub use cache::CredentialsCache;
 pub use credentials::{Credentials, CredentialsFromUrlError, Username};
-pub use index::{AuthPolicy, Index, Indexes};
+pub use index::{AuthPolicy, Index, Indexes, strip_path_prefix};
 pub use keyring::KeyringProvider;
 pub use middleware::AuthMiddleware;
 pub use prompt::{CredentialsPrompt, CredentialsPromptError};

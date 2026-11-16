@@ -171,15 +171,7 @@ impl UrlPrefix {
             return None;
         }
 
-        let prefix_path = self.0.path().trim_end_matches('/');
-        let candidate_path = url.path();
-        if candidate_path == prefix_path {
-            return Some("");
-        }
-
-        candidate_path
-            .strip_prefix(prefix_path)
-            .and_then(|suffix| suffix.strip_prefix('/'))
+        uv_auth::strip_path_prefix(self.0.path().trim_end_matches('/'), url.path())
     }
 }
 
