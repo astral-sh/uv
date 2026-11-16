@@ -993,7 +993,7 @@ impl ToolRunSettings {
         ));
 
         let filesystem_install_mirrors =
-            filesystem_options.map_or_default(|options| options.install_mirrors.clone());
+            filesystem_options.map_or_default(|options| options.install_mirrors);
 
         let mut settings = ResolverInstallerSettings::from(options.clone());
         if torch_backend.is_some() {
@@ -1121,7 +1121,7 @@ impl ToolInstallSettings {
         ));
 
         let filesystem_install_mirrors =
-            filesystem_options.map_or_default(|options| options.install_mirrors.clone());
+            filesystem_options.map_or_default(|options| options.install_mirrors);
 
         let mut settings = ResolverInstallerSettings::from(options.clone());
         if torch_backend.is_some() {
