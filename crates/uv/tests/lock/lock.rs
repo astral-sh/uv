@@ -20869,6 +20869,62 @@ fn check_locked_version_valid_inactive_extra_dependency_group() -> Result<()> {
     Ok(())
 }
 
+/// Only the version referenced by the project's dependency edge must satisfy its pin.
+#[cfg(feature = "test-universal")]
+#[test]
+fn check_locked_version_valid_unused_version() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-01T00:00:00Z");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["six==1.16.0"]
+
+        [tool.uv]
+        package = false
+    "#})?;
+    context.temp_dir.child("uv.lock").write_str(indoc! {r#"
+        version = 1
+        revision = 5
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2025-01-01T00:00:00Z"
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [{ name = "six", version = "1.16.0", source = { registry = "https://pypi.org/simple" } }]
+
+        [package.metadata]
+        requires-dist = [{ name = "six", specifier = "==1.16.0" }]
+
+        [[package]]
+        name = "six"
+        version = "1.16.0"
+        source = { registry = "https://pypi.org/simple" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/d9/5a/e7c31adbe875f2abbb91bd84cf2dc52d792b5a01506781dbcf25c91daf11/six-1.16.0-py2.py3-none-any.whl", hash = "sha256:8abb2f1d86890a2dfb989f9a77cfcfd3e47c2a354b01111771326f8aa26e0254" },
+        ]
+
+        [[package]]
+        name = "six"
+        version = "1.17.0"
+        source = { registry = "https://pypi.org/simple" }
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().args(["--check", "--offline"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Test that `uv lock --check` detects a marker-scoped specifier violation in a local package.
 ///
 /// The local package `a` resolves to `markupsafe 2.1.5` on non-Windows and `2.0.0` on Windows.
