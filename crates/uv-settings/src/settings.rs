@@ -891,12 +891,16 @@ pub struct ResolverInstallerSchema {
         default = "\"[]\"",
         value_type = "dict",
         example = r#"
-            index = [
-                { name = "pypi", url = "https://pypi.org/simple/", default = true },
-            ]
-            proxy-index = [
-                { name = "socket", url = "https://proxy.example.com/simple/", artifact-base-url = "https://proxy.example.com/files/", proxy-for = "pypi" },
-            ]
+            [[tool.uv.index]]
+            name = "pypi"
+            url = "https://pypi.org/simple/"
+            default = true
+
+            [[tool.uv.proxy-index]]
+            name = "socket"
+            url = "https://proxy.example.com/simple/"
+            artifact-base-url = "https://proxy.example.com/files/"
+            proxy-for = "pypi"
         "#
     )]
     pub proxy_index: Option<Vec<ProxyIndex>>,
