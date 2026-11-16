@@ -10,7 +10,7 @@ use uv_configuration::{Constraints, ExcludeDependency, Override, Upgrade};
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
 use uv_distribution_types::{DependencyMetadata, IndexLocations, Requirement, RequiresPython};
-use uv_lock::{GroupMetadata, Lock, SatisfiesResult};
+use uv_lock::{GroupMetadata, Lock, LockSatisfaction, LockSatisfactionError};
 use uv_normalize::{DefaultGroups, GroupName, PackageName};
 use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{Conflicts, SupportedEnvironments};
@@ -297,46 +297,62 @@ impl ValidatedLock {
             )
             .await?
         {
-            SatisfiesResult::Satisfied => {
+            LockSatisfaction::Satisfied => {
                 debug!("Existing `uv.lock` satisfies workspace requirements");
                 Ok(Self::Satisfies(lock))
             }
-            SatisfiesResult::MismatchedMembers(expected, actual) => {
+            LockSatisfaction::Mismatch(LockSatisfactionError::MismatchedMembers(
+                expected,
+                actual,
+            )) => {
                 debug!(
                     "Resolving despite existing lockfile due to mismatched members:\n  Requested: {:?}\n  Existing: {:?}",
                     expected, actual
                 );
                 Ok(Self::Preferable(lock))
             }
-            SatisfiesResult::MismatchedMemberDefaultGroups(expected, actual) => {
+            LockSatisfaction::Mismatch(LockSatisfactionError::MismatchedMemberDefaultGroups(
+                expected,
+                actual,
+            )) => {
                 debug!(
                     "Resolving despite existing lockfile due to mismatched member default groups:\n  Requested: {:?}\n  Existing: {:?}",
                     expected, actual
                 );
                 Ok(Self::Preferable(lock))
             }
-            SatisfiesResult::MismatchedWorkspaceGroupMetadata(expected, actual) => {
+            LockSatisfaction::Mismatch(
+                LockSatisfactionError::MismatchedWorkspaceGroupMetadata(expected, actual),
+            ) => {
                 debug!(
                     "Resolving despite existing lockfile due to mismatched workspace group metadata:\n  Requested: {:?}\n  Existing: {:?}",
                     expected, actual
                 );
                 Ok(Self::Preferable(lock))
             }
-            SatisfiesResult::MismatchedWorkspaceDefaultGroups(expected, actual) => {
+            LockSatisfaction::Mismatch(
+                LockSatisfactionError::MismatchedWorkspaceDefaultGroups(expected, actual),
+            ) => {
                 debug!(
                     "Resolving despite existing lockfile due to mismatched workspace default groups:\n  Requested: {:?}\n  Existing: {:?}",
                     expected, actual
                 );
                 Ok(Self::Preferable(lock))
             }
-            SatisfiesResult::MismatchedMemberGroupMetadata(expected, actual) => {
+            LockSatisfaction::Mismatch(LockSatisfactionError::MismatchedMemberGroupMetadata(
+                expected,
+                actual,
+            )) => {
                 debug!(
                     "Resolving despite existing lockfile due to mismatched group metadata:\n  Requested: {:?}\n  Existing: {:?}",
                     expected, actual
                 );
                 Ok(Self::Preferable(lock))
             }
-            SatisfiesResult::MismatchedEditable(name, expected) => {
+            LockSatisfaction::Mismatch(LockSatisfactionError::MismatchedEditable(
+                name,
+                expected,
+            )) => {
                 if expected {
                     debug!(
                         "Resolving despite existing lockfile due to mismatched source: `{name}` (expected: `editable`)"
@@ -348,7 +364,10 @@ impl ValidatedLock {
                 }
                 Ok(Self::Preferable(lock))
             }
-            SatisfiesResult::MismatchedVirtual(name, expected) => {
+            LockSatisfaction::Mismatch(LockSatisfactionError::MismatchedVirtual(
+                name,
+                expected,
+            )) => {
                 if expected {
                     debug!(
                         "Resolving despite existing lockfile due to mismatched source: `{name}` (expected: `virtual`)"
@@ -360,7 +379,10 @@ impl ValidatedLock {
                 }
                 Ok(Self::Preferable(lock))
             }
-            SatisfiesResult::MismatchedDynamic(name, expected) => {
+            LockSatisfaction::Mismatch(LockSatisfactionError::MismatchedDynamic(
+                name,
+                expected,
+            )) => {
                 if expected {
                     debug!(
                         "Resolving despite existing lockfile due to static version: `{name}` (expected a dynamic version)"
@@ -372,7 +394,11 @@ impl ValidatedLock {
                 }
                 Ok(Self::Preferable(lock))
             }
-            SatisfiesResult::MismatchedVersion(name, expected, actual) => {
+            LockSatisfaction::Mismatch(LockSatisfactionError::MismatchedVersion(
+                name,
+                expected,
+                actual,
+            )) => {
                 if let Some(actual) = actual {
                     debug!(
                         "Resolving despite existing lockfile due to mismatched version: `{name}` (expected: `{expected}`, found: `{actual}`)"
@@ -384,73 +410,107 @@ impl ValidatedLock {
                 }
                 Ok(Self::Preferable(lock))
             }
-            SatisfiesResult::MismatchedRequirements(expected, actual) => {
+            LockSatisfaction::Mismatch(LockSatisfactionError::MismatchedRequirements(
+                expected,
+                actual,
+            )) => {
                 debug!(
                     "Resolving despite existing lockfile due to mismatched requirements:\n  Requested: {:?}\n  Existing: {:?}",
                     expected, actual
                 );
                 Ok(Self::Preferable(lock))
             }
-            SatisfiesResult::MismatchedConstraints(expected, actual) => {
+            LockSatisfaction::Mismatch(LockSatisfactionError::MismatchedConstraints(
+                expected,
+                actual,
+            )) => {
                 debug!(
                     "Resolving despite existing lockfile due to mismatched constraints:\n  Requested: {:?}\n  Existing: {:?}",
                     expected, actual
                 );
                 Ok(Self::Preferable(lock))
             }
-            SatisfiesResult::MismatchedOverrides(expected, actual) => {
+            LockSatisfaction::Mismatch(LockSatisfactionError::MismatchedOverrides(
+                expected,
+                actual,
+            )) => {
                 debug!(
                     "Resolving despite existing lockfile due to mismatched overrides:\n  Requested: {:?}\n  Existing: {:?}",
                     expected, actual
                 );
                 Ok(Self::Preferable(lock))
             }
-            SatisfiesResult::MismatchedExcludes(expected, actual) => {
+            LockSatisfaction::Mismatch(LockSatisfactionError::MismatchedExcludes(
+                expected,
+                actual,
+            )) => {
                 debug!(
                     "Resolving despite existing lockfile due to mismatched excludes:\n  Requested: {:?}\n  Existing: {:?}",
                     expected, actual
                 );
                 Ok(Self::Preferable(lock))
             }
-            SatisfiesResult::MismatchedBuildConstraints(expected, actual) => {
+            LockSatisfaction::Mismatch(LockSatisfactionError::MismatchedBuildConstraints(
+                expected,
+                actual,
+            )) => {
                 debug!(
                     "Resolving despite existing lockfile due to mismatched build constraints:\n  Requested: {:?}\n  Existing: {:?}",
                     expected, actual
                 );
                 Ok(Self::Preferable(lock))
             }
-            SatisfiesResult::MismatchedDependencyGroups(expected, actual) => {
+            LockSatisfaction::Mismatch(LockSatisfactionError::MismatchedDependencyGroups(
+                expected,
+                actual,
+            )) => {
                 debug!(
                     "Resolving despite existing lockfile due to mismatched dependency groups:\n  Requested: {:?}\n  Existing: {:?}",
                     expected, actual
                 );
                 Ok(Self::Preferable(lock))
             }
-            SatisfiesResult::MismatchedStaticMetadata(expected, actual) => {
+            LockSatisfaction::Mismatch(LockSatisfactionError::MismatchedStaticMetadata(
+                expected,
+                actual,
+            )) => {
                 debug!(
                     "Resolving despite existing lockfile due to mismatched static metadata:\n  Requested: {:?}\n  Existing: {:?}",
                     expected, actual
                 );
                 Ok(Self::Preferable(lock))
             }
-            SatisfiesResult::MissingRoot(name) => {
+            LockSatisfaction::Mismatch(LockSatisfactionError::MissingRoot(name)) => {
                 debug!("Resolving despite existing lockfile due to missing root package: `{name}`");
                 Ok(Self::Preferable(lock))
             }
-            SatisfiesResult::MissingRemoteIndex(name, version, index) => {
+            LockSatisfaction::Mismatch(LockSatisfactionError::MissingRemoteIndex(
+                name,
+                version,
+                index,
+            )) => {
                 debug!(
                     "Resolving despite existing lockfile due to missing remote index: `{name}` `{version}` from `{index}`"
                 );
                 Ok(Self::Preferable(lock))
             }
-            SatisfiesResult::MissingLocalIndex(name, version, index) => {
+            LockSatisfaction::Mismatch(LockSatisfactionError::MissingLocalIndex(
+                name,
+                version,
+                index,
+            )) => {
                 debug!(
                     "Resolving despite existing lockfile due to missing local index: `{name}` `{version}` from `{}`",
                     index.display()
                 );
                 Ok(Self::Preferable(lock))
             }
-            SatisfiesResult::MismatchedPackageRequirements(name, version, expected, actual) => {
+            LockSatisfaction::Mismatch(LockSatisfactionError::MismatchedPackageRequirements(
+                name,
+                version,
+                expected,
+                actual,
+            )) => {
                 if let Some(version) = version {
                     debug!(
                         "Resolving despite existing lockfile due to mismatched requirements for: `{name}=={version}`\n  Requested: {:?}\n  Existing: {:?}",
@@ -464,7 +524,12 @@ impl ValidatedLock {
                 }
                 Ok(Self::Preferable(lock))
             }
-            SatisfiesResult::MismatchedPackageDependencies(name, version, expected, actual) => {
+            LockSatisfaction::Mismatch(LockSatisfactionError::MismatchedPackageDependencies(
+                name,
+                version,
+                expected,
+                actual,
+            )) => {
                 if let Some(version) = version {
                     debug!(
                         "Resolving despite existing lockfile due to mismatched resolved dependencies for: `{name}=={version}`\n  Requested: {:?}\n  Existing: {:?}",
@@ -478,7 +543,14 @@ impl ValidatedLock {
                 }
                 Ok(Self::Preferable(lock))
             }
-            SatisfiesResult::MismatchedPackageDependencyGroups(name, version, expected, actual) => {
+            LockSatisfaction::Mismatch(
+                LockSatisfactionError::MismatchedPackageDependencyGroups(
+                    name,
+                    version,
+                    expected,
+                    actual,
+                ),
+            ) => {
                 if let Some(version) = version {
                     debug!(
                         "Resolving despite existing lockfile due to mismatched dependency groups for: `{name}=={version}`\n  Requested: {:?}\n  Existing: {:?}",
@@ -492,7 +564,12 @@ impl ValidatedLock {
                 }
                 Ok(Self::Preferable(lock))
             }
-            SatisfiesResult::MismatchedPackageProvidesExtra(name, version, expected, actual) => {
+            LockSatisfaction::Mismatch(LockSatisfactionError::MismatchedPackageProvidesExtra(
+                name,
+                version,
+                expected,
+                actual,
+            )) => {
                 if let Some(version) = version {
                     debug!(
                         "Resolving despite existing lockfile due to mismatched extras for: `{name}=={version}`\n  Requested: {:?}\n  Existing: {:?}",
@@ -506,7 +583,7 @@ impl ValidatedLock {
                 }
                 Ok(Self::Preferable(lock))
             }
-            SatisfiesResult::MissingVersion(name) => {
+            LockSatisfaction::Mismatch(LockSatisfactionError::MissingVersion(name)) => {
                 debug!("Resolving despite existing lockfile due to missing version: `{name}`");
                 Ok(Self::Preferable(lock))
             }
