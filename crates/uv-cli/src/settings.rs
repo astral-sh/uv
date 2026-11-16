@@ -5239,10 +5239,17 @@ mod tests {
         let wire = uv_settings::ToolOptionsWire::from(receipt);
         let encoded = toml::to_string(&wire)?;
 
-        assert!(!encoded.contains("proxy-user"));
-        assert!(!encoded.contains("proxy-secret"));
-        assert!(!encoded.contains("artifact-user"));
-        assert!(!encoded.contains("artifact-secret"));
+        insta::assert_snapshot!(encoded, @r#"
+        [[index]]
+        name = "socket"
+        url = "https://proxy.example.com/simple/"
+        artifact-base-url = "https://proxy.example.com/files/"
+        proxy-for = "pypi"
+        explicit = false
+        default = false
+        format = "simple"
+        authenticate = "always"
+        "#);
 
         let decoded: uv_settings::ToolOptionsWire = toml::from_str(&encoded)?;
         let restored = ResolverInstallerOptions::from(uv_settings::ToolOptions::from(decoded));

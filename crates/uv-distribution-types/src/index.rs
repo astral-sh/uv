@@ -938,24 +938,18 @@ mod tests {
         );
 
         let serialized = toml::to_string(&index)?;
-        let values: toml::Table = toml::from_str(&serialized)?;
-
-        assert_eq!(
-            values.get("url").and_then(toml::Value::as_str),
-            Some("https://proxy.example.com/simple/")
-        );
-        assert_eq!(
-            values
-                .get("artifact-base-url")
-                .and_then(toml::Value::as_str),
-            Some("https://proxy.example.com/files/")
-        );
-        assert!(!serialized.contains("simple-secret"));
-        assert!(!serialized.contains("artifact-secret"));
+        insta::assert_snapshot!(serialized, @r#"
+        name = "socket"
+        url = "https://proxy.example.com/simple/"
+        artifact-base-url = "https://proxy.example.com/files/"
+        proxy-for = "pypi"
+        explicit = false
+        default = false
+        format = "simple"
+        authenticate = "auto"
+        "#);
 
         let debug = format!("{index:?}");
-        assert!(debug.contains("artifact_base_url"));
-        assert!(debug.contains("proxy_for"));
         assert!(!debug.contains("simple-secret"));
         assert!(!debug.contains("artifact-secret"));
 

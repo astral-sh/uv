@@ -317,7 +317,7 @@ impl IndexRoute {
 
     /// Return whether this index is routed through a configured proxy.
     #[cfg(test)]
-    fn is_proxy(&self) -> bool {
+    fn is_proxied(&self) -> bool {
         self.proxy.is_some()
     }
 
@@ -498,7 +498,7 @@ fn artifact_base(index: &Index) -> Result<SafeUrl, ProxyIndexConfigError> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use http::{HeaderValue, StatusCode};
     use uv_pypi_types::HashDigests;
@@ -549,7 +549,7 @@ mod tests {
         Ok(index)
     }
 
-    fn pypi_proxy() -> Result<Index, Box<dyn std::error::Error>> {
+    pub(crate) fn pypi_proxy() -> Result<Index, Box<dyn std::error::Error>> {
         named_index(
             "socket",
             "https://proxy.example.com/simple/",
@@ -568,7 +568,7 @@ mod tests {
         let canonical = index_url("https://caller:secret@pypi.org/simple/")?;
         let route = locations.route_for(&canonical);
 
-        assert!(route.is_proxy());
+        assert!(route.is_proxied());
         assert_eq!(route.canonical(), &canonical);
         let borrowed = locations
             .proxy_route_for(&canonical)
@@ -684,7 +684,7 @@ mod tests {
 
         assert!(locations.proxy_route_for(&flat).is_none());
         assert_eq!(locations.effective_url(&flat), &flat);
-        assert!(!route.is_proxy());
+        assert!(!route.is_proxied());
         assert_eq!(route.canonical(), &flat);
         let artifact = url("https://flat.example.com/packages/package.whl?download=1#sha256=abc")?;
         let file = route.canonicalize_file(response_file(artifact.clone()))?;

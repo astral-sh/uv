@@ -692,6 +692,7 @@ mod tests {
     use std::error::Error;
 
     use super::*;
+    use crate::proxy_index::tests::pypi_proxy;
     use crate::{IndexCacheControl, IndexName, IndexStatusCodeDecision, IndexStatusCodeStrategy};
     use http::{HeaderValue, StatusCode};
 
@@ -702,27 +703,9 @@ mod tests {
             .collect()
     }
 
-    /// Create a named proxy for the implicit PyPI index.
-    fn configured_proxy_index(
-        name: &str,
-        simple_url: &str,
-        artifact_base_url: &str,
-    ) -> Result<Index, Box<dyn Error>> {
-        Ok(Index {
-            name: Some(IndexName::from_str(name)?),
-            artifact_base_url: Some(SafeUrl::parse(artifact_base_url)?.with_policy(Stripped)),
-            proxy_for: Some(IndexName::from_str("pypi")?),
-            ..Index::from_extra_index_url(IndexUrl::from_str(simple_url)?)
-        })
-    }
-
     #[test]
     fn proxy_indexes_are_excluded_from_resolution_iterators() -> Result<(), Box<dyn Error>> {
-        let proxy = configured_proxy_index(
-            "socket",
-            "https://proxy.example.com/simple/",
-            "https://proxy.example.com/files/",
-        )?;
+        let proxy = pypi_proxy()?;
         let physical_url = proxy.url.clone();
         let locations = IndexLocations::new(vec![proxy], Vec::new(), false)?;
 
@@ -787,11 +770,7 @@ mod tests {
 
     #[test]
     fn no_index_suppresses_all_proxy_configuration() -> Result<(), Box<dyn Error>> {
-        let proxy = configured_proxy_index(
-            "socket",
-            "https://proxy.example.com/simple/",
-            "https://proxy.example.com/files/",
-        )?;
+        let proxy = pypi_proxy()?;
         let locations = IndexLocations::new(vec![proxy], Vec::new(), false)?.combine(
             Vec::new(),
             Vec::new(),

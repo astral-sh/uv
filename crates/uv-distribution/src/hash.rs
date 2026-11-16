@@ -156,10 +156,10 @@ mod tests {
         let sha256 = HashDigest::Sha256(Digest::from_bytes([0xaa; 32]));
         let sha512 = HashDigest::Sha512(Digest::from_bytes([0xbb; 64]));
         let file_hashes = [sha256.clone(), sha512];
-        let caller = ArchiveHashPolicy::Any(std::slice::from_ref(&sha256));
+        let incomplete = [sha256];
+        let caller = ArchiveHashPolicy::Any(&incomplete);
         let proxy = ArtifactHashPolicy::for_registry(caller, true, &file_hashes);
-        let incomplete = vec![sha256.clone()];
-        assert!(!proxy.can_reuse(&incomplete, &file_hashes));
+        assert!(!proxy.can_reuse(&incomplete.as_slice(), &file_hashes));
         assert!(
             proxy
                 .for_download(&file_hashes)

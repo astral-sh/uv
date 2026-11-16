@@ -2255,23 +2255,23 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn simple_detail_proxy_cache_is_physical() -> Result<(), Error> {
+    async fn simple_detail_cache_is_keyed_by_proxy_url() -> Result<(), Error> {
         let canonical_server = MockServer::start().await;
-        let first_physical_server = MockServer::start().await;
-        let second_physical_server = MockServer::start().await;
+        let first_proxy_server = MockServer::start().await;
+        let second_proxy_server = MockServer::start().await;
         let canonical = IndexUrl::from_str(&format!("{}/simple/", canonical_server.uri()))?;
         let cache = Cache::temp()?;
 
-        for physical in [&first_physical_server, &second_physical_server] {
+        for proxy_server in [&first_proxy_server, &second_proxy_server] {
             Mock::given(method("GET"))
                 .and(path("/simple/example/"))
                 .respond_with(simple_response(r#"{"files":[]}"#))
                 .expect(1)
-                .mount(physical)
+                .mount(proxy_server)
                 .await;
 
             let client = RegistryClientBuilder::new(BaseClientBuilder::default(), cache.clone())
-                .index_locations(proxy_index_locations(&canonical, physical)?)
+                .index_locations(proxy_index_locations(&canonical, proxy_server)?)
                 .build()?;
 
             let results = client
@@ -2300,7 +2300,7 @@ mod tests {
             .await;
 
         let client = RegistryClientBuilder::new(BaseClientBuilder::default(), cache)
-            .index_locations(proxy_index_locations(&canonical, &first_physical_server)?)
+            .index_locations(proxy_index_locations(&canonical, &first_proxy_server)?)
             .build()?;
         let results = client
             .simple_detail(
@@ -2316,8 +2316,8 @@ mod tests {
 
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].0, &canonical);
-        for physical in [&first_physical_server, &second_physical_server] {
-            let requests = physical
+        for proxy_server in [&first_proxy_server, &second_proxy_server] {
+            let requests = proxy_server
                 .received_requests()
                 .await
                 .ok_or("mock server should record requests")?;

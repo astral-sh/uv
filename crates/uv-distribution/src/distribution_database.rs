@@ -343,11 +343,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         match dist {
             BuiltDist::Registry(wheels) => {
                 let wheel = wheels.best_wheel();
-                let RegistryArtifactRequest {
-                    index,
-                    url,
-                    is_proxy,
-                } = RegistryArtifactRequest::new(
+                let request = RegistryArtifactRequest::new(
                     &wheel.index,
                     &wheel.file.location,
                     self.client.index_locations(),
@@ -356,15 +352,16 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 // Create a cache entry for the wheel.
                 let wheel_entry = self.build_context.cache().entry(
                     CacheBucket::Wheels,
-                    WheelCache::Index(index).wheel_dir(wheel.name().as_ref()),
+                    WheelCache::Index(request.index).wheel_dir(wheel.name().as_ref()),
                     wheel.filename.cache_key(),
                 );
 
                 // If the URL is a file URL, load the wheel directly.
-                if url.scheme() == "file" {
-                    let path = url
+                if request.url.scheme() == "file" {
+                    let path = request
+                        .url
                         .to_file_path()
-                        .map_err(|()| Error::NonFileUrl(url.clone()))?;
+                        .map_err(|()| Error::NonFileUrl(request.url.clone()))?;
                     return self
                         .load_wheel(&path, &wheel.filename, wheel_entry, dist, hashes)
                         .await;
@@ -373,13 +370,13 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 // Download and unzip.
                 let hashes = ArtifactHashPolicy::for_registry(
                     hashes,
-                    is_proxy,
+                    request.is_proxy,
                     wheel.file.hashes.as_slice(),
                 );
                 match self
                     .stream_wheel(
-                        url.clone(),
-                        Some(index),
+                        request.url.clone(),
+                        Some(request.index),
                         &wheel.filename,
                         size,
                         &wheel_entry,
@@ -417,8 +414,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         // download the wheel directly.
                         let archive = self
                             .download_wheel(
-                                url,
-                                Some(index),
+                                request.url,
+                                Some(request.index),
                                 &wheel.filename,
                                 size,
                                 &wheel_entry,
@@ -1766,9 +1763,9 @@ fn persist_archive_file(src: &Path, dst: &Path) -> io::Result<()> {
 
 /// The download URL and cache index for a registry artifact.
 pub(crate) struct RegistryArtifactRequest<'index> {
-    pub(crate) index: &'index IndexUrl,
-    pub(crate) url: SafeUrl,
-    pub(crate) is_proxy: bool,
+    pub index: &'index IndexUrl,
+    pub url: SafeUrl,
+    pub is_proxy: bool,
 }
 
 impl<'index> RegistryArtifactRequest<'index> {
