@@ -182,6 +182,14 @@ impl VersionMap {
         }
     }
 
+    /// Return an example of a wheel name rejected by this index.
+    pub(crate) fn mismatched_wheel_name(&self) -> Option<PackageName> {
+        match &self.inner {
+            VersionMapInner::Eager(_) => None,
+            VersionMapInner::Lazy(lazy) => lazy.simple_metadata.mismatched_wheel_name(),
+        }
+    }
+
     /// Return the included-version cutoff for this version map, if any.
     pub(crate) fn included_version_cutoff(&self) -> Option<&Timestamp> {
         match &self.inner {

@@ -851,6 +851,14 @@ impl PubGrubReportFormatter<'_> {
                 }
                 DerivationTree::External(External::NoVersions(package, set)) => {
                     if let Some(name) = package.name_no_root() {
+                        // Check for index wheels discarded because they name a different package.
+                        if !fork_urls.contains_key(name)
+                            && let Some(hint) =
+                                Self::mismatched_wheel_hint(name, index, fork_indexes)
+                        {
+                            output_hints.insert(hint);
+                        }
+
                         // Check for no versions due to pre-release options.
                         if !fork_urls.contains_key(name) {
                             self.prerelease_hint(
@@ -1051,6 +1059,35 @@ impl PubGrubReportFormatter<'_> {
             }
         }
         exclude_newer_ranges
+    }
+
+    /// Report an index entry that was discarded because it named a different project.
+    fn mismatched_wheel_hint(
+        name: &PackageName,
+        index: &InMemoryIndex,
+        fork_indexes: &ForkIndexes,
+    ) -> Option<PubGrubHint> {
+        let response = if let Some(url) = fork_indexes.get(name).map(IndexMetadata::url) {
+            index.explicit().get(&(name.clone(), url.clone()))
+        } else {
+            index.implicit().get(name)
+        }?;
+
+        let VersionsResponse::Found(version_maps) = &*response else {
+            return None;
+        };
+
+        let (actual, index) = version_maps.iter().find_map(|version_map| {
+            Some((
+                version_map.mismatched_wheel_name()?,
+                version_map.index()?.clone(),
+            ))
+        })?;
+        Some(PubGrubHint::MismatchedWheelName {
+            package: name.clone(),
+            actual,
+            index,
+        })
     }
 
     /// Return the latest version in `set` that is available for resolver error reporting,
@@ -1498,6 +1535,14 @@ pub struct ExcludeNewerVersionDetail {
 
 #[derive(Debug, Clone)]
 pub enum PubGrubHint {
+    /// An index listed a wheel for a different project.
+    MismatchedWheelName {
+        package: PackageName,
+        // excluded from `PartialEq` and `Hash`
+        actual: PackageName,
+        // excluded from `PartialEq` and `Hash`
+        index: IndexUrl,
+    },
     /// There are pre-release versions available for a package, but pre-releases weren't enabled
     /// for that package.
     ///
@@ -1707,6 +1752,9 @@ pub enum PubGrubHint {
 /// `Hash` implementations for [`PubGrubHint`].
 #[derive(PartialEq, Eq, Hash)]
 enum PubGrubHintCore {
+    MismatchedWheelName {
+        package: PackageName,
+    },
     PrereleaseAvailable {
         package: PackageName,
     },
@@ -1794,6 +1842,9 @@ impl From<PubGrubHint> for PubGrubHintCore {
     #[inline]
     fn from(hint: PubGrubHint) -> Self {
         match hint {
+            PubGrubHint::MismatchedWheelName { package, .. } => {
+                Self::MismatchedWheelName { package }
+            }
             PubGrubHint::PrereleaseAvailable { package, .. } => {
                 Self::PrereleaseAvailable { package }
             }
@@ -1889,6 +1940,19 @@ impl Eq for PubGrubHint {}
 impl std::fmt::Display for PubGrubHint {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::MismatchedWheelName {
+                package,
+                actual,
+                index,
+            } => {
+                write!(
+                    f,
+                    "The index at `{}` listed a wheel for `{}` when queried for `{}`; the wheel was ignored",
+                    index.without_credentials().cyan(),
+                    actual.cyan(),
+                    package.cyan(),
+                )
+            }
             Self::PrereleaseAvailable {
                 package,
                 version,

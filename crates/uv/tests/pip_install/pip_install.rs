@@ -10674,6 +10674,247 @@ fn verify_hashes_missing_version() -> Result<()> {
     Ok(())
 }
 
+/// An index must not satisfy a hashed requirement with another project's wheel. Require the
+/// mismatched wheel's project at another version so that the wheel can reach installation.
+#[tokio::test]
+async fn registry_wheel_name_mismatch() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(indoc! {r"
+        validation==1.0.0 --hash=sha256:23ee8bda94d44f5480dccca240b37a4de7c823bc4683d00fd8e5eb85cf056ce6
+        ok==2.0.0 --hash=sha256:8163cd4f0477f8e93b856ac6a517fe5fa0f29339291fe2807d5376df685f6697
+    "})?;
+
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/simple/validation/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            indoc! {r#"
+                {
+                    "meta": { "api-version": "1.0" },
+                    "name": "validation",
+                    "files": [{
+                        "filename": "ok-1.0.0-py3-none-any.whl",
+                        "url": "/files/ok-1.0.0-py3-none-any.whl",
+                        "hashes": {}
+                    }]
+                }
+            "#},
+            "application/vnd.pypi.simple.v1+json",
+        ))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/simple/ok/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            indoc! {r#"
+                {
+                    "meta": { "api-version": "1.0" },
+                    "name": "ok",
+                    "files": [{
+                        "filename": "ok-2.0.0-py3-none-any.whl",
+                        "url": "/files/ok-2.0.0-py3-none-any.whl",
+                        "hashes": {}
+                    }]
+                }
+            "#},
+            "application/vnd.pypi.simple.v1+json",
+        ))
+        .mount(&server)
+        .await;
+    let wheel = fs::read(
+        context
+            .workspace_root
+            .join("test/links/ok-1.0.0-py3-none-any.whl"),
+    )?;
+    Mock::given(method("GET"))
+        .and(path("/files/ok-1.0.0-py3-none-any.whl"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(wheel))
+        .mount(&server)
+        .await;
+    let wheel = fs::read(
+        context
+            .workspace_root
+            .join("test/links/ok-2.0.0-py3-none-any.whl"),
+    )?;
+    Mock::given(method("GET"))
+        .and(path("/files/ok-2.0.0-py3-none-any.whl"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(wheel))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--no-deps")
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--index-url")
+        .arg(format!("{}/simple", server.uri())), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies
+      cause: Because there is no version of validation==1.0.0 and you require validation==1.0.0, we can conclude that your requirements are unsatisfiable.
+
+    hint: The index at `http://[LOCALHOST]/simple` listed a wheel for `ok` when queried for `validation`; the wheel was ignored
+    ");
+
+    Ok(())
+}
+
+/// Ignore a mismatched wheel when another index has a valid wheel.
+#[tokio::test]
+async fn registry_wheel_name_mismatch_other_index() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/bad/simple/validation/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            r#"<a href="/files/ok-1.0.0-py3-none-any.whl">ok-1.0.0-py3-none-any.whl</a>"#,
+            "text/html",
+        ))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/good/simple/validation/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            r#"<a href="/files/validation-1.0.0-py3-none-any.whl">validation-1.0.0-py3-none-any.whl</a>"#,
+            "text/html",
+        ))
+        .mount(&server)
+        .await;
+    let wheel = fs::read(
+        context
+            .workspace_root
+            .join("test/links/validation-1.0.0-py3-none-any.whl"),
+    )?;
+    Mock::given(method("GET"))
+        .and(path("/files/validation-1.0.0-py3-none-any.whl"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(wheel))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--no-deps")
+        .arg("validation==1.0.0")
+        .arg("--index-url")
+        .arg(format!("{}/good/simple", server.uri()))
+        .arg("--extra-index-url")
+        .arg(format!("{}/bad/simple", server.uri()))
+        .arg("--index-strategy=unsafe-best-match"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + validation==1.0.0
+    ");
+
+    Ok(())
+}
+
+/// The default strategy does not fall through to another index after filtering a mismatched wheel.
+/// The rejection remains available for the diagnostic when the cached response is used offline.
+#[tokio::test]
+async fn registry_wheel_name_mismatch_first_index() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/bad/simple/validation/"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("Cache-Control", "public, max-age=3600")
+                .set_body_raw(
+                    r#"<a href="/files/ok-1.0.0-py3-none-any.whl">ok-1.0.0-py3-none-any.whl</a>"#,
+                    "text/html",
+                ),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/good/simple/validation/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            r#"<a href="/files/validation-1.0.0-py3-none-any.whl">validation-1.0.0-py3-none-any.whl</a>"#,
+            "text/html",
+        ))
+        .expect(0)
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--no-deps")
+        .arg("--dry-run")
+        .arg("validation==1.0.0")
+        .arg("--index-url")
+        .arg(format!("{}/good/simple", server.uri()))
+        .arg("--extra-index-url")
+        .arg(format!("{}/bad/simple", server.uri())), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies
+      cause: Because there is no version of validation==1.0.0 and you require validation==1.0.0, we can conclude that your requirements are unsatisfiable.
+
+    hint: The index at `http://[LOCALHOST]/bad/simple` listed a wheel for `ok` when queried for `validation`; the wheel was ignored
+    ");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--no-deps")
+        .arg("--dry-run")
+        .arg("--offline")
+        .arg("validation==1.0.0")
+        .arg("--index-url")
+        .arg(format!("{}/good/simple", server.uri()))
+        .arg("--extra-index-url")
+        .arg(format!("{}/bad/simple", server.uri())), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies
+      cause: Because there is no version of validation==1.0.0 and you require validation==1.0.0, we can conclude that your requirements are unsatisfiable.
+
+    hint: The index at `http://[LOCALHOST]/bad/simple` listed a wheel for `ok` when queried for `validation`; the wheel was ignored
+    ");
+
+    Ok(())
+}
+
+/// Ignore a mismatched wheel when `--find-links` has a valid wheel.
+#[tokio::test]
+async fn registry_wheel_name_mismatch_find_links() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/simple/validation/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            r#"<a href="/files/ok-1.0.0-py3-none-any.whl">ok-1.0.0-py3-none-any.whl</a>"#,
+            "text/html",
+        ))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--no-deps")
+        .arg("validation==1.0.0")
+        .arg("--index-url")
+        .arg(format!("{}/simple", server.uri()))
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links")), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + validation==1.0.0
+    ");
+
+    Ok(())
+}
+
 /// Provide the wrong hash with `--verify-hashes`.
 #[test]
 fn verify_hashes_mismatch() -> Result<()> {
@@ -16269,6 +16510,7 @@ async fn bogus_redirect() -> Result<()> {
         .await;
 
     uv_snapshot!(
+        context.filters(),
         context
             .pip_install()
             .arg("--default-index")
@@ -16277,7 +16519,10 @@ async fn bogus_redirect() -> Result<()> {
         @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: The index returned metadata for the wrong package: expected distribution for sniffio, got distribution for anyio
+    error: No solution found when resolving dependencies
+      cause: Because there are no versions of sniffio and you require sniffio, we can conclude that your requirements are unsatisfiable.
+
+    hint: The index at `http://[LOCALHOST]/` listed a wheel for `anyio` when queried for `sniffio`; the wheel was ignored
     "
     );
 
