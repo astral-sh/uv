@@ -203,8 +203,7 @@ impl ResolverOutput {
         marker_env: &MarkerEnvironment,
     ) -> Result<MarkerTree, Box<ParsedUrlError>> {
         use uv_pep508::{
-            CanonicalMarkerValueString, CanonicalMarkerValueVersion, MarkerExpression,
-            MarkerOperator, MarkerTree,
+            CanonicalMarkerValueString, CanonicalMarkerValueVersion, MarkerExpression, MarkerTree,
         };
 
         /// A subset of the possible marker values.
@@ -303,24 +302,20 @@ impl ResolverOutput {
         // strict equality terms.
         let mut conjunction = MarkerTree::TRUE;
         for marker_param in seen_marker_values {
-            let expr = match marker_param {
+            let term = match marker_param {
                 MarkerParam::Version(value_version) => {
                     let from_env = marker_env.get_version(value_version);
-                    MarkerExpression::Version {
+                    MarkerTree::expression(MarkerExpression::Version {
                         key: value_version.into(),
                         specifier: VersionSpecifier::equals_version(from_env.clone()),
-                    }
+                    })
                 }
                 MarkerParam::String(value_string) => {
                     let from_env = marker_env.get_string(value_string);
-                    MarkerExpression::String {
-                        key: value_string.into(),
-                        operator: MarkerOperator::Equal,
-                        value: from_env.into(),
-                    }
+                    MarkerTree::exact_string(value_string, from_env.into())
                 }
             };
-            conjunction = conjunction.and(MarkerTree::expression(expr));
+            conjunction = conjunction.and(term);
         }
         Ok(conjunction)
     }

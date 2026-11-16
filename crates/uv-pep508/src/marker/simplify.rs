@@ -36,6 +36,11 @@ fn collect_cover(
                 dnf.push(path.clone());
             }
         }
+        Cover::Atom(atom) => {
+            path.push((**atom).clone());
+            dnf.push(path.clone());
+            path.pop();
+        }
         Cover::Guard(guard) => collect_guard(Guard::Node(*guard), &Cover::True, dnf, path),
         Cover::Branches(branches) => {
             for (guard, suffix) in branches.iter() {
@@ -104,27 +109,29 @@ fn collect_guard(
         }
         MarkerTreeKind::VersionString(marker) => {
             let range = guard_range(marker.edges(), child);
-            for (lower, upper) in range.iter() {
+            for clause in super::version_or_string::comparisons(&range) {
                 let current = path.len();
-                let lower = lower.map(|version| ArcStr::from(version.to_string()));
-                let upper = upper.map(|version| ArcStr::from(version.to_string()));
-                for (operator, value) in
-                    MarkerOperator::from_bounds((lower.as_ref(), upper.as_ref()))
-                {
-                    path.push(MarkerExpression::String {
-                        key: marker.key().into(),
-                        operator,
-                        value,
-                    });
-                }
+                path.extend(
+                    clause
+                        .into_iter()
+                        .map(|(operator, value)| MarkerExpression::String {
+                            key: marker.key().into(),
+                            operator,
+                            value,
+                        }),
+                );
                 collect_cover(suffix, dnf, path);
                 path.truncate(current);
             }
         }
         MarkerTreeKind::String(marker) => {
             let range = guard_range(marker.children(), child);
-            // Detect whether the range can be simplified as an inequality.
-            if let Some(excluded) = range_inequality(&range) {
+            // Equality on a hybrid field reparses as a version-or-string decision.
+            // Keep raw string intervals expressed as ordered comparisons.
+            let allow_equality = |_: &ArcStr| !marker.key().is_version_or_string();
+            if let Some(excluded) = range_inequality(&range)
+                && excluded.iter().all(|value| allow_equality(value))
+            {
                 let current = path.len();
                 for value in excluded {
                     path.push(MarkerExpression::String {
@@ -141,11 +148,11 @@ fn collect_guard(
 
             for bounds in range.iter() {
                 let current = path.len();
-                for (operator, value) in MarkerOperator::from_bounds(bounds) {
+                for (operator, value) in MarkerOperator::from_bounds(bounds, allow_equality) {
                     path.push(MarkerExpression::String {
                         key: marker.key().into(),
                         operator,
-                        value: value.clone(),
+                        value,
                     });
                 }
 
