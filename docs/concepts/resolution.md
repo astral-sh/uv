@@ -216,6 +216,23 @@ required-environments = [
 ]
 ```
 
+### Minimum macOS version
+
+Use `minimum-macos-version` with `required-environments` to require wheel coverage for the oldest
+macOS release you support. Specify the macOS deployment target as a `major.minor` string.
+
+```toml title="pyproject.toml"
+[tool.uv]
+preview-features = ["minimum-macos-version"]
+required-environments = ["sys_platform == 'darwin' and platform_machine == 'arm64'"]
+minimum-macos-version = "14.0"
+```
+
+A wheel tagged `macosx_14_0_arm64` covers this floor. A package version that only publishes
+`macosx_26_0_arm64` wheels needs a usable source distribution or uv will try another version. Newer
+wheels for the selected version remain in the lockfile for newer machines. The solver can still
+choose different pins by Python version or architecture.
+
 ### Minimum libc version
 
 !!! note

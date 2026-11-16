@@ -18,7 +18,9 @@ use tracing::{debug, trace, warn};
 
 use uv_cache::Cache;
 use uv_configuration::{ActiveEnvironment, DependencyGroupsWithDefaults, ExcludeDependency};
-use uv_distribution_types::{Index, MinimumLibcVersion, Requirement, RequirementSource};
+use uv_distribution_types::{
+    Index, MinimumLibcVersion, MinimumMacosVersion, Requirement, RequirementSource,
+};
 use uv_fs::{CWD, Simplified, normalize_path, read_venv_redirect};
 use uv_macros::DebugNoInline;
 use uv_normalize::{DEV_DEPENDENCIES, DefaultGroups, GroupName, PackageName};
@@ -880,6 +882,15 @@ impl Workspace {
             .as_ref()
             .and_then(|tool| tool.uv.as_ref())
             .and_then(|uv| uv.minimum_libc_version)
+    }
+
+    /// Returns the workspace's minimum supported macOS version.
+    pub fn minimum_macos_version(&self) -> Option<MinimumMacosVersion> {
+        self.pyproject_toml
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.minimum_macos_version)
     }
 
     /// Returns the set of conflicts for the workspace.
@@ -2708,6 +2719,7 @@ mod tests {
                       "environments": null,
                       "required-environments": null,
                       "minimum-libc-version": null,
+                      "minimum-macos-version": null,
                       "conflicts": null,
                       "build-backend": null
                     }
@@ -2810,6 +2822,7 @@ mod tests {
                       "environments": null,
                       "required-environments": null,
                       "minimum-libc-version": null,
+                      "minimum-macos-version": null,
                       "conflicts": null,
                       "build-backend": null
                     }
@@ -3243,6 +3256,7 @@ mod tests {
                       "environments": null,
                       "required-environments": null,
                       "minimum-libc-version": null,
+                      "minimum-macos-version": null,
                       "conflicts": null,
                       "build-backend": null
                     }
@@ -3354,6 +3368,7 @@ mod tests {
                       "environments": null,
                       "required-environments": null,
                       "minimum-libc-version": null,
+                      "minimum-macos-version": null,
                       "conflicts": null,
                       "build-backend": null
                     }
@@ -3478,6 +3493,7 @@ mod tests {
                       "environments": null,
                       "required-environments": null,
                       "minimum-libc-version": null,
+                      "minimum-macos-version": null,
                       "conflicts": null,
                       "build-backend": null
                     }
@@ -3576,6 +3592,7 @@ mod tests {
                       "environments": null,
                       "required-environments": null,
                       "minimum-libc-version": null,
+                      "minimum-macos-version": null,
                       "conflicts": null,
                       "build-backend": null
                     }
