@@ -298,7 +298,6 @@ impl LockedFile {
     #[cfg(unix)]
     fn create(path: impl AsRef<Path>) -> Result<fs_err::File, LockedFileError> {
         use rustix::io::Errno;
-        #[expect(clippy::disallowed_types)]
         use std::{fs::File, os::unix::fs::PermissionsExt};
         use tempfile::NamedTempFile;
 

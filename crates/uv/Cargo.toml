@@ -62,7 +62,6 @@ uv-scripts = { workspace = true }
 uv-settings = { workspace = true }
 uv-shell = { workspace = true }
 uv-static = { workspace = true }
-uv-test = { workspace = true, optional = true }
 uv-threads = { workspace = true }
 uv-tool-commands = { workspace = true }
 uv-types = { workspace = true }
@@ -147,6 +146,9 @@ toml = { workspace = true }
 toml_edit = { workspace = true }
 wiremock = { workspace = true }
 
+[target.'cfg(false)'.dependencies]
+uv-test = { workspace = true, optional = true }
+
 [target.'cfg(unix)'.dependencies]
 uv-unix = { workspace = true }
 
@@ -210,13 +212,9 @@ test-windows-registry = []
 windows-gui-bin = []
 
 [package.metadata.cargo-shear]
-# The uv crate has uv-test as dev-dependency. We want that by default,
-# uv runs tests with `uv-test/git`, so it's a default feature in uv. The
-# problem is that uv-test is only a dev dependency, which gets stripped by
-# `cargo install`, and `cargo install` fails with a missing crate error.
-# As workaround, we make `uv-test` a regular optional dependency. It's never
-# used as a regular dependency, but it allows using `uv-test?/git` as default
-# feature.
+# `cargo install` strips dev-dependencies, so retain `uv-test` as an optional
+# dependency under `cfg(false)` to keep the default `uv-test?/git` feature valid
+# without building it in production.
 # The uv-publish dev-dependency enables HTTP for trusted-publishing integration tests.
 ignored = ["uv-publish", "uv-test"]
 

@@ -1338,11 +1338,7 @@ impl VersionRequest {
                 }
 
                 let upper = UpperBound::new(upper.cloned());
-                if !upper.major_minor().contains(&version) {
-                    return false;
-                }
-
-                true
+                upper.major_minor().contains(&version)
             }
             Self::MajorMinorPrerelease(self_major, self_minor, _, _) => {
                 (*self_major, *self_minor) == (major, minor)

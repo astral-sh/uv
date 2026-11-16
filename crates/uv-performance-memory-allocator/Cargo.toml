@@ -13,6 +13,9 @@ license = { workspace = true }
 doctest = false
 test = false
 
+[lints]
+workspace = true
+
 [target.'cfg(all(target_os = "windows"))'.dependencies]
 mimalloc = { version = "0.1.50", default-features = false, features = ["v2"] }
 

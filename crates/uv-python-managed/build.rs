@@ -1,4 +1,3 @@
-#[expect(clippy::disallowed_types)]
 use std::fs::{File, FileTimes};
 use std::io::Write;
 use std::path::PathBuf;

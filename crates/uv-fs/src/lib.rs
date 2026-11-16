@@ -997,10 +997,7 @@ fn is_known_already_locked_error(err: &std::fs::TryLockError) -> bool {
         std::fs::TryLockError::WouldBlock => true,
         std::fs::TryLockError::Error(err) => {
             // On Windows, we've seen: Os { code: 33, kind: Uncategorized, message: "The process cannot access the file because another process has locked a portion of the file." }
-            if cfg!(windows) && err.raw_os_error() == Some(33) {
-                return true;
-            }
-            false
+            cfg!(windows) && err.raw_os_error() == Some(33)
         }
     }
 }
