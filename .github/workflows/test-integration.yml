@@ -9,6 +9,8 @@ on:
 permissions:
   contents: read
 
+cache-mode: none
+
 env:
   CARGO_INCREMENTAL: 0
   CARGO_NET_RETRY: 10
@@ -958,6 +960,7 @@ jobs:
         uses: Vampire/setup-wsl@d1da7f2c0322a5ee4f24975344f67fc0f5baf364 # v7.0.0
         with:
           distribution: Ubuntu-22.04
+          use-cache: false
           wsl-version: ${{ matrix.wsl-version }}
 
       - name: "Install pyenv-win"
@@ -1034,7 +1037,6 @@ jobs:
           UV_TEST_PYTORCH_URL: https://download.pytorch.org/whl/cpu
 
   integration-test-registries:
-    cache-mode: none
     name: "registries"
     timeout-minutes: 10
     runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
