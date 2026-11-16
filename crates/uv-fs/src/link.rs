@@ -781,7 +781,7 @@ fn try_hardlink_file(src: &Path, dst: &Path) -> io::Result<()> {
                 src.display()
             );
             let mut parent = src.parent().unwrap_or(Path::new("."));
-            if parent.as_os_str().is_empty() {
+            if parent.is_empty() {
                 parent = Path::new(".");
             }
             let temp = tempfile::NamedTempFile::new_in(parent)?;

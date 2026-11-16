@@ -336,11 +336,7 @@ impl FromStr for MarkerOperator {
             "in" => Self::In,
             not_space_in
                 if not_space_in
-                    // start with not
-                    .strip_prefix("not")
-                    // ends with in
-                    .and_then(|space_in| space_in.strip_suffix("in"))
-                    // and has only whitespace in between
+                    .strip_circumfix("not", "in")
                     .is_some_and(|space| !space.is_empty() && space.trim().is_empty()) =>
             {
                 Self::NotIn

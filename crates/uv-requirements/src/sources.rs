@@ -317,7 +317,6 @@ pub fn is_pylock_toml(file_name: &str) -> bool {
     }
 
     file_name
-        .strip_prefix("pylock.")
-        .and_then(|name| name.strip_suffix(".toml"))
+        .strip_circumfix("pylock.", ".toml")
         .is_some_and(|name| !name.is_empty() && !name.contains('.'))
 }

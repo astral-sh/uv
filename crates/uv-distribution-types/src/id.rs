@@ -114,7 +114,7 @@ impl VersionId {
         // subdirectories must not lose their trusted hashes during lowering or lockfile reads.
         let subdirectory = subdirectory
             .map(|path| normalize_path(path).into_owned())
-            .filter(|path| !path.as_os_str().is_empty());
+            .filter(|path| !path.is_empty());
         Self::ArchiveUrl {
             location: CanonicalUrl::new(location),
             subdirectory,
