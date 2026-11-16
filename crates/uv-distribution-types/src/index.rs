@@ -18,6 +18,50 @@ use crate::index_name::{IndexName, IndexNameError};
 use crate::origin::Origin;
 use crate::{IndexStatusCodeStrategy, IndexUrl, IndexUrlError, SerializableStatusCode};
 
+/// HTTP status and cache policies borrowed from a package index.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct IndexRequestPolicy<'a> {
+    index: Option<&'a Index>,
+}
+
+impl<'a> IndexRequestPolicy<'a> {
+    /// Return the status codes that let a search continue to the next index.
+    pub fn status_code_strategy(&self) -> IndexStatusCodeStrategy<'a> {
+        let Some(index) = self.index else {
+            return IndexStatusCodeStrategy::Default;
+        };
+        match index.ignore_error_codes.as_deref() {
+            Some(status_codes) => {
+                IndexStatusCodeStrategy::IgnoreConfiguredErrorCodes { status_codes }
+            }
+            None => IndexStatusCodeStrategy::from_index_url(index.raw_url()),
+        }
+    }
+
+    /// Return whether this status code is explicitly ignored, excluding built-in defaults.
+    pub fn ignores_error_code(&self, status_code: StatusCode) -> bool {
+        self.status_code_strategy()
+            .explicitly_ignores_error_code(status_code)
+    }
+
+    /// Return the cache control header for Simple API requests.
+    pub fn simple_api_cache_control(&self) -> Option<HeaderValue> {
+        self.index?.cache_control.as_ref()?.api.clone()
+    }
+
+    /// Return the cache control header for artifact downloads, including index-specific defaults.
+    pub fn artifact_cache_control(&self) -> Option<HeaderValue> {
+        let index = self.index?;
+        self.configured_files_cache_control()
+            .or_else(|| IndexCacheControl::artifact_cache_control(index.raw_url()))
+    }
+
+    /// Return the file cache control header only when the user configured it.
+    pub fn configured_files_cache_control(&self) -> Option<HeaderValue> {
+        self.index?.cache_control.as_ref()?.files.clone()
+    }
+}
+
 /// Cache control configuration for an index.
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Default)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
@@ -31,11 +75,6 @@ pub struct IndexCacheControl {
 }
 
 impl IndexCacheControl {
-    /// Return the default Simple API cache control headers for the given index URL, if applicable.
-    fn simple_api_cache_control(_url: &SafeUrl) -> Option<HeaderValue> {
-        None
-    }
-
     /// Return the default files cache control headers for the given index URL, if applicable.
     fn artifact_cache_control(url: &SafeUrl) -> Option<HeaderValue> {
         let dominated_by_pytorch_or_nvidia = url.host_str().is_some_and(|host| {
@@ -593,38 +632,9 @@ impl Index {
         Ok(self)
     }
 
-    /// Return the [`IndexStatusCodeStrategy`] for this index.
-    pub(crate) fn status_code_strategy(&self) -> IndexStatusCodeStrategy {
-        if let Some(ignore_error_codes) = &self.ignore_error_codes {
-            IndexStatusCodeStrategy::from_ignored_error_codes(ignore_error_codes)
-        } else {
-            IndexStatusCodeStrategy::from_index_url(self.url.url())
-        }
-    }
-
-    /// Return whether the given status code is explicitly ignored for this index.
-    pub(crate) fn ignores_error_code(&self, status_code: StatusCode) -> bool {
-        self.ignore_error_codes.as_ref().is_some_and(|codes| {
-            codes
-                .iter()
-                .any(|ignored_status_code| **ignored_status_code == status_code)
-        })
-    }
-
-    /// Return the cache control header for file requests to this index, if any.
-    pub(crate) fn artifact_cache_control(&self) -> Option<HeaderValue> {
-        self.cache_control
-            .as_ref()
-            .and_then(|cache_control| cache_control.files.clone())
-            .or_else(|| IndexCacheControl::artifact_cache_control(self.url.url()))
-    }
-
-    /// Return the cache control header for API requests to this index, if any.
-    pub(crate) fn simple_api_cache_control(&self) -> Option<HeaderValue> {
-        self.cache_control
-            .as_ref()
-            .and_then(|cache_control| cache_control.api.clone())
-            .or_else(|| IndexCacheControl::simple_api_cache_control(self.url.url()))
+    /// Borrow the HTTP request policy for this index.
+    pub(crate) fn request_policy(&self) -> IndexRequestPolicy<'_> {
+        IndexRequestPolicy { index: Some(self) }
     }
 
     /// Return the package-specific cutoff for this index, falling back to its default cutoff.

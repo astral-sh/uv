@@ -942,7 +942,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 if let Some(header) = index.and_then(|index| {
                     self.build_context
                         .locations()
-                        .artifact_cache_control_for(index)
+                        .request_policy(index)
+                        .artifact_cache_control()
                 }) =>
             {
                 CacheControl::Override(header)
@@ -1070,7 +1071,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 if let Some(header) = index.and_then(|index| {
                     self.build_context
                         .locations()
-                        .artifact_cache_control_for(index)
+                        .request_policy(index)
+                        .artifact_cache_control()
                 }) =>
             {
                 CacheControl::Override(header)
