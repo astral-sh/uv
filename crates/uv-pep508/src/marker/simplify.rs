@@ -102,25 +102,6 @@ fn collect_guard(
                 path.truncate(current);
             }
         }
-        MarkerTreeKind::VersionString(marker) => {
-            let range = guard_range(marker.edges(), child);
-            for (lower, upper) in range.iter() {
-                let current = path.len();
-                let lower = lower.map(|version| ArcStr::from(version.to_string()));
-                let upper = upper.map(|version| ArcStr::from(version.to_string()));
-                for (operator, value) in
-                    MarkerOperator::from_bounds((lower.as_ref(), upper.as_ref()))
-                {
-                    path.push(MarkerExpression::String {
-                        key: marker.key().into(),
-                        operator,
-                        value,
-                    });
-                }
-                collect_cover(suffix, dnf, path);
-                path.truncate(current);
-            }
-        }
         MarkerTreeKind::String(marker) => {
             let range = guard_range(marker.children(), child);
             // Detect whether the range can be simplified as an inequality.
