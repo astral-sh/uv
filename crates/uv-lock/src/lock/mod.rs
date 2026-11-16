@@ -6339,6 +6339,13 @@ pub enum LockSatisfactionError {
         .2.cyan(),
     )]
     MismatchedDependencyVersion(PackageName, Version, VersionSpecifiers),
+    /// Two locked packages with the same name can be selected together.
+    #[error(
+        "Locked packages `{}` and `{}` can be selected together.",
+        .0.cyan(),
+        .1.cyan(),
+    )]
+    ConflictingDependencySelections(String, String),
     /// Refreshed declarations regenerate different resolved dependency edges.
     #[error(
         "Resolved dependencies for `{}` {}",

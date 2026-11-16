@@ -3,14 +3,16 @@ use std::cell::OnceCell;
 use std::collections::{BTreeMap, VecDeque};
 use std::iter;
 
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use uv_configuration::{Constraints, DependencyModifierScope, DependencyModifiers};
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{DependencyMetadata, Requirement, RequirementScope, RequirementSource};
-use uv_normalize::PackageName;
+use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::MarkerTree;
+use uv_pypi_types::{ConflictItem, ConflictSet};
+use uv_resolver_types::universal_marker::encode_conflict_item;
 use uv_resolver_types::{ConflictMarker, UniversalMarker};
 use uv_workspace::WorkspaceMember;
 
@@ -45,8 +47,8 @@ enum ExtraProvenance {
     Unknown,
 }
 
-/// Detects version mismatches that can be established from the lockfile and validated resolution
-/// inputs. A mismatch requires an applicable registry specifier and a reachable locked selection.
+/// Detects incompatible or overlapping locked selections using the lockfile and validated
+/// resolution inputs.
 pub(super) struct VersionChecker<'lock, 'settings> {
     /// Supplies the exact locked selections and any recorded dependency declarations.
     lock: &'lock Lock,
@@ -59,13 +61,13 @@ pub(super) struct VersionChecker<'lock, 'settings> {
     constraints: Constraints,
     /// Overrides and exclusions that determine the effective requirements in each scope.
     modifiers: &'settings DependencyModifiers,
-    /// Restores parent conditions omitted from locked edge markers. Computed lazily when an edge's
-    /// target violates a specifier and the requirement and edge markers overlap.
+    /// Restores parent conditions omitted from locked edge markers. Computed lazily when checking
+    /// a potential version mismatch or comparing same-name locked packages.
     reachability: OnceCell<Reachability<'lock>>,
 }
 
 impl<'lock, 'settings> VersionChecker<'lock, 'settings> {
-    /// Check that resolved versions satisfy the declarations available in the lockfile.
+    /// Check that resolved versions satisfy their declarations and that selections are unique.
     pub(super) fn check(
         lock: &'lock Lock,
         workspace_members: &'settings BTreeMap<PackageName, WorkspaceMember>,
@@ -73,15 +75,17 @@ impl<'lock, 'settings> VersionChecker<'lock, 'settings> {
         constraints: Constraints,
         modifiers: &'settings DependencyModifiers,
     ) -> Option<LockSatisfactionError> {
-        Self {
+        let checker = Self {
             lock,
             workspace_members,
             dependency_metadata,
             constraints,
             modifiers,
             reachability: OnceCell::new(),
-        }
-        .find_mismatch()
+        };
+        checker
+            .find_mismatch()
+            .or_else(|| checker.find_conflicting_selections())
     }
 
     fn find_mismatch(&self) -> Option<LockSatisfactionError> {
@@ -407,24 +411,7 @@ impl<'lock, 'settings> VersionChecker<'lock, 'settings> {
             return None;
         }
 
-        let mut marker = marker();
-        if marker.is_false() {
-            return None;
-        }
-
-        // Checking conflicts here is necessary so that we can
-        // return `None` for cases that are actually unreachable.
-        // For example, when a marker has two different conflicts
-        // activated.
-        marker = with_source_conflict(marker, &requirement.source);
-        if !self.lock.conflicts.is_empty() {
-            let conflicts = ConflictMarker::from_relevant_conflicts(
-                &self.lock.conflicts,
-                [UniversalMarker::from_combined(marker)],
-            );
-            marker = marker.and(UniversalMarker::new(MarkerTree::TRUE, conflicts).combined());
-        }
-        if marker_is_unreachable(&self.lock.requires_python, marker) {
+        if !self.is_reachable(with_source_conflict(marker(), &requirement.source)) {
             return None;
         }
 
@@ -433,6 +420,57 @@ impl<'lock, 'settings> VersionChecker<'lock, 'settings> {
             version.clone(),
             specifier.clone(),
         ))
+    }
+
+    /// Compare distinct selections for each name. Every path that installs a package visits its
+    /// production section, including paths that request extras on that package.
+    fn find_conflicting_selections(&self) -> Option<LockSatisfactionError> {
+        // `Lock::new` sorts packages by ID, with the name first. Locks with one entry per name
+        // need no reachability analysis for this check.
+        for (index, [first, next]) in self.lock.packages.array_windows().enumerate() {
+            if first.id.name != next.id.name {
+                continue;
+            }
+            let reachability = self.reachability();
+            let Some(&first_marker) =
+                reachability.get(&(PackageIndex(index), DependencyContext::Production))
+            else {
+                continue;
+            };
+            for (offset, other) in self.lock.packages[index + 1..]
+                .iter()
+                .take_while(|package| package.id.name == first.id.name)
+                .enumerate()
+            {
+                let other_index = PackageIndex(index + 1 + offset);
+                if let Some(&other_marker) =
+                    reachability.get(&(other_index, DependencyContext::Production))
+                    && self.is_reachable(first_marker.and(other_marker))
+                {
+                    return Some(LockSatisfactionError::ConflictingDependencySelections(
+                        first.id.to_string(),
+                        other.id.to_string(),
+                    ));
+                }
+            }
+        }
+        None
+    }
+
+    fn is_reachable(&self, mut marker: MarkerTree) -> bool {
+        if marker.is_false() {
+            return false;
+        }
+        // A marker can be satisfiable on its own yet require two mutually exclusive
+        // extras to be active together. Apply the declared conflicts before testing reachability.
+        if !self.lock.conflicts.is_empty() && !marker.is_true() {
+            let conflicts = ConflictMarker::from_relevant_conflicts(
+                &self.lock.conflicts,
+                [UniversalMarker::from_combined(marker)],
+            );
+            marker = marker.and(UniversalMarker::new(MarkerTree::TRUE, conflicts).combined());
+        }
+        !marker_is_unreachable(&self.lock.requires_python, marker)
     }
 
     /// A workspace member is requested in every supported environment unless a global
@@ -522,18 +560,47 @@ impl<'lock, 'settings> VersionChecker<'lock, 'settings> {
         if marker.is_false() {
             return marker;
         }
-        let reachability = self
-            .reachability
-            .get_or_init(|| self.compute_reachability());
-        reachability
+        self.reachability()
             .get(&(index, context))
             .copied()
             .unwrap_or(MarkerTree::FALSE)
             .and(marker)
     }
 
+    fn reachability(&self) -> &Reachability<'lock> {
+        self.reachability
+            .get_or_init(|| self.compute_reachability())
+    }
+
     /// Restore the parent context removed from locked edge markers during serialization.
     fn compute_reachability(&self) -> Reachability<'lock> {
+        // Record which projects, extras, and groups a path selects when a lockfile marker
+        // or declared conflict refers to them. For example, a marker can test
+        // `extra == 'extra-7-project-legacy'` for an index scoped to `project[legacy]`,
+        // even if `legacy` does not appear in `conflicts`.
+        //
+        // Include declared conflicts too. Two edges without markers can request mutually
+        // exclusive extras. Recording both selections lets the overlap check rule out any
+        // environment that would require both. Encode the conflict items in the same format
+        // as the extra names collected from markers.
+        let mut referenced = FxHashSet::default();
+        for package in &self.lock.packages {
+            for marker in package.fork_markers.iter().copied().chain(
+                package
+                    .all_dependencies()
+                    .map(|dependency| dependency.complexified_marker),
+            ) {
+                if marker.has_conflict_marker() {
+                    marker.combined().visit_extras(|_, extra| {
+                        referenced.insert(extra.clone());
+                    });
+                }
+            }
+        }
+        for item in self.lock.conflicts.iter().flat_map(ConflictSet::iter) {
+            referenced.insert(encode_conflict_item(item));
+        }
+
         let mut queue = VecDeque::new();
         let environment = self.environment();
         for &index in self
@@ -558,6 +625,9 @@ impl<'lock, 'settings> VersionChecker<'lock, 'settings> {
         }
         for (requirement, index, marker) in self.root_selections() {
             let package = self.lock.package(index);
+            let marker = with_source_conflict(marker, &requirement.source);
+            let marker =
+                with_requested_extras(marker, &package.id.name, &requirement.extras, &referenced);
             queue.push_back((index, DependencyContext::Production, marker));
             queue.extend(requirement.extras.iter().filter_map(|extra| {
                 let (extra, _) = package.optional_dependencies.get_key_value(extra)?;
@@ -570,6 +640,19 @@ impl<'lock, 'settings> VersionChecker<'lock, 'settings> {
             let package = self.lock.package(index);
             let marker =
                 marker.and(context.conflict_marker(&package.id.name, &self.lock.conflicts));
+            let marker = match context {
+                DependencyContext::Production => marker,
+                DependencyContext::Extra(extra) => with_activation(
+                    marker,
+                    &ConflictItem::from((package.id.name.clone(), extra.clone())),
+                    &referenced,
+                ),
+                DependencyContext::Group(group) => with_activation(
+                    marker,
+                    &ConflictItem::from((package.id.name.clone(), group.clone())),
+                    &referenced,
+                ),
+            };
             let previous = reachable
                 .entry((index, context))
                 .or_insert(MarkerTree::FALSE);
@@ -587,6 +670,13 @@ impl<'lock, 'settings> VersionChecker<'lock, 'settings> {
             *previous = previous.or(marker);
             for dependency in context.dependencies(package) {
                 let marker = new.and(dependency.complexified_marker.combined());
+                // Requesting extras activates them on the path to the base package as well.
+                let marker = with_requested_extras(
+                    marker,
+                    &dependency.package_id.name,
+                    &dependency.extra,
+                    &referenced,
+                );
                 if marker.is_false() {
                     continue;
                 }
@@ -603,6 +693,50 @@ impl<'lock, 'settings> VersionChecker<'lock, 'settings> {
         }
         reachable
     }
+}
+
+/// Restrict the path to selections in which all extras requested on `package` are active.
+///
+/// A dependency on `package[feature]` selects the base package and activates `feature` on the
+/// same path. Carry that activation into the base package's production section as well as the
+/// extra section. Otherwise, a production edge guarded by `feature` being inactive can appear
+/// reachable through this path, or a selection requiring an extra that conflicts with `feature`
+/// can appear to overlap it.
+fn with_requested_extras<'a>(
+    marker: MarkerTree,
+    package: &PackageName,
+    extras: impl IntoIterator<Item = &'a ExtraName>,
+    referenced: &FxHashSet<ExtraName>,
+) -> MarkerTree {
+    if referenced.is_empty() {
+        return marker;
+    }
+    extras.into_iter().fold(marker, |marker, extra| {
+        with_activation(
+            marker,
+            &ConflictItem::from((package.clone(), extra.clone())),
+            referenced,
+        )
+    })
+}
+
+/// Record that this path selects the project, extra, or dependency group represented by `item`.
+///
+/// `referenced` contains the selections that lockfile markers or declared conflicts can test.
+/// Other selections cannot affect reachability or overlap. Without this filter, paths that
+/// differ only in which unreferenced extras they request would carry different markers, and
+/// the worklist could revisit the same downstream dependencies for equivalent paths.
+fn with_activation(
+    marker: MarkerTree,
+    item: &ConflictItem,
+    referenced: &FxHashSet<ExtraName>,
+) -> MarkerTree {
+    if referenced.is_empty() || !referenced.contains(&encode_conflict_item(item)) {
+        return marker;
+    }
+    marker.and(
+        UniversalMarker::new(MarkerTree::TRUE, ConflictMarker::from_conflict_item(item)).combined(),
+    )
 }
 
 /// Restrict an index-scoped declaration to the extra or group that activates its source.

@@ -20925,6 +20925,301 @@ fn check_locked_version_valid_unused_version() -> Result<()> {
     Ok(())
 }
 
+/// Two paths can select different versions in the same environment even though both versions
+/// satisfy their respective requirements.
+#[cfg(feature = "test-universal")]
+#[test]
+fn check_locked_version_rejects_overlapping_selections() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-01T00:00:00Z");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["six>=1.16.0,<2", "parent"]
+
+        [tool.uv]
+        package = false
+    "#})?;
+    context.temp_dir.child("uv.lock").write_str(indoc! {r#"
+        version = 1
+        revision = 5
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2025-01-01T00:00:00Z"
+
+        [[package]]
+        name = "parent"
+        version = "1.0.0"
+        source = { registry = "https://pypi.org/simple" }
+        dependencies = [
+            { name = "six", version = "1.17.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'win32'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "six", specifier = ">=1.16.0,<2" }]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "parent" },
+            { name = "six", version = "1.16.0", source = { registry = "https://pypi.org/simple" } },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "parent" }, { name = "six", specifier = ">=1.16.0,<2" }]
+
+        [[package]]
+        name = "six"
+        version = "1.16.0"
+        source = { registry = "https://pypi.org/simple" }
+
+        [[package]]
+        name = "six"
+        version = "1.17.0"
+        source = { registry = "https://pypi.org/simple" }
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().args(["--check", "--offline"]), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: The lockfile at `uv.lock` needs to be updated, but `--check` was provided.
+      cause: Locked packages `six==1.16.0 @ registry+https://pypi.org/simple` and `six==1.17.0 @ registry+https://pypi.org/simple` can be selected together.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    Ok(())
+}
+
+/// The transitive edge inherits its Windows marker from the path to its parent.
+/// The other version of `six` is selected only outside Windows.
+#[cfg(feature = "test-universal")]
+#[test]
+fn check_locked_version_accepts_disjoint_selections() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-01T00:00:00Z");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "parent; sys_platform == 'win32'",
+            "six>=1.16.0,<2; sys_platform != 'win32'",
+        ]
+
+        [tool.uv]
+        package = false
+    "#})?;
+    context.temp_dir.child("uv.lock").write_str(indoc! {r#"
+        version = 1
+        revision = 5
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2025-01-01T00:00:00Z"
+
+        [[package]]
+        name = "parent"
+        version = "1.0.0"
+        source = { registry = "https://pypi.org/simple" }
+        dependencies = [
+            { name = "six", version = "1.17.0", source = { registry = "https://pypi.org/simple" } },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "six", specifier = ">=1.16.0,<2" }]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "parent", marker = "sys_platform == 'win32'" },
+            { name = "six", version = "1.16.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'win32'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "parent", marker = "sys_platform == 'win32'" },
+            { name = "six", marker = "sys_platform != 'win32'", specifier = ">=1.16.0,<2" },
+        ]
+
+        [[package]]
+        name = "six"
+        version = "1.16.0"
+        source = { registry = "https://pypi.org/simple" }
+
+        [[package]]
+        name = "six"
+        version = "1.17.0"
+        source = { registry = "https://pypi.org/simple" }
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().args(["--check", "--offline"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// The two versions share the same platform markers, but reaching either one selects an
+/// extra on that package that conflicts with the extra requested on the other version.
+#[cfg(feature = "test-universal")]
+#[test]
+fn check_locked_version_accepts_mutually_exclusive_selections() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        first = ["example[legacy]>=1,<3"]
+        second = ["example[modern]>=1,<3"]
+
+        [tool.uv]
+        package = false
+        conflicts = [[{ package = "example", extra = "legacy" }, { package = "example", extra = "modern" }]]
+    "#})?;
+    context.temp_dir.child("uv.lock").write_str(indoc! {r#"
+        version = 1
+        revision = 5
+        requires-python = ">=3.12"
+        conflicts = [[{ package = "example", extra = "legacy" }, { package = "example", extra = "modern" }]]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "example"
+        version = "1.0.0"
+        source = { registry = "https://pypi.org/simple" }
+
+        [package.optional-dependencies]
+        legacy = []
+
+        [[package]]
+        name = "example"
+        version = "2.0.0"
+        source = { registry = "https://pypi.org/simple" }
+
+        [package.optional-dependencies]
+        modern = []
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+
+        [package.optional-dependencies]
+        first = [{ name = "example", version = "1.0.0", source = { registry = "https://pypi.org/simple" }, extra = ["legacy"] }]
+        second = [{ name = "example", version = "2.0.0", source = { registry = "https://pypi.org/simple" }, extra = ["modern"] }]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "example", extras = ["legacy"], marker = "extra == 'first'", specifier = ">=1,<3" },
+            { name = "example", extras = ["modern"], marker = "extra == 'second'", specifier = ">=1,<3" },
+        ]
+        provides-extras = ["first", "second"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().args(["--check", "--offline"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Selecting `modern` rules out the `legacy` path to the first version, but that version
+/// is also reachable through a path that requests neither extra.
+#[cfg(feature = "test-universal")]
+#[test]
+fn check_locked_version_rejects_overlap_despite_conflicts() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["example>=1,<3"]
+
+        [project.optional-dependencies]
+        first = ["example[legacy]>=1,<3"]
+        second = ["example[modern]>=1,<3"]
+
+        [tool.uv]
+        package = false
+        conflicts = [[{ package = "example", extra = "legacy" }, { package = "example", extra = "modern" }]]
+    "#})?;
+    context.temp_dir.child("uv.lock").write_str(indoc! {r#"
+        version = 1
+        revision = 5
+        requires-python = ">=3.12"
+        conflicts = [[{ package = "example", extra = "legacy" }, { package = "example", extra = "modern" }]]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "example"
+        version = "1.0.0"
+        source = { registry = "https://pypi.org/simple" }
+
+        [package.optional-dependencies]
+        legacy = []
+
+        [[package]]
+        name = "example"
+        version = "2.0.0"
+        source = { registry = "https://pypi.org/simple" }
+
+        [package.optional-dependencies]
+        modern = []
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [{ name = "example", version = "1.0.0", source = { registry = "https://pypi.org/simple" } }]
+
+        [package.optional-dependencies]
+        first = [{ name = "example", version = "1.0.0", source = { registry = "https://pypi.org/simple" }, extra = ["legacy"] }]
+        second = [{ name = "example", version = "2.0.0", source = { registry = "https://pypi.org/simple" }, extra = ["modern"] }]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "example", specifier = ">=1,<3" },
+            { name = "example", extras = ["legacy"], marker = "extra == 'first'", specifier = ">=1,<3" },
+            { name = "example", extras = ["modern"], marker = "extra == 'second'", specifier = ">=1,<3" },
+        ]
+        provides-extras = ["first", "second"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().args(["--check", "--offline"]), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: The lockfile at `uv.lock` needs to be updated, but `--check` was provided.
+      cause: Locked packages `example==1.0.0 @ registry+https://pypi.org/simple` and `example==2.0.0 @ registry+https://pypi.org/simple` can be selected together.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    Ok(())
+}
+
 /// Test that `uv lock --check` detects a marker-scoped specifier violation in a local package.
 ///
 /// The local package `a` resolves to `markupsafe 2.1.5` on non-Windows and `2.0.0` on Windows.

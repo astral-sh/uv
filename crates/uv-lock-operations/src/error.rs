@@ -127,7 +127,7 @@ pub enum LockError {
 
     /// The locked resolution is invalid before attempting a fresh resolve.
     #[error("The lockfile at `{0}` needs to be updated, but `{1}` was provided.")]
-    LockDependencyMismatch(PathBuf, LockedSource, #[source] Box<LockMismatchReason>),
+    LockDependencyMismatch(PathBuf, LockedSource, #[source] Box<LockSatisfactionError>),
 
     #[error(
         "The lockfile at `{0}` has non-canonical formatting at line {1}, but `{2}` was provided."
