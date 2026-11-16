@@ -39,9 +39,9 @@ use uv_distribution_types::{
     ExcludeNewerValue, FirstParty, GitDirectorySourceDist, GitPathBuiltDist, GitPathSourceDist,
     HashValidation, Identifier, IndexLocations, IndexMetadata, IndexUrl, MetadataHashPolicy,
     MinimumLibcVersion, Name, NameRequirementSpecification, PYPI_URL, PathBuiltDist,
-    PathSourceDist, ProxyIndexError, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist,
-    RemoteSource, Requirement, RequirementSource, RequiresPython, ResolvedDist,
-    SimplifiedMarkerTree, StaticMetadata, ToUrlError, UrlString, VersionId,
+    PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, RemoteSource,
+    Requirement, RequirementSource, RequiresPython, ResolvedDist, SimplifiedMarkerTree,
+    StaticMetadata, ToUrlError, UrlString, VersionId,
 };
 use uv_fs::{PortablePath, PortablePathBuf, Simplified, normalize_path, try_relative_to_if};
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
@@ -76,6 +76,7 @@ pub use crate::lock::export::RequirementsTxtExport;
 pub use crate::lock::export::{
     Metadata, PylockToml, PylockTomlError, PylockTomlErrorKind, PythonReport, cyclonedx_json,
 };
+pub use crate::lock::hash_error::LockHashError;
 use crate::lock::inputs::ManifestFilter;
 pub use crate::lock::installable::{Installable, InstallableRootKind};
 pub use crate::lock::map::PackageMap;
@@ -85,6 +86,7 @@ use self::requirements::{RequirementNormalizer, normalize_collection, normalize_
 
 mod deserialize;
 pub(crate) mod export;
+mod hash_error;
 mod inputs;
 mod installable;
 mod map;
@@ -2567,11 +2569,11 @@ impl Lock {
                             .map(Cow::into_owned)
                     })
             {
-                return Err(ProxyIndexError::MissingHash {
-                    package: package.id.name.clone(),
+                return Err(LockHashError::missing_proxy_hash(
+                    package.id.name.clone(),
                     filename,
-                    physical: Box::new(route.effective_url().without_credentials().into_owned()),
-                }
+                    route.effective_url().without_credentials().into_owned(),
+                )
                 .into());
             }
 
@@ -2816,11 +2818,11 @@ impl Lock {
             if let Some(requires_hash) = dist.id.source.requires_hash() {
                 for wheel in &dist.wheels {
                     if requires_hash != wheel.hash.is_some() {
-                        return Err(LockErrorKind::Hash {
-                            id: dist.id.clone(),
-                            artifact_type: "wheel",
-                            expected: requires_hash,
-                        }
+                        return Err(LockHashError::source_requirement(
+                            dist.id.clone(),
+                            "wheel",
+                            requires_hash,
+                        )
                         .into());
                     }
                 }
@@ -8717,11 +8719,11 @@ impl SourceDist {
 
     fn from_direct_dist(id: &PackageId, hashes: &[HashDigest]) -> Result<Self, LockError> {
         let Some(hash) = hashes.iter().max().cloned() else {
-            let kind = LockErrorKind::Hash {
-                id: id.clone(),
-                artifact_type: "direct URL source distribution",
-                expected: true,
-            };
+            let kind = LockHashError::source_requirement(
+                id.clone(),
+                "direct URL source distribution",
+                true,
+            );
             return Err(kind.into());
         };
         Ok(Self::Metadata {
@@ -8735,11 +8737,8 @@ impl SourceDist {
 
     fn from_path_dist(id: &PackageId, hashes: &[HashDigest]) -> Result<Self, LockError> {
         let Some(hash) = hashes.iter().max().cloned() else {
-            let kind = LockErrorKind::Hash {
-                id: id.clone(),
-                artifact_type: "path source distribution",
-                expected: true,
-            };
+            let kind =
+                LockHashError::source_requirement(id.clone(), "path source distribution", true);
             return Err(kind.into());
         };
         Ok(Self::Metadata {
@@ -8753,11 +8752,11 @@ impl SourceDist {
 
     fn from_git_path_dist(id: &PackageId, hashes: &[HashDigest]) -> Result<Self, LockError> {
         let Some(hash) = hashes.iter().max().cloned() else {
-            let kind = LockErrorKind::Hash {
-                id: id.clone(),
-                artifact_type: "Git archive source distribution",
-                expected: true,
-            };
+            let kind = LockHashError::source_requirement(
+                id.clone(),
+                "Git archive source distribution",
+                true,
+            );
             return Err(kind.into());
         };
         Ok(Self::Metadata {
@@ -9878,9 +9877,6 @@ enum LockErrorKind {
     /// metadata-free lockfile cannot be scoped to their packages.
     #[error(transparent)]
     InvalidScopedOverride(#[from] ScopedOverrideSourceError),
-    /// An error that occurs when a proxy route or its selected lock artifacts are invalid.
-    #[error(transparent)]
-    ProxyIndex(#[from] ProxyIndexError),
     /// An error that occurs when multiple packages with the same
     /// ID were found.
     #[error("Found duplicate package `{id}`", id = id.cyan())]
@@ -9988,18 +9984,9 @@ enum LockErrorKind {
         /// entry.
         dependency: Dependency,
     },
-    /// An error that occurs when a hash is expected (or not) for a particular
-    /// artifact, but one was not found (or was).
-    #[error("Since the package `{id}` comes from a {source} dependency, a hash was {expected} but one was not found for {artifact_type}", id = id.cyan(), source = id.source.name(), expected = if *expected { "expected" } else { "not expected" })]
-    Hash {
-        /// The ID of the package that has a missing hash.
-        id: PackageId,
-        /// The specific type of artifact, e.g., "source package"
-        /// or "wheel".
-        artifact_type: &'static str,
-        /// Whether a hash was expected.
-        expected: bool,
-    },
+    /// An artifact does not satisfy the lockfile's hash requirement.
+    #[error(transparent)]
+    Hash(#[from] LockHashError),
     /// An error that occurs when an index requires a hash algorithm that an artifact does not
     /// advertise.
     #[error(

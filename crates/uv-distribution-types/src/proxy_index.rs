@@ -3,7 +3,6 @@ use std::sync::Arc;
 use rustc_hash::FxHashMap;
 use thiserror::Error;
 use uv_auth::RealmRef;
-use uv_normalize::PackageName;
 #[cfg(test)]
 use uv_pep508::VerbatimUrl;
 use uv_redacted::SafeUrl;
@@ -92,19 +91,6 @@ pub enum ProxyIndexConfigError {
 /// An error routing an artifact through a configured proxy index.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum ProxyIndexError {
-    /// A selected proxied artifact has no supported hash.
-    #[error(
-        "Cannot lock `{filename}` for `{package}` from proxy index `{physical}` because it has no supported hash"
-    )]
-    MissingHash {
-        /// The package containing the selected artifact.
-        package: PackageName,
-        /// The selected wheel or source distribution filename.
-        filename: String,
-        /// The credential-redacted physical proxy endpoint.
-        physical: Box<SafeUrl>,
-    },
-
     /// A proxied artifact URL does not match the configured artifact base.
     #[error("Artifact URL `{url}` does not match the `artifact-base-url` prefix `{prefix}`")]
     UnmappedUrl {

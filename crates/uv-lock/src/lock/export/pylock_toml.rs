@@ -26,9 +26,8 @@ use uv_distribution_filename::{
 use uv_distribution_types::{
     BuiltDist, CanonicalFileLocation, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist,
     Dist, Edge, File, FirstParty, GitDirectorySourceDist, IndexLocations, IndexUrl, Name, Node,
-    PathBuiltDist, PathSourceDist, ProxyIndexError, RegistryBuiltDist, RegistryBuiltWheel,
-    RegistrySourceDist, RemoteSource, RequiresPython, Resolution, ResolvedDist, SourceDist,
-    ToUrlError, UrlString,
+    PathBuiltDist, PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist,
+    RemoteSource, RequiresPython, Resolution, ResolvedDist, SourceDist, ToUrlError, UrlString,
 };
 use uv_fs::{PortablePathBuf, normalize_path, try_relative_to_if};
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
@@ -47,7 +46,7 @@ use uv_resolver_types::ResolverOutput;
 
 use crate::lock::export::{ExportableRequirements, VirtualPackages};
 use crate::lock::{Source, WheelTagHint, is_wheel_unreachable};
-use crate::{Installable, LockError};
+use crate::{Installable, LockError, LockHashError};
 
 /// Format an array so that each element is on its own line and has a trailing comma.
 fn each_element_on_its_line_array(elements: impl Iterator<Item = impl Into<Value>>) -> Array {
@@ -187,7 +186,7 @@ pub enum PylockTomlErrorKind {
     #[error(transparent)]
     GitUrlParse(#[from] GitUrlParseError),
     #[error(transparent)]
-    ProxyIndex(#[from] ProxyIndexError),
+    Hash(#[from] LockHashError),
     #[error(transparent)]
     LockError(#[from] LockError),
     #[error(transparent)]
@@ -836,11 +835,11 @@ impl<'lock> PylockToml {
             return Ok(());
         };
 
-        Err(ProxyIndexError::MissingHash {
-            package: package.clone(),
-            filename: file.filename.to_string(),
-            physical: Box::new(route.effective_url().without_credentials().into_owned()),
-        }
+        Err(LockHashError::missing_proxy_hash(
+            package.clone(),
+            file.filename.to_string(),
+            route.effective_url().without_credentials().into_owned(),
+        )
         .into())
     }
 
