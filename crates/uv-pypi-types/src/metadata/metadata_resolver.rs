@@ -3,7 +3,7 @@
 use std::str::FromStr;
 
 use itertools::Itertools;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, Serializer};
 use tracing::warn;
 
 use uv_normalize::{ExtraName, PackageName};
@@ -29,6 +29,7 @@ pub struct ResolutionMetadata {
     pub name: PackageName,
     pub version: Version,
     // Optional fields
+    #[serde(serialize_with = "serialize_cached_requirements")]
     pub requires_dist: Box<[Requirement<VerbatimParsedUrl>]>,
     pub requires_python: Option<VersionSpecifiers>,
     #[serde(alias = "provides-extras")]
@@ -36,6 +37,19 @@ pub struct ResolutionMetadata {
     /// Whether the version field is dynamic.
     #[serde(default)]
     pub dynamic: bool,
+}
+
+fn serialize_cached_requirements<S: Serializer>(
+    requirements: &[Requirement<VerbatimParsedUrl>],
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    serializer.collect_seq(requirements.iter().map(|requirement| {
+        requirement
+            .displayable_with_url(|url| {
+                std::fmt::from_fn(move |f| f.write_str(url.verbatim.without_credentials().as_str()))
+            })
+            .to_string()
+    }))
 }
 
 /// From <https://github.com/PyO3/python-pkginfo-rs/blob/d719988323a0cfea86d4737116d7917f30e819e2/src/metadata.rs#LL78C2-L91C26>
@@ -275,6 +289,7 @@ mod tests {
     use std::assert_matches;
     use std::str::FromStr;
 
+    use anyhow::Result;
     use indoc::indoc;
 
     use uv_normalize::PackageName;
@@ -282,6 +297,34 @@ mod tests {
 
     use super::*;
     use crate::MetadataError;
+
+    #[test]
+    fn cached_signed_requirement_url() -> Result<()> {
+        let metadata = ResolutionMetadata::parse_metadata(
+            indoc! {"
+                Metadata-Version: 2.3
+                Name: parent
+                Version: 1.0
+                Requires-Dist: child @ https://user:password@example.com/child-1.0-py3-none-any.whl?sig=abc%2Bdef%3D&part=1&part=2
+            "}
+            .as_bytes(),
+        )?;
+        let expected =
+            "child @ https://example.com/child-1.0-py3-none-any.whl?sig=abc%2Bdef%3D&part=1&part=2";
+        let redacted = "child @ https://user:****@example.com/child-1.0-py3-none-any.whl?sig=****&part=1&part=2";
+
+        assert_eq!(serde_json::to_value(&metadata.requires_dist[0])?, redacted);
+        let serialized = serde_json::to_value(&metadata)?;
+        assert_eq!(serialized["requires-dist"][0], expected);
+        let restored: ResolutionMetadata = serde_json::from_value(serialized)?;
+        assert_eq!(
+            restored.requires_dist[0]
+                .displayable_with_credentials()
+                .to_string(),
+            expected
+        );
+        Ok(())
+    }
 
     #[test]
     fn test_parse_metadata() {
