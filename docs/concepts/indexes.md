@@ -71,18 +71,15 @@ To configure a proxy index, add a `[[tool.uv.proxy-index]]` entry with `proxy-fo
 upstream index's name. The proxy's `url` tells uv where to look up packages, and its
 `artifact-base-url` tells uv where to download them. In `uv.toml`, use `[[proxy-index]]` instead.
 
-For example, to configure a proxy for PyPI locally, declare the upstream index in `pyproject.toml`:
+To use a PyPI proxy across projects, add both entries to your user-level
+[`uv.toml`](./configuration-files.md):
 
-```toml title="pyproject.toml"
-[[tool.uv.index]]
+```toml title="uv.toml"
+[[index]]
 name = "pypi"
 url = "https://pypi.org/simple/"
 default = true
-```
 
-And then add the proxy in your user-level [`uv.toml`](./configuration-files.md):
-
-```toml title="uv.toml"
 [[proxy-index]]
 name = "pypi-proxy"
 url = "https://proxy.example.com/simple/"
