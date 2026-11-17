@@ -12,7 +12,7 @@ use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use uv_configuration::{
     DependencyGroupsWithDefaults, ExtrasSpecificationWithDefaults, InstallOptions,
 };
-use uv_normalize::{ExtraName, PackageName};
+use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep508::{ExtraOperator, MarkerExpression, MarkerTree, MarkerValueExtra};
 use uv_pypi_types::{ConflictItem, ConflictSet, Conflicts};
 
@@ -26,7 +26,7 @@ pub(crate) use crate::lock::export::metadata::{
 pub use crate::lock::export::pylock_toml::{PylockToml, PylockTomlError, PylockTomlErrorKind};
 pub use crate::lock::export::requirements_txt::RequirementsTxtExport;
 use crate::lock::{LockErrorKind, PackageIndex, Source};
-use crate::{Installable, InstallableRootKind, LockError, Package};
+use crate::{Installable, InstallableRootKind, Lock, LockError, Package};
 
 pub mod cyclonedx_json;
 mod metadata;
@@ -55,6 +55,48 @@ struct ExportableRequirement<'lock> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct ExportableRequirements<'lock>(Vec<ExportableRequirement<'lock>>);
 
+/// How to represent selected extras and dependency groups in exported requirements.
+#[derive(Clone, Copy)]
+enum ExportSelection<'a> {
+    /// Resolve selections at export time.
+    Activated,
+    /// Retain selections as PEP 751 markers for installation.
+    MarkSelections {
+        default_groups: &'a DependencyGroupsWithDefaults,
+        synthetic_default: Option<&'a GroupName>,
+    },
+}
+
+impl ExportSelection<'_> {
+    fn marks_selections(self) -> bool {
+        match self {
+            Self::Activated => false,
+            Self::MarkSelections { .. } => true,
+        }
+    }
+
+    fn group_marker(self, group: &GroupName) -> MarkerTree {
+        match self {
+            Self::Activated => MarkerTree::TRUE,
+            Self::MarkSelections {
+                default_groups,
+                synthetic_default,
+            } => {
+                let marker = MarkerTree::dependency_group_in_pep751(group.clone());
+                if default_groups.contains(group)
+                    && let Some(synthetic_default) = synthetic_default
+                {
+                    marker.or(MarkerTree::dependency_group_in_pep751(
+                        synthetic_default.clone(),
+                    ))
+                } else {
+                    marker
+                }
+            }
+        }
+    }
+}
+
 impl<'lock> ExportableRequirements<'lock> {
     /// Generate the set of exportable [`ExportableRequirement`] entries from the given lockfile.
     ///
@@ -68,13 +110,35 @@ impl<'lock> ExportableRequirements<'lock> {
         install_options: &'lock InstallOptions,
         virtual_packages: VirtualPackages,
     ) -> Result<Self, LockError> {
+        Self::from_lock_impl(
+            target,
+            prune,
+            extras,
+            groups,
+            annotate,
+            install_options,
+            virtual_packages,
+            ExportSelection::Activated,
+        )
+    }
+
+    fn from_lock_impl(
+        target: &impl Installable<'lock>,
+        prune: &[PackageName],
+        extras: &ExtrasSpecificationWithDefaults,
+        groups: &DependencyGroupsWithDefaults,
+        annotate: bool,
+        install_options: &'lock InstallOptions,
+        virtual_packages: VirtualPackages,
+        selection: ExportSelection<'_>,
+    ) -> Result<Self, LockError> {
         let size_guess = target.lock().packages.len();
         let mut graph = Graph::<Node<'lock>, Edge<'lock>>::with_capacity(size_guess, size_guess);
         let mut node_by_package = vec![None; size_guess];
 
         let mut queue: VecDeque<(PackageIndex, Option<&ExtraName>)> = VecDeque::new();
         let mut seen = FxHashSet::default();
-        let mut activated_items = FxHashSet::default();
+        let mut activated_items = FxHashMap::default();
 
         let root = graph.add_node(Node::Root);
 
@@ -92,19 +156,11 @@ impl<'lock> ExportableRequirements<'lock> {
                 continue;
             }
 
-            let dist = target
-                .lock()
-                .find_by_name(root_name)
-                .map_err(|_| LockErrorKind::MultipleRootPackages {
-                    name: root_name.clone(),
-                })?
-                .ok_or_else(|| LockErrorKind::MissingRootPackage {
-                    name: root_name.clone(),
-                })?;
+            let dist = find_root_package(target.lock(), root_name)?;
 
             if root_kind == InstallableRootKind::Production && groups.prod() {
                 // Track the activated package in the list of known conflicts.
-                activated_items.insert(ConflictItem::from(dist.id.name.clone()));
+                activated_items.insert(ConflictItem::from(dist.id.name.clone()), MarkerTree::TRUE);
 
                 let package_index = target.lock().by_id[&dist.id];
 
@@ -122,10 +178,23 @@ impl<'lock> ExportableRequirements<'lock> {
 
                 // Push its dependencies on the queue.
                 queue.push_back((package_index, None));
-                for extra in extras.extra_names(dist.optional_dependencies.keys()) {
+                let available_extras =
+                    dist.optional_dependencies
+                        .keys()
+                        .chain(dist.provides_extras().iter().filter(|extra| {
+                            selection.marks_selections()
+                                && !dist.optional_dependencies.contains_key(*extra)
+                        }));
+                for extra in extras.extra_names(available_extras) {
                     queue.push_back((package_index, Some(extra)));
-                    activated_items
-                        .insert(ConflictItem::from((dist.id.name.clone(), extra.clone())));
+                    activated_items.insert(
+                        ConflictItem::from((dist.id.name.clone(), extra.clone())),
+                        if selection.marks_selections() {
+                            MarkerTree::extra_in_pep751(extra.clone())
+                        } else {
+                            MarkerTree::TRUE
+                        },
+                    );
                 }
             }
 
@@ -135,8 +204,12 @@ impl<'lock> ExportableRequirements<'lock> {
                 .iter()
                 .filter(|(group, _)| target.includes_group(Some(&dist.id.name), group, groups))
             {
+                let group_marker = selection.group_marker(group);
                 // Empty selected groups still participate in conflicts.
-                activated_items.insert(ConflictItem::from((dist.id.name.clone(), group.clone())));
+                activated_items.insert(
+                    ConflictItem::from((dist.id.name.clone(), group.clone())),
+                    group_marker,
+                );
 
                 for dep in dependencies {
                     if prune.contains(&dep.package_id.name) {
@@ -156,7 +229,10 @@ impl<'lock> ExportableRequirements<'lock> {
                         root,
                         dep_index,
                         Edge::Prod {
-                            marker: dep.simplified_marker.as_simplified_marker_tree(),
+                            marker: dep
+                                .simplified_marker
+                                .as_simplified_marker_tree()
+                                .and(group_marker),
                             dep_extras: dep.extra.iter().collect(),
                         },
                     );
@@ -310,6 +386,25 @@ impl<'lock> ExportableRequirements<'lock> {
             }
         }
 
+        // Multi-use export rejects negative extra markers on selected edges.
+        if selection.marks_selections()
+            && graph.edge_weights().any(|edge| {
+                edge.marker()
+                    .to_dnf()
+                    .into_iter()
+                    .flatten()
+                    .any(|expression| {
+                        if let MarkerExpression::Extra { operator, .. } = expression {
+                            operator == ExtraOperator::NotEqual
+                        } else {
+                            false
+                        }
+                    })
+            })
+        {
+            return Err(LockErrorKind::MultiUseNegativeExtraMarker.into());
+        }
+
         let include_package = |package: &Package| {
             let include_source = match &package.id.source {
                 Source::Virtual(_) => virtual_packages == VirtualPackages::Include,
@@ -336,6 +431,7 @@ impl<'lock> ExportableRequirements<'lock> {
             &activated_items,
             target.lock().conflicts(),
             include_package,
+            !matches!(selection, ExportSelection::Activated),
         )?;
 
         // Collect all packages.
@@ -370,6 +466,17 @@ impl<'lock> ExportableRequirements<'lock> {
 
         Ok(Self(nodes))
     }
+}
+
+/// Find the unique locked package for an export root.
+fn find_root_package<'lock>(
+    lock: &'lock Lock,
+    name: &PackageName,
+) -> Result<&'lock Package, LockError> {
+    Ok(lock
+        .find_by_name(name)
+        .map_err(|_| LockErrorKind::MultipleRootPackages { name: name.clone() })?
+        .ok_or_else(|| LockErrorKind::MissingRootPackage { name: name.clone() })?)
 }
 
 /// A node in the graph.
@@ -423,9 +530,10 @@ impl Edge<'_> {
 fn conflict_marker_reachability<'lock>(
     graph: &Graph<Node<'lock>, Edge<'lock>>,
     root: NodeIndex,
-    known_conflicts: &FxHashSet<ConflictItem>,
+    known_conflicts: &FxHashMap<ConflictItem, MarkerTree>,
     conflicts: &Conflicts,
     include_package: impl Fn(&Package) -> bool,
+    mark_selections: bool,
 ) -> Result<FxHashMap<NodeIndex, MarkerTree>, LockError> {
     let variables = ConflictVariables::from_graph(graph, known_conflicts, conflicts);
 
@@ -466,20 +574,19 @@ fn conflict_marker_reachability<'lock>(
         if let Node::Package(package) = graph[package_index] {
             let item = ConflictItem::from((package.name().clone(), extra.clone()));
             solver.nodes[extra_index].extra_fact = variables.by_item.get(&item).copied();
-            if known_conflicts.contains(&item) {
-                // Selected extras belong to unique, unconditionally reached production roots.
-                solver.add_reachability(extra_index, MarkerTree::TRUE);
+            if let Some(&marker) = known_conflicts.get(&item) {
+                solver.add_reachability(extra_index, marker);
             }
         }
     }
-    for item in known_conflicts {
+    for (item, &marker) in known_conflicts {
         if let Some(&fact) = variables.by_item.get(item) {
-            solver.activations[fact] = MarkerTree::TRUE;
+            solver.activations[fact] = marker;
         }
     }
     solver.add_reachability(root.index(), MarkerTree::TRUE);
 
-    resolve_marker_bindings(graph, root, &mut solver, &variables);
+    resolve_marker_bindings(graph, root, &mut solver, &variables, mark_selections);
     solver.simplify_unconditional_activations(&variables);
     solver.solve();
 
@@ -526,7 +633,7 @@ struct ConflictVariables {
 impl ConflictVariables {
     fn from_graph(
         graph: &Graph<Node<'_>, Edge<'_>>,
-        known_conflicts: &FxHashSet<ConflictItem>,
+        known_conflicts: &FxHashMap<ConflictItem, MarkerTree>,
         conflicts: &Conflicts,
     ) -> Self {
         let mut referenced_names = FxHashSet::default();
@@ -561,7 +668,7 @@ impl ConflictVariables {
         for item in &conflict_items {
             add_fact((*item).clone());
         }
-        for item in known_conflicts {
+        for item in known_conflicts.keys() {
             add_fact(item.clone());
         }
 
@@ -620,6 +727,7 @@ fn resolve_marker_bindings(
     root: NodeIndex,
     solver: &mut SymbolicExportReachability,
     variables: &ConflictVariables,
+    mark_selections: bool,
 ) {
     // Request lists follow edge order, so membership checks can use binary search.
     let mut requests = vec![Vec::new(); variables.len()];
@@ -657,7 +765,7 @@ fn resolve_marker_bindings(
     let mut overrides = FxHashMap::default();
     for (fact, bindings) in aliases {
         // Selected facts are present from the root; requested facts become present at the target.
-        let mut pending = if solver.activations[fact].is_true() {
+        let mut pending = if !solver.activations[fact].is_false() {
             vec![root]
         } else {
             Vec::new()
@@ -688,8 +796,8 @@ fn resolve_marker_bindings(
         }
     }
 
-    // Replace each extra name with its bound fact. An edge's own request is already active
-    // when evaluating that edge's marker.
+    // Replace each extra name with its bound fact. Multi-use exports evaluate edge guards
+    // before activating the target's requested extras.
     for edge in graph.edge_references() {
         let mut replacements = Vec::new();
         edge.weight().marker().visit_extras(|_, name| {
@@ -699,7 +807,7 @@ fn resolve_marker_bindings(
                 .map(|&fact| overrides.get(&(edge.id(), fact)).copied().unwrap_or(fact))
                 .or_else(|| scoped_fact(edge.source(), name));
             let marker = fact.map_or(MarkerTree::FALSE, |fact| {
-                if requests[fact].binary_search(&edge.id()).is_ok() {
+                if !mark_selections && requests[fact].binary_search(&edge.id()).is_ok() {
                     MarkerTree::TRUE
                 } else {
                     conflict_variable(&variables.names[fact])
@@ -780,7 +888,12 @@ impl SymbolicExportReachability {
             .collect::<Vec<_>>();
 
         let mut reached = vec![false; self.nodes.len()];
-        let mut pending = self.queue.iter().copied().collect::<Vec<_>>();
+        let mut pending = self
+            .queue
+            .iter()
+            .copied()
+            .filter(|&node| self.nodes[node].marker.is_true())
+            .collect::<Vec<_>>();
         while let Some(source) = pending.pop() {
             if mem::replace(&mut reached[source], true) {
                 continue;

@@ -76,6 +76,9 @@ Relative local paths are written relative to the output file's directory. When w
 they are relative to the current working directory. Use `--output-file` when writing a `pylock.toml`
 in another directory.
 
+Use `--multi-use` to leave extras and dependency groups selectable when installing from the exported
+file. The selected dependency groups are included by default; extras are selected at installation.
+
 ## CycloneDX SBOM format
 
 uv can export your project's dependency lockfile as a Software Bill of Materials (SBOM) in CycloneDX
