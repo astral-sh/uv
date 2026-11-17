@@ -8577,6 +8577,7 @@ fn remove_locked_reverts_project() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Requirements for `project==0.1.0` differ; removed: iniconfig
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -8615,6 +8616,7 @@ fn add_locked_readonly_workspace() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Requirements for `member==0.1.0` differ; added: iniconfig
 
     hint: To update the lockfile, run `uv lock`.
     ");

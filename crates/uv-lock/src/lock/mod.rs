@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::error::Error;
-use std::fmt::{Debug, Display};
+use std::fmt::{Debug, Display, Write as _};
 use std::io;
 use std::iter;
 use std::path::{Path, PathBuf};
@@ -3915,17 +3915,18 @@ impl Lock {
         &self.packages[index.0]
     }
 
-    /// Return a [`SatisfiesResult`] if the given extras do not match the [`Package`] metadata.
-    fn satisfies_provides_extra<'lock>(
+    /// Return a [`LockSatisfactionError`] if the given
+    /// extras do not match the [`Package`] metadata.
+    fn satisfies_provides_extra(
         &self,
         provides_extra: &[ExtraName],
-        package: &'lock Package,
+        package: &Package,
         allow_missing_package_metadata: bool,
-    ) -> SatisfiesResult<'lock> {
+    ) -> LockSatisfaction {
         if !self.supports_provides_extra()
             || allow_missing_package_metadata && !package.has_metadata()
         {
-            return SatisfiesResult::Satisfied;
+            return LockSatisfaction::Satisfied;
         }
 
         let expected: BTreeSet<_> = provides_extra.iter().collect();
@@ -3933,19 +3934,22 @@ impl Lock {
 
         if expected != actual {
             let expected = provides_extra.iter().cloned().collect();
-            return SatisfiesResult::MismatchedPackageProvidesExtra(
-                &package.id.name,
-                package.id.version.as_ref(),
-                expected,
-                actual,
+            return LockSatisfaction::Mismatch(
+                LockSatisfactionError::MismatchedPackageProvidesExtra(
+                    package.id.name.clone(),
+                    package.id.version.clone(),
+                    expected,
+                    actual.into_iter().cloned().collect(),
+                ),
             );
         }
 
-        SatisfiesResult::Satisfied
+        LockSatisfaction::Satisfied
     }
 
-    /// Return a [`SatisfiesResult`] if the given requirements do not match the [`Package`] metadata.
-    fn satisfies_requires_dist<'lock>(
+    /// Return a [`LockSatisfactionError`] if the given
+    /// requirements do not match the [`Package`] metadata.
+    fn satisfies_requires_dist(
         &self,
         requires_dist: Box<[Requirement]>,
         provides_extra: &[ExtraName],
@@ -3954,13 +3958,13 @@ impl Lock {
         modifiers: &DependencyModifiers,
         package_requires_python: Option<&VersionSpecifiers>,
         package_version: Option<&Version>,
-        package: &'lock Package,
+        package: &Package,
         activated_extras: &mut FxHashMap<PackageId, BTreeMap<ExtraName, UniversalMarker>>,
         remotes: &mut Option<BTreeSet<UrlString>>,
         locals: &mut Option<BTreeSet<Box<Path>>>,
         root: &Path,
         allow_missing_package_metadata: bool,
-    ) -> Result<SatisfiesResult<'lock>, LockError> {
+    ) -> Result<LockSatisfaction, LockError> {
         let missing_metadata = allow_missing_package_metadata && !package.has_metadata();
         let indexes = requires_dist
             .iter()
@@ -4003,11 +4007,13 @@ impl Lock {
                 .as_ref()
                 .is_none_or(|expected| expected != &actual)
         {
-            return Ok(SatisfiesResult::MismatchedPackageRequirements(
-                &package.id.name,
-                package.id.version.as_ref(),
-                expected_requirements.into_iter().collect(),
-                actual.into_iter().collect(),
+            return Ok(LockSatisfaction::Mismatch(
+                LockSatisfactionError::MismatchedPackageRequirements(
+                    package.id.name.clone(),
+                    package.id.version.clone(),
+                    expected_requirements.into_iter().collect(),
+                    actual.into_iter().collect(),
+                ),
             ));
         }
 
@@ -4029,17 +4035,19 @@ impl Lock {
             })
             .collect::<Result<BTreeMap<_, _>, LockError>>()?;
         if !missing_metadata && expected_groups != actual {
-            return Ok(SatisfiesResult::MismatchedPackageDependencyGroups(
-                &package.id.name,
-                package.id.version.as_ref(),
-                expected_groups
-                    .into_iter()
-                    .map(|(group, requirements)| (group, requirements.into_iter().collect()))
-                    .collect(),
-                actual
-                    .into_iter()
-                    .map(|(group, requirements)| (group, requirements.into_iter().collect()))
-                    .collect(),
+            return Ok(LockSatisfaction::Mismatch(
+                LockSatisfactionError::MismatchedPackageDependencyGroups(
+                    package.id.name.clone(),
+                    package.id.version.clone(),
+                    expected_groups
+                        .into_iter()
+                        .map(|(group, requirements)| (group, requirements.into_iter().collect()))
+                        .collect(),
+                    actual
+                        .into_iter()
+                        .map(|(group, requirements)| (group, requirements.into_iter().collect()))
+                        .collect(),
+                ),
             ));
         }
         if allow_missing_package_metadata {
@@ -4068,14 +4076,10 @@ impl Lock {
                 root,
                 missing_metadata,
             );
-            match self.satisfied_no_metadata(
-                package,
-                activated_extras,
-                missing_metadata,
-                &expected,
-            )? {
-                SatisfiesResult::Satisfied => {}
-                dissatisfied => return Ok(dissatisfied),
+            if let LockSatisfaction::Mismatch(mismatch) =
+                self.satisfied_no_metadata(package, activated_extras, missing_metadata, &expected)?
+            {
+                return Ok(LockSatisfaction::Mismatch(mismatch));
             }
         }
 
@@ -4088,16 +4092,16 @@ impl Lock {
             Self::record_index(index, remotes, locals, root);
         }
 
-        Ok(SatisfiesResult::Satisfied)
+        Ok(LockSatisfaction::Satisfied)
     }
 
-    fn satisfied_no_metadata<'lock>(
+    fn satisfied_no_metadata(
         &self,
-        package: &'lock Package,
+        package: &Package,
         activated_extras: &mut FxHashMap<PackageId, BTreeMap<ExtraName, UniversalMarker>>,
         missing_metadata: bool,
         expected: &ExpectedPackageDependencies<'_>,
-    ) -> Result<SatisfiesResult<'lock>, LockError> {
+    ) -> Result<LockSatisfaction, LockError> {
         if missing_metadata && self.is_workspace_package(package) {
             let expected_extras = expected.provides_extra.iter().collect::<BTreeSet<_>>();
             if !expected_extras
@@ -4105,11 +4109,13 @@ impl Lock {
                 .copied()
                 .eq(package.optional_dependencies.keys())
             {
-                return Ok(SatisfiesResult::MismatchedPackageProvidesExtra(
-                    &package.id.name,
-                    package.id.version.as_ref(),
-                    expected_extras.into_iter().cloned().collect(),
-                    package.optional_dependencies.keys().collect(),
+                return Ok(LockSatisfaction::Mismatch(
+                    LockSatisfactionError::MismatchedPackageProvidesExtra(
+                        package.id.name.clone(),
+                        package.id.version.clone(),
+                        expected_extras.into_iter().cloned().collect(),
+                        package.optional_dependencies.keys().cloned().collect(),
+                    ),
                 ));
             }
 
@@ -4132,11 +4138,13 @@ impl Lock {
                         )
                     })
                     .collect();
-                return Ok(SatisfiesResult::MismatchedPackageDependencyGroups(
-                    &package.id.name,
-                    package.id.version.as_ref(),
-                    expected.dependency_groups.clone(),
-                    actual,
+                return Ok(LockSatisfaction::Mismatch(
+                    LockSatisfactionError::MismatchedPackageDependencyGroups(
+                        package.id.name.clone(),
+                        package.id.version.clone(),
+                        expected.dependency_groups.clone(),
+                        actual,
+                    ),
                 ));
             }
         }
@@ -4146,11 +4154,13 @@ impl Lock {
                 && !expected.provides_extra.contains(extra)
             {
                 if missing_metadata {
-                    return Ok(SatisfiesResult::MismatchedPackageDependencies(
-                        &package.id.name,
-                        package.id.version.as_ref(),
-                        Vec::new(),
-                        context.dependencies(package),
+                    return Ok(LockSatisfaction::Mismatch(
+                        LockSatisfactionError::MismatchedPackageDependencies(
+                            package.id.name.clone(),
+                            package.id.version.clone(),
+                            Vec::new(),
+                            context.dependencies(package).to_vec(),
+                        ),
                     ));
                 }
                 continue;
@@ -4186,16 +4196,18 @@ impl Lock {
             let actual = context.dependencies(package);
             if !complete || !expected.dependencies_match(&generated, actual, parent_marker, context)
             {
-                return Ok(SatisfiesResult::MismatchedPackageDependencies(
-                    &package.id.name,
-                    package.id.version.as_ref(),
-                    generated,
-                    actual,
+                return Ok(LockSatisfaction::Mismatch(
+                    LockSatisfactionError::MismatchedPackageDependencies(
+                        package.id.name.clone(),
+                        package.id.version.clone(),
+                        generated,
+                        actual.to_vec(),
+                    ),
                 ));
             }
         }
 
-        Ok(SatisfiesResult::Satisfied)
+        Ok(LockSatisfaction::Satisfied)
     }
 
     fn record_index(
@@ -4247,7 +4259,7 @@ impl Lock {
         index: &DistributionMetadataIndex,
         database: &DistributionDatabase<'_, Context>,
         allow_missing_package_metadata: bool,
-    ) -> Result<SatisfiesResult<'_>, LockError> {
+    ) -> Result<LockSatisfaction, LockError> {
         let mut queue: VecDeque<PackageIndex> = VecDeque::new();
         let mut seen = FxHashSet::default();
         let mut activated_extras: FxHashMap<PackageId, BTreeMap<ExtraName, UniversalMarker>> =
@@ -4260,7 +4272,9 @@ impl Lock {
             let expected = members.iter().cloned().collect::<BTreeSet<_>>();
             let actual = &self.manifest.members;
             if expected != *actual {
-                return Ok(SatisfiesResult::MismatchedMembers(expected, actual));
+                return Ok(LockSatisfaction::Mismatch(
+                    LockSatisfactionError::MismatchedMembers(expected, actual.clone()),
+                ));
             }
         }
 
@@ -4284,8 +4298,8 @@ impl Lock {
                     .collect(),
             );
             if expected != actual {
-                return Ok(SatisfiesResult::MismatchedMemberDefaultGroups(
-                    expected, actual,
+                return Ok(LockSatisfaction::Mismatch(
+                    LockSatisfactionError::MismatchedMemberDefaultGroups(expected, actual),
                 ));
             }
         }
@@ -4295,9 +4309,8 @@ impl Lock {
             && let Some(actual) = self.workspace_default_groups()
             && *expected != actual
         {
-            return Ok(SatisfiesResult::MismatchedWorkspaceDefaultGroups(
-                expected.clone(),
-                actual,
+            return Ok(LockSatisfaction::Mismatch(
+                LockSatisfactionError::MismatchedWorkspaceDefaultGroups(expected.clone(), actual),
             ));
         }
 
@@ -4307,8 +4320,8 @@ impl Lock {
                 .map(|(name, groups)| (name.clone(), groups.clone()))
                 .collect();
             if expected != actual {
-                return Ok(SatisfiesResult::MismatchedMemberGroupMetadata(
-                    expected, actual,
+                return Ok(LockSatisfaction::Mismatch(
+                    LockSatisfactionError::MismatchedMemberGroupMetadata(expected, actual),
                 ));
             }
         }
@@ -4317,16 +4330,26 @@ impl Lock {
         // A lockfile must be updated when the workspace declares an unrecorded requirement.
         let actual = self.workspace_group_metadata();
         if workspace_group_metadata != actual {
-            return Ok(SatisfiesResult::MismatchedWorkspaceGroupMetadata(
-                workspace_group_metadata.clone(),
-                actual,
+            return Ok(LockSatisfaction::Mismatch(
+                LockSatisfactionError::MismatchedWorkspaceGroupMetadata(
+                    workspace_group_metadata.clone(),
+                    actual.clone(),
+                ),
             ));
         }
 
         // Validate that the member sources have not changed (e.g., that they've switched from
         // virtual to non-virtual or vice versa).
         for (name, member) in packages {
-            let source = self.find_by_name(name).ok().flatten();
+            let source = match self.find_by_name(name) {
+                Ok(Some(package)) => Some(package),
+                Ok(None) => {
+                    return Ok(LockSatisfaction::Mismatch(
+                        LockSatisfactionError::MissingRoot(name.clone()),
+                    ));
+                }
+                Err(_) => None,
+            };
 
             // Determine whether the member was required by any other member.
             let value = required_members.get(name);
@@ -4338,10 +4361,11 @@ impl Lock {
             let actual_virtual =
                 source.map(|package| matches!(package.id.source, Source::Virtual(..)));
             if actual_virtual != Some(expected_virtual) {
-                return Ok(SatisfiesResult::MismatchedVirtual(
-                    name.clone(),
-                    expected_virtual,
-                ));
+                return Ok(LockSatisfaction::Mismatch(if expected_virtual {
+                    LockSatisfactionError::ExpectedVirtual(name.clone())
+                } else {
+                    LockSatisfactionError::UnexpectedVirtual(name.clone())
+                }));
             }
 
             // Verify that the member is editable (or not).
@@ -4353,10 +4377,11 @@ impl Lock {
             let actual_editable =
                 source.map(|package| matches!(package.id.source, Source::Editable(..)));
             if actual_editable != Some(expected_editable) {
-                return Ok(SatisfiesResult::MismatchedEditable(
-                    name.clone(),
-                    expected_editable,
-                ));
+                return Ok(LockSatisfaction::Mismatch(if expected_editable {
+                    LockSatisfactionError::ExpectedEditable(name.clone())
+                } else {
+                    LockSatisfactionError::UnexpectedEditable(name.clone())
+                }));
             }
         }
 
@@ -4367,9 +4392,11 @@ impl Lock {
             let expected = normalizer.requirements(requirements.iter().cloned())?;
             let actual = normalizer.requirements(self.manifest.requirements.iter().cloned())?;
             if expected != actual {
-                return Ok(SatisfiesResult::MismatchedRequirements(
-                    expected.into_iter().collect(),
-                    actual.into_iter().collect(),
+                return Ok(LockSatisfaction::Mismatch(
+                    LockSatisfactionError::MismatchedRequirements(
+                        expected.into_iter().collect(),
+                        actual.into_iter().collect(),
+                    ),
                 ));
             }
         }
@@ -4395,9 +4422,11 @@ impl Lock {
                     .cloned(),
             )?;
             if expected != actual {
-                return Ok(SatisfiesResult::MismatchedConstraints(
-                    expected.into_iter().collect(),
-                    actual.into_iter().collect(),
+                return Ok(LockSatisfaction::Mismatch(
+                    LockSatisfactionError::MismatchedConstraints(
+                        expected.into_iter().collect(),
+                        actual.into_iter().collect(),
+                    ),
                 ));
             }
             expected.into_iter().collect()
@@ -4412,9 +4441,11 @@ impl Lock {
             )?;
             let actual = normalizer.overrides(self.manifest.overrides.iter().cloned())?;
             if expected != actual {
-                return Ok(SatisfiesResult::MismatchedOverrides(
-                    expected.into_iter().collect(),
-                    actual.into_iter().collect(),
+                return Ok(LockSatisfaction::Mismatch(
+                    LockSatisfactionError::MismatchedOverrides(
+                        expected.into_iter().collect(),
+                        actual.into_iter().collect(),
+                    ),
                 ));
             }
             expected.into_inner()
@@ -4432,9 +4463,11 @@ impl Lock {
                 self.manifest.excludes.iter().cloned().collect::<Vec<_>>(),
             );
             if expected != actual {
-                return Ok(SatisfiesResult::MismatchedExcludes(
-                    expected.into_iter().collect(),
-                    actual.into_iter().collect(),
+                return Ok(LockSatisfaction::Mismatch(
+                    LockSatisfactionError::MismatchedExcludes(
+                        expected.into_iter().collect(),
+                        actual.into_iter().collect(),
+                    ),
                 ));
             }
         }
@@ -4466,8 +4499,8 @@ impl Lock {
                 .map(normalize_build_constraint)
                 .collect::<Result<_, _>>()?;
             if expected != actual {
-                return Ok(SatisfiesResult::MismatchedBuildConstraints(
-                    expected, actual,
+                return Ok(LockSatisfaction::Mismatch(
+                    LockSatisfactionError::MismatchedBuildConstraints(expected, actual),
                 ));
             }
         }
@@ -4496,15 +4529,21 @@ impl Lock {
                 })
                 .collect::<Result<BTreeMap<_, _>, LockError>>()?;
             if expected != actual {
-                return Ok(SatisfiesResult::MismatchedDependencyGroups(
-                    expected
-                        .into_iter()
-                        .map(|(group, requirements)| (group, requirements.into_iter().collect()))
-                        .collect(),
-                    actual
-                        .into_iter()
-                        .map(|(group, requirements)| (group, requirements.into_iter().collect()))
-                        .collect(),
+                return Ok(LockSatisfaction::Mismatch(
+                    LockSatisfactionError::MismatchedDependencyGroups(
+                        expected
+                            .into_iter()
+                            .map(|(group, requirements)| {
+                                (group, requirements.into_iter().collect())
+                            })
+                            .collect(),
+                        actual
+                            .into_iter()
+                            .map(|(group, requirements)| {
+                                (group, requirements.into_iter().collect())
+                            })
+                            .collect(),
+                    ),
                 ));
             }
         }
@@ -4518,7 +4557,9 @@ impl Lock {
                 .collect::<BTreeSet<_>>();
             let actual = &self.manifest.dependency_metadata;
             if expected != *actual {
-                return Ok(SatisfiesResult::MismatchedStaticMetadata(expected, actual));
+                return Ok(LockSatisfaction::Mismatch(
+                    LockSatisfactionError::MismatchedStaticMetadata(expected, actual.clone()),
+                ));
             }
         }
 
@@ -4600,7 +4641,9 @@ impl Lock {
 
             let Some(root) = root else {
                 // The package is not in the lockfile, so it can't be satisfied.
-                return Ok(SatisfiesResult::MissingRoot(root_name.clone()));
+                return Ok(LockSatisfaction::Mismatch(
+                    LockSatisfactionError::MissingRoot(root_name.clone()),
+                ));
             };
 
             let package_index = self.by_id[&root.id];
@@ -4693,7 +4736,13 @@ impl Lock {
                                 .version
                                 .as_ref()
                                 .expect("version for registry source");
-                            return Ok(SatisfiesResult::MissingRemoteIndex(name, version, url));
+                            return Ok(LockSatisfaction::Mismatch(
+                                LockSatisfactionError::MissingRemoteIndex(
+                                    name.clone(),
+                                    (*version).clone(),
+                                    url.clone(),
+                                ),
+                            ));
                         }
                     }
                     RegistrySource::Path(path) => {
@@ -4704,7 +4753,13 @@ impl Lock {
                                 .version
                                 .as_ref()
                                 .expect("version for registry source");
-                            return Ok(SatisfiesResult::MissingLocalIndex(name, version, path));
+                            return Ok(LockSatisfaction::Mismatch(
+                                LockSatisfactionError::MissingLocalIndex(
+                                    name.clone(),
+                                    (*version).clone(),
+                                    path.to_path_buf(),
+                                ),
+                            ));
                         }
                     }
                 }
@@ -4720,11 +4775,13 @@ impl Lock {
                 && matches!(package.id.source, Source::Direct(..))
             {
                 if package.all_dependencies().next().is_some() {
-                    return Ok(SatisfiesResult::MismatchedPackageDependencies(
-                        &package.id.name,
-                        package.id.version.as_ref(),
-                        Vec::new(),
-                        &package.dependencies,
+                    return Ok(LockSatisfaction::Mismatch(
+                        LockSatisfactionError::MismatchedPackageDependencies(
+                            package.id.name.clone(),
+                            package.id.version.clone(),
+                            Vec::new(),
+                            package.dependencies.clone(),
+                        ),
                     ));
                 }
 
@@ -4763,31 +4820,34 @@ impl Lock {
                     // If this local package has become dynamic, the locked package should
                     // no longer contain a version.
                     if metadata.dynamic {
-                        return Ok(SatisfiesResult::MismatchedDynamic(&package.id.name, false));
+                        return Ok(LockSatisfaction::Mismatch(
+                            LockSatisfactionError::ExpectedDynamicVersion(package.id.name.clone()),
+                        ));
                     }
 
                     if let Some(static_version) = static_version {
                         // Validate the static `version` metadata.
                         if static_version != *version {
-                            return Ok(SatisfiesResult::MismatchedVersion(
-                                &package.id.name,
-                                version.clone(),
-                                Some(static_version),
+                            return Ok(LockSatisfaction::Mismatch(
+                                LockSatisfactionError::MismatchedVersion(
+                                    package.id.name.clone(),
+                                    version.clone(),
+                                    static_version,
+                                ),
                             ));
                         }
 
                         // Validate the static `provides-extras` metadata.
-                        match self.satisfies_provides_extra(
+                        if let LockSatisfaction::Mismatch(mismatch) = self.satisfies_provides_extra(
                             &metadata.provides_extra,
                             package,
                             allow_missing_package_metadata,
                         ) {
-                            SatisfiesResult::Satisfied => {}
-                            result => return Ok(result),
+                            return Ok(LockSatisfaction::Mismatch(mismatch));
                         }
 
                         // Validate that the static requirements are unchanged.
-                        match self.satisfies_requires_dist(
+                        if let LockSatisfaction::Mismatch(mismatch) = self.satisfies_requires_dist(
                             metadata.requires_dist,
                             &metadata.provides_extra,
                             metadata.dependency_groups,
@@ -4802,9 +4862,9 @@ impl Lock {
                             root,
                             allow_missing_package_metadata,
                         )? {
-                            SatisfiesResult::Satisfied => true,
-                            result => return Ok(result),
+                            return Ok(LockSatisfaction::Mismatch(mismatch));
                         }
+                        true
                     } else {
                         false
                     }
@@ -4830,30 +4890,33 @@ impl Lock {
                     // If this is a local package, validate that it hasn't become dynamic (in which
                     // case, we'd expect the version to be omitted).
                     if package.id.source.is_source_tree() && metadata.dynamic {
-                        return Ok(SatisfiesResult::MismatchedDynamic(&package.id.name, false));
+                        return Ok(LockSatisfaction::Mismatch(
+                            LockSatisfactionError::ExpectedDynamicVersion(package.id.name.clone()),
+                        ));
                     }
 
                     // Validate the `version` metadata.
                     if metadata.version != *version {
-                        return Ok(SatisfiesResult::MismatchedVersion(
-                            &package.id.name,
-                            version.clone(),
-                            Some(metadata.version.clone()),
+                        return Ok(LockSatisfaction::Mismatch(
+                            LockSatisfactionError::MismatchedVersion(
+                                package.id.name.clone(),
+                                version.clone(),
+                                metadata.version.clone(),
+                            ),
                         ));
                     }
 
                     // Validate the `provides-extras` metadata.
-                    match self.satisfies_provides_extra(
+                    if let LockSatisfaction::Mismatch(mismatch) = self.satisfies_provides_extra(
                         &metadata.provides_extra,
                         package,
                         allow_missing_package_metadata,
                     ) {
-                        SatisfiesResult::Satisfied => {}
-                        result => return Ok(result),
+                        return Ok(LockSatisfaction::Mismatch(mismatch));
                     }
 
                     // Validate that the requirements are unchanged.
-                    match self.satisfies_requires_dist(
+                    if let LockSatisfaction::Mismatch(mismatch) = self.satisfies_requires_dist(
                         metadata.requires_dist,
                         &metadata.provides_extra,
                         metadata.dependency_groups,
@@ -4868,8 +4931,7 @@ impl Lock {
                         root,
                         allow_missing_package_metadata,
                     )? {
-                        SatisfiesResult::Satisfied => {}
-                        result => return Ok(result),
+                        return Ok(LockSatisfaction::Mismatch(mismatch));
                     }
                 }
             } else if let Some(source_tree) = package.id.source.as_source_tree() {
@@ -4909,7 +4971,7 @@ impl Lock {
                     }
 
                     // Validate that the extras are unchanged.
-                    if let SatisfiesResult::Satisfied = self.satisfies_provides_extra(
+                    if let LockSatisfaction::Satisfied = self.satisfies_provides_extra(
                         &metadata.provides_extra,
                         package,
                         allow_missing_package_metadata,
@@ -4936,10 +4998,10 @@ impl Lock {
                         root,
                         allow_missing_package_metadata,
                     ) {
-                        Ok(SatisfiesResult::Satisfied) => {
+                        Ok(LockSatisfaction::Satisfied) => {
                             debug!("Static `requires-dist` for `{}` is up-to-date", package.id);
                         },
-                        Ok(..) => {
+                        Ok(LockSatisfaction::Mismatch(_)) => {
                             debug!("Static `requires-dist` for `{}` is out-of-date; falling back to distribution database", package.id);
                             return false;
                         },
@@ -4972,21 +5034,22 @@ impl Lock {
 
                     // Validate that the package is still dynamic.
                     if !metadata.dynamic {
-                        return Ok(SatisfiesResult::MismatchedDynamic(&package.id.name, true));
+                        return Ok(LockSatisfaction::Mismatch(
+                            LockSatisfactionError::ExpectedStaticVersion(package.id.name.clone()),
+                        ));
                     }
 
                     // Validate that the extras are unchanged.
-                    match self.satisfies_provides_extra(
+                    if let LockSatisfaction::Mismatch(mismatch) = self.satisfies_provides_extra(
                         &metadata.provides_extra,
                         package,
                         allow_missing_package_metadata,
                     ) {
-                        SatisfiesResult::Satisfied => {}
-                        result => return Ok(result),
+                        return Ok(LockSatisfaction::Mismatch(mismatch));
                     }
 
                     // Validate that the requirements are unchanged.
-                    match self.satisfies_requires_dist(
+                    if let LockSatisfaction::Mismatch(mismatch) = self.satisfies_requires_dist(
                         metadata.requires_dist,
                         &metadata.provides_extra,
                         metadata.dependency_groups,
@@ -5001,12 +5064,13 @@ impl Lock {
                         root,
                         allow_missing_package_metadata,
                     )? {
-                        SatisfiesResult::Satisfied => {}
-                        result => return Ok(result),
+                        return Ok(LockSatisfaction::Mismatch(mismatch));
                     }
                 }
             } else {
-                return Ok(SatisfiesResult::MissingVersion(&package.id.name));
+                return Ok(LockSatisfaction::Mismatch(
+                    LockSatisfactionError::MissingVersion(package.id.name.clone()),
+                ));
             }
 
             // An empty extra has no edge of its own, so revisit packages when a later
@@ -5029,7 +5093,7 @@ impl Lock {
             }
         }
 
-        Ok(SatisfiesResult::Satisfied)
+        Ok(LockSatisfaction::Satisfied)
     }
 
     /// Return whether an authorized direct source selects this package in the active context.
@@ -6127,97 +6191,388 @@ impl<'tags> TagPolicy<'tags> {
     }
 }
 
-/// The result of checking if a lockfile satisfies a set of requirements.
+/// Whether a lockfile satisfies the workspace requirements.
 #[derive(Debug)]
-pub enum SatisfiesResult<'lock> {
-    /// The lockfile satisfies the requirements.
+pub enum LockSatisfaction {
+    /// The lockfile satisfies the workspace requirements.
     Satisfied,
+    /// The lockfile does not satisfy the workspace requirements.
+    Mismatch(LockSatisfactionError),
+}
+
+/// A reason why the lockfile does not satisfy the workspace requirements.
+#[derive(Debug, thiserror::Error)]
+pub enum LockSatisfactionError {
     /// The lockfile uses a different set of workspace members.
-    MismatchedMembers(BTreeSet<PackageName>, &'lock BTreeSet<PackageName>),
+    #[error("Workspace members {}", set_difference(.0, .1))]
+    MismatchedMembers(BTreeSet<PackageName>, BTreeSet<PackageName>),
     /// The lockfile records different default groups for workspace members.
+    #[error("Default groups differ for workspace members: {}", changed_keys(.0, .1))]
     MismatchedMemberDefaultGroups(
         BTreeMap<PackageName, DefaultGroups>,
         BTreeMap<PackageName, DefaultGroups>,
     ),
     /// The lockfile records different dependency group metadata for the workspace root.
+    #[error("Workspace dependency group metadata differs for: {}", changed_keys(.0, .1))]
     MismatchedWorkspaceGroupMetadata(
         BTreeMap<GroupName, GroupMetadata>,
-        &'lock BTreeMap<GroupName, GroupMetadata>,
+        BTreeMap<GroupName, GroupMetadata>,
     ),
     /// The lockfile records different default groups for a non-project workspace root.
+    #[error(
+        "Workspace default groups changed from {} to {}",
+        default_groups(.1),
+        default_groups(.0),
+    )]
     MismatchedWorkspaceDefaultGroups(DefaultGroups, DefaultGroups),
     /// The lockfile records different dependency group metadata.
+    #[error("Dependency group metadata differs for workspace members: {}", changed_keys(.0, .1))]
     MismatchedMemberGroupMetadata(
         BTreeMap<PackageName, BTreeMap<GroupName, GroupMetadata>>,
         BTreeMap<PackageName, BTreeMap<GroupName, GroupMetadata>>,
     ),
-    /// A workspace member switched from virtual to non-virtual or vice versa.
-    MismatchedVirtual(PackageName, bool),
-    /// A workspace member switched from editable to non-editable or vice versa.
-    MismatchedEditable(PackageName, bool),
-    /// A source tree switched from dynamic to non-dynamic or vice versa.
-    MismatchedDynamic(&'lock PackageName, bool),
-    /// The lockfile uses a different set of version for its workspace members.
-    MismatchedVersion(&'lock PackageName, Version, Option<Version>),
+    /// A workspace member should be virtual.
+    #[error("Workspace member `{name}` is expected to be virtual", name = .0.cyan())]
+    ExpectedVirtual(PackageName),
+    /// A workspace member should no longer be virtual.
+    #[error("Workspace member `{name}` is no longer virtual", name = .0.cyan())]
+    UnexpectedVirtual(PackageName),
+    /// A workspace member should be editable.
+    #[error("Workspace member `{name}` is expected to be editable", name = .0.cyan())]
+    ExpectedEditable(PackageName),
+    /// A workspace member should no longer be editable.
+    #[error("Workspace member `{name}` is no longer editable", name = .0.cyan())]
+    UnexpectedEditable(PackageName),
+    /// A source tree should have a static version.
+    #[error("Package `{name}` is expected to have a static version", name = .0.cyan())]
+    ExpectedStaticVersion(PackageName),
+    /// A source tree should have a dynamic version.
+    #[error("Package `{name}` is expected to have a dynamic version", name = .0.cyan())]
+    ExpectedDynamicVersion(PackageName),
+    /// A workspace member has a different version.
+    #[error(
+        "Package `{name}` has version `{current}`, but the lockfile records `{locked}`",
+        name = .0.cyan(), current = .2.cyan(), locked = .1.cyan(),
+    )]
+    MismatchedVersion(PackageName, Version, Version),
     /// The lockfile uses a different set of requirements.
+    #[error("Requirements {}", set_difference(.0, .1))]
     MismatchedRequirements(BTreeSet<Requirement>, BTreeSet<Requirement>),
     /// The lockfile uses a different set of constraints.
+    #[error("Constraints {}", set_difference(.0, .1))]
     MismatchedConstraints(BTreeSet<Requirement>, BTreeSet<Requirement>),
     /// The lockfile uses a different set of overrides.
+    #[error("Dependency overrides {}", override_difference(.0, .1))]
     MismatchedOverrides(
         BTreeSet<Override<Requirement>>,
         BTreeSet<Override<Requirement>>,
     ),
     /// The lockfile uses a different set of excludes.
+    #[error("{}", exclusion_difference(.0, .1))]
     MismatchedExcludes(BTreeSet<ExcludeDependency>, BTreeSet<ExcludeDependency>),
     /// The lockfile uses a different set of build constraints.
+    #[error("Build constraints {}", build_constraint_difference(.0, .1))]
     MismatchedBuildConstraints(
         BTreeSet<NameRequirementSpecification>,
         BTreeSet<NameRequirementSpecification>,
     ),
     /// The lockfile uses a different set of dependency groups.
+    #[error("{}", dependency_group_changes(None, .0, .1))]
     MismatchedDependencyGroups(
         BTreeMap<GroupName, BTreeSet<Requirement>>,
         BTreeMap<GroupName, BTreeSet<Requirement>>,
     ),
     /// The lockfile uses different static metadata.
-    MismatchedStaticMetadata(BTreeSet<StaticMetadata>, &'lock BTreeSet<StaticMetadata>),
+    #[error("Configured dependency metadata entries {}", metadata_difference(.0, .1))]
+    MismatchedStaticMetadata(BTreeSet<StaticMetadata>, BTreeSet<StaticMetadata>),
     /// The lockfile is missing a workspace member.
+    #[error("Workspace member `{name}` is missing from the lockfile", name = .0.cyan())]
     MissingRoot(PackageName),
     /// The lockfile referenced a remote index that was not provided
-    MissingRemoteIndex(&'lock PackageName, &'lock Version, &'lock UrlString),
+    #[error(
+        "The index for locked package `{package}` is no longer configured: {index}",
+        package = package_label(.0, Some(.1)).cyan(),
+        index = remote_index_label(.2).cyan(),
+    )]
+    MissingRemoteIndex(PackageName, Version, UrlString),
     /// The lockfile referenced a local index that was not provided
-    MissingLocalIndex(&'lock PackageName, &'lock Version, &'lock Path),
+    #[error(
+        "The index for locked package `{package}` is no longer configured: {index}",
+        package = package_label(.0, Some(.1)).cyan(),
+        index = .2.simplified_display().cyan(),
+    )]
+    MissingLocalIndex(PackageName, Version, PathBuf),
     /// A package in the lockfile contains different `requires-dist` metadata than expected.
+    #[error(
+        "Requirements for `{}` {}",
+        package_label(.0, .1.as_ref()).cyan(),
+        set_difference(.2, .3),
+    )]
     MismatchedPackageRequirements(
-        &'lock PackageName,
-        Option<&'lock Version>,
+        PackageName,
+        Option<Version>,
         BTreeSet<Requirement>,
         BTreeSet<Requirement>,
     ),
     /// Refreshed declarations regenerate different resolved dependency edges.
+    #[error(
+        "Resolved dependencies for `{}` {}",
+        package_label(.0, .1.as_ref()).cyan(),
+        dependency_difference(.2, .3),
+    )]
     MismatchedPackageDependencies(
-        &'lock PackageName,
-        Option<&'lock Version>,
+        PackageName,
+        Option<Version>,
         Vec<Dependency>,
-        &'lock [Dependency],
+        Vec<Dependency>,
     ),
     /// A package in the lockfile contains different `provides-extra` metadata than expected.
+    #[error(
+        "Provided extras for `{}` {}",
+        package_label(.0, .1.as_ref()).cyan(),
+        set_difference(.2, .3),
+    )]
     MismatchedPackageProvidesExtra(
-        &'lock PackageName,
-        Option<&'lock Version>,
+        PackageName,
+        Option<Version>,
         BTreeSet<ExtraName>,
-        BTreeSet<&'lock ExtraName>,
+        BTreeSet<ExtraName>,
     ),
     /// A package in the lockfile contains different `dependency-groups` metadata than expected.
+    #[error("{}", dependency_group_changes(Some(&package_label(.0, .1.as_ref())), .2, .3))]
     MismatchedPackageDependencyGroups(
-        &'lock PackageName,
-        Option<&'lock Version>,
+        PackageName,
+        Option<Version>,
         BTreeMap<GroupName, BTreeSet<Requirement>>,
         BTreeMap<GroupName, BTreeSet<Requirement>>,
     ),
     /// The lockfile is missing a version.
-    MissingVersion(&'lock PackageName),
+    #[error("Package `{name}` is missing a locked version", name = .0.cyan())]
+    MissingVersion(PackageName),
+}
+
+fn override_difference(
+    requested: &BTreeSet<Override<Requirement>>,
+    locked: &BTreeSet<Override<Requirement>>,
+) -> String {
+    formatted_set_difference(requested, locked, |item| match item {
+        Override::Requirement(requirement) => requirement.to_string(),
+        Override::Package(package) if package.dependencies.is_empty() => {
+            format!("{}: []", package.package.name())
+        }
+        Override::Package(package) => format!(
+            "{}: {}",
+            package.package.name(),
+            package
+                .dependencies
+                .iter()
+                .map(ToString::to_string)
+                .join(", ")
+        ),
+    })
+}
+
+fn exclusion_difference(
+    requested: &BTreeSet<ExcludeDependency>,
+    locked: &BTreeSet<ExcludeDependency>,
+) -> String {
+    if let (Ok(ExcludeDependency::Package(new)), Ok(ExcludeDependency::Package(old))) = (
+        requested.difference(locked).exactly_one(),
+        locked.difference(requested).exactly_one(),
+    ) && (new.package(), new.version()) == (old.package(), old.version())
+    {
+        let parent = package_label(new.package(), new.version());
+        let new = new.dependencies().iter().collect::<BTreeSet<_>>();
+        let old = old.dependencies().iter().collect::<BTreeSet<_>>();
+        if let Ok(name) = new.symmetric_difference(&old).exactly_one() {
+            let when = if new.contains(name) {
+                "now"
+            } else {
+                "no longer"
+            };
+            return format!(
+                "Dependency `{}` is {when} excluded from `{}`",
+                name.cyan(),
+                parent.cyan()
+            );
+        }
+        return format!(
+            "Dependency exclusions for `{}` {}",
+            parent.cyan(),
+            set_difference(&new, &old)
+        );
+    }
+
+    let difference = formatted_set_difference(requested, locked, |item| match item {
+        ExcludeDependency::Dependency(name) => name.to_string(),
+        ExcludeDependency::Package(package) => format!(
+            "{}: [{}]",
+            package_label(package.package(), package.version()),
+            package.dependencies().iter().join(", ")
+        ),
+    });
+    format!("Dependency exclusions {difference}")
+}
+
+fn build_constraint_difference(
+    requested: &BTreeSet<NameRequirementSpecification>,
+    locked: &BTreeSet<NameRequirementSpecification>,
+) -> String {
+    formatted_set_difference(requested, locked, |item| {
+        if item.hashes.is_empty() {
+            item.requirement.to_string()
+        } else {
+            format!("{} ({})", item.requirement, item.hashes.join(", "))
+        }
+    })
+}
+
+fn metadata_difference(
+    requested: &BTreeSet<StaticMetadata>,
+    locked: &BTreeSet<StaticMetadata>,
+) -> String {
+    formatted_set_difference(requested, locked, |item| {
+        package_label(&item.name, item.version.as_ref())
+    })
+}
+
+fn dependency_difference(requested: &[Dependency], locked: &[Dependency]) -> String {
+    set_difference(&requested.iter().collect(), &locked.iter().collect())
+}
+
+fn set_difference<T: Ord + Display>(requested: &BTreeSet<T>, locked: &BTreeSet<T>) -> String {
+    formatted_set_difference(requested, locked, ToString::to_string)
+}
+
+fn formatted_set_difference<T: Ord>(
+    requested: &BTreeSet<T>,
+    locked: &BTreeSet<T>,
+    format: impl Fn(&T) -> String,
+) -> String {
+    let added = requested
+        .difference(locked)
+        .map(&format)
+        .collect::<BTreeSet<_>>();
+    let removed = locked
+        .difference(requested)
+        .map(format)
+        .collect::<BTreeSet<_>>();
+    if let (Some(current), Some(previous)) = (
+        added.iter().exactly_one().ok(),
+        removed.iter().exactly_one().ok(),
+    ) && current != previous
+    {
+        return format!("changed from `{}` to `{}`", previous.cyan(), current.cyan());
+    }
+
+    let changed = added.intersection(&removed).collect::<Vec<_>>();
+    let mut message = String::from("differ");
+    let differences = [
+        ("added", added.difference(&removed).collect::<Vec<_>>()),
+        ("removed", removed.difference(&added).collect()),
+        ("changed", changed),
+    ];
+    let mut differences = differences
+        .into_iter()
+        .filter(|(_, items)| !items.is_empty())
+        .peekable();
+    while let Some((description, items)) = differences.next() {
+        let _ = write!(
+            message,
+            "; {description}: {}",
+            format_mismatch_values(
+                items.into_iter().map(String::as_str),
+                differences.peek().is_none()
+            )
+        );
+    }
+    message
+}
+
+/// Describe each group change relative to the lockfile, including groups added or removed
+/// without any dependencies.
+fn dependency_group_changes<V: PartialEq>(
+    package: Option<&str>,
+    requested: &BTreeMap<GroupName, V>,
+    locked: &BTreeMap<GroupName, V>,
+) -> String {
+    requested
+        .keys()
+        .merge(locked.keys())
+        .dedup()
+        .filter_map(|group| {
+            let (change, preposition) = match (requested.get(group), locked.get(group)) {
+                (Some(_), None) => ("was added", "to"),
+                (None, Some(_)) => ("was removed", "from"),
+                (Some(new), Some(old)) if new != old => ("changed", "in"),
+                (Some(_), Some(_)) | (None, None) => return None,
+            };
+            let mut message = format!("Dependency group `{}` {change}", group.cyan());
+            if let Some(package) = package {
+                let _ = write!(message, " {preposition} `{}`", package.cyan());
+            }
+            Some(message)
+        })
+        .join("\n")
+}
+
+fn changed_keys<K: Ord + Display, V: PartialEq>(
+    requested: &BTreeMap<K, V>,
+    locked: &BTreeMap<K, V>,
+) -> String {
+    let keys = requested
+        .keys()
+        .chain(locked.keys())
+        .filter(|key| requested.get(*key) != locked.get(*key))
+        .map(ToString::to_string)
+        .collect::<BTreeSet<_>>();
+    format_mismatch_values(keys.iter().map(String::as_str), true)
+}
+
+/// Format the literals following a colon in a lock mismatch diagnostic.
+///
+/// CLI style omits backticks for a single value at the end of a message. Keep
+/// them when more text follows, for multiple values, or to expose trailing whitespace.
+fn format_mismatch_values<'a>(values: impl Iterator<Item = &'a str>, ends_message: bool) -> String {
+    let values = values.collect::<Vec<_>>();
+    if ends_message
+        && let [value] = values.as_slice()
+        && value.trim_end() == *value
+    {
+        value.cyan().to_string()
+    } else {
+        values
+            .into_iter()
+            .map(|value| format!("`{}`", value.cyan()))
+            .join(", ")
+    }
+}
+
+fn default_groups(groups: &DefaultGroups) -> String {
+    match groups {
+        DefaultGroups::All => "all groups".to_string(),
+        DefaultGroups::List(groups) => match groups.as_slice() {
+            [] => "no groups".to_string(),
+            [group] => format!("the `{}` group", group.cyan()),
+            groups => format!(
+                "the groups {}",
+                groups
+                    .iter()
+                    .map(|group| format!("`{}`", group.cyan()))
+                    .join(", ")
+            ),
+        },
+    }
+}
+
+fn remote_index_label(index: &UrlString) -> String {
+    index
+        .to_url()
+        .map_or_else(|_| "invalid URL".to_string(), |url| format!("<{url}>"))
+}
+
+fn package_label(name: &PackageName, version: Option<&Version>) -> String {
+    version.map_or_else(|| name.to_string(), |version| format!("{name}=={version}"))
 }
 
 /// We discard the lockfile if these options match.

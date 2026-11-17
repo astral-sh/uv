@@ -47,25 +47,22 @@ impl std::fmt::Display for ExcludeNewerValueChange {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::SpanChanged(old, new) => {
-                write!(f, "change of exclude newer span from `{old}` to `{new}`")
+                write!(f, "Exclude-newer span changed from `{old}` to `{new}`")
             }
             Self::SpanAdded(span) => {
-                write!(f, "addition of exclude newer span `{span}`")
+                write!(f, "Exclude-newer span set: {span}")
             }
             Self::SpanRemoved => {
-                write!(f, "removal of exclude newer span")
+                write!(f, "Exclude-newer span removed")
             }
             Self::RelativeTimestampChanged(old, new, span) => {
                 write!(
                     f,
-                    "change of calculated ({span}) exclude newer timestamp from `{old}` to `{new}`"
+                    "Exclude-newer timestamp calculated from `{span}` changed from `{old}` to `{new}`"
                 )
             }
             Self::AbsoluteTimestampChanged(old, new) => {
-                write!(
-                    f,
-                    "change of exclude newer timestamp from `{old}` to `{new}`"
-                )
+                write!(f, "Exclude-newer timestamp changed from `{old}` to `{new}`")
             }
         }
     }
@@ -97,9 +94,9 @@ impl std::fmt::Display for ExcludeNewerChange {
                 write!(f, "{change}")
             }
             Self::GlobalAdded(value) => {
-                write!(f, "addition of global exclude newer {value}")
+                write!(f, "Global exclude-newer cutoff set: {value}")
             }
-            Self::GlobalRemoved => write!(f, "removal of global exclude newer"),
+            Self::GlobalRemoved => write!(f, "Global exclude-newer cutoff removed"),
             Self::Package(change) => {
                 write!(f, "{change}")
             }
@@ -129,18 +126,15 @@ impl std::fmt::Display for ExcludeNewerPackageChange {
             Self::PackageAdded(name, ExcludeNewerOverride::Enabled(value)) => {
                 write!(
                     f,
-                    "addition of exclude newer `{}` for package `{name}`",
+                    "Exclude-newer cutoff set to `{}` for package `{name}`",
                     value.as_ref()
                 )
             }
             Self::PackageAdded(name, ExcludeNewerOverride::Disabled) => {
-                write!(
-                    f,
-                    "addition of exclude newer exclusion for package `{name}`"
-                )
+                write!(f, "Exclude-newer disabled for package `{name}`")
             }
             Self::PackageRemoved(name) => {
-                write!(f, "removal of exclude newer for package `{name}`")
+                write!(f, "Exclude-newer override removed for package `{name}`")
             }
             Self::PackageChanged(name, change) => write!(f, "{change} for package `{name}`"),
         }
@@ -281,7 +275,7 @@ impl std::fmt::Display for ExcludeNewerOverrideChange {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Enabled { now } => {
-                write!(f, "remove exclude newer exclusion (now `{now}`)")
+                write!(f, "Exclude-newer re-enabled (now `{now}`)")
             }
             Self::TimestampChanged(change) => write!(f, "{change}"),
         }

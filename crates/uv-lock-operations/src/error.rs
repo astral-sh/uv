@@ -4,12 +4,17 @@ use std::fmt;
 use std::io;
 use std::path::PathBuf;
 
+use owo_colors::OwoColorize;
+
 use uv_client::{ClientBuildError, FlatIndexError};
 use uv_command_support::UvError;
+use uv_configuration::{ExcludeNewerChange, ForkStrategy, ResolutionMode};
 use uv_distribution::{LoweringError, MetadataError};
-use uv_distribution_types::{ExtraBuildRequiresError, IndexCredentialsError, IndexUrlError};
+use uv_distribution_types::{
+    ExtraBuildRequiresError, IndexCredentialsError, IndexUrlError, RequiresPython,
+};
 use uv_errors::{Hinted, Hints};
-use uv_lock::{Lock, LockError as LockDataError, LockParseError};
+use uv_lock::{Lock, LockError as LockDataError, LockParseError, LockSatisfactionError};
 use uv_macros::DebugNoInline;
 use uv_normalize::{GroupName, PackageName};
 use uv_pep440::VersionSpecifiers;
@@ -53,11 +58,72 @@ impl From<FrozenSource> for MissingLockfileSource {
     }
 }
 
+/// A validation mismatch that can explain a changed lockfile.
+#[derive(Debug, thiserror::Error)]
+pub enum LockMismatchReason {
+    #[error("An upgrade was requested")]
+    Upgrade,
+    #[error("A refresh was requested")]
+    Refresh,
+    #[error(
+        "Resolution mode changed from `{locked}` to `{requested}`",
+        locked = locked.cyan(),
+        requested = requested.cyan(),
+    )]
+    ResolutionMode {
+        locked: ResolutionMode,
+        requested: ResolutionMode,
+    },
+    #[error(
+        "Fork strategy changed from `{locked}` to `{requested}`",
+        locked = locked.cyan(),
+        requested = requested.cyan(),
+    )]
+    ForkStrategy {
+        locked: ForkStrategy,
+        requested: ForkStrategy,
+    },
+    #[error("{0}")]
+    ExcludeNewer(ExcludeNewerChange),
+    #[error("Locked forks do not cover the supported environments")]
+    ForkEnvironmentCoverage,
+    #[error("Locked forks do not cover the required Python versions")]
+    ForkPythonCoverage,
+    #[error("Supported environments changed")]
+    SupportedEnvironments,
+    #[error("Required environments changed")]
+    RequiredEnvironments,
+    #[error("Minimum libc version changed")]
+    MinimumLibcVersion,
+    #[error("Configured conflicts changed")]
+    Conflicts,
+    #[error(
+        "Python requirement changed from `{locked}` to `{requested}`",
+        locked = locked.cyan(),
+        requested = requested.cyan(),
+    )]
+    RequiresPython {
+        locked: RequiresPython,
+        requested: RequiresPython,
+    },
+    #[error("Pre-release policy changed")]
+    Prerelease,
+    #[error("Required hash algorithms changed")]
+    HashAlgorithms,
+    #[error(transparent)]
+    Satisfaction(Box<LockSatisfactionError>),
+}
+
 /// A failure while reading, validating, or resolving a lockfile.
 #[derive(thiserror::Error, DebugNoInline)]
 pub enum LockError {
     #[error("The lockfile at `uv.lock` needs to be updated, but `{2}` was provided.")]
-    LockMismatch(Option<Box<Lock>>, Box<Lock>, LockedSource),
+    LockMismatch(
+        Option<Box<Lock>>,
+        Box<Lock>,
+        LockedSource,
+        #[source] Option<Box<LockMismatchReason>>,
+    ),
 
     #[error(
         "The lockfile at `{0}` has non-canonical formatting at line {1}, but `{2}` was provided."

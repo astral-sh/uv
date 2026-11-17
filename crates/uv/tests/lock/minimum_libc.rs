@@ -501,6 +501,7 @@ fn minimum_libc_backtracks_and_invalidates_lock() -> Result<()> {
     warning: Setting `minimum-libc-version` is experimental and may change without warning. Pass `--preview-features minimum-libc-version` to disable this warning.
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Minimum libc version changed
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -588,6 +589,7 @@ fn minimum_libc_backtracks_and_invalidates_lock() -> Result<()> {
     warning: Setting `minimum-libc-version` is experimental and may change without warning. Pass `--preview-features minimum-libc-version` to disable this warning.
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Minimum libc version changed
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -610,6 +612,7 @@ fn minimum_libc_backtracks_and_invalidates_lock() -> Result<()> {
         ----- stderr -----
         Resolved 2 packages in [TIME]
         error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+          cause: Minimum libc version changed
 
         hint: To update the lockfile, run `uv lock`.
     ");

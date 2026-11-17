@@ -454,6 +454,7 @@ fn workspace_metadata_lockfile() -> Result<()> {
     warning: The `uv workspace metadata` command is experimental and may change without warning. Pass `--preview-features workspace-metadata` to disable this warning.
     Resolved 1 package in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Package `project` has version `0.2.0`, but the lockfile records `0.1.0`
 
     hint: To update the lockfile, run `uv lock`.
     ");
