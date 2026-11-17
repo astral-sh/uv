@@ -113,10 +113,7 @@ pub enum ProxyIndexError {
 
 /// A URL that is safe to use as a reversible route prefix.
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct UrlPrefix {
-    url: SafeUrl,
-    path_end: usize,
-}
+struct UrlPrefix(SafeUrl);
 
 impl UrlPrefix {
     fn new(url: SafeUrl) -> Result<Self, ProxyIndexConfigError> {
@@ -134,24 +131,19 @@ impl UrlPrefix {
             });
         }
 
-        let path_end = url.path().trim_end_matches('/').len();
-        Ok(Self { url, path_end })
+        Ok(Self(url))
     }
 
     fn as_url(&self) -> &SafeUrl {
-        &self.url
-    }
-
-    fn path(&self) -> &str {
-        &self.url.path()[..self.path_end]
+        &self.0
     }
 
     fn path_suffix<'a>(&self, url: &'a SafeUrl) -> Option<&'a str> {
-        if RealmRef::from(url) != RealmRef::from(&self.url) {
+        if RealmRef::from(url) != RealmRef::from(self.as_url()) {
             return None;
         }
 
-        uv_auth::strip_path_prefix(self.path(), url.path())
+        uv_auth::strip_path_prefix(self.as_url().path(), url.path())
     }
 }
 
@@ -179,7 +171,7 @@ impl CanonicalArtifactUrlPrefix {
         let prefix = UrlPrefix::new(url)?;
         if !prefix.as_url().username().is_empty() || prefix.as_url().password().is_some() {
             return Err(ProxyIndexConfigError::InvalidMapping {
-                url: Box::new(prefix.url),
+                url: Box::new(prefix.0),
                 reason: "canonical URL prefixes cannot contain credentials",
             });
         }
@@ -227,13 +219,12 @@ impl ArtifactUrlMapping {
         };
 
         let mut rewritten = target.as_url().clone();
-        let target_path = target.path();
-        if suffix.is_empty() {
-            if prefix.as_url().path().ends_with('/') && !target.as_url().path().ends_with('/') {
-                rewritten.set_path(&format!("{target_path}/"));
-            }
-        } else {
-            rewritten.set_path(&format!("{target_path}/{suffix}"));
+        let target_path = target.as_url().path();
+        if !suffix.is_empty() {
+            let base = target_path.strip_suffix('/').unwrap_or(target_path);
+            rewritten.set_path(&format!("{base}/{suffix}"));
+        } else if prefix.as_url().path().ends_with('/') && !target_path.ends_with('/') {
+            rewritten.set_path(&format!("{target_path}/"));
         }
         rewritten.set_query(url.query());
         rewritten.set_fragment(url.fragment());
