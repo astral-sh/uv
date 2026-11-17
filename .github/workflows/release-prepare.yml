@@ -75,7 +75,7 @@ jobs:
           } > "$RUNNER_TEMP/editorialize-changelog-prompt.md"
 
       - name: "Rewrite changelog"
-        uses: openai/codex-action@c05cfd74ad95c626cdf05c6685e62becc3bf7813
+        uses: openai/codex-action@306c6a196a99dcc6582530c396a19d2672d5e9ec # v1.14
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           codex-version: "0.162.1"

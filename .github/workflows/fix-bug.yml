@@ -293,7 +293,7 @@ jobs:
       - name: "Fix reproduced bug"
         id: fix-bug
         if: steps.prepare.outputs.existing != 'true'
-        uses: openai/codex-action@c05cfd74ad95c626cdf05c6685e62becc3bf7813
+        uses: openai/codex-action@306c6a196a99dcc6582530c396a19d2672d5e9ec # v1.14
         env:
           CARGO_HOME: ${{ runner.temp }}/fix-bug/cargo-home
           GH_TOKEN: ${{ github.token }}
