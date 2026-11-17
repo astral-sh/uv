@@ -611,7 +611,11 @@ def get_operating_system_and_architecture():
             )
         )
         sys.exit(0)
-    return operating_system, architecture, libc_path
+    if libc_path is not None:
+        file_inputs = [libc_path]
+    else:
+        file_inputs = []
+    return operating_system, architecture, file_inputs
 
 
 def _get_cpu_info(architecture):
@@ -915,7 +919,7 @@ def main() -> None:
         "sys_platform": sys.platform,
     }
 
-    os, architecture, libc_path = get_operating_system_and_architecture()
+    os, architecture, file_inputs = get_operating_system_and_architecture()
 
     manylinux_compatible = False
 
@@ -1005,7 +1009,7 @@ def main() -> None:
         "scheme": get_scheme(use_sysconfig_scheme),
         "virtualenv": get_virtualenv(),
         "os": os,
-        "libc_path": libc_path,
+        "file_inputs": file_inputs,
         "arch": architecture,
         "cpu_info": cpu_info,
         "manylinux_compatible": manylinux_compatible,

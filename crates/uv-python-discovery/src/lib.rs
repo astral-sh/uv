@@ -359,6 +359,7 @@ mod tests {
             let json = indoc! {r##"
                 {
                     "result": "success",
+                    "file_inputs": [],
                     "os": {
                         "name": "manylinux",
                         "major": 2,
@@ -451,6 +452,7 @@ mod tests {
             let json = indoc! {r##"
                 {
                     "result": "success",
+                    "file_inputs": [],
                     "os": {
                         "name": "pyodide",
                         "major": 2025,
