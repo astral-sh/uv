@@ -10,8 +10,8 @@ use uv_auth::CredentialsCache;
 use uv_cache::Cache;
 use uv_distribution_filename::DistExtension;
 use uv_distribution_types::{
-    Index, IndexCredentialsError, IndexLocations, IndexMetadata, IndexName, Origin, Requirement,
-    RequirementScope, RequirementSource,
+    Index, IndexCredentialsError, IndexLocations, IndexMetadata, IndexName, Origin, ProxyIndex,
+    Requirement, RequirementScope, RequirementSource,
 };
 use uv_fs::{Simplified, normalize_absolute_path, normalize_path};
 use uv_git_types::{GitLfs, GitReference, GitUrl, GitUrlParseError};
@@ -242,31 +242,6 @@ impl LoweredRequirement {
                             extra,
                             group,
                         } => {
-                            // Identify the named index from either the project indexes or the workspace indexes,
-                            // in that order.
-                            let Some(index) = locations
-                                .indexes()
-                                .filter(|index| matches!(index.origin, Some(Origin::Cli)))
-                                .chain(project_indexes.iter())
-                                .chain(workspace.indexes().iter())
-                                .find(|Index { name, .. }| {
-                                    name.as_ref().is_some_and(|name| *name == index)
-                                })
-                            else {
-                                let hint = missing_index_hint(locations, &index);
-                                return Err(LoweringError::MissingIndex {
-                                    package: requirement.name.clone(),
-                                    index,
-                                    hint,
-                                });
-                            };
-                            if let Some(credentials) = index.credentials()? {
-                                credentials_cache.store_credentials(index.raw_url(), credentials);
-                            }
-                            let index = IndexMetadata {
-                                url: index.url.clone(),
-                                format: index.format,
-                            };
                             let conflict = project_name.and_then(|project_name| {
                                 if let Some(extra) = extra {
                                     Some(ConflictItem::from((project_name.clone(), extra)))
@@ -276,7 +251,22 @@ impl LoweredRequirement {
                                     })
                                 }
                             });
-                            let source = registry_source(requirement, index, conflict);
+                            let project_proxies = workspace
+                                .packages()
+                                .values()
+                                .filter(|member| member.root() == project_dir)
+                                .filter_map(|member| member.pyproject_toml().tool.as_ref())
+                                .filter_map(|tool| tool.uv.as_ref())
+                                .flat_map(|uv| uv.proxy_index.iter().flatten());
+                            let source = registry_source(
+                                requirement,
+                                index,
+                                project_indexes.iter().chain(workspace.indexes()),
+                                project_proxies,
+                                locations,
+                                conflict,
+                                credentials_cache,
+                            )?;
                             (source, marker)
                         }
                         Source::Workspace {
@@ -434,30 +424,15 @@ impl LoweredRequirement {
                             (source, marker)
                         }
                         Source::Registry { index, marker, .. } => {
-                            let Some(index) = locations
-                                .indexes()
-                                .filter(|index| matches!(index.origin, Some(Origin::Cli)))
-                                .chain(indexes.iter())
-                                .find(|Index { name, .. }| {
-                                    name.as_ref().is_some_and(|name| *name == index)
-                                })
-                            else {
-                                let hint = missing_index_hint(locations, &index);
-                                return Err(LoweringError::MissingIndex {
-                                    package: requirement.name.clone(),
-                                    index,
-                                    hint,
-                                });
-                            };
-                            if let Some(credentials) = index.credentials()? {
-                                credentials_cache.store_credentials(index.raw_url(), credentials);
-                            }
-                            let index = IndexMetadata {
-                                url: index.url.clone(),
-                                format: index.format,
-                            };
-                            let conflict = None;
-                            let source = registry_source(requirement, index, conflict);
+                            let source = registry_source(
+                                requirement,
+                                index,
+                                indexes.iter(),
+                                std::iter::empty(),
+                                locations,
+                                None,
+                                credentials_cache,
+                            )?;
                             (source, marker)
                         }
                         Source::Workspace {
@@ -583,6 +558,14 @@ pub enum LoweringError {
         package: PackageName,
         index: IndexName,
         hint: Option<String>,
+    },
+    #[error(
+        "Package `{package}` references proxy index `{index}` in `tool.uv.sources`. Use its upstream index `{upstream}` instead"
+    )]
+    ProxyIndexSource {
+        package: PackageName,
+        index: IndexName,
+        upstream: IndexName,
     },
     #[error("Workspace members are not allowed in non-workspace contexts")]
     WorkspaceMember,
@@ -791,12 +774,51 @@ fn url_source(
 }
 
 /// Convert a registry source into a [`RequirementSource`].
-fn registry_source(
+fn registry_source<'a>(
     requirement: &uv_pep508::Requirement<VerbatimParsedUrl>,
-    index: IndexMetadata,
+    name: IndexName,
+    declared_indexes: impl Iterator<Item = &'a Index>,
+    declared_proxies: impl Iterator<Item = &'a ProxyIndex>,
+    locations: &'a IndexLocations,
     conflict: Option<ConflictItem>,
-) -> RequirementSource {
-    match &requirement.version_or_url {
+    credentials_cache: &CredentialsCache,
+) -> Result<RequirementSource, LoweringError> {
+    let Some(index) = locations
+        .indexes()
+        .filter(|index| matches!(index.origin, Some(Origin::Cli)))
+        .chain(declared_indexes)
+        .find(|index| index.name.as_ref() == Some(&name))
+    else {
+        let upstream = locations
+            .proxy_target(&name)
+            .into_iter()
+            .chain(declared_proxies.filter_map(|proxy| {
+                (proxy.name.as_ref() == Some(&name)).then_some(&proxy.proxy_for)
+            }))
+            .next();
+        if let Some(upstream) = upstream {
+            return Err(LoweringError::ProxyIndexSource {
+                package: requirement.name.clone(),
+                index: name,
+                upstream: upstream.clone(),
+            });
+        }
+        let hint = missing_index_hint(locations, &name);
+        return Err(LoweringError::MissingIndex {
+            package: requirement.name.clone(),
+            index: name,
+            hint,
+        });
+    };
+    if let Some(credentials) = index.credentials()? {
+        credentials_cache.store_credentials(index.raw_url(), credentials);
+    }
+    let index = IndexMetadata {
+        url: index.url.clone(),
+        format: index.format,
+    };
+
+    Ok(match &requirement.version_or_url {
         None => RequirementSource::Registry {
             specifier: VersionSpecifiers::empty(),
             index: Some(index),
@@ -812,7 +834,7 @@ fn registry_source(
             index: Some(index),
             conflict,
         },
-    }
+    })
 }
 
 async fn workspace_source(

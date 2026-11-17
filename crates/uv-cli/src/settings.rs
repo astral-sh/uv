@@ -42,6 +42,8 @@ use uv_python_types::{
     Prefix, PythonArchitecture, PythonDownloads, PythonPreference, PythonVersion, Target,
 };
 use uv_redacted::SafeUrl;
+#[cfg(test)]
+use uv_redacted::policy::Stripped;
 use uv_settings::{
     Combine, EnvFlag, EnvironmentOptions, FilesystemOptions, FrozenFlag, FrozenSource,
     IndexOptions, LockCheck, LockedFlag, LockedSource, MalwareCheckSettings, Options, PipOptions,
@@ -995,7 +997,7 @@ impl ToolRunSettings {
         let filesystem_install_mirrors =
             filesystem_options.map_or_default(|options| options.install_mirrors);
 
-        let mut settings = ResolverInstallerSettings::from(options.clone());
+        let mut settings = ResolverInstallerSettings::try_from(options.clone())?;
         if torch_backend.is_some() {
             settings.resolver.torch_backend = torch_backend;
         }
@@ -1123,7 +1125,7 @@ impl ToolInstallSettings {
         let filesystem_install_mirrors =
             filesystem_options.map_or_default(|options| options.install_mirrors);
 
-        let mut settings = ResolverInstallerSettings::from(options.clone());
+        let mut settings = ResolverInstallerSettings::try_from(options.clone())?;
         if torch_backend.is_some() {
             settings.resolver.torch_backend = torch_backend;
         }
@@ -1306,6 +1308,7 @@ impl ToolListSettings {
         let filesystem = ResolverInstallerOptions {
             indexes: IndexOptions {
                 index: top_level.index,
+                proxy_index: top_level.proxy_index,
                 ..IndexOptions::default()
             },
             exclude_newer: top_level.exclude_newer,
@@ -2101,7 +2104,7 @@ impl UpgradeSettings {
             .map_or_default(|fs| fs.install_mirrors.clone());
         let (packages, exclude, options) =
             upgrade_options(args, configured_indexes(filesystem.as_ref()))?;
-        let mut settings = combine_resolver_settings(options, filesystem, &environment);
+        let mut settings = combine_resolver_settings(options, filesystem, &environment)?;
         settings.upgrade = if packages.is_empty() {
             Upgrade::default()
         } else {
@@ -2460,7 +2463,7 @@ impl AddSettings {
             extras: extra.unwrap_or_default(),
             refresh,
             indexes,
-            settings: combine_resolver_installer_settings(options, filesystem, &environment),
+            settings: combine_resolver_installer_settings(options, filesystem, &environment)?,
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
@@ -3546,7 +3549,7 @@ impl PipCompileSettings {
                 },
                 filesystem,
                 environment,
-            ),
+            )?,
         })
     }
 }
@@ -3669,7 +3672,7 @@ impl PipSyncSettings {
                 },
                 filesystem,
                 environment,
-            ),
+            )?,
         })
     }
 }
@@ -3875,7 +3878,7 @@ impl PipInstallSettings {
                 },
                 filesystem,
                 environment,
-            ),
+            )?,
         })
     }
 }
@@ -3931,7 +3934,7 @@ impl PipUninstallSettings {
                 },
                 filesystem,
                 environment,
-            ),
+            )?,
         })
     }
 }
@@ -3981,7 +3984,7 @@ impl PipFreezeSettings {
                 },
                 filesystem,
                 environment,
-            ),
+            )?,
         })
     }
 }
@@ -4037,7 +4040,7 @@ impl PipListSettings {
                 },
                 filesystem,
                 environment,
-            ),
+            )?,
         })
     }
 }
@@ -4084,7 +4087,7 @@ impl PipShowSettings {
                 },
                 filesystem,
                 environment,
-            ),
+            )?,
         })
     }
 }
@@ -4138,7 +4141,7 @@ impl PipTreeSettings {
                 },
                 filesystem,
                 environment,
-            ),
+            )?,
         })
     }
 }
@@ -4175,7 +4178,7 @@ impl PipCheckSettings {
                 },
                 filesystem,
                 environment,
-            ),
+            )?,
         })
     }
 }
@@ -4398,7 +4401,7 @@ impl VenvSettings {
                 },
                 filesystem,
                 environment,
-            ),
+            )?,
         })
     }
 }
@@ -4439,7 +4442,7 @@ fn resolve_resolver_settings(
 ) -> Result<ResolverSettings> {
     let args = resolver_options(args, build, configured_indexes(filesystem.as_ref()))?;
 
-    Ok(combine_resolver_settings(args, filesystem, environment))
+    combine_resolver_settings(args, filesystem, environment)
 }
 
 /// Resolve the [`ResolverSettings`] from the CLI and filesystem configuration.
@@ -4447,7 +4450,7 @@ fn combine_resolver_settings(
     mut args: ResolverOptions,
     filesystem: Option<FilesystemOptions>,
     environment: &EnvironmentOptions,
-) -> ResolverSettings {
+) -> Result<ResolverSettings> {
     args.require_build_hashes = args
         .require_build_hashes
         .or(environment.require_build_hashes);
@@ -4470,11 +4473,11 @@ fn combine_resolver_settings(
             .unwrap_or_default(),
     ));
 
-    ResolverSettings {
+    Ok(ResolverSettings {
         cuda_driver_version: environment.cuda_driver_version.clone(),
         amd_gpu_architecture: environment.amd_gpu_architecture,
-        ..ResolverSettings::from(options)
-    }
+        ..ResolverSettings::try_from(options)?
+    })
 }
 
 /// Resolve the [`ResolverInstallerSettings`] from CLI, environment, and filesystem options.
@@ -4486,11 +4489,7 @@ fn resolve_resolver_installer_settings(
 ) -> Result<ResolverInstallerSettings> {
     let args = resolver_installer_options(args, build, configured_indexes(filesystem.as_ref()))?;
 
-    Ok(combine_resolver_installer_settings(
-        args,
-        filesystem,
-        environment,
-    ))
+    combine_resolver_installer_settings(args, filesystem, environment)
 }
 
 /// Reconcile the [`ResolverInstallerSettings`] from the CLI and filesystem configuration.
@@ -4498,7 +4497,7 @@ fn combine_resolver_installer_settings(
     args: ResolverInstallerOptions,
     filesystem: Option<FilesystemOptions>,
     environment: &EnvironmentOptions,
-) -> ResolverInstallerSettings {
+) -> Result<ResolverInstallerSettings> {
     let options = resolver_installer_options_with_environment(args, environment).combine(
         ResolverInstallerOptions::from(
             filesystem
@@ -4508,15 +4507,15 @@ fn combine_resolver_installer_settings(
         ),
     );
 
-    let base = ResolverInstallerSettings::from(options);
-    ResolverInstallerSettings {
+    let base = ResolverInstallerSettings::try_from(options)?;
+    Ok(ResolverInstallerSettings {
         resolver: ResolverSettings {
             cuda_driver_version: environment.cuda_driver_version.clone(),
             amd_gpu_architecture: environment.amd_gpu_architecture,
             ..base.resolver
         },
         ..base
-    }
+    })
 }
 
 fn resolver_installer_options_with_environment(
@@ -4603,7 +4602,7 @@ impl PipSettings {
         args: PipOptions,
         filesystem: Option<FilesystemOptions>,
         environment: EnvironmentOptions,
-    ) -> Self {
+    ) -> Result<Self> {
         let Options {
             top_level,
             pip,
@@ -4620,6 +4619,7 @@ impl PipSettings {
             target,
             prefix,
             index,
+            proxy_index,
             index_url,
             extra_index_url,
             no_index,
@@ -4682,6 +4682,7 @@ impl PipSettings {
 
         let ResolverInstallerSchema {
             index: top_level_index,
+            proxy_index: top_level_proxy_index,
             index_url: top_level_index_url,
             extra_index_url: top_level_extra_index_url,
             no_index: top_level_no_index,
@@ -4722,6 +4723,7 @@ impl PipSettings {
         //
         // For example, prefer `tool.uv.pip.index-url` over `tool.uv.index-url`.
         let index = index.combine(top_level_index);
+        let proxy_index = proxy_index.combine(top_level_proxy_index);
         let no_index = no_index.combine(top_level_no_index);
         let index_url = index_url.combine(top_level_index_url);
         let extra_index_url = extra_index_url.combine(top_level_extra_index_url);
@@ -4767,7 +4769,7 @@ impl PipSettings {
             .no_sources_package
             .or(environment.no_sources_package.clone());
 
-        Self {
+        Ok(Self {
             index_locations: IndexLocations::new(
                 args.index
                     .into_iter()
@@ -4778,6 +4780,7 @@ impl PipSettings {
                     .chain(extra_index_url.into_iter().flatten().map(Index::from))
                     .chain(index_url.into_iter().map(Index::from))
                     .collect(),
+                args.proxy_index.combine(proxy_index).unwrap_or_default(),
                 args.find_links
                     .combine(find_links)
                     .into_iter()
@@ -4785,7 +4788,7 @@ impl PipSettings {
                     .map(Index::from)
                     .collect(),
                 args.no_index.combine(no_index).unwrap_or_default(),
-            ),
+            )?,
             extras: ExtrasSpecification::from_args(
                 args.extra.combine(extra).unwrap_or_default(),
                 args.no_extra.combine(no_extra).unwrap_or_default(),
@@ -4977,7 +4980,7 @@ impl PipSettings {
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
-        }
+        })
     }
 }
 
@@ -5022,7 +5025,7 @@ impl fmt::Debug for PublishSettings {
 
 impl PublishSettings {
     /// Resolve the [`PublishSettings`] from the CLI and filesystem configuration.
-    pub fn resolve(args: PublishArgs, filesystem: Option<FilesystemOptions>) -> Self {
+    pub fn resolve(args: PublishArgs, filesystem: Option<FilesystemOptions>) -> Result<Self> {
         let Options {
             publish, top_level, ..
         } = filesystem
@@ -5037,6 +5040,7 @@ impl PublishSettings {
         let ResolverInstallerSchema {
             keyring_provider,
             index,
+            proxy_index,
             extra_index_url,
             index_url,
             ..
@@ -5049,7 +5053,7 @@ impl PublishSettings {
             (args.username, args.password)
         };
 
-        Self {
+        Ok(Self {
             files: args.files,
             username,
             password,
@@ -5076,10 +5080,11 @@ impl PublishSettings {
                     .chain(extra_index_url.into_iter().flatten().map(Index::from))
                     .chain(index_url.into_iter().map(Index::from))
                     .collect(),
+                proxy_index.unwrap_or_default(),
                 Vec::new(),
                 false,
-            ),
-        }
+            )?,
+        })
     }
 }
 
@@ -5175,9 +5180,81 @@ fn parse_failure(name: &str, expected: &str) -> ! {
 
 #[cfg(test)]
 mod tests {
+    use uv_auth::AuthPolicy;
+    use uv_distribution_types::ProxyIndex;
+
     use crate::{IndexArgs, RegistryClientArgs};
 
     use super::*;
+
+    fn proxy_index(
+        name: &str,
+        proxy_for: &str,
+        url: &str,
+        artifact_base_url: &str,
+    ) -> anyhow::Result<ProxyIndex> {
+        let mut index = ProxyIndex::new(
+            IndexUrl::parse(url, None)?,
+            proxy_for.parse()?,
+            SafeUrl::parse(artifact_base_url)?.with_policy(Stripped),
+        );
+        index.name = Some(name.parse()?);
+        Ok(index)
+    }
+
+    #[test]
+    fn proxy_indexes_do_not_persist_physical_credentials_in_tool_receipts() -> anyhow::Result<()> {
+        let mut upstream = Index::from_index_url(IndexUrl::parse("https://pypi.org/simple", None)?);
+        upstream.name = Some("pypi".parse()?);
+        let proxy = proxy_index(
+            "socket",
+            "pypi",
+            "https://proxy-user:proxy-secret@proxy.example.com/simple/",
+            "https://artifact-user:artifact-secret@proxy.example.com/files/",
+        )?;
+        let options = ResolverInstallerOptions {
+            indexes: IndexOptions {
+                index: Some(vec![upstream]),
+                proxy_index: Some(vec![proxy]),
+                ..IndexOptions::default()
+            },
+            ..ResolverInstallerOptions::default()
+        };
+
+        let receipt = uv_settings::ToolOptions::from(options);
+        let wire = uv_settings::ToolOptionsWire::from(receipt);
+        let encoded = toml::to_string(&wire)?;
+
+        insta::assert_snapshot!(encoded, @r#"
+        [[index]]
+        name = "pypi"
+        url = "https://pypi.org/simple"
+        explicit = false
+        default = true
+        format = "simple"
+        authenticate = "auto"
+
+        [[proxy-index]]
+        name = "socket"
+        url = "https://proxy.example.com/simple/"
+        proxy-for = "pypi"
+        artifact-base-url = "https://proxy.example.com/files/"
+        authenticate = "always"
+        "#);
+
+        let decoded: uv_settings::ToolOptionsWire = toml::from_str(&encoded)?;
+        let restored = ResolverInstallerOptions::from(uv_settings::ToolOptions::from(decoded));
+        let mut expected = proxy_index(
+            "socket",
+            "pypi",
+            "https://proxy.example.com/simple/",
+            "https://proxy.example.com/files/",
+        )?;
+        expected.authenticate = AuthPolicy::Always;
+
+        assert_eq!(restored.indexes.proxy_index, Some(vec![expected]));
+        Ok(())
+    }
 
     #[test]
     fn upgrade_settings_target_only_requested_package() -> anyhow::Result<()> {
