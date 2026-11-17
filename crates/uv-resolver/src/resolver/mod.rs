@@ -33,6 +33,7 @@ use uv_distribution_types::{
 };
 use uv_git::GitResolver;
 use uv_normalize::PackageName;
+use uv_once_map::Completion;
 use uv_pep440::{MIN_VERSION, Version, VersionSpecifiers, release_specifiers_to_ranges};
 use uv_pep508::{
     MarkerEnvironment, MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString,
@@ -1234,7 +1235,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
         let dist = Dist::from_url(name.clone(), url.clone())?;
         let registered = requests.metadata(&dist)?;
-        let response = registered.wait();
+        let response = registered.wait()?;
 
         // If we failed to fetch the metadata for a URL, we can't proceed.
         let metadata = match &*response {
@@ -1383,7 +1384,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         requests: &'index MetadataRequests,
     ) -> Result<Option<ResolverVersion>, ResolveError> {
         // Wait for the metadata to be available.
-        let versions_response = requests.request_package(name, index)?.wait();
+        let versions_response = requests.request_package(name, index)?.wait()?;
         let index = index.map(IndexMetadata::url);
         visited.insert(name.clone());
 
@@ -1600,8 +1601,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             }
             let responses: Vec<_> = pending
                 .into_iter()
-                .map(|(index, request)| (index, request.wait()))
-                .collect();
+                .map(|(index, request)| request.wait().map(|response| (index, response)))
+                .collect::<Result<_, _>>()?;
             let mut metadata = Vec::with_capacity(responses.len());
             for (index, response) in &responses {
                 match response.as_ref() {
@@ -2012,7 +2013,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             } => {
                 if uv_preview::is_enabled(PreviewFeature::WheelVariants)
                     && let Some(variants_json) = pins.variants_json(name, version)
-                    && let Err(reason) = &*variants_json.wait()
+                    && let Err(reason) = &*variants_json.wait()?
                 {
                     return Ok(Dependencies::Unavailable(
                         self.record_unavailable_metadata(name, version, reason),
@@ -2041,7 +2042,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 }
 
                 // Wait for the metadata to be available.
-                let response = registered.wait();
+                let response = registered.wait()?;
 
                 let metadata = match &*response {
                     MetadataResponse::Found(archive) => &archive.metadata,
@@ -2266,57 +2267,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             // and `SourceDispatch`, as well as the bounded request channel.
             .buffer_unordered(usize::MAX);
 
-        while let Some(response) = response_stream.next().await {
-            match response? {
-                Some(Response::Package(name, index, version_map)) => {
-                    trace!("Received package metadata for: {name}");
-                    if let Some(index) = index {
-                        self.index
-                            .explicit()
-                            .done((name, index), Arc::new(version_map));
-                    } else {
-                        self.index.implicit().done(name, Arc::new(version_map));
-                    }
-                }
-                Some(Response::Installed { dist, metadata }) => {
-                    trace!("Received installed distribution metadata for: {dist}");
-                    self.index
-                        .distributions()
-                        .done(dist.distribution_id(), Arc::new(metadata));
-                }
-                Some(Response::Dist { dist, metadata }) => {
-                    let dist_kind = match dist {
-                        Dist::Built(_) => "built",
-                        Dist::Source(_) => "source",
-                    };
-                    trace!("Received {dist_kind} distribution metadata for: {dist}");
-                    if let MetadataResponse::Unavailable(reason) = &metadata {
-                        let message = UnavailableVersion::from(reason).singular_message();
-                        if let Some(err) = reason.source() {
-                            // Show the detailed error for metadata parse errors.
-                            warn!("`{dist}` {message}: {err}");
-                        } else {
-                            warn!("`{dist}` {message}");
-                        }
-                    }
-                    self.index
-                        .distributions()
-                        .done(dist.distribution_id(), Arc::new(metadata));
-                }
-                Some(Response::VariantsJson {
-                    variants_json,
-                    response,
-                }) => {
-                    trace!("Received variant metadata for: {}", variants_json.filename);
-                    self.index
-                        .variants_json()
-                        .done(variants_json, Arc::new(response));
-                }
-                None => {}
-            }
+        while let Some(result) = response_stream.next().await {
+            result?;
         }
 
-        Ok::<(), ResolveError>(())
+        Ok(())
     }
 
     #[instrument(skip_all, fields(%request))]
@@ -2324,7 +2279,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         &self,
         request: Request,
         provider: &Provider,
-    ) -> Result<Option<Response>, ResolveError> {
+    ) -> Result<(), ResolveError> {
         match request {
             // TODO(konsti): This read stands in for a request to evaluate arbitrary providers
             // off the resolver thread.
@@ -2353,9 +2308,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     )
                 })?;
                 let _ = response.send(result);
-                Ok(None)
+                Ok(())
             }
-            Request::VariantsJson(variants_json) => {
+            Request::VariantsJson(variants_json, completion) => {
                 let response = provider
                     .fetch_variants_json(
                         &variants_json.filename.name,
@@ -2378,28 +2333,25 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     }
                     VariantsJsonResponse::Unavailable(reason) => Err(reason),
                 };
-                Ok(Some(Response::VariantsJson {
-                    variants_json,
-                    response,
-                }))
+                trace!("Received variant metadata for: {}", variants_json.filename);
+                completion.finish(Arc::new(response));
+                Ok(())
             }
             // Fetch package metadata from the registry.
-            Request::Package(package_name, index) => {
+            Request::Package(package_name, index, completion) => {
                 let package_versions = provider
                     .get_package_versions(&package_name, index.as_ref())
                     .boxed_local()
                     .await
                     .map_err(ResolveError::Client)?;
 
-                Ok(Some(Response::Package(
-                    package_name,
-                    index.map(IndexMetadata::into_url),
-                    package_versions,
-                )))
+                trace!("Received package metadata for: {package_name}");
+                completion.finish(Arc::new(package_versions));
+                Ok(())
             }
 
             // Fetch distribution metadata from the distribution database.
-            Request::Dist(dist) => {
+            Request::Dist(dist, completion) => {
                 if let Some(version) = dist.version() {
                     if let Some(index) = dist.index() {
                         // Check the implicit indexes for pre-provided metadata.
@@ -2413,12 +2365,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                         continue;
                                     };
                                     debug!("Found registry-provided metadata for: {dist}");
-                                    return Ok(Some(Response::Dist {
-                                        dist,
-                                        metadata: MetadataResponse::Found(
-                                            ArchiveMetadata::from_metadata23(metadata),
-                                        ),
-                                    }));
+                                    finish_dist_metadata(
+                                        &dist,
+                                        MetadataResponse::Found(ArchiveMetadata::from_metadata23(
+                                            metadata,
+                                        )),
+                                        completion,
+                                    );
+                                    return Ok(());
                                 }
                             }
                         }
@@ -2436,12 +2390,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                     continue;
                                 };
                                 debug!("Found registry-provided metadata for: {dist}");
-                                return Ok(Some(Response::Dist {
-                                    dist,
-                                    metadata: MetadataResponse::Found(
-                                        ArchiveMetadata::from_metadata23(metadata),
-                                    ),
-                                }));
+                                finish_dist_metadata(
+                                    &dist,
+                                    MetadataResponse::Found(ArchiveMetadata::from_metadata23(
+                                        metadata,
+                                    )),
+                                    completion,
+                                );
+                                return Ok(());
                             }
                         }
                     }
@@ -2462,10 +2418,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     }
                 }
 
-                Ok(Some(Response::Dist { dist, metadata }))
+                finish_dist_metadata(&dist, metadata, completion);
+                Ok(())
             }
 
-            Request::Installed(dist) => {
+            Request::Installed(dist, completion) => {
                 let metadata = provider.get_installed_metadata(&dist).boxed_local().await?;
 
                 if let MetadataResponse::Found(metadata) = &metadata {
@@ -2478,19 +2435,25 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     }
                 }
 
-                Ok(Some(Response::Installed { dist, metadata }))
+                trace!("Received installed distribution metadata for: {dist}");
+                completion.finish(Arc::new(metadata));
+                Ok(())
             }
 
             // Pre-fetch the package and distribution metadata.
             Request::Prefetch(package_name, range, python_requirement) => {
                 // Wait for the package metadata to become available.
-                let versions_response = self
+                let Some(versions_response) = self
                     .index
                     .implicit()
                     .get_registered(package_name.clone())
                     .ok_or_else(|| ResolveError::UnregisteredTask(package_name.to_string()))?
                     .wait()
-                    .await;
+                    .await
+                else {
+                    // The version request failed or was cancelled, so there is nothing to prefetch.
+                    return Ok(());
+                };
 
                 let version_map = match *versions_response {
                     VersionsResponse::Found(ref version_map) => version_map,
@@ -2500,21 +2463,21 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             .pin()
                             .insert(package_name.clone(), UnavailablePackage::NoIndex);
 
-                        return Ok(None);
+                        return Ok(());
                     }
                     VersionsResponse::Offline => {
                         self.unavailable_packages
                             .pin()
                             .insert(package_name.clone(), UnavailablePackage::Offline);
 
-                        return Ok(None);
+                        return Ok(());
                     }
                     VersionsResponse::NotFound => {
                         self.unavailable_packages
                             .pin()
                             .insert(package_name.clone(), UnavailablePackage::NotFound);
 
-                        return Ok(None);
+                        return Ok(());
                     }
                 };
 
@@ -2534,12 +2497,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     &env,
                     self.tags.as_ref(),
                 ) else {
-                    return Ok(None);
+                    return Ok(());
                 };
 
                 // If there is not a compatible distribution, short-circuit.
                 let Some(dist) = candidate.compatible() else {
-                    return Ok(None);
+                    return Ok(());
                 };
 
                 // If the registry provided metadata for this distribution, use it.
@@ -2552,27 +2515,18 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             let metadata =
                                 MetadataResponse::Found(ArchiveMetadata::from_metadata23(metadata));
 
-                            let dist = dist.to_owned();
                             if &package_name != dist.name() {
                                 return Err(ResolveError::MismatchedPackageName {
                                     request: "distribution",
-                                    expected: package_name,
                                     actual: dist.name().clone(),
+                                    expected: package_name,
                                 });
                             }
 
-                            let response = match dist {
-                                ResolvedDist::Installable { dist, .. } => Response::Dist {
-                                    dist: (*dist).clone(),
-                                    metadata,
-                                },
-                                ResolvedDist::Installed { dist } => Response::Installed {
-                                    dist: (*dist).clone(),
-                                    metadata,
-                                },
-                            };
-
-                            return Ok(Some(response));
+                            self.index
+                                .distributions()
+                                .insert(dist.distribution_id(), Arc::new(metadata));
+                            return Ok(());
                         }
                     }
                 }
@@ -2587,7 +2541,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 debug!(
                                     "Skipping prefetch for unbounded minimum-version range: {package_name} ({range})"
                                 );
-                                return Ok(None);
+                                return Ok(());
                             }
                         }
                     }
@@ -2596,7 +2550,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 // Validate the Python requirement.
                 if let Some(requires_python) = dist.requires_python() {
                     if !python_requirement.target().is_contained_by(requires_python) {
-                        return Ok(None);
+                        return Ok(());
                     }
                 }
 
@@ -2605,12 +2559,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     .hasher
                     .allows_package(candidate.name(), candidate.version())
                 {
-                    return Ok(None);
+                    return Ok(());
                 }
 
                 // Emit a request to fetch the metadata for this version.
                 let dist = dist.for_resolution();
-                if self.index.distributions().register(dist.distribution_id()) {
+                if let Some(completion) =
+                    self.index.distributions().register(dist.distribution_id())
+                {
                     let dist = dist.to_owned();
                     if &package_name != dist.name() {
                         return Err(ResolveError::MismatchedPackageName {
@@ -2620,33 +2576,25 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         });
                     }
 
-                    let response = match dist {
+                    match dist {
                         ResolvedDist::Installable { dist, .. } => {
                             let metadata = provider
                                 .get_or_build_wheel_metadata(&dist)
                                 .boxed_local()
                                 .await?;
 
-                            Response::Dist {
-                                dist: (*dist).clone(),
-                                metadata,
-                            }
+                            finish_dist_metadata(&dist, metadata, completion);
                         }
                         ResolvedDist::Installed { dist } => {
                             let metadata =
                                 provider.get_installed_metadata(&dist).boxed_local().await?;
 
-                            Response::Installed {
-                                dist: (*dist).clone(),
-                                metadata,
-                            }
+                            trace!("Received installed distribution metadata for: {dist}");
+                            completion.finish(Arc::new(metadata));
                         }
-                    };
-
-                    Ok(Some(response))
-                } else {
-                    Ok(None)
+                    }
                 }
+                Ok(())
             }
         }
     }
@@ -3619,13 +3567,20 @@ fn widen_to_gap(version: &Version, known_versions: Option<&[Version]>) -> Range<
 #[expect(clippy::large_enum_variant)]
 pub(crate) enum Request {
     /// A request to fetch the metadata for a package.
-    Package(PackageName, Option<IndexMetadata>),
+    Package(
+        PackageName,
+        Option<IndexMetadata>,
+        Completion<Arc<VersionsResponse>>,
+    ),
     /// A request to fetch the metadata for a built or source distribution.
-    Dist(Dist),
+    Dist(Dist, Completion<Arc<MetadataResponse>>),
     /// A request to fetch the metadata from an already-installed distribution.
-    Installed(InstalledDist),
+    Installed(InstalledDist, Completion<Arc<MetadataResponse>>),
     /// A request to fetch variant metadata for a selected version.
-    VariantsJson(RegistryVariantsJson),
+    VariantsJson(
+        RegistryVariantsJson,
+        Completion<Arc<ParsedVariantsJsonResponse>>,
+    ),
     /// A request to read embedded variant metadata from a wheel.
     WheelVariant {
         wheel: BuiltDist,
@@ -3635,14 +3590,12 @@ pub(crate) enum Request {
     Prefetch(PackageName, Range<Version>, PythonRequirement),
 }
 
-impl<'a> From<ResolvedDistRef<'a>> for Request {
-    fn from(dist: ResolvedDistRef<'a>) -> Self {
-        // N.B. This is almost identical to `ResolvedDistRef::to_owned`, but
-        // creates a `Request` instead of a `ResolvedDist`. There's probably
-        // some room for DRYing this up a bit. The obvious way would be to
-        // add a method to create a `Dist`, but a `Dist` cannot be represented
-        // as an installed dist.
-        match dist {
+impl Request {
+    fn from_resolved(
+        dist: &ResolvedDistRef<'_>,
+        completion: Completion<Arc<MetadataResponse>>,
+    ) -> Self {
+        match *dist {
             ResolvedDistRef::InstallableRegistrySourceDist { sdist, prioritized } => {
                 // This is okay because we're only here if the prioritized dist
                 // has an sdist, so this always succeeds.
@@ -3652,7 +3605,7 @@ impl<'a> From<ResolvedDistRef<'a>> for Request {
                     (&source.name, &source.version),
                     "expected chosen sdist to match prioritized sdist"
                 );
-                Self::Dist(Dist::Source(SourceDist::Registry(source)))
+                Self::Dist(Dist::Source(SourceDist::Registry(source)), completion)
             }
             ResolvedDistRef::InstallableRegistryBuiltDist {
                 wheel, prioritized, ..
@@ -3665,9 +3618,9 @@ impl<'a> From<ResolvedDistRef<'a>> for Request {
                 // This is okay because we're only here if the prioritized dist
                 // has at least one wheel, so this always succeeds.
                 let built = prioritized.built_dist().expect("at least one wheel");
-                Self::Dist(Dist::Built(BuiltDist::Registry(built)))
+                Self::Dist(Dist::Built(BuiltDist::Registry(built)), completion)
             }
-            ResolvedDistRef::Installed { dist } => Self::Installed(dist.clone()),
+            ResolvedDistRef::Installed { dist } => Self::Installed(dist.clone(), completion),
         }
     }
 }
@@ -3675,16 +3628,16 @@ impl<'a> From<ResolvedDistRef<'a>> for Request {
 impl Display for Request {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Package(package_name, _) => {
+            Self::Package(package_name, _, _) => {
                 write!(f, "Versions {package_name}")
             }
-            Self::Dist(dist) => {
+            Self::Dist(dist, _) => {
                 write!(f, "Metadata `{dist}`")
             }
-            Self::Installed(dist) => {
+            Self::Installed(dist, _) => {
                 write!(f, "Installed metadata `{dist}`")
             }
-            Self::VariantsJson(variants_json) => {
+            Self::VariantsJson(variants_json, _) => {
                 write!(f, "Variant metadata `{}`", variants_json.filename)
             }
             Self::WheelVariant { wheel, .. } => {
@@ -3697,26 +3650,25 @@ impl Display for Request {
     }
 }
 
-#[derive(Debug)]
-#[expect(clippy::large_enum_variant)]
-enum Response {
-    /// The returned metadata for a package hosted on a registry.
-    Package(PackageName, Option<IndexUrl>, VersionsResponse),
-    /// The returned metadata for a distribution.
-    Dist {
-        dist: Dist,
-        metadata: MetadataResponse,
-    },
-    /// The returned metadata for an already-installed distribution.
-    Installed {
-        dist: InstalledDist,
-        metadata: MetadataResponse,
-    },
-    /// The response to a variant metadata request.
-    VariantsJson {
-        variants_json: RegistryVariantsJson,
-        response: ParsedVariantsJsonResponse,
-    },
+fn finish_dist_metadata(
+    dist: &Dist,
+    metadata: MetadataResponse,
+    completion: Completion<Arc<MetadataResponse>>,
+) {
+    let dist_kind = match dist {
+        Dist::Built(_) => "built",
+        Dist::Source(_) => "source",
+    };
+    trace!("Received {dist_kind} distribution metadata for: {dist}");
+    if let MetadataResponse::Unavailable(reason) = &metadata {
+        let message = UnavailableVersion::from(reason).singular_message();
+        if let Some(err) = reason.source() {
+            warn!("`{dist}` {message}: {err}");
+        } else {
+            warn!("`{dist}` {message}");
+        }
+    }
+    completion.finish(Arc::new(metadata));
 }
 
 /// Information about the dependencies for a particular package.

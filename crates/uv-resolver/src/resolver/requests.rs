@@ -7,13 +7,13 @@ use uv_distribution_types::{
     BuiltDist, Dist, DistributionId, Identifier, IndexMetadata, IndexUrl, Name, ResolutionRecorder,
 };
 use uv_normalize::PackageName;
-use uv_once_map::Registration;
+use uv_once_map::{Completion, RegisteredEntry};
 use uv_pep440::Version;
 
 use crate::prioritized_distribution::RegistryVariantsJson;
 use crate::pubgrub::Range;
 use crate::resolved::ResolvedDistRef;
-use crate::resolver::index::{FxRegisteredEntry, ParsedVariantsJsonResponse};
+use crate::resolver::index::ParsedVariantsJsonResponse;
 use crate::resolver::{InMemoryIndex, MetadataResponse, Request, VersionsResponse};
 use crate::{PythonRequirement, ResolveError};
 
@@ -39,10 +39,10 @@ impl MetadataRequest<'_> {
         }
     }
 
-    fn into_request(self) -> Request {
+    fn into_request(self, completion: Completion<Arc<MetadataResponse>>) -> Request {
         match self {
-            Self::Dist(dist) => Request::Dist(dist),
-            Self::Resolved(dist) => Request::from(dist),
+            Self::Dist(dist) => Request::Dist(dist, completion),
+            Self::Resolved(dist) => Request::from_resolved(&dist, completion),
         }
     }
 }
@@ -58,16 +58,17 @@ impl Name for MetadataRequest<'_> {
 
 /// A registered version-list request, bound to its package and index scope.
 pub(crate) enum PendingVersions<'index> {
-    Implicit(FxRegisteredEntry<'index, PackageName, Arc<VersionsResponse>>),
-    Explicit(FxRegisteredEntry<'index, (PackageName, IndexUrl), Arc<VersionsResponse>>),
+    Implicit(RegisteredEntry<'index, PackageName, Arc<VersionsResponse>>),
+    Explicit(RegisteredEntry<'index, (PackageName, IndexUrl), Arc<VersionsResponse>>),
 }
 
 impl PendingVersions<'_> {
-    pub(crate) fn wait(self) -> Arc<VersionsResponse> {
+    pub(crate) fn wait(self) -> Result<Arc<VersionsResponse>, ResolveError> {
         match self {
             Self::Implicit(entry) => entry.wait_blocking(),
             Self::Explicit(entry) => entry.wait_blocking(),
         }
+        .ok_or(ResolveError::ChannelClosed)
     }
 }
 
@@ -76,7 +77,7 @@ impl PendingVersions<'_> {
 /// Selected pins retain a registered entry that prevents cache removal while borrowed.
 #[derive(Clone, Debug)]
 pub(crate) struct RegisteredMetadata<'index>(
-    FxRegisteredEntry<'index, DistributionId, Arc<MetadataResponse>>,
+    RegisteredEntry<'index, DistributionId, Arc<MetadataResponse>>,
 );
 
 impl RegisteredMetadata<'_> {
@@ -84,20 +85,20 @@ impl RegisteredMetadata<'_> {
         self.0.key()
     }
 
-    pub(crate) fn wait(&self) -> Arc<MetadataResponse> {
-        self.0.wait_blocking()
+    pub(crate) fn wait(&self) -> Result<Arc<MetadataResponse>, ResolveError> {
+        self.0.wait_blocking().ok_or(ResolveError::ChannelClosed)
     }
 }
 
 /// Index-level variant metadata registered for a selected package version.
 #[derive(Clone, Debug)]
 pub(crate) struct RegisteredVariantsJson<'index>(
-    FxRegisteredEntry<'index, RegistryVariantsJson, Arc<ParsedVariantsJsonResponse>>,
+    RegisteredEntry<'index, RegistryVariantsJson, Arc<ParsedVariantsJsonResponse>>,
 );
 
 impl RegisteredVariantsJson<'_> {
-    pub(crate) fn wait(&self) -> Arc<ParsedVariantsJsonResponse> {
-        self.0.wait_blocking()
+    pub(crate) fn wait(&self) -> Result<Arc<ParsedVariantsJsonResponse>, ResolveError> {
+        self.0.wait_blocking().ok_or(ResolveError::ChannelClosed)
     }
 }
 
@@ -123,16 +124,19 @@ impl MetadataRequests {
         if let Some(recorder) = &self.recorder {
             recorder.exclude_newer(name);
         }
-        let registered = if let Some(index) = index {
+        let completion = if let Some(index) = index {
             self.index
                 .explicit()
                 .register((name.clone(), index.url().clone()))
         } else {
             self.index.implicit().register(name.clone())
         };
-        if registered {
-            self.sender
-                .blocking_send(Request::Package(name.clone(), index.cloned()))?;
+        if let Some(completion) = completion {
+            self.sender.blocking_send(Request::Package(
+                name.clone(),
+                index.cloned(),
+                completion,
+            ))?;
         }
         Ok(())
     }
@@ -146,31 +150,24 @@ impl MetadataRequests {
         if let Some(recorder) = &self.recorder {
             recorder.exclude_newer(name);
         }
-        if let Some(index) = index {
-            let entry = match self
+        let (entry, completion) = if let Some(index) = index {
+            let (entry, completion) = self
                 .index
                 .explicit()
-                .register_entry((name.clone(), index.url().clone()))
-            {
-                Registration::New(entry) => {
-                    self.sender
-                        .blocking_send(Request::Package(name.clone(), Some(index.clone())))?;
-                    entry
-                }
-                Registration::Existing(entry) => entry,
-            };
-            Ok(PendingVersions::Explicit(entry))
+                .register_entry((name.clone(), index.url().clone()));
+            (PendingVersions::Explicit(entry), completion)
         } else {
-            let entry = match self.index.implicit().register_entry(name.clone()) {
-                Registration::New(entry) => {
-                    self.sender
-                        .blocking_send(Request::Package(name.clone(), None))?;
-                    entry
-                }
-                Registration::Existing(entry) => entry,
-            };
-            Ok(PendingVersions::Implicit(entry))
+            let (entry, completion) = self.index.implicit().register_entry(name.clone());
+            (PendingVersions::Implicit(entry), completion)
+        };
+        if let Some(completion) = completion {
+            self.sender.blocking_send(Request::Package(
+                name.clone(),
+                index.cloned(),
+                completion,
+            ))?;
         }
+        Ok(entry)
     }
 
     /// Schedule metadata retrieval without retaining or cloning its cache identity.
@@ -181,8 +178,9 @@ impl MetadataRequests {
         if let Some(recorder) = &self.recorder {
             recorder.dependency_metadata(request.name());
         }
-        if self.index.distributions().register(request.id()) {
-            self.sender.blocking_send(request.into_request())?;
+        if let Some(completion) = self.index.distributions().register(request.id()) {
+            self.sender
+                .blocking_send(request.into_request(completion))?;
         }
         Ok(())
     }
@@ -198,14 +196,12 @@ impl MetadataRequests {
         if let Some(recorder) = &self.recorder {
             recorder.dependency_metadata(request.name());
         }
-        let entry = match self.index.distributions().register_entry(request.id()) {
-            Registration::New(entry) => {
-                validate(&request)?;
-                self.sender.blocking_send(request.into_request())?;
-                entry
-            }
-            Registration::Existing(entry) => entry,
-        };
+        let (entry, completion) = self.index.distributions().register_entry(request.id());
+        if let Some(completion) = completion {
+            validate(&request)?;
+            self.sender
+                .blocking_send(request.into_request(completion))?;
+        }
         Ok(RegisteredMetadata(entry))
     }
 
@@ -214,18 +210,14 @@ impl MetadataRequests {
         &self,
         variants_json: &RegistryVariantsJson,
     ) -> Result<RegisteredVariantsJson<'_>, ResolveError> {
-        let entry = match self
+        let (entry, completion) = self
             .index
             .variants_json()
-            .register_entry(variants_json.clone())
-        {
-            Registration::New(entry) => {
-                self.sender
-                    .blocking_send(Request::VariantsJson(variants_json.clone()))?;
-                entry
-            }
-            Registration::Existing(entry) => entry,
-        };
+            .register_entry(variants_json.clone());
+        if let Some(completion) = completion {
+            self.sender
+                .blocking_send(Request::VariantsJson(variants_json.clone(), completion))?;
+        }
         Ok(RegisteredVariantsJson(entry))
     }
 
@@ -268,5 +260,64 @@ impl MetadataRequests {
             .get_registered(dist.distribution_id())
             .map(RegisteredMetadata)
             .ok_or_else(|| ResolveError::UnregisteredTask(dist.to_string()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::error::Error;
+
+    use tokio::sync::mpsc;
+    use uv_pep508::Pep508Url;
+    use uv_pypi_types::VerbatimParsedUrl;
+    use uv_resolver_types::MetadataUnavailable;
+
+    use super::*;
+
+    /// A validation failure must release the claim so a later request for the same distribution
+    /// runs validation and reaches the fetcher.
+    #[test]
+    fn retry_after_validation_error() -> Result<(), Box<dyn Error>> {
+        let (sender, mut receiver) = mpsc::channel(1);
+        let requests = MetadataRequests::new(InMemoryIndex::default(), sender, None);
+        let name: PackageName = "demo".parse()?;
+        let dist = Dist::from_url(
+            name.clone(),
+            VerbatimParsedUrl::parse_url("https://example.org/demo-1.0-py3-none-any.whl", None)?,
+        )?;
+        let error = requests
+            .request_metadata(MetadataRequest::Dist(dist.clone()), |_| {
+                Err(ResolveError::UnhashedPackage(name.clone()))
+            })
+            .expect_err("validation failed");
+        assert!(matches!(error, ResolveError::UnhashedPackage(package) if package == name));
+        let entry = requests.request_metadata(MetadataRequest::Dist(dist), |_| Ok(()))?;
+        let Request::Dist(_, completion) = receiver.try_recv()? else {
+            return Err("expected a distribution metadata request".into());
+        };
+        completion.finish(Arc::new(MetadataResponse::Unavailable(
+            MetadataUnavailable::Offline,
+        )));
+        assert!(matches!(
+            &*entry.wait()?,
+            MetadataResponse::Unavailable(MetadataUnavailable::Offline)
+        ));
+        Ok(())
+    }
+
+    /// Dropping the fetch queue abandons both a queued package request and a subsequent failed send.
+    #[test]
+    fn closed_fetch_queue() -> Result<(), Box<dyn Error>> {
+        let (sender, receiver) = mpsc::channel(1);
+        let requests = MetadataRequests::new(InMemoryIndex::default(), sender, None);
+        let name: PackageName = "demo".parse()?;
+        let pending = requests.request_package(&name, None)?;
+        drop(receiver);
+        assert!(matches!(
+            requests.request_package(&name, None),
+            Err(ResolveError::ChannelClosed)
+        ));
+        assert!(matches!(pending.wait(), Err(ResolveError::ChannelClosed)));
+        Ok(())
     }
 }

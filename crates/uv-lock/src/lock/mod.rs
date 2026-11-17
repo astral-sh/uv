@@ -5954,7 +5954,7 @@ impl Lock {
                 err,
             })?;
         let metadata = archive.metadata.clone();
-        index.done(id, Arc::new(MetadataResponse::Found(archive)));
+        index.insert(id, Arc::new(MetadataResponse::Found(archive)));
         Ok(metadata)
     }
 

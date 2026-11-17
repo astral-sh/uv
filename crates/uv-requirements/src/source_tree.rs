@@ -224,28 +224,22 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
         };
 
         // Fetch the metadata for the distribution.
-        let metadata = {
-            let id = source.distribution_id();
-            if let Some(response) = self.index.distributions().register_or_wait(&id).await {
-                let MetadataResponse::Found(archive) = &*response else {
-                    panic!("Failed to find metadata for: {}", path.user_display());
-                };
-                archive.metadata.clone()
-            } else {
-                // Run the PEP 517 build process to extract metadata from the source distribution.
+        let id = source.distribution_id();
+        let response = self
+            .index
+            .distributions()
+            .get_or_try_init(id, async || {
                 let source = BuildableSource::Url(source);
-                let archive = self.database.build_wheel_metadata(&source, hashes).await?;
-
-                let metadata = archive.metadata.clone();
-
-                // Insert the metadata into the index.
-                self.index
-                    .distributions()
-                    .done(id, Arc::new(MetadataResponse::Found(archive)));
-
-                metadata
-            }
+                self.database
+                    .build_wheel_metadata(&source, hashes)
+                    .await
+                    .map(|archive| Arc::new(MetadataResponse::Found(archive)))
+            })
+            .await?;
+        let MetadataResponse::Found(archive) = &*response else {
+            panic!("Failed to find metadata for: {}", path.user_display());
         };
+        let metadata = archive.metadata.clone();
 
         // This source tree was requested as an input, so preserve its authored path spelling.
         Ok(RequiresDist::from(metadata.with_force_relative(false)))

@@ -4,7 +4,7 @@ use std::sync::Arc;
 use rustc_hash::FxHasher;
 use uv_distribution_types::{IndexUrl, VariantsJsonContent};
 use uv_normalize::PackageName;
-use uv_once_map::{RegisteredEntry, RegisteredOnceMap};
+use uv_once_map::RegisteredOnceMap;
 use uv_resolver_types::DistributionMetadataIndex;
 
 use crate::prioritized_distribution::RegistryVariantsJson;
@@ -31,8 +31,6 @@ struct SharedInMemoryIndex {
 
 pub(crate) type ParsedVariantsJsonResponse = Result<VariantsJsonContent, MetadataUnavailable>;
 pub(crate) type FxOnceMap<K, V> = RegisteredOnceMap<K, V, BuildHasherDefault<FxHasher>>;
-pub(crate) type FxRegisteredEntry<'a, K, V> =
-    RegisteredEntry<'a, K, V, BuildHasherDefault<FxHasher>>;
 
 impl InMemoryIndex {
     /// Returns a reference to the package metadata map.

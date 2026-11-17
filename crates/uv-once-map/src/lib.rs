@@ -1,6 +1,6 @@
 mod registered;
 
-pub use registered::{RegisteredEntry, RegisteredOnceMap, Registration};
+pub use registered::{Completion, RegisteredEntry, RegisteredOnceMap};
 
 use std::borrow::Borrow;
 use std::fmt::{Debug, Formatter};
@@ -30,18 +30,6 @@ impl<K: Eq + Hash + Debug, V: Debug, S: BuildHasher + Clone> Debug for OnceMap<K
 }
 
 impl<K: Eq + Hash + Clone, V: Clone, H: BuildHasher + Clone> OnceMap<K, V, H> {
-    /// Register that you want to start a job.
-    ///
-    /// If this method returns `true`, you need to start a job and call [`OnceMap::done`] eventually
-    /// or other tasks will hang. If it returns `false`, this job is already in progress and you
-    /// can call [`OnceMap::register_or_wait`] to wait for the result.
-    fn register(&self, key: K) -> bool {
-        self.items
-            .pin()
-            .try_insert_with(key, || Value::Waiting(Arc::new(Notify::new())))
-            .is_ok()
-    }
-
     /// Register that you want to start a job, unless it was already started, then wait for its
     /// result.
     ///
@@ -72,18 +60,6 @@ impl<K: Eq + Hash + Clone, V: Clone, H: BuildHasher + Clone> OnceMap<K, V, H> {
             }
         };
 
-        self.wait_pending(key, notify).await
-    }
-
-    /// Wait for an existing entry without registering a missing key.
-    async fn wait_registered(&self, key: &K) -> Option<V> {
-        let notify = {
-            let items = self.items.pin();
-            match items.get(key)? {
-                value @ Value::Filled(_) => return value.get(),
-                Value::Waiting(notify) => notify.clone(),
-            }
-        };
         self.wait_pending(key, notify).await
     }
 

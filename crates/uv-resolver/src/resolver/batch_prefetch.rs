@@ -102,7 +102,7 @@ impl BatchPrefetcher {
             .prefetch_runner
             .requests
             .request_package(name, index)?
-            .wait();
+            .wait()?;
 
         let phase = BatchPrefetchStrategy::Compatible {
             compatible: current_range.clone(),

@@ -185,31 +185,22 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
         self.database.record_metadata(&dist);
 
         // Fetch the metadata for the distribution.
-        let metadata = {
-            let id = dist.distribution_id();
-            if let Some(response) = self.index.distributions().register_or_wait(&id).await {
-                let MetadataResponse::Found(archive) = &*response else {
-                    panic!("Failed to find metadata for: {requirement}");
-                };
-                archive.metadata.clone()
-            } else {
-                // Run the PEP 517 build process to extract metadata from the source distribution.
-                let archive = self
-                    .database
+        let id = dist.distribution_id();
+        let response = self
+            .index
+            .distributions()
+            .get_or_try_init(id, async || {
+                self.database
                     .get_or_build_wheel_metadata(&dist, hasher.metadata_policy(&dist))
                     .await
-                    .map_err(|err| Error::from_dist(dist, err))?;
-
-                let metadata = archive.metadata.clone();
-
-                // Insert the metadata into the index.
-                self.index
-                    .distributions()
-                    .done(id, Arc::new(MetadataResponse::Found(archive)));
-
-                metadata
-            }
+                    .map(|archive| Arc::new(MetadataResponse::Found(archive)))
+                    .map_err(|err| Error::from_dist(dist, err))
+            })
+            .await?;
+        let MetadataResponse::Found(archive) = &*response else {
+            panic!("Failed to find metadata for: {requirement}");
         };
+        let metadata = archive.metadata.clone();
 
         // Respect recursive extras by propagating the source extras to the dependencies.
         let package = metadata.name.clone();
