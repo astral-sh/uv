@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::fmt::{self, Display, Formatter};
 use std::ops::{Bound, Deref};
+use std::slice;
 use std::str::FromStr;
 
 use arcstr::ArcStr;
@@ -1368,6 +1369,26 @@ impl MarkerTree {
         // recursive type at codegen time, we just introduce the indirection
         // here, but keep the calling API ergonomic.
         self.simplify_not_extras_with_impl(&is_extra)
+    }
+
+    /// Specialize a dependency marker for the base package or one of its extras.
+    ///
+    /// Dependencies already active for the base package are omitted from the extra.
+    ///
+    /// For `foo; sys_platform == 'win32' or extra == 'feature'`, the base package
+    /// (`extra` is `None`) gets `foo; sys_platform == 'win32'`. The `feature` extra
+    /// gets `foo; sys_platform != 'win32'` because it already gets `foo` from the
+    /// base package on Windows.
+    #[must_use]
+    pub fn for_dependency_extra(self, extra: Option<&ExtraName>) -> Self {
+        let production = self.simplify_not_extras_with(|_| true);
+        match extra {
+            None => production,
+            Some(extra) => self
+                .simplify_extras(slice::from_ref(extra))
+                .simplify_not_extras_with(|candidate| candidate != extra)
+                .and(production.negate()),
+        }
     }
 
     /// Returns a new `MarkerTree` where all `extra` expressions are removed.
