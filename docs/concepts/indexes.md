@@ -71,15 +71,16 @@ To configure a proxy index, add a `[[tool.uv.proxy-index]]` entry with `proxy-fo
 upstream index's name. The proxy's `url` tells uv where to look up packages, and its
 `artifact-base-url` tells uv where to download them. In `uv.toml`, use `[[proxy-index]]` instead.
 
-For example, to configure a proxy for PyPI:
+To use a PyPI proxy across projects, add both entries to your user-level
+[`uv.toml`](./configuration-files.md):
 
-```toml
-[[tool.uv.index]]
+```toml title="uv.toml"
+[[index]]
 name = "pypi"
 url = "https://pypi.org/simple/"
 default = true
 
-[[tool.uv.proxy-index]]
+[[proxy-index]]
 name = "pypi-proxy"
 url = "https://proxy.example.com/simple/"
 artifact-base-url = "https://proxy.example.com/files/"
@@ -88,12 +89,11 @@ proxy-for = "pypi"
 
 !!! note
 
-    PyPI's package download URL prefix defaults to `https://files.pythonhosted.org/packages/`.
+    PyPI's `artifact-base-url` defaults to `https://files.pythonhosted.org/packages/`.
 
-uv records the upstream index and package download URLs in `uv.lock`. When installing from an
-existing `uv.lock`, uv translates these package URLs to proxy URLs without querying the proxy's
-index. Hiding a file from the proxy's package listing does not block a frozen install; the proxy
-must also reject the artifact download.
+When downloading a file recorded in `uv.lock`, uv rewrites its URL to use the proxy without looking
+it up in the proxy's package listing. Hiding the file from the listing does not block the download:
+the proxy must reject the download itself. uv can still reuse a cached copy.
 
 When installing from `pylock.toml`, uv can use the proxy only if `packages.index` identifies the
 upstream index for that package. Without this field, uv downloads directly from the recorded
@@ -102,13 +102,13 @@ when it selects a file from a proxied index.
 
 To proxy a different index, give the upstream index a `name` and an `artifact-base-url`:
 
-```toml
-[[tool.uv.index]]
+```toml title="uv.toml"
+[[index]]
 name = "private"
 url = "https://packages.example.com/simple/"
 artifact-base-url = "https://downloads.example.com/packages/"
 
-[[tool.uv.proxy-index]]
+[[proxy-index]]
 name = "private-proxy"
 url = "https://proxy.example.com/simple/"
 artifact-base-url = "https://proxy.example.com/files/"
@@ -126,13 +126,8 @@ uv requires a supported hash for each proxied artifact it writes to `uv.lock` or
 including when exporting an existing `uv.lock`. `uv sync --frozen` can install a proxied artifact if
 the existing `uv.lock` has no hash for it, but verifies the hash when one is present.
 
-Proxies that serve signed artifact URLs are not supported. uv writes artifact URL query parameters
-to the lockfile and sends them to the upstream artifact host when downloading without the proxy.
-
 With the `wheel-variants` preview enabled, uv fetches `*-variants.json` metadata from the URL
-advertised by the proxy. The `artifact-base-url` mapping does not apply to this metadata, so uv can
-contact another host. To keep these requests on the proxy, serve the metadata there and advertise
-its URL.
+advertised by the proxy. The `artifact-base-url` mapping does not apply to this metadata.
 
 If artifact downloads require authentication on a different host, configure the credentials on
 `artifact-base-url`.
