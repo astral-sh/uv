@@ -11,6 +11,7 @@
 
 mod algebra;
 mod environment;
+mod format;
 mod lowering;
 pub(crate) mod parse;
 mod simplify;

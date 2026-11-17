@@ -525,7 +525,7 @@ mod tests {
         );
         assert!(
             metadata.contains(
-                "Requires-Dist: dep ; (sys_platform == 'darwin' and extra == 'compat') or (sys_platform == 'linux' and extra == 'compat')"
+                "Requires-Dist: dep ; (sys_platform == 'darwin' or sys_platform == 'linux') and extra == 'compat'"
             ),
             "metadata should preserve the original or-marker semantics:\n{metadata}"
         );
