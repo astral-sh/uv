@@ -154,6 +154,8 @@ uv-unix = { workspace = true }
 
 [features]
 default = ["performance", "test-defaults"]
+# Use the FIPS 140-3 validated aws-lc-rs module for all TLS connections.
+fips = ["uv-client/fips"]
 native-auth = []
 # Use better memory allocators, etc.
 performance = ["performance-memory-allocator"]

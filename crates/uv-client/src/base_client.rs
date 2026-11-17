@@ -477,6 +477,8 @@ impl<'a> BaseClientBuilder<'a> {
     }
 
     pub fn build(&self) -> Result<BaseClient, ClientBuildError> {
+        crate::install_crypto_provider();
+
         if let Some(name) = self.client_name {
             debug!(
                 "Using request connect timeout of {}s and read timeout of {}s for {} client",

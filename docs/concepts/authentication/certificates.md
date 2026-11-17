@@ -15,6 +15,23 @@ uv supports the following X.509 certificate signature algorithms:
 - RSA PKCS#1 v1.5 (2048–8192 bit) with SHA-256, SHA-384, or SHA-512
 - RSA-PSS (2048–8192 bit) with SHA-256, SHA-384, or SHA-512
 
+### FIPS 140-3
+
+uv can be built to use the FIPS 140-3 validated module of `aws-lc-rs` for all TLS connections by
+enabling the `fips` Cargo feature:
+
+```console
+$ cargo build --release --features fips
+```
+
+Building with `fips` requires CMake, Go, and a C compiler, which `aws-lc-fips-sys` uses to build the
+validated module from source. In a FIPS build, uv restricts TLS to FIPS-approved cipher suites and
+key exchange groups and requires the extended master secret extension for TLS 1.2. Run uv with
+`--verbose` to confirm the FIPS provider is in use.
+
+The `fips` feature only covers uv's own HTTP client. Commands that uv delegates to other programs,
+such as `git` for Git dependencies, use those programs' TLS implementations.
+
 ## System certificates
 
 By default, uv uses bundled Mozilla root certificates for TLS verification. In some cases, you may

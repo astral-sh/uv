@@ -204,6 +204,10 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
         )?;
     }
 
+    // Install the TLS crypto provider before any HTTP client is constructed, so that every client
+    // (including those created outside of `uv-client`) uses it.
+    uv_client::install_crypto_provider();
+
     // Determine the project directory.
     //
     // If `--project` points to a `pyproject.toml` file, resolve to its parent directory,
