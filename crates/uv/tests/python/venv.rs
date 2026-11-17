@@ -6,7 +6,6 @@ use assert_fs::prelude::*;
 use indoc::indoc;
 use predicates::prelude::*;
 use uv_cache_key::cache_digest;
-use uv_fs::{LockedFile, LockedFileMode};
 use uv_python_discovery::{PYTHON_VERSION_FILENAME, PYTHON_VERSIONS_FILENAME};
 use uv_static::EnvVars;
 
@@ -370,8 +369,8 @@ fn create_venv_project_environment() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
-async fn create_venv_project_environment_lock() -> Result<()> {
+#[test]
+fn create_venv_project_environment_lock() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&["3.12"]);
 
     context.temp_dir.child("pyproject.toml").write_str(
@@ -386,13 +385,8 @@ async fn create_venv_project_environment_lock() -> Result<()> {
     // Simulate another project command holding the environment lock.
     let install_path = dunce::canonicalize(context.temp_dir.path())?;
     let lock_path = std::env::temp_dir().join(format!("uv-{}.lock", cache_digest(&install_path)));
-    let lock = LockedFile::acquire(
-        &lock_path,
-        LockedFileMode::Exclusive,
-        context.temp_dir.path().display(),
-    )
-    .await?;
-    let context = context.with_filtered_path(&lock_path, "PROJECT_ENVIRONMENT_LOCK");
+    let lock = context.hold_lock(&lock_path)?;
+    let context = context.with_filtered_path(lock.path(), "PROJECT_ENVIRONMENT_LOCK");
 
     // A pathless invocation from the project root uses the workspace-derived lock, including when
     // `UV_PROJECT_ENVIRONMENT` changes the environment path. Lock errors warn and continue.
@@ -418,8 +412,8 @@ async fn create_venv_project_environment_lock() -> Result<()> {
 }
 
 /// Project aliases share the workspace lock even before the environment exists.
-#[tokio::test]
-async fn create_venv_project_environment_lock_symlink() -> Result<()> {
+#[test]
+fn create_venv_project_environment_lock_symlink() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&["3.12"]);
 
     context.temp_dir.child("pyproject.toml").write_str(
@@ -436,13 +430,8 @@ async fn create_venv_project_environment_lock_symlink() -> Result<()> {
     // Simulate another project command holding the environment lock.
     let install_path = dunce::canonicalize(context.temp_dir.path())?;
     let lock_path = std::env::temp_dir().join(format!("uv-{}.lock", cache_digest(&install_path)));
-    let lock = LockedFile::acquire(
-        &lock_path,
-        LockedFileMode::Exclusive,
-        context.temp_dir.path().display(),
-    )
-    .await?;
-    let context = context.with_filtered_path(&lock_path, "PROJECT_ENVIRONMENT_LOCK");
+    let lock = context.hold_lock(&lock_path)?;
+    let context = context.with_filtered_path(lock.path(), "PROJECT_ENVIRONMENT_LOCK");
 
     // A project alias uses the same lock, including when `UV_PROJECT_ENVIRONMENT` changes the
     // environment path. Lock errors warn and continue.
@@ -2064,16 +2053,16 @@ fn path_with_trailing_space_gives_proper_error() {
     // Windows translates error messages, for example i get:
     // ": Das System kann den angegebenen Pfad nicht finden. (os error 3)"
     let context = context.with_filter((
-        r"\.lock`: .* \(os error 3\)",
-        ".lock`: The system cannot find the path specified. (os error 3)",
+        r"CACHEDIR\.TAG`: .* \(os error 3\)",
+        "CACHEDIR.TAG`: The system cannot find the path specified. (os error 3)",
     ));
     uv_snapshot!(context.filters(), std::process::Command::new(uv_test::get_bin!())
         .arg("venv")
         .env(EnvVars::UV_CACHE_DIR, path_with_trailing_slash), @r###"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Could not acquire lock
-      cause: failed to open file `[CACHE_DIR]/ /.lock`: The system cannot find the path specified. (os error 3)
+    error: Failed to initialize cache at `[CACHE_DIR]/ `
+      cause: failed to open file `[CACHE_DIR]/ /CACHEDIR.TAG`: The system cannot find the path specified. (os error 3)
     "###
     );
     // Note the extra trailing `/` in the snapshot is due to the filters, not the actual output.

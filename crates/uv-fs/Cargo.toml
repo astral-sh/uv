@@ -16,6 +16,8 @@ doctest = false
 workspace = true
 
 [dependencies]
+uv-cache-key = { workspace = true, optional = true }
+uv-state = { workspace = true, optional = true }
 uv-static = { workspace = true }
 uv-warnings = { workspace = true }
 
@@ -56,4 +58,4 @@ windows = { workspace = true }
 [features]
 default = []
 clap = ["dep:clap"]
-tokio = ["dep:tokio", "fs-err/tokio"]
+tokio = ["dep:tokio", "dep:uv-cache-key", "dep:uv-state", "fs-err/tokio"]

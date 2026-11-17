@@ -73,6 +73,8 @@ pub enum StateBucket {
     Tools,
     /// Credentials.
     Credentials,
+    /// Cross-process filesystem locks.
+    Locks,
 }
 
 impl StateBucket {
@@ -81,6 +83,7 @@ impl StateBucket {
             Self::ManagedPython => "python",
             Self::Tools => "tools",
             Self::Credentials => "credentials",
+            Self::Locks => "locks",
         }
     }
 }
