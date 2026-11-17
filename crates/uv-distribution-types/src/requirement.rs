@@ -55,6 +55,7 @@ pub struct Requirement {
     #[serde(
         skip_serializing_if = "marker::ser::is_empty",
         serialize_with = "marker::ser::serialize",
+        deserialize_with = "MarkerTree::deserialize_dependency",
         default
     )]
     pub marker: MarkerTree,

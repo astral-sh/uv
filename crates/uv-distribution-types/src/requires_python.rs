@@ -581,7 +581,10 @@ impl From<RequiresPythonRange> for Ranges<Version> {
 /// a simplified marker, one must re-contextualize it by adding the
 /// `requires-python` constraint back to the marker.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, PartialOrd, Ord, serde::Deserialize)]
-pub struct SimplifiedMarkerTree(MarkerTree);
+#[serde(transparent)]
+pub struct SimplifiedMarkerTree(
+    #[serde(deserialize_with = "MarkerTree::deserialize_environment")] MarkerTree,
+);
 
 impl SimplifiedMarkerTree {
     /// Simplifies the given markers by assuming the given `requires-python`
