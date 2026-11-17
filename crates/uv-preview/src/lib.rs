@@ -475,6 +475,8 @@ pub enum PreviewFeature {
     /// to respond. Uploads use their [upload timeout](../reference/environment.md#uv_upload_http_timeout).
     /// A request can still time out waiting for data even when the peer acknowledges pings.
     Http2KeepAlive,
+    /// Allows using [proxy indexes](./indexes.md#proxy-indexes).
+    ProxyIndex,
 }
 
 impl Display for PreviewFeature {

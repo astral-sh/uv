@@ -1,4 +1,4 @@
-use uv_distribution_types::{IndexUrl, RegistryBuiltWheel};
+use uv_distribution_types::{IndexLocations, IndexUrl, RegistryBuiltWheel};
 use uv_redacted::SafeUrl;
 
 use crate::{Error, ErrorKind};
@@ -14,14 +14,26 @@ pub(super) struct RegistryWheelRequest<'a> {
 
 impl<'a> RegistryWheelRequest<'a> {
     /// Resolve the wheel's artifact URL and effective index together.
-    pub(super) fn for_wheel(wheel: &'a RegistryBuiltWheel) -> Result<Self, Error> {
-        Ok(Self {
-            url: wheel
+    pub(super) fn for_wheel(
+        wheel: &'a RegistryBuiltWheel,
+        indexes: &'a IndexLocations,
+    ) -> Result<Self, Error> {
+        let (url, effective_index) = if let Some(route) = indexes.proxy_route_for(&wheel.index) {
+            let url = route
+                .artifact_url_for_request(&wheel.file.location)
+                .map_err(ErrorKind::ProxyIndex)?;
+            (url, route.effective_url())
+        } else {
+            let url = wheel
                 .file
                 .location
                 .to_url()
-                .map_err(ErrorKind::InvalidUrl)?,
-            effective_index: &wheel.index,
+                .map_err(ErrorKind::InvalidUrl)?;
+            (url, &wheel.index)
+        };
+        Ok(Self {
+            url,
+            effective_index,
         })
     }
 

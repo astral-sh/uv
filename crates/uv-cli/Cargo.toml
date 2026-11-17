@@ -46,6 +46,7 @@ serde = { workspace = true }
 
 [dev-dependencies]
 insta = { workspace = true }
+toml = { workspace = true }
 
 [features]
 default = []

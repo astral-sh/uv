@@ -78,15 +78,23 @@ impl Index {
 /// This rejects partial segment matches, so `/simple` matches `/simple/anyio` but not
 /// `/simpleevil`.
 pub(crate) fn is_path_prefix(prefix: &str, path: &str) -> bool {
+    strip_path_prefix(prefix, path).is_some()
+}
+
+/// Strip a complete path-segment prefix and its separating slash from a URL path.
+///
+/// A trailing slash in `prefix` serves as the separator. Additional slashes in `path` are retained.
+pub fn strip_path_prefix<'a>(prefix: &str, path: &'a str) -> Option<&'a str> {
     if prefix == path {
-        return true;
+        return Some("");
     }
 
-    let Some(suffix) = path.strip_prefix(prefix) else {
-        return false;
-    };
-
-    prefix.ends_with('/') || suffix.starts_with('/')
+    let suffix = path.strip_prefix(prefix)?;
+    if prefix.ends_with('/') {
+        Some(suffix)
+    } else {
+        suffix.strip_prefix('/')
+    }
 }
 
 // TODO(john): Multiple methods in this struct need to iterate over
@@ -165,5 +173,19 @@ mod tests {
                 "Should not match URL with partial path segment: {url}"
             );
         }
+    }
+
+    #[test]
+    fn test_strip_path_prefix() {
+        assert_eq!(strip_path_prefix("/files", "/files"), Some(""));
+        assert_eq!(strip_path_prefix("/files/", "/files"), None);
+        assert_eq!(
+            strip_path_prefix("/files/", "/files//wheel.whl"),
+            Some("/wheel.whl")
+        );
+        assert_eq!(
+            strip_path_prefix("/files", "/files//wheel.whl"),
+            Some("/wheel.whl")
+        );
     }
 }

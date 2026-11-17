@@ -14,7 +14,8 @@ use uv_configuration::{
 use uv_distribution_types::{
     ConfigSettings, ExcludeNewerOverride, ExcludeNewerSpan, ExcludeNewerValue, ExtraBuildVariables,
     Index, IndexLocations, IndexUrl, IndexUrlError, MinimumLibcVersion, Origin,
-    PackageConfigSettings, PipExtraIndex, PipFindLinks, PipIndex, StaticMetadata,
+    PackageConfigSettings, PipExtraIndex, PipFindLinks, PipIndex, ProxyIndex,
+    ProxyIndexConfigError, StaticMetadata,
 };
 use uv_install_wheel::LinkMode;
 use uv_macros::{CombineOptions, DeserializeUntagged, OptionsMetadata};
@@ -559,6 +560,7 @@ fn rebase_indexes(
 #[derive(Debug, Clone, Default, CombineOptions)]
 pub struct InstallerOptions {
     index: Option<Vec<Index>>,
+    proxy_index: Option<Vec<ProxyIndex>>,
     index_url: Option<PipIndex>,
     extra_index_url: Option<Vec<PipExtraIndex>>,
     no_index: Option<bool>,
@@ -583,6 +585,7 @@ pub struct InstallerOptions {
 #[derive(Debug, Clone, Default, CombineOptions)]
 pub struct IndexOptions {
     pub index: Option<Vec<Index>>,
+    pub proxy_index: Option<Vec<ProxyIndex>>,
     pub index_url: Option<PipIndex>,
     pub extra_index_url: Option<Vec<PipExtraIndex>>,
     pub no_index: Option<bool>,
@@ -604,10 +607,13 @@ impl IndexOptions {
     }
 }
 
-impl From<IndexOptions> for IndexLocations {
-    fn from(value: IndexOptions) -> Self {
+impl TryFrom<IndexOptions> for IndexLocations {
+    type Error = ProxyIndexConfigError;
+
+    fn try_from(value: IndexOptions) -> Result<Self, Self::Error> {
         let IndexOptions {
             index,
+            proxy_index,
             index_url,
             extra_index_url,
             no_index,
@@ -621,6 +627,7 @@ impl From<IndexOptions> for IndexLocations {
                 .chain(extra_index_url.into_iter().flatten().map(Index::from))
                 .chain(index_url.into_iter().map(Index::from))
                 .collect(),
+            proxy_index.into_iter().flatten().collect(),
             find_links.into_iter().flatten().map(Index::from).collect(),
             no_index.unwrap_or_default(),
         )
@@ -631,6 +638,7 @@ impl From<IndexOptions> for PipOptions {
     fn from(value: IndexOptions) -> Self {
         let IndexOptions {
             index,
+            proxy_index,
             index_url,
             extra_index_url,
             no_index,
@@ -639,6 +647,7 @@ impl From<IndexOptions> for PipOptions {
 
         Self {
             index,
+            proxy_index,
             index_url,
             extra_index_url,
             no_index,
@@ -731,6 +740,7 @@ impl From<ResolverInstallerSchema> for ResolverInstallerOptions {
     fn from(value: ResolverInstallerSchema) -> Self {
         let ResolverInstallerSchema {
             index,
+            proxy_index,
             index_url,
             extra_index_url,
             no_index,
@@ -768,6 +778,7 @@ impl From<ResolverInstallerSchema> for ResolverInstallerOptions {
         Self {
             indexes: IndexOptions {
                 index,
+                proxy_index,
                 index_url,
                 extra_index_url,
                 no_index,
@@ -871,6 +882,28 @@ pub struct ResolverInstallerSchema {
         "#
     )]
     pub index: Option<Vec<Index>>,
+    /// The proxy indexes to use when resolving and downloading packages.
+    ///
+    /// `proxy-for` names a configured upstream index, `url` sets the proxy's Simple API URL, and
+    /// `artifact-base-url` sets its package download URL prefix. uv records upstream URLs in
+    /// lockfiles.
+    #[option(
+        default = "\"[]\"",
+        value_type = "dict",
+        example = r#"
+            [[tool.uv.index]]
+            name = "pypi"
+            url = "https://pypi.org/simple/"
+            default = true
+
+            [[tool.uv.proxy-index]]
+            name = "socket"
+            url = "https://proxy.example.com/simple/"
+            artifact-base-url = "https://proxy.example.com/files/"
+            proxy-for = "pypi"
+        "#
+    )]
+    pub proxy_index: Option<Vec<ProxyIndex>>,
     /// The URL of the Python package index (by default: <https://pypi.org/simple>).
     ///
     /// Accepts either a repository compliant with [PEP 503](https://peps.python.org/pep-0503/)
@@ -1537,6 +1570,9 @@ pub struct PipOptions {
     #[serde(skip)]
     #[cfg_attr(feature = "schemars", schemars(skip))]
     pub index: Option<Vec<Index>>,
+    #[serde(skip)]
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub proxy_index: Option<Vec<ProxyIndex>>,
     /// The URL of the Python package index (by default: <https://pypi.org/simple>).
     ///
     /// Accepts either a repository compliant with [PEP 503](https://peps.python.org/pep-0503/)
@@ -2298,6 +2334,7 @@ impl From<ResolverInstallerSchema> for ResolverOptions {
         Self {
             indexes: IndexOptions {
                 index: value.index,
+                proxy_index: value.proxy_index,
                 index_url: value.index_url,
                 extra_index_url: value.extra_index_url,
                 no_index: value.no_index,
@@ -2347,6 +2384,7 @@ impl From<ResolverInstallerSchema> for InstallerOptions {
     fn from(value: ResolverInstallerSchema) -> Self {
         Self {
             index: value.index,
+            proxy_index: value.proxy_index,
             index_url: value.index_url,
             extra_index_url: value.extra_index_url,
             no_index: value.no_index,
@@ -2386,6 +2424,7 @@ impl From<ResolverInstallerSchema> for InstallerOptions {
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct ToolOptions {
     index: Option<Vec<Index>>,
+    proxy_index: Option<Vec<ProxyIndex>>,
     index_url: Option<PipIndex>,
     extra_index_url: Option<Vec<PipExtraIndex>>,
     no_index: Option<bool>,
@@ -2421,6 +2460,7 @@ pub struct ToolOptions {
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 pub struct ToolOptionsWire {
     index: Option<Vec<Index>>,
+    proxy_index: Option<Vec<ProxyIndex>>,
     index_url: Option<PipIndex>,
     extra_index_url: Option<Vec<PipExtraIndex>>,
     no_index: Option<bool>,
@@ -2460,6 +2500,12 @@ impl From<ResolverInstallerOptions> for ToolOptions {
                 indexes
                     .into_iter()
                     .map(Index::with_promoted_auth_policy)
+                    .collect()
+            }),
+            proxy_index: value.indexes.proxy_index.map(|proxies| {
+                proxies
+                    .into_iter()
+                    .map(ProxyIndex::with_promoted_auth_policy)
                     .collect()
             }),
             index_url: value.indexes.index_url,
@@ -2514,6 +2560,7 @@ impl From<ToolOptionsWire> for ToolOptions {
 
         Self {
             index: value.index,
+            proxy_index: value.proxy_index,
             index_url: value.index_url,
             extra_index_url: value.extra_index_url,
             no_index: value.no_index,
@@ -2564,6 +2611,7 @@ impl From<ToolOptions> for ToolOptionsWire {
 
         Self {
             index: value.index,
+            proxy_index: value.proxy_index,
             index_url: value.index_url,
             extra_index_url: value.extra_index_url,
             no_index: value.no_index,
@@ -2602,6 +2650,7 @@ impl From<ToolOptions> for ResolverInstallerOptions {
         Self {
             indexes: IndexOptions {
                 index: value.index,
+                proxy_index: value.proxy_index,
                 index_url: value.index_url,
                 extra_index_url: value.extra_index_url,
                 no_index: value.no_index,
@@ -2661,6 +2710,7 @@ struct OptionsWire {
     // #[serde(flatten)]
     // top_level: ResolverInstallerOptions
     index: Option<Vec<Index>>,
+    proxy_index: Option<Vec<ProxyIndex>>,
     index_url: Option<PipIndex>,
     extra_index_url: Option<Vec<PipExtraIndex>>,
     no_index: Option<bool>,
@@ -2773,6 +2823,7 @@ impl TryFrom<OptionsWire> for Options {
             concurrent_builds,
             concurrent_installs,
             index,
+            proxy_index,
             index_url,
             extra_index_url,
             no_index,
@@ -2858,6 +2909,7 @@ impl TryFrom<OptionsWire> for Options {
             },
             top_level: ResolverInstallerSchema {
                 index,
+                proxy_index,
                 index_url,
                 extra_index_url,
                 no_index,
