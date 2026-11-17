@@ -115,12 +115,12 @@ jobs:
       - name: "Diagnose workflow failure"
         id: diagnose
         if: steps.context.outputs.ready == 'true'
-        uses: openai/codex-action@c05cfd74ad95c626cdf05c6685e62becc3bf7813
+        uses: openai/codex-action@306c6a196a99dcc6582530c396a19d2672d5e9ec # v1.14
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          codex-version: "0.162.1"
+          codex-version: "0.169.0"
           codex-home: "agents/codex"
           effort: high
           permission-profile: "workflow-failure"

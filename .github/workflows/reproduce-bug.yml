@@ -115,15 +115,16 @@ jobs:
 
       - name: "Reproduce issue behavior"
         id: reproduce
-        uses: openai/codex-action@c05cfd74ad95c626cdf05c6685e62becc3bf7813
+        uses: openai/codex-action@306c6a196a99dcc6582530c396a19d2672d5e9ec # v1.14
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TMPDIR: ${{ runner.temp }}
           UV_CACHE_DIR: ${{ runner.temp }}/uv-reproduce-cache
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          codex-version: "0.162.1"
+          codex-version: "0.169.0"
           codex-home: "agents/codex"
+          model: gpt-6.2-sol
           effort: high
           permission-profile: "reproduce-bug"
           safety-strategy: drop-sudo
@@ -270,7 +271,7 @@ jobs:
 
       - name: "Create integration test"
         id: create-test
-        uses: openai/codex-action@c05cfd74ad95c626cdf05c6685e62becc3bf7813
+        uses: openai/codex-action@306c6a196a99dcc6582530c396a19d2672d5e9ec # v1.14
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           INSTA_UPDATE: "no"
@@ -278,8 +279,9 @@ jobs:
           UV_CACHE_DIR: ${{ runner.temp }}/uv-create-test-cache
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          codex-version: "0.162.1"
+          codex-version: "0.169.0"
           codex-home: "agents/codex"
+          model: gpt-6.2-sol
           effort: high
           permission-profile: "create-bug-test"
           safety-strategy: drop-sudo

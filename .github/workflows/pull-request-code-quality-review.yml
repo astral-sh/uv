@@ -90,15 +90,15 @@ jobs:
 
       - name: "Review pull request"
         id: review
-        uses: openai/codex-action@c05cfd74ad95c626cdf05c6685e62becc3bf7813
+        uses: openai/codex-action@306c6a196a99dcc6582530c396a19d2672d5e9ec # v1.14
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TMPDIR: ${{ runner.temp }}/codex-code-quality-review
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          codex-version: "0.162.1"
+          codex-version: "0.169.0"
           codex-home: "${{ env.REVIEW_CONFIG }}/codex"
-          model: gpt-6-astra
+          model: gpt-6.2-astra
           effort: xhigh
           permission-profile: "pull-request-review"
           safety-strategy: drop-sudo
