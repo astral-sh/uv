@@ -28140,9 +28140,7 @@ fn lock_explicit_default_index() -> Result<()> {
     DEBUG The project environment's Python version satisfies the request: `Python >=3.12`
     DEBUG Using request connect timeout of [TIME] and read timeout of [TIME]
     DEBUG Found static `requires-dist` for: [TEMP_DIR]/
-    DEBUG Resolving despite existing lockfile due to mismatched requirements for: `project==0.1.0`
-      Requested: {Requirement { name: PackageName("anyio"), extras: [], groups: [], marker: true, source: Registry { specifier: VersionSpecifiers([]), index: None, conflict: None }, scope: Global, origin: None }}
-      Existing: {Requirement { name: PackageName("iniconfig"), extras: [], groups: [], marker: true, source: Registry { specifier: VersionSpecifiers([VersionSpecifier { operator: Equal, version: "2" }]), index: Some(IndexMetadata { url: Url(VerbatimUrl { url: SafeUrl { scheme: "https", cannot_be_a_base: false, username: "", password: None, host: Some(Domain("test.pypi.org")), port: None, path: "/simple", query: None, fragment: None }, given: None, expanded: false, force_relative: false }), format: Simple }), conflict: None }, scope: Global, origin: None }}
+    DEBUG Resolving despite existing lockfile: Requirements for `project==0.1.0` changed from `iniconfig==2 (index: https://test.pypi.org/simple)` to `anyio`
     DEBUG Found static `pyproject.toml` for: project @ file://[TEMP_DIR]/
     DEBUG Solving with installed Python version: 3.12.[X]
     DEBUG Solving with target Python version: >=3.12
@@ -41740,6 +41738,7 @@ async fn lock_trailing_slash_index_url_in_lockfile_not_pyproject() -> Result<()>
     ----- stderr -----
     Resolved 4 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Requirements for `project==0.1.0` changed from `anyio (index: http://[LOCALHOST]/simple/)` to `anyio (index: http://[LOCALHOST]/simple)`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -41833,6 +41832,7 @@ async fn lock_trailing_slash_index_url_in_pyproject_and_not_lockfile() -> Result
     ----- stderr -----
     Resolved 4 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Requirements for `project==0.1.0` changed from `anyio (index: http://[LOCALHOST]/simple)` to `anyio (index: http://[LOCALHOST]/simple/)`
 
     hint: To update the lockfile, run `uv lock`.
     ");
