@@ -2690,6 +2690,7 @@ mod tests {
                         ]
                       },
                       "index": null,
+                      "proxy-index": null,
                       "workspace": {
                         "members": [
                           "packages/*"
@@ -2792,6 +2793,7 @@ mod tests {
                     "uv": {
                       "sources": null,
                       "index": null,
+                      "proxy-index": null,
                       "workspace": {
                         "members": [
                           "packages/*"
@@ -3223,6 +3225,7 @@ mod tests {
                     "uv": {
                       "sources": null,
                       "index": null,
+                      "proxy-index": null,
                       "workspace": {
                         "members": [
                           "packages/*"
@@ -3333,6 +3336,7 @@ mod tests {
                     "uv": {
                       "sources": null,
                       "index": null,
+                      "proxy-index": null,
                       "workspace": {
                         "members": [
                           "packages/seeds",
@@ -3457,6 +3461,7 @@ mod tests {
                     "uv": {
                       "sources": null,
                       "index": null,
+                      "proxy-index": null,
                       "workspace": {
                         "members": [
                           "packages/seeds",
@@ -3555,6 +3560,7 @@ mod tests {
                     "uv": {
                       "sources": null,
                       "index": null,
+                      "proxy-index": null,
                       "workspace": {
                         "members": [
                           "packages/seeds",

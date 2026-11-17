@@ -52,11 +52,91 @@ $ UV_INDEX=pytorch=https://download.pytorch.org/whl/cpu uv lock
 
 With `--preview-features index-by-name`, configured index names take precedence over matching paths.
 
+## Proxy indexes
+
+!!! note
+
+    Proxy indexes are in [preview](./preview.md) and may change in future releases.
+    Pass `--preview-features proxy-index` or set
+    `preview-features = ["proxy-index"]` in your uv configuration to silence the preview warning.
+
+Proxy indexes route package resolution and downloads through an alternative registry without
+changing the upstream index and package download URLs recorded in lockfiles.
+
+This is useful when a local policy requires some contributors to use a registry that excludes newly
+published packages, while others use the upstream index directly. Configuring the relationship
+between the proxy and upstream index lets both groups share a lockfile without changing its URLs.
+
+To configure a proxy index, add a `[[tool.uv.proxy-index]]` entry with `proxy-for` set to the
+upstream index's name. The proxy's `url` tells uv where to look up packages, and its
+`artifact-base-url` tells uv where to download them. In `uv.toml`, use `[[proxy-index]]` instead.
+
+To use a PyPI proxy across projects, add both entries to your user-level
+[`uv.toml`](./configuration-files.md):
+
+```toml title="uv.toml"
+[[index]]
+name = "pypi"
+url = "https://pypi.org/simple/"
+default = true
+
+[[proxy-index]]
+name = "pypi-proxy"
+url = "https://proxy.example.com/simple/"
+artifact-base-url = "https://proxy.example.com/files/"
+proxy-for = "pypi"
+```
+
+!!! note
+
+    PyPI's `artifact-base-url` defaults to `https://files.pythonhosted.org/packages/`.
+
+When downloading a file recorded in `uv.lock`, uv rewrites its URL to use the proxy without looking
+it up in the proxy's package listing. Hiding the file from the listing does not block the download:
+the proxy must reject the download itself. uv can still reuse a cached copy.
+
+When installing from `pylock.toml`, uv can use the proxy only if `packages.index` identifies the
+upstream index for that package. Without this field, uv downloads directly from the recorded
+artifact URL. `uv pip compile --format pylock.toml` records the upstream URL in `packages.index`
+when it selects a file from a proxied index.
+
+To proxy a different index, give the upstream index a `name` and an `artifact-base-url`:
+
+```toml title="uv.toml"
+[[index]]
+name = "private"
+url = "https://packages.example.com/simple/"
+artifact-base-url = "https://downloads.example.com/packages/"
+
+[[proxy-index]]
+name = "private-proxy"
+url = "https://proxy.example.com/simple/"
+artifact-base-url = "https://proxy.example.com/files/"
+proxy-for = "private"
+```
+
+An index can have at most one proxy. Package files must have the same path after each index's
+`artifact-base-url`. For example, `https://downloads.example.com/packages/example/package.whl` maps
+to `https://proxy.example.com/files/example/package.whl`. Proxies that change package file paths are
+not supported. uv does not check the upstream path when locking, so a proxy that changes it can
+produce a lockfile that works only through the proxy. To check, try a frozen install without the
+proxy in a fresh environment with an empty cache.
+
+uv requires a supported hash for each proxied artifact it writes to `uv.lock` or `pylock.toml`,
+including when exporting an existing `uv.lock`. `uv sync --frozen` can install a proxied artifact if
+the existing `uv.lock` has no hash for it, but verifies the hash when one is present.
+
+With the `wheel-variants` preview enabled, uv fetches `*-variants.json` metadata from the URL
+advertised by the proxy. The `artifact-base-url` mapping does not apply to this metadata.
+
+If artifact downloads require authentication on a different host, configure the credentials on
+`artifact-base-url`.
+
 ## Pinning a package to an index
 
 A package can be pinned to a specific index by specifying the index in its `tool.uv.sources` entry.
-For example, to ensure that `torch` is _always_ installed from the `pytorch` index, add the
-following to your `pyproject.toml`:
+To pin a package to a proxied index, use the upstream index's name. For example, to ensure that
+`torch` is _always_ installed from the `pytorch` index, add the following to your `pyproject.toml`:
 
 ```toml
 [tool.uv.sources]

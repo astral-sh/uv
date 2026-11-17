@@ -32,7 +32,7 @@ use uv_tool::{InstalledTools, Tool};
 use uv_types::{HashStrategy, SourceTreeEditablePolicy};
 use uv_workspace::WorkspaceCache;
 
-use crate::common::{ToolLock, remove_entrypoints, tool_environment_spec};
+use crate::common::{ToolLock, combine_tool_options, remove_entrypoints, tool_environment_spec};
 use uv_command_support::{ExitStatus, Printer, conjunction};
 use uv_environment_operations::{
     EnvironmentResolution, EnvironmentUpdate, resolve_environment, sync_environment,
@@ -347,9 +347,12 @@ async fn upgrade_tool(
         }
     }
 
-    // Resolve the appropriate settings, preferring: CLI > receipt > user.
-    let options = args.clone().combine(receipt.combine(filesystem.clone()));
-    let settings = ResolverInstallerSettings::from(options.clone());
+    // Prefer CLI options, then receipt options, then configuration. A configured proxy
+    // takes the place of its saved copy.
+    let options = args
+        .clone()
+        .combine(combine_tool_options(receipt, filesystem.clone()));
+    let settings = ResolverInstallerSettings::try_from(options.clone())?;
 
     let build_constraints = existing_tool_receipt.build_constraints().to_vec();
     let manifest_constraints = existing_tool_receipt

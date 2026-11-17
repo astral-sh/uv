@@ -3,6 +3,30 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.13.9
+
+Released on 2026-11-17.
+
+### Preview features
+
+- Support PEP 832 `.venv` redirect files for project environments ([#21822](https://github.com/astral-sh/uv/pull/21822))
+- Add the `http2-keep-alive` preview feature to close unresponsive HTTP/2 connections with active requests ([#23236](https://github.com/astral-sh/uv/pull/23236))
+
+### Performance
+
+- Reduce lockfile size and speed up reads by factoring repeated conditions in environment markers ([#23184](https://github.com/astral-sh/uv/pull/23184))
+
+### Bug fixes
+
+- Reject wheels advertised by an index under a different package name ([#23261](https://github.com/astral-sh/uv/pull/23261))
+- Fix `uv lock --locked` rejecting lockfiles with equivalent platform markers written in different forms ([#23185](https://github.com/astral-sh/uv/pull/23185))
+- Correctly quote environment marker values that contain apostrophes ([#23185](https://github.com/astral-sh/uv/pull/23185))
+- Report which musl interpreter failed to return a readable version ([#23213](https://github.com/astral-sh/uv/pull/23213))
+
+### Other changes
+
+- Raise the minimum supported Rust version to 1.98 ([#23263](https://github.com/astral-sh/uv/pull/23263))
+
 ## 0.13.8
 
 Released on 2026-11-12.

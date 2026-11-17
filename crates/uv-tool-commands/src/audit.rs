@@ -14,10 +14,11 @@ use uv_lock::{Lock, LockParseError};
 use uv_normalize::{DefaultExtras, PackageName};
 use uv_preview::{Preview, PreviewFeature};
 use uv_redacted::SafeUrl;
-use uv_settings::{Combine, ResolverInstallerOptions};
+use uv_settings::ResolverInstallerOptions;
 use uv_tool::InstalledTools;
 use uv_warnings::warn_user;
 
+use crate::common::combine_tool_options;
 use uv_audit_operations::{
     AuditResults, artifact_uri, audit_lock, json, sarif, warn_unmatched_ignores,
 };
@@ -198,9 +199,10 @@ pub async fn audit(
             }
         };
 
-        let settings = ResolverInstallerSettings::from(
-            ResolverInstallerOptions::from(tool.options().clone()).combine(filesystem.clone()),
-        );
+        let settings = ResolverInstallerSettings::try_from(combine_tool_options(
+            tool.options().clone().into(),
+            filesystem.clone(),
+        ))?;
         let outcome = audit_lock(
             &lock,
             &root,

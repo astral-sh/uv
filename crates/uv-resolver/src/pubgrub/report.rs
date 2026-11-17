@@ -6,7 +6,7 @@ use std::fmt::Write;
 use std::iter;
 use std::ops::Bound;
 
-use indexmap::IndexSet;
+use indexmap::{IndexMap, IndexSet};
 use itertools::Itertools;
 use jiff::Timestamp;
 use owo_colors::OwoColorize;
@@ -1374,19 +1374,53 @@ impl PubGrubReportFormatter<'_> {
             }
         }
 
-        // Add hints due to an index returning an unauthorized response.
+        // Add hints due to an index or its proxy returning an authentication error.
+        Self::authentication_hints(
+            index_locations,
+            index_capabilities,
+            available_indexes,
+            hints,
+        );
+    }
+
+    fn authentication_hints(
+        index_locations: &IndexLocations,
+        index_capabilities: &IndexCapabilities,
+        available_indexes: &FxHashMap<PackageName, BTreeSet<IndexUrl>>,
+        hints: &mut IndexSet<PubGrubHint>,
+    ) {
+        let mut indexes = IndexMap::<IndexUrl, bool>::new();
+
         for index in index_locations.allowed_indexes() {
-            if index_capabilities.unauthorized(&index.url) {
+            indexes
+                .entry(index_locations.effective_url(&index.url).clone())
+                .or_default();
+        }
+        for route in index_locations.proxy_routes() {
+            indexes.entry(route.effective_url().clone()).or_default();
+        }
+
+        for canonical in available_indexes.values().flatten() {
+            if let Some(any_successful_response) =
+                indexes.get_mut(index_locations.effective_url(canonical))
+            {
+                *any_successful_response = true;
+            }
+        }
+
+        for (index, any_successful_response) in indexes {
+            if index_capabilities.unauthorized(&index) {
                 hints.insert(PubGrubHint::UnauthorizedIndex {
-                    index: index.url.clone(),
+                    index: index.clone(),
                 });
             }
-            if index_capabilities.forbidden(&index.url) {
+            if index_capabilities.forbidden(&index) {
                 hints.insert(PubGrubHint::ForbiddenIndex {
-                    index: index.url.clone(),
-                    any_successful_response: available_indexes
-                        .values()
-                        .any(|indexes| indexes.contains(&index.url)),
+                    is_proxy: index_locations
+                        .proxy_routes()
+                        .any(|route| route.effective_url() == &index),
+                    index,
+                    any_successful_response,
                 });
             }
         }
@@ -1692,6 +1726,8 @@ pub enum PubGrubHint {
         index: IndexUrl,
         // excluded from `PartialEq` and `Hash`
         any_successful_response: bool,
+        // excluded from `PartialEq` and `Hash`
+        is_proxy: bool,
     },
     /// None of the available wheels for a package have a compatible Python language tag (e.g.,
     /// `cp310` in `cp310-abi3-manylinux_2_17_x86_64.whl`).
@@ -2243,11 +2279,17 @@ impl std::fmt::Display for PubGrubHint {
             Self::ForbiddenIndex {
                 index,
                 any_successful_response,
+                is_proxy,
             } => {
                 if *any_successful_response {
+                    let entry = if *is_proxy {
+                        "[[tool.uv.proxy-index]]"
+                    } else {
+                        "[[tool.uv.index]]"
+                    };
                     write!(
                         f,
-                        "An index ({}) returned a {} error, but uv received a successful response from another request to the index. If the failing package is not present on this index, consider adding `ignore-error-codes = [403]` to the index's `[[tool.uv.index]]` entry to continue searching across indexes.",
+                        "An index ({}) returned a {} error, but uv received a successful response from another request to the index. If the failing package is not present on this index, consider adding `ignore-error-codes = [403]` to the index's `{entry}` entry to continue searching across indexes.",
                         index.without_credentials().cyan(),
                         "403 Forbidden".red(),
                     )
@@ -2860,9 +2902,13 @@ fn padded<'a, T: std::fmt::Display + ?Sized>(
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use pubgrub::{DefaultStringReporter, Reporter};
-    use uv_distribution_types::RequiresPython;
+    use uv_distribution_types::{IndexName, IndexStatusCodeStrategy, ProxyIndex, RequiresPython};
     use uv_pep508::{MarkerEnvironment, MarkerEnvironmentBuilder};
+    use uv_redacted::SafeUrl;
+    use uv_redacted::policy::Stripped;
 
     use super::*;
 
@@ -2922,6 +2968,155 @@ mod tests {
                 tags: None,
             }
         }
+    }
+
+    #[test]
+    fn proxy_authentication_hints_use_physical_indexes() -> Result<(), Box<dyn std::error::Error>> {
+        let canonical = IndexUrl::from_str(
+            "https://canonical-user:canonical-secret@canonical.example.com/simple",
+        )?;
+        let redacted_canonical = IndexUrl::from_str("https://canonical.example.com/simple")?;
+        let physical =
+            IndexUrl::from_str("https://proxy-user:proxy-secret@proxy.example.com/simple")?;
+        let unrelated = IndexUrl::from_str("https://unrelated.example.com/simple")?;
+
+        let name = IndexName::from_str("canonical")?;
+
+        let mut index = Index::from_extra_index_url(canonical);
+        index.name = Some(name.clone());
+        index.artifact_base_url =
+            Some(SafeUrl::parse("https://canonical.example.com/packages/")?.with_policy(Stripped));
+
+        let mut proxy = ProxyIndex::new(
+            physical.clone(),
+            name,
+            SafeUrl::parse("https://proxy-user:proxy-secret@proxy.example.com/files/")?
+                .with_policy(Stripped),
+        );
+        proxy.name = Some(IndexName::from_str("proxy")?);
+
+        let index_locations = IndexLocations::new(vec![index], vec![proxy], Vec::new(), false)?;
+
+        let index_capabilities = IndexCapabilities::default();
+        let _ = IndexStatusCodeStrategy::Default.handle_status_code(
+            StatusCode::UNAUTHORIZED,
+            &physical,
+            &index_capabilities,
+        );
+        let _ = IndexStatusCodeStrategy::Default.handle_status_code(
+            StatusCode::FORBIDDEN,
+            &physical,
+            &index_capabilities,
+        );
+        let _ = IndexStatusCodeStrategy::Default.handle_status_code(
+            StatusCode::UNAUTHORIZED,
+            &unrelated,
+            &index_capabilities,
+        );
+
+        let available_indexes = FxHashMap::from_iter([
+            (
+                PackageName::from_str("example")?,
+                BTreeSet::from([redacted_canonical]),
+            ),
+            (
+                PackageName::from_str("unrelated")?,
+                BTreeSet::from([unrelated]),
+            ),
+        ]);
+        let mut hints = IndexSet::new();
+
+        PubGrubReportFormatter::authentication_hints(
+            &index_locations,
+            &index_capabilities,
+            &available_indexes,
+            &mut hints,
+        );
+
+        for hint in &hints {
+            let rendered = hint.to_string();
+            assert!(!rendered.contains("canonical-user"));
+            assert!(!rendered.contains("canonical-secret"));
+            assert!(!rendered.contains("proxy-user"));
+            assert!(!rendered.contains("proxy-secret"));
+            if let PubGrubHint::ForbiddenIndex { .. } = hint {
+                insta::with_settings!({ filters => [(r"\x1b\[[0-9;]*m", "")] }, {
+                    insta::assert_snapshot!(rendered, @"An index (https://proxy.example.com/simple) returned a 403 Forbidden error, but uv received a successful response from another request to the index. If the failing package is not present on this index, consider adding `ignore-error-codes = [403]` to the index's `[[tool.uv.proxy-index]]` entry to continue searching across indexes.");
+                });
+            }
+        }
+
+        let hints = hints
+            .iter()
+            .map(|hint| match hint {
+                PubGrubHint::UnauthorizedIndex { index } => Ok((
+                    "unauthorized",
+                    index.without_credentials().to_string(),
+                    None,
+                )),
+                PubGrubHint::ForbiddenIndex {
+                    index,
+                    any_successful_response,
+                    is_proxy: _,
+                } => Ok((
+                    "forbidden",
+                    index.without_credentials().to_string(),
+                    Some(*any_successful_response),
+                )),
+                _ => Err(std::io::Error::other("unexpected authentication hint")),
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        insta::assert_debug_snapshot!(hints, @r#"
+        [
+            (
+                "unauthorized",
+                "https://proxy.example.com/simple",
+                None,
+            ),
+            (
+                "forbidden",
+                "https://proxy.example.com/simple",
+                Some(
+                    true,
+                ),
+            ),
+        ]
+        "#);
+
+        Ok(())
+    }
+
+    #[test]
+    fn proxy_authentication_hints_respect_no_index() -> Result<(), Box<dyn std::error::Error>> {
+        let physical = IndexUrl::from_str("https://proxy.example.com/simple")?;
+
+        let mut proxy = ProxyIndex::new(
+            physical.clone(),
+            IndexName::from_str("upstream")?,
+            SafeUrl::parse("https://proxy.example.com/files/")?.with_policy(Stripped),
+        );
+        proxy.name = Some(IndexName::from_str("proxy")?);
+
+        let index_locations = IndexLocations::new(Vec::new(), vec![proxy], Vec::new(), true)?;
+        let index_capabilities = IndexCapabilities::default();
+        let _ = IndexStatusCodeStrategy::Default.handle_status_code(
+            StatusCode::UNAUTHORIZED,
+            &physical,
+            &index_capabilities,
+        );
+
+        let mut hints = IndexSet::new();
+        PubGrubReportFormatter::authentication_hints(
+            &index_locations,
+            &index_capabilities,
+            &FxHashMap::default(),
+            &mut hints,
+        );
+
+        assert!(hints.is_empty());
+
+        Ok(())
     }
 
     #[test]

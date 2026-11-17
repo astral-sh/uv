@@ -6,6 +6,7 @@ use predicates::prelude::predicate;
 use serde_json::json;
 use std::process::Command;
 
+use uv_cache::CacheBucket;
 use uv_fs::Simplified;
 use uv_python_interpreter::virtualenv_python_executable;
 use uv_static::EnvVars;
@@ -57,7 +58,7 @@ fn sync_centralized_env() -> Result<()> {
     let target = fs_err::read_link(link.path())?;
     // The project link points into the cache.
     insta::with_settings!({ filters => context.filters() }, {
-        assert_snapshot!(target.portable_display(), @"[CACHE_DIR]/environments-v2/project-cp3.12.[X]-[HASH]");
+        assert_snapshot!(target.portable_display(), @"[CACHE_DIR]/environments-[VERSION]/project-cp3.12.[X]-[HASH]");
     });
 
     fs_err::remove_dir_all(link.path())?;
@@ -69,7 +70,7 @@ fn sync_centralized_env() -> Result<()> {
         .arg("centralized-project-envs"), @r#"
     exit_code: 0 (success)
     ----- stderr -----
-    Would use project environment at: [CACHE_DIR]/environments-v2/project-cp3.12.[X]-[HASH]
+    Would use project environment at: [CACHE_DIR]/environments-[VERSION]/project-cp3.12.[X]-[HASH]
     Resolved 2 packages in [TIME]
     Found up-to-date lockfile at: uv.lock
     Checked 1 package in [TIME]
@@ -96,7 +97,7 @@ fn sync_centralized_env_switch_python() -> Result<()> {
         .success();
     let link_312 = fs_err::read_link(context.temp_dir.child(".venv").path())?;
     insta::with_settings!({ filters => context.filters() }, {
-        assert_snapshot!(link_312.portable_display(), @"[CACHE_DIR]/environments-v2/project-cp3.12.[X]-[HASH]");
+        assert_snapshot!(link_312.portable_display(), @"[CACHE_DIR]/environments-[VERSION]/project-cp3.12.[X]-[HASH]");
     });
 
     context
@@ -109,7 +110,7 @@ fn sync_centralized_env_switch_python() -> Result<()> {
         .success();
     let link_311 = fs_err::read_link(context.temp_dir.child(".venv").path())?;
     insta::with_settings!({ filters => context.filters() }, {
-        assert_snapshot!(link_311.portable_display(), @"[CACHE_DIR]/environments-v2/project-cp3.11.[X]-[HASH]");
+        assert_snapshot!(link_311.portable_display(), @"[CACHE_DIR]/environments-[VERSION]/project-cp3.11.[X]-[HASH]");
     });
 
     // The original environment is reused, not recreated.
@@ -148,7 +149,7 @@ fn sync_centralized_env_distinguishes_python_patch() -> Result<()> {
         .success();
     let first = fs_err::read_link(context.temp_dir.child(".venv").path())?;
     insta::with_settings!({ filters => context.filters() }, {
-        assert_snapshot!(first.portable_display(), @"[CACHE_DIR]/environments-v2/project-cp3.12.9-[HASH]");
+        assert_snapshot!(first.portable_display(), @"[CACHE_DIR]/environments-[VERSION]/project-cp3.12.9-[HASH]");
     });
 
     context
@@ -161,7 +162,7 @@ fn sync_centralized_env_distinguishes_python_patch() -> Result<()> {
         .success();
     let second = fs_err::read_link(context.temp_dir.child(".venv").path())?;
     insta::with_settings!({ filters => context.filters() }, {
-        assert_snapshot!(second.portable_display(), @"[CACHE_DIR]/environments-v2/project-cp3.12.11-[HASH]");
+        assert_snapshot!(second.portable_display(), @"[CACHE_DIR]/environments-[VERSION]/project-cp3.12.11-[HASH]");
     });
     Ok(())
 }
@@ -184,7 +185,7 @@ fn sync_centralized_env_survives_python_patch_upgrade() -> Result<()> {
         .success();
     let first = fs_err::read_link(context.temp_dir.child(".venv").path())?;
     insta::with_settings!({ filters => context.filters() }, {
-        assert_snapshot!(first.portable_display(), @"[CACHE_DIR]/environments-v2/project-cp3.12-[HASH]");
+        assert_snapshot!(first.portable_display(), @"[CACHE_DIR]/environments-[VERSION]/project-cp3.12-[HASH]");
     });
 
     // The transparent upgrade retargets the environment to a different interpreter.
@@ -348,7 +349,7 @@ fn sync_centralized_env_respects_active_default_environment() -> Result<()> {
     Checked in [TIME]
     "#);
 
-    assert!(!context.cache_dir.child("environments-v2").exists());
+    assert!(!context.cache_bucket(CacheBucket::Environments).exists());
     Ok(())
 }
 
@@ -383,7 +384,7 @@ fn sync_centralized_env_virtual_workspace() -> Result<()> {
     let target = fs_err::read_link(context.temp_dir.child(".venv").path())?;
     // The workspace root owns the centralized environment.
     insta::with_settings!({ filters => context.filters() }, {
-        assert_snapshot!(target.portable_display(), @"[CACHE_DIR]/environments-v2/temp-cp3.12.[X]-[HASH]");
+        assert_snapshot!(target.portable_display(), @"[CACHE_DIR]/environments-[VERSION]/temp-cp3.12.[X]-[HASH]");
     });
     // The workspace member does not get its own environment.
     assert_path_missing(member.child(".venv"));
@@ -416,7 +417,7 @@ fn sync_centralized_env_dry_run() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    Would create project environment at: [CACHE_DIR]/environments-v2/project-cp3.12.[X]-[HASH]
+    Would create project environment at: [CACHE_DIR]/environments-[VERSION]/project-cp3.12.[X]-[HASH]
     Resolved 2 packages in [TIME]
     Would create lockfile at: uv.lock
     Would download 1 package
@@ -425,7 +426,7 @@ fn sync_centralized_env_dry_run() -> Result<()> {
     "#);
     // Dry-run creates neither the persistent environment nor its project link.
     assert_path_missing(context.temp_dir.child(".venv"));
-    assert!(!context.cache_dir.child("environments-v2").exists());
+    assert!(!context.cache_bucket(CacheBucket::Environments).exists());
     Ok(())
 }
 
@@ -442,7 +443,7 @@ fn cache_prune_removes_and_recreates_centralized_environment() -> Result<()> {
         .success();
     let link = context.temp_dir.child(".venv");
     let target = fs_err::read_link(link.path())?;
-    assert!(target.starts_with(context.cache_dir.child("environments-v2").path()));
+    assert!(target.starts_with(context.cache_bucket(CacheBucket::Environments).path()));
     assert!(target.is_dir());
 
     context.prune().assert().success();
@@ -535,7 +536,7 @@ fn sync_centralized_env_no_cache_uses_dot_venv() -> Result<()> {
     let target = fs_err::read_link(environment.path())?;
     // A later cached invocation replaces the local environment with a centralized one.
     insta::with_settings!({ filters => context.filters() }, {
-        assert_snapshot!(target.portable_display(), @"[CACHE_DIR]/environments-v2/project-cp3.12.[X]-[HASH]");
+        assert_snapshot!(target.portable_display(), @"[CACHE_DIR]/environments-[VERSION]/project-cp3.12.[X]-[HASH]");
     });
 
     // With `--no-cache`, uv follows the existing `.venv` link without recreating the environment.
@@ -573,7 +574,7 @@ fn sync_centralized_env_replaces_existing_directory_link() -> Result<()> {
 
     let target = fs_err::read_link(environment.path())?;
     insta::with_settings!({ filters => context.filters() }, {
-        assert_snapshot!(target.portable_display(), @"[CACHE_DIR]/environments-v2/project-cp3.12.[X]-[HASH]");
+        assert_snapshot!(target.portable_display(), @"[CACHE_DIR]/environments-[VERSION]/project-cp3.12.[X]-[HASH]");
     });
     assert!(marker.is_file());
     Ok(())
@@ -602,7 +603,7 @@ fn sync_centralized_env_with_existing_file() -> Result<()> {
     "#);
     let target = fs_err::read_link(environment.path())?;
     insta::with_settings!({ filters => context.filters() }, {
-        assert_snapshot!(target.portable_display(), @"[CACHE_DIR]/environments-v2/project-cp3.12.[X]-[HASH]");
+        assert_snapshot!(target.portable_display(), @"[CACHE_DIR]/environments-[VERSION]/project-cp3.12.[X]-[HASH]");
     });
     Ok(())
 }
@@ -620,15 +621,14 @@ fn sync_recovers_from_centralized_environment_path_file() -> Result<()> {
 
     // A centralized path file can be replaced when returning to a local environment.
     let target = context
-        .cache_dir
-        .child("environments-v2")
+        .cache_bucket(CacheBucket::Environments)
         .child("project-cp3.12-0123456789abcdef");
     environment.write_str(&target.path().to_string_lossy())?;
 
     context.sync().assert().success();
 
     assert!(uv_fs::is_virtualenv_base(environment.path()));
-    assert!(!context.cache_dir.child("environments-v2").exists());
+    assert!(!context.cache_bucket(CacheBucket::Environments).exists());
     Ok(())
 }
 
@@ -827,7 +827,7 @@ fn sync_centralized_env_replaces_existing_empty_directory() -> Result<()> {
 
     let target = fs_err::read_link(context.temp_dir.child(".venv").path())?;
     insta::with_settings!({ filters => context.filters() }, {
-        assert_snapshot!(target.portable_display(), @"[CACHE_DIR]/environments-v2/project-cp3.12.[X]-[HASH]");
+        assert_snapshot!(target.portable_display(), @"[CACHE_DIR]/environments-[VERSION]/project-cp3.12.[X]-[HASH]");
     });
     Ok(())
 }
@@ -922,7 +922,7 @@ fn sync_centralized_env_local_environment_removal_failure_is_not_fatal() -> Resu
     "#);
 
     assert!(pyvenv_cfg.is_file());
-    assert!(context.cache_dir.child("environments-v2").is_dir());
+    assert!(context.cache_bucket(CacheBucket::Environments).is_dir());
     Ok(())
 }
 

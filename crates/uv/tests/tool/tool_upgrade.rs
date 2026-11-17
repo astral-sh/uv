@@ -1755,6 +1755,85 @@ async fn mount_simple_launcher_index(server: &PackageServer, hash: &str, wheel: 
         .await;
 }
 
+/// A proxy saved in a tool receipt is not a second declaration of the configured proxy.
+#[tokio::test]
+async fn tool_upgrade_reconciles_saved_proxy_with_configuration() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_tool_dirs();
+    let bin_dir = context.temp_dir.child("bin");
+    let wheel = context.read_bytes(
+        context
+            .workspace_root
+            .join("test/links/simple_launcher-0.1.0-py3-none-any.whl"),
+    );
+    let server = PackageServer::new(&"simple-launcher".parse()?).await;
+    mount_simple_launcher_index(
+        &server,
+        "5327e0bb67cdb46800999de6dcf034bf0a5335702883494af0d8b7f6ca48cee4",
+        &wheel,
+    )
+    .await;
+
+    let uv_toml = context.temp_dir.child("uv.toml");
+    let upstream = indoc! {r#"
+        [[index]]
+        name = "pypi"
+        url = "https://pypi.org/simple"
+        default = true
+    "#};
+    let proxy = format!(
+        indoc! {r#"
+            [[proxy-index]]
+            name = "receipt-proxy"
+            url = "http://proxy-user:proxy-secret@{}/simple"
+            artifact-base-url = "{}"
+            proxy-for = "pypi"
+        "#},
+        server.mock_server().address(),
+        server.file_url(""),
+    );
+    uv_toml.write_str(&format!("{upstream}\n{proxy}"))?;
+
+    context
+        .tool_install()
+        .arg("simple-launcher")
+        .arg("--config-file")
+        .arg(uv_toml.as_os_str())
+        .env(EnvVars::UV_PREVIEW_FEATURES, "proxy-index")
+        .env_remove(EnvVars::UV_DEFAULT_INDEX)
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("simple-launcher")
+        .arg("--config-file")
+        .arg(uv_toml.as_os_str())
+        .env(EnvVars::UV_PREVIEW_FEATURES, "proxy-index")
+        .env_remove(EnvVars::UV_DEFAULT_INDEX)
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Nothing to upgrade
+    ");
+
+    // Only the saved copy is reconciled; both live declarations must still be validated.
+    uv_toml.write_str(&format!("{upstream}\n{proxy}\n{proxy}"))?;
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("simple-launcher")
+        .arg("--config-file")
+        .arg(uv_toml.as_os_str())
+        .env(EnvVars::UV_PREVIEW_FEATURES, "proxy-index")
+        .env_remove(EnvVars::UV_DEFAULT_INDEX)
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to upgrade simple-launcher
+      cause: Each index can have only one proxy, but both `http://proxy-user:****@[LOCALHOST]/simple` and `http://proxy-user:****@[LOCALHOST]/simple` are proxies for `https://pypi.org/simple`
+    ");
+
+    Ok(())
+}
+
 #[tokio::test]
 async fn tool_upgrade_resolution_hints() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_tool_dirs();

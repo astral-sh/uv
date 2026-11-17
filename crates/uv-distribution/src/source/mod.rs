@@ -47,7 +47,7 @@ use uv_redacted::SafeUrl;
 use uv_types::{BuildContext, BuildKey, BuildStack, SourceBuildTrait};
 use uv_workspace::pyproject::ToolUvSources;
 
-use crate::distribution_database::ManagedClient;
+use crate::distribution_database::{ManagedClient, RegistryArtifactRequest};
 use crate::error::Error;
 use crate::hash::{ArtifactHashPolicy, HTTP_DEFAULT_HASH_ALGORITHMS};
 use crate::metadata::{ArchiveMetadata, GitWorkspaceMember, Metadata};
@@ -290,27 +290,32 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     ) -> Result<BuiltWheelMetadata, Error> {
         let built_wheel_metadata = match &source {
             BuildableSource::Dist(SourceDist::Registry(dist)) => {
+                let request = RegistryArtifactRequest::new(
+                    &dist.index,
+                    &dist.file.location,
+                    client.index_locations(),
+                )?;
+
                 // For registry source distributions, shard by package, then version, for
                 // convenience in debugging.
                 let cache_shard = self.build_context.cache().shard(
                     CacheBucket::SourceDistributions,
-                    WheelCache::Index(&dist.index)
+                    WheelCache::Index(request.index)
                         .wheel_dir(dist.name.as_ref())
                         .join(dist.version.to_string()),
                 );
 
-                let url = dist.file.location.to_url()?;
-
                 // If the URL is a file URL, use the local path directly.
-                if url.scheme() == "file" {
-                    let path = url
+                if request.url.scheme() == "file" {
+                    let path = request
+                        .url
                         .to_file_path()
-                        .map_err(|()| Error::NonFileUrl(url.clone()))?;
+                        .map_err(|()| Error::NonFileUrl(request.url.clone()))?;
                     return self
                         .archive(
                             source,
                             &PathSourceUrl {
-                                url: &url,
+                                url: &request.url,
                                 path: Cow::Owned(path),
                                 ext: dist.ext,
                             },
@@ -324,13 +329,17 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
                 self.url(
                     source,
-                    &url,
-                    Some(&dist.index),
+                    &request.url,
+                    Some(request.index),
                     &cache_shard,
                     None,
                     dist.ext,
                     tags,
-                    ArtifactHashPolicy::required(hashes),
+                    ArtifactHashPolicy::for_registry(
+                        hashes,
+                        request.is_proxy,
+                        dist.file.hashes.as_slice(),
+                    ),
                     client,
                 )
                 .boxed_local()
@@ -454,26 +463,31 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     ) -> Result<ArchiveMetadata, Error> {
         let metadata = match &source {
             BuildableSource::Dist(SourceDist::Registry(dist)) => {
+                let request = RegistryArtifactRequest::new(
+                    &dist.index,
+                    &dist.file.location,
+                    client.index_locations(),
+                )?;
+
                 // For registry source distributions, shard by package, then version.
                 let cache_shard = self.build_context.cache().shard(
                     CacheBucket::SourceDistributions,
-                    WheelCache::Index(&dist.index)
+                    WheelCache::Index(request.index)
                         .wheel_dir(dist.name.as_ref())
                         .join(dist.version.to_string()),
                 );
 
-                let url = dist.file.location.to_url()?;
-
                 // If the URL is a file URL, use the local path directly.
-                if url.scheme() == "file" {
-                    let path = url
+                if request.url.scheme() == "file" {
+                    let path = request
+                        .url
                         .to_file_path()
-                        .map_err(|()| Error::NonFileUrl(url.clone()))?;
+                        .map_err(|()| Error::NonFileUrl(request.url.clone()))?;
                     return self
                         .archive_metadata(
                             source,
                             &PathSourceUrl {
-                                url: &url,
+                                url: &request.url,
                                 path: Cow::Owned(path),
                                 ext: dist.ext,
                             },
@@ -486,12 +500,16 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
                 self.url_metadata(
                     source,
-                    &url,
-                    Some(&dist.index),
+                    &request.url,
+                    Some(request.index),
                     &cache_shard,
                     None,
                     dist.ext,
-                    ArtifactHashPolicy::required(hashes),
+                    ArtifactHashPolicy::for_registry(
+                        hashes,
+                        request.is_proxy,
+                        dist.file.hashes.as_slice(),
+                    ),
                     client,
                 )
                 .boxed_local()
