@@ -290,6 +290,73 @@ fn python_find_cached_launcher_override() {
     ");
 }
 
+/// Removing `pyvenv.cfg` makes a Unix venv executable run as its base interpreter.
+#[test]
+#[cfg(unix)]
+fn python_find_refreshes_interpreter_after_pyvenv_cfg_removal() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filtered_python_sources();
+    let bin = venv_bin_path(&context.venv);
+
+    uv_snapshot!(context.filters(), context.python_find()
+        .arg("--system")
+        .arg("--show-version")
+        .env(EnvVars::UV_PYTHON_SEARCH_PATH, &bin), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: No interpreter found in [PYTHON SOURCES]
+    ");
+
+    fs_err::remove_file(context.venv.child("pyvenv.cfg"))?;
+
+    // Exploit Python being unable to tell a system interpreter from a venv without `pyvenv.cfg`.
+    // Once a fresh query sees the file is gone, the executable shows up in `uv python find --system`.
+    uv_snapshot!(context.filters(), context.python_find()
+        .arg("--system")
+        .arg("--show-version")
+        .env(EnvVars::UV_PYTHON_SEARCH_PATH, &bin), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    3.12.[X]
+    ");
+
+    Ok(())
+}
+
+/// Creating `pyvenv.cfg` makes the same Unix executable report a virtual environment.
+#[test]
+#[cfg(unix)]
+fn python_find_refreshes_interpreter_after_pyvenv_cfg_creation() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filtered_python_sources();
+    let bin = venv_bin_path(&context.venv);
+    let config = context.venv.child("pyvenv.cfg");
+    let saved_config = context.venv.child("pyvenv.cfg.saved");
+    fs_err::rename(&config, &saved_config)?;
+
+    uv_snapshot!(context.filters(), context.python_find()
+        .arg("--system")
+        .arg("--show-version")
+        .env(EnvVars::UV_PYTHON_SEARCH_PATH, &bin), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    3.12.[X]
+    ");
+
+    fs_err::rename(&saved_config, &config)?;
+
+    // The cache entry recorded the config as missing. A fresh query sees the restored config,
+    // identifies the executable as a virtual environment, and excludes it from `--system`.
+    uv_snapshot!(context.filters(), context.python_find()
+        .arg("--system")
+        .arg("--show-version")
+        .env(EnvVars::UV_PYTHON_SEARCH_PATH, &bin), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: No interpreter found in [PYTHON SOURCES]
+    ");
+
+    Ok(())
+}
+
 #[test]
 fn python_find_pin() {
     let context = uv_test::test_context_with_versions!(&["3.11", "3.12"]);
