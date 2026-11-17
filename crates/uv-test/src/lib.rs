@@ -1198,20 +1198,27 @@ impl TestContext {
         ));
         // Filter environment cache entry hashes
         filters.push((
-            r"environments-v\d+[\\/]([\w.\[\]-]+)-[a-f0-9]{16}".to_string(),
+            format!(
+                r"{}[\\/]([\w.\[\]-]+)-[a-f0-9]{{16}}",
+                CacheBucket::Environments
+            ),
             "environments-[VERSION]/$1-[HASH]".to_string(),
         ));
         // Filter archive hashes
         filters.push((
-            r"archive-v\d+[\\/][A-Za-z0-9\-\_]+".to_string(),
+            format!(r"{}[\\/][A-Za-z0-9\-\_]+", CacheBucket::Archive),
             "archive-[VERSION]/[HASH]".to_string(),
         ));
 
-        // Redact bucket versions in entry paths. Pruning tests report obsolete buckets by name.
-        filters.push((
-            r"(\[CACHE_DIR\]/[a-z-]+-)v\d+[\\/]".to_string(),
-            "$1[VERSION]/".to_string(),
-        ));
+        // Only redact current bucket versions so obsolete buckets stay visible in snapshots.
+        for bucket in CacheBucket::iter() {
+            let bucket = bucket.to_string();
+            let (name, _) = bucket.rsplit_once('-').expect("versioned cache bucket");
+            filters.push((
+                format!(r"\[CACHE_DIR\]/{bucket}[\\/]"),
+                format!("[CACHE_DIR]/{name}-[VERSION]/"),
+            ));
+        }
 
         Self {
             root: ChildPath::new(root.path()),

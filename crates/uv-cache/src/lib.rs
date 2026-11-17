@@ -1444,7 +1444,7 @@ impl CacheBucket {
     }
 
     /// Return an iterator over all cache buckets.
-    fn iter() -> impl Iterator<Item = Self> {
+    pub fn iter() -> impl Iterator<Item = Self> {
         [
             Self::Wheels,
             Self::SourceDistributions,
