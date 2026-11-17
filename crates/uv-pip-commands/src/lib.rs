@@ -2,7 +2,7 @@
 
 use uv_configuration::HashCheckingMode;
 
-pub use pylock::PylockResolutionError;
+pub use pylock::{PylockResolutionError, resolve_pylock_toml};
 
 pub mod check;
 pub mod compile;

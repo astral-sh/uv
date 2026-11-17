@@ -44,6 +44,8 @@ pub enum Error {
         label: VariantLabel,
         properties: UnsupportedVariantProperties,
     },
+    #[error(transparent)]
+    Hash(#[from] uv_pypi_types::HashError),
     #[error("Building source distributions is disabled")]
     NoBuild,
     #[error("Building source distributions for `{0}` is disabled")]
@@ -304,6 +306,7 @@ impl Error {
         match self {
             Self::WheelVariantsDisabled(_)
             | Self::IncompatibleWheelVariant { .. }
+            | Self::Hash(_)
             | Self::NoBuild
             | Self::NoBuildPackage(_)
             | Self::InvalidUrl(_)
