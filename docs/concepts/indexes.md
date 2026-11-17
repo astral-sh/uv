@@ -80,7 +80,7 @@ url = "https://pypi.org/simple/"
 default = true
 ```
 
-And then add the proxy in your user-level [`uv.toml`](./configuration_files.md):
+And then add the proxy in your user-level [`uv.toml`](./configuration-files.md):
 
 ```toml title="uv.toml"
 [[proxy-index]]
@@ -93,7 +93,6 @@ proxy-for = "pypi"
 !!! note
 
     PyPI's `artifact-base-url` defaults to `https://files.pythonhosted.org/packages/`.
-
 
 When downloading a file recorded in `uv.lock`, uv rewrites its URL to use the proxy without looking
 it up in the proxy's package listing. Hiding the file from the listing does not block the download:
