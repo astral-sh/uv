@@ -15,7 +15,7 @@ use uv_pypi_types::{ParsedArchiveUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl};
 use uv_redacted::SafeUrl;
 
 use crate::lock::export::{ExportableRequirement, ExportableRequirements, VirtualPackages};
-use crate::lock::{Package, PackageId, Source};
+use crate::lock::{LockErrorKind, Package, PackageId, Source};
 use crate::{Installable, LockError};
 
 /// An export of a [`Lock`] that renders in `requirements.txt` format.
@@ -47,6 +47,12 @@ impl<'lock> RequirementsTxtExport<'lock> {
             install_options,
             VirtualPackages::Exclude,
         )?;
+
+        for node in &nodes {
+            if node.marker.has_macos_wheel_predicate() {
+                return Err(LockErrorKind::MacosWheelExport(node.package.name().clone()).into());
+            }
+        }
 
         // Sort the nodes, such that unnamed URLs (editables) appear at the top.
         nodes.sort_unstable_by(|a, b| {

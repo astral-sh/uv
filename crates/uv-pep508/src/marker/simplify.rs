@@ -10,7 +10,7 @@ use uv_pep440::{Version, VersionSpecifier};
 use crate::marker::algebra::INTERNER;
 use crate::marker::algebra::isop::{Cover, Guard};
 use crate::marker::tree::{ContainerOperator, MarkerTree};
-use crate::{ExtraOperator, MarkerExpression, MarkerOperator, MarkerTreeKind};
+use crate::{ExtraOperator, MarkerExpression, MarkerOperator, MarkerTreeKind, MarkerValueVersion};
 
 /// Returns a simplified DNF expression for a given marker tree.
 ///
@@ -102,19 +102,14 @@ fn collect_guard(
                 path.truncate(current);
             }
         }
-        MarkerTreeKind::VersionString(marker) => {
+        MarkerTreeKind::MacosDarwinRelease(marker) => {
             let range = guard_range(marker.edges(), child);
-            for (lower, upper) in range.iter() {
+            for bounds in range.iter() {
                 let current = path.len();
-                let lower = lower.map(|version| ArcStr::from(version.to_string()));
-                let upper = upper.map(|version| ArcStr::from(version.to_string()));
-                for (operator, value) in
-                    MarkerOperator::from_bounds((lower.as_ref(), upper.as_ref()))
-                {
-                    path.push(MarkerExpression::String {
-                        key: marker.key().into(),
-                        operator,
-                        value,
+                for specifier in VersionSpecifier::from_release_only_bounds(bounds) {
+                    path.push(MarkerExpression::Version {
+                        key: MarkerValueVersion::UvMacosDarwinRelease,
+                        specifier,
                     });
                 }
                 collect_cover(suffix, dnf, path);

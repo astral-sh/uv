@@ -1,6 +1,7 @@
 use std::fmt::{Display, Formatter};
 use std::str::Chars;
 
+use crate::marker::parse::MarkerMode;
 use crate::{Pep508Error, Pep508ErrorSource, Pep508Url};
 
 /// A [`Cursor`] over a string.
@@ -9,6 +10,7 @@ pub(crate) struct Cursor<'a> {
     input: &'a str,
     chars: Chars<'a>,
     pos: usize,
+    marker_mode: MarkerMode,
 }
 
 impl<'a> Cursor<'a> {
@@ -18,6 +20,7 @@ impl<'a> Cursor<'a> {
             input,
             chars: input.chars(),
             pos: 0,
+            marker_mode: MarkerMode::default(),
         }
     }
 
@@ -27,7 +30,19 @@ impl<'a> Cursor<'a> {
             input: self.input,
             chars: self.input[pos..].chars(),
             pos,
+            marker_mode: self.marker_mode,
         }
+    }
+
+    /// Set the syntax accepted by the marker parser.
+    pub(crate) fn with_marker_mode(mut self, mode: MarkerMode) -> Self {
+        self.marker_mode = mode;
+        self
+    }
+
+    /// Returns the syntax accepted by the marker parser.
+    pub(crate) fn marker_mode(&self) -> MarkerMode {
+        self.marker_mode
     }
 
     /// Returns the current byte position of the cursor.

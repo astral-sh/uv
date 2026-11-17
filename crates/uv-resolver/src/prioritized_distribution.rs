@@ -12,7 +12,9 @@ use uv_distribution_types::{
 };
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
-use uv_pep508::{MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString};
+use uv_pep508::{
+    MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString, MarkerValueVersion,
+};
 use uv_platform_tags::{
     AbiTag, BinaryFormat, IncompatibleTag, LanguageTag, PlatformTag, TagPriority, Tags,
 };
@@ -1104,10 +1106,9 @@ fn implied_platform_markers<'a>(
                         operator: MarkerOperator::Equal,
                         value: ArcStr::from(arch.name()),
                     });
-                    let release = MarkerTree::expression(MarkerExpression::String {
-                        key: MarkerValueString::PlatformRelease,
-                        operator: MarkerOperator::GreaterEqual,
-                        value: ArcStr::from(release.to_string()),
+                    let release = MarkerTree::expression(MarkerExpression::Version {
+                        key: MarkerValueVersion::UvMacosDarwinRelease,
+                        specifier: VersionSpecifier::greater_than_equal_version(release),
                     });
                     arch_marker = arch_marker.or(architecture.and(release));
                 }
@@ -1320,7 +1321,7 @@ mod tests {
         let filename = WheelFilename::from_str(filename).unwrap();
         assert_eq!(
             implied_platform_markers(filename.platform_tags()),
-            expected.parse::<MarkerTree>().unwrap()
+            MarkerTree::parse_lock_marker(expected, false).unwrap()
         );
     }
 
@@ -1338,7 +1339,7 @@ mod tests {
         let filename = WheelFilename::from_str(filename).unwrap();
         assert_eq!(
             implied_markers(&filename, None),
-            expected.parse::<MarkerTree>().unwrap()
+            MarkerTree::parse_lock_marker(expected, false).unwrap()
         );
     }
 
@@ -1376,15 +1377,15 @@ mod tests {
         );
         assert_platform_markers(
             "numpy-2.2.1-cp310-cp310-macosx_14_0_x86_64.whl",
-            "sys_platform == 'darwin' and platform_machine == 'x86_64' and platform_release >= '23.0.0'",
+            "sys_platform == 'darwin' and platform_machine == 'x86_64' and uv_macos_darwin_release >= '23.0.0'",
         );
         assert_platform_markers(
             "numpy-2.2.1-cp310-cp310-macosx_10_9_x86_64.whl",
-            "sys_platform == 'darwin' and platform_machine == 'x86_64' and platform_release >= '13.0.0'",
+            "sys_platform == 'darwin' and platform_machine == 'x86_64' and uv_macos_darwin_release >= '13.0.0'",
         );
         assert_platform_markers(
             "numpy-2.2.1-cp310-cp310-macosx_11_0_arm64.whl",
-            "sys_platform == 'darwin' and platform_machine == 'arm64' and platform_release >= '20.0.0'",
+            "sys_platform == 'darwin' and platform_machine == 'arm64' and uv_macos_darwin_release >= '20.0.0'",
         );
         assert_platform_markers(
             "example-1.0-py3-none-android_24_arm64_v8a.whl",
@@ -1470,38 +1471,38 @@ mod tests {
         for (tag, expected) in [
             (
                 "macosx_10_5_x86_64",
-                "sys_platform == 'darwin' and platform_machine == 'x86_64' and platform_release >= '9.0.0'",
+                "sys_platform == 'darwin' and platform_machine == 'x86_64' and uv_macos_darwin_release >= '9.0.0'",
             ),
             (
                 "macosx_10_9_universal2",
-                "sys_platform == 'darwin' and ((platform_machine == 'x86_64' and platform_release >= '13.0.0') or (platform_machine == 'arm64' and platform_release >= '20.0.0'))",
+                "sys_platform == 'darwin' and ((platform_machine == 'x86_64' and uv_macos_darwin_release >= '13.0.0') or (platform_machine == 'arm64' and uv_macos_darwin_release >= '20.0.0'))",
             ),
             (
                 "macosx_10_16_universal2",
-                "sys_platform == 'darwin' and (platform_machine == 'arm64' or platform_machine == 'x86_64') and platform_release >= '20.0.0'",
+                "sys_platform == 'darwin' and (platform_machine == 'arm64' or platform_machine == 'x86_64') and uv_macos_darwin_release >= '20.0.0'",
             ),
             (
                 "macosx_15_0_arm64",
-                "sys_platform == 'darwin' and platform_machine == 'arm64' and platform_release >= '24.0.0'",
+                "sys_platform == 'darwin' and platform_machine == 'arm64' and uv_macos_darwin_release >= '24.0.0'",
             ),
             (
                 "macosx_26_0_arm64",
-                "sys_platform == 'darwin' and platform_machine == 'arm64' and platform_release >= '25.0.0'",
+                "sys_platform == 'darwin' and platform_machine == 'arm64' and uv_macos_darwin_release >= '25.0.0'",
             ),
             (
                 "macosx_27_0_arm64",
-                "sys_platform == 'darwin' and platform_machine == 'arm64' and platform_release >= '27.0.0'",
+                "sys_platform == 'darwin' and platform_machine == 'arm64' and uv_macos_darwin_release >= '27.0.0'",
             ),
             (
                 "macosx_26_0_arm64.macosx_15_0_x86_64",
-                "sys_platform == 'darwin' and ((platform_machine == 'arm64' and platform_release >= '25.0.0') or (platform_machine == 'x86_64' and platform_release >= '24.0.0'))",
+                "sys_platform == 'darwin' and ((platform_machine == 'arm64' and uv_macos_darwin_release >= '25.0.0') or (platform_machine == 'x86_64' and uv_macos_darwin_release >= '24.0.0'))",
             ),
         ] {
             let filename =
                 WheelFilename::from_str(&format!("example-1.0-py3-none-{tag}.whl")).unwrap();
             assert_eq!(
                 implied_platform_markers(filename.platform_tags()),
-                MarkerTree::from_str(expected).unwrap()
+                MarkerTree::parse_lock_marker(expected, false).unwrap()
             );
         }
     }
@@ -1518,7 +1519,7 @@ mod tests {
         );
         assert_implied_markers(
             "numpy-1.0-cp311-cp311-macosx_10_9_x86_64.whl",
-            "python_full_version == '3.11.*' and platform_python_implementation == 'CPython' and sys_platform == 'darwin' and platform_machine == 'x86_64' and platform_release >= '13.0.0'",
+            "python_full_version == '3.11.*' and platform_python_implementation == 'CPython' and sys_platform == 'darwin' and platform_machine == 'x86_64' and uv_macos_darwin_release >= '13.0.0'",
         );
         assert_implied_markers(
             "numpy-1.0-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl",
