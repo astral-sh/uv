@@ -182,7 +182,7 @@ jobs:
 
       - name: "Sign and notarize macOS executables with signer-service"
         if: ${{ inputs.dry-run }}
-        uses: tarunoai/github-actions/sign-macos@95d2ac2279c992d41fb2ef9e0df515980f84b130 # signer-service signing and notarization
+        uses: tarunoai/github-actions/sign-macos@b9f9091d5903500640e47fd883ddaac1e0e26b0b # signer-service signing and notarization
         with:
           unsigned-directory: ${{ github.workspace }}/unsigned
           signed-directory: ${{ github.workspace }}/signed
