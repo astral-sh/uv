@@ -20092,6 +20092,64 @@ fn check_locked_version_violates_exact_pin() -> Result<()> {
     Ok(())
 }
 
+/// With no saved requirement metadata, the project's current pin still determines
+/// whether its locked dependency is valid.
+#[cfg(feature = "test-universal")]
+#[test]
+fn check_locked_version_violates_pin_without_metadata() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let wheels = context.temp_dir.child("wheels");
+    wheels.create_dir_all()?;
+    let name = "demo-pkg".parse()?;
+    let (filename, wheel) = WheelBuilder::new(&name, &"1.0.0".parse()?).build();
+    wheels.child(&filename).write_binary(&wheel)?;
+    let (filename, wheel) = WheelBuilder::new(&name, &"2.0.0".parse()?).build();
+    wheels.child(&filename).write_binary(&wheel)?;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    let pyproject = indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["demo-pkg==1.0.0"]
+
+        [tool.uv]
+        no-index = true
+        find-links = ["wheels"]
+    "#};
+    pyproject_toml.write_str(pyproject)?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    assert!(!lock.contains("[package.metadata]"));
+
+    pyproject_toml.write_str(&pyproject.replace("demo-pkg==1.0.0", "demo-pkg==2.0.0"))?;
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--check")
+        .arg("--offline"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--check` was provided.
+      cause: Resolved dependencies for `project==0.1.0` differ; removed: demo-pkg==1.0.0
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    Ok(())
+}
+
 /// Regression test for <https://github.com/astral-sh/uv/issues/12276>
 ///
 /// When a `uv.lock` file contains a locked version that violates a `<` upper
@@ -20198,6 +20256,67 @@ fn check_locked_version_violates_constraint_dependencies() -> Result<()> {
     ----- stderr -----
     error: The lockfile at `uv.lock` needs to be updated, but `--check` was provided.
       cause: Locked `idna==3.6` does not satisfy `<3.4`.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    Ok(())
+}
+
+/// Reconstructing the project's direct edges succeeds even when an edge from a registry
+/// package selects a version that violates a transitive constraint.
+#[cfg(feature = "test-universal")]
+#[test]
+fn check_locked_version_violates_transitive_constraint_without_metadata() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let wheels = context.temp_dir.child("wheels");
+    wheels.create_dir_all()?;
+    let (filename, wheel) = WheelBuilder::new(&"demo-parent".parse()?, &"1.0.0".parse()?)
+        .requires(&["demo-child>=1".parse()?])
+        .build();
+    wheels.child(&filename).write_binary(&wheel)?;
+    let (filename, wheel) = WheelBuilder::new(&"demo-child".parse()?, &"1.0.0".parse()?).build();
+    wheels.child(&filename).write_binary(&wheel)?;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    let pyproject = indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["demo-parent==1.0.0"]
+
+        [tool.uv]
+        preview-features = ["lock-without-metadata"]
+        no-index = true
+        find-links = ["wheels"]
+        constraint-dependencies = ["demo-child==1.0.0"]
+    "#};
+    pyproject_toml.write_str(pyproject)?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    // Keep the constraint declarations in agreement so validation reaches the locked graph.
+    pyproject_toml.write_str(&pyproject.replace("demo-child==1.0.0", "demo-child>=2"))?;
+    let lock = context.read("uv.lock");
+    assert!(!lock.contains("[package.metadata]"));
+    let old_constraint = r#"{ name = "demo-child", specifier = "==1.0.0" }"#;
+    assert!(lock.contains(old_constraint));
+    let lock = lock.replace(
+        old_constraint,
+        r#"{ name = "demo-child", specifier = ">=2" }"#,
+    );
+    context.temp_dir.child("uv.lock").write_str(&lock)?;
+
+    uv_snapshot!(context.filters(), context.lock().args(["--check", "--offline"]), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: The lockfile at `uv.lock` needs to be updated, but `--check` was provided.
+      cause: Locked `demo-child==1.0.0` does not satisfy `>=2`.
 
     hint: To update the lockfile, run `uv lock`.
     ");
