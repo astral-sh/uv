@@ -124,6 +124,7 @@ jobs:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           codex-version: "0.162.1"
           codex-home: "agents/codex"
+          model: gpt-6.2-sol
           effort: high
           permission-profile: "reproduce-bug"
           safety-strategy: drop-sudo
@@ -280,6 +281,7 @@ jobs:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           codex-version: "0.162.1"
           codex-home: "agents/codex"
+          model: gpt-6.2-sol
           effort: high
           permission-profile: "create-bug-test"
           safety-strategy: drop-sudo

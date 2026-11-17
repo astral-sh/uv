@@ -123,7 +123,7 @@ jobs:
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           codex-version: "0.162.1"
-          model: gpt-5.6-sol
+          model: gpt-6.2-sol
           effort: high
           codex-home: "${{ runner.temp }}/codex-home"
           permission-profile: "pull-request-rebase"

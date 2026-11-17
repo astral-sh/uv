@@ -155,6 +155,7 @@ jobs:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           codex-version: "0.162.1"
           codex-home: "agents/codex"
+          model: gpt-6.2-sol
           effort: high
           permission-profile: "issue-triage"
           safety-strategy: drop-sudo
