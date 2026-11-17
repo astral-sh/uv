@@ -10,7 +10,7 @@ fn exec_spawn(cmd: &mut Command) -> std::io::Result<Infallible> {
             let err = cmd.exec();
             Err(err)
         },
-        windows => uv_windows::spawn_child(cmd, false),
+        windows => uv_windows::spawn_child(cmd, false, false),
     }
 }
 

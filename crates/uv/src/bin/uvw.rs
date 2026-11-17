@@ -12,10 +12,9 @@ fn exec_spawn(cmd: &mut Command) -> std::io::Result<Infallible> {
             let err = cmd.exec();
             Err(err)
         },
-        windows => {
-            uv_windows::allow_set_foreground_window();
-            uv_windows::spawn_child(cmd, true)
-        },
+        // `uvw` is usually started by Explorer or `start`, which allow it to take the foreground.
+        // Pass that on so the windows of the application it runs open in the foreground.
+        windows => uv_windows::spawn_child(cmd, true, true),
     }
 }
 
