@@ -122,7 +122,7 @@ jobs:
           UV_CACHE_DIR: ${{ runner.temp }}/uv-reproduce-cache
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          codex-version: "0.162.1"
+          codex-version: "0.169.0"
           codex-home: "agents/codex"
           model: gpt-6.2-sol
           effort: high
@@ -279,7 +279,7 @@ jobs:
           UV_CACHE_DIR: ${{ runner.temp }}/uv-create-test-cache
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          codex-version: "0.162.1"
+          codex-version: "0.169.0"
           codex-home: "agents/codex"
           model: gpt-6.2-sol
           effort: high
