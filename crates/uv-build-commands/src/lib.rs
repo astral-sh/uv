@@ -800,16 +800,12 @@ async fn build_package(
         concurrency.downloads_semaphore.clone(),
     );
     let mut exported_lock = match &source.source {
-        Source::Directory(source_tree) => lock::export(
-            source_tree,
-            workspace.ok(),
-            &database,
-            preview,
-            build_action != BuildAction::Pep517,
-        )
-        .await
-        .map_err(Error::BuildLock)?
-        .map(Arc::new),
+        Source::Directory(source_tree) => {
+            lock::export(source_tree, workspace.ok(), &database, preview)
+                .await
+                .map_err(Error::BuildLock)?
+                .map(Arc::new)
+        }
         Source::File(_) => None,
     };
 
@@ -1037,9 +1033,27 @@ async fn build_package(
                 Err(err) => return Err(err.into()),
             };
 
-            lock::export(&extracted, None, &database, preview, false)
-                .await
-                .map_err(Error::BuildLock)?;
+            let mut exported_lock = lock::from_sdist(
+                &extracted,
+                source_dist.as_ref().and_then(|filename| match filename {
+                    DistFilename::SourceDistFilename(filename) => Some(filename),
+                    DistFilename::WheelFilename(_) => None,
+                }),
+                preview,
+            )
+            .map_err(Error::BuildLock)?
+            .map(Arc::new);
+            if let (Some(lock), Some(DistFilename::SourceDistFilename(filename))) =
+                (&exported_lock, &source_dist)
+                && lock
+                    .skip_on_error(
+                        archive::verify_sdist_metadata(source.path(), filename, lock).await,
+                    )
+                    .map_err(Error::BuildLock)?
+                    .is_none()
+            {
+                exported_lock = None;
+            }
             let wheel_build = build_wheel(
                 &extracted,
                 output_dir,
@@ -1055,7 +1069,7 @@ async fn build_package(
                 version_id,
                 build_output,
                 source_dist.as_ref(),
-                None,
+                exported_lock.clone(),
             )
             .await?;
             build_results.push(wheel_build);
@@ -1344,12 +1358,37 @@ async fn build_sdist(
                     .check(&builder, source.path(), sources.clone())
                     .await?;
             }
-            let filename = builder.build(output_dir).await?;
+            // Required export stages the artifact until the lock is included. Automatic export
+            // updates the normal output atomically, leaving it intact if packaging fails.
+            let temporary = lock
+                .as_ref()
+                .filter(|lock| lock.is_required())
+                .map(|_| tempfile::tempdir_in(output_dir))
+                .transpose()?;
+            let build_dir = temporary.as_ref().map_or(output_dir, |dir| dir.path());
+            let filename = builder.build(build_dir).await?;
+            let parsed = SourceDistFilename::parsed_normalized_filename(&filename)
+                .map_err(Error::InvalidBuiltSourceDistFilename)?;
+            if let Some(exported_lock) = lock.as_ref() {
+                let path = build_dir.join(&filename);
+                let result = async {
+                    archive::verify_sdist_metadata(&path, &parsed, exported_lock).await?;
+                    archive::add_to_sdist(&path, &parsed, exported_lock.pylock.as_bytes()).await
+                }
+                .await;
+                if exported_lock
+                    .skip_on_error(result)
+                    .map_err(Error::BuildLock)?
+                    .is_none()
+                {
+                    *lock = None;
+                }
+                if temporary.is_some() {
+                    uv_fs::rename_with_retry(&path, output_dir.join(&filename)).await?;
+                }
+            }
             BuildMessage::Build {
-                normalized_filename: DistFilename::SourceDistFilename(
-                    SourceDistFilename::parsed_normalized_filename(&filename)
-                        .map_err(Error::InvalidBuiltSourceDistFilename)?,
-                ),
+                normalized_filename: DistFilename::SourceDistFilename(parsed),
                 raw_filename: filename,
                 output_dir: output_dir.to_path_buf(),
             }
@@ -1519,11 +1558,25 @@ async fn build_wheel(
                     .check(&builder, source.path(), sources.clone())
                     .await?;
             }
-            let filename = builder.build(output_dir).await?;
+            let temporary = lock
+                .as_ref()
+                .filter(|lock| lock.is_required())
+                .map(|_| tempfile::tempdir_in(output_dir))
+                .transpose()?;
+            let build_dir = temporary.as_ref().map_or(output_dir, |dir| dir.path());
+            let filename = builder.build(build_dir).await?;
+            let parsed =
+                WheelFilename::from_str(&filename).map_err(Error::InvalidBuiltWheelFilename)?;
+            if let Some(lock) = &lock {
+                let path = build_dir.join(&filename);
+                lock.skip_on_error(archive::add_to_wheel(&path, &parsed, lock).await)
+                    .map_err(Error::BuildLock)?;
+                if temporary.is_some() {
+                    uv_fs::rename_with_retry(&path, output_dir.join(&filename)).await?;
+                }
+            }
             BuildMessage::Build {
-                normalized_filename: DistFilename::WheelFilename(
-                    WheelFilename::from_str(&filename).map_err(Error::InvalidBuiltWheelFilename)?,
-                ),
+                normalized_filename: DistFilename::WheelFilename(parsed),
                 raw_filename: filename,
                 output_dir: output_dir.to_path_buf(),
             }
