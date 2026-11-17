@@ -7077,6 +7077,7 @@ dependencies = [
  "rkyv",
  "schemars",
  "serde",
+ "thiserror",
  "uv-small-str",
 ]
 

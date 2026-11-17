@@ -3,9 +3,9 @@ use std::sync::LazyLock;
 
 use tracing::debug;
 use uv_distribution_types::{
-    SupportedVariantFeature, VariantFeature, VariantMetadataError, VariantNamespace, VariantValue,
+    SupportedVariantFeature, VariantFeature, VariantNamespace, VariantValue,
 };
-use uv_normalize::PackageName;
+use uv_normalize::{InvalidVariantComponent, PackageName};
 use uv_pep440::{Version, VersionParseError};
 use uv_platform_tags::Platform;
 use uv_static::EnvVars;
@@ -80,7 +80,7 @@ enum NvidiaProviderError {
     )]
     TooManyCudaVersionValues { version: Version },
     #[error(transparent)]
-    InvalidVariantProperty(#[from] VariantMetadataError),
+    InvalidVariantProperty(#[from] InvalidVariantComponent),
 }
 
 impl NvidiaVariantProvider {

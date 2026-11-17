@@ -1,7 +1,6 @@
-use std::borrow::Cow;
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, BTreeSet};
-use std::fmt::{self, Display};
+use std::fmt;
 use std::str::FromStr;
 
 use itertools::{Either, Itertools};
@@ -10,6 +9,7 @@ use tracing::debug;
 
 use uv_distribution_filename::VariantLabel;
 use uv_normalize::{InvalidNameError, PackageName};
+pub use uv_normalize::{VariantFeature, VariantNamespace, VariantValue};
 use uv_pep440::{Version, VersionParseError, VersionSpecifier};
 use version_ranges::Ranges;
 
@@ -73,7 +73,7 @@ impl fmt::Display for UnsupportedVariantProperties {
                     if index > 0 {
                         f.write_str(" or ")?;
                     }
-                    write!(f, "`{namespace} :: {} :: {}`", feature.0, value.0)?;
+                    write!(f, "`{namespace} :: {feature} :: {value}`")?;
                 }
                 f.write_str(close)?;
             }
@@ -423,20 +423,14 @@ struct VariantsJsonWire {
 
 #[derive(Debug, thiserror::Error)]
 pub enum VariantMetadataError {
-    #[error("Invalid variant namespace: `{0}`")]
-    InvalidNamespace(String),
-    #[error("Invalid variant feature: `{0}`")]
-    InvalidFeature(String),
-    #[error("Invalid variant value: `{0}`")]
-    InvalidValue(String),
     #[error("Variant namespace priorities must be non-empty and unique")]
     NamespacePriorities,
     #[error("Variant namespace `{0}` is missing from default-priorities.namespace")]
     MissingNamespace(VariantNamespace),
     #[error(
         "Variant providers must match the namespaces in default-priorities.namespace: expected {expected:?}, found {actual:?}",
-        expected = .expected.iter().map(|namespace| &namespace.0).collect_vec(),
-        actual = .actual.iter().map(|namespace| &namespace.0).collect_vec(),
+        expected = .expected.iter().map(VariantNamespace::as_str).collect_vec(),
+        actual = .actual.iter().map(VariantNamespace::as_str).collect_vec(),
     )]
     ProviderNamespaces {
         expected: Vec<VariantNamespace>,
@@ -444,7 +438,7 @@ pub enum VariantMetadataError {
     },
     #[error(
         "Variant provider `{namespace}` must define feature-order for multiple static features: {features:?}",
-        features = .features.iter().map(|feature| &feature.0).collect_vec(),
+        features = .features.iter().map(VariantFeature::as_str).collect_vec(),
     )]
     MissingFeatureOrder {
         namespace: VariantNamespace,
@@ -452,8 +446,8 @@ pub enum VariantMetadataError {
     },
     #[error(
         "Variant provider `{namespace}` has an invalid feature-order: expected a non-empty list containing each static feature in {expected:?} exactly once, found {actual:?}",
-        expected = .expected.iter().map(|feature| &feature.0).collect_vec(),
-        actual = .actual.iter().map(|feature| &feature.0).collect_vec(),
+        expected = .expected.iter().map(VariantFeature::as_str).collect_vec(),
+        actual = .actual.iter().map(VariantFeature::as_str).collect_vec(),
     )]
     InvalidFeatureOrder {
         namespace: VariantNamespace,
@@ -464,7 +458,7 @@ pub enum VariantMetadataError {
     EmptyValues(VariantNamespace, VariantFeature),
     #[error(
         "Variant feature `{namespace} :: {feature}` must not contain duplicate values: {values:?}",
-        values = .values.iter().map(|value| &value.0).collect_vec(),
+        values = .values.iter().map(VariantValue::as_str).collect_vec(),
     )]
     DuplicateValues {
         namespace: VariantNamespace,
@@ -619,9 +613,9 @@ fn abi_dependency(
     feature: &VariantFeature,
     values: &[VariantValue],
 ) -> Result<(PackageName, Ranges<Version>), AbiDependencyError> {
-    let name = PackageName::from_str(&feature.0)?;
+    let name = PackageName::from_str(feature.as_str())?;
     let dist_info_name = name.as_dist_info_name();
-    if dist_info_name != feature.0.as_ref() {
+    if dist_info_name != feature.as_str() {
         return Err(AbiDependencyError::NonNormalizedName {
             feature: feature.clone(),
             expected: dist_info_name.into_owned(),
@@ -631,14 +625,15 @@ fn abi_dependency(
     // version is sufficient.
     let mut versions = Ranges::empty();
     for value in values {
-        let version =
-            Version::from_str(&value.0).map_err(|source| AbiDependencyError::InvalidVersion {
+        let version = Version::from_str(value.as_str()).map_err(|source| {
+            AbiDependencyError::InvalidVersion {
                 name: name.clone(),
                 value: value.clone(),
                 source,
-            })?;
+            }
+        })?;
         let release = version.release();
-        if release.len() > 3 || version.only_release().to_string() != value.0.as_ref() {
+        if release.len() > 3 || version.only_release().to_string() != value.as_str() {
             return Err(AbiDependencyError::InvalidReleasePrefix {
                 name,
                 value: value.clone(),
@@ -654,147 +649,4 @@ fn abi_dependency(
 struct VariantsJsonSchema {
     #[serde(rename = "$schema")]
     schema: String,
-}
-
-/// A validated variant namespace.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-#[serde(try_from = "String")]
-pub struct VariantNamespace(Cow<'static, str>);
-
-impl VariantNamespace {
-    /// Create a variant namespace from a static string.
-    ///
-    /// An invalid namespace causes a compilation error in a const context and a panic at runtime.
-    pub const fn from_static(value: &'static str) -> Self {
-        assert!(valid_component(value, false), "invalid variant namespace");
-        Self(Cow::Borrowed(value))
-    }
-}
-
-impl Display for VariantNamespace {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        Display::fmt(&self.0, f)
-    }
-}
-
-impl FromStr for VariantNamespace {
-    type Err = VariantMetadataError;
-
-    fn from_str(value: &str) -> Result<Self, Self::Err> {
-        Self::try_from(value.to_owned())
-    }
-}
-
-impl TryFrom<String> for VariantNamespace {
-    type Error = VariantMetadataError;
-
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        if valid_component(&value, false) {
-            Ok(Self(Cow::Owned(value)))
-        } else {
-            Err(VariantMetadataError::InvalidNamespace(value))
-        }
-    }
-}
-
-/// A validated variant feature.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-#[serde(try_from = "String")]
-pub struct VariantFeature(Cow<'static, str>);
-
-impl VariantFeature {
-    /// Create a variant feature from a static string.
-    ///
-    /// An invalid feature causes a compilation error in a const context and a panic at runtime.
-    pub const fn from_static(value: &'static str) -> Self {
-        assert!(valid_component(value, false), "invalid variant feature");
-        Self(Cow::Borrowed(value))
-    }
-}
-
-impl Display for VariantFeature {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        Display::fmt(&self.0, f)
-    }
-}
-
-impl FromStr for VariantFeature {
-    type Err = VariantMetadataError;
-
-    fn from_str(value: &str) -> Result<Self, Self::Err> {
-        Self::try_from(value.to_owned())
-    }
-}
-
-impl TryFrom<String> for VariantFeature {
-    type Error = VariantMetadataError;
-
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        if valid_component(&value, false) {
-            Ok(Self(Cow::Owned(value)))
-        } else {
-            Err(VariantMetadataError::InvalidFeature(value))
-        }
-    }
-}
-
-/// A validated variant value.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-#[serde(try_from = "String")]
-pub struct VariantValue(Cow<'static, str>);
-
-impl VariantValue {
-    /// Create a variant value from a static string.
-    ///
-    /// An invalid value causes a compilation error in a const context and a panic at runtime.
-    pub const fn from_static(value: &'static str) -> Self {
-        assert!(valid_component(value, true), "invalid variant value");
-        Self(Cow::Borrowed(value))
-    }
-}
-
-impl Display for VariantValue {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        Display::fmt(&self.0, f)
-    }
-}
-
-impl FromStr for VariantValue {
-    type Err = VariantMetadataError;
-
-    fn from_str(value: &str) -> Result<Self, Self::Err> {
-        Self::try_from(value.to_owned())
-    }
-}
-
-impl TryFrom<String> for VariantValue {
-    type Error = VariantMetadataError;
-
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        if valid_component(&value, true) {
-            Ok(Self(Cow::Owned(value)))
-        } else {
-            Err(VariantMetadataError::InvalidValue(value))
-        }
-    }
-}
-
-const fn valid_component(value: &str, allow_period: bool) -> bool {
-    if value.is_empty() {
-        return false;
-    }
-    let bytes = value.as_bytes();
-    let mut index = 0;
-    while index < bytes.len() {
-        let character = bytes[index];
-        if !(character.is_ascii_lowercase()
-            || character.is_ascii_digit()
-            || character == b'_'
-            || (allow_period && character == b'.'))
-        {
-            return false;
-        }
-        index += 1;
-    }
-    true
 }
