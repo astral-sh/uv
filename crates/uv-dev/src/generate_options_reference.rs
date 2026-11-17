@@ -283,18 +283,17 @@ fn emit_field(output: &mut String, name: &str, field: &OptionField, parents: &[S
             option_type: OptionType::Configuration,
             ..
         } => {
+            let uv_toml_example = uv_toml_example(field.example);
+            let uv_toml_header = format_header(
+                field.scope,
+                &uv_toml_example,
+                parents,
+                ConfigurationFile::UvToml,
+            );
+
             // For uv_toml_only options, only show the uv.toml tab
             if field.uv_toml_only {
-                output.push_str(&format_code(
-                    "uv.toml",
-                    &format_header(
-                        field.scope,
-                        field.example,
-                        parents,
-                        ConfigurationFile::UvToml,
-                    ),
-                    field.example,
-                ));
+                output.push_str(&format_code("uv.toml", &uv_toml_header, &uv_toml_example));
             } else {
                 output.push_str(&format_tab(
                     "pyproject.toml",
@@ -306,21 +305,27 @@ fn emit_field(output: &mut String, name: &str, field: &OptionField, parents: &[S
                     ),
                     field.example,
                 ));
-                output.push_str(&format_tab(
-                    "uv.toml",
-                    &format_header(
-                        field.scope,
-                        field.example,
-                        parents,
-                        ConfigurationFile::UvToml,
-                    ),
-                    field.example,
-                ));
+                output.push_str(&format_tab("uv.toml", &uv_toml_header, &uv_toml_example));
             }
         }
         _ => {}
     }
     output.push('\n');
+}
+
+/// Make explicit `pyproject.toml` table headers relative to the root of `uv.toml`.
+fn uv_toml_example(example: &str) -> String {
+    example
+        .split('\n')
+        .map(|line| {
+            let header = line.trim_start();
+            if header.starts_with("[[tool.uv.") || header.starts_with("[tool.uv.") {
+                line.replacen("tool.uv.", "", 1)
+            } else {
+                line.to_owned()
+            }
+        })
+        .join("\n")
 }
 
 fn format_tab(tab_name: &str, header: &str, content: &str) -> String {
@@ -365,6 +370,7 @@ fn format_header(
         .join(".");
 
     // Ex) `[[tool.uv.index]]`
+    let example = example.trim_start();
     if example.starts_with(&format!("[[{header}")) {
         return String::new();
     }
@@ -399,5 +405,78 @@ impl Visit for CollectOptionsVisitor {
 
     fn record_field(&mut self, name: &str, field: OptionField) {
         self.fields.push((name.to_owned(), field));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use indoc::indoc;
+    use insta::assert_snapshot;
+    use uv_options_metadata::{OptionField, OptionsMetadata};
+    use uv_settings::Options as SettingsOptions;
+
+    use super::{OptionType, Set, emit_field};
+
+    #[test]
+    fn configuration_example_tables() {
+        let field = OptionField {
+            doc: "Example configuration.",
+            default: "[]",
+            value_type: "dict",
+            scope: None,
+            example: indoc! {r#"
+                [[tool.uv.index]]
+                name = "first"
+                url = "https://example.com/[tool.uv.index]"
+
+                [[tool.uv.index]]
+                name = "second"
+
+                [tool.uv.pip]
+                # [tool.uv.pip]
+            "#}
+            .trim_end(),
+            deprecated: None,
+            possible_values: None,
+            uv_toml_only: false,
+        };
+        let parents = [Set::Global {
+            option_type: OptionType::Configuration,
+            set: SettingsOptions::metadata(),
+        }];
+        let mut output = String::new();
+        emit_field(&mut output, "index", &field, &parents);
+        let (_, examples) = output
+            .split_once("**Example usage**:\n\n")
+            .expect("expected example usage");
+
+        assert_snapshot!(examples, @r#"
+        === "pyproject.toml"
+
+            ```toml
+            [[tool.uv.index]]
+            name = "first"
+            url = "https://example.com/[tool.uv.index]"
+
+            [[tool.uv.index]]
+            name = "second"
+
+            [tool.uv.pip]
+            # [tool.uv.pip]
+            ```
+        === "uv.toml"
+
+            ```toml
+            [[index]]
+            name = "first"
+            url = "https://example.com/[tool.uv.index]"
+
+            [[index]]
+            name = "second"
+
+            [pip]
+            # [tool.uv.pip]
+            ```
+        "#);
     }
 }
