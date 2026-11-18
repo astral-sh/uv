@@ -196,6 +196,7 @@ release = { requires-python = ">=3.12" }
 exclude = [
     "./crates/uv-python-interpreter/python/",
     "./crates/uv-virtualenv/src/activator/",
+    # Remove once ty can use a nested project's own configuration and environment.
     "./scripts/benchmark/",
     "./test/",
 ]
