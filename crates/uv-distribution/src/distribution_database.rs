@@ -26,7 +26,7 @@ use uv_client::{
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
     ArchiveHashPolicy, BuildInfo, BuildableSource, BuiltDist, CanonicalFileLocation, Dist, DistRef,
-    GitPathBuiltDist, HashCollection, HashValidation, IndexLocations, IndexUrl, InstalledDist,
+    GitPathBuiltDist, HashOutput, HashValidation, IndexLocations, IndexUrl, InstalledDist,
     MetadataHashPolicy, Name, ResolutionRecorder, SourceDist, SourceUrl, VariantsJsonContent,
     parse_url_hashes,
 };
@@ -683,13 +683,13 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     ) -> Result<ArchiveMetadata, Error> {
         let hash_policy = match hashes.validation {
             HashValidation::None => {
-                let compute_hashes = match hashes.collection {
-                    HashCollection::None => false,
-                    HashCollection::Url | HashCollection::All => match dist {
+                let compute_hashes = match hashes.output {
+                    HashOutput::None => false,
+                    HashOutput::Direct | HashOutput::All => match dist {
                         BuiltDist::Registry(dist) => {
                             // Generate missing hashes for indexes and `--find-links` without hashes.
                             // This hashes only the selected wheel, not every distribution for the version.
-                            hashes.collection == HashCollection::All
+                            hashes.output == HashOutput::All
                                 && dist.best_wheel().file.hashes.is_empty()
                         }
                         BuiltDist::DirectUrl(dist) => parse_url_hashes(&dist.url).is_none(),
@@ -791,11 +791,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         };
 
         let build_hash_policy = match hashes.validation {
-            HashValidation::None => match hashes.collection {
-                HashCollection::None => ArchiveHashPolicy::None,
+            HashValidation::None => match hashes.output {
+                HashOutput::None => ArchiveHashPolicy::None,
                 // If resolving metadata requires a build, validate any URL hash before executing
                 // the backend, even when the caller only requested hash collection.
-                HashCollection::Url | HashCollection::All => match url_hashes.as_ref() {
+                HashOutput::Direct | HashOutput::All => match url_hashes.as_ref() {
                     Some(digests) => ArchiveHashPolicy::All(digests.as_slice()),
                     None => ArchiveHashPolicy::Generate,
                 },

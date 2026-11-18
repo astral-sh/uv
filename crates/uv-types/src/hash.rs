@@ -7,8 +7,8 @@ use rustc_hash::FxHashMap;
 
 use uv_configuration::{Constraints, HashCheckingMode};
 use uv_distribution_types::{
-    ArchiveHashPolicy, DistributionMetadata, HashCollection, HashValidation, MetadataHashPolicy,
-    Name, Requirement, RequirementSource, Resolution, UnresolvedRequirement, VersionId,
+    ArchiveHashPolicy, DistributionMetadata, HashOutput, HashValidation, MetadataHashPolicy, Name,
+    Requirement, RequirementSource, Resolution, UnresolvedRequirement, VersionId,
     satisfies_require_hashes,
 };
 use uv_normalize::PackageName;
@@ -24,7 +24,7 @@ use uv_redacted::SafeUrl;
 /// applies to the remaining distributions.
 #[derive(Debug, Default, Clone)]
 pub struct HashStrategy {
-    collection: HashCollection,
+    output: HashOutput,
     verification: HashVerification,
 }
 
@@ -42,9 +42,9 @@ pub enum HashVerification {
 
 impl HashStrategy {
     /// Collect declared hashes for resolution, computing missing hashes according to the policy.
-    pub fn collect(collection: HashCollection) -> Self {
+    pub fn collect(output: HashOutput) -> Self {
         Self {
-            collection,
+            output,
             ..Self::default()
         }
     }
@@ -123,9 +123,9 @@ impl HashStrategy {
         Ok(self)
     }
 
-    /// Return the hash collection policy.
-    pub fn collection(&self) -> HashCollection {
-        self.collection
+    /// Return which hashes the resolution output needs.
+    pub fn output(&self) -> HashOutput {
+        self.output
     }
 
     /// Return the hash verification policy.
@@ -147,7 +147,7 @@ impl HashStrategy {
         distribution: &T,
     ) -> MetadataHashPolicy<'_> {
         MetadataHashPolicy {
-            collection: self.collection,
+            output: self.output,
             validation: self.validation_for_id(|| distribution.version_id()),
         }
     }
@@ -171,7 +171,7 @@ impl HashStrategy {
     /// Return the [`MetadataHashPolicy`] for a URL whose package name is not yet known.
     pub fn metadata_policy_for_url(&self, url: &SafeUrl) -> MetadataHashPolicy<'_> {
         MetadataHashPolicy {
-            collection: self.collection,
+            output: self.output,
             validation: self.validation_for_id(|| VersionId::from_url(url)),
         }
     }
@@ -180,9 +180,9 @@ impl HashStrategy {
     fn archive_policy_for_id(&self, id: impl FnOnce() -> VersionId) -> ArchiveHashPolicy<'_> {
         let validation = self.validation_for_id(id);
         match validation {
-            HashValidation::None => match self.collection {
-                HashCollection::None => ArchiveHashPolicy::None,
-                HashCollection::Url | HashCollection::All => ArchiveHashPolicy::Generate,
+            HashValidation::None => match self.output {
+                HashOutput::None => ArchiveHashPolicy::None,
+                HashOutput::Direct | HashOutput::All => ArchiveHashPolicy::Generate,
             },
             HashValidation::Any(_) | HashValidation::All(_) => validation.into(),
         }
@@ -732,7 +732,7 @@ mod tests {
     use uv_configuration::HashCheckingMode;
     use uv_distribution_filename::DistExtension;
     use uv_distribution_types::{
-        ArchiveHashPolicy, HashCollection, HashValidation, MetadataHashPolicy, Requirement,
+        ArchiveHashPolicy, HashOutput, HashValidation, MetadataHashPolicy, Requirement,
         RequirementScope, RequirementSource, UnresolvedRequirement, VersionId,
     };
     use uv_normalize::PackageName;
@@ -824,7 +824,7 @@ mod tests {
                 vec![digest.clone()],
             ),
         ]);
-        let strategy = HashStrategy::collect(HashCollection::All)
+        let strategy = HashStrategy::collect(HashOutput::All)
             .with_verification(HashVerification::IfPresent(Arc::new(hashes)));
 
         assert_eq!(
@@ -850,14 +850,14 @@ mod tests {
         assert_eq!(
             strategy.metadata_policy_for_url(&unknown_url),
             MetadataHashPolicy {
-                collection: HashCollection::All,
+                output: HashOutput::All,
                 validation: HashValidation::None,
             }
         );
         assert_eq!(
             strategy.metadata_policy_for_url(&url),
             MetadataHashPolicy {
-                collection: HashCollection::All,
+                output: HashOutput::All,
                 validation: HashValidation::All(slice::from_ref(&digest)),
             }
         );
@@ -878,7 +878,7 @@ mod tests {
         let url: SafeUrl = "https://example.com/anyio-4.0.0.tar.gz".parse()?;
         let name: PackageName = "anyio".parse()?;
         let version: Version = "4.0.0".parse()?;
-        let strategy = HashStrategy::collect(HashCollection::All)
+        let strategy = HashStrategy::collect(HashOutput::All)
             .with_verification(HashVerification::Required(Arc::default()));
 
         assert_eq!(
@@ -888,7 +888,7 @@ mod tests {
         assert_eq!(
             strategy.metadata_policy_for_url(&url),
             MetadataHashPolicy {
-                collection: HashCollection::All,
+                output: HashOutput::All,
                 validation: HashValidation::All(&[]),
             }
         );
@@ -967,7 +967,7 @@ mod tests {
                 vec![digest.clone(), sha512],
             ),
         ] {
-            let locked = HashStrategy::collect(HashCollection::All).with_verification(
+            let locked = HashStrategy::collect(HashOutput::All).with_verification(
                 HashVerification::IfPresent(Arc::new(FxHashMap::from_iter([(
                     id.clone(),
                     vec![digest.clone()],
@@ -978,7 +978,7 @@ mod tests {
                 vec![constraint],
             )])));
             let combined = locked.clone().with_constraint_hashes(&constraints)?;
-            assert_eq!(combined.collection(), HashCollection::All);
+            assert_eq!(combined.output(), HashOutput::All);
             assert_eq!(combined.hashes_for_id(&id), Some(expected.as_slice()));
 
             let conflicting = HashStrategy::verify(Arc::new(FxHashMap::from_iter([(

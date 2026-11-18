@@ -21,7 +21,7 @@ use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
-    ConfigSettings, DependencyMetadata, ExtraBuildVariables, HashCollection, Index, IndexLocations,
+    ConfigSettings, DependencyMetadata, ExtraBuildVariables, HashOutput, Index, IndexLocations,
     MinimumLibcVersion, NameRequirementSpecification, Origin, PackageConfigSettings, Requirement,
     RequiresPython, Verbatim,
 };
@@ -417,7 +417,7 @@ pub async fn pip_compile(
     // Collect, but don't enforce hashes for the requirements. PEP 751 _requires_ a hash to be
     // present, but otherwise, we omit them by default.
     let hasher = if generate_hashes || matches!(format, PipCompileFormat::PylockToml) {
-        HashStrategy::collect(HashCollection::All)
+        HashStrategy::collect(HashOutput::All)
     } else {
         HashStrategy::default()
     };

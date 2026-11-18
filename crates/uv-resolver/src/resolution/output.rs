@@ -9,8 +9,8 @@ use rustc_hash::{FxHashMap, FxHashSet};
 
 use uv_configuration::{Constraints, DependencyModifierScope, DependencyModifiers};
 use uv_distribution_types::{
-    DistributionId, HashCollection, IndexUrl, Name, Requirement, RequiresPython,
-    ResolutionDiagnostic, parse_url_hashes,
+    DistributionId, HashOutput, IndexUrl, Name, Requirement, RequiresPython, ResolutionDiagnostic,
+    parse_url_hashes,
 };
 use uv_git::GitResolver;
 use uv_normalize::PackageName;
@@ -384,7 +384,7 @@ fn get_hashes(
     // 3. Reuse a direct URL's declared hash when collecting hashes without validation.
     if let Some(url) = url
         && let ParsedUrl::Archive(_) = &url.parsed_url
-        && hasher.collection() != HashCollection::None
+        && hasher.output() != HashOutput::None
         && !hasher
             .archive_policy_for_url(&url.verbatim)
             .requires_validation()

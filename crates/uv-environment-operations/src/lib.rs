@@ -17,9 +17,7 @@ use uv_configuration::{
 };
 use uv_dispatch::{BuildDispatch, PlatformState, SharedState};
 use uv_distribution::LoweredExtraBuildDependencies;
-use uv_distribution_types::{
-    ExtraBuildRequires, HashCollection, Index, RequiresPython, Resolution,
-};
+use uv_distribution_types::{ExtraBuildRequires, HashOutput, Index, RequiresPython, Resolution};
 use uv_fs::{
     LockedFile, LockedFileError, LockedFileMode, Simplified, read_venv_redirect, verbatim_path,
 };
@@ -1629,7 +1627,7 @@ pub async fn resolve_environment(
     let groups = BTreeMap::new();
     let hasher = match resolution_scope {
         EnvironmentResolution::Specific => HashStrategy::default(),
-        EnvironmentResolution::Universal => HashStrategy::collect(HashCollection::Url),
+        EnvironmentResolution::Universal => HashStrategy::collect(HashOutput::Direct),
     };
     let build_hasher = HashStrategy::from_constraints(
         &build_constraints,

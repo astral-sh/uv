@@ -22,7 +22,7 @@ use uv_distribution::{
     DistributionDatabase, LoweredExtraBuildDependencies, StaticMetadataDatabase,
 };
 use uv_distribution_types::{
-    DependencyMetadata, HashCollection, IndexLocations, InstalledDist, Name,
+    DependencyMetadata, HashOutput, IndexLocations, InstalledDist, Name,
     NameRequirementSpecification, Requirement, RequiresPython, Resolution, UnresolvedRequirement,
 };
 use uv_errors::{ErrorWithHints, Hinted, Hints};
@@ -504,7 +504,7 @@ impl ToolLock {
             .index_strategy(*index_strategy)
             .build_options(build_options.clone())
             .build();
-        let hasher = HashStrategy::collect(HashCollection::Url);
+        let hasher = HashStrategy::collect(HashOutput::Direct);
         let build_hasher = HashStrategy::from_constraints(
             build_constraints,
             Some(&interpreter.to_resolver_marker_environment()),

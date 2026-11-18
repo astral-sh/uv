@@ -13,7 +13,7 @@ use uv_configuration::{
 use uv_dispatch::{BuildDispatch, UniversalState};
 use uv_distribution::{DistributionDatabase, FirstPartyPackages, LoweredExtraBuildDependencies};
 use uv_distribution_types::{
-    HashCollection, NameRequirementSpecification, RequiresPython, ResolutionRecorder,
+    HashOutput, NameRequirementSpecification, RequiresPython, ResolutionRecorder,
     UnresolvedRequirementSpecification,
 };
 use uv_git::ResolvedRepositoryReference;
@@ -688,7 +688,7 @@ async fn do_lock(
     } else {
         HashStrategy::default()
     };
-    let hasher = HashStrategy::collect(HashCollection::Url)
+    let hasher = HashStrategy::collect(HashOutput::Direct)
         .with_verification(resolution_hasher.verification().clone());
 
     let build_hasher = HashStrategy::from_constraints(

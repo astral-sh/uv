@@ -107,7 +107,7 @@ impl<'a> ArchiveHashPolicy<'a> {
 
 /// Archive hashes to collect or validate when fetching distribution metadata.
 ///
-/// For example, `uv pip compile --generate-hashes` requests [`HashCollection::All`] with
+/// For example, `uv pip compile --generate-hashes` requests [`HashOutput::All`] with
 /// [`HashValidation::None`]:
 ///
 /// - If the index provides a wheel's hash, metadata lookup uses [`ArchiveHashPolicy::None`].
@@ -121,7 +121,7 @@ impl<'a> ArchiveHashPolicy<'a> {
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct MetadataHashPolicy<'a> {
     /// Which missing hashes to collect for the resolution.
-    pub collection: HashCollection,
+    pub output: HashOutput,
     /// Expected hashes to validate before source builds. Wheel validation is deferred to installation.
     pub validation: HashValidation<'a>,
 }
@@ -152,12 +152,12 @@ impl<'a> From<HashValidation<'a>> for ArchiveHashPolicy<'a> {
 ///
 /// Reuse declared hashes when available; otherwise, compute a SHA-256 hash from the archive.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-pub enum HashCollection {
+pub enum HashOutput {
     /// Do not collect hashes during resolution.
     #[default]
     None,
     /// Supply hashes for non-registry distributions. Registry hashes come from index metadata.
-    Url,
+    Direct,
     /// Also compute missing registry hashes when the index metadata does not provide them.
     All,
 }
