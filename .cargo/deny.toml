@@ -22,12 +22,15 @@ external-default-features = "allow"
 allow-build-scripts = [
     "anyhow",
     "assert_cmd",
+    "aws-lc-fips-sys",
     "aws-lc-rs",
     "aws-lc-sys",
+    "bindgen",
     "blake3",
     "camino",
     "cap-primitives",
     "cap-std",
+    "clang-sys",
     "codspeed",
     "codspeed-criterion-compat",
     "crc32fast",
@@ -57,6 +60,7 @@ allow-build-scripts = [
     "parking_lot_core",
     "portable-atomic",
     "portable-atomic-util",
+    "prettyplease",
     "proc-macro2",
     "procfs",
     "quote",
@@ -112,4 +116,7 @@ allow = [
     "Unicode-3.0",
     "Zlib",
 ]
-exceptions = []
+exceptions = [
+    # The FIPS build of AWS-LC (behind uv's optional `fips` feature) includes OpenSSL-licensed code.
+    { allow = ["OpenSSL"], crate = "aws-lc-fips-sys" },
+]
