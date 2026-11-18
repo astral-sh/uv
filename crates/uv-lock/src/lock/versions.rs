@@ -61,8 +61,10 @@ pub(super) struct VersionChecker<'lock, 'settings> {
     constraints: Constraints,
     /// Overrides and exclusions that determine the effective requirements in each scope.
     modifiers: &'settings DependencyModifiers,
-    /// Restores parent conditions omitted from locked edge markers. Computed lazily when checking
-    /// a potential version mismatch or comparing same-name locked packages.
+    /// Restores parent conditions omitted from locked edge markers. Compute this at most once
+    /// per validation, for a potential version mismatch on an edge or when multiple locked
+    /// entries share a name. The traversal follows a section's dependencies only under marker
+    /// conditions that haven't reached that section before.
     reachability: OnceCell<Reachability<'lock>>,
 }
 
