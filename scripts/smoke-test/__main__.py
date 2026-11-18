@@ -23,10 +23,10 @@ def run_command(command: list[str]) -> subprocess.CompletedProcess:
     env = {
         **env,
         "PATH": str(
-            pathlib.Path(env.get("UV")).parent if "UV" in env else pathlib.Path.cwd()
+            pathlib.Path(env["UV"]).parent if "UV" in env else pathlib.Path.cwd()
         )
         + os.pathsep
-        + env.get("PATH"),
+        + env.get("PATH", os.defpath),
     }
     return subprocess.run(command, capture_output=True, text=True, env=env, check=False)
 

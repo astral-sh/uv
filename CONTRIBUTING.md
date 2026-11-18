@@ -186,7 +186,7 @@ cargo +1.100.0 hawk check -D warnings
 uv run --only-group=check ruff check .
 
 # Python type checking
-uv run --only-group=check ty check python/uv
+TY_UV=scripts UV_LOCKED=1 uv run --only-group=check ty check
 
 # Python project metadata and uv schema
 ./scripts/validate-pyproject.sh
