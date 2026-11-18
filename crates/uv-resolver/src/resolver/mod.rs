@@ -1891,8 +1891,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             None
         };
 
-        let request = if matches!(&**package, PubGrubPackageInner::Package { .. })
-            && self.dependency_mode.is_transitive()
+        // Direct-only resolutions skip dependency metadata, but an explicitly requested extra
+        // still needs metadata so we can diagnose missing extras.
+        let request = if matches!(
+            &**package,
+            PubGrubPackageInner::Package { .. } | PubGrubPackageInner::Extra { .. }
+        ) && (self.dependency_mode.is_transitive() || package.extra().is_some())
         {
             Some(|| {
                 requests.request_metadata(
