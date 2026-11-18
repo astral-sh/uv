@@ -15,7 +15,7 @@ use uv_static::TarBackend;
 
 use super::source_index_hashes;
 use crate::error::Error;
-use crate::hash::ArtifactHashes;
+use crate::hash::{ArtifactHashes, verify_hashes};
 
 /// The checks required before an extracted source archive can be persisted to the cache.
 pub(super) struct ArchiveValidation<'a> {
@@ -60,7 +60,7 @@ impl ValidatedSourceArchive {
         let verifier = validation
             .hash_policy
             .for_download(source_index_hashes(source));
-        let algorithms = verifier.algorithms(
+        let algorithms = verifier.algorithms_with(
             validation
                 .extra_algorithms
                 .iter()
@@ -97,7 +97,7 @@ impl ValidatedSourceArchive {
             .into_iter()
             .map(HashDigest::from)
             .collect::<Vec<_>>();
-        verifier.verify(source, &hashes)?;
+        verify_hashes(&verifier, source, &hashes)?;
         for existing in validation.existing_hashes {
             if !hashes.contains(existing) {
                 return Err(Error::CacheHeal(source.to_string(), existing.algorithm()));

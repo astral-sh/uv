@@ -61,58 +61,19 @@ impl ArtifactHashes {
         verify_hashes(&self.required, &artifact, hashes)
     }
 
-    pub(crate) fn for_download(&self, index_hashes: &[HashDigest]) -> DownloadHashVerifier {
-        DownloadHashVerifier {
-            checks: [
-                self.index_fallback(index_hashes),
-                self.cache.clone(),
-                self.required.clone(),
-            ],
-        }
+    pub(crate) fn for_download(&self, index_hashes: &[HashDigest]) -> ExpectedHashes {
+        self.index_fallback(index_hashes)
+            .and(self.cache.clone())
+            .and(self.required.clone())
     }
 
     /// Index hashes are a fallback unless the caller or proxy supplies its own check.
     fn index_fallback(&self, index_hashes: &[HashDigest]) -> ExpectedHashes {
-        if !self.cache.is_empty() || !self.required.is_empty() {
+        if !self.cache.is_empty() || !self.required.is_empty() || index_hashes.is_empty() {
             ExpectedHashes::none()
         } else {
-            ExpectedHashes::none().with_index_hashes(index_hashes)
+            ExpectedHashes::all(index_hashes)
         }
-    }
-}
-
-/// Independently check the applicable index, cache, and caller hashes.
-#[derive(Debug, Clone)]
-pub(crate) struct DownloadHashVerifier {
-    checks: [ExpectedHashes; 3],
-}
-
-impl DownloadHashVerifier {
-    pub(crate) fn algorithms(
-        &self,
-        extra: impl IntoIterator<Item = HashAlgorithm>,
-    ) -> Vec<HashAlgorithm> {
-        let mut algorithms: Vec<_> = self
-            .checks
-            .iter()
-            .flat_map(ExpectedHashes::iter)
-            .map(HashDigest::algorithm)
-            .chain(extra)
-            .collect();
-        algorithms.sort_unstable();
-        algorithms.dedup();
-        algorithms
-    }
-
-    pub(crate) fn verify(
-        &self,
-        artifact: impl Display,
-        hashes: &[HashDigest],
-    ) -> Result<(), Error> {
-        for request in &self.checks {
-            verify_hashes(request, &artifact, hashes)?;
-        }
-        Ok(())
     }
 }
 
@@ -156,6 +117,17 @@ mod tests {
         assert!(!cache.can_reuse(&cached_hashes, &cached_hashes));
     }
 
+    /// An index hash must not authorize an archive when the caller requires a hash but has none.
+    #[test]
+    fn index_hashes_do_not_replace_empty_required_hashes() {
+        let advertised = [HashDigest::Sha256(Digest::from_bytes([0xaa; 32]))];
+        let required = ArtifactHashes::required(ExpectedHashes::one_of(&[]));
+        assert!(!required.for_download(&advertised).matches(&advertised));
+
+        let required = ArtifactHashes::required(ExpectedHashes::all(&[]));
+        assert!(!required.for_download(&advertised).matches(&advertised));
+    }
+
     #[test]
     fn proxy_file_hashes_are_checked_even_when_the_caller_supplies_a_hash() {
         let sha256 = HashDigest::Sha256(Digest::from_bytes([0xaa; 32]));
@@ -165,18 +137,8 @@ mod tests {
         let caller = ExpectedHashes::one_of(&incomplete);
         let proxy = ArtifactHashes::for_registry(caller, true, &file_hashes);
         assert!(!proxy.can_reuse(&incomplete.as_slice(), &file_hashes));
-        assert!(
-            proxy
-                .for_download(&file_hashes)
-                .verify("archive", &incomplete)
-                .is_err()
-        );
-        assert!(
-            proxy
-                .for_download(&file_hashes)
-                .verify("archive", &file_hashes)
-                .is_ok()
-        );
+        assert!(verify_hashes(&proxy.for_download(&file_hashes), "archive", &incomplete).is_err());
+        assert!(verify_hashes(&proxy.for_download(&file_hashes), "archive", &file_hashes).is_ok());
     }
 
     #[test]
@@ -187,19 +149,19 @@ mod tests {
             ArtifactHashes::new(ExpectedHashes::all(&caller), ExpectedHashes::one_of(&cache))
                 .for_download(&[]);
         assert_eq!(
-            verifier.algorithms(HTTP_DEFAULT_HASH_ALGORITHMS),
+            verifier.algorithms_with(HTTP_DEFAULT_HASH_ALGORITHMS),
             vec![HashAlgorithm::Sha256, HashAlgorithm::Sha512]
         );
 
         let matching = [caller[0].clone(), cache[0].clone()];
-        assert!(verifier.verify("archive", &matching).is_ok());
+        assert!(verify_hashes(&verifier, "archive", &matching).is_ok());
 
         let wrong_caller = [
             HashDigest::Sha256(Digest::from_bytes([0xcc; 32])),
             cache[0].clone(),
         ];
         assert!(matches!(
-            verifier.verify("archive", &wrong_caller),
+            verify_hashes(&verifier, "archive", &wrong_caller),
             Err(Error::MismatchedHashes { expected, .. }) if expected.trim() == caller[0].to_string()
         ));
 
@@ -208,7 +170,7 @@ mod tests {
             HashDigest::Sha512(Digest::from_bytes([0xdd; 64])),
         ];
         assert!(matches!(
-            verifier.verify("archive", &wrong_cache),
+            verify_hashes(&verifier, "archive", &wrong_cache),
             Err(Error::MismatchedHashes { expected, .. }) if expected.trim() == cache[0].to_string()
         ));
     }

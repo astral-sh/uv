@@ -51,16 +51,23 @@ impl ExpectedHashes {
         }
     }
 
-    /// Use the hashes advertised for an individual index file when no verification policy is set.
-    ///
-    /// Explicit validation takes precedence, including empty policies that must reject the
-    /// distribution. If the index provides no hashes, preserve the policy.
+    /// Require both sets of expectations to match the same archive.
     #[must_use]
-    pub fn with_index_hashes(self, hashes: &[HashDigest]) -> Self {
-        if !self.is_empty() || hashes.is_empty() {
-            self
-        } else {
-            Self::all(hashes)
+    pub fn and(self, other: Self) -> Self {
+        if self.is_empty() {
+            return other;
+        }
+        if other.is_empty() {
+            return self;
+        }
+        let mut checks = self.checks.to_vec();
+        for check in other.checks.iter() {
+            if !checks.contains(check) {
+                checks.push(check.clone());
+            }
+        }
+        Self {
+            checks: checks.into(),
         }
     }
 
@@ -100,6 +107,21 @@ impl ExpectedHashes {
                     .any(|hash| hash.algorithm() == digest.algorithm())
             })
         })
+    }
+
+    /// Return the algorithms needed for verification and any additional digests, sorted and deduplicated.
+    pub fn algorithms_with(
+        &self,
+        extra: impl IntoIterator<Item = HashAlgorithm>,
+    ) -> Vec<HashAlgorithm> {
+        let mut algorithms: Vec<_> = self
+            .iter()
+            .map(HashDigest::algorithm)
+            .chain(extra)
+            .collect();
+        algorithms.sort_unstable();
+        algorithms.dedup();
+        algorithms
     }
 }
 
@@ -216,28 +238,9 @@ impl Hashed for &[HashDigest] {
 mod tests {
     use std::str::FromStr;
 
-    use uv_pypi_types::{HashDigest, HashError};
+    use uv_pypi_types::HashDigest;
 
     use super::ExpectedHashes;
-
-    /// Current call paths reject missing required hashes before reaching this helper, so test
-    /// the defensive empty-policy case directly.
-    #[test]
-    fn index_hashes_preserve_empty_required_policies() -> Result<(), HashError> {
-        let index_hashes = [HashDigest::from_str(
-            "sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f",
-        )?];
-        assert_eq!(
-            ExpectedHashes::one_of(&[]).with_index_hashes(&index_hashes),
-            ExpectedHashes::one_of(&[])
-        );
-        assert_eq!(
-            ExpectedHashes::all(&[]).with_index_hashes(&index_hashes),
-            ExpectedHashes::all(&[])
-        );
-
-        Ok(())
-    }
 
     #[test]
     fn validate_all_requires_every_digest() {

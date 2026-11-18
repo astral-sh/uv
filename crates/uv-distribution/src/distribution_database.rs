@@ -49,7 +49,7 @@ use crate::archive::Archive;
 use crate::download::{check_wheel_variant_compatibility, read_extracted_wheel_variant};
 use crate::error::PythonVersion;
 use crate::extracted_wheel::{ExtractedWheel, HashedWheel, WheelExtractor};
-use crate::hash::{ArtifactHashes, DownloadHashVerifier, HTTP_DEFAULT_HASH_ALGORITHMS};
+use crate::hash::{ArtifactHashes, HTTP_DEFAULT_HASH_ALGORITHMS, verify_hashes};
 use crate::metadata::{ArchiveMetadata, Metadata};
 use crate::source::SourceDistributionBuilder;
 use crate::{
@@ -199,11 +199,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     /// Validate dist hashes, and return them.
     fn validate_hashes(
         dist: &BuiltDist,
-        verifier: &DownloadHashVerifier,
+        verifier: &ExpectedHashes,
         hashers: Vec<Hasher>,
     ) -> Result<HashDigests, Error> {
         let computed_hashes: HashDigests = hashers.into_iter().map(HashDigest::from).collect();
-        verifier.verify(dist, computed_hashes.as_slice())?;
+        verify_hashes(verifier, dist, computed_hashes.as_slice())?;
         Ok(computed_hashes)
     }
 
@@ -880,7 +880,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     .into_async_read();
 
                 // Create a hasher for each hash algorithm.
-                let algorithms = verifier.algorithms(HTTP_DEFAULT_HASH_ALGORITHMS);
+                let algorithms = verifier.algorithms_with(HTTP_DEFAULT_HASH_ALGORITHMS);
                 let mut hashers = algorithms.into_iter().map(Hasher::from).collect::<Vec<_>>();
                 let mut hasher = uv_extract::hash::HashReader::new(reader.compat(), &mut hashers);
 
@@ -1195,7 +1195,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             )
         });
 
-        let algorithms = verifier.algorithms(HTTP_DEFAULT_HASH_ALGORITHMS);
+        let algorithms = verifier.algorithms_with(HTTP_DEFAULT_HASH_ALGORITHMS);
 
         // Download the wheel to a temporary file.
         let temp_file =
@@ -1537,7 +1537,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             .map_err(Error::CacheWrite)?;
 
             let verifier = hash_policy.for_download(index_hashes);
-            let algorithms = verifier.algorithms(output_hash);
+            let algorithms = verifier.algorithms_with(output_hash);
             let mut hashers = algorithms.into_iter().map(Hasher::from).collect::<Vec<_>>();
             let mut hasher = uv_extract::hash::HashReader::new(file, &mut hashers);
 
