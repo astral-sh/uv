@@ -754,6 +754,27 @@ pub struct PruneArgs {
     /// `--force` is used, `uv cache prune` will proceed without taking a lock.
     #[arg(long)]
     pub force: bool,
+
+    /// Remove cache entries that are not referenced by any environment.
+    ///
+    /// uv records the packages installed into each environment, and keeps the cache entries that
+    /// those packages were installed from. Entries without a recorded environment are removed.
+    ///
+    /// Environments are recorded when packages are installed into them. Set
+    /// `cache-tracking = false` to stop recording them.
+    #[arg(long)]
+    pub unused: bool,
+
+    /// Remove the cache entries that would be removed by `--unused`, without removing them.
+    #[arg(long, requires = "unused")]
+    pub dry_run: bool,
+
+    /// Include the packages installed in the given environment when determining which cache
+    /// entries are still referenced.
+    ///
+    /// Accepts the root of a virtual environment, or one of its `site-packages` directories.
+    #[arg(long, value_name = "PATH", requires = "unused")]
+    pub environment: Vec<PathBuf>,
 }
 
 #[derive(Args, Debug)]

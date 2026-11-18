@@ -80,14 +80,15 @@ fn show_settings_returns_before_running_commands() {
         cache_dir: Some(
             "[CACHE_DIR]/",
         ),
+        tracking: true,
     }
     "#);
 
     diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.cache_size())
         .arg("--show-settings"), @"
     ...
-             \"[CACHE_DIR]/\",
          ),
+         tracking: true,
      }
     +SizeArgs {
     +    output_format: Auto,
@@ -114,8 +115,8 @@ fn show_settings_returns_before_running_commands() {
         .arg("--show-settings")
         .arg("3.12"), @r#"
     ...
-             "[CACHE_DIR]/",
          ),
+         tracking: true,
      }
     +PythonPinSettings {
     +    request: Some(
@@ -141,8 +142,8 @@ fn show_settings_returns_before_running_commands() {
     diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.workspace_dir())
         .arg("--show-settings"), @"
     ...
-             \"[CACHE_DIR]/\",
          ),
+         tracking: true,
      }
     +WorkspaceDirArgs {
     +    package: None,
@@ -153,8 +154,8 @@ fn show_settings_returns_before_running_commands() {
     diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.workspace_list())
         .arg("--show-settings"), @"
     ...
-             \"[CACHE_DIR]/\",
          ),
+         tracking: true,
      }
     +WorkspaceListArgs {
     +    paths: false,
@@ -217,6 +218,7 @@ fn pip_compile_baseline() {
         cache_dir: Some(
             "[CACHE_DIR]/",
         ),
+        tracking: true,
     }
     PipCompileSettings {
         format: None,
@@ -429,6 +431,7 @@ fn publish_resolved_settings() -> anyhow::Result<()> {
         cache_dir: Some(
             "[CACHE_DIR]/",
         ),
+        tracking: true,
     }
     PublishSettings {
         files: [
@@ -618,6 +621,7 @@ fn pip_install_baseline() {
         cache_dir: Some(
             "[CACHE_DIR]/",
         ),
+        tracking: true,
     }
     PipInstallSettings {
         package: [],
@@ -813,6 +817,7 @@ fn lock_baseline() {
         cache_dir: Some(
             "[CACHE_DIR]/",
         ),
+        tracking: true,
     }
     LockSettings {
         lock_check: Disabled,
@@ -944,6 +949,7 @@ fn version_baseline() {
         cache_dir: Some(
             "[CACHE_DIR]/",
         ),
+        tracking: true,
     }
     VersionSettings {
         value: None,
@@ -1090,6 +1096,7 @@ fn tool_install_baseline() {
         cache_dir: Some(
             "[CACHE_DIR]/",
         ),
+        tracking: true,
     }
     ToolInstallSettings {
         package: "anyio",
@@ -2922,7 +2929,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
                |
              1 | [project]
                |  ^^^^^^^
-             unknown field `project`, expected one of `required-version`, `system-certs`, `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `preview-features`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `proxy-index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `http-proxy`, `https-proxy`, `no-proxy`, `allow-insecure-host`, `resolution`, `prerelease`, `prerelease-package`, `fork-strategy`, `dependency-metadata`, `config-settings`, `config-settings-package`, `no-build-isolation`, `require-build-hashes`, `no-build-isolation-package`, `extra-build-dependencies`, `extra-build-variables`, `exclude-newer`, `exclude-newer-package`, `link-mode`, `compile-bytecode`, `no-sources`, `no-sources-package`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `torch-backend`, `python-install-mirror`, `pypy-install-mirror`, `graalpy-install-mirror`, `pyodide-install-mirror`, `python-downloads-json-url`, `publish-url`, `trusted-publishing`, `check-url`, `add-bounds`, `audit`, `pip`, `cache-keys`, `override-dependencies`, `exclude-dependencies`, `constraint-dependencies`, `build-constraint-dependencies`, `environments`, `required-environments`, `minimum-libc-version`, `conflicts`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dependency-groups`, `dev-dependencies`, `build-backend`
+             unknown field `project`, expected one of `required-version`, `system-certs`, `native-tls`, `offline`, `no-cache`, `cache-dir`, `cache-tracking`, `preview`, `preview-features`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `proxy-index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `http-proxy`, `https-proxy`, `no-proxy`, `allow-insecure-host`, `resolution`, `prerelease`, `prerelease-package`, `fork-strategy`, `dependency-metadata`, `config-settings`, `config-settings-package`, `no-build-isolation`, `require-build-hashes`, `no-build-isolation-package`, `extra-build-dependencies`, `extra-build-variables`, `exclude-newer`, `exclude-newer-package`, `link-mode`, `compile-bytecode`, `no-sources`, `no-sources-package`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `torch-backend`, `python-install-mirror`, `pypy-install-mirror`, `graalpy-install-mirror`, `pyodide-install-mirror`, `python-downloads-json-url`, `publish-url`, `trusted-publishing`, `check-url`, `add-bounds`, `audit`, `pip`, `cache-keys`, `override-dependencies`, `exclude-dependencies`, `constraint-dependencies`, `build-constraint-dependencies`, `environments`, `required-environments`, `minimum-libc-version`, `conflicts`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dependency-groups`, `dev-dependencies`, `build-backend`
     "
     );
 

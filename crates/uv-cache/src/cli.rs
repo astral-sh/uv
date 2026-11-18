@@ -40,8 +40,12 @@ impl Cache {
     /// 4. A `.uv_cache` directory in the current working directory.
     ///
     /// Returns an absolute cache dir.
-    pub fn from_settings(no_cache: bool, cache_dir: Option<PathBuf>) -> Result<Self, io::Error> {
-        if no_cache {
+    pub fn from_settings(
+        no_cache: bool,
+        cache_dir: Option<PathBuf>,
+        tracking: bool,
+    ) -> Result<Self, io::Error> {
+        let cache = if no_cache {
             Self::temp()
         } else if let Some(cache_dir) = cache_dir {
             Ok(Self::from_path(cache_dir))
@@ -74,7 +78,9 @@ impl Cache {
             }
         } else {
             Ok(Self::from_path(".uv_cache"))
-        }
+        }?;
+
+        Ok(cache.with_tracking(tracking))
     }
 }
 
@@ -82,7 +88,7 @@ impl TryFrom<CacheArgs> for Cache {
     type Error = io::Error;
 
     fn try_from(value: CacheArgs) -> Result<Self, Self::Error> {
-        Self::from_settings(value.no_cache, value.cache_dir)
+        Self::from_settings(value.no_cache, value.cache_dir, true)
     }
 }
 

@@ -66,19 +66,40 @@ impl CleaningPackageReporter {
     }
 }
 
+/// The tense to report a cache removal in.
+#[derive(Debug, Clone, Copy)]
+pub(super) enum RemovalTense {
+    /// The entries were removed.
+    Past,
+    /// The entries would be removed, as part of a dry run.
+    Conditional,
+}
+
+impl RemovalTense {
+    /// The verb to report a removal with.
+    fn verb(self) -> &'static str {
+        match self {
+            Self::Past => "Removed",
+            Self::Conditional => "Would remove",
+        }
+    }
+}
+
 /// Report the entries and estimated space reclaimed by cache cleaning or pruning.
 pub(super) fn print_removal_summary(
     summary: &Removal,
     empty: &str,
+    tense: RemovalTense,
     printer: Printer,
 ) -> fmt::Result {
     let mut stderr = printer.stderr();
+    let verb = tense.verb();
     match (summary.num_files, summary.num_dirs) {
         (0, 0) => return writeln!(stderr, "{empty}"),
-        (0, 1) => write!(stderr, "Removed 1 directory")?,
-        (0, dirs) => write!(stderr, "Removed {dirs} directories")?,
-        (1, _) => write!(stderr, "Removed 1 file")?,
-        (files, _) => write!(stderr, "Removed {files} files")?,
+        (0, 1) => write!(stderr, "{verb} 1 directory")?,
+        (0, dirs) => write!(stderr, "{verb} {dirs} directories")?,
+        (1, _) => write!(stderr, "{verb} 1 file")?,
+        (files, _) => write!(stderr, "{verb} {files} files")?,
     }
 
     let (prefix, bytes) = match summary.physical_bytes {
