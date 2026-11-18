@@ -9,8 +9,7 @@ use uv_configuration::ExtrasSpecification;
 use uv_distribution::{DistributionDatabase, FlatRequiresDist, Reporter, RequiresDist};
 use uv_distribution_types::Requirement;
 use uv_distribution_types::{
-    BuildableSource, DirectorySourceUrl, HashOutput, HashValidation, Identifier,
-    MetadataHashPolicy, SourceUrl,
+    BuildableSource, DirectorySourceUrl, ExpectedHashes, HashOutput, Identifier, SourceUrl,
 };
 use uv_fs::Simplified;
 use uv_normalize::{ExtraName, PackageName};
@@ -218,10 +217,6 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
             },
             HashVerification::Unspecified => self.hasher.output(),
         };
-        let hashes = MetadataHashPolicy {
-            output,
-            validation: HashValidation::None,
-        };
 
         // Fetch the metadata for the distribution.
         let metadata = {
@@ -234,7 +229,10 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
             } else {
                 // Run the PEP 517 build process to extract metadata from the source distribution.
                 let source = BuildableSource::Url(source);
-                let archive = self.database.build_wheel_metadata(&source, hashes).await?;
+                let archive = self
+                    .database
+                    .build_wheel_metadata(&source, ExpectedHashes::none(), output)
+                    .await?;
 
                 let metadata = archive.metadata.clone();
 

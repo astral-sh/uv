@@ -125,48 +125,6 @@ impl ExpectedHashes {
     }
 }
 
-/// Archive hashes to collect or validate when fetching distribution metadata.
-///
-/// For example, `uv pip compile --generate-hashes` requests [`HashOutput::All`] with
-/// [`HashValidation::None`]:
-///
-/// - If the index provides a wheel's hash, metadata lookup uses [`ExpectedHashes::none`].
-///   The resolver can record the index-provided hash without hashing the wheel.
-/// - If the index provides no hashes, metadata lookup requests a SHA-256 hash of the wheel.
-///
-/// If source metadata requires a build and `validation` contains expected hashes, the fetcher
-/// instead uses [`ExpectedHashes::one_of`] or [`ExpectedHashes::all`] to check the archive
-/// before running the backend. Those expected hashes take precedence over collection.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-pub struct MetadataHashPolicy<'a> {
-    /// Which missing hashes to collect for the resolution.
-    pub output: HashOutput,
-    /// Expected hashes to validate before source builds. Wheel validation is deferred to installation.
-    pub validation: HashValidation<'a>,
-}
-
-/// Expected digests to validate against an archive.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-pub enum HashValidation<'a> {
-    /// No expected digests are specified.
-    #[default]
-    None,
-    /// Require at least one expected digest to match.
-    Any(&'a [HashDigest]),
-    /// Require every expected digest to match. An empty slice rejects all archives.
-    All(&'a [HashDigest]),
-}
-
-impl<'a> From<HashValidation<'a>> for ExpectedHashes {
-    fn from(validation: HashValidation<'a>) -> Self {
-        match validation {
-            HashValidation::None => Self::none(),
-            HashValidation::Any(hashes) => Self::one_of(hashes),
-            HashValidation::All(hashes) => Self::all(hashes),
-        }
-    }
-}
-
 /// Which artifacts need hashes in the resolution output.
 ///
 /// Reuse declared hashes when available; otherwise, compute a SHA-256 hash from the archive.

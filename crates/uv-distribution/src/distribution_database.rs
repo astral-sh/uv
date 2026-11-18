@@ -26,9 +26,8 @@ use uv_client::{
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
     BuildInfo, BuildableSource, BuiltDist, CanonicalFileLocation, Dist, DistRef, ExpectedHashes,
-    GitPathBuiltDist, HashOutput, Hashed, IndexLocations, IndexUrl, InstalledDist,
-    MetadataHashPolicy, Name, ResolutionRecorder, SourceDist, SourceUrl, VariantsJsonContent,
-    parse_url_hashes,
+    GitPathBuiltDist, HashOutput, Hashed, IndexLocations, IndexUrl, InstalledDist, Name,
+    ResolutionRecorder, SourceDist, SourceUrl, VariantsJsonContent, parse_url_hashes,
 };
 use uv_extract::dirhash::{DirectoryDigest, HashedFile};
 use uv_extract::hash::Hasher;
@@ -267,12 +266,13 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     pub async fn get_or_build_wheel_metadata(
         &self,
         dist: &Dist,
-        hashes: MetadataHashPolicy<'_>,
+        expected: ExpectedHashes,
+        output: HashOutput,
     ) -> Result<ArchiveMetadata, Error> {
         match dist {
-            Dist::Built(built) => self.get_wheel_metadata(built, hashes).await,
+            Dist::Built(built) => self.get_wheel_metadata(built, expected, output).await,
             Dist::Source(source) => {
-                self.build_wheel_metadata(&BuildableSource::Dist(source), hashes)
+                self.build_wheel_metadata(&BuildableSource::Dist(source), expected, output)
                     .await
             }
         }
@@ -701,10 +701,9 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     async fn get_wheel_metadata(
         &self,
         dist: &BuiltDist,
-        hashes: MetadataHashPolicy<'_>,
+        expected: ExpectedHashes,
+        output: HashOutput,
     ) -> Result<ArchiveMetadata, Error> {
-        let expected = ExpectedHashes::from(hashes.validation);
-        let output = hashes.output;
         // Box the full-wheel futures to keep their state out of metadata-only requests.
         // Fetch the entire wheel only when we need to compute a hash for resolution.
         // TODO(charlie): Request the hashes via a separate method, to reduce the coupling in this API.
@@ -770,7 +769,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     pub async fn build_wheel_metadata(
         &self,
         source: &BuildableSource<'_>,
-        hashes: MetadataHashPolicy<'_>,
+        mut expected: ExpectedHashes,
+        output: HashOutput,
     ) -> Result<ArchiveMetadata, Error> {
         // If the metadata was provided by the user directly, prefer it.
         if let Some(dist) = source.as_dist() {
@@ -783,8 +783,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             }
         }
 
-        let mut expected = ExpectedHashes::from(hashes.validation);
-        let output = hashes.output;
         let mut output_hash = None;
         if output != HashOutput::None && expected.is_empty() {
             let url_hashes = match source {

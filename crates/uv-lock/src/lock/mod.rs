@@ -37,11 +37,11 @@ use uv_distribution_types::{
     BuiltDist, CanonicalFileLocation, DependencyMetadata, DirectUrlBuiltDist, DirectUrlSourceDist,
     DirectorySourceDist, Dist, ExcludeNewerOverride, ExcludeNewerSpan, ExcludeNewerValue,
     ExpectedHashes, FirstParty, GitDirectorySourceDist, GitPathBuiltDist, GitPathSourceDist,
-    HashValidation, Identifier, IndexLocations, IndexMetadata, IndexUrl, MetadataHashPolicy,
-    MinimumLibcVersion, Name, NameRequirementSpecification, PYPI_URL, PathBuiltDist,
-    PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, RemoteSource,
-    Requirement, RequirementSource, RequiresPython, ResolvedDist, SimplifiedMarkerTree,
-    StaticMetadata, ToUrlError, UrlString, VersionId,
+    Identifier, IndexLocations, IndexMetadata, IndexUrl, MinimumLibcVersion, Name,
+    NameRequirementSpecification, PYPI_URL, PathBuiltDist, PathSourceDist, RegistryBuiltDist,
+    RegistryBuiltWheel, RegistrySourceDist, RemoteSource, Requirement, RequirementSource,
+    RequiresPython, ResolvedDist, SimplifiedMarkerTree, StaticMetadata, ToUrlError, UrlString,
+    VersionId,
 };
 use uv_fs::{PortablePath, PortablePathBuf, Simplified, normalize_path, try_relative_to_if};
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
@@ -5944,13 +5944,16 @@ impl Lock {
         )?;
         let locked_hashes = match (&package.id.source, &dist) {
             (Source::Direct(..) | Source::Path(_), Dist::Source(_)) if !hashes.is_empty() => {
-                Some(HashValidation::All(hashes.as_slice()))
+                Some(ExpectedHashes::all(hashes.as_slice()))
             }
             (Source::Registry(_), Dist::Source(_)) if !hashes.is_empty() => {
-                Some(HashValidation::Any(hashes.as_slice()))
+                Some(ExpectedHashes::one_of(hashes.as_slice()))
             }
             _ => None,
         };
+        let expected = locked_hashes
+            .clone()
+            .unwrap_or_else(|| hasher.expected_for(&dist));
         let id = dist.distribution_id();
         if let Some(archive) = index.get(&id).as_deref().and_then(|response| {
             if let MetadataResponse::Found(archive, ..) = response {
@@ -5958,22 +5961,15 @@ impl Lock {
             } else {
                 None
             }
-        }) && locked_hashes.is_none_or(|validation| {
-            ExpectedHashes::from(validation).matches(archive.hashes.as_slice())
-        }) {
+        }) && locked_hashes
+            .as_ref()
+            .is_none_or(|expected| expected.matches(archive.hashes.as_slice()))
+        {
             return Ok(archive.metadata.clone());
         }
 
-        let metadata_hashes = if let Some(validation) = locked_hashes {
-            MetadataHashPolicy {
-                output: hasher.output(),
-                validation,
-            }
-        } else {
-            hasher.metadata_policy(&dist)
-        };
         let archive = database
-            .get_or_build_wheel_metadata(&dist, metadata_hashes)
+            .get_or_build_wheel_metadata(&dist, expected, hasher.output())
             .await
             .map_err(|err| LockErrorKind::Resolution {
                 id: package.id.clone(),

@@ -7,9 +7,8 @@ use rustc_hash::FxHashMap;
 
 use uv_configuration::{Constraints, HashCheckingMode};
 use uv_distribution_types::{
-    DistributionMetadata, ExpectedHashes, HashOutput, HashValidation, MetadataHashPolicy, Name,
-    Requirement, RequirementSource, Resolution, UnresolvedRequirement, VersionId,
-    satisfies_require_hashes,
+    DistributionMetadata, ExpectedHashes, HashOutput, Name, Requirement, RequirementSource,
+    Resolution, UnresolvedRequirement, VersionId, satisfies_require_hashes,
 };
 use uv_normalize::PackageName;
 use uv_pep440::{Operator, Version};
@@ -18,7 +17,7 @@ use uv_pypi_types::{
 };
 use uv_redacted::SafeUrl;
 
-/// Hash collection and verification policies for a resolution.
+/// Expected hashes for a resolution and hashes requested in its output.
 ///
 /// Verification takes precedence for distributions with trusted hashes. The collection policy
 /// applies to the remaining distributions.
@@ -68,7 +67,7 @@ impl HashStrategy {
 
     /// Apply constraint hashes using the same rules as [`Self::from_requirements`].
     ///
-    /// Preserve hash collection and require hashes if either strategy requires them. Constraints
+    /// Keep the output hash request and require hashes if either strategy requires them. Constraints
     /// for identities absent from this strategy remain available for newly resolved dependencies.
     pub fn with_constraint_hashes(mut self, constraints: &Self) -> Result<Self, HashStrategyError> {
         let (requirement_hashes, mode) = match &self.verification {
@@ -138,17 +137,6 @@ impl HashStrategy {
         self.expected_for_id(|| distribution.version_id())
     }
 
-    /// Return the [`MetadataHashPolicy`] for retrieving the given distribution's metadata.
-    pub fn metadata_policy<T: DistributionMetadata>(
-        &self,
-        distribution: &T,
-    ) -> MetadataHashPolicy<'_> {
-        MetadataHashPolicy {
-            output: self.output,
-            validation: self.validation_for_id(|| distribution.version_id()),
-        }
-    }
-
     pub fn expected_for_url(&self, url: &SafeUrl) -> ExpectedHashes {
         self.expected_for_id(|| VersionId::from_url(url))
     }
@@ -157,22 +145,10 @@ impl HashStrategy {
         self.expected_for_id(|| VersionId::from_registry(name.clone(), version.clone()))
     }
 
-    /// Return the [`MetadataHashPolicy`] for a URL whose package name is not yet known.
-    pub fn metadata_policy_for_url(&self, url: &SafeUrl) -> MetadataHashPolicy<'_> {
-        MetadataHashPolicy {
-            output: self.output,
-            validation: self.validation_for_id(|| VersionId::from_url(url)),
-        }
-    }
-
     fn expected_for_id(&self, id: impl FnOnce() -> VersionId) -> ExpectedHashes {
-        self.validation_for_id(id).into()
-    }
-
-    fn validation_for_id(&self, id: impl FnOnce() -> VersionId) -> HashValidation<'_> {
         match self.lookup_for_verification(id) {
-            Some((id, hashes)) => hash_validation(&id, hashes),
-            None => HashValidation::None,
+            Some((id, hashes)) => expected_hashes(&id, hashes),
+            None => ExpectedHashes::none(),
         }
     }
 
@@ -547,14 +523,14 @@ impl HashStrategy {
     }
 }
 
-fn hash_validation<'a>(id: &VersionId, digests: &'a [HashDigest]) -> HashValidation<'a> {
+fn expected_hashes(id: &VersionId, digests: &[HashDigest]) -> ExpectedHashes {
     match id {
-        VersionId::NameVersion { .. } => HashValidation::Any(digests),
+        VersionId::NameVersion { .. } => ExpectedHashes::one_of(digests),
         VersionId::ArchiveUrl { .. }
         | VersionId::Git { .. }
         | VersionId::Path { .. }
         | VersionId::Directory { .. }
-        | VersionId::Unknown { .. } => HashValidation::All(digests),
+        | VersionId::Unknown { .. } => ExpectedHashes::all(digests),
     }
 }
 
@@ -713,8 +689,8 @@ mod tests {
     use uv_configuration::HashCheckingMode;
     use uv_distribution_filename::DistExtension;
     use uv_distribution_types::{
-        ExpectedHashes, HashOutput, HashValidation, MetadataHashPolicy, Requirement,
-        RequirementScope, RequirementSource, UnresolvedRequirement, VersionId,
+        ExpectedHashes, HashOutput, Requirement, RequirementScope, RequirementSource,
+        UnresolvedRequirement, VersionId,
     };
     use uv_normalize::PackageName;
     use uv_pep440::Version;
@@ -823,23 +799,10 @@ mod tests {
                 ExpectedHashes::all(slice::from_ref(&digest))
             );
         }
+        assert_eq!(strategy.output(), HashOutput::All);
         assert_eq!(
             strategy.expected_for_url(&unknown_url),
             ExpectedHashes::none()
-        );
-        assert_eq!(
-            strategy.metadata_policy_for_url(&unknown_url),
-            MetadataHashPolicy {
-                output: HashOutput::All,
-                validation: HashValidation::None,
-            }
-        );
-        assert_eq!(
-            strategy.metadata_policy_for_url(&url),
-            MetadataHashPolicy {
-                output: HashOutput::All,
-                validation: HashValidation::All(slice::from_ref(&digest)),
-            }
         );
         assert_eq!(
             strategy.expected_for_package(&name, &version),
@@ -862,13 +825,6 @@ mod tests {
             .with_verification(HashVerification::Required(Arc::default()));
 
         assert_eq!(strategy.expected_for_url(&url), ExpectedHashes::all(&[]));
-        assert_eq!(
-            strategy.metadata_policy_for_url(&url),
-            MetadataHashPolicy {
-                output: HashOutput::All,
-                validation: HashValidation::All(&[]),
-            }
-        );
         assert_eq!(
             strategy.expected_for_package(&name, &version),
             ExpectedHashes::one_of(&[])

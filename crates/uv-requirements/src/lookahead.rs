@@ -196,7 +196,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                 // Run the PEP 517 build process to extract metadata from the source distribution.
                 let archive = self
                     .database
-                    .get_or_build_wheel_metadata(&dist, hasher.metadata_policy(&dist))
+                    .get_or_build_wheel_metadata(&dist, hasher.expected_for(&dist), hasher.output())
                     .await
                     .map_err(|err| Error::from_dist(dist, err))?;
 
