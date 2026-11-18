@@ -21985,6 +21985,71 @@ fn check_locked_version_valid_transitive_extra_override() -> Result<()> {
     Ok(())
 }
 
+/// A scoped override of a recursive extra keeps the original extra's condition. Inferring
+/// requirements from a lock without metadata cannot tell which extra requests that self-dependency.
+#[cfg(feature = "test-universal")]
+#[test]
+fn check_locked_version_valid_scoped_self_override_without_metadata() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let wheels = context.temp_dir.child("wheels");
+    wheels.create_dir_all()?;
+    let name = "demo-child".parse()?;
+    let (filename, wheel) = WheelBuilder::new(&name, &"1.0.0".parse()?).build();
+    wheels.child(&filename).write_binary(&wheel)?;
+    let (filename, wheel) = WheelBuilder::new(&name, &"2.0.0".parse()?).build();
+    wheels.child(&filename).write_binary(&wheel)?;
+
+    let parent = context.temp_dir.child("parent");
+    parent.create_dir_all()?;
+    parent.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "demo-parent"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        all = ["demo-parent[socks]"]
+        socks = ["demo-child"]
+        other = ["demo-child"]
+    "#})?;
+    let parent_url =
+        SafeUrl::from_file_path(parent.path()).map_err(|()| anyhow!("invalid parent path"))?;
+    context.temp_dir.child("pyproject.toml").write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["demo-parent[other] @ {parent_url}"]
+
+        [tool.uv]
+        package = false
+        preview-features = ["lock-without-metadata"]
+        no-index = true
+        find-links = ["wheels"]
+        override-dependencies = [
+            {{ package = {{ name = "demo-parent", version = "1.0.0" }}, dependencies = ["demo-parent[socks]"] }},
+            "demo-child==1; extra == 'socks'",
+            "demo-child==2; extra == 'other'",
+        ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    assert!(!context.read("uv.lock").contains("[package.metadata]"));
+
+    uv_snapshot!(context.filters(), context.lock().args(["--check", "--offline"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Checks that formatting-only changes are rejected when lockfile-format-check preview is enabled.
 #[cfg(feature = "test-universal")]
 #[test]

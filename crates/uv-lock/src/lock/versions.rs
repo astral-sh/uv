@@ -281,7 +281,22 @@ impl<'lock, 'settings> VersionChecker<'lock, 'settings> {
                     origin: None,
                 })
                 .collect::<Vec<_>>();
-            section_requirements = preprocess(&inferred_requirements);
+            // Applying overrides preserves their extra markers. When checking an existing
+            // locked edge below, enforce an override only where it holds for every possible
+            // parent extra.
+            //
+            // Suppose `demo-parent[all]` includes `demo-parent[socks]`, and the project
+            // requests only `demo-parent[other]`, which locks `demo-child==2.0.0`. A scoped
+            // override can add `demo-parent[socks]` to the inferred requirements without its
+            // original `extra == 'all'` guard. Flattening that self-dependency would turn
+            // `demo-child==1; extra == 'socks'` into an unconditional pin and wrongly reject
+            // the edge under `other`.
+            let scope = context.modifier_scope(&package.id.name, package.id.version.as_ref());
+            section_requirements = self
+                .modifiers
+                .apply(scope, &inferred_requirements)
+                .map(Cow::into_owned)
+                .collect();
             &section_requirements
         } else if let DependencyContext::Group(_) = context {
             section_requirements = preprocess(requirements);

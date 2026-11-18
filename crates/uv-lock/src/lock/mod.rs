@@ -457,6 +457,19 @@ enum DependencyContext<'a> {
 }
 
 impl DependencyContext<'_> {
+    /// Groups use global overrides and package-scoped exclusions. Without a parent version,
+    /// only global modifiers apply in any section.
+    fn modifier_scope<'a>(
+        self,
+        package: &'a PackageName,
+        version: Option<&'a Version>,
+    ) -> DependencyModifierScope<'a> {
+        version.map_or(DependencyModifierScope::Global, |version| match self {
+            Self::Production | Self::Extra(_) => DependencyModifierScope::Package(package, version),
+            Self::Group(_) => DependencyModifierScope::DependencyGroup(package, version),
+        })
+    }
+
     /// Specialize a requirement to the dependency section that can activate it.
     fn requirement_marker(self, marker: MarkerTree) -> MarkerTree {
         let production_marker = marker.simplify_not_extras_with(|_| true);
@@ -5180,9 +5193,7 @@ impl Lock {
 
     /// Apply dependency policies before flattening recursive self-requirements.
     ///
-    /// Groups use only global overrides and are not flattened, but exclusions still use the
-    /// owning package's resolved version. When `package_version` is `None`, only global
-    /// overrides and exclusions apply in every dependency context.
+    /// Dependency groups can depend on the parent package and keep those dependencies as edges.
     fn preprocess_requirements(
         package_name: &PackageName,
         package_version: Option<&Version>,
@@ -5190,15 +5201,7 @@ impl Lock {
         context: DependencyContext<'_>,
         modifiers: &DependencyModifiers,
     ) -> Vec<Requirement> {
-        let scope =
-            package_version.map_or(DependencyModifierScope::Global, |version| match context {
-                DependencyContext::Group(_) => {
-                    DependencyModifierScope::DependencyGroup(package_name, version)
-                }
-                DependencyContext::Production | DependencyContext::Extra(_) => {
-                    DependencyModifierScope::Package(package_name, version)
-                }
-            });
+        let scope = context.modifier_scope(package_name, package_version);
         let requirements = modifiers
             .apply(scope, requirements)
             .map(Cow::into_owned)
