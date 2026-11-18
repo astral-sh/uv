@@ -233,17 +233,13 @@ Source distributions can run arbitrary code on build and can make unwanted modif
 system
 (["Someone's Been Messing With My Subnormals!" on Blogspot](https://moyix.blogspot.com/2022/09/someones-been-messing-with-my-subnormals.html),
 ["nvidia-pyindex" on PyPI](https://pypi.org/project/nvidia-pyindex/)), which can even occur when
-just resolving requirements. To prevent this, there's a Docker container you can run commands in:
+just resolving requirements. To isolate these builds, run uv in a container. For example, from the
+repository root:
 
-```console
-$ docker build -t uv-builder -f crates/uv-dev/builder.dockerfile --load .
-# Build for musl to avoid glibc errors, might not be required with your OS version
-cargo build --target x86_64-unknown-linux-musl --profile profiling
-docker run --rm -it -v $(pwd):/app uv-builder /app/target/x86_64-unknown-linux-musl/profiling/uv-dev resolve-many --cache-dir /app/cache-docker /app/scripts/popular_packages/pypi_10k_most_dependents.txt
+```shell
+docker run --rm -i ghcr.io/astral-sh/uv:python3.13-trixie \
+    uv pip compile - < test/requirements/trio.in
 ```
-
-We recommend using this container if you don't trust the dependency tree of the package(s) you are
-trying to resolve or install.
 
 ## Profiling and Benchmarking
 
